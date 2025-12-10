@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import * as amigafs from './amigafs';
 import * as path from 'path';
 
 import { config } from '../config';
@@ -86,7 +87,7 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
     const baseDir = config.getConfig().dataDir;
     const iconPath = path.join(baseDir, `Conf${confNumber}.info`);
 
-    if (!fs.existsSync(iconPath)) {
+    if (!amigafs.existsSync(iconPath)) {
       return {};
     }
 

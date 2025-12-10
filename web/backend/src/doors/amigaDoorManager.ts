@@ -66,6 +66,7 @@ export interface DoorInfo {
   description?: string;      // Description from archive
   installed: boolean;        // Whether door executable exists
   doorName?: string;         // Extracted door name from path
+  size?: number;             // File size in bytes
 }
 
 /**
@@ -293,6 +294,17 @@ export class AmigaDoorManager {
         console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
 
+        // Get file size if executable exists
+        let fileSize = 0;
+        if (executableExists) {
+          try {
+            const stats = fs.statSync(metadata.resolvedPath);
+            fileSize = stats.size;
+          } catch (err) {
+            console.log(`[scanInstalledDoors] Could not get file size: ${err}`);
+          }
+        }
+
         doors.push({
           command: metadata.command || path.basename(infoFile, '.info'),
           location: metadata.location,
@@ -317,6 +329,7 @@ export class AmigaDoorManager {
           toolTypes: metadata.toolTypes,
           doorName: metadata.doorName,
           installed: executableExists,
+          size: fileSize,
         });
 
         console.log(`[scanInstalledDoors] Added door to list: ${metadata.command} (${executableExists ? 'INSTALLED' : 'NOT INSTALLED'})`);

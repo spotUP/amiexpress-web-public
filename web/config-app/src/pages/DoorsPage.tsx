@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DoorOpen, Edit2, Trash2, Plus, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { DoorOpen, Edit2, Trash2, Plus, X, FileCode } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -18,6 +19,7 @@ interface DoorFormData {
 
 export function DoorsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
@@ -132,6 +134,12 @@ export function DoorsPage() {
     }
   };
 
+  const handleEditInfo = (door: Door) => {
+    // Navigate to Info Editor page - it will show all .info files grouped by type
+    // User can find their door in the "Doors" section
+    navigate('/info-editor');
+  };
+
   if (isLoading) {
     return <div className="text-bbs-text">Loading doors...</div>;
   }
@@ -203,6 +211,13 @@ export function DoorsPage() {
               >
                 <Edit2 size={16} />
                 <span>Edit</span>
+              </button>
+              <button
+                onClick={() => handleEditInfo(door)}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded transition-colors"
+                title="Edit .info file tooltypes"
+              >
+                <FileCode size={16} />
               </button>
               <button
                 onClick={() => handleDelete(door)}

@@ -7,6 +7,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from './amigafs';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import { execSync } from 'child_process';
@@ -85,7 +86,7 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
 
   try {
     // Check if file exists
-    if (!fs.existsSync(filePath)) {
+    if (!amigafs.existsSync(filePath)) {
       SysopDebugUtil.debugFileError(socket, session, 'read', filePath, new Error('File does not exist'), DebugSeverity.WARNING);
       console.error(`[parseInfoFile] File does not exist: ${filePath}`);
       return tooltypes;
@@ -152,11 +153,11 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
  */
 export function parseCmdFile(filePath: string, session?: any, socket?: any): CommandDefinition | null {
   try {
-    if (!fs.existsSync(filePath)) {
+    if (!amigafs.existsSync(filePath)) {
       return null;
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    const content = amigafs.readFileSync(filePath, 'utf8').toString();
     const lines = content.split('\n');
 
     for (const line of lines) {
@@ -169,7 +170,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
 
       // Parse: *COMMAND_NAME TYPE+ACCESS LOCATION
       // Example: *WEEK     XM050Doors:WeekConfTop/WeekConfTop.XIM
-      const parts = trimmed.substring(1).split(/\s+/).filter(p => p.length > 0);
+      const parts = trimmed.substring(1).split(/\s+/).filter((p: string) => p.length > 0);
 
       if (parts.length >= 2) {
         const name = parts[0];
@@ -376,7 +377,7 @@ export function scanCommandDirectory(
         const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'BBSCmd');
         const rootPath = path.join(baseDir, confName, 'Commands', 'BBSCmd');
         searchPaths.push(rootPath);
-        if (existsSync(legacyPath)) {
+        if (amigafs.existsSync(legacyPath)) {
           searchPaths.push(legacyPath);
         }
       }
@@ -391,7 +392,7 @@ export function scanCommandDirectory(
         const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'SysCmd');
         const rootPath = path.join(baseDir, confName, 'Commands', 'SysCmd');
         searchPaths.push(rootPath);
-        if (existsSync(legacyPath)) {
+        if (amigafs.existsSync(legacyPath)) {
           searchPaths.push(legacyPath);
         }
       }
@@ -405,12 +406,12 @@ export function scanCommandDirectory(
   // Scan each directory for .info files
   for (const dirPath of searchPaths) {
     console.log(`  Scanning ${commandType} directory: ${dirPath}`);
-    if (!fs.existsSync(dirPath)) {
+    if (!amigafs.existsSync(dirPath)) {
       console.log(`    Directory does not exist, skipping`);
       continue;
     }
 
-    const files = fs.readdirSync(dirPath);
+    const files = amigafs.readdirSync(dirPath);
     console.log(`    Found ${files.length} file(s): ${files.join(', ')}`);
     for (const file of files) {
       if (file.endsWith('.info') || file.endsWith('.Info')) {

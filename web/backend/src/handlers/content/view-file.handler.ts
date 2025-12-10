@@ -13,6 +13,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import * as readline from 'readline';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
@@ -186,16 +187,14 @@ export class ViewFileHandler {
     socket.emit('ansi-output', `\r\n\x1b[32mViewing: ${filename}\x1b[0m\r\n\r\n`);
 
     try {
-      const fileStream = fs.createReadStream(fileInfo.fullPath, { encoding: 'utf8' });
-      const rl = readline.createInterface({
-        input: fileStream,
-        crlfDelay: Infinity
-      });
+      // Read file content using amigafs (case-insensitive)
+      const fileContent = amigafs.readFileSync(fileInfo.fullPath, 'utf8').toString();
+      const lines = fileContent.split(/\r?\n/);
 
       let lineCount = 0;
       const linesPerPage = 20;
 
-      for await (const line of rl) {
+      for (const line of lines) {
         // Display line with wrapping at 79 characters - express.e:20492-20516
         await this.displayLineWithWrapping(socket, line);
 
@@ -205,7 +204,6 @@ export class ViewFileHandler {
         if (lineCount % linesPerPage === 0) {
           const shouldContinue = await flagPause(socket, session, 0);
           if (!shouldContinue) {
-            rl.close();
             session.subState = LoggedOnSubState.DISPLAY_MENU;
             return;
           }
@@ -270,12 +268,12 @@ export class ViewFileHandler {
     for (let dirNum = 1; dirNum <= 20; dirNum++) {
       const dirPath = path.join(confPath, `Dir${dirNum}`);
 
-      if (!fs.existsSync(dirPath)) continue;
+      if (!amigafs.existsSync(dirPath)) continue;
 
       const filePath = path.join(dirPath, filename);
 
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
+      if (amigafs.existsSync(filePath)) {
+        const stats = amigafs.statSync(filePath);
 
         return {
           name: filename,
@@ -335,7 +333,7 @@ export class ViewFileHandler {
   private static async isBinaryFile(filePath: string): Promise<boolean> {
     try {
       const buffer = Buffer.alloc(3);
-      const fd = fs.openSync(filePath, 'r');
+      const fd = amigafs.openSync(filePath, 'r');
       fs.readSync(fd, buffer, 0, 3, 0);
       fs.closeSync(fd);
 

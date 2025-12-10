@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -77,7 +78,7 @@ function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], co
   if (bullHelpPath) {
     // Load and display the file
     try {
-      let content = fs.readFileSync(bullHelpPath, 'utf-8');
+      let content = amigafs.readFileSync(bullHelpPath, 'utf-8').toString();
 
       // Parse MCI codes
       if (_parseMciCodes) {
@@ -135,7 +136,7 @@ function displayBulletin(
   if (bulletinPath) {
     // Load and display the file
     try {
-      let content = fs.readFileSync(bulletinPath, 'utf-8');
+      let content = amigafs.readFileSync(bulletinPath, 'utf-8').toString();
 
       // Parse MCI codes
       if (_parseMciCodes) {

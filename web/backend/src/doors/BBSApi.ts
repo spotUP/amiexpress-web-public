@@ -14,6 +14,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
 import type { BBSSession } from '../index';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
@@ -433,8 +434,8 @@ export class BBSApi {
         ? filename
         : path.join(bbsRoot, filename);
 
-      const content = fs.readFileSync(fullPath, 'utf8');
-      return content;
+      const content = amigafs.readFileSync(fullPath, 'utf8');
+      return content.toString();
     } catch (error) {
       console.error(`[BBSApi] Error reading file ${filename}:`, error);
       return null;
@@ -453,7 +454,7 @@ export class BBSApi {
         ? filename
         : path.join(bbsRoot, filename);
 
-      fs.writeFileSync(fullPath, content, 'utf8');
+      amigafs.writeFileSync(fullPath, content, 'utf8');
       return true;
     } catch (error) {
       console.error(`[BBSApi] Error writing file ${filename}:`, error);
@@ -472,7 +473,7 @@ export class BBSApi {
         ? filename
         : path.join(bbsRoot, filename);
 
-      return fs.existsSync(fullPath);
+      return amigafs.existsSync(fullPath);
     } catch (error) {
       return false;
     }
@@ -490,7 +491,7 @@ export class BBSApi {
         ? directory
         : path.join(bbsRoot, directory);
 
-      const files = fs.readdirSync(fullPath);
+      const files = amigafs.readdirSync(fullPath);
 
       // Apply pattern filter if provided (simple glob matching)
       if (pattern) {

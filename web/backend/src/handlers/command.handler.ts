@@ -625,7 +625,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // Handle DOOR_SELECT state (arrow key navigation for DOORS command)
   if (session.subState === LoggedOnSubState.DOOR_SELECT) {
     const { handleDoorSelectInput } = await import('./door.handler');
-    handleDoorSelectInput(socket, session, data);
+    await handleDoorSelectInput(socket, session, data);
     return;
   }
 

@@ -247,56 +247,63 @@ export class ChatHandler {
 // Export standalone functions for backward compatibility
 // These will be removed once all call sites are updated to use DI
 
+/**
+ * Helper to safely resolve ChatHandler from DI container
+ */
+function resolveChatHandler(): ChatHandler {
+  try {
+    const { container } = require('../../container');
+    return container.resolve(ChatHandler);
+  } catch (error) {
+    console.error('[ChatHandler] DI Resolution Error:', error);
+    // Fallback: create instance manually if DI fails
+    const { ChatSessionUseCase } = require('../../services/use-cases/chat-session.use-case');
+    const useCase = new ChatSessionUseCase();
+    return new ChatHandler(useCase);
+  }
+}
+
 export function startSysopPage(socket: any, session: BBSSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.startSysopPage(socket, session);
 }
 
 export function displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.displayInternalPager(socket, session, chatSession);
 }
 
 export function completePaging(socket: any, session: BBSSession, chatSession: ChatSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.completePaging(socket, session, chatSession);
 }
 
 export function acceptChat(socket: any, session: BBSSession, chatSession: ChatSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.acceptChat(socket, session, chatSession);
 }
 
 export function enterChatMode(socket: any, session: BBSSession, chatSession: ChatSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.enterChatMode(socket, session, chatSession);
 }
 
 export function exitChat(socket: any, session: BBSSession): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.exitChat(socket, session);
 }
 
 export function sendChatMessage(socket: any, session: BBSSession, message: string): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.sendChatMessage(socket, session, message);
 }
 
 export function toggleSysopAvailable(): void {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   handler.toggleSysopAvailable();
 }
 
 export function getChatStatus(): { available: boolean; pagingCount: number; activeCount: number } {
-  const { container } = require('../../container');
-  const handler = container.resolve(ChatHandler);
+  const handler = resolveChatHandler();
   return handler.getChatStatus();
 }

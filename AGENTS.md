@@ -780,3 +780,173 @@ node web/backend/dist/scripts/run-amiga-door.js Doors/WHO/WHO 1
 - Each door runs in isolated process
 - Timeout kills are normal for doors expecting interactive input
 - Check `/tmp/*.out` files for individual door output logs
+
+---
+
+# CLI Tools for BBS Administration
+
+## info-editor: .info File Tooltype Editor
+
+**Location**: `web/backend/src/scripts/info-editor.ts`  
+**Purpose**: Command-line tool for editing Amiga .info file tooltypes
+
+### Features
+- List all tooltypes with enabled/disabled status
+- Get, set, add, delete tooltypes
+- Enable/disable (comment/uncomment) tooltypes
+- Toggle comment status
+- Automatic backup before modifications
+- JSON output option for scripting
+- Preserves icon image data and DiskObject structure
+
+### Usage
+
+**Basic Syntax:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts <file.info> <command> [args] [options]
+```
+
+**Commands:**
+
+| Command | Args | Description |
+|---------|------|-------------|
+| `list` | - | List all tooltypes with status |
+| `get` | `<KEY>` | Get value of specific tooltype |
+| `set` | `<KEY> <VALUE>` | Set or add a tooltype |
+| `delete` | `<KEY>` | Delete a tooltype |
+| `enable` | `<KEY>` | Enable (uncomment) a tooltype |
+| `disable` | `<KEY>` | Disable (comment out) a tooltype |
+| `toggle` | `<KEY>` | Toggle comment status |
+| `backup` | - | Create backup file |
+| `restore` | - | Restore from backup |
+
+**Options:**
+- `--no-backup` - Skip automatic backup before modifications
+- `--verbose` - Show detailed operation logs
+- `--json` - Output in JSON format (for list/get)
+
+### Examples
+
+**List all tooltypes:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts Commands/BBSCmd/j.info list
+```
+
+**Get specific tooltype:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts Commands/BBSCmd/j.info get LOCATION
+```
+
+**Set a tooltype (creates if missing):**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info set STACK 20000
+```
+
+**Disable a door (comment out LOCATION):**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info disable LOCATION
+```
+
+**Enable a door (uncomment LOCATION):**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info enable LOCATION
+```
+
+**Toggle comment status:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info toggle LOCATION
+```
+
+**Delete a tooltype:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info delete OLDKEY
+```
+
+**Create manual backup:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info backup
+```
+
+**Restore from backup:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info restore
+```
+
+**JSON output for scripting:**
+```bash
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info list --json
+npx tsx web/backend/src/scripts/info-editor.ts doors/MyDoor/MyDoor.info get LOCATION --json
+```
+
+### Use Cases
+
+**Bulk Door Management:**
+```bash
+# Disable all doors in a directory
+for file in doors/*/*.info; do
+  npx tsx web/backend/src/scripts/info-editor.ts "$file" disable LOCATION
+done
+
+# Enable specific doors
+for door in WHO RTW Bulls; do
+  npx tsx web/backend/src/scripts/info-editor.ts "doors/$door/$door.info" enable LOCATION
+done
+```
+
+**Configuration Updates:**
+```bash
+# Update stack size for all doors
+for file in doors/*/*.info; do
+  npx tsx web/backend/src/scripts/info-editor.ts "$file" set STACK 20000
+done
+```
+
+**Audit Tooltypes:**
+```bash
+# List all doors and their LOCATION settings
+for file in doors/*/*.info; do
+  echo "=== $file ==="
+  npx tsx web/backend/src/scripts/info-editor.ts "$file" get LOCATION 2>/dev/null || echo "  No LOCATION"
+done
+```
+
+### Technical Details
+
+**File Format:**
+- Reads/writes binary Amiga .info files (IFF FORM ICON format)
+- Uses `strings` command for reliable tooltype parsing
+- Binary writer preserves DiskObject structure and icon data
+- Case-insensitive key matching (converts to uppercase)
+- Automatic backup with `.backup` extension
+
+**Tooltype Format:**
+- `KEY=VALUE` - Enabled tooltype
+- `!KEY=VALUE` - Disabled (commented) tooltype
+- Keys are uppercase by convention
+- Values can contain spaces (quote in shell if needed)
+
+**Backup Behavior:**
+- Automatic backup before all modifications (unless `--no-backup`)
+- Backup file: `<original>.backup`
+- Restore command copies backup over original
+- Only one backup level (overwrites previous backup)
+
+**Error Handling:**
+- Validates file exists and has `.info` extension
+- Checks for required arguments per command
+- Reports specific errors (file not found, key not found, etc.)
+- Non-zero exit code on errors for shell scripting
+
+### Integration with Admin UI
+
+This CLI tool provides the backend functionality for the admin web interface .info editor. The same utilities (`info-file.util.ts`) power both the CLI and web API.
+
+**Web API Equivalent:**
+- CLI `list` → GET `/api/info-editor/file`
+- CLI `get <KEY>` → GET `/api/info-editor/file` + filter
+- CLI `set <KEY> <VALUE>` → PUT `/api/info-editor/file`
+- CLI `toggle <KEY>` → POST `/api/info-editor/toggle`
+
+See `web/backend/src/api/info-editor-routes.ts` for web API implementation.
+
+---

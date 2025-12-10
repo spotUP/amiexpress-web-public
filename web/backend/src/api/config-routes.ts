@@ -1576,5 +1576,26 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
     }
   });
 
+  // ===== Doors Cache Management =====
+
+  /**
+   * POST /api/config/doors/reload
+   * Reload doors cache after adding/modifying/deleting doors
+   */
+  router.post('/doors/reload', async (req: Request, res: Response) => {
+    try {
+      const { reloadDoors } = await import('../handlers/door.handler');
+      const doors = await reloadDoors();
+
+      sendResponse(
+        res,
+        { doorsCount: doors.length, doors },
+        `Doors cache reloaded: ${doors.length} doors`
+      );
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   return router;
 }

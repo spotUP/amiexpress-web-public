@@ -36,20 +36,46 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    // Retry logic to handle race conditions during server startup
+    let lastError: Error | null = null;
+    const maxRetries = 3;
+    const retryDelay = 500; // ms
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: response.statusText,
-      }));
-      throw new Error(error.error || error.message || response.statusText);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers,
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({
+            error: response.statusText,
+          }));
+          throw new Error(error.error || error.message || response.statusText);
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        lastError = error as Error;
+
+        // Only retry on network errors (ECONNREFUSED, fetch failures)
+        // Don't retry on auth errors or other HTTP errors
+        const isNetworkError = error instanceof TypeError ||
+                              (error as Error).message.includes('Failed to fetch') ||
+                              (error as Error).message.includes('ECONNREFUSED');
+
+        if (!isNetworkError || attempt === maxRetries - 1) {
+          throw error;
+        }
+
+        // Wait before retrying with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
+      }
     }
 
-    const data = await response.json();
-    return data;
+    throw lastError || new Error('Request failed after retries');
   }
 
   // Authentication
@@ -528,6 +554,29 @@ class ApiClient {
   async autoFixHealth() {
     return this.request<ApiResponse>(`${API_BASE}/config/health/auto-fix`, {
       method: 'POST',
+    });
+  }
+
+  // Info Editor
+  async getInfoFiles() {
+    return this.request<ApiResponse>(`${API_BASE}/info-editor/files`);
+  }
+
+  async getInfoFile(relativePath: string) {
+    return this.request<ApiResponse>(`${API_BASE}/info-editor/file?path=${encodeURIComponent(relativePath)}`);
+  }
+
+  async updateInfoFile(relativePath: string, tooltypes: any[]) {
+    return this.request<ApiResponse>(`${API_BASE}/info-editor/file`, {
+      method: 'PUT',
+      body: JSON.stringify({ path: relativePath, tooltypes }),
+    });
+  }
+
+  async toggleTooltypeComment(relativePath: string, key: string) {
+    return this.request<ApiResponse>(`${API_BASE}/info-editor/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ path: relativePath, key }),
     });
   }
 }

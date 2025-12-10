@@ -155,11 +155,25 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
 async function loadDoorManifest(doorId: string): Promise<any | null> {
   try {
     const bbsRoot = getBbsRoot();
+    const amigafs = require('../utils/amigafs');
 
-    // Only consider installed doors/ in the BBS tree.
-    const doorsPath = path.join(bbsRoot, 'doors', doorId, 'package.json');
-    if (fs.existsSync(doorsPath)) {
-      const content = fs.readFileSync(doorsPath, 'utf8');
+    // Get door from registry to find actual location (LOCATION tooltype from .info file)
+    const { doors } = require('../handlers/door.handler');
+    const door = doors.find((d: any) => d.id.toUpperCase() === doorId.toUpperCase());
+
+    if (door && door.path) {
+      // Use door.path from registry (e.g., "Doors/arkanoid-audio")
+      const manifestPath = path.join(bbsRoot, door.path, 'package.json');
+      if (amigafs.existsSync(manifestPath)) {
+        const content = amigafs.readFileSync(manifestPath, 'utf8');
+        return JSON.parse(content);
+      }
+    }
+
+    // Fallback: try standard locations with case-insensitive matching
+    const manifestPath = path.join(bbsRoot, 'Doors', doorId, 'package.json');
+    if (amigafs.existsSync(manifestPath)) {
+      const content = amigafs.readFileSync(manifestPath, 'utf8');
       return JSON.parse(content);
     }
 
@@ -175,21 +189,17 @@ async function loadDoorManifest(doorId: string): Promise<any | null> {
  */
 function resolveDoorPath(doorId: string, entryPoint: string): string {
   const bbsRoot = getBbsRoot();
+  const amigafs = require('../utils/amigafs');
 
-  // Only consider doors directory in the BBS tree
-  const doorsPath = path.join(bbsRoot, 'doors', doorId, entryPoint);
-  // Support symlinked door IDs (e.g., tracker -> tracker-door)
-  const doorsPathSymlink = path.join(bbsRoot, 'doors', `${doorId}`, entryPoint);
-  if (fs.existsSync(doorsPath)) {
+  // Check Doors directory (amigafs handles case-insensitive matching automatically)
+  const doorsPath = path.join(bbsRoot, 'Doors', doorId, entryPoint);
+  if (amigafs.existsSync(doorsPath)) {
     return doorsPath;
-  }
-  if (fs.existsSync(doorsPathSymlink)) {
-    return doorsPathSymlink;
   }
 
   // Fall back to SDK examples (dev)
   const sdkPath = path.join(bbsRoot, 'sdk/doors', doorId, entryPoint);
-  if (fs.existsSync(sdkPath)) {
+  if (amigafs.existsSync(sdkPath)) {
     return sdkPath;
   }
 
@@ -208,27 +218,25 @@ function resolveDoorPath(doorId: string, entryPoint: string): string {
 async function listAvailableDoors(): Promise<any[]> {
   const doors: any[] = [];
   const bbsRoot = getBbsRoot();
+  const amigafs = require('../utils/amigafs');
 
-  // Scan doors directory (preferred for deployments)
-  const doorsPath = path.join(bbsRoot, 'doors');
-  if (fs.existsSync(doorsPath)) {
-    const entries = fs.readdirSync(doorsPath);
+  // Scan Doors directory (amigafs handles case-insensitive matching automatically)
+  const doorsPath = path.join(bbsRoot, 'Doors');
+  if (amigafs.existsSync(doorsPath)) {
+    const entries = amigafs.readdirSync(doorsPath);
     for (const entry of entries) {
       const manifestPath = path.join(doorsPath, entry, 'package.json');
-      if (fs.existsSync(manifestPath)) {
+      if (amigafs.existsSync(manifestPath)) {
         try {
-          const content = fs.readFileSync(manifestPath, 'utf8');
+          const content = amigafs.readFileSync(manifestPath, 'utf8');
           const manifest = JSON.parse(content);
 
-          // Skip if already added from SDK
-          if (!doors.find(d => d.id === entry)) {
-            doors.push({
-              id: entry,
-              name: manifest.name || entry,
-              runtime: manifest.runtime || 'server',
-              description: manifest.description || '',
-            });
-          }
+          doors.push({
+            id: entry,
+            name: manifest.name || entry,
+            runtime: manifest.runtime || 'server',
+            description: manifest.description || '',
+          });
         } catch (error) {
           console.error(`Error loading manifest for ${entry}:`, error);
         }

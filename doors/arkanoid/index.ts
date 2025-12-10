@@ -514,6 +514,10 @@ class ArkanoidGame {
   private gameLoop: NodeJS.Timeout | null = null;
   private lastUpdate: number = 0;
   private highscorePath: string;
+  private keysPressed: Set<string> = new Set();
+  private keyTimestamps: Map<string, number> = new Map();
+  private isQuitting: boolean = false;
+  private readonly KEY_TIMEOUT_MS = 200; // Auto-clear keys after 200ms without repeat
 
   constructor(doorSession: any) {
     this.socket = doorSession.socket;
@@ -1348,16 +1352,27 @@ class ArkanoidGame {
 
   private handleGameInput(k: string, key: string): void {
     if (k === 'arrowleft' || k === 'left' || k === 'a') {
-      this.movePaddle(-1);
+      this.keysPressed.delete('right'); // Clear opposite direction
+      this.keysPressed.add('left');
+      this.keyTimestamps.set('left', Date.now());
+      this.movePaddle(-1); // Immediate response
     } else if (k === 'arrowright' || k === 'right' || k === 'd') {
-      this.movePaddle(1);
+      this.keysPressed.delete('left'); // Clear opposite direction
+      this.keysPressed.add('right');
+      this.keyTimestamps.set('right', Date.now());
+      this.movePaddle(1); // Immediate response
     } else if (k === ' ' || k === 'space') {
+      // Clear movement keys on other actions
+      this.keysPressed.clear();
+      this.keyTimestamps.clear();
       if (this.data.balls.some(b => !b.active)) {
         this.launchBall();
       } else {
         this.data.state = 'paused';
       }
     } else if (k === 'q') {
+      this.keysPressed.clear();
+      this.keyTimestamps.clear();
       this.data.state = 'menu';
     }
   }
@@ -1445,16 +1460,26 @@ class ArkanoidGame {
   }
 
   private quit(): void {
-    // Show cursor and reset colors before cleanup
+    // Set quitting flag to prevent further rendering
+    this.isQuitting = true;
+
+    // Stop game loop FIRST to prevent race conditions
+    this.cleanup();
+
+    // Show cursor and reset colors after cleanup
     this.socket.emit('ansi-output', ANSI.show + ANSI.reset);
     this.socket.emit('ansi-output', ANSI.clear + ANSI.home);
     this.socket.emit('ansi-output', '\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
 
-    this.cleanup();
+    // Emit door-exit last
     this.socket.emit('door-exit');
   }
 
   private cleanup(): void {
+    // Set quitting flag immediately
+    this.isQuitting = true;
+
+    // Stop game loop first
     if (this.gameLoop) {
       clearInterval(this.gameLoop);
       this.gameLoop = null;
@@ -1465,6 +1490,10 @@ class ArkanoidGame {
 
     // Clear input handler
     this.bbsSession.doorInputHandler = null;
+
+    // Clear key tracking
+    this.keysPressed.clear();
+    this.keyTimestamps.clear();
   }
 
   // =============================================================================
@@ -1507,10 +1536,32 @@ class ArkanoidGame {
     const frameTime = 1000 / FPS;
 
     this.gameLoop = setInterval(() => {
+      // Safety check: stop if quitting
+      if (this.isQuitting) {
+        this.cleanup();
+        return;
+      }
+
       if (this.data.state === 'playing') {
         const now = Date.now();
         const deltaTime = (now - this.lastUpdate) / 1000;
         this.lastUpdate = now;
+
+        // Auto-clear keys that haven't been pressed recently (simulates keyup)
+        for (const [key, timestamp] of this.keyTimestamps.entries()) {
+          if (now - timestamp > this.KEY_TIMEOUT_MS) {
+            this.keysPressed.delete(key);
+            this.keyTimestamps.delete(key);
+          }
+        }
+
+        // Process continuous key movement
+        if (this.keysPressed.has('left')) {
+          this.movePaddle(-1);
+        }
+        if (this.keysPressed.has('right')) {
+          this.movePaddle(1);
+        }
 
         // Update game state
         let output = this.updateBalls(deltaTime);
@@ -1523,8 +1574,10 @@ class ArkanoidGame {
           this.nextLevel();
         }
 
-        // Render
-        this.socket.emit('ansi-output', output + this.render());
+        // Render (with safety check)
+        if (!this.isQuitting) {
+          this.socket.emit('ansi-output', output + this.render());
+        }
       }
     }, frameTime);
 

@@ -389,6 +389,8 @@ export class ClientDoorBridge {
 
     // Clear BBS session flag and reset menu input mode
     delete session.bbsSession.inDoorManager;
+    // Disable mouse events when door exits
+    session.bbsSession.mouseEventsEnabled = false;
     if ((session.bbsSession as any).shortcuts?.clear) {
       (session.bbsSession as any).shortcuts.clear();
     }

@@ -243,7 +243,7 @@ async function connectTelnet(
 /**
  * Get manual connection details from user
  */
-async function getManualConnection(socket: SocketIOSocket): Promise<TelnetConfig | null> {
+async function getManualConnection(socket: SocketIOSocket, bbsSession: any): Promise<TelnetConfig | null> {
   return new Promise((resolve) => {
     const config: Partial<TelnetConfig> = {};
     let step = 0;
@@ -310,7 +310,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 
     if (choice === 'M') {
       // Manual connection
-      const manualConfig = await getManualConnection(socket);
+      const manualConfig = await getManualConnection(socket, bbsSession);
       if (manualConfig) {
         await connectTelnet(socket, manualConfig, user?.username || 'Guest');
       }

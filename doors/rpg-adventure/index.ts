@@ -4,7 +4,7 @@ import {
   CombatSystem,
   HighScoreManager,
   GameUtils
-} from '../../src/game-engine';
+} from '@amiexpress/bbs-door-sdk';
 
 interface MazeCell {
   type: 'wall' | 'floor' | 'exit' | 'treasure' | 'monster';

@@ -26,6 +26,11 @@
     "door"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../dist"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
   }
 }

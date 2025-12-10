@@ -122,6 +122,10 @@ export function registerHttpRoutes(app: Application): void {
   const importRouter = createImportRouter(db);
   app.use('/api/import', authenticateToken(db), requireSysop(), importRouter);
 
+  // ===== Info Editor API - Sysop-only Routes =====
+  const { infoEditorRouter } = require('../api/info-editor-routes');
+  app.use('/api/info-editor', authenticateToken(db), requireSysop(), infoEditorRouter);
+
   // ===== Static File Serving for Unified Deployment =====
   // Note: Using process.cwd() instead of __dirname for tsx compatibility
   // process.cwd() = ~/Code/amiexpress-web/web/backend

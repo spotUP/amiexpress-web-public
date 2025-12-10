@@ -45,9 +45,15 @@ export function OperatorChatPage() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
+    // Get auth token from localStorage
+    const token = localStorage.getItem('authToken');
+
     const socketInstance = io('http://localhost:3001', {
       transports: ['websocket'],
       reconnection: true,
+      auth: {
+        token: token
+      }
     });
 
     socketInstance.on('connect', () => {
@@ -219,28 +225,24 @@ export function OperatorChatPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 bg-black">
-              <div className="font-mono text-sm space-y-2">
+              <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
                 {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.senderType === 'sysop' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[80%] px-3 py-2 rounded ${
-                        msg.senderType === 'sysop'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-100'
-                      }`}
-                    >
-                      <div className="text-xs opacity-75 mb-1">
-                        {msg.senderHandle} - {formatTime(msg.timestamp)}
-                      </div>
-                      <div className="whitespace-pre-wrap break-words">{msg.message}</div>
-                    </div>
+                  <div key={msg.id} className="text-sm">
+                    <span className={msg.senderType === 'sysop' ? 'text-cyan-400' : 'text-yellow-300'}>
+                      [{formatTime(msg.timestamp)}]
+                    </span>
+                    {' '}
+                    <span className={msg.senderType === 'sysop' ? 'text-green-400' : 'text-blue-400'}>
+                      {msg.senderHandle}:
+                    </span>
+                    {' '}
+                    <span className="text-white whitespace-pre-wrap break-words">
+                      {msg.message}
+                    </span>
                   </div>
                 ))}
                 {isTyping && (
-                  <div className="text-bbs-muted text-xs italic">
+                  <div className="text-gray-500 text-xs italic">
                     {activeChat.userHandle} is typing...
                   </div>
                 )}

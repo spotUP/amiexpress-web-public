@@ -18,6 +18,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
 
@@ -581,7 +582,7 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
 
   // Check if BullHelp.txt exists
   const bullHelpPath = path.join(_confScreenDir, 'Bulletins', 'BullHelp.txt');
-  if (!fs.existsSync(bullHelpPath)) {
+  if (!amigafs.existsSync(bullHelpPath)) {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.errorLine('Sorry, there are no bulletins available'));
     socket.emit('ansi-output', '\r\n');

@@ -277,7 +277,7 @@ export async function runDoor(doorSession: any): Promise<void> {
   await new Promise<void>((resolve) => {
     let finished = false;
 
-    const cleanup = (data: string) => {
+    const cleanup = (data?: string) => {
       outputStream.off('data', sendAnsi);
       delete bbsSession.doorInputHandler;
       ui.destroy();

@@ -25,10 +25,7 @@
     "moduleResolution": "node",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "types": [
-      "node"
-    ]
+    "sourceMap": true
   },
   "ts-node": {
     "transpileOnly": true,

@@ -436,6 +436,42 @@ const io = new Server(server, {
   connectTimeout: 45000, // 45s connection timeout
 });
 
+// Socket.IO authentication middleware for operator chat
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth.token;
+
+  // If no token provided, allow connection (for BBS clients)
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+
+    // Get user from database
+    const user = await db.getUserById(decoded.userId);
+    if (!user) {
+      return next(new Error('User not found'));
+    }
+
+    // Attach user info to socket for operator chat handlers
+    (socket as any).session = {
+      user: {
+        id: user.id,
+        username: user.username,
+        secLevel: user.secLevel
+      },
+      nodeId: 0 // Admin UI doesn't have a node
+    };
+
+    next();
+  } catch (error) {
+    console.error('[Socket.IO Auth] Token verification failed:', error);
+    next(new Error('Authentication failed'));
+  }
+});
+
 const port = process.env.PORT || config.get('port');
 
 // Create telnet and SSH servers for native BBS client connections (configured at runtime)

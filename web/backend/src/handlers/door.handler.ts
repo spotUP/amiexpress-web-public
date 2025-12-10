@@ -561,11 +561,12 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   session.tempData = {
     availableDoors: allDoors,
     selectedIndex: 0,
-    scrollOffset: 0
+    scrollOffset: 0,
+    previousSelectedIndex: undefined
   };
 
-  // Show door list
-  showDoorsList(socket, session);
+  // Show door list (initial draw)
+  showDoorsList(socket, session, true);
 
   // Set state to handle arrow key input
   session.subState = LoggedOnSubState.DOOR_SELECT;
@@ -574,67 +575,115 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
 /**
  * Show doors list with current selection highlighted (doorman-style)
  */
-function showDoorsList(socket: any, session: BBSSession): void {
-  const { availableDoors, selectedIndex, scrollOffset } = session.tempData;
+function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean = false): void {
+  const { availableDoors, selectedIndex, scrollOffset, previousSelectedIndex } = session.tempData;
 
-  // Clear screen and show header - fixed at top (position 1,1)
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
-
-  // Move to line 3 for content (leave line 2 blank)
-  socket.emit('ansi-output', '\x1b[3;1H');
+  // Only clear screen on initial draw
+  if (isInitialDraw) {
+    socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    socket.emit('ansi-output', '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
+  }
 
   // Display doors (show up to 15 at a time)
   const pageSize = 15;
   const visibleDoors = availableDoors.slice(scrollOffset, scrollOffset + pageSize);
 
+  // If not initial draw, only redraw changed lines
+  if (!isInitialDraw && previousSelectedIndex !== undefined) {
+    const prevLine = 3 + (previousSelectedIndex - scrollOffset);
+    const newLine = 3 + (selectedIndex - scrollOffset);
+
+    // Redraw previous line (unselect)
+    if (prevLine >= 3 && prevLine < 3 + pageSize) {
+      const prevDoor = availableDoors[previousSelectedIndex];
+      socket.emit('ansi-output', `\x1b[${prevLine};1H`);
+      socket.emit('ansi-output', formatDoorLine(prevDoor, false));
+    }
+
+    // Redraw new line (select)
+    if (newLine >= 3 && newLine < 3 + pageSize) {
+      const newDoor = availableDoors[selectedIndex];
+      socket.emit('ansi-output', `\x1b[${newLine};1H`);
+      socket.emit('ansi-output', formatDoorLine(newDoor, true));
+    }
+
+    session.tempData.previousSelectedIndex = selectedIndex;
+    return;
+  }
+
+  // Initial draw - show all doors
+  socket.emit('ansi-output', '\x1b[3;1H');
   visibleDoors.forEach((door: any, index: number) => {
     const globalIndex = scrollOffset + index;
     const isSelected = globalIndex === selectedIndex;
-
-    // Get door type
-    const doorType = (door as any).doorType || door.type;
-    const type = doorType === 'TS' ? 'TS' :
-                doorType === 'PYTHON' ? 'PY' :
-                doorType === 'AREXX' ? 'RX' :
-                doorType === 'AMI' || doorType === 'amiga' ? 'AMI' :
-                door.type === 'typescript' ? 'TS' :
-                door.type === 'python' ? 'PY' :
-                door.type === 'arexx' ? 'RX' :
-                door.type === 'archive' ? 'ARC' : 'AMI';
-
-    // Format command (pad to 10 chars)
-    const command = door.command || door.id;
-    const commandDisplay = padString(command, 10);
-
-    // Format name (pad to 30 chars)
-    const name = padString(door.name, 30);
-
-    // Format size
-    const size = formatDoorSize(door.size || 0);
-
-    // Display door line (no checkbox, just type/command/name/size)
-    if (isSelected) {
-      // Selected: blue background
-      socket.emit('ansi-output', `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name} ${size} \x1b[0m\r\n`);
-    } else {
-      // Not selected: normal colors
-      socket.emit('ansi-output', ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m\r\n`);
-    }
+    socket.emit('ansi-output', formatDoorLine(door, isSelected) + '\r\n');
   });
 
   // Footer with instructions
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
+
+  session.tempData.previousSelectedIndex = selectedIndex;
+}
+
+/**
+ * Format a single door line for display
+ */
+function formatDoorLine(door: any, isSelected: boolean): string {
+  // Get door type
+  const doorType = (door as any).doorType || door.type;
+  const type = doorType === 'TS' ? 'TS' :
+              doorType === 'PYTHON' ? 'PY' :
+              doorType === 'AREXX' ? 'RX' :
+              doorType === 'AMI' || doorType === 'amiga' ? 'AMI' :
+              door.type === 'typescript' ? 'TS' :
+              door.type === 'python' ? 'PY' :
+              door.type === 'arexx' ? 'RX' :
+              door.type === 'archive' ? 'ARC' : 'AMI';
+
+  // Format command (pad to 10 chars)
+  const command = door.command || door.id;
+  const commandDisplay = padString(command, 10);
+
+  // Format name (pad to 30 chars)
+  const name = padString(door.name, 30);
+
+  // Format size
+  const size = formatDoorSize(door.size || 0);
+
+  // Clear the entire line first (80 spaces)
+  let line = '\x1b[2K';
+
+  // Display door line (no checkbox, just type/command/name/size)
+  if (isSelected) {
+    // Selected: blue background
+    line += `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name} ${size} \x1b[0m`;
+  } else {
+    // Not selected: normal colors
+    line += ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m`;
+  }
+
+  return line;
 }
 
 /**
  * Handle input for DOOR_SELECT state (arrow keys to navigate, Enter to launch, Q to quit)
  */
-export function handleDoorSelectInput(socket: any, session: BBSSession, data: string): void {
+export async function handleDoorSelectInput(socket: any, session: BBSSession, data: string): Promise<void> {
+  console.log(`[DOOR Select] Input received: ${JSON.stringify(data)} (subState: ${session.subState})`);
+
+  // Validate that we have door selection state
+  if (!session.tempData || !session.tempData.availableDoors) {
+    console.error('[DOOR Select] Missing tempData or availableDoors - resetting to menu');
+    session.tempData = {};
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
   const key = data.toLowerCase();
   const { availableDoors, selectedIndex, scrollOffset } = session.tempData;
+  console.log(`[DOOR Select] Current selection: ${selectedIndex}/${availableDoors.length - 1}`);
 
   // Arrow Up
   if (data === '\x1b[A' || data === '\x1b\x5b\x41') {
@@ -673,15 +722,40 @@ export function handleDoorSelectInput(socket: any, session: BBSSession, data: st
 
   // Enter - Launch selected door
   if (key === '\r' || key === '\n') {
+    // Validate that we have valid data
+    if (!availableDoors || availableDoors.length === 0) {
+      console.error('[DOOR Select] No doors available');
+      session.tempData = {};
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    if (selectedIndex === undefined || selectedIndex < 0 || selectedIndex >= availableDoors.length) {
+      console.error('[DOOR Select] Invalid selectedIndex:', selectedIndex);
+      session.tempData = {};
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
     const selectedDoor = availableDoors[selectedIndex];
+
+    if (!selectedDoor) {
+      console.error('[DOOR Select] selectedDoor is undefined at index', selectedIndex);
+      session.tempData = {};
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // Clear temp data before launching
+    session.tempData = {};
 
     // Check if it's an Amiga door
     if (selectedDoor.isAmigaDoor && selectedDoor.doorInfo) {
       console.log(`[DOOR Command] Launching Amiga door: ${selectedDoor.name}`);
-      launchAmigaDoor(socket, session, selectedDoor.doorInfo);
+      await launchAmigaDoor(socket, session, selectedDoor.doorInfo);
     } else {
       // TypeScript door
-      executeDoor(socket, session, selectedDoor);
+      await executeDoor(socket, session, selectedDoor);
     }
     return;
   }
@@ -694,6 +768,10 @@ export function handleDoorSelectInput(socket: any, session: BBSSession, data: st
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
+
+  // Catch-all: ignore any other input to prevent command history interference
+  // This includes regular letters, numbers, and other keys that aren't handled above
+  console.log(`[DOOR Select] Ignoring unhandled input: ${JSON.stringify(data)}`);
 }
 
 /**
@@ -2108,6 +2186,24 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
  * express.e:28228 - Command priority: SYSCMD > BBSCMD > InternalCommand
  * BBSCMD doors are loaded from .info files in Commands/BBSCmd/
  */
+/**
+ * Reload doors cache (call when doors are added/modified/deleted)
+ */
+export async function reloadDoors() {
+  console.log('[reloadDoors] Reloading doors cache...');
+
+  // Reload command definitions from .info files
+  const bbsBaseDir = require('../config').config.get('dataDir');
+  const { loadCommands } = await import('./command-execution.handler');
+  loadCommands(bbsBaseDir, 1, 0);
+
+  // Reinitialize doors
+  await initializeDoors();
+
+  console.log(`[reloadDoors] Doors cache reloaded: ${doors.length} doors`);
+  return doors;
+}
+
 export async function initializeDoors() {
   // Import commandCache to access loaded BBSCMD commands
   const { commandCache } = await import('./command-execution.handler');
@@ -2217,6 +2313,10 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     // Set door active flag
     session.inDoorManager = true;
     console.log(`[executeClientDoor] Set inDoorManager=true for session`);
+
+    // Enable mouse events for client doors (needed for games like Arkanoid)
+    session.mouseEventsEnabled = true;
+    console.log(`[executeClientDoor] Set mouseEventsEnabled=true for session`);
 
     // Set a no-op input handler to prevent BBS from echoing input
     // The actual input handling is done by the client-door-bridge

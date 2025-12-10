@@ -18,10 +18,10 @@
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.26",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
   },

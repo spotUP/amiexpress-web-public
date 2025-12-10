@@ -163,36 +163,6 @@ const DEVELOPER_DOCS = {
     path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TELNET_SSH_SERVERS.md'),
     description: 'Telnet and SSH server implementation (296 lines)',
     mimeType: 'text/markdown'
-  },
-  'sdk-summary': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'SDK_SUMMARY.md'),
-    description: 'BBS Door SDK summary and usage (573 lines)',
-    mimeType: 'text/markdown'
-  },
-  'sdk-readme': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'README.md'),
-    description: 'SDK documentation (570 lines)',
-    mimeType: 'text/markdown'
-  },
-  'sdk-api-reference': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'API_REFERENCE.md'),
-    description: 'SDK API reference (589 lines)',
-    mimeType: 'text/markdown'
-  },
-  'sdk-ai-guide': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'AI_DOOR_CREATION_GUIDE.md'),
-    description: 'AI-assisted door creation guide (957 lines)',
-    mimeType: 'text/markdown'
-  },
-  'sdk-neo-blessed': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'NEO_BLESSED_UI.md'),
-    description: 'Neo-Blessed UI framework guide (1234 lines)',
-    mimeType: 'text/markdown'
-  },
-  'sdk-arexx-guide': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'archive', 'sdk', 'docs', 'AREXX_GUIDE.md'),
-    description: 'AREXX door development guide (536 lines)',
-    mimeType: 'text/markdown'
   }
 };
 
@@ -224,12 +194,12 @@ const DOOR_DOCS = {
     mimeType: 'text/markdown'
   },
   'aedoor-disasm': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'aedoor_library_disasm.asm'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'aedoor_library_disasm.asm'),
     description: 'AEDoor library disassembly',
     mimeType: 'text/plain'
   },
   'bulls-disasm': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'bulls_disasm.asm'),
+    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'bulls_disasm.asm'),
     description: 'Bulls door disassembly',
     mimeType: 'text/plain'
   },
@@ -851,11 +821,11 @@ Common dos.library offsets:
   async handleReadExpressModule(args) {
     const { module } = args;
     const modulesPath = path.join(__dirname, 'express-modules.json');
-    const modules = JSON.parse(await fs.readFile(modulesPath, 'utf-8'));
-    const moduleInfo = modules.modules.find(m => m.name === module);
+    const modulesData = JSON.parse(await fs.readFile(modulesPath, 'utf-8'));
+    const moduleInfo = modulesData.modules[module];
 
     if (!moduleInfo) {
-      throw new Error(`Unknown module: ${module}`);
+      throw new Error(`Unknown module: ${module}. Available: ${Object.keys(modulesData.modules).join(', ')}`);
     }
 
     const expressPath = SOURCES['express-e'].path;

@@ -10,7 +10,7 @@ import {
   PlatformerPhysics,
   CollisionSystem,
   ParticleSystem
-} from '../../src/game-engine';
+} from '@amiexpress/bbs-door-sdk';
 
 interface GameObject {
   sprite: Sprite;

@@ -400,6 +400,19 @@ class ArkanoidGame {
     });
 
     this.door.onInput((user, key) => {
+      // Check if this is a mouse event (JSON string)
+      const keyStr = typeof key === 'string' ? key : (typeof key.key === 'string' ? key.key : '');
+
+      if (keyStr.startsWith('{')) {
+        try {
+          const mouseEvent = JSON.parse(keyStr);
+          this.handleMouseInput(mouseEvent);
+          return;
+        } catch (e) {
+          // Not a mouse event, continue with keyboard handling
+        }
+      }
+
       // Handle non-movement keys (space, q, enter, etc.)
       const k = key.key?.toLowerCase() || '';
 
@@ -1173,6 +1186,63 @@ class ArkanoidGame {
     } else if (key.length === 1 && this.data.playerName.length < 10) {
       if (/[a-zA-Z0-9]/.test(key)) {
         this.data.playerName += key.toUpperCase();
+      }
+    }
+  }
+
+  private handleMouseInput(event: { type: string; x: number; y: number; button?: number }): void {
+    // Mouse events: mouse-hover, mouse-click, mouse-drag, mouse-up
+    // x and y are 1-indexed terminal coordinates
+
+    if (this.data.state === 'playing') {
+      // Map mouse X position to paddle position
+      // Mouse x is 1-indexed, game area is GAME_LEFT to GAME_RIGHT
+      const mouseX = event.x;
+      const paddle = this.data.paddle;
+      const paddleHalfWidth = paddle.width / 2;
+
+      // Center the paddle on the mouse position
+      let newPaddleX = mouseX - paddleHalfWidth;
+
+      // Clamp to game boundaries
+      newPaddleX = Math.max(GAME_LEFT, Math.min(GAME_RIGHT - paddle.width + 1, newPaddleX));
+
+      paddle.x = newPaddleX;
+
+      // Move attached ball with paddle
+      for (const ball of this.data.balls) {
+        if (!ball.active) {
+          ball.x = paddle.x + Math.floor(paddle.width / 2);
+        }
+      }
+
+      // Click to launch ball
+      if (event.type === 'mouse-click') {
+        if (this.data.balls.some(b => !b.active)) {
+          this.launchBall();
+        }
+      }
+
+      // Render immediately for smooth mouse movement
+      this.door.send(this.render());
+    } else if (this.data.state === 'menu' && event.type === 'mouse-click') {
+      // Menu click handling - check Y position for menu items
+      const menuStartY = 10;
+      const clickY = event.y;
+
+      if (clickY >= menuStartY && clickY <= menuStartY + 4) {
+        const selection = clickY - menuStartY;
+        this.data.menuSelection = selection;
+
+        switch (selection) {
+          case 0: this.startGame(); break;
+          case 1: this.cycleDifficulty(); break;
+          case 2: this.data.state = 'highscores'; break;
+          case 3: this.data.state = 'help'; break;
+          case 4: this.quit(); break;
+        }
+
+        this.door.send(this.render());
       }
     }
   }
