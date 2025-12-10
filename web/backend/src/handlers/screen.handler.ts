@@ -544,7 +544,8 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Store for async file loading - we'll process these after parsing
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
-  const ssRegex = /~(?:SS_|2S)([^~|\r\n]+)(\|\|)?/g;
+  // Path stops at whitespace, tilde (next MCI code), pipe, or newline
+  const ssRegex = /~(?:SS_|2S)([^\s|~\r\n]+)(\|\|)?/g;
   const filesToDisplay: string[] = [];
 
   // Keep provided extensions; only trim whitespace/terminators.
@@ -598,7 +599,8 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
   // Format: ~<max>SR_<path>/<basename> - displays random file from numbered set (max optional, defaults to 99)
   // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays 001.logoff.txt, 002.logoff.txt, etc.
-  const srRegex = /~(\d*)SR_([^|\r\n]+)(\|\|)?/g;
+  // Note: Path stops at whitespace, tilde (next MCI code), pipe, or newline
+  const srRegex = /~(\d*)SR_([^\s|~\r\n]+)(\|\|)?/g;
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
     const maxCountRaw = srMatch[1];

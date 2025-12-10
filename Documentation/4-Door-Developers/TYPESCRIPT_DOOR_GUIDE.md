@@ -2,6 +2,38 @@
 
 Complete guide for creating TypeScript doors for AmiExpress-Web BBS.
 
+## Door Types
+
+AmiExpress-Web supports **three types of doors**:
+
+### 1. Backend Doors (Server-Side)
+- **Runtime**: `server`
+- **Code runs on**: Node.js server
+- **I/O**: ANSI escape codes via `socket.emit('ansi-output', ...)`
+- **Audio**: Terminal bell only (`\x07`)
+- **Best for**: Text games, utilities, ANSI-based interfaces
+- **Example**: Arkanoid, text adventure games, BBS utilities
+
+### 2. Frontend Doors (Client-Side)
+- **Runtime**: `client`
+- **Code runs on**: Browser (JavaScript)
+- **I/O**: Full DOM access, Canvas, WebGL
+- **Audio**: Web Audio API, actual sound files
+- **Best for**: Graphical games, rich media experiences
+- **Example**: Canvas-based games, audio visualizers
+
+### 3. Hybrid Doors (Backend + Frontend)
+- **Runtime**: `hybrid`
+- **Code runs on**: Both server and browser
+- **I/O**: Backend logic with frontend rendering
+- **Audio**: Web Audio API for real sounds
+- **Best for**: Games needing both server logic and rich client audio/graphics
+- **Example**: Multiplayer games with audio, score tracking with sound effects
+
+**IMPORTANT**: This guide covers **Backend Doors** (`runtime: "server"`). For frontend or hybrid doors, see [CLIENT_DOOR_DEVELOPMENT.md](CLIENT_DOOR_DEVELOPMENT.md).
+
+---
+
 ## Quick Start
 
 ### 1. Create Door Directory
@@ -85,8 +117,10 @@ export async function runDoor(doorSession: any): Promise<void> {
   socket.emit('ansi-output', '\r\nPress Q to quit...\r\n');
 
   // Set up input handler on bbsSession (not session!)
-  bbsSession.doorInputHandler = (data: any) => {
-    const key = data?.key?.toLowerCase() || '';
+  // IMPORTANT: Input data is a raw string (the key pressed), NOT an object!
+  bbsSession.doorInputHandler = (data: string) => {
+    // Data is the raw key string: 'a', 'q', '\r', '\x1b[A' (arrow up), etc.
+    const key = data.toLowerCase();
 
     if (key === 'q') {
       // Cleanup before closing
@@ -177,34 +211,46 @@ socket.emit('ansi-output', '\x1b[0m');      // Reset colors
 
 ```typescript
 // Set up input handler on bbsSession (not session!)
-bbsSession.doorInputHandler = (data: any) => {
-  const key = data?.key || '';
+// IMPORTANT: Input is a raw string, NOT an object with a key property!
+bbsSession.doorInputHandler = (data: string) => {
+  // Data is the raw key pressed:
+  // - Regular keys: 'a', 'q', '1', ' ' (space)
+  // - Enter: '\r' or '\n'
+  // - Escape sequences: '\x1b[A' (up), '\x1b[B' (down), '\x1b[C' (right), '\x1b[D' (left)
 
-  // Special keys come as strings like 'ArrowUp', 'ArrowDown', 'Enter', 'Space'
-  // Regular keys come as single characters
+  const key = data.toLowerCase();
 
-  switch (key.toLowerCase()) {
-    case 'arrowup':
-    case 'up':
-    case 'w':
-      // Move up
-      break;
-    case 'arrowdown':
-    case 'down':
-    case 's':
-      // Move down
-      break;
-    case 'enter':
-    case '\r':
-    case '\n':
-      // Enter pressed
-      break;
-    case 'q':
-      socket.emit('door:close');
-      break;
+  // Handle arrow keys (ANSI escape sequences)
+  if (data === '\x1b[A' || key === 'w') {
+    // Move up
+  } else if (data === '\x1b[B' || key === 's') {
+    // Move down
+  } else if (data === '\x1b[C' || key === 'd') {
+    // Move right
+  } else if (data === '\x1b[D' || key === 'a') {
+    // Move left
+  } else if (key === '\r' || key === '\n') {
+    // Enter pressed
+  } else if (key === 'q') {
+    socket.emit('door:close');
   }
 };
 ```
+
+**Common Key Values:**
+
+| Key | Value |
+|-----|-------|
+| Arrow Up | `\x1b[A` |
+| Arrow Down | `\x1b[B` |
+| Arrow Right | `\x1b[C` |
+| Arrow Left | `\x1b[D` |
+| Enter | `\r` or `\n` |
+| Escape | `\x1b` (alone) |
+| Backspace | `\x7f` or `\x08` |
+| Tab | `\t` |
+| Space | ` ` (space character) |
+| Regular keys | The character itself (e.g., 'a', 'q', '1') |
 
 ---
 
@@ -219,21 +265,21 @@ export async function runDoor(doorSession: any): Promise<void> {
   // Enable mouse events - MUST be set on bbsSession
   bbsSession.mouseEventsEnabled = true;
 
-  bbsSession.doorInputHandler = (data: any) => {
-    // Check if this is a mouse event (JSON string)
-    if (typeof data === 'string' && data.startsWith('{')) {
+  // Input is a raw string - could be keyboard key or JSON-formatted mouse event
+  bbsSession.doorInputHandler = (data: string) => {
+    // Check if this is a mouse event (JSON string starting with '{')
+    if (data.startsWith('{')) {
       try {
         const event = JSON.parse(data);
         handleMouseEvent(event);
         return;
       } catch (e) {
-        // Not a mouse event, continue with keyboard
+        // Not valid JSON, continue with keyboard handling
       }
     }
 
-    // Handle keyboard input
-    const key = data?.key || '';
-    handleKeyboard(key);
+    // Handle keyboard input - data is the raw key string
+    handleKeyboard(data);
   };
 
   function handleMouseEvent(event: MouseEvent) {
@@ -321,12 +367,14 @@ export async function runDoor(doorSession: any): Promise<void> {
   let score = 0;
 
   // Input handler - set on bbsSession!
-  bbsSession.doorInputHandler = (data: any) => {
-    const key = data?.key?.toLowerCase() || '';
+  // IMPORTANT: data is a raw string (the key pressed)
+  bbsSession.doorInputHandler = (data: string) => {
+    const key = data.toLowerCase();
 
-    if (key === 'arrowleft' || key === 'a') {
+    // Arrow keys come as ANSI escape sequences
+    if (data === '\x1b[D' || key === 'a') {  // Left arrow or 'a'
       playerX = Math.max(1, playerX - 1);
-    } else if (key === 'arrowright' || key === 'd') {
+    } else if (data === '\x1b[C' || key === 'd') {  // Right arrow or 'd'
       playerX = Math.min(80, playerX + 1);
     } else if (key === 'q') {
       running = false;
@@ -568,16 +616,18 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   // Set input handler on bbsSession!
-  bbsSession.doorInputHandler = (data: any) => {
-    const key = data?.key?.toLowerCase() || '';
+  // IMPORTANT: data is a raw string (the key pressed)
+  bbsSession.doorInputHandler = (data: string) => {
+    const key = data.toLowerCase();
 
-    if (key === 'arrowup' || key === 'w') {
+    // Arrow keys are ANSI escape sequences: \x1b[A (up), \x1b[B (down)
+    if (data === '\x1b[A' || key === 'w') {
       selection = (selection - 1 + options.length) % options.length;
       render();
-    } else if (key === 'arrowdown' || key === 's') {
+    } else if (data === '\x1b[B' || key === 's') {
       selection = (selection + 1) % options.length;
       render();
-    } else if (key === 'enter' || key === '\r') {
+    } else if (key === '\r' || key === '\n') {
       switch (selection) {
         case 0: /* Start game */ break;
         case 1: /* Show scores */ break;
@@ -619,8 +669,9 @@ export async function runDoor(doorSession: any): Promise<void> {
 ### Input Not Working
 
 1. Ensure `bbsSession.doorInputHandler` is set (NOT `session.doorInputHandler`)
-2. Check `data?.key` not `data.key` (may be undefined)
-3. Handle both lowercase and special key names
+2. **CRITICAL**: Input data is a raw string, NOT an object! Use `data` directly, not `data.key`
+3. Arrow keys are ANSI escape sequences (`\x1b[A`, `\x1b[B`, etc.), not strings like 'ArrowUp'
+4. Test with simple logging: `console.log('Key received:', JSON.stringify(data))`
 
 ### Mouse Not Working
 
@@ -648,6 +699,8 @@ export async function runDoor(doorSession: any): Promise<void> {
 | `doorSession.session` | `doorSession.bbsSession` |
 | `session.doorInputHandler` | `bbsSession.doorInputHandler` |
 | `session.mouseEventsEnabled` | `bbsSession.mouseEventsEnabled` |
+| `data.key` or `data?.key` | `data` (input is a raw string, not an object!) |
+| Checking for `'ArrowUp'` | Check for `'\x1b[A'` (ANSI escape sequence) |
 | Missing `runtime: "server"` in package.json | Add `"runtime": "server"` |
 | Missing `doorPattern: "runDoor"` | Add `"doorPattern": "runDoor"` |
 | Not cleaning up on exit | Set `doorInputHandler = null`, `mouseEventsEnabled = false` |

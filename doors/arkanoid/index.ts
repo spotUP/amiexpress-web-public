@@ -1462,7 +1462,8 @@ class ArkanoidGame {
         }
       }
 
-      const key = data?.key || '';
+      // Data can be either a string (direct key) or an object with key property
+      const key = typeof data === 'string' ? data : (data?.key || '');
       this.handleInput(key);
 
       // Immediate render for menu/non-game states
