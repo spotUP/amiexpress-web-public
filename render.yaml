@@ -3,6 +3,10 @@
 # Unified Docker Service - Serves all frontends (BBS, Admin, SDK)
 # Cost: 1 service | Build time: 3-5 minutes
 #
+# IMPORTANT: BBS data is stored on persistent disk at /app/data
+# Deployments do NOT overwrite user data (messages, uploads, users)
+# Only code/frontend changes are deployed
+#
 
 services:
   - type: web
@@ -26,7 +30,7 @@ services:
       - key: BACKEND_PORT
         value: 3001
       - key: DATABASE_DIR
-        value: /app/db
+        value: /app/data/db
       - key: DATABASE_FILE
         value: amiexpress.db
       - key: BBS_DATA_DIR
@@ -44,9 +48,11 @@ services:
       - key: XIM_DEBUG
         value: 0
 
+    # Persistent disk for ALL BBS data (database, users, messages, files)
+    # This data survives deployments and is NOT overwritten
     disk:
       name: bbs-data
-      mountPath: /app/db
+      mountPath: /app/data
       sizeGB: 10
 
     healthCheckPath: /

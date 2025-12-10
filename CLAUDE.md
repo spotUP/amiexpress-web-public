@@ -59,6 +59,32 @@ When debugging 68K door issues (doors not working, showing errors, hanging, etc.
 
 **Violation = You wasted time implementing features that already exist**
 
+7. **CHECK LOGS FREQUENTLY DURING DEBUGGING**:
+   - Read door logs after EVERY change you make
+   - Don't wait until the end to check - check immediately after each test
+   - Compare log output before and after your changes
+   - If a fix doesn't change the log output, the fix didn't work
+
+8. **DOCUMENT YOUR DEBUGGING PROGRESS**:
+   - Create/update `Documentation/6-Progress/{DOORNAME}_DEBUG_SESSION.md` for each door
+   - Log EVERY step you take with results (what worked, what didn't)
+   - Include: hypothesis, action taken, result, next hypothesis
+   - This prevents repeating the same failed approaches across sessions
+   - Example format:
+     ```
+     ## Step 1: Check AllocSignal return value
+     Hypothesis: AllocSignal returning -1 (failure)
+     Action: Added debug log in ExecLibrary.allocSignal()
+     Result: AllocSignal returns 16 (success) - NOT the issue
+
+     ## Step 2: Check FindPort call
+     Hypothesis: Door can't find AEDoorPort
+     Action: grep FindPort in backend.log
+     Result: NO FindPort calls! Door exits before XIM init
+     ```
+
+**Violation = You wasted time repeating failed debugging steps**
+
 ---
 
 **NEVER USE BACKGROUND PROCESSES - THIS IS NON-NEGOTIABLE**

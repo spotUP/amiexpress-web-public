@@ -118,41 +118,34 @@ COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dis
 COPY web/backend/src ./web/backend/src
 COPY web/backend/scripts ./web/backend/scripts
 
-# Create BBS data directories
-RUN mkdir -p \
-    /app/data/bbs \
-    /app/data/amiga-roms \
-    /app/logs \
-    /app/Doors \
-    /app/Commands \
-    /app/Screens \
-    /app/Bulletins \
-    /app/Users \
-    /app/db \
-    /app/Conf1 /app/Conf2 /app/Conf3 /app/Conf4 /app/Conf5 \
-    /app/Conf6 /app/Conf7 /app/Conf8 /app/Conf9 /app/Conf10 \
-    /app/Conf11 /app/Conf12 /app/Conf13
+# Create directories that will exist in the container (not on persistent disk)
+RUN mkdir -p /app/logs /app/default-data
 
-# Copy default BBS data files
-COPY Screens /app/Screens
-COPY Bulletins /app/Bulletins
-COPY Commands /app/Commands
-COPY Conf1 /app/Conf1
-COPY Conf2 /app/Conf2
-COPY Conf3 /app/Conf3
-COPY Conf4 /app/Conf4
-COPY Conf5 /app/Conf5
-COPY Conf6 /app/Conf6
-COPY Conf7 /app/Conf7
-COPY Conf8 /app/Conf8
-COPY Conf9 /app/Conf9
-COPY Conf10 /app/Conf10
-COPY Conf11 /app/Conf11
-COPY Conf12 /app/Conf12
-COPY Conf13 /app/Conf13
+# Copy default BBS data to a template directory (NOT the live data location)
+# These will be used to initialize the persistent disk on first run only
+COPY Screens /app/default-data/Screens
+COPY Bulletins /app/default-data/Bulletins
+COPY Commands /app/default-data/Commands
+COPY Conf1 /app/default-data/Conf1
+COPY Conf2 /app/default-data/Conf2
+COPY Conf3 /app/default-data/Conf3
+COPY Conf4 /app/default-data/Conf4
+COPY Conf5 /app/default-data/Conf5
+COPY Conf6 /app/default-data/Conf6
+COPY Conf7 /app/default-data/Conf7
+COPY Conf8 /app/default-data/Conf8
+COPY Conf9 /app/default-data/Conf9
+COPY Conf10 /app/default-data/Conf10
+COPY Conf11 /app/default-data/Conf11
+COPY Conf12 /app/default-data/Conf12
+COPY Conf13 /app/default-data/Conf13
+COPY doors /app/default-data/doors
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # Set permissions
-RUN chown -R bbsuser:bbsuser /app
+RUN chown -R bbsuser:bbsuser /app && chmod +x /app/docker-entrypoint.sh
 
 # Switch to non-root user
 USER bbsuser
@@ -171,5 +164,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Set working directory to backend
 WORKDIR /app/web/backend
 
-# Start the BBS server (runs TypeScript directly with tsx)
+# Use entrypoint to initialize data on first run, then start server
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["npx", "tsx", "src/index.ts"]
