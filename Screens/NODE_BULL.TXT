@@ -2,9 +2,10 @@
 ~SS_BBS:bulletins/bull6.txt| ~SP
 ~f
 ~CC_gl ~SP
-~CC_gwall
 ~f
-~5SR_WORK:bbs/Screens/flt/flt ~SP
+~CC_gwall ~SP
+~f
+~5SR_WORK:screens/flt/flt ~SP
 ~f
 ~SS_BBS:screens/uprough.txt ~SP
 ~f
