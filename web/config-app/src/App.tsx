@@ -21,6 +21,7 @@ import { LogsPage } from './pages/LogsPage';
 import { BatchEditorPage } from './pages/BatchEditorPage';
 import { SessionLogsPage } from './pages/SessionLogsPage';
 import { HealthCheckPage } from './pages/HealthCheckPage';
+import { OperatorChatPage } from './pages/OperatorChatPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -69,6 +70,7 @@ function App() {
         <Route path="logs" element={<LogsPage />} />
         <Route path="session-logs" element={<SessionLogsPage />} />
         <Route path="batches" element={<BatchEditorPage />} />
+        <Route path="operator-chat" element={<OperatorChatPage />} />
         <Route path="*" element={<Navigate to="system" replace />} />
       </Route>
     </Routes>

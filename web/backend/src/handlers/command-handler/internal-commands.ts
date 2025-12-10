@@ -26,6 +26,7 @@ import {
   setSystemCommandsDependencies
 } from '../commands/system-commands.handler';
 import { WebhookCommandsHandler } from '../commands/webhook-commands.handler';
+import { handlePageSysopCommand } from './page-sysop-command';
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -48,7 +49,6 @@ import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
   handleCommentToSysopCommand,
-  handlePageSysopCommand,
   setPreferenceChatCommandsDependencies
 } from '../chat/preference-chat-commands.handler';
 import {
@@ -169,6 +169,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'MS': // Mail Scan (internalCommandMS) - express.e:25250-25279
       handleMailScanCommand(socket, session);
+      return;
+
+    case 'O': // Page Sysop (internalCommandO) - express.e:25372-25405
+      await handlePageSysopCommand(socket, session, socket.server);
       return;
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503
@@ -309,11 +313,6 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     case 'N': // New Files (internalCommandN) - express.e:25275-25279
       await handleNewFilesCommand(socket, session, params);
       return;
-
-    case 'O': // Page Sysop (internalCommandO) - express.e:25372-25404
-      handlePageSysopCommand(socket, session);
-      return;
-
 
     case 'T': // Time/Date Display (internalCommandT) - express.e:25622-25644
       handleTimeCommand(socket, session);

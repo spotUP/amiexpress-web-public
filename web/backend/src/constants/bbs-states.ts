@@ -102,6 +102,10 @@ export enum LoggedOnSubState {
   DOOR_SELECT = 'door_select',
   DOOR_RUNNING = 'door_running',
 
+  // Operator chat operations
+  OPERATOR_CHAT_WAITING = 'operator_chat_waiting',      // Waiting for sysop to accept page
+  OPERATOR_CHAT_ACTIVE = 'operator_chat_active',        // Active chat session
+
   // Account operations
   ACCOUNT_MENU = 'account_menu',
   ACCOUNT_CHANGE_PASSWORD = 'account_change_password',
@@ -177,6 +181,7 @@ export enum LoggedOnSubState {
   W_EDIT_SCREENTYPE = 'w_edit_screentype',            // Edit screen type (option 9)
   W_EDIT_PROTOCOL = 'w_edit_protocol',                // Edit transfer protocol (option 11)
   W_EDIT_TRANSLATOR = 'w_edit_translator',            // Edit translator (option 15)
+  W_EDIT_MODEM_SPEED = 'w_edit_modem_speed',          // Edit modem emulation speed (web extension)
 
   // User Stats (S command) - Web-specific font selection
   USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option

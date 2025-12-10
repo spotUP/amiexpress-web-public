@@ -325,6 +325,10 @@ export interface BBSSession {
     commands?: string[];
     onComplete?: () => void;
   };
+  slowmo?: number; // Slow screen output speed (MCI ~SMO), 1-5 per express.e
+  slowmoCount?: number; // Remaining byte budget before next slowmo delay
+  modemEmulationEnabled?: boolean; // When true, throttle screen output to modem-like speeds
+  modemBps?: number; // Target bits per second for modem emulation
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
@@ -860,7 +864,9 @@ io.on('connection', async (socket) => {
     // Command history (express.e:31561-31563)
     commandHistory: [], // Circular buffer of last 20 commands (historyBuf)
     historyIndex: 0, // Current position for next command storage (historyNum)
-    historyCycle: 0 // Current position when navigating history
+    historyCycle: 0, // Current position when navigating history
+    modemEmulationEnabled: false,
+    modemBps: 0
   };
   setSession(socket.id, session); // Use helper to store by nodeId
   try {
@@ -916,6 +922,12 @@ io.on('connection', async (socket) => {
   try {
     console.log('Initializing database and loading data...');
     await initializeData();
+
+    // Initialize operator chat handler
+    const { initOperatorChatHandler } = await import('./handlers/operator-chat.handler');
+    const operatorChatRepo = db.getOperatorChatRepository();
+    initOperatorChatHandler(io, operatorChatRepo);
+    console.log('[OK] Operator chat handler initialized');
 
     // Register HTTP routes (auth, sessions, config, upload, download, etc.)
     registerHttpRoutes(app);
