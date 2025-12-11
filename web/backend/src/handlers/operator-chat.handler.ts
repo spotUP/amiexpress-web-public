@@ -40,8 +40,21 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
 
   // Listen for sysop status updates
   io.on('connection', (socket: Socket) => {
+    const session = (socket as any).session as BBSSession;
+
+    // Mark sysop sockets available on connect, defaulting status to AVAILABLE
+    if (session?.user && session.user.secLevel >= 100) {
+      repository.updateSysopStatus(session.user.id, SysopAvailability.AVAILABLE, 'Online');
+    }
+
+    socket.on('disconnect', () => {
+      const sess = (socket as any).session as BBSSession;
+      if (sess?.user && sess.user.secLevel >= 100) {
+        repository.updateSysopStatus(sess.user.id, SysopAvailability.OFFLINE, 'Offline');
+      }
+    });
+
     socket.on('operator:set-status', async (data: { availability: SysopAvailability; statusMessage?: string }) => {
-      const session = (socket as any).session as BBSSession;
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
@@ -54,7 +67,6 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
     });
 
     socket.on('operator:get-pending-pages', async () => {
-      const session = (socket as any).session as BBSSession;
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
@@ -74,7 +86,6 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
     });
 
     socket.on('operator:accept-page', async (data: { pageId: string }) => {
-      const session = (socket as any).session as BBSSession;
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
@@ -84,7 +95,6 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
     });
 
     socket.on('operator:send-message', async (data: { pageId: string; message: string }) => {
-      const session = (socket as any).session as BBSSession;
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;
@@ -94,7 +104,6 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
     });
 
     socket.on('operator:end-chat', async (data: { pageId: string }) => {
-      const session = (socket as any).session as BBSSession;
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
         return;

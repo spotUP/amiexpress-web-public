@@ -336,13 +336,13 @@ export class OperatorChatRepository {
     `).get(sysopId) as any;
 
     if (!row) {
-      // Create default status
+      // Create default status (AVAILABLE so paging works by default)
       this.db.prepare(`
         INSERT INTO operator_sysop_status (sysop_id, availability, updated_at)
         VALUES (?, ?, ?)
-      `).run(sysopId, SysopAvailability.OFFLINE, Date.now());
+      `).run(sysopId, SysopAvailability.AVAILABLE, Date.now());
 
-      return { availability: SysopAvailability.OFFLINE };
+      return { availability: SysopAvailability.AVAILABLE };
     }
 
     return {
