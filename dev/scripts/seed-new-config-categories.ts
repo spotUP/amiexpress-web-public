@@ -203,25 +203,13 @@ const insertChecker = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
+// NOTE: File checkers should be configured via Fcheck/*.info files (disk-based)
+// The database entries here are legacy fallbacks only
+// See: express.e:18556-18614 for Fcheck implementation
 const fileCheckers = [
-  [
-    'Virus Scanner',
-    '/usr/bin/clamscan',
-    '--no-summary --infected',
-    8192,
-    0,
-    null,
-    0  // Disabled by default
-  ],
-  [
-    'Archive Validator',
-    '/usr/bin/unzip',
-    '-t',
-    4096,
-    0,
-    null,
-    0  // Disabled by default
-  ],
+  // No default checkers - use Fcheck/*.info files instead
+  // To add a checker, create Fcheck/{EXT}.info with CHECKER tooltype
+  // Example: Fcheck/ZIP.info with CHECKER=/usr/bin/unzip -t
 ];
 
 for (const checker of fileCheckers) {

@@ -76,6 +76,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
+  const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
@@ -341,16 +342,53 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       (import.meta as any).env?.VITE_BBS_BACKEND_URL ||
       (isDevelopment ? 'http://localhost:3001' : (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-backend.onrender.com');
 
-    console.log('🔌 BBS Terminal: Connecting to:', finalBackendUrl);
+    console.log('[Terminal] Connecting to:', finalBackendUrl);
 
-    // Keyboard cancel for transfers (Esc)
-    const handleKeyDown = (ev: KeyboardEvent) => {
+    // Reset game mode state at initialization to prevent stuck state from previous sessions
+    gameMode.current = false;
+    keyState.current = {};
+
+    // Game mode keyboard handlers - bypass OS key repeat delay
+    const handleGameKeyDown = (ev: KeyboardEvent) => {
+      // Handle transfer cancel
       if (transferState.current.direction && ev.key === 'Escape') {
         ev.preventDefault();
         cancelTransfer();
+        return;
+      }
+
+      // Game mode: send raw keydown events (no key repeat!)
+      if (gameMode.current && socketRef.current?.connected) {
+        // Ignore browser key repeat - we handle our own repeat logic
+        if (ev.repeat) {
+          ev.preventDefault();
+          return;
+        }
+
+        const key = ev.key;
+        // Only send if key wasn't already pressed (prevents duplicate downs)
+        if (!keyState.current[key]) {
+          keyState.current[key] = true;
+          socketRef.current.emit('key-down', { key, code: ev.code });
+        }
+        ev.preventDefault();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
+
+    const handleGameKeyUp = (ev: KeyboardEvent) => {
+      // Game mode: send raw keyup events
+      if (gameMode.current && socketRef.current?.connected) {
+        const key = ev.key;
+        if (keyState.current[key]) {
+          delete keyState.current[key];
+          socketRef.current.emit('key-up', { key, code: ev.code });
+        }
+        ev.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', handleGameKeyDown);
+    window.addEventListener('keyup', handleGameKeyUp);
 
     // Connect to BBS backend
     const socket = io(finalBackendUrl, {
@@ -367,7 +405,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Socket event handlers
     socket.on('connect', () => {
-      console.log('✅ BBS Terminal: Connected to BBS backend');
+      console.log('[Terminal] Connected to BBS backend');
+      // CRITICAL: Reset game mode on new connection to prevent stuck input state
+      gameMode.current = false;
+      keyState.current = {};
       if (loginState.current === 'password' && newUserPromptUsername.current && password.current) {
         socket.emit('login', { username: newUserPromptUsername.current, password: password.current });
         loginState.current = 'loggedin';
@@ -749,6 +790,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       doorActive.current = active;
     });
 
+    // Game mode: bypass OS key repeat for real-time game controls
+    socket.on('game-mode', (enabled: boolean) => {
+      console.log(`[GameMode] ${enabled ? 'ENABLED' : 'DISABLED'} - raw keydown/keyup events`);
+      gameMode.current = enabled;
+      // Clear key states when switching modes
+      keyState.current = {};
+    });
+
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
       console.log(`[ClientDoor] Loading door: ${data.doorId}`);
 
@@ -929,7 +978,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Send all other input directly to the backend (doors/commands)
     term.onData((data: string) => {
       if (!socket.connected) {
-        console.error('❌ Socket not connected, cannot send data');
+        console.error('[Terminal] Socket not connected, cannot send data');
+        return;
+      }
+      // In game mode, keydown/keyup events are sent separately - skip onData
+      if (gameMode.current) {
         return;
       }
       if (
@@ -958,7 +1011,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       doorMessageBuffer.current = {};
       doorScripts.current = {};
       transferState.current = { direction: null, paths: [] };
-      window.removeEventListener('keydown', handleKeyDown);
+      gameMode.current = false;
+      keyState.current = {};
+      window.removeEventListener('keydown', handleGameKeyDown);
+      window.removeEventListener('keyup', handleGameKeyUp);
       if (transferTimeout.current) {
         clearTimeout(transferTimeout.current);
         transferTimeout.current = null;

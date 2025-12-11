@@ -673,6 +673,26 @@ export async function runDoor(doorSession: any): Promise<void> {
 3. Arrow keys are ANSI escape sequences (`\x1b[A`, `\x1b[B`, etc.), not strings like 'ArrowUp'
 4. Test with simple logging: `console.log('Key received:', JSON.stringify(data))`
 
+### Game Mode and Input Events
+
+**Important**: Game mode is designed for real-time games that need raw keyboard events. However, game mode can block normal input for doors that use `bbs.getKey()` or `socket.once('command', ...)`.
+
+**Key points:**
+- Game mode is NOT automatically enabled for TypeScript doors
+- If your door needs real-time keyboard input (games, continuous movement), call `bbs.enableGameMode()`
+- If your door uses `bbs.getKey()` for "Press any key to continue..." prompts, do NOT enable game mode
+- `bbs.getKey()` relies on 'command' events which are blocked when game mode is active
+
+**When to use game mode:**
+- Real-time games (paddle games, shooters, snake-style games)
+- Applications needing continuous key repeat
+- Games tracking multiple simultaneous key presses
+
+**When NOT to use game mode:**
+- Simple menus with `bbs.getKey()` prompts
+- Utilities with "Press any key to continue..." flows
+- Text-based applications with line input
+
 ### Mouse Not Working
 
 1. Ensure `bbsSession.mouseEventsEnabled = true` (NOT `session.mouseEventsEnabled`)

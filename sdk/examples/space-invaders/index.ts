@@ -106,13 +106,14 @@ function drawGame(socket: any, game: GameState): void {
 }
 
 function updateGame(game: GameState): void {
-  // Update bullets
+  // Update bullets - move 2 rows per update for faster bullet speed
   game.bullets = game.bullets.filter(bullet => {
-    bullet.y--;
+    bullet.y -= 2;
 
-    // Check collision with enemies
+    // Check collision with enemies (check both current and previous position for fast bullets)
     for (const enemy of game.enemies) {
-      if (enemy.alive && Math.abs(bullet.x - enemy.x) < 2 && bullet.y === enemy.y) {
+      if (enemy.alive && Math.abs(bullet.x - enemy.x) < 2 &&
+          (bullet.y === enemy.y || bullet.y + 1 === enemy.y)) {
         enemy.alive = false;
         game.score += 10;
         return false; // Remove bullet
@@ -122,9 +123,9 @@ function updateGame(game: GameState): void {
     return bullet.y > 1; // Remove if out of bounds
   });
 
-  // Simple enemy movement
+  // Enemy movement - slightly more active
   game.enemies.forEach(enemy => {
-    if (enemy.alive && Math.random() < 0.1) {
+    if (enemy.alive && Math.random() < 0.15) {
       enemy.x += Math.random() < 0.5 ? -1 : 1;
       enemy.x = Math.max(2, Math.min(77, enemy.x));
     }
@@ -158,15 +159,15 @@ async function playGame(socket: any, bbsSession: any): Promise<void> {
   await getKey(socket, bbsSession);
 
   let lastUpdate = Date.now();
-  const updateInterval = 500; // Update every 500ms
+  const updateInterval = 100; // Update every 100ms for faster gameplay
 
   while (game.gameRunning && game.lives > 0) {
     drawGame(socket, game);
 
-    // Non-blocking input with timeout
+    // Non-blocking input with short timeout for responsive controls
     const inputPromise = getKey(socket, bbsSession);
     const timeoutPromise = new Promise<string>((resolve) =>
-      setTimeout(() => resolve('timeout'), 300)
+      setTimeout(() => resolve('timeout'), 50)
     );
 
     const key = await Promise.race([inputPromise, timeoutPromise]);
@@ -176,11 +177,11 @@ async function playGame(socket: any, bbsSession: any): Promise<void> {
       switch (keyLower) {
         case 'a':
         case 'arrowleft':
-          game.playerX = Math.max(2, game.playerX - 2);
+          game.playerX = Math.max(2, game.playerX - 3);
           break;
         case 'd':
         case 'arrowright':
-          game.playerX = Math.min(78, game.playerX + 2);
+          game.playerX = Math.min(78, game.playerX + 3);
           break;
         case ' ':
           game.bullets.push({ x: game.playerX, y: 20 });

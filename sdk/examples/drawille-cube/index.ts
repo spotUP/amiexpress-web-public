@@ -36,9 +36,9 @@ function rotateZ(p: Point3D, angle: number): Point3D {
   const cos = Math.cos(angle); const sin = Math.sin(angle);
   return { x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos, z: p.z };
 }
-function project(p: Point3D, distance: number, centerX: number, centerY: number, scale: number): Point2D {
+function project(p: Point3D, distance: number, centerX: number, centerY: number, scaleX: number, scaleY: number): Point2D {
   const factor = distance / (distance + p.z);
-  return { x: Math.floor(centerX + p.x * scale * factor), y: Math.floor(centerY - p.y * scale * factor) };
+  return { x: Math.floor(centerX + p.x * scaleX * factor), y: Math.floor(centerY - p.y * scaleY * factor) };
 }
 function drawLine(canvas: any, width: number, height: number, x0: number, y0: number, x1: number, y1: number): void {
   const dx = Math.abs(x1 - x0); const dy = Math.abs(y1 - y0);
@@ -68,15 +68,31 @@ export async function runDoor(doorSession: any): Promise<void> {
     if (paused || closed) return;
     angleX += speed; angleY += speed * 0.7; angleZ += speed * 0.5;
 
-    const width = 40, height = 16;
-    const canvas = new DrawilleCanvas(width, height);
-    const centerX = width / 2, centerY = height / 2, scale = 7, distance = 4;
+    // Drawille canvas: width/height in CHARACTERS
+    // Each character is 2 dots wide x 4 dots tall
+    // So actual pixel grid is width*2 x height*4
+    const charWidth = 40, charHeight = 16;
+    const canvas = new DrawilleCanvas(charWidth, charHeight);
+
+    // Pixel dimensions (what canvas.set() uses)
+    const pixelWidth = charWidth * 2;   // 80
+    const pixelHeight = charHeight * 4; // 64
+
+    // Center in PIXEL coordinates
+    const centerX = pixelWidth / 2;     // 40
+    const centerY = pixelHeight / 2;    // 32
+
+    // Adjust scale for aspect ratio: braille chars are 2:1 ratio (2 dots wide, 4 tall)
+    // To make cube appear square, use separate X/Y scales
+    const scaleX = 25;
+    const scaleY = 20;  // Less Y scale because chars are taller than wide
+    const distance = 4;
 
     const projected: Point2D[] = CUBE_VERTICES.map((v) => {
       let r = rotateX(v, angleX); r = rotateY(r, angleY); r = rotateZ(r, angleZ);
-      return project(r, distance, centerX, centerY, scale);
+      return project(r, distance, centerX, centerY, scaleX, scaleY);
     });
-    for (const [s, e] of CUBE_EDGES) drawLine(canvas, width, height, projected[s].x, projected[s].y, projected[e].x, projected[e].y);
+    for (const [s, e] of CUBE_EDGES) drawLine(canvas, pixelWidth, pixelHeight, projected[s].x, projected[s].y, projected[e].x, projected[e].y);
 
     frameCount += 1;
     const frameRaw = canvas.frame();

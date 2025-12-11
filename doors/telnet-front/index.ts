@@ -211,7 +211,6 @@ function displayFrontend(socket: SocketIOSocket, user: any): void {
 
   // Bottom border
   socket.emit('ansi-output', '    \x1b[35m `----+-----------------+-----------------------+-------------------|/-|/\r\n');
-  socket.emit('ansi-output', '\r\n');
 
   // Show hostname and IPs
   const centeredHostname = hostname.substring(0, 26).padEnd(26);

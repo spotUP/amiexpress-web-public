@@ -29,7 +29,57 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Test function
+# Test function with configurable timeout
+test_door_with_timeout() {
+    local timeout_secs=$1
+    local door_name=$2
+    local door_path=$3
+    shift 3
+    local args=("$@")
+
+    TOTAL_DOORS=$((TOTAL_DOORS + 1))
+
+    echo ""
+    echo "[TEST] Testing: $door_name (timeout: ${timeout_secs}s)"
+    echo "[TEST] Path: $door_path"
+    echo "[TEST] Args: ${args[*]}"
+
+    local output_file="/tmp/door_test_${door_name}.out"
+    export AEDOOR_STDOUT="$output_file"
+
+    # Run door with timeout
+    if timeout "$timeout_secs" npx tsx web/backend/src/scripts/run-amiga-door.ts "$door_path" 1 "${args[@]}" > "/tmp/door_test_${door_name}.log" 2>&1; then
+        # Check if output was generated or door exited cleanly
+        if [ -f "$output_file" ] || grep -q "Total iterations" "/tmp/door_test_${door_name}.log" 2>/dev/null; then
+            echo -e "${GREEN}[OK]${NC} $door_name completed successfully"
+            PASSED_DOORS=$((PASSED_DOORS + 1))
+
+            # Show iteration count
+            local iterations=$(grep "Total iterations" "/tmp/door_test_${door_name}.log" 2>/dev/null | tail -1 || echo "unknown")
+            echo "[INFO] $iterations"
+            return 0
+        else
+            echo -e "${RED}[FAIL]${NC} $door_name - no output generated"
+            FAILED_DOORS=$((FAILED_DOORS + 1))
+            return 1
+        fi
+    else
+        local exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            echo -e "${RED}[TIMEOUT]${NC} $door_name - exceeded ${timeout_secs} second limit"
+        else
+            echo -e "${RED}[ERROR]${NC} $door_name - exit code $exit_code"
+        fi
+        FAILED_DOORS=$((FAILED_DOORS + 1))
+
+        # Show last few lines of log
+        echo "[LOG] Last 5 lines:"
+        tail -5 "/tmp/door_test_${door_name}.log" 2>/dev/null || echo "(no log)"
+        return 1
+    fi
+}
+
+# Standard 10-second test function
 test_door() {
     local door_name=$1
     local door_path=$2
@@ -83,20 +133,23 @@ echo "[TEST] Starting door tests..."
 echo ""
 
 # QuickNew - File listing door
+# Uses TestConfig (minimal test file) with relative path from door's cwd
 if [ -f "Doors/QuickNew/QuickNew" ]; then
     test_door "QuickNew" "Doors/QuickNew/QuickNew" \
-        "$PROJECT_ROOT/Doors/QuickNew/QuickNew.Config1" "7"
+        "QuickNew.TestConfig" "1"
 else
     echo -e "${YELLOW}[SKIP]${NC} QuickNew - binary not found"
     SKIPPED_DOORS=$((SKIPPED_DOORS + 1))
 fi
 
 # MultiTop - Top users door
+# Usage: MULTITOP <designfile> <outputfile> [<userdata>]
+# Uses test-users.data (small 10-user file) for fast testing
 if [ -f "Doors/MultiTop/mtop" ]; then
+    # Use relative paths from door's cwd, output to screen (*)
+    # Uses small test user file for reliable fast testing
     test_door "MultiTop" "Doors/MultiTop/mtop" \
-        "$PROJECT_ROOT/Doors/MultiTop/Designs/MTopULBytes1.dsg" \
-        "/tmp/multitop_test.txt" \
-        "ignoresysop" "userdata" "$PROJECT_ROOT/User.Data"
+        "Designs/MTopULBytes1.dsg" "*" "test-users.data"
 else
     echo -e "${YELLOW}[SKIP]${NC} MultiTop - binary not found"
     SKIPPED_DOORS=$((SKIPPED_DOORS + 1))

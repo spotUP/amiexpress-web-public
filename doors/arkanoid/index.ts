@@ -110,11 +110,11 @@ const PADDLE_WIDTH_DEFAULT = 10;
 const PADDLE_WIDTH_SMALL = 6;
 const PADDLE_WIDTH_LARGE = 14;
 const PADDLE_Y = GAME_BOTTOM - 1;
-const PADDLE_SPEED = 6; // Doubled from 3 for better responsiveness
+const PADDLE_SPEED = 2; // Reduced from 4 for more precise control
 
-const BALL_SPEED_DEFAULT = 1;
-const BALL_SPEED_FAST = 1.5;
-const BALL_SPEED_SLOW = 0.6;
+const BALL_SPEED_DEFAULT = 0.6; // Reduced from 1 for easier gameplay
+const BALL_SPEED_FAST = 1.0;
+const BALL_SPEED_SLOW = 0.4;
 
 const BRICK_WIDTH = 6;
 const BRICK_HEIGHT = 1;
@@ -1329,6 +1329,9 @@ class ArkanoidGame {
       this.data.menuSelection = (this.data.menuSelection - 1 + maxOptions + 1) % (maxOptions + 1);
     } else if (k === 'arrowdown' || k === 'down' || k === 's') {
       this.data.menuSelection = (this.data.menuSelection + 1) % (maxOptions + 1);
+    } else if (k === 'q') {
+      // Quick quit from menu with 'q' key
+      this.quit();
     } else if (k === 'enter' || k === '\r' || k === '\n') {
       switch (this.data.menuSelection) {
         case 0: // Start Game
