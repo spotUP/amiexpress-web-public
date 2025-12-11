@@ -1,5 +1,0 @@
-TYPE=TS
-COMMAND=SCREEN
-SECURITY=0
-PARAMS=1
-DESCRIPTION=Display any screen file from Screens/ directory

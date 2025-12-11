@@ -37,6 +37,10 @@ export interface DrawingContext {
   // Numpad mode
   numpadModeEnabled: boolean;
 
+  // Viewport (optional; defaults to full canvas)
+  viewportWidth?: number;
+  viewportHeight?: number;
+
   // File state
   modified: boolean;
 

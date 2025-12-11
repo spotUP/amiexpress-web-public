@@ -1,6 +1,6 @@
 BBSCMD=TCONNECT
 TYPE=TS
-LOCATION=doors/telnet-connect
+LOCATION=Doors/telnet
 DESCRIPTION=Telnet to other BBSes from within this BBS
 ACCESS=50
 MULTINODE=YES

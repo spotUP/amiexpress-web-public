@@ -525,7 +525,7 @@ class ArkanoidGame {
     this.user = doorSession.user;
     this.renderer = new Renderer();
     this.audio = new AudioSystem();
-    this.highscorePath = path.join(process.cwd(), 'doors', 'arkanoid', 'highscores.json');
+    this.highscorePath = path.join(__dirname, 'highscores.json');
 
     this.data = this.createInitialGameData();
     this.loadHighscores();

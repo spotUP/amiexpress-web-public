@@ -1,9 +1,0 @@
-FileID          "BVDBG"
-Name            "BullView Debug"
-Type            TS
-Location        ~/Code/amiexpress-web/web/backend/src/doors/bullview-debug/index.ts
-Command         BVDBG
-HotKey          BV
-MenuName        "BullView Debug"
-Description     "Debug BullView XIM handshake"
-HotKeyDescription "BullView Debug"

@@ -343,9 +343,10 @@ function runAmigaDoorViaRunner(
 
     const useTsRunner = resolvedRunner.endsWith('.ts');
     const command = useTsRunner ? 'npx' : 'node';
-    // For batch doors, use a higher loop limit (10M) but keep the guard enabled
-    // This allows longer-running doors while still catching infinite loops
-    const toolTypes = { LOOP_LIMIT: '10000000' };
+    // For batch doors, use default loop limit (500K) with guard enabled by default
+    // Batch doors should complete quickly - if they exceed 500K iterations they're stuck
+    // The 60s timeout provides an additional safety net
+    const toolTypes = {}; // Empty toolTypes = use DoorLifecycleManager defaults (500K loop limit, guard enabled)
     const execArgs = useTsRunner
       ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)]
       : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)];

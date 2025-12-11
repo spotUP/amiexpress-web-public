@@ -1,0 +1,13 @@
+{
+  "extends": "../../sdk/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@amiexpress/bbs-door-sdk/*": ["../../sdk/src/*"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

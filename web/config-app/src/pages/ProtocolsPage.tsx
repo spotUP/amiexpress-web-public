@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Star } from 'lucide-react';
+import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Star } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Protocol } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataGrid, type DataGridColumn } from '../components/DataGrid';
 
 export function ProtocolsPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<Protocol | null>(null);
+  const [sortKey, setSortKey] = useState<string>('protocol_name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<Omit<Protocol, 'id' | 'created_at' | 'updated_at'>>({
     protocol_name: '',
     protocol_code: '',
@@ -136,7 +139,117 @@ export function ProtocolsPage() {
     return <div className="text-bbs-text">Loading protocols...</div>;
   }
 
-  const protocols: Protocol[] = data?.data || [];
+  const protocols: Protocol[] = (data?.data || []).sort((a: Protocol, b: Protocol) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const aVal = a[sortKey as keyof Protocol];
+    const bVal = b[sortKey as keyof Protocol];
+
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * dir;
+    }
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * dir;
+    }
+    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+      return (aVal === bVal ? 0 : aVal ? -1 : 1) * dir;
+    }
+    return 0;
+  });
+
+  const columns: DataGridColumn<Protocol>[] = [
+    {
+      key: 'enabled',
+      header: 'Status',
+      sortable: true,
+      render: (protocol) => (
+        <button
+          onClick={() => handleToggle(protocol)}
+          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
+            protocol.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+          }`}
+        >
+          {protocol.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+          <span>{protocol.enabled ? 'Enabled' : 'Disabled'}</span>
+        </button>
+      ),
+    },
+    {
+      key: 'protocol_name',
+      header: 'Name',
+      sortable: true,
+      render: (protocol) => (
+        <div className="flex items-center space-x-2">
+          <span className="text-bbs-text font-semibold">{protocol.protocol_name}</span>
+          {protocol.is_default && (
+            <span className="px-2 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs flex items-center space-x-1">
+              <Star size={12} />
+              <span>Default</span>
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'protocol_code',
+      header: 'Code',
+      sortable: true,
+      render: (protocol) => <span className="text-bbs-text font-mono text-xs">{protocol.protocol_code}</span>,
+    },
+    {
+      key: 'command',
+      header: 'Base Command',
+      render: (protocol) => (
+        <code className="text-bbs-text bg-bbs-bg px-2 py-0.5 rounded text-xs font-mono">
+          {protocol.command || '—'}
+        </code>
+      ),
+    },
+    {
+      key: 'features',
+      header: 'Features',
+      render: (protocol) => (
+        <div className="flex flex-wrap gap-1">
+          {protocol.batch_upload && (
+            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs">Batch↑</span>
+          )}
+          {protocol.batch_download && (
+            <span className="px-1.5 py-0.5 bg-bbs-accent/20 text-bbs-accent rounded text-xs">Batch↓</span>
+          )}
+          {protocol.bidirectional && (
+            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-500 rounded text-xs">Bi-Dir</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (protocol) => (
+        <div className="flex space-x-2 justify-end">
+          <button
+            onClick={() => handleEdit(protocol)}
+            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+          >
+            <Edit2 size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => handleMakeDefault(protocol, protocols)}
+            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+            title="Set as default"
+          >
+            <Star size={14} />
+          </button>
+          <button
+            onClick={() => handleDelete(protocol)}
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -151,108 +264,18 @@ export function ProtocolsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {protocols.map((protocol: Protocol) => {
-          const code = protocol.protocol_code?.toUpperCase() || '';
-          // All protocols now implemented: ZMODEM, YMODEM, XMODEM variants, Punter
-          const isC64Protocol = code.includes('PUNTER') || code === 'P';
-          return (
-            <div key={protocol.id} className="card">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 bg-bbs-primary rounded">
-                    <Download className="text-bbs-accent" size={20} />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-lg font-semibold text-bbs-text">{protocol.protocol_name}</h3>
-                      {protocol.is_default && (
-                        <span className="px-2 py-1 bg-bbs-accent/20 text-bbs-accent rounded text-xs flex items-center space-x-1">
-                          <Star size={14} />
-                          <span>Default</span>
-                        </span>
-                      )}
-                      {isC64Protocol && (
-                        <span className="px-2 py-1 bg-blue-500/20 text-blue-500 rounded text-xs">C64/C128</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-bbs-muted font-mono">{protocol.protocol_code}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleToggle(protocol)}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                    protocol.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
-                  }`}
-                  title="Toggle availability"
-                >
-                  {protocol.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                  <span>{protocol.enabled ? 'Enabled' : 'Disabled'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-bbs-muted block mb-1">Base Command:</span>
-                  <code className="text-bbs-text bg-bbs-bg px-2 py-1 rounded block font-mono text-xs">
-                    {protocol.command || 'Not set'}
-                  </code>
-                </div>
-                <div>
-                  <span className="text-bbs-muted block mb-1">Upload Command:</span>
-                  <code className="text-bbs-text bg-bbs-bg px-2 py-1 rounded block font-mono text-xs">
-                    {protocol.upload_command || 'Not set'}
-                  </code>
-                </div>
-                <div>
-                  <span className="text-bbs-muted block mb-1">Download Command:</span>
-                  <code className="text-bbs-text bg-bbs-bg px-2 py-1 rounded block font-mono text-xs">
-                    {protocol.download_command || 'Not set'}
-                  </code>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs mt-2">
-                  {(protocol.batch_upload || protocol.batch_download) && (
-                    <span className="px-2 py-1 bg-bbs-accent/20 text-bbs-accent rounded">Batch</span>
-                  )}
-                  {protocol.bidirectional && (
-                    <span className="px-2 py-1 bg-blue-500/20 text-blue-500 rounded">Bi-Dir</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex space-x-2 mt-4">
-                <button
-                  onClick={() => handleEdit(protocol)}
-                  className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-                >
-                  <Edit2 size={16} />
-                  <span>Edit</span>
-                </button>
-                <button
-                  onClick={() => handleMakeDefault(protocol, protocols)}
-                  className="btn-secondary flex items-center justify-center space-x-2"
-                  title="Set as default protocol"
-                >
-                  <Star size={16} />
-                  <span>Default</span>
-                </button>
-                <button
-                  onClick={() => handleDelete(protocol)}
-                  className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {protocols.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No protocols configured. Add transfer protocols like ZMODEM, YMODEM, XMODEM, or Punter.
-        </div>
-      )}
+      <DataGrid
+        columns={columns}
+        rows={protocols}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={(key) => {
+          setSortKey(key);
+          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
+        }}
+        emptyMessage="No protocols configured. Add transfer protocols like ZMODEM, YMODEM, XMODEM, or Punter."
+        getRowKey={(row) => row.id.toString()}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

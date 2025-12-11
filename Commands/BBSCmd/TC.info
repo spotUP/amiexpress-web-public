@@ -1,6 +1,6 @@
 FORM
 ICON
-LOCATION=doors/telnet-connect
+LOCATION=Doors/telnet
 TYPE=TS
 MULTINODE=YES
 STACK=65536

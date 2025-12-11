@@ -1,0 +1,5 @@
+NAME=FRONTEND
+LOCATION=doors/telnet-front
+TYPE=TS
+DESCRIPTION=Connection frontend - shows who's online
+MULTINODE=YES

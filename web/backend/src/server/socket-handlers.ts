@@ -33,31 +33,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Enable game mode for a session (auto-called when door starts)
- * For 68K doors: Creates KeyRepeatManager for backend-side key repeat
- * For SDK doors: Just enables game mode flag
+ * Enable game mode for a session
+ *
+ * IMPORTANT: This should ONLY be called for doors that need raw keydown/keyup events.
+ * Traditional 68K doors (XIM/AMI) use normal character input via door:input and should NOT have game mode enabled.
+ * Only TypeScript game doors that explicitly call bbs.enableGameMode() should use this.
+ *
+ * For SDK doors: Enables game mode flag and tells frontend to send raw keydown/keyup events
  */
 export function enableGameMode(socket: Socket, session: BBSSession, doorType: string): void {
-  const is68KDoor = doorType === 'XIM' || doorType === 'AMI' || doorType === 'xim' || doorType === 'ami';
-
   session.gameModeEnabled = true;
   session.currentDoorType = doorType;
 
-  if (is68KDoor) {
-    // Create KeyRepeatManager for 68K doors
-    session.keyRepeatManager = new KeyRepeatManager((char: string) => {
-      // Route repeated keys to door input handler
-      if (session.doorInputHandler) {
-        session.doorInputHandler(char);
-      }
-    });
-    session.keyRepeatManager.start();
-    console.log(`[GameMode] Enabled for 68K door (type=${doorType}) with backend key repeat`);
-  } else {
-    console.log(`[GameMode] Enabled for SDK door (type=${doorType})`);
-  }
+  console.log(`[GameMode] Enabled for door (type=${doorType})`);
 
-  // Tell frontend to enable game mode
+  // Tell frontend to enable game mode (sends raw keydown/keyup events)
   socket.emit('game-mode', true);
 }
 

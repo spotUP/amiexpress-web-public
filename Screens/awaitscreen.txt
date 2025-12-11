@@ -1,2 +1,25 @@
-~
-~CC_TELNET-FRONT|
+[2J[H
+[36m                         _____________________________________________
+[36m                        /                                             \
+[36m                       |  [37mWelcome to [33mAmiExpress-Web BBS[36m              |
+[36m                       |  [37mRunning on [32mmodern web technology[36m           |
+[36m                        \_____________________________________________/
+[0m
+[35m     .-------------------------------------------------------------------.
+[35m     |[34mNode[35m| [34mHandle/Username [35m| [34mLocation/Group        [35m| [34mUser IP Address   [35m|
+[35m     |----+-----------------+-----------------------+-------------------|
+[35m     |  [32m0 [35m| [37mAwaiting Call   [35m|                       [35m|                   [35m|
+[35m     |  [32m1 [35m| [37mAwaiting Call   [35m|                       [35m|                   [35m|
+[35m     |  [32m2 [35m| [33mConnecting...   [35m| [37m~CI_                 [35m| [36m~IP_              [35m|
+[35m     |  [32m3 [35m| [37mAwaiting Call   [35m|                       [35m|                   [35m|
+[35m     `---+-----------------+-----------------------+-------------------'
+[0m
+[32m Your connection has been established from: [37m~CI_
+[32m           BBS System Address: [37mlocalhost:3001
+[0m
+[34m  _____________________________________________________________________
+[34m |                                                                     |
+[34m |  [33mAmiExpress-Web [34m- [37mClassic Amiga BBS software for the modern web   [34m|
+[34m |  [37mFeatures: [36m68K emulation, AREXX, Multi-node, Door games          [34m|
+[34m |_____________________________________________________________________|
+[0m

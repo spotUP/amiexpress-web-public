@@ -1,1 +1,3 @@
-Placeholder screen Logon.txt
+Welcome to AmiExpress Web BBS
+Logon screen placeholder (LOGON.TXT)
+Replace this file with your ANSI art if desired.

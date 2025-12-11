@@ -759,3 +759,8 @@ door.onConnect(async (user: any) => {
 // =============================================================================
 
 export default door;
+
+// Provide runDoor entrypoint expected by the TS door harness
+export async function runDoor(session: any): Promise<void> {
+  await runDoorWithSession(door, session);
+}

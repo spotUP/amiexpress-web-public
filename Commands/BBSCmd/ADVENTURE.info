@@ -1,6 +1,6 @@
 FORM
 ICON
-LOCATION=doors/text-adventure
+LOCATION=Doors/adventure
 TYPE=TS
 MULTINODE=YES
 STACK=65536

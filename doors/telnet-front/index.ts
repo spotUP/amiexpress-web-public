@@ -227,23 +227,40 @@ function displayFrontend(socket: SocketIOSocket, user: any): void {
 export async function runDoor(doorSession: any): Promise<void> {
   const { socket, user, bbsSession } = doorSession;
 
+  console.log('[TELNET-FRONT] Starting display');
+
   // Display the frontend
   displayFrontend(socket, user);
 
-  // Auto-exit after 2 seconds or wait for any key
+  console.log('[TELNET-FRONT] Display complete');
+
+  // During pre-login (AWAIT state), just display and exit - don't wait for input
+  // The main BBS flow will handle the ANSI prompt
+  if (!bbsSession || bbsSession.state === 'AWAIT') {
+    console.log('[TELNET-FRONT] Pre-login mode, exiting immediately');
+    return;
+  }
+
+  // For logged-in users, wait briefly for any key to continue
   const exitPromise = new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
-      delete bbsSession.doorInputHandler;
+      if (bbsSession) {
+        delete bbsSession.doorInputHandler;
+      }
       resolve();
     }, 2000);
 
     const handleInput = (data: string) => {
       clearTimeout(timeout);
-      delete bbsSession.doorInputHandler;
+      if (bbsSession) {
+        delete bbsSession.doorInputHandler;
+      }
       resolve();
     };
 
-    bbsSession.doorInputHandler = handleInput;
+    if (bbsSession) {
+      bbsSession.doorInputHandler = handleInput;
+    }
   });
 
   await exitPromise;

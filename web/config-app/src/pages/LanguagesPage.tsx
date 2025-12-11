@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Languages as LanguagesIcon, Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Language } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataGrid, type DataGridColumn } from '../components/DataGrid';
 
 export function LanguagesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<Language | null>(null);
+  const [sortKey, setSortKey] = useState<string>('language_number');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<Omit<Language, 'id' | 'created_at' | 'updated_at'>>({
     language_number: 1,
     title: '',
@@ -108,7 +111,89 @@ export function LanguagesPage() {
     return <div className="text-bbs-text">Loading languages...</div>;
   }
 
-  const languages = data?.data || [];
+  const languages = (data?.data || []).sort((a: Language, b: Language) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const aVal = a[sortKey as keyof Language];
+    const bVal = b[sortKey as keyof Language];
+
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * dir;
+    }
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * dir;
+    }
+    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+      return (aVal === bVal ? 0 : aVal ? -1 : 1) * dir;
+    }
+    return 0;
+  });
+
+  const columns: DataGridColumn<Language>[] = [
+    {
+      key: 'enabled',
+      header: 'Status',
+      sortable: true,
+      render: (lang) => (
+        <button
+          onClick={() => handleToggle(lang)}
+          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
+            lang.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+          }`}
+        >
+          {lang.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+          <span>{lang.enabled ? 'Enabled' : 'Disabled'}</span>
+        </button>
+      ),
+    },
+    {
+      key: 'language_number',
+      header: 'Number',
+      sortable: true,
+      render: (lang) => <span className="text-bbs-text font-mono">{lang.language_number}</span>,
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      sortable: true,
+      render: (lang) => <span className="text-bbs-text font-semibold">{lang.title}</span>,
+    },
+    {
+      key: 'language_code',
+      header: 'Code',
+      sortable: true,
+      render: (lang) => <code className="text-bbs-text bg-bbs-bg px-2 py-0.5 rounded text-xs font-mono">{lang.language_code}</code>,
+    },
+    {
+      key: 'file_path',
+      header: 'File Path',
+      render: (lang) => (
+        <span className="text-bbs-text text-xs font-mono truncate block max-w-xs">
+          {lang.file_path || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (lang) => (
+        <div className="flex space-x-2 justify-end">
+          <button
+            onClick={() => handleEdit(lang)}
+            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+          >
+            <Edit2 size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => handleDelete(lang)}
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -123,64 +208,18 @@ export function LanguagesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {languages.map((lang: Language) => (
-          <div key={lang.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <LanguagesIcon className="text-bbs-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{lang.title}</h3>
-                  <p className="text-xs text-bbs-muted font-mono">
-                    {lang.language_code} (Lang #{lang.language_number})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleToggle(lang)}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  lang.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-                title="Toggle availability"
-              >
-                {lang.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                <span>{lang.enabled ? 'Enabled' : 'Disabled'}</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Language File:</span>
-                <span className="text-bbs-text font-mono text-xs">{lang.file_path || 'Not set'}</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2 mt-4">
-              <button
-                onClick={() => handleEdit(lang)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(lang)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {languages.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No languages configured. Add language files to support multi-language BBS operation.
-        </div>
-      )}
+      <DataGrid
+        columns={columns}
+        rows={languages}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={(key) => {
+          setSortKey(key);
+          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
+        }}
+        emptyMessage="No languages configured. Add language files to support multi-language BBS operation."
+        getRowKey={(row) => row.id.toString()}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

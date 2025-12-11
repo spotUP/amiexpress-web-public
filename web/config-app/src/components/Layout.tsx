@@ -17,6 +17,8 @@ import {
   ArrowUpDown,
   Activity,
   FileText,
+  Network,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,6 +41,8 @@ export function Layout() {
     { to: `${ADMIN_BASE}/users`, icon: User, label: 'Users' },
     { to: `${ADMIN_BASE}/conferences`, icon: MessageSquare, label: 'Conferences' },
     { to: `${ADMIN_BASE}/doors`, icon: DoorOpen, label: 'Doors' },
+    { to: `${ADMIN_BASE}/amixnet`, icon: Network, label: 'AmiXnet Network' },
+    { to: `${ADMIN_BASE}/system-files`, icon: FolderOpen, label: 'System Files' },
     { to: `${ADMIN_BASE}/security`, icon: Shield, label: 'Security' },
     { to: `${ADMIN_BASE}/drives`, icon: HardDrive, label: 'Drives' },
     { to: `${ADMIN_BASE}/computers`, icon: Monitor, label: 'Computers' },

@@ -24,12 +24,14 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
   try {
     console.log(`[DoorAPI] Serving bundle for door: ${doorId}`);
 
-    // Look up door manifest
-    const doorManifest = await loadDoorManifest(doorId);
+    // Look up door manifest and path
+    const result = await loadDoorManifest(doorId);
 
-    if (!doorManifest) {
+    if (!result) {
       return res.status(404).json({ error: 'Door not found' });
     }
+
+    const { manifest: doorManifest, doorBasePath } = result;
 
     // Check runtime type
     if (doorManifest.runtime !== 'client' && doorManifest.runtime !== 'hybrid') {
@@ -44,9 +46,10 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
     }
 
     console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
+    console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
 
-    // Resolve door path
-    const doorPath = resolveDoorPath(doorId, entryPoint);
+    // Resolve door path - use actual door base path from registry, not doorId
+    const doorPath = path.join(doorBasePath, entryPoint);
 
     // Bundle the door
     const bundler = getClientDoorBundler();
@@ -82,11 +85,13 @@ doorApiRouter.get('/doors/:doorId/manifest', async (req: Request, res: Response)
   const { doorId } = req.params;
 
   try {
-    const manifest = await loadDoorManifest(doorId);
+    const result = await loadDoorManifest(doorId);
 
-    if (!manifest) {
+    if (!result) {
       return res.status(404).json({ error: 'Door not found' });
     }
+
+    const { manifest } = result;
 
     // Return public manifest info
     res.json({
@@ -151,30 +156,34 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
 
 /**
  * Load door manifest from package.json
+ * Returns both the manifest and the resolved door path
  */
-async function loadDoorManifest(doorId: string): Promise<any | null> {
+async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBasePath: string } | null> {
   try {
     const bbsRoot = getBbsRoot();
     const amigafs = require('../utils/amigafs');
 
     // Get door from registry to find actual location (LOCATION tooltype from .info file)
-    const { doors } = require('../handlers/door.handler');
+    const { getDoors } = require('../handlers/door.handler');
+    const doors = getDoors();
     const door = doors.find((d: any) => d.id.toUpperCase() === doorId.toUpperCase());
 
     if (door && door.path) {
       // Use door.path from registry (e.g., "Doors/arkanoid-audio")
-      const manifestPath = path.join(bbsRoot, door.path, 'package.json');
+      const doorBasePath = path.join(bbsRoot, door.path);
+      const manifestPath = path.join(doorBasePath, 'package.json');
       if (amigafs.existsSync(manifestPath)) {
         const content = amigafs.readFileSync(manifestPath, 'utf8');
-        return JSON.parse(content);
+        return { manifest: JSON.parse(content), doorBasePath };
       }
     }
 
     // Fallback: try standard locations with case-insensitive matching
-    const manifestPath = path.join(bbsRoot, 'Doors', doorId, 'package.json');
+    const doorBasePath = path.join(bbsRoot, 'Doors', doorId);
+    const manifestPath = path.join(doorBasePath, 'package.json');
     if (amigafs.existsSync(manifestPath)) {
       const content = amigafs.readFileSync(manifestPath, 'utf8');
-      return JSON.parse(content);
+      return { manifest: JSON.parse(content), doorBasePath };
     }
 
     return null;

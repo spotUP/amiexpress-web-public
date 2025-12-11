@@ -1,6 +1,6 @@
 BBSCMD=DUNGEON
 TYPE=TS
-LOCATION=doors/dungeon-rpg
+LOCATION=Doors/dungeon
 DESCRIPTION=Comprehensive RPG example demonstrating all SDK features
 ACCESS=0
 MULTINODE=YES

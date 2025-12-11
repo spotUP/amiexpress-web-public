@@ -12,7 +12,7 @@
  * - Screen clearing utilities
  */
 
-import { Cell, Tool, GuideType, HIDE_CURSOR, CLEAR_SCREEN } from './types';
+import { Cell, Tool, GuideType, BrushMode, OperationMode, HIDE_CURSOR, CLEAR_SCREEN } from './types';
 
 // ========== DISPLAY CONTEXT INTERFACE ==========
 
@@ -37,6 +37,9 @@ export interface DisplayContext {
 
   // Tool state
   currentTool: Tool;
+  brushSize: number;
+  brushMode: BrushMode;
+  operationMode: OperationMode;
 
   // Mode state
   iceColorsEnabled: boolean;
@@ -48,6 +51,12 @@ export interface DisplayContext {
   guideOverlayEnabled: boolean;
   guideType: GuideType;
   gridSpacing: number;
+
+  // Viewport state (for larger canvases)
+  viewportX: number;
+  viewportY: number;
+  viewportWidth: number;
+  viewportHeight: number;
 
   // Selection state
   selecting: boolean;

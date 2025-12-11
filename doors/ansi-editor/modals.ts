@@ -121,10 +121,11 @@ export class ColorPickerModal extends Modal {
   private mode: 'fg' | 'bg' = 'fg';
   private iceColorsEnabled = false;  // iCE colors mode (enables bg 8-15)
 
-  constructor(editor: any, currentFg: number, currentBg: number) {
+  constructor(editor: any, currentFg: number, currentBg: number, startInBg: boolean = false) {
     super(editor, 'SELECT COLORS', []);
     this.selectedFg = currentFg;
     this.selectedBg = currentBg;
+    this.mode = startInBg ? 'bg' : 'fg';
   }
 
   render(): string {
@@ -320,8 +321,9 @@ export class FileDialogModal extends Modal {
   private files: string[] = [];
   private mode: 'save' | 'load';
   private location: 'bbs' | 'local' = 'bbs';
+  private inputValue = '';
 
-  constructor(editor: any, mode: 'save' | 'load', files: string[]) {
+  constructor(editor: any, mode: 'save' | 'load', files: string[], initialInput = '') {
     const menuOptions: ModalOption[] = [
       { value: 'bbs', label: 'BBS Server', description: 'Save/Load from BBS Screens directory' },
       { value: 'local', label: 'Local Computer', description: mode === 'save' ? 'Download ANSI to your computer' : 'Upload ANSI from your computer' }
@@ -330,6 +332,7 @@ export class FileDialogModal extends Modal {
     super(editor, mode === 'save' ? 'SAVE FILE' : 'LOAD FILE', menuOptions);
     this.files = files;
     this.mode = mode;
+    this.inputValue = initialInput;
   }
 
   render(): string {
@@ -388,6 +391,12 @@ export class FileDialogModal extends Modal {
       }
     }
 
+    // Current filename input
+    buffer += `\x1b[${boxY + boxHeight - 4};${boxX + 2}H\x1b[0;37;44m`;
+    const inputLabel = this.mode === 'save' ? 'Save as:' : 'Load file:';
+    const inputDisplay = this.inputValue.length > 0 ? this.inputValue : '(type filename)';
+    buffer += `${inputLabel} ${inputDisplay}`.padEnd(boxWidth - 4);
+
     // Footer
     buffer += `\x1b[${boxY + boxHeight - 2};${boxX + 2}H\x1b[0;37;44m`;
     buffer += this.centerText('ARROWS=Select  ENTER=Continue  ESC=Cancel', boxWidth - 4);
@@ -405,6 +414,14 @@ export class FileDialogModal extends Modal {
 
   getBBSFiles(): string[] {
     return this.files;
+  }
+
+  updateInput(value: string): void {
+    this.inputValue = value;
+  }
+
+  getInputValue(): string {
+    return this.inputValue.trim();
   }
 }
 
@@ -488,6 +505,18 @@ export class GalleryBrowserModal extends Modal {
         this.scrollOffset = this.selectedIndex - maxVisible + 1;
       }
     }
+  }
+
+  moveLeft(): void {
+    const maxVisible = 13;
+    this.selectedIndex = Math.max(0, this.selectedIndex - maxVisible);
+    this.scrollOffset = Math.max(0, this.selectedIndex);
+  }
+
+  moveRight(): void {
+    const maxVisible = 13;
+    this.selectedIndex = Math.min(this.options.length - 1, this.selectedIndex + maxVisible);
+    this.scrollOffset = Math.max(0, Math.min(this.selectedIndex, Math.max(0, this.options.length - maxVisible)));
   }
 }
 

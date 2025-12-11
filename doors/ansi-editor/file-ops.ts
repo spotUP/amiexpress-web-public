@@ -24,6 +24,12 @@ export interface FileContext {
   height: number;
   fg: number;
   bg: number;
+  filename?: string | null;
+  modified?: boolean;
+  doorSession?: any;
+  emit?: (data: string) => void;
+  refresh?: () => void;
+  saveUndoState?: (chunk?: boolean) => void;
   dataDir?: string;
 }
 

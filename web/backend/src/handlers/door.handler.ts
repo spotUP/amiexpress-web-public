@@ -328,9 +328,11 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
 
-    // Enable game mode for real-time input (68K doors get backend key repeat)
-    const doorType = doorInfo.type || 'XIM';
-    enableGameMode(socket, session, doorType);
+    // DO NOT enable game mode for 68K doors - they use normal character input via door:input
+    // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
+    // Only TypeScript doors that explicitly call bbs.enableGameMode() should use game mode
+    // const doorType = doorInfo.type || 'XIM';
+    // enableGameMode(socket, session, doorType);
 
     session.doorInputHandler = (data: string) => {
       try {
@@ -891,10 +893,19 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
 
   // Check if this is a client door (needs to detect runtime from manifest)
   const doorManifest = await loadDoorManifestForExecution(door);
-  if (doorManifest && (doorManifest.runtime === 'client' || doorManifest.runtime === 'hybrid')) {
-    // Execute as client door (browser-based)
+
+  // Client-only doors: Just load the client bundle and return
+  if (doorManifest && doorManifest.runtime === 'client') {
     await executeClientDoor(socket, session, door, doorManifest);
     return;
+  }
+
+  // Hybrid doors: Load client bundle but ALSO continue to execute server part
+  if (doorManifest && doorManifest.runtime === 'hybrid') {
+    console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
+    // Load client bundle
+    await executeClientDoor(socket, session, door, doorManifest);
+    // Continue to execute server part below (don't return)
   }
 
   const nodeId = session.nodeId || 0;
@@ -1007,10 +1018,37 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     // Get BBS root directory (use BBS_ROOT env var or default to project root)
     const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
-    // If path is a directory, append index.ts
+    // For hybrid doors, use the server entry point from package.json
+    // Check if path is a directory and if it has a package.json with server entry
     if (fs.existsSync(path.join(projectRoot, doorPath)) &&
         fs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
-      doorPath = path.join(doorPath, 'index.ts');
+      const packageJsonPath = path.join(projectRoot, doorPath, 'package.json');
+      if (fs.existsSync(packageJsonPath)) {
+        try {
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+          // Check if it's a hybrid door with explicit server entry
+          if (packageJson.runtime === 'hybrid' && packageJson.server && packageJson.server.entry) {
+            // Use server entry from manifest (e.g., "./server.ts")
+            const serverEntry = packageJson.server.entry.replace(/^\.\//, '');
+            doorPath = path.join(doorPath, serverEntry);
+            console.log(`[executeTypeScriptDoor] Hybrid door detected, using server entry: ${serverEntry}`);
+          } else if (packageJson.main) {
+            // Use main entry from package.json
+            doorPath = path.join(doorPath, packageJson.main);
+            console.log(`[executeTypeScriptDoor] Using main entry from package.json: ${packageJson.main}`);
+          } else {
+            // Default to index.ts
+            doorPath = path.join(doorPath, 'index.ts');
+          }
+        } catch (error) {
+          // If package.json parse fails, fall back to index.ts
+          console.log(`[executeTypeScriptDoor] Failed to parse package.json, using default index.ts`);
+          doorPath = path.join(doorPath, 'index.ts');
+        }
+      } else {
+        // No package.json, default to index.ts
+        doorPath = path.join(doorPath, 'index.ts');
+      }
     }
 
     // Build absolute path from project root
@@ -1034,6 +1072,43 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     const cacheBuster = `?t=${Date.now()}`;
     const doorModule = await import(`${doorPath}${cacheBuster}`);
 
+    // Check if this is a hybrid door using SDK's ServerDoor class
+    // These doors call door.start() when imported and don't export runDoor()
+    let packageJson: any = null;
+    try {
+      const packageJsonPath = path.join(path.dirname(doorPath), 'package.json');
+      if (fs.existsSync(packageJsonPath)) {
+        packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      }
+    } catch (err) {
+      // No package.json or parse error - not a problem
+    }
+
+    const isHybridSDKDoor = packageJson && packageJson.runtime === 'hybrid' &&
+                           typeof doorModule.runDoor !== 'function';
+
+    if (isHybridSDKDoor) {
+      // Hybrid door using SDK's ServerDoor class - just importing it starts the server
+      // The door.start() call in the module handles everything
+      console.log(`[executeTypeScriptDoor] Hybrid SDK door detected - server component started via import`);
+      console.log(`[executeTypeScriptDoor] Door server is running, client bundle already loaded`);
+
+      // Set door active flag so BBS knows door is running
+      session.inDoorManager = true;
+
+      // Notify frontend that door is active
+      socket.emit('door:status', { status: 'running' });
+
+      // Door will handle its own lifecycle via SDK's ServerDoor class
+      // Input routing, disconnects, etc. are handled by the SDK
+      console.log(`[executeTypeScriptDoor] Hybrid SDK door lifecycle managed by SDK`);
+
+      // Keep session alive until door disconnects or user exits
+      // The SDK's door.disconnect() or door.onConnect() handler will clean up
+      return;
+    }
+
+    // Legacy TypeScript door with runDoor() export
     if (typeof doorModule.runDoor !== 'function') {
       socket.emit('ansi-output', `\r\n\x1b[31mInvalid TypeScript door: No runDoor() export found\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -1133,9 +1208,10 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
   console.log(`[executeSDKDoor] Door path: ${door.path}`);
   disableShortcuts(session);
 
-  // Enable game mode for real-time input (SDK doors - no backend repeat)
+  // NOTE: Don't enable game mode by default - it blocks 'command' events which breaks bbs.getKey()
+  // Doors that need real-time keyboard input (games) should call bbs.enableGameMode() themselves
   session.inDoorManager = true;
-  enableGameMode(socket, session, 'SDK');
+  // enableGameMode(socket, session, 'SDK');
 
   try {
     // Build absolute path to door
@@ -1539,9 +1615,11 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
 
-    // Enable game mode for real-time input (68K doors get backend key repeat)
-    const doorType2 = door.type || 'XIM';
-    enableGameMode(socket, session, doorType2);
+    // DO NOT enable game mode for 68K doors - they use normal character input via door:input
+    // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
+    // Only TypeScript doors that explicitly call bbs.enableGameMode() should use game mode
+    // const doorType2 = door.type || 'XIM';
+    // enableGameMode(socket, session, doorType2);
 
     session.doorInputHandler = (data: string) => {
       try {

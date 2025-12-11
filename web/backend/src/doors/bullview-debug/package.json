@@ -1,8 +1,0 @@
-{
-  "name": "bullview-debug",
-  "version": "1.0.0",
-  "description": "Debug BullView XIM handshake in TypeScript",
-  "main": "index.ts",
-  "type": "module",
-  "dependencies": {}
-}

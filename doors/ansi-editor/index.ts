@@ -126,11 +126,11 @@ import {
 import {
   DisplayContext,
   clearScreen as displayClearScreen,
-  moveCursor,
-  setColors,
+  moveCursor as moveCursorAbs,
+  setColors as applyColors,
   isGuideOverlayCell as displayIsGuideOverlayCell,
   showHelpLine,
-  showStatusBar,
+  showStatusBar as renderStatusBar,
   refresh,
   showHelpScreen
 } from './display';
@@ -306,6 +306,10 @@ class ANSIEditor implements ANSIEditorInterface {
       pendingUndoChunk: this.pendingUndoChunk,
       operationMode: this.operationMode,
       insertMode: this.insertMode,
+      modified: this.modified,
+      showStatusBar: () => this.showStatusBar(),
+      getInput: () => this.getInputLine(),
+      sleep: (ms: number) => this.sleep(ms),
       emit: this.emit.bind(this),
       refresh: () => this.refreshDisplay(),
       getFileContext: () => this.getFileContext()
@@ -328,9 +332,15 @@ class ANSIEditor implements ANSIEditorInterface {
       mirrorModeEnabled: this.mirrorModeEnabled,
       guideType: this.guideType,
       gridSpacing: this.gridSpacing,
+      guideOverlayEnabled: this.guideOverlayEnabled,
       numpadModeEnabled: this.numpadModeEnabled,
       viewportWidth: this.viewportWidth,
+      viewportHeight: this.viewportHeight,
+      modified: this.modified,
       emit: this.emit.bind(this),
+      showStatusBar: () => this.showStatusBar(),
+      moveCursor: (x: number, y: number) => this.moveCursorAbsolute(x, y),
+      setColors: (fg: number, bg: number) => this.setAnsiColors(fg, bg),
       saveUndoState: (chunk?: boolean) => saveUndoState(this.getEditorContext(), chunk),
       refresh: () => this.refreshDisplay()
     };
@@ -341,6 +351,8 @@ class ANSIEditor implements ANSIEditorInterface {
       canvas: this.canvas,
       width: this.width,
       height: this.height,
+      fg: this.currentFg,
+      bg: this.currentBg,
       filename: this.filename,
       modified: this.modified,
       doorSession: this.doorSession,
@@ -359,6 +371,7 @@ class ANSIEditor implements ANSIEditorInterface {
       viewportY: this.viewportY,
       viewportWidth: this.viewportWidth,
       viewportHeight: this.viewportHeight,
+      doorSession: this.doorSession,
       cursorX: this.cursorX,
       cursorY: this.cursorY,
       currentFg: this.currentFg,
@@ -375,16 +388,72 @@ class ANSIEditor implements ANSIEditorInterface {
       operationMode: this.operationMode,
       mirrorModeEnabled: this.mirrorModeEnabled,
       guideType: this.guideType,
+      guideOverlayEnabled: this.guideOverlayEnabled,
       gridSpacing: this.gridSpacing,
       numpadModeEnabled: this.numpadModeEnabled,
       iceColorsEnabled: this.iceColorsEnabled,
       currentFKeySet: this.currentFKeySet,
-      emit: this.emit.bind(this)
+      emit: this.emit.bind(this),
+      getSelectionBounds: () => getSelectionBounds(this.getEditorContext()),
+      refresh: () => this.refreshDisplay()
     };
   }
 
   private refreshDisplay(): void {
     refresh(this.getDisplayContext());
+  }
+
+  private moveCursorAbsolute(x: number, y: number): void {
+    moveCursorAbs(this.getDisplayContext(), x, y);
+  }
+
+  private setAnsiColors(fg: number, bg: number): void {
+    applyColors(this.getDisplayContext(), fg, bg);
+  }
+
+  private showStatusBar(): void {
+    renderStatusBar(this.getDisplayContext());
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async getInputLine(): Promise<string> {
+    return new Promise((resolve) => {
+      let buffer = '';
+      const handler = (data: any) => {
+        const key = data.key;
+
+        if (key === '\x1b') {
+          this.socket.off('ansi-input', handler);
+          resolve('');
+          return;
+        }
+
+        if (key === '\r') {
+          this.socket.off('ansi-input', handler);
+          this.emit('\r\n');
+          resolve(buffer);
+          return;
+        }
+
+        if (key === '\x7f' || key === '\x08') {
+          if (buffer.length > 0) {
+            buffer = buffer.slice(0, -1);
+            this.emit('\b \b');
+          }
+          return;
+        }
+
+        if (typeof key === 'string' && key.length === 1 && key >= ' ' && key <= '~') {
+          buffer += key;
+          this.emit(key);
+        }
+      };
+
+      this.socket.on('ansi-input', handler);
+    });
   }
 
   private moveCursorRel(dx: number, dy: number): void {
@@ -459,7 +528,7 @@ class ANSIEditor implements ANSIEditorInterface {
    * Show color picker modal and handle color selection
    */
   private async selectColor(isBg: boolean): Promise<void> {
-    const modal = new ColorPickerModal(this, isBg ? this.currentBg : this.currentFg, isBg);
+    const modal = new ColorPickerModal(this, this.currentFg, this.currentBg, isBg);
     this.emit(modal.render());
 
     return new Promise((resolve) => {
@@ -471,12 +540,8 @@ class ANSIEditor implements ANSIEditorInterface {
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
-          const color = parseInt(modal.getSelectedValue());
-          if (isBg) {
-            this.currentBg = color;
-          } else {
-            this.currentFg = color;
-          }
+          this.currentBg = modal.getSelectedBg();
+          this.currentFg = modal.getSelectedFg();
           this.socket.off('ansi-input', handler);
           this.refreshDisplay();
           resolve();
@@ -485,6 +550,12 @@ class ANSIEditor implements ANSIEditorInterface {
           this.emit(modal.render());
         } else if (key === '\x1b[B') {  // Down arrow
           modal.moveDown();
+          this.emit(modal.render());
+        } else if (key === '\x1b[D') {  // Left arrow switches to FG
+          modal.moveLeft();
+          this.emit(modal.render());
+        } else if (key === '\x1b[C') {  // Right arrow switches to BG
+          modal.moveRight();
           this.emit(modal.render());
         }
       };
@@ -513,7 +584,7 @@ class ANSIEditor implements ANSIEditorInterface {
           this.refreshDisplay();
           resolve();
         } else if (key === '\r') {  // Enter
-          const selectedFile = modal.getSelectedValue();
+          const selectedFile = modal.getInputValue();
           if (selectedFile) {
             if (mode === 'load') {
               loadFile(ctx, selectedFile);

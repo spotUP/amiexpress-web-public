@@ -1,0 +1,7 @@
+BBSCMD=PHREAKWARS
+TYPE=TS
+LOCATION=Doors/phreakwars
+DESCRIPTION=Phreak Wars: The Underground BBS Empire - 1980s phone phreaking adventure
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

@@ -665,7 +665,7 @@ import { registerHttpRoutes } from './server/routes-setup';
 
 // Telnet/SSH Connection Handler
 // Connects native telnet and SSH clients to BBS command processing
-function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, type: 'telnet' | 'ssh') {
+function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, type: 'telnet' | 'ssh', io: any) {
   const remoteAddress = connection.getRemoteAddress();
   console.log(`[${type.toUpperCase()}] Connection from ${remoteAddress} on node ${connection.nodeId}`);
 
@@ -750,7 +750,7 @@ function setupTelnetSSHHandler(connection: TelnetConnection | SSHConnection, typ
     if (connection.session) {
       // Call handleCommand directly (same logic as Socket.IO 'command' event)
       const { handleCommand } = await import('./handlers/command.handler');
-      handleCommand(emitter as any, connection.session, input);
+      handleCommand(emitter as any, connection.session, input, io);
     }
   });
 
@@ -1058,7 +1058,7 @@ io.on('connection', async (socket) => {
     try {
       telnetServer = new TelnetServer(telnetPort);
       telnetServer.on('connection', (connection: TelnetConnection) => {
-        setupTelnetSSHHandler(connection, 'telnet');
+        setupTelnetSSHHandler(connection, 'telnet', io);
       });
       // Handle C64 terminal auto-detection (skip graphics prompt, show BBSTITLE directly)
       telnetServer.on('c64-detected', async (connection: TelnetConnection) => {
@@ -1112,7 +1112,7 @@ io.on('connection', async (socket) => {
 
       sshServer = new SSHServerImpl(sshPort, sshHostKeys);
       sshServer.on('connection', (connection: SSHConnection) => {
-        setupTelnetSSHHandler(connection, 'ssh');
+        setupTelnetSSHHandler(connection, 'ssh', io);
       });
       await sshServer.start();
       console.log(`[OK] SSH Server ready on port ${sshPort}`);

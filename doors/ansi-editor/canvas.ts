@@ -39,16 +39,18 @@ export interface EditorContext {
   selectionEnd: Point | null;
   clipboard: Cell[][];
   operationMode: OperationMode;
+  insertMode: boolean;
 
   // File state
   modified: boolean;
 
   // Methods needed
   refresh: () => void;
-  showStatusBar: () => void;
+  showStatusBar?: () => void;
   emit: (data: string) => void;
-  getInput: () => Promise<string>;
-  sleep: (ms: number) => Promise<void>;
+  getInput?: () => Promise<string>;
+  sleep?: (ms: number) => Promise<void>;
+  getFileContext?: () => any;
 }
 
 // ========== UNDO/REDO SYSTEM ==========

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Monitor, Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Edit2, Trash2, Plus, ToggleLeft, ToggleRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { DataGrid, type DataGridColumn } from '../components/DataGrid';
 
 interface ScreenType {
   id: number;
@@ -19,6 +20,8 @@ export function ScreenTypesPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<ScreenType | null>(null);
+  const [sortKey, setSortKey] = useState<string>('screen_number');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<Omit<ScreenType, 'id' | 'created_at' | 'updated_at'>>({
     screen_number: 1,
     screen_type: '',
@@ -116,7 +119,80 @@ export function ScreenTypesPage() {
     return <div className="text-bbs-text">Loading screen types...</div>;
   }
 
-  const screenTypes = data?.data || [];
+  const screenTypes = (data?.data || []).sort((a: ScreenType, b: ScreenType) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const aVal = a[sortKey as keyof ScreenType];
+    const bVal = b[sortKey as keyof ScreenType];
+
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * dir;
+    }
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * dir;
+    }
+    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+      return (aVal === bVal ? 0 : aVal ? -1 : 1) * dir;
+    }
+    return 0;
+  });
+
+  const columns: DataGridColumn<ScreenType>[] = [
+    {
+      key: 'enabled',
+      header: 'Status',
+      sortable: true,
+      render: (screenType) => (
+        <button
+          onClick={() => handleToggle(screenType)}
+          className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
+            screenType.enabled ? 'bg-green-500/20 text-green-500' : 'bg-bbs-muted/20 text-bbs-muted'
+          }`}
+        >
+          {screenType.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+          <span>{screenType.enabled ? 'Enabled' : 'Disabled'}</span>
+        </button>
+      ),
+    },
+    {
+      key: 'screen_number',
+      header: 'Number',
+      sortable: true,
+      render: (screenType) => <span className="text-bbs-text font-mono">{screenType.screen_number}</span>,
+    },
+    {
+      key: 'screen_title',
+      header: 'Title',
+      sortable: true,
+      render: (screenType) => <span className="text-bbs-text font-semibold">{screenType.screen_title}</span>,
+    },
+    {
+      key: 'screen_type',
+      header: 'Type Code',
+      sortable: true,
+      render: (screenType) => <code className="text-bbs-text bg-bbs-bg px-2 py-0.5 rounded text-xs font-mono">{screenType.screen_type}</code>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (screenType) => (
+        <div className="flex space-x-2 justify-end">
+          <button
+            onClick={() => handleEdit(screenType)}
+            className="btn-secondary px-2 py-1 text-xs flex items-center space-x-1"
+          >
+            <Edit2 size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => handleDelete(screenType)}
+            className="bg-bbs-accent hover:bg-bbs-accent/90 text-white px-2 py-1 rounded text-xs"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -131,72 +207,18 @@ export function ScreenTypesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {screenTypes.map((screenType: ScreenType) => (
-          <div key={screenType.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <Monitor className="text-bbs-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{screenType.screen_title}</h3>
-                  <p className="text-xs text-bbs-muted font-mono">{screenType.screen_type}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleToggle(screenType)}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  screenType.enabled
-                    ? 'bg-green-500/20 text-green-500'
-                    : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-                title="Toggle availability"
-              >
-                {screenType.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
-                <span>{screenType.enabled ? 'Enabled' : 'Disabled'}</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Number:</span>
-                <span className="text-bbs-text font-mono">{screenType.screen_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Type:</span>
-                <span className="text-bbs-text font-mono">{screenType.screen_type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Title:</span>
-                <span className="text-bbs-text">{screenType.screen_title}</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(screenType)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleDelete(screenType)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {screenTypes.length === 0 && (
-        <div className="card text-center text-bbs-muted">
-          No screen types configured. Add screen types to define terminal formats (ANSI, ASCII, etc.).
-        </div>
-      )}
+      <DataGrid
+        columns={columns}
+        rows={screenTypes}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={(key) => {
+          setSortKey(key);
+          setSortDir(sortKey === key && sortDir === 'asc' ? 'desc' : 'asc');
+        }}
+        emptyMessage="No screen types configured. Add screen types to define terminal formats (ANSI, ASCII, etc.)."
+        getRowKey={(row) => row.id.toString()}
+      />
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

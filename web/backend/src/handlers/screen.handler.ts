@@ -10,6 +10,7 @@ import * as path from 'path';
 
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { BBSPaths } from '../utils/bbs-paths.util';
 // iconv-lite for character encoding conversion
 // Auto-detects between CP437 (PC ANSI) and ISO-8859-1 (Amiga ANSI)
 // Also supports iCE colors from SAUCE metadata (16 background colors)
@@ -19,7 +20,7 @@ import { db } from '../database';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import { sequentialFileManager, formatNumberedFilename } from '../services/SequentialFileManager';
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
-import { findCaseInsensitive } from '../utils/amigafs';
+import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/amigafs';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
@@ -549,34 +550,24 @@ screenDebug('[MCI] Looking for ~XC_ and ~XI codes...');
   DebugLogger.mci((session as any).socket?.id || 'unknown', `Parsing MCI codes (${content.length} bytes)`);
 
   const xcRegex = /~XC_([^\|]+)\|\|/g;
-  let xcMatch;
-  while ((xcMatch = xcRegex.exec(parsed)) !== null) {
-    const commandStr = xcMatch[1];
+  parsed = parsed.replace(xcRegex, (_fullMatch: string, commandStr: string) => {
     screenDebug('[MCI] *** FOUND ~XC_ COMMAND:', commandStr);
-    // Store command for async execution after screen display
     commandsToExecute.push(commandStr.trim());
-    // Remove the ~XC code from output (silent execution)
-    parsed = parsed.replace(xcMatch[0], '');
     screenDebug('[MCI] Added command to execution queue');
-
-    // Debug log found MCI code
     DebugLogger.mci((session as any).socket?.id || 'unknown', `Found MCI: ~XC_ (Execute Command)`, { command: commandStr });
-  }
+    return '';
+  });
 
   // ~XI - Execute XIM door (express.e format: ~XI<doorpath>)
   // Format: ~XIDOORS:who/NI or ~XIDOORS:who/No
   // This executes XIM doors silently from screen files
   const xiRegex = /~XI([^\s\r\n]+)/g;
-  let xiMatch;
-  while ((xiMatch = xiRegex.exec(parsed)) !== null) {
-    const doorPath = xiMatch[1];
+  parsed = parsed.replace(xiRegex, (_fullMatch: string, doorPath: string) => {
     screenDebug('[MCI] *** FOUND ~XI DOOR:', doorPath);
-    // Store door command for async execution after screen display
     commandsToExecute.push(doorPath.trim());
-    // Remove the ~XI code from output (silent execution)
-    parsed = parsed.replace(xiMatch[0], '');
     screenDebug('[MCI] Added XIM door to execution queue');
-  }
+    return '';
+  });
 
 screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   if (commandsToExecute.length > 0) {
@@ -1031,12 +1022,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // reference-board screens sometimes omit the pipe and just terminate with whitespace/~SP.
   // Accept either a pipe delimiter or whitespace/end of line.
   const ccRegex = /~CC_([^\s|~\r\n]+)(\|{1,2})?/g;
-  let ccMatch;
-  while ((ccMatch = ccRegex.exec(parsed)) !== null) {
-    const commandStr = ccMatch[1];
+  parsed = parsed.replace(ccRegex, (_fullMatch: string, commandStr: string) => {
     commandsToExecute.push(commandStr.trim());
-    parsed = parsed.replace(ccMatch[0], '');
-  }
+    return '';
+  });
 
   // ~CR_ - Prompted keypress (express.e:5571-5580)
   // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
@@ -1147,87 +1136,58 @@ export function loadScreenFile(
   // Use dataDir from config which points to project root
   const { config } = require('../config');
   const baseDir = config.getConfig().dataDir;
+  const bbsPaths = new BBSPaths(baseDir);
   const paths = [];
 
-  screenDebug(`[loadScreenFile] Loading screen: ${screenName}`);
+  const normalizeAbsoluteCaseInsensitive = (absPath: string): string => {
+    if (!path.isAbsolute(absPath)) return absPath;
+    const resolved = amigaResolvePath(absPath);
+    if (resolved) return resolved;
+    return absPath;
+  };
+
+  // Normalize common absolute-path-without-leading-slash cases (e.g. "Users/spot/..."),
+  // since MCI-resolved absolute paths sometimes lose the leading separator.
+  let effectiveName = screenName;
+  const baseDirNoSlash = baseDir.replace(new RegExp(`^${path.sep}`), '');
+  if (!path.isAbsolute(effectiveName) && (effectiveName.startsWith(baseDir) || effectiveName.startsWith(baseDirNoSlash))) {
+    effectiveName = path.join(path.sep, effectiveName);
+  }
+
+  screenDebug(`[loadScreenFile] Loading screen: ${effectiveName}`);
   screenDebug(`[loadScreenFile] Base directory: ${baseDir}`);
   screenDebug(`[loadScreenFile] Conference ID: ${conferenceId}, Node ID: ${nodeId}`);
   screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
   const userSecLevel = session?.user?.secLevel ?? 0;
-  const screenBaseNoExt = screenName.replace(/\.[^/.]+$/, ''); // strip extension for security search
-  const isAssignPath = screenName.includes(':');
-  const normalizedName = screenName.toLowerCase();
+  const screenBaseNoExt = effectiveName.replace(/\.[^/.]+$/, ''); // strip extension for security search
+  const isAssignPath = effectiveName.includes(':');
+  let isAbsolutePath = path.isAbsolute(effectiveName);
+  const normalizedName = effectiveName.toLowerCase();
 
-  // Handle Amiga-style paths (e.g., "bbs:screens/reference-board/007.reference-board.txt")
-  // Amiga filesystems are case-insensitive, so we need case-insensitive lookups
-  // This is important for files imported from real Amigas (like reference-boardBBS)
-  if (screenName.includes(':')) {
-    // Split assign and path parts
-    const [assign, ...pathParts] = screenName.split(':');
-    const relativePath = pathParts.join(':'); // Handle case where path contains ':'
-
-    let basePath: string;
-    const assignLower = assign.toLowerCase();
-
-    if (assignLower === 'bbs' || assignLower === 'work') {
-      // bbs: or work: map to the root dataDir (not dataDir/BBS)
-      basePath = baseDir;
-    } else if (assignLower.startsWith('node')) {
-      const nodeNum = assign.match(/\d+/)?.[0] || '0';
-      basePath = path.join(baseDir, `Node${nodeNum}`);
-    } else if (assignLower === 'screens') {
-      basePath = path.join(baseDir, 'Screens');
-    } else {
-      // Unknown assign, try as-is under dataDir root
-      basePath = baseDir;
-    }
-
-    // Resolve case-insensitive path (Amiga compatibility)
-    // Try to find actual filesystem path by checking each component
-    const fs = require('fs');
-    let currentPath = basePath;
-    const pathComponents = relativePath.split('/').filter(c => c.length > 0);
-    // If WORK:/BBS: points at the data root and the first component is "bbs",
-    // drop that component so we resolve to dataDir/Screens/...
-    if ((assignLower === 'work' || assignLower === 'bbs') && pathComponents.length > 0 && pathComponents[0].toLowerCase() === 'bbs') {
-      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' from ${assignLower.toUpperCase()}: path ${relativePath}`);
-      pathComponents.shift();
-    }
-    let resolved = true;
-
-    for (const component of pathComponents) {
-      try {
-        const entries = fs.readdirSync(currentPath);
-        // Find matching entry (case-insensitive)
-        const match = entries.find((e: string) => e.toLowerCase() === component.toLowerCase());
-        if (match) {
-          currentPath = path.join(currentPath, match);
-        } else {
-          // Component not found, use as-is (will fail later)
-          currentPath = path.join(currentPath, component);
-          resolved = false;
-          break;
-        }
-      } catch (error) {
-        // Directory doesn't exist or can't be read
-        currentPath = path.join(currentPath, component);
-        resolved = false;
-        break;
-      }
-    }
-
-    const petsciiPath = resolvePetsciiPath(currentPath, !!session?.petsciiMode);
-    // Strip a leading "bbs" path component universally to avoid creating BBS/ dirs
-    const normalized = petsciiPath.replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
-    if (normalized !== petsciiPath) {
-      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${petsciiPath} -> ${normalized}`);
+  // Handle explicit absolute filesystem paths (already resolved)
+  if (isAbsolutePath) {
+    const normalizedAbs = normalizeAbsoluteCaseInsensitive(effectiveName);
+    const dir = path.dirname(normalizedAbs);
+    const base = path.basename(normalizedAbs);
+    const resolved = findCaseInsensitive(dir, base) || normalizedAbs;
+    paths.push(resolvePetsciiPath(resolved, !!session?.petsciiMode));
+  } else if (effectiveName.includes(':')) {
+    // Use centralized BBS path resolver for Amiga assigns (BBS:, WORK:, NODE:, etc.)
+    const resolved = bbsPaths.resolveAmigaPath(effectiveName, nodeId);
+    const dir = path.dirname(resolved);
+    const base = path.basename(resolved);
+    const ci = findCaseInsensitive(dir, base) || resolved;
+    const normalized = resolvePetsciiPath(ci, !!session?.petsciiMode).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
+    if (normalized !== ci) {
+      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${ci} -> ${normalized}`);
     }
     paths.push(normalized);
-    screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${currentPath} (${resolved ? 'found' : 'not found'})`);
+    screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${normalized}`);
   } else if (screenName.includes('/')) {
+  } else if (effectiveName.includes('/')) {
     // Relative path with slashes - treat as dataDir-relative (no extra "Screens" prefix)
-    const fsPath = path.join(baseDir, ...screenName.split('/'));
+    const fsPath = path.join(baseDir, ...effectiveName.split('/'));
     const resolved = findCaseInsensitive(path.dirname(fsPath), path.basename(fsPath));
     const normalized = (resolved || fsPath).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
     if (normalized !== (resolved || fsPath)) {
@@ -1239,10 +1199,10 @@ export function loadScreenFile(
   // Define search directories and filenames to try (case-insensitive, AmigaOS compatible)
   // We try multiple filename variations: FILENAME.TXT, filename.txt, Filename.txt, etc.
   const searchLocations: Array<{ dir: string; desc: string }> = [];
-  const hasSlash = screenName.includes('/');
+  const hasSlash = !isAbsolutePath && effectiveName.includes('/');
 
   // Only populate default search locations when no explicit path/assign is given.
-  if (!isAssignPath && !hasSlash) {
+  if (!isAbsolutePath && !isAssignPath && !hasSlash) {
     // Try conference-specific screen first (if provided)
     // express.e uses confScreenDir which points to Conf directory
     if (conferenceId) {

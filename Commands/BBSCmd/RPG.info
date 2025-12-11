@@ -1,6 +1,6 @@
 BBSCMD=RPG
 TYPE=TS
-LOCATION=doors/rpg-adventure
+LOCATION=Doors/rpgadv
 DESCRIPTION=Maze exploration RPG with combat and treasure hunting
 ACCESS=0
 MULTINODE=YES

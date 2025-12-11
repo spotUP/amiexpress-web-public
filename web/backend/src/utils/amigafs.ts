@@ -20,7 +20,7 @@ import * as path from 'path';
  * Find a file/directory with case-insensitive matching
  * Returns the actual path with correct casing, or null if not found
  */
-function findCaseInsensitive(directory: string, filename: string): string | null {
+export function findCaseInsensitive(directory: string, filename: string): string | null {
   try {
     if (!fs.existsSync(directory)) {
       return null;
@@ -44,7 +44,7 @@ function findCaseInsensitive(directory: string, filename: string): string | null
 /**
  * Resolve a full path with case-insensitive component matching
  */
-function resolvePath(targetPath: string): string | null {
+export function resolvePath(targetPath: string): string | null {
   // If path doesn't exist as-is, try case-insensitive resolution
   if (fs.existsSync(targetPath)) {
     return targetPath;
@@ -446,4 +446,4 @@ export function readlinkSync(linkPath: string, options?: fs.BufferEncodingOption
 export const constants = fs.constants;
 
 // Export helper functions
-export { findCaseInsensitive, resolvePath };
+// findCaseInsensitive and resolvePath are already exported at top; avoid duplicate named exports here.

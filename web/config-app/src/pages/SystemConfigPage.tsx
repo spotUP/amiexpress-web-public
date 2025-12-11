@@ -67,6 +67,24 @@ export function SystemConfigPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const skipNextSave = useRef(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+
+  // Define categories
+  const categories = ['All', 'General', 'Security & Access', 'Networking', 'System'];
+
+  // Helper function to determine if a section should be shown based on category
+  const shouldShowSection = (section: string): boolean => {
+    if (selectedCategory === 'All') return true;
+
+    const categoryMap: Record<string, string[]> = {
+      'General': ['Basic Information', 'Display Settings', 'Language Settings'],
+      'Security & Access': ['Security Settings', 'Session Settings', 'New User Defaults'],
+      'Networking': ['Mail & SMTP Settings', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
+      'System': ['System Limits', 'File Management', 'System Behavior', 'Logging Settings']
+    };
+
+    return categoryMap[selectedCategory]?.includes(section) || false;
+  };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['systemConfig'],
@@ -229,8 +247,27 @@ export function SystemConfigPage() {
         </div>
       </div>
 
+      {/* Category Filter */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        {categories.map((category) => (
+          <button
+            key={category}
+            onClick={() => setSelectedCategory(category)}
+            type="button"
+            className={`px-4 py-2 rounded transition-colors ${
+              selectedCategory === category
+                ? 'bg-bbs-accent text-bbs-background'
+                : 'bg-bbs-secondary text-bbs-text hover:bg-bbs-secondary/80'
+            }`}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+
       <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
         {/* Basic Information */}
+        {shouldShowSection('Basic Information') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -307,8 +344,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Security Settings */}
+        {shouldShowSection('Security Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Security Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -413,8 +452,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Session Settings */}
+        {shouldShowSection('Session Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Session Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -469,8 +510,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* New User Defaults */}
+        {shouldShowSection('New User Defaults') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">New User Defaults</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -669,8 +712,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Display Settings */}
+        {shouldShowSection('Display Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Display Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -699,8 +744,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Language Settings */}
+        {shouldShowSection('Language Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Language Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -742,8 +789,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* System Limits */}
+        {shouldShowSection('System Limits') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">System Limits</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -799,8 +848,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* File Management */}
+        {shouldShowSection('File Management') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">File Management</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -841,8 +892,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Mail & SMTP Settings */}
+        {shouldShowSection('Mail & SMTP Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Mail & SMTP Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -958,8 +1011,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* FTP Server Settings */}
+        {shouldShowSection('FTP Server Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">FTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1015,8 +1070,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* HTTP Server Settings */}
+        {shouldShowSection('HTTP Server Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">HTTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1059,8 +1116,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* BBS Server Ports */}
+        {shouldShowSection('BBS Server Ports') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">BBS Server Ports</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1100,8 +1159,10 @@ export function SystemConfigPage() {
             </p>
           </div>
         </div>
+        )}
 
         {/* SSH Key Management */}
+        {shouldShowSection('SSH Key Management') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6 flex items-center gap-2">
             <Key size={24} />
@@ -1215,8 +1276,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* System Behavior */}
+        {shouldShowSection('System Behavior') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">System Behavior</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1257,8 +1320,10 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Logging Settings */}
+        {shouldShowSection('Logging Settings') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-bbs-text mb-6">Logging Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1309,6 +1374,7 @@ export function SystemConfigPage() {
             </div>
           </div>
         </div>
+        )}
 
       </form>
     </div>

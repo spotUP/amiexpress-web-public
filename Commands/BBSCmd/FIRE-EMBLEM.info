@@ -1,6 +1,6 @@
 BBSCMD=FIRE-EMBLEM
 TYPE=TS
-LOCATION=doors/fire-emblem
+LOCATION=Doors/fireemblem
 DESCRIPTION=Fire Emblem tactical RPG BBS door
 ACCESS=0
 MULTINODE=YES

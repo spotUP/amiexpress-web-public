@@ -28,6 +28,17 @@ import {
   renderArchiveBrowser,
   renderFileViewer
 } from './DoorManagerArchive';
+import {
+  InfoFile,
+  Tooltype
+} from '../utils/info-file.util';
+import {
+  InfoEditorState,
+  findInfoFile,
+  openInfoFile,
+  renderInfoEditor,
+  handleInfoEditorInput
+} from './DoorManagerInfoEditor';
 
 interface DoorInfo {
   id: string;
@@ -48,7 +59,7 @@ interface DoorInfo {
 }
 
 interface DoorManagerState {
-  mode: 'list' | 'info' | 'upload' | 'docs' | 'browse-archive' | 'view-file';
+  mode: 'list' | 'info' | 'upload' | 'docs' | 'browse-archive' | 'view-file' | 'edit-info';
   selectedIndex: number;
   doors: DoorInfo[];
   currentDoor?: DoorInfo;
@@ -68,6 +79,8 @@ interface DoorManagerState {
     content: string;
     type: 'text' | 'amigaguide';
   };
+  // Info editor state (uses InfoEditorState from DoorManagerInfoEditor)
+  infoEditorState?: InfoEditorState;
 }
 
 export class DoorManager {
@@ -574,6 +587,7 @@ export class DoorManager {
       }
     }
 
+    this.socket.emit('ansi-output', '\x1b[33mE\x1b[0m Edit .info  ');
     this.socket.emit('ansi-output', '\x1b[33mB\x1b[0m Back  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit\r\n');
   }
@@ -1320,6 +1334,9 @@ export class DoorManager {
       case 'upload':
         this.handleUploadInput(key);
         break;
+      case 'edit-info':
+        this.handleInfoEditorInput(key, data);
+        break;
     }
   }
 
@@ -1456,6 +1473,12 @@ export class DoorManager {
       this.state.scrollOffset = 0;
       this.state.mode = 'docs';
       this.showDocs();
+      return;
+    }
+
+    // E - Edit .info file
+    if (key === 'e') {
+      this.openInfoEditor();
       return;
     }
 
@@ -1706,6 +1729,63 @@ export class DoorManager {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
+
+  /**
+   * Open the .info file editor for the current door
+   */
+  private openInfoEditor(): void {
+    const door = this.state.currentDoor;
+    if (!door) return;
+
+    const infoPath = findInfoFile(door.id, this.doorsPath, this.projectRoot);
+
+    if (!infoPath) {
+      this.socket.emit('ansi-output', '\r\n\x1b[33mNo .info file found for this door.\x1b[0m\r\n');
+      this.socket.emit('ansi-output', 'Press any key to continue...\r\n');
+      return;
+    }
+
+    try {
+      this.state.infoEditorState = openInfoFile(infoPath);
+      this.state.mode = 'edit-info';
+      renderInfoEditor(this.socket, this.state.infoEditorState);
+    } catch (error) {
+      this.socket.emit('ansi-output', `\r\n\x1b[31mError parsing .info file: ${(error as Error).message}\x1b[0m\r\n`);
+      this.socket.emit('ansi-output', 'Press any key to continue...\r\n');
+    }
+  }
+
+  /**
+   * Handle input in .info editor mode (delegates to module)
+   */
+  private handleInfoEditorInput(key: string, rawData: string): void {
+    if (!this.state.infoEditorState) {
+      this.state.mode = 'info';
+      this.showInfo();
+      return;
+    }
+
+    const callbacks = {
+      onBack: () => {
+        this.state.mode = 'info';
+        this.state.infoEditorState = undefined;
+        this.showInfo();
+      },
+      onQuit: () => {
+        this.state.infoEditorState = undefined;
+        this.cleanup();
+        this.socket.emit('door-exit');
+      }
+    };
+
+    this.state.infoEditorState = handleInfoEditorInput(
+      key,
+      rawData,
+      this.state.infoEditorState,
+      this.socket,
+      callbacks
+    );
+  }
   /**
    * Cleanup when exiting Door Manager
    */

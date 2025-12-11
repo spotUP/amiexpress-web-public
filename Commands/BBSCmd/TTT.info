@@ -1,6 +1,6 @@
 BBSCMD=TTT
 TYPE=TS
-LOCATION=doors/tic-tac-toe
+LOCATION=Doors/tictactoe
 DESCRIPTION=Turn-based multiplayer Tic-Tac-Toe demonstrating Network Engine
 ACCESS=0
 MULTINODE=YES

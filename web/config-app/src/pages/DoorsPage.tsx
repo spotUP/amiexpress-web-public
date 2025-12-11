@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DoorOpen, Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -28,6 +28,8 @@ export function DoorsPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
+  const [sortColumn, setSortColumn] = useState<keyof Door>('door_name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<DoorFormData>({
     door_name: '',
     door_command: '',
@@ -201,11 +203,35 @@ export function DoorsPage() {
     setInfoDirty(true);
   };
 
+  const handleSort = (column: keyof Door) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
   if (isLoading) {
     return <div className="text-bbs-text">Loading doors...</div>;
   }
 
-  const doors = data?.data || [];
+  const doors = (data?.data || []).sort((a: Door, b: Door) => {
+    const aVal = a[sortColumn];
+    const bVal = b[sortColumn];
+    const modifier = sortDirection === 'asc' ? 1 : -1;
+
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * modifier;
+    }
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return (aVal - bVal) * modifier;
+    }
+    if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+      return (aVal === bVal ? 0 : aVal ? -1 : 1) * modifier;
+    }
+    return 0;
+  });
 
   return (
     <div>
@@ -220,75 +246,89 @@ export function DoorsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {doors.map((door: Door) => (
-          <div key={door.id} className="card">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
-                  <DoorOpen className="text-bbs-accent" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-bbs-text">{door.door_name}</h3>
-                  <p className="text-xs text-bbs-muted font-mono">/{door.door_command}</p>
-                </div>
-              </div>
-              <div
-                className={`px-2 py-1 rounded text-xs ${
-                  door.enabled
-                    ? 'bg-green-500/20 text-green-500'
-                    : 'bg-bbs-muted/20 text-bbs-muted'
-                }`}
-              >
-                {door.enabled ? 'Enabled' : 'Disabled'}
-              </div>
-            </div>
-
-            <p className="text-sm text-bbs-muted mb-4">{door.description}</p>
-
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Type:</span>
-                <span className="text-bbs-text font-mono">{door.door_type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Runtime:</span>
-                <span className="text-bbs-text font-mono">{door.runtime_env}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Min Security:</span>
-                <span className="text-bbs-text">{door.min_security_level}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-bbs-muted">Time Limit:</span>
-                <span className="text-bbs-text">{door.time_limit} min</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleEdit(door)}
-                className="btn-secondary flex-1 flex items-center justify-center space-x-2"
-              >
-                <Edit2 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => handleEditInfo(door)}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded transition-colors"
-                title="Edit .info file tooltypes"
-              >
-                <FileCode size={16} />
-              </button>
-              <button
-                onClick={() => handleDelete(door)}
-                className="bg-bbs-accent hover:bg-bbs-accent/90 text-white font-medium py-2 px-4 rounded transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="card overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-bbs-border">
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('enabled')}>
+                Status {sortColumn === 'enabled' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_name')}>
+                Name {sortColumn === 'door_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_command')}>
+                Command {sortColumn === 'door_command' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold">
+                Description
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('door_type')}>
+                Type {sortColumn === 'door_type' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('runtime_env')}>
+                Runtime {sortColumn === 'runtime_env' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('min_security_level')}>
+                Min Sec {sortColumn === 'min_security_level' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-left py-3 px-4 text-bbs-text font-semibold cursor-pointer hover:bg-bbs-secondary/30" onClick={() => handleSort('time_limit')}>
+                Time {sortColumn === 'time_limit' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </th>
+              <th className="text-right py-3 px-4 text-bbs-text font-semibold">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {doors.map((door: Door) => (
+              <tr key={door.id} className="border-b border-bbs-border hover:bg-bbs-secondary/20 transition-colors">
+                <td className="py-3 px-4">
+                  {door.enabled ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-green-500/20 text-green-500">
+                      <Power size={12} className="mr-1" /> Enabled
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-bbs-muted/20 text-bbs-muted">
+                      <PowerOff size={12} className="mr-1" /> Disabled
+                    </span>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-bbs-text font-semibold">{door.door_name}</td>
+                <td className="py-3 px-4 text-bbs-text font-mono text-sm">/{door.door_command}</td>
+                <td className="py-3 px-4 text-bbs-muted text-sm max-w-xs truncate" title={door.description}>{door.description}</td>
+                <td className="py-3 px-4 text-bbs-text font-mono text-sm">{door.door_type}</td>
+                <td className="py-3 px-4 text-bbs-text font-mono text-sm">{door.runtime_env}</td>
+                <td className="py-3 px-4 text-bbs-text text-center">{door.min_security_level}</td>
+                <td className="py-3 px-4 text-bbs-text text-center">{door.time_limit}m</td>
+                <td className="py-3 px-4">
+                  <div className="flex space-x-2 justify-end">
+                    <button
+                      onClick={() => handleEdit(door)}
+                      className="p-2 bg-bbs-secondary hover:bg-bbs-secondary/80 text-bbs-text rounded transition-colors"
+                      title="Edit door"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleEditInfo(door)}
+                      className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+                      title="Edit .info file"
+                    >
+                      <FileCode size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(door)}
+                      className="p-2 bg-bbs-accent hover:bg-bbs-accent/90 text-white rounded transition-colors"
+                      title="Delete door"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {doors.length === 0 && (

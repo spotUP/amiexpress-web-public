@@ -576,7 +576,7 @@ function showMenuAfterCommand(socket: any, session: BBSSession, menuPauseDefault
 }
 
 // Handle user commands (processCommand equivalent)
-export async function handleCommand(socket: any, session: BBSSession, data: string) {
+export async function handleCommand(socket: any, session: BBSSession, data: string, io?: any) {
   console.log('=== handleCommand called ===');
   console.log('data:', JSON.stringify(data));
   console.log('session.state:', session.state);
