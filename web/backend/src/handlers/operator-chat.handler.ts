@@ -208,6 +208,16 @@ export async function handlePageSysop(
 
   const pageRequest = repository.createPageRequest(pageData);
 
+  // Join user-specific rooms so targeted emits reach this socket
+  try {
+    socket.join(`page:${pageRequest.id}`);
+    if (session.user?.id) {
+      socket.join(`user:${session.user.id}`);
+    }
+  } catch (err) {
+    console.error('[Operator Chat] Failed to join page/user rooms:', err);
+  }
+
   // Set cooldown
   repository.setUserCooldown(session.user!.id, config.pageCooldown);
 
@@ -337,6 +347,17 @@ async function acceptPage(
   if (!page || page.status !== PageStatus.PENDING) {
     console.error(`[Operator Chat] Cannot accept page ${pageId}: not found or not pending`);
     return;
+  }
+
+  // Add sysop socket to page room for chat fan-out
+  const sysopSocket = io.sockets?.sockets?.get(sysopSessionId);
+  if (sysopSocket) {
+    try {
+      sysopSocket.join(`page:${pageId}`);
+      sysopSocket.join(`user:${page.userId}`);
+    } catch (err) {
+      console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId}:`, err);
+    }
   }
 
   // Update page status

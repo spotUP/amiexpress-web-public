@@ -48,11 +48,17 @@ export function OperatorChatPage() {
     // Get auth token from localStorage
     const token = localStorage.getItem('authToken');
 
-    const socketInstance = io('http://localhost:3001', {
+    // Use same-origin backend by default; allow override via env for deployments
+    const socketUrl =
+      import.meta.env.VITE_SOCKET_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : undefined);
+
+    const socketInstance = io(socketUrl || 'http://localhost:3001', {
       transports: ['websocket'],
       reconnection: true,
+      secure: socketUrl?.startsWith('https'),
       auth: {
-        token: token
+        token
       }
     });
 
@@ -81,12 +87,12 @@ export function OperatorChatPage() {
       setPendingPages(pages);
     });
 
-    socketInstance.on('operator:chat-message', (message: ChatMessage) => {
+    socketInstance.on('operator:message', (message: ChatMessage) => {
       console.log('[Operator Chat] New message:', message);
       setMessages(prev => [...prev, message]);
     });
 
-    socketInstance.on('operator:typing', ({ pageId, isTyping: typing }: { pageId: string; isTyping: boolean }) => {
+    socketInstance.on('operator:typing-status', ({ pageId, isTyping: typing }: { pageId: string; isTyping: boolean }) => {
       if (activeChat?.id === pageId) {
         setIsTyping(typing);
       }
@@ -133,7 +139,7 @@ export function OperatorChatPage() {
     const message = messageText || inputMessage.trim();
     if (!message) return;
 
-    socket.emit('operator:message', {
+    socket.emit('operator:send-message', {
       pageId: activeChat.id,
       message,
       nodeId: activeChat.nodeId,
