@@ -12,6 +12,14 @@ export function SessionLogTerminal({ content }: SessionLogTerminalProps) {
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Strip destructive ANSI control codes while keeping color (SGR) codes
+  const sanitizeAnsi = (text: string) => {
+    // Remove cursor movement/clear sequences but keep SGR (m) codes
+    return text.replace(/\x1b\[[0-9;?]*([@-Z\\-_]|[a-ln-z])/g, (match, cmd) => {
+      return cmd === 'm' ? match : '';
+    });
+  };
+
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -76,7 +84,7 @@ export function SessionLogTerminal({ content }: SessionLogTerminalProps) {
     xtermRef.current.clear();
 
     // Write all content
-    const fullContent = content.join('');
+    const fullContent = sanitizeAnsi(content.join(''));
     if (fullContent) {
       xtermRef.current.write(fullContent);
     }

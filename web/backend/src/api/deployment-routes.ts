@@ -15,11 +15,14 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 const router = express.Router();
 
+const auth = authenticateToken(db);
+const sysop = requireSysop();
+
 /**
  * System Health Check Endpoint
  * GET /api/deployment/health
  */
-router.get('/deployment/health', authenticateToken, requireSysop, async (req: Request, res: Response) => {
+router.get('/deployment/health', auth, sysop, async (req: Request, res: Response) => {
   try {
     const healthStatus = {
       timestamp: new Date().toISOString(),
@@ -49,7 +52,7 @@ router.get('/deployment/health', authenticateToken, requireSysop, async (req: Re
  * System Information Endpoint
  * GET /api/deployment/system-info
  */
-router.get('/deployment/system-info', authenticateToken, requireSysop, async (req: Request, res: Response) => {
+router.get('/deployment/system-info', auth, sysop, async (req: Request, res: Response) => {
   try {
     const systemInfo = {
       node: {
@@ -87,7 +90,7 @@ router.get('/deployment/system-info', authenticateToken, requireSysop, async (re
  * Database Statistics Endpoint
  * GET /api/deployment/database-stats
  */
-router.get('/deployment/database-stats', authenticateToken, requireSysop, async (req: Request, res: Response) => {
+router.get('/deployment/database-stats', auth, sysop, async (req: Request, res: Response) => {
   try {
     // Get database path from environment or default
     const dbDir = process.env.DATABASE_DIR || './data';
@@ -131,7 +134,7 @@ router.get('/deployment/database-stats', authenticateToken, requireSysop, async 
  * TypeScript Check Endpoint
  * POST /api/deployment/typecheck
  */
-router.post('/deployment/typecheck', authenticateToken, requireSysop, async (req: Request, res: Response) => {
+router.post('/deployment/typecheck', auth, sysop, async (req: Request, res: Response) => {
   try {
     const { stdout, stderr } = await execAsync('cd web/backend && npx tsc --noEmit', {
       timeout: 60000,
@@ -156,7 +159,7 @@ router.post('/deployment/typecheck', authenticateToken, requireSysop, async (req
  * Test Endpoint
  * POST /api/deployment/test
  */
-router.post('/deployment/test', authenticateToken, requireSysop, async (req: Request, res: Response) => {
+router.post('/deployment/test', auth, sysop, async (req: Request, res: Response) => {
   try {
     const dbDir = process.env.DATABASE_DIR || './data';
     const dbFile = process.env.DATABASE_FILE || 'amiexpress.db';
