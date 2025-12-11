@@ -472,7 +472,6 @@ function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Ar
 
 // Screens that should start with a full clear (express.e shows a blank frame first)
 const SCREENS_REQUIRE_CLEAR = new Set([
-  'AWAITSCREEN',
   'BBSTITLE',
   'LOGON',
   'BULL',
