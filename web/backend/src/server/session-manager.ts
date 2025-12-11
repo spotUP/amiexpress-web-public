@@ -163,6 +163,20 @@ export function getSession(socketId: string): BBSSession | undefined {
 export const getSessionBySocketId = getSession;
 
 /**
+ * Get socket ID by node ID
+ * Reverse lookup: finds which socket is connected as a given node
+ * Used by OLM and chat systems to send messages to specific nodes
+ */
+export function getSocketIdByNodeId(nodeId: number): string | undefined {
+  for (const [socketId, mappedNodeId] of socketToNodeId.entries()) {
+    if (mappedNodeId === nodeId) {
+      return socketId;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Set session for socket ID
  * CRITICAL: Stores session by nodeId and creates socket.id → nodeId mapping
  */

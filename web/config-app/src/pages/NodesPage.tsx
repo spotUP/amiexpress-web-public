@@ -6,6 +6,9 @@ import type { NodeConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
 import { DataGrid, type DataGridColumn } from '../components/DataGrid';
 
+// Stable empty array reference to prevent infinite re-renders
+const EMPTY_NODES: NodeConfig[] = [];
+
 interface NodeRow {
   nodeNumber: number;
   config: NodeConfig | null;
@@ -81,12 +84,13 @@ export function NodesPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading node configurations...</div>;
-  }
+  // Use stable reference for empty fallback to prevent infinite re-renders
+  const nodes = data?.data ?? EMPTY_NODES;
+  const maxNodes = useMemo(
+    () => Math.max(1, Math.min(255, systemConfig?.data?.max_nodes || 8)),
+    [systemConfig?.data?.max_nodes]
+  );
 
-  const nodes = data?.data || [];
-  const maxNodes = Math.max(1, Math.min(255, systemConfig?.data?.max_nodes || 8));
   const nodeMap = useMemo(() => {
     const map = new Map<number, NodeConfig>();
     nodes.forEach((n: NodeConfig) => map.set(n.node_number, n));
@@ -101,6 +105,10 @@ export function NodesPage() {
       }),
     [maxNodes, nodeMap]
   );
+
+  if (isLoading) {
+    return <div className="text-bbs-text">Loading node configurations...</div>;
+  }
 
   const columns: DataGridColumn<NodeRow>[] = [
     {

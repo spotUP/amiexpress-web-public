@@ -8,6 +8,7 @@ import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
 import { nodeFileManager } from '../services/NodeFileManager';
+import { userFileManager } from '../services/UserFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity } from '../utils/security.util';
 import { AnsiUtil } from '../utils/ansi.util';
@@ -67,7 +68,7 @@ export function registerAuthHandlers(socket: Socket) {
       // between the frontend sending 'login' and the backend processing the Enter key
       // that transitions from AWAIT → LOGON. The authentication itself is the real security check.
 
-      let user;
+      let user: any;
       const remoteAddress = session?.remoteAddress || (socket as any).handshake?.address || 'unknown';
       const handleFailure = () => {
         const stillAllowed = ipBanManager.recordFailure(remoteAddress);
@@ -241,6 +242,25 @@ export function registerAuthHandlers(socket: Socket) {
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
         ipBanManager.resetFailures(remoteAddress);
+
+        // CRITICAL: Sync user to disk files for 68K door compatibility
+        // 68K doors use XIM protocol and read from user.data, not database
+        try {
+          // Get all users to determine slot number (sorted by creation date)
+          const allUsers = await db.getUsers({});
+          const slotNumber = allUsers.findIndex((u: any) => u.id === user.id);
+
+          if (slotNumber >= 0) {
+            // Write/update user.data, user.keys, user.misc
+            userFileManager.updateUserDataFile(user, slotNumber + 1); // Slots are 1-indexed in AmiExpress
+            console.log(`[LOGIN] Synced user ${user.username} to disk files (slot ${slotNumber + 1})`);
+          } else {
+            console.error(`[LOGIN] Failed to find slot number for user ${user.username}`);
+          }
+        } catch (error) {
+          console.error(`[LOGIN] Failed to sync user to disk:`, error);
+          // Don't fail login - disk sync is best-effort
+        }
 
         // Generate JWT tokens for this session
         const accessToken = await db.generateAccessToken(user);

@@ -2,9 +2,62 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Key, Trash2, RefreshCw } from 'lucide-react';
 import { apiClient } from '../api/client';
-import type { SystemConfig } from '../types';
+import type { SystemConfig, Language, ScreenType } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
+
+// Standard AmiExpress security levels
+const SECURITY_LEVELS = [
+  { value: 1, label: '1 - Guest' },
+  { value: 10, label: '10 - Unvalidated' },
+  { value: 20, label: '20 - New User' },
+  { value: 30, label: '30 - Regular User' },
+  { value: 40, label: '40 - Validated' },
+  { value: 50, label: '50 - Trusted' },
+  { value: 60, label: '60 - VIP' },
+  { value: 70, label: '70 - Elite' },
+  { value: 80, label: '80 - Moderator' },
+  { value: 90, label: '90 - Sub-Sysop' },
+  { value: 100, label: '100 - Co-Sysop' },
+  { value: 200, label: '200 - Sysop' },
+  { value: 250, label: '250 - Senior Sysop' },
+  { value: 255, label: '255 - Super User' },
+];
+
+// AmiExpress editor types (express.e:31745+)
+const EDITOR_TYPES = [
+  { value: 'FULL', label: 'Full Screen Editor' },
+  { value: 'LINE', label: 'Line Editor' },
+  { value: 'EXT', label: 'External Editor' },
+];
+
+// Common lines per screen values
+const LINES_PER_SCREEN = [
+  { value: 23, label: '23 lines' },
+  { value: 24, label: '24 lines (standard)' },
+  { value: 25, label: '25 lines' },
+  { value: 40, label: '40 lines' },
+  { value: 50, label: '50 lines' },
+];
+
+// Common idle timeout values (minutes)
+const IDLE_TIMEOUTS = [
+  { value: 3, label: '3 minutes' },
+  { value: 5, label: '5 minutes' },
+  { value: 10, label: '10 minutes' },
+  { value: 15, label: '15 minutes' },
+  { value: 30, label: '30 minutes' },
+];
+
+// Log retention presets (days)
+const LOG_RETENTION_PRESETS = [
+  { value: 7, label: '1 week' },
+  { value: 14, label: '2 weeks' },
+  { value: 30, label: '1 month' },
+  { value: 90, label: '3 months' },
+  { value: 180, label: '6 months' },
+  { value: 365, label: '1 year' },
+];
 
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
@@ -18,6 +71,18 @@ export function SystemConfigPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['systemConfig'],
     queryFn: () => apiClient.getSystemConfig(),
+  });
+
+  // Fetch languages for dropdown
+  const { data: languagesData } = useQuery({
+    queryKey: ['languages'],
+    queryFn: () => apiClient.getLanguages(),
+  });
+
+  // Fetch screen types for dropdown
+  const { data: screenTypesData } = useQuery({
+    queryKey: ['screenTypes'],
+    queryFn: () => apiClient.getScreenTypes(),
   });
 
   // SSH Key Info Query
@@ -307,6 +372,7 @@ export function SystemConfigPage() {
                 <option value="bcrypt">bcrypt</option>
                 <option value="sha256">SHA256</option>
                 <option value="md5">MD5</option>
+                <option value="legacy">Legacy (imported)</option>
               </select>
             </div>
 
@@ -386,14 +452,20 @@ export function SystemConfigPage() {
 
             <div>
               <label htmlFor="idle_timeout" className="label">
-                Idle Timeout (minutes)
+                Idle Timeout
               </label>
-              <input
+              <select
                 id="idle_timeout"
-                type="number"
-                {...register('idle_timeout', { min: 1, max: 60, valueAsNumber: true })}
+                value={watch('idle_timeout') ?? 10}
+                onChange={(e) => setValue('idle_timeout', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
-              />
+              >
+                {IDLE_TIMEOUTS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -406,12 +478,18 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_sec_level" className="label">
                 Default Security Level
               </label>
-              <input
+              <select
                 id="new_user_sec_level"
-                type="number"
-                {...register('new_user_sec_level', { min: 1, max: 255, valueAsNumber: true, value: 30 })}
+                value={watch('new_user_sec_level') ?? 30}
+                onChange={(e) => setValue('new_user_sec_level', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
-              />
+              >
+                {SECURITY_LEVELS.map((level) => (
+                  <option key={level.value} value={level.value}>
+                    {level.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="new_user_time_limit" className="label">
@@ -447,12 +525,18 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_lines_per_screen" className="label">
                 Lines Per Screen
               </label>
-              <input
+              <select
                 id="new_user_lines_per_screen"
-                type="number"
-                {...register('new_user_lines_per_screen', { min: 10, max: 100, valueAsNumber: true })}
+                value={watch('new_user_lines_per_screen') ?? 24}
+                onChange={(e) => setValue('new_user_lines_per_screen', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
-              />
+              >
+                {LINES_PER_SCREEN.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="new_user_protocol" className="label">
@@ -476,25 +560,44 @@ export function SystemConfigPage() {
               <label htmlFor="new_user_screen_type" className="label">
                 Default Screen Type
               </label>
-              <input
+              <select
                 id="new_user_screen_type"
-                type="text"
-                {...register('new_user_screen_type')}
+                value={watch('new_user_screen_type') ?? 'ANSI'}
+                onChange={(e) => setValue('new_user_screen_type', e.target.value, { shouldDirty: true })}
                 className="input-field w-full"
-                placeholder="ANSI"
-              />
+              >
+                <option value="ANSI">ANSI</option>
+                <option value="ASCII">ASCII</option>
+                <option value="RIP">RIP</option>
+                <option value="C64">C64 / PETSCII</option>
+                {/* Include additional screen types from config */}
+                {((screenTypesData?.data || []) as ScreenType[])
+                  .filter((st: ScreenType) =>
+                    !['ANSI', 'ASCII', 'RIP', 'C64'].includes(st.screen_type?.toUpperCase())
+                  )
+                  .map((st: ScreenType) => (
+                    <option key={st.id} value={st.screen_type}>
+                      {st.screen_title || st.screen_type}
+                    </option>
+                  ))}
+              </select>
             </div>
             <div>
               <label htmlFor="new_user_editor" className="label">
                 Default Editor
               </label>
-              <input
+              <select
                 id="new_user_editor"
-                type="text"
-                {...register('new_user_editor')}
+                value={watch('new_user_editor') ?? 'FULL'}
+                onChange={(e) => setValue('new_user_editor', e.target.value, { shouldDirty: true })}
                 className="input-field w-full"
-                placeholder="FULL"
-              />
+              >
+                {EDITOR_TYPES.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor="new_user_conf_access" className="label">
@@ -603,15 +706,16 @@ export function SystemConfigPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="language_base" className="label">
-                Language Base
+                Language Base Directory
               </label>
-              <select
+              <input
                 id="language_base"
+                type="text"
                 {...register('language_base')}
                 className="input-field w-full"
-              >
-                <option value="Languages">Languages</option>
-              </select>
+                placeholder="Languages"
+              />
+              <p className="text-xs text-bbs-muted mt-1">Directory containing language files</p>
             </div>
 
             <div>
@@ -620,11 +724,21 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="default_language"
-                {...register('default_language')}
+                value={watch('default_language') ?? 'English'}
+                onChange={(e) => setValue('default_language', e.target.value, { shouldDirty: true })}
                 className="input-field w-full"
               >
-                <option value="English">English</option>
+                <option value="English">English (default)</option>
+                {/* Include languages from config */}
+                {((languagesData?.data || []) as Language[])
+                  .filter((lang: Language) => lang.enabled && lang.title?.toLowerCase() !== 'english')
+                  .map((lang: Language) => (
+                    <option key={lang.id} value={lang.title || lang.language_code}>
+                      {lang.title || lang.language_code}
+                    </option>
+                  ))}
               </select>
+              <p className="text-xs text-bbs-muted mt-1">Language shown to new users</p>
             </div>
           </div>
         </div>
@@ -1166,14 +1280,20 @@ export function SystemConfigPage() {
 
             <div>
               <label htmlFor="log_retention_days" className="label">
-                Log Retention (days)
+                Log Retention
               </label>
-              <input
+              <select
                 id="log_retention_days"
-                type="number"
-                {...register('log_retention_days', { min: 1, max: 365, valueAsNumber: true })}
+                value={watch('log_retention_days') ?? 30}
+                onChange={(e) => setValue('log_retention_days', parseInt(e.target.value, 10), { shouldDirty: true })}
                 className="input-field w-full"
-              />
+              >
+                {LOG_RETENTION_PRESETS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center space-x-3">

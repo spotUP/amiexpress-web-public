@@ -24,6 +24,9 @@ interface BbsUser {
   firstLogin: Date;
 }
 
+// Stable empty array reference to prevent infinite re-renders
+const EMPTY_USERS: BbsUser[] = [];
+
 interface UserFormData {
   username: string;
   password: string;
@@ -181,11 +184,9 @@ export function UsersPage() {
     return 'text-bbs-muted';
   };
 
-  if (isLoading) {
-    return <div className="text-bbs-text">Loading users...</div>;
-  }
+  // Use stable reference for empty fallback to prevent infinite re-renders
+  const users = (data?.data ?? EMPTY_USERS) as BbsUser[];
 
-  const users = (data?.data || []) as BbsUser[];
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     let list = users;
@@ -214,6 +215,10 @@ export function UsersPage() {
     });
     return list;
   }, [users, search, sortKey, sortDir]);
+
+  if (isLoading) {
+    return <div className="text-bbs-text">Loading users...</div>;
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageUsers = filtered.slice((page - 1) * pageSize, page * pageSize);

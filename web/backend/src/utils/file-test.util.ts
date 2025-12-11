@@ -3,15 +3,100 @@
  * 1:1 port from AmiExpress express.e:18639-18750
  *
  * Tests uploaded files for integrity, format, and virus checking
+ * Uses disk-based Fcheck/*.info file checkers (express.e:18556-18614)
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import { runExamineCommandsForTesting } from './examine-runner.util';
+import { config } from '../config';
+import { InfoFileParser } from '../services/info-file-parser';
 
 const execAsync = promisify(exec);
+
+// Cached file checkers loaded from disk
+let cachedFileCheckers: Map<string, FileCheckerInfo> | null = null;
+let checkersCacheTime = 0;
+const CACHE_DURATION_MS = 60000; // 1 minute cache
+
+interface FileCheckerInfo {
+  name: string;
+  checker: string;
+  options: string;
+  stackSize: number;
+  priority: number;
+  scriptPath: string | null;
+}
+
+/**
+ * Load file checkers from Fcheck/*.info directory (disk-based, express.e:18556-18614)
+ * This is the proper AmiExpress implementation - checkers are defined in .info files
+ */
+function loadFileCheckersFromDisk(): Map<string, FileCheckerInfo> {
+  const now = Date.now();
+  if (cachedFileCheckers && (now - checkersCacheTime) < CACHE_DURATION_MS) {
+    return cachedFileCheckers;
+  }
+
+  const checkers = new Map<string, FileCheckerInfo>();
+  const bbsRoot = config.get('dataDir');
+  const fcheckDir = path.join(bbsRoot, 'Fcheck');
+
+  if (!fsSync.existsSync(fcheckDir)) {
+    console.log('[FileTest] Fcheck/ directory not found, using built-in checkers only');
+    cachedFileCheckers = checkers;
+    checkersCacheTime = now;
+    return checkers;
+  }
+
+  try {
+    const files = fsSync.readdirSync(fcheckDir);
+    const infoFiles = files.filter(f => f.endsWith('.info'));
+
+    for (const infoFile of infoFiles) {
+      const infoPath = path.join(fcheckDir, infoFile);
+      const buffer = fsSync.readFileSync(infoPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+
+      // Convert tooltypes to uppercase map
+      const toolTypes = new Map<string, string>();
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        const cleanKey = key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase();
+        toolTypes.set(cleanKey, value);
+      }
+
+      const checkerPath = toolTypes.get('CHECKER');
+      if (!checkerPath) continue;
+
+      // Extract extension from filename (e.g., ZIP.info -> ZIP)
+      const ext = path.basename(infoFile, '.info').toUpperCase();
+
+      const checkerInfo: FileCheckerInfo = {
+        name: ext,
+        checker: checkerPath,
+        options: toolTypes.get('OPTIONS') || toolTypes.get('SOPTIONS') || '',
+        stackSize: parseInt(toolTypes.get('STACK') || '8192', 10),
+        priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
+        scriptPath: toolTypes.get('SCRIPT') || null
+      };
+
+      checkers.set(ext, checkerInfo);
+      console.log(`[FileTest] Loaded checker for .${ext}: ${checkerPath}`);
+    }
+
+    console.log(`[FileTest] Loaded ${checkers.size} file checkers from Fcheck/`);
+  } catch (error: any) {
+    console.error(`[FileTest] Error loading file checkers: ${error.message}`);
+  }
+
+  cachedFileCheckers = checkers;
+  checkersCacheTime = now;
+  return checkers;
+}
 
 // Test result statuses (express.e return codes)
 export enum TestResult {
@@ -117,6 +202,8 @@ async function tryFilecheckCommand(filepath: string, nodeWorkDir: string): Promi
  * Check file based on extension type
  * Express.e:18659-18672 - Calls checkFileExternal(temp2, temp4)
  *
+ * First tries disk-based Fcheck/*.info checkers, then falls back to built-in checkers
+ *
  * @param extension File extension (e.g., "zip", "lha")
  * @param filepath Full file path
  * @param nodeWorkDir Work directory for output
@@ -128,7 +215,17 @@ async function checkFileByExtension(
 ): Promise<TestResult> {
   const extUpper = extension.toUpperCase();
 
-  // Built-in checkers for common archive formats
+  // DISK-BASED: First try Fcheck/*.info checkers (express.e:18556-18614)
+  const diskCheckers = loadFileCheckersFromDisk();
+  const diskChecker = diskCheckers.get(extUpper);
+
+  if (diskChecker) {
+    console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
+    return await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir);
+  }
+
+  // FALLBACK: Built-in JavaScript checkers for common archive formats
+  console.log(`[FileTest] No disk checker for .${extUpper}, using built-in checker`);
   switch (extUpper) {
     case 'ZIP':
       return await testZipFile(filepath, nodeWorkDir);
@@ -145,6 +242,79 @@ async function checkFileByExtension(
     default:
       console.log(`[testFile] No checker for extension: ${extension}`);
       return TestResult.NOT_TESTED;
+  }
+}
+
+/**
+ * Run a disk-based file checker from Fcheck/*.info
+ * Express.e:18556-18614 - checkFileExternal
+ *
+ * @param checker FileCheckerInfo from Fcheck/*.info
+ * @param filepath Full path to file being tested
+ * @param nodeWorkDir Work directory for output
+ */
+async function runDiskBasedChecker(
+  checker: FileCheckerInfo,
+  filepath: string,
+  nodeWorkDir: string
+): Promise<TestResult> {
+  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
+
+  try {
+    // Build command with file path substitution
+    // Common patterns: %s = file path, %f = filename
+    let command = checker.checker;
+    const filename = path.basename(filepath);
+
+    // If options exist, append them
+    if (checker.options) {
+      command = `${command} ${checker.options}`;
+    }
+
+    // Substitute placeholders
+    command = command
+      .replace(/%s/g, `"${filepath}"`)
+      .replace(/%f/g, `"${filename}"`)
+      .replace(/%p/g, `"${filepath}"`)
+      .replace(/%w/g, `"${nodeWorkDir}"`);
+
+    // If no placeholder, append filepath at end
+    if (!command.includes(filepath) && !command.includes(filename)) {
+      command = `${command} "${filepath}"`;
+    }
+
+    console.log(`[FileTest] Running disk checker: ${command}`);
+
+    const { stdout, stderr } = await execAsync(command, {
+      timeout: 60000, // 60 second timeout
+      cwd: nodeWorkDir,
+    });
+
+    // Write output to test output file
+    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
+
+    // Check for error indicators in output
+    const output = `${stdout} ${stderr}`.toLowerCase();
+    if (output.includes('error') || output.includes('failed') || output.includes('corrupt') ||
+        output.includes('bad') || output.includes('invalid')) {
+      console.log(`[FileTest] Disk checker reported failure for ${filename}`);
+      return TestResult.FAILURE;
+    }
+
+    console.log(`[FileTest] Disk checker succeeded for ${filename}`);
+    return TestResult.SUCCESS;
+  } catch (error: any) {
+    // Command execution failed (non-zero exit code or timeout)
+    console.error(`[FileTest] Disk checker error: ${error.message}`);
+    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
+
+    // Non-zero exit code usually means test failure
+    if (error.code !== undefined) {
+      return TestResult.FAILURE;
+    }
+
+    // Other errors (timeout, command not found) - mark as not tested
+    return TestResult.NOT_TESTED;
   }
 }
 

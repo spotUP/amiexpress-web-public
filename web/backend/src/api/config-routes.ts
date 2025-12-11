@@ -11,6 +11,7 @@ import { ConfigService } from '../services/config.service';
 import { ConferenceSetupService } from '../services/conference-setup.service';
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
+import { userFileManager } from '../services/UserFileManager';
 import type { Database } from '../database';
 import * as path from 'path';
 
@@ -359,12 +360,38 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
   /**
    * GET /api/config/doors
-   * Get all doors
+   * Get all doors (loaded from .info files on disk, NOT database)
    */
   router.get('/doors', async (req: Request, res: Response) => {
     try {
-      const doors = await configService.getDoors();
-      sendResponse(res, doors);
+      // DISK-BASED CONFIG: Load doors from .info files, not database
+      // This ensures we get the actual doors available on the system
+      const { getDoors } = await import('../handlers/door.handler');
+      const backendDoors = getDoors();
+      console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
+
+      // Transform backend Door format to frontend Door format
+      // Backend uses: id, name, command, type, path, accessLevel, etc.
+      // Frontend expects: id (number), door_name, door_command, door_type, door_path, etc.
+      const frontendDoors = backendDoors.map((door, index) => ({
+        id: index + 1,  // Frontend expects numeric ID
+        door_name: door.name,
+        door_command: door.command,
+        description: door.description || '',
+        door_type: door.type || 'BBSCMD',
+        runtime_env: door.type === 'typescript' ? 'nodejs' : door.type === 'XIM' ? 'vamos' : 'native',
+        min_security_level: door.accessLevel || 0,
+        time_limit: 30,
+        enabled: door.enabled !== false,
+        door_path: door.path || '',
+        door_args: door.args || '',
+        working_directory: '',
+        priority: `P${door.priority || 0}`,
+        door_options: []
+      }));
+
+      console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
+      sendResponse(res, frontendDoors);
     } catch (error) {
       handleError(res, error);
     }
@@ -1102,10 +1129,21 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
   /**
    * GET /api/config/users
    * Get all users
+   * DISK-BASED: Loads from user.data/keys/misc files, NOT database
    */
   router.get('/users', async (req: Request, res: Response) => {
     try {
-      const users = await database.getUsers({});
+      // DISK-BASED: Load from user.data, user.keys, user.misc
+      let users = userFileManager.readAllUsers();
+
+      // Fallback to database if disk files missing or empty
+      if (!users || users.length === 0) {
+        console.warn('[API] user.data files not found or empty, falling back to database');
+        users = await database.getUsers({});
+      } else {
+        console.log(`[API] Loaded ${users.length} users from disk files`);
+      }
+
       // Remove password hashes from response
       const sanitizedUsers = users.map((u: any) => {
         const { passwordHash, ...userWithoutPassword } = u;
@@ -1228,14 +1266,53 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
   /**
    * PUT /api/config/users/:id
-   * Update user
+   * Update user - handles both disk-based (user-N) and database (UUID) IDs
    */
   router.put('/users/:id', async (req: any, res: Response) => {
     try {
       const id = req.params.id;
-      const context = getRequestContext(req);
       const { password, ...updates } = req.body;
 
+      // Check if this is a disk-based user ID (format: user-N)
+      const diskUserMatch = id.match(/^user-(\d+)$/);
+      if (diskUserMatch) {
+        const slotNumber = parseInt(diskUserMatch[1], 10);
+
+        // Read current user from slot
+        const currentUser = userFileManager.readUserBySlot(slotNumber);
+        if (!currentUser) {
+          return handleError(res, new Error(`User at slot ${slotNumber} not found`));
+        }
+
+        // Merge updates into current user
+        const updatedUser = { ...currentUser };
+
+        // Map frontend field names to User object fields
+        if (updates.realname !== undefined) updatedUser.realname = updates.realname;
+        if (updates.location !== undefined) updatedUser.location = updates.location;
+        if (updates.phone !== undefined) updatedUser.phone = updates.phone;
+        if (updates.email !== undefined) updatedUser.email = updates.email;
+        if (updates.secLevel !== undefined) updatedUser.secLevel = updates.secLevel;
+        if (updates.timeLimit !== undefined) updatedUser.timeLimit = updates.timeLimit;
+        if (updates.expert !== undefined) updatedUser.expert = updates.expert;
+        if (updates.ansi !== undefined) updatedUser.ansi = updates.ansi;
+
+        // Handle password update
+        if (password) {
+          const bcrypt = require('bcrypt');
+          updatedUser.passwordHash = await bcrypt.hash(password, 10);
+        }
+
+        // Write back to disk
+        userFileManager.updateUserDataFile(updatedUser, slotNumber);
+
+        // Remove password hash from response
+        const { passwordHash: _, ...userWithoutPassword } = updatedUser;
+        sendResponse(res, userWithoutPassword, 'User updated successfully');
+        return;
+      }
+
+      // Otherwise, it's a database UUID - use database operations
       // If password is being updated, hash it
       if (password) {
         const bcrypt = require('bcrypt');
@@ -1259,13 +1336,22 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
   /**
    * DELETE /api/config/users/:id
-   * Delete user
+   * Delete user - handles both disk-based (user-N) and database (UUID) IDs
    */
   router.delete('/users/:id', async (req: any, res: Response) => {
     try {
       const id = req.params.id;
-      const context = getRequestContext(req);
 
+      // Check if this is a disk-based user ID (format: user-N)
+      const diskUserMatch = id.match(/^user-(\d+)$/);
+      if (diskUserMatch) {
+        const slotNumber = parseInt(diskUserMatch[1], 10);
+        userFileManager.deleteUserSlot(slotNumber);
+        sendResponse(res, { deleted: true }, 'User deleted successfully');
+        return;
+      }
+
+      // Otherwise, it's a database UUID - delete from database
       await database.deleteUser(id);
       sendResponse(res, { deleted: true }, 'User deleted successfully');
     } catch (error) {

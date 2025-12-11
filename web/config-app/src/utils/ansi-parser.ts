@@ -246,3 +246,65 @@ export function stripAnsiCodes(text: string): string {
   // Matches: ESC [ ... (any letter or @)
   return text.replace(/\x1b\[[0-9;]*[A-Za-z@]/g, '');
 }
+
+/**
+ * Wrap text at 80 columns (BBS terminal width)
+ * Handles ANSI escape codes by not counting them toward line width.
+ *
+ * @param text - Input text (with or without ANSI codes)
+ * @param columns - Width to wrap at (default 80)
+ * @returns Text with lines wrapped at specified column width
+ */
+export function wrapAt80Columns(text: string, columns: number = 80): string {
+  // Split into lines first (preserve existing line breaks)
+  const lines = text.split(/\r?\n/);
+  const wrappedLines: string[] = [];
+
+  // ANSI escape sequence pattern
+  const ansiPattern = /\x1b\[[0-9;]*[A-Za-z@]/g;
+
+  for (const line of lines) {
+    // Calculate visual length (excluding ANSI codes)
+    const visualLength = line.replace(ansiPattern, '').length;
+
+    if (visualLength <= columns) {
+      // Line fits, no wrapping needed
+      wrappedLines.push(line);
+    } else {
+      // Need to wrap this line
+      let currentLine = '';
+      let currentVisualLength = 0;
+      let i = 0;
+
+      while (i < line.length) {
+        // Check for ANSI escape sequence at current position
+        const remaining = line.slice(i);
+        const ansiMatch = remaining.match(/^\x1b\[[0-9;]*[A-Za-z@]/);
+
+        if (ansiMatch) {
+          // Found ANSI sequence - add it without counting toward width
+          currentLine += ansiMatch[0];
+          i += ansiMatch[0].length;
+        } else {
+          // Regular character
+          if (currentVisualLength >= columns) {
+            // Line is full, start new line
+            wrappedLines.push(currentLine);
+            currentLine = '';
+            currentVisualLength = 0;
+          }
+          currentLine += line[i];
+          currentVisualLength++;
+          i++;
+        }
+      }
+
+      // Add remaining content
+      if (currentLine) {
+        wrappedLines.push(currentLine);
+      }
+    }
+  }
+
+  return wrappedLines.join('\n');
+}

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { DoorOpen, Edit2, Trash2, Plus, X, FileCode } from 'lucide-react';
+import { DoorOpen, Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -17,9 +16,15 @@ interface DoorFormData {
   enabled: boolean;
 }
 
+interface Tooltype {
+  key: string;
+  value: string;
+  commented: boolean;
+  originalLine: string;
+}
+
 export function DoorsPage() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
@@ -33,6 +38,12 @@ export function DoorsPage() {
     time_limit: 30,
     enabled: true,
   });
+
+  // Info editor modal state
+  const [isInfoEditorOpen, setIsInfoEditorOpen] = useState(false);
+  const [editingInfoDoor, setEditingInfoDoor] = useState<Door | null>(null);
+  const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
+  const [infoDirty, setInfoDirty] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['doors'],
@@ -134,10 +145,60 @@ export function DoorsPage() {
     }
   };
 
-  const handleEditInfo = (door: Door) => {
-    // Navigate to Info Editor page - it will show all .info files grouped by type
-    // User can find their door in the "Doors" section
-    navigate('/info-editor');
+  const handleEditInfo = async (door: Door) => {
+    try {
+      // Load the door's .info file from Commands/BBSCmd/{command}.info
+      const infoPath = `Commands/BBSCmd/${door.door_command}.info`;
+      const response = await apiClient.getInfoFile(infoPath);
+
+      setTooltypes(response.data?.tooltypes || []);
+      setEditingInfoDoor(door);
+      setInfoDirty(false);
+      setIsInfoEditorOpen(true);
+    } catch (error) {
+      showError(`Failed to load .info file: ${(error as Error).message}`);
+    }
+  };
+
+  const handleInfoSave = async () => {
+    if (!editingInfoDoor) return;
+
+    try {
+      const infoPath = `Commands/BBSCmd/${editingInfoDoor.door_command}.info`;
+      await apiClient.updateInfoFile(infoPath, tooltypes);
+
+      showSuccess('Door .info file saved successfully');
+      setInfoDirty(false);
+      setIsInfoEditorOpen(false);
+      setEditingInfoDoor(null);
+      queryClient.invalidateQueries({ queryKey: ['doors'] });
+    } catch (error) {
+      showError(`Failed to save .info file: ${(error as Error).message}`);
+    }
+  };
+
+  const handleTooltypeToggle = (index: number) => {
+    const updated = [...tooltypes];
+    updated[index] = { ...updated[index], commented: !updated[index].commented };
+    setTooltypes(updated);
+    setInfoDirty(true);
+  };
+
+  const handleTooltypeUpdate = (index: number, field: 'key' | 'value', newValue: string) => {
+    const updated = [...tooltypes];
+    updated[index] = { ...updated[index], [field]: newValue };
+    setTooltypes(updated);
+    setInfoDirty(true);
+  };
+
+  const handleTooltypeAdd = () => {
+    setTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
+    setInfoDirty(true);
+  };
+
+  const handleTooltypeRemove = (index: number) => {
+    setTooltypes(tooltypes.filter((_, i) => i !== index));
+    setInfoDirty(true);
   };
 
   if (isLoading) {
@@ -385,6 +446,153 @@ export function DoorsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Info Editor Modal */}
+      {isInfoEditorOpen && editingInfoDoor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-bbs-bg border-2 border-bbs-accent rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4">
+            <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-bbs-accent">Edit .info File</h2>
+                <p className="text-bbs-muted text-sm mt-1">
+                  {editingInfoDoor.door_name} ({editingInfoDoor.door_command}.info)
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (infoDirty) {
+                    if (window.confirm('You have unsaved changes. Discard them?')) {
+                      setIsInfoEditorOpen(false);
+                      setEditingInfoDoor(null);
+                      setInfoDirty(false);
+                    }
+                  } else {
+                    setIsInfoEditorOpen(false);
+                    setEditingInfoDoor(null);
+                  }
+                }}
+                className="text-bbs-muted hover:text-bbs-text transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-4 flex justify-between items-center">
+                <p className="text-bbs-muted text-sm">
+                  Edit tooltypes for this door. Changes are saved back to the .info file.
+                </p>
+                <button
+                  onClick={handleTooltypeAdd}
+                  className="btn-secondary text-sm flex items-center space-x-1"
+                >
+                  <Plus size={16} />
+                  <span>Add Tooltype</span>
+                </button>
+              </div>
+
+              <div className="border border-bbs-primary rounded overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-bbs-primary">
+                    <tr>
+                      <th className="text-left p-3 text-bbs-text font-semibold w-12">Active</th>
+                      <th className="text-left p-3 text-bbs-text font-semibold">Key</th>
+                      <th className="text-left p-3 text-bbs-text font-semibold">Value</th>
+                      <th className="text-left p-3 text-bbs-text font-semibold w-20">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tooltypes.map((tt, index) => (
+                      <tr
+                        key={index}
+                        className={`border-t border-bbs-primary ${
+                          tt.commented ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <td className="p-3">
+                          <button
+                            onClick={() => handleTooltypeToggle(index)}
+                            className={`p-1 rounded transition-colors ${
+                              tt.commented
+                                ? 'text-bbs-muted hover:text-bbs-text'
+                                : 'text-green-500 hover:text-green-400'
+                            }`}
+                            title={tt.commented ? 'Enable this tooltype' : 'Disable this tooltype'}
+                          >
+                            {tt.commented ? <PowerOff size={20} /> : <Power size={20} />}
+                          </button>
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="text"
+                            value={tt.key}
+                            onChange={(e) => handleTooltypeUpdate(index, 'key', e.target.value)}
+                            className="input-field w-full font-mono text-sm"
+                            placeholder="KEY"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <input
+                            type="text"
+                            value={tt.value}
+                            onChange={(e) => handleTooltypeUpdate(index, 'value', e.target.value)}
+                            className="input-field w-full font-mono text-sm"
+                            placeholder="value"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <button
+                            onClick={() => handleTooltypeRemove(index)}
+                            className="text-bbs-accent hover:text-bbs-accent/90 transition-colors"
+                            title="Remove this tooltype"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {tooltypes.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-bbs-muted">
+                          No tooltypes defined. Click "Add Tooltype" to create one.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary mt-6">
+                <button
+                  onClick={() => {
+                    if (infoDirty) {
+                      if (window.confirm('You have unsaved changes. Discard them?')) {
+                        setIsInfoEditorOpen(false);
+                        setEditingInfoDoor(null);
+                        setInfoDirty(false);
+                      }
+                    } else {
+                      setIsInfoEditorOpen(false);
+                      setEditingInfoDoor(null);
+                    }
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleInfoSave}
+                  className="btn-primary flex items-center space-x-2"
+                  disabled={!infoDirty}
+                >
+                  <Save size={16} />
+                  <span>{infoDirty ? 'Save Changes' : 'No Changes'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

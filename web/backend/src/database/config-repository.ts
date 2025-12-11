@@ -278,7 +278,11 @@ export class ConfigRepository extends BaseRepository<any> {
       JSON.stringify(config.nrams || [])
     );
 
-    return this.getNodeConfig(config.node_number)!;
+    const result = this.getNodeConfig(config.node_number);
+    if (!result) {
+      throw new Error(`Failed to create node config ${config.node_number}`);
+    }
+    return result;
   }
 
   /**
@@ -300,7 +304,11 @@ export class ConfigRepository extends BaseRepository<any> {
     });
 
     if (fields.length === 0) {
-      return this.getNodeConfig(nodeNumber)!;
+      const result = this.getNodeConfig(nodeNumber);
+      if (!result) {
+        throw new Error(`Node config ${nodeNumber} not found`);
+      }
+      return result;
     }
 
     values.push(nodeNumber);
@@ -309,7 +317,11 @@ export class ConfigRepository extends BaseRepository<any> {
     `);
 
     stmt.run(...values);
-    return this.getNodeConfig(nodeNumber)!;
+    const result = this.getNodeConfig(nodeNumber);
+    if (!result) {
+      throw new Error(`Failed to update node config ${nodeNumber}`);
+    }
+    return result;
   }
 
   /**
@@ -395,7 +407,11 @@ export class ConfigRepository extends BaseRepository<any> {
       config.max_access_level || 255
     );
 
-    return this.getConferenceConfig(config.conference_id)!;
+    const result = this.getConferenceConfig(config.conference_id);
+    if (!result) {
+      throw new Error(`Failed to create conference config ${config.conference_id}`);
+    }
+    return result;
   }
 
   /**
@@ -413,7 +429,11 @@ export class ConfigRepository extends BaseRepository<any> {
     });
 
     if (fields.length === 0) {
-      return this.getConferenceConfig(conferenceId)!;
+      const result = this.getConferenceConfig(conferenceId);
+      if (!result) {
+        throw new Error(`Conference config ${conferenceId} not found`);
+      }
+      return result;
     }
 
     values.push(conferenceId);
@@ -422,7 +442,11 @@ export class ConfigRepository extends BaseRepository<any> {
     `);
 
     stmt.run(...values);
-    return this.getConferenceConfig(conferenceId)!;
+    const result = this.getConferenceConfig(conferenceId);
+    if (!result) {
+      throw new Error(`Failed to update conference config ${conferenceId}`);
+    }
+    return result;
   }
 
   /**
@@ -676,7 +700,7 @@ export class ConfigRepository extends BaseRepository<any> {
   /**
    * Create language
    */
-  createLanguage(language: Omit<Language, 'id' | 'created_at' | 'updated_at'>): Language {
+  createLanguage(language: Omit<Language, 'id' | 'created_at' | 'updated_at'>): Language | null {
     const stmt = this.prepare(`
       INSERT INTO languages (
         language_number, title, language_code, file_path, enabled
@@ -691,13 +715,13 @@ export class ConfigRepository extends BaseRepository<any> {
       language.enabled !== false ? 1 : 0
     );
 
-    return this.getLanguage(result.lastInsertRowid as number)!;
+    return this.getLanguage(result.lastInsertRowid as number);
   }
 
   /**
    * Update language
    */
-  updateLanguage(id: number, updates: Partial<Language>): Language {
+  updateLanguage(id: number, updates: Partial<Language>): Language | null {
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -709,7 +733,7 @@ export class ConfigRepository extends BaseRepository<any> {
     });
 
     if (fields.length === 0) {
-      return this.getLanguage(id)!;
+      return this.getLanguage(id);
     }
 
     values.push(id);
@@ -718,7 +742,7 @@ export class ConfigRepository extends BaseRepository<any> {
     `);
 
     stmt.run(...values);
-    return this.getLanguage(id)!;
+    return this.getLanguage(id);
   }
 
   /**
@@ -778,7 +802,7 @@ export class ConfigRepository extends BaseRepository<any> {
   /**
    * Create protocol
    */
-  createProtocol(protocol: Omit<Protocol, 'id' | 'created_at' | 'updated_at'>): Protocol {
+  createProtocol(protocol: Omit<Protocol, 'id' | 'created_at' | 'updated_at'>): Protocol | null {
     const stmt = this.prepare(`
       INSERT INTO protocols (
         protocol_name, protocol_code,
@@ -801,13 +825,13 @@ export class ConfigRepository extends BaseRepository<any> {
       protocol.is_default ? 1 : 0
     );
 
-    return this.getProtocol(result.lastInsertRowid as number)!;
+    return this.getProtocol(result.lastInsertRowid as number);
   }
 
   /**
    * Update protocol
    */
-  updateProtocol(id: number, updates: Partial<Protocol>): Protocol {
+  updateProtocol(id: number, updates: Partial<Protocol>): Protocol | null {
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -819,7 +843,7 @@ export class ConfigRepository extends BaseRepository<any> {
     });
 
     if (fields.length === 0) {
-      return this.getProtocol(id)!;
+      return this.getProtocol(id);
     }
 
     values.push(id);
@@ -828,7 +852,7 @@ export class ConfigRepository extends BaseRepository<any> {
     `);
 
     stmt.run(...values);
-    return this.getProtocol(id)!;
+    return this.getProtocol(id);
   }
 
   /**

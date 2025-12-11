@@ -5,7 +5,7 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import type { SessionInfo } from '../types';
 import { SessionLogTerminal } from '../components/SessionLogTerminal';
-import { stripAnsiCodes } from '../utils/ansi-parser';
+import { stripAnsiCodes, wrapAt80Columns } from '../utils/ansi-parser';
 
 export function SessionLogsPage() {
   const queryClient = useQueryClient();
@@ -246,10 +246,12 @@ export function SessionLogsPage() {
               </div>
             ) : (
               <div
-                className="border border-bbs-border rounded-lg overflow-auto bg-black p-4 font-mono text-sm whitespace-pre-wrap text-green-400"
-                style={{ height: '600px' }}
+                className="border border-bbs-border rounded-lg overflow-auto bg-black p-4 font-mono text-sm whitespace-pre text-green-400"
+                style={{ height: '600px', maxWidth: '100%' }}
               >
-                {stripAnsiCodes(sessionLog.output.join(''))}
+                <div style={{ width: '80ch' }}>
+                  {wrapAt80Columns(stripAnsiCodes(sessionLog.output.join('')))}
+                </div>
               </div>
             )
           ) : (

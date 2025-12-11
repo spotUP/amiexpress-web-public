@@ -318,6 +318,17 @@ export interface SessionStats {
   oldestSession?: string;
 }
 
+// Screen Type configuration
+export interface ScreenType {
+  id: number;
+  screen_number: number;
+  screen_type: string;    // e.g., "TXT.GR", "IBM", "ASCII"
+  screen_title: string;   // e.g., "Amiga Ansi", "IBM Ansi"
+  enabled: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
 // API Response wrapper
 export interface ApiResponse<T = any> {
   success: boolean;

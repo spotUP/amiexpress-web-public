@@ -17,7 +17,6 @@ import {
   ArrowUpDown,
   Activity,
   FileText,
-  FileCode,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -48,7 +47,6 @@ export function Layout() {
     { to: `${ADMIN_BASE}/languages`, icon: Languages, label: 'Languages' },
     { to: `${ADMIN_BASE}/protocols`, icon: Download, label: 'Protocols' },
     { to: `${ADMIN_BASE}/batches`, icon: FileText, label: 'Batch Editor' },
-    { to: `${ADMIN_BASE}/info-editor`, icon: FileCode, label: 'Info Editor' },
     { to: `${ADMIN_BASE}/deployment`, icon: Activity, label: 'Deployment' },
     { to: `${ADMIN_BASE}/import-export`, icon: ArrowUpDown, label: 'Import/Export' },
     { to: `${ADMIN_BASE}/logs`, icon: FileText, label: 'System Logs' },

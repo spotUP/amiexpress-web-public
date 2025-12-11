@@ -28,8 +28,103 @@ import { runSamiLogUpdate } from '../services/SamiLogRunner';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
+import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
 import * as fs from 'fs';
 import * as path from 'path';
+
+/**
+ * Enable game mode for a session (auto-called when door starts)
+ * For 68K doors: Creates KeyRepeatManager for backend-side key repeat
+ * For SDK doors: Just enables game mode flag
+ */
+export function enableGameMode(socket: Socket, session: BBSSession, doorType: string): void {
+  const is68KDoor = doorType === 'XIM' || doorType === 'AMI' || doorType === 'xim' || doorType === 'ami';
+
+  session.gameModeEnabled = true;
+  session.currentDoorType = doorType;
+
+  if (is68KDoor) {
+    // Create KeyRepeatManager for 68K doors
+    session.keyRepeatManager = new KeyRepeatManager((char: string) => {
+      // Route repeated keys to door input handler
+      if (session.doorInputHandler) {
+        session.doorInputHandler(char);
+      }
+    });
+    session.keyRepeatManager.start();
+    console.log(`[GameMode] Enabled for 68K door (type=${doorType}) with backend key repeat`);
+  } else {
+    console.log(`[GameMode] Enabled for SDK door (type=${doorType})`);
+  }
+
+  // Tell frontend to enable game mode
+  socket.emit('game-mode', true);
+}
+
+/**
+ * Disable game mode for a session (auto-called when door exits)
+ */
+export function disableGameMode(socket: Socket, session: BBSSession): void {
+  // Stop and clean up KeyRepeatManager if exists
+  if (session.keyRepeatManager) {
+    session.keyRepeatManager.stop();
+    session.keyRepeatManager = null;
+  }
+
+  session.gameModeEnabled = false;
+  session.currentDoorType = undefined;
+  session.keyState = {};
+
+  // Tell frontend to disable game mode
+  socket.emit('game-mode', false);
+  console.log('[GameMode] Disabled');
+}
+
+/**
+ * Convert special key names to their corresponding characters or escape sequences
+ * Used for game mode where we receive key names instead of raw characters
+ */
+function getSpecialKeyChar(key: string): string | null {
+  const keyMap: Record<string, string> = {
+    // Arrow keys (ANSI escape sequences)
+    'ArrowUp': '\x1b[A',
+    'ArrowDown': '\x1b[B',
+    'ArrowRight': '\x1b[C',
+    'ArrowLeft': '\x1b[D',
+    // Common control keys
+    'Enter': '\r',
+    'enter': '\r',
+    'Escape': '\x1b',
+    'escape': '\x1b',
+    'Backspace': '\x7f',
+    'backspace': '\x7f',
+    'Tab': '\t',
+    'tab': '\t',
+    'space': ' ',
+    ' ': ' ',
+    // Function keys
+    'F1': '\x1bOP',
+    'F2': '\x1bOQ',
+    'F3': '\x1bOR',
+    'F4': '\x1bOS',
+    'F5': '\x1b[15~',
+    'F6': '\x1b[17~',
+    'F7': '\x1b[18~',
+    'F8': '\x1b[19~',
+    'F9': '\x1b[20~',
+    'F10': '\x1b[21~',
+    'F11': '\x1b[23~',
+    'F12': '\x1b[24~',
+    // Navigation
+    'Home': '\x1b[H',
+    'End': '\x1b[F',
+    'PageUp': '\x1b[5~',
+    'PageDown': '\x1b[6~',
+    'Insert': '\x1b[2~',
+    'Delete': '\x1b[3~',
+  };
+  return keyMap[key] || null;
+}
 
 /**
  * Register all Socket.IO event handlers for a socket connection
@@ -236,6 +331,58 @@ function registerCommandHandler(socket: Socket) {
     if (session.inDoorManager && session.doorKeyStateHandler) {
       console.log('[socket-handlers] Calling doorKeyStateHandler');
       session.doorKeyStateHandler(data);
+    }
+  });
+
+  // Handle individual key-down events (game mode - bypasses OS key repeat delay)
+  socket.on('key-down', (data: { key: string; code: string }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    // Initialize key state if needed
+    if (!session.keyState) {
+      session.keyState = {};
+    }
+    session.keyState[data.key] = true;
+
+    // If door is active and has a key state handler, call it (SDK doors)
+    if (session.inDoorManager && session.doorKeyStateHandler) {
+      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState });
+    }
+
+    // Route through KeyRepeatManager for 68K doors (handles repeat timing)
+    if (session.keyRepeatManager) {
+      const char = data.key.length === 1 ? data.key : keyToChar(data.key);
+      if (char) {
+        session.keyRepeatManager.keyDown(data.key, char);
+      }
+    } else if (session.inDoorManager && session.doorInputHandler) {
+      // SDK doors: send directly to input handler (no repeat, they handle their own)
+      const char = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
+      if (char) {
+        session.doorInputHandler(char);
+      }
+    }
+  });
+
+  // Handle individual key-up events (game mode - for multi-key support)
+  socket.on('key-up', (data: { key: string; code: string }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    // Update key state
+    if (session.keyState) {
+      delete session.keyState[data.key];
+    }
+
+    // If door is active and has a key state handler, call it (SDK doors)
+    if (session.inDoorManager && session.doorKeyStateHandler) {
+      session.doorKeyStateHandler({ key: data.key, pressed: false, keyState: session.keyState || {} });
+    }
+
+    // Stop repeat for 68K doors
+    if (session.keyRepeatManager) {
+      session.keyRepeatManager.keyUp(data.key);
     }
   });
 
