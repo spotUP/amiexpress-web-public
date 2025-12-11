@@ -36,6 +36,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Import Zod validation schemas from dedicated module
+import {
+  SystemConfigSchema,
+  NodeConfigSchema,
+  ConferenceConfigSchema,
+  DoorSchema,
+  SystemLanguagesSchema,
+  LanguageSchema,
+  ProtocolSchema,
+  SecurityLevelAccessSchema,
+  DriveConfigSchema,
+  ComputerTypeSchema,
+  ScreenTypeSchema,
+  FileCheckerSchema,
+  FileCheckerErrorSchema,
+  type RequestContext
+} from './config.schemas';
+
+// Re-export for downstream consumers
 export {
   SystemConfigSchema,
   NodeConfigSchema,
