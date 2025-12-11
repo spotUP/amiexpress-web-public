@@ -86,13 +86,16 @@ RUN npm run build
 # ============================================================================
 FROM node:18-alpine
 
-# Install system dependencies
+# Install system dependencies (including build tools for native modules)
 RUN apk add --no-cache \
     python3 \
     py3-pip \
     sqlite \
     bash \
-    curl
+    curl \
+    build-base \
+    g++ \
+    make
 
 # Create app user (non-root)
 RUN addgroup -g 1001 bbsuser && \
@@ -104,7 +107,10 @@ WORKDIR /app
 # Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
-RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+# Install production deps and rebuild better-sqlite3 for Linux
+RUN npm ci --only=production --ignore-scripts && \
+    npm rebuild better-sqlite3 && \
+    npm cache clean --force
 
 # Copy all built artifacts (frontend assets)
 WORKDIR /app

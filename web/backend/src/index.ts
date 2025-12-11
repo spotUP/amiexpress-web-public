@@ -856,6 +856,20 @@ io.on('connection', async (socket) => {
   const bbsConfig = config.getConfig();
   const sessionStart = Date.now();
 
+  // Load disk-based config for reg_key and version
+  const { loadBBSConfig } = await import('./services/bbs-config-file.service');
+  const diskConfig = loadBBSConfig(bbsConfig.dataDir);
+
+  // ===== /X NATIVE TELNET CONNECTION SEQUENCE (reference-board-style) =====
+  // Simulate classic AmiExpress telnet connection messages
+  socket.emit('ansi-output', '\r\n/X Native Telnet:  Searching for free node...\r\n');
+  socket.emit('ansi-output', `/X Native Telnet:  Successful connection to node ${nodeSession.nodeId}\r\n`);
+  socket.emit('ansi-output', '\r\nCONNECT 19200\r\n');
+  socket.emit('ansi-output', '**EMSI_IRQ8E08\r\n\r\n');
+
+  // 3-second pause after EMSI handshake (like real BBS connection negotiation)
+  await new Promise(resolve => setTimeout(resolve, 3000));
+
   const session: BBSSession = {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
@@ -916,7 +930,11 @@ io.on('connection', async (socket) => {
 
   // ===== CONNECTION BANNER (express.e:29507-29524) =====
   // Display welcome banner before AWAITSCREEN like real AmiExpress
-  const expressVersion = '1.0.0-web'; // Web port version
+
+  // Get version from package.json
+  const packageJson = require('../package.json');
+  const bbsVersion = packageJson.version || '1.0.0-web';
+
   const connectionTime = new Date();
   const dateStr = connectionTime.toLocaleString('en-US', {
     weekday: 'short',
@@ -930,19 +948,23 @@ io.on('connection', async (socket) => {
   });
 
   // express.e:29507-29512 - Welcome to {bbsName}, located in {location}
-  if (bbsConfig.location && bbsConfig.location.length > 0) {
-    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsConfig.bbsName}, located in ${bbsConfig.location}`);
+  // Use values from disk config (bbsConfig.info)
+  const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
+  const location = diskConfig.location || bbsConfig.location;
+
+  if (location && location.length > 0) {
+    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsName}, located in ${location}`);
   } else {
-    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsConfig.bbsName}.`);
+    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsName}.`);
   }
 
   // express.e:29514-29515 - Running AmiExpress {version} Copyright...
   const currentYear = new Date().getFullYear();
-  socket.emit('ansi-output', `\r\n\r\nRunning AmiExpress ${expressVersion} Copyright (c) 2018-${currentYear} Darren Coles\r\n`);
-  socket.emit('ansi-output', `Web port by Spot/Up Rough\r\n`);
+  socket.emit('ansi-output', `\r\n\r\nRunning AmiExpress ${bbsVersion} Copyright (c) 2018-${currentYear} Darren Coles, Web port by Spot/Up Rough\r\n`);
 
   // express.e:29516-29517 - Registration and node info
-  const regKey = process.env.REG_KEY || 'UNREGISTERED';
+  // Use reg_key from disk config (bbsConfig.info REG_KEY tooltype)
+  const regKey = diskConfig.reg_key || 'UNREGISTERED';
   socket.emit('ansi-output', `Registration ${regKey}. You are connected to Node ${session.nodeId} at ${session.connectionBaud} baud`);
 
   // express.e:29518-29522 - Connection timestamp
@@ -950,21 +972,17 @@ io.on('connection', async (socket) => {
   socket.emit('ansi-output', '\r\n');
 
   // express.e:29524 - Run FRONTEND syscmd (optional - runs custom telnet frontend screen)
-  // This is typically a door or custom screen. For now we skip to AWAITSCREEN.
-
-  // Display complete connection screen via AWAITSCREEN.TXT
-  // reference-board BBS layout: everything shown via screen file with MCI codes
-  // All messages, node list, etc. are in AWAITSCREEN.TXT
-  await displayScreen(socket, session, 'AWAITSCREEN');
-  if (session.pendingScreenCommand) {
-    try {
-      await session.pendingScreenCommand;
-    } catch (error) {
-      console.error('[AWAITSCREEN] Error waiting for screen commands:', error);
-    }
+  // This runs the FRONTEND door which typically displays who's online
+  try {
+    const { runSysCommand } = await import('./handlers/command-execution.handler');
+    await runSysCommand(socket, session, 'FRONTEND', '');
+  } catch (err) {
+    // FRONTEND syscmd is optional - continue if not found
+    console.log('[Connection] FRONTEND syscmd not found, continuing');
   }
 
-  // Show ANSI prompt immediately (reference-board style - no key wait)
+  // express.e:29527-29528 - ANSI prompt (unless FORCE_ANSI tooltype is set)
+  // "ANSI, RIP or No graphics (A/r/n)?"
   socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
 
   // Set state to wait for ANSI response
