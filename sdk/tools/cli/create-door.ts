@@ -89,6 +89,10 @@ export async function createDoor(
     await copyTemplate(config.template, projectPath, config);
     spinner.text = 'Template copied';
 
+    // Generate .info file for BBS command registration
+    generateInfoFile(projectPath, config);
+    spinner.text = '.info file generated';
+
     // Install dependencies
     spinner.text = 'Installing dependencies...';
     await installDependencies(projectPath, config.template);
@@ -96,11 +100,18 @@ export async function createDoor(
     spinner.succeed(chalk.green('Door created successfully!'));
 
     // Show next steps
+    const commandName = config.name.replace(/-/g, '').toUpperCase();
     console.log(chalk.bold('\n[INFO] Next Steps:\n'));
-    console.log(chalk.gray('  cd') + ' ' + chalk.cyan(config.name));
-    console.log(chalk.gray('  npm run') + ' ' + chalk.cyan('dev'));
-    console.log(chalk.gray('  or'));
-    console.log(chalk.gray('  npm run') + ' ' + chalk.cyan('preview') + chalk.gray(' # Test in browser'));
+    console.log(chalk.gray('  1. Develop your door:'));
+    console.log(chalk.gray('     cd') + ' ' + chalk.cyan(config.name));
+    console.log(chalk.gray('     npm run') + ' ' + chalk.cyan('dev') + chalk.gray('      # Start development'));
+    console.log(chalk.gray('     npm run') + ' ' + chalk.cyan('preview') + chalk.gray('  # Test in browser'));
+    console.log('');
+    console.log(chalk.gray('  2. Install to BBS (copy .info file to register command):'));
+    console.log(chalk.gray('     cp') + ' ' + chalk.cyan(`${config.name}/${commandName}.info`) + ' ' + chalk.cyan('Commands/BBSCmd/'));
+    console.log('');
+    console.log(chalk.gray('  3. Move door to BBS doors directory:'));
+    console.log(chalk.gray('     mv') + ' ' + chalk.cyan(config.name) + ' ' + chalk.cyan('doors/'));
     console.log('');
 
   } catch (error: any) {
@@ -337,4 +348,52 @@ function toTitleCase(str: string): string {
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+/**
+ * Get door type code for .info file
+ */
+function getDoorTypeCode(template: string): string {
+  switch (template) {
+    case 'typescript': return 'TS';
+    case 'arexx': return 'AREXX';
+    case 'python': return 'PYTHON';
+    default: return 'TS';
+  }
+}
+
+/**
+ * Generate .info file for BBS command registration
+ *
+ * This creates a BBSCMD.info file that registers the door as a BBS command.
+ * The file should be installed to Commands/BBSCmd/ in the BBS directory.
+ *
+ * Express.e scans Commands/BBSCmd/*.info files to find available doors.
+ * Required tooltypes:
+ *   - BBSCMD: Command name (uppercase)
+ *   - TYPE: Door type (TS, AREXX, PYTHON, XIM for 68K)
+ *   - LOCATION: Path to door directory (relative to BBS root)
+ *   - DESCRIPTION: Description shown in DOORS command
+ *   - ACCESS: Minimum security level (0 = all users)
+ *   - MULTINODE: YES/NO for multi-node support
+ *   - PRIORITY: Task priority (SAME = inherit)
+ */
+function generateInfoFile(projectPath: string, config: DoorConfig): void {
+  const commandName = config.name.replace(/-/g, '').toUpperCase();
+  const typeCode = getDoorTypeCode(config.template);
+
+  // Generate .info file content (Amiga tooltype format)
+  const infoContent = `BBSCMD=${commandName}
+TYPE=${typeCode}
+LOCATION=doors/${config.name}
+DESCRIPTION=${config.description}
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+`;
+
+  // Write .info file to door project directory
+  const infoFilename = `${commandName}.info`;
+  const infoPath = path.join(projectPath, infoFilename);
+  fs.writeFileSync(infoPath, infoContent, 'utf8');
 }

@@ -11,10 +11,12 @@ This document is the definitive reference for creating BBS door games with the A
 5. [Audio Engine](#audio-engine)
 6. [Graphics Engine](#graphics-engine)
 7. [Input Handling](#input-handling)
-8. [Components Reference](#components-reference)
-9. [Types Reference](#types-reference)
-10. [Common Patterns](#common-patterns)
-11. [Checklist for New Games](#checklist-for-new-games)
+8. [Game Mode (Automatic)](#game-mode-automatic-for-all-doors)
+9. [Case-Insensitive Filesystem](#case-insensitive-filesystem)
+10. [Components Reference](#components-reference)
+11. [Types Reference](#types-reference)
+12. [Common Patterns](#common-patterns)
+13. [Checklist for New Games](#checklist-for-new-games)
 
 ---
 
@@ -669,6 +671,105 @@ function quit() {
 
 ---
 
+## Game Mode (Optional for TypeScript Doors)
+
+### What is Game Mode?
+
+Game Mode is a special input handling mode that enables:
+1. **Raw keydown/keyup events** instead of processed character input
+2. **No OS key repeat delay** - instant response when holding keys
+3. **Multi-key simultaneous input** - hold one key while pressing another
+
+**Important**: Game mode is **NOT automatically enabled** for TypeScript doors. You must explicitly call `bbs.enableGameMode()` if your door needs real-time keyboard input.
+
+**Why?** Game mode blocks 'command' events on the socket. Doors that use `bbs.getKey()` or `socket.once('command', ...)` for "Press any key to continue..." prompts will not receive input when game mode is active.
+
+### How It Works
+
+| Door Type | Game Mode Handling |
+|-----------|-------------------|
+| **TypeScript/SDK Doors** | Frontend sends raw keydown/keyup events. Key repeat handled by browser KeyStateTracker. |
+| **68K Amiga Doors** | Backend-side KeyRepeatManager generates repeated characters at 50ms intervals. |
+
+### For TypeScript/SDK Doors
+
+Game mode works automatically. Use the existing input handling:
+
+```typescript
+// Standard onInput handler works with game mode
+door.onInput((user, key) => {
+  if (key.key === 'ArrowLeft') player.moveLeft();
+  if (key.key === 'ArrowRight') player.moveRight();
+  if (key.key === ' ') player.shoot();
+});
+
+// For smooth continuous movement, combine with KeyStateTracker
+const keyTracker = new KeyStateTracker();
+keyTracker.start((key) => {
+  if (key === 'arrowleft') paddle.x -= SPEED;
+  if (key === 'arrowright') paddle.x += SPEED;
+}, 16);  // 16ms = 60fps
+```
+
+### For 68K Amiga Doors (Advanced)
+
+68K doors use XIM protocol for input. When running in game mode:
+- Backend receives raw keydown/keyup events from the frontend
+- `KeyRepeatManager` generates repeated key characters at 20 keys/sec (50ms intervals)
+- No initial delay before repeat starts
+- Supports simultaneous key presses
+
+The door receives input through the standard XIM input buffer. The key repeat is handled transparently - your door just receives a stream of characters while keys are held down.
+
+### Disabling Game Mode (Optional)
+
+If you need to disable game mode for a specific door (e.g., for text input):
+
+```typescript
+// In BBSApi (for SDK doors)
+api.disableGameMode();
+
+// Re-enable when needed
+api.enableGameMode();
+```
+
+### Key State Queries (SDK Doors)
+
+You can query which keys are currently held:
+
+```typescript
+// Check if a specific key is pressed
+if (api.isKeyPressed('ArrowLeft')) {
+  player.moveLeft();
+}
+
+// Get all currently pressed keys
+const pressedKeys = api.getPressedKeys();
+console.log('Keys held:', pressedKeys);
+```
+
+### Key Event Callbacks (SDK Doors)
+
+Register callbacks for key state changes:
+
+```typescript
+// Individual key events
+api.onKeyDown((key) => {
+  console.log('Key pressed:', key);
+});
+
+api.onKeyUp((key) => {
+  console.log('Key released:', key);
+});
+
+// Combined key event handler
+api.onKeyEvent((event) => {
+  console.log(`Key ${event.type}: ${event.key}`);
+});
+```
+
+---
+
 ## Case-Insensitive Filesystem
 
 **IMPORTANT**: AmiExpress uses case-insensitive filesystem operations (like AmigaOS).
@@ -938,7 +1039,12 @@ door.onInput((user, key) => {
 - [ ] Verify bundle created in `dist/client.bundle.js`
 
 **Registration (REQUIRED for command to work):**
-- [ ] Create `.info` file in `Commands/BBSCmd/` to register the door command
+- [ ] Copy `.info` file to `Commands/BBSCmd/` to register the door command
+
+**Note:** The SDK `create-door` wizard automatically generates the `.info` file in your door directory. Just copy it to `Commands/BBSCmd/`:
+```bash
+cp my-door/MYDOOR.info Commands/BBSCmd/
+```
 
 Example `Commands/BBSCmd/MYGAME.info`:
 ```
