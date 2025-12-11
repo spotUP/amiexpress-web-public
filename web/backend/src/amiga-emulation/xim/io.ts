@@ -92,16 +92,23 @@ export class XIMIOHandler {
   /**
    * Queue input from terminal for door to read via GETKEY or JH_LI
    * Called from AmigaDoorSession when 'door:input' event received
+   *
+   * IMPORTANT: ANSI escape sequences (arrow keys, etc.) must be kept intact.
+   * xterm.js sends arrow keys as escape sequences: \x1b[A (up), \x1b[B (down), etc.
    */
   queueInput(data: string): void {
-    console.log(`[XIMIOHandler] Queuing input: "${data}"`);
+    console.log(`[XIMIOHandler] Queuing input: "${data}" (len=${data.length})`);
 
     if (this.state.carrierDropped) {
       console.warn('[XIMIOHandler] Carrier already dropped, ignoring input');
       return;
     }
 
-    for (const char of data) {
+    // Parse input into tokens, preserving ANSI escape sequences
+    const tokens = this.parseInputTokens(data);
+    console.log(`[XIMIOHandler] Parsed into ${tokens.length} token(s)`);
+
+    for (const token of tokens) {
       if (this.waitingForPause && this.pauseReply) {
         console.log('[XIMIOHandler] Pause acknowledged, resuming output');
         this.finishPause();
@@ -109,12 +116,13 @@ export class XIMIOHandler {
       }
 
       if (this.waitingForHotkey && this.hotkeyMessage) {
-        this.completeHotkey(char);
+        // For hotkeys, if it's an escape sequence, pass the full sequence
+        this.completeHotkey(token);
         continue;
       }
 
       if (this.waitingForLineInput) {
-        if (char === '\r' || char === '\n') {
+        if (token === '\r' || token === '\n') {
           console.log(
             `[XIMIOHandler] Enter pressed, completing line input: "${this.lineInputBuffer}"`
           );
@@ -122,7 +130,7 @@ export class XIMIOHandler {
           continue;
         }
 
-        if (char === '\b' || char === '\x7f') {
+        if (token === '\b' || token === '\x7f') {
           if (this.lineInputBuffer.length > 0) {
             this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
             console.log(
@@ -134,24 +142,62 @@ export class XIMIOHandler {
           continue;
         }
 
+        // For line input, add token to buffer (even if it's an escape sequence)
         if (this.lineInputBuffer.length < this.lineInputMaxLen) {
-          this.lineInputBuffer += char;
+          this.lineInputBuffer += token;
           console.log(
-            `[XIMIOHandler] Character added, buffer now: "${this.lineInputBuffer}"`
+            `[XIMIOHandler] Token added, buffer now: "${this.lineInputBuffer}"`
           );
-          // Echo typed character
-          this.socket.emit('ansi-output', char);
+          // Echo typed character (only for single visible characters)
+          if (token.length === 1 && token >= ' ' && token <= '~') {
+            this.socket.emit('ansi-output', token);
+          }
         }
         continue;
       }
 
       // Not waiting for special input - queue for GETKEY/quick key
-      this.inputQueue.push(char);
+      // Keep entire token as single queue entry (preserves escape sequences)
+      this.inputQueue.push(token);
+      console.log(`[XIMIOHandler] Queued token: "${token}" (len=${token.length})`);
     }
 
     if (!this.waitingForLineInput) {
       console.log(`[XIMIOHandler] Input queue size: ${this.inputQueue.length}`);
     }
+  }
+
+  /**
+   * Parse input string into tokens, preserving ANSI escape sequences
+   * Returns array of tokens: single chars or complete escape sequences
+   */
+  private parseInputTokens(data: string): string[] {
+    const tokens: string[] = [];
+    let i = 0;
+
+    while (i < data.length) {
+      // Check for ANSI escape sequence: ESC [ ... <letter>
+      if (data[i] === '\x1b' && i + 1 < data.length && data[i + 1] === '[') {
+        // Find the end of the CSI sequence (terminated by letter A-Z or a-z)
+        let end = i + 2;
+        while (end < data.length && !/[A-Za-z~]/.test(data[end])) {
+          end++;
+        }
+        if (end < data.length) {
+          // Include the terminating character
+          const seq = data.slice(i, end + 1);
+          tokens.push(seq);
+          console.log(`[XIMIOHandler] Parsed escape sequence: ${JSON.stringify(seq)}`);
+          i = end + 1;
+          continue;
+        }
+      }
+      // Single character
+      tokens.push(data[i]);
+      i++;
+    }
+
+    return tokens;
   }
 
   /**
@@ -376,14 +422,14 @@ export class XIMIOHandler {
     }
 
     if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
+      const token = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-      console.log(
-        `[XIMIOHandler] JH_HK: Got hotkey '${char}' (0x${char
-          .charCodeAt(0)
-          .toString(16)})`
-      );
-      this.reply(msg, 1, char);
+      if (token.length > 1) {
+        console.log(`[XIMIOHandler] JH_HK: Got escape sequence: ${JSON.stringify(token)}`);
+      } else {
+        console.log(`[XIMIOHandler] JH_HK: Got hotkey '${token}' (0x${token.charCodeAt(0).toString(16)})`);
+      }
+      this.reply(msg, 1, token);
       return;
     }
 
@@ -405,12 +451,17 @@ export class XIMIOHandler {
     }
 
     const msg = this.hotkeyMessage;
-    const keyChar = char.length > 0 ? char[0] : '';
+    // Pass the full token (could be single char or escape sequence like \x1b[A)
+    const keyData = char.length > 0 ? char : '';
 
-    console.log(`[XIMIOHandler] JH_HK: Completing with key '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)})`);
+    if (keyData.length > 1) {
+      console.log(`[XIMIOHandler] JH_HK: Completing with escape sequence: ${JSON.stringify(keyData)}`);
+    } else {
+      console.log(`[XIMIOHandler] JH_HK: Completing with key '${keyData}' (0x${keyData.charCodeAt(0).toString(16)})`);
+    }
 
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-    this.reply(msg, this.state.carrierDropped ? -1 : 1, keyChar);
+    this.reply(msg, this.state.carrierDropped ? -1 : 1, keyData);
 
     this.waitingForHotkey = false;
     this.hotkeyMessage = null;

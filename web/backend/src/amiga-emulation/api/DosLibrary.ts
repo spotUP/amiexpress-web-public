@@ -708,7 +708,11 @@ export class DosLibrary {
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
-      return { bytes: data.length, consoleData: data };
+      // Convert bare LF to CR+LF for proper terminal display
+      const text = data.toString('latin1');
+      const convertedText = text.replace(/(?<!\r)\n/g, '\r\n');
+      const convertedData = Buffer.from(convertedText, 'latin1');
+      return { bytes: data.length, consoleData: convertedData };
     }
 
     if (!fileHandle || !fileHandle.buffer) {
@@ -1231,7 +1235,7 @@ export class DosLibrary {
 
     if (isConsoleHandle) {
       const rawBuf = Buffer.from(bytes);
-      const text = rawBuf.toString('latin1');
+      let text = rawBuf.toString('latin1');
 
       // DEBUG: Log WHO2 door output
       console.log(
@@ -1240,12 +1244,18 @@ export class DosLibrary {
         )}`
       );
 
+      // Convert bare LF to CR+LF for proper terminal display
+      // Amiga files often use LF only, but terminals expect CR+LF
+      // This fixes bulletin text offset issues in doors like Bulls
+      const convertedText = text.replace(/(?<!\r)\n/g, '\r\n');
+      const convertedBuf = Buffer.from(convertedText, 'latin1');
+
       // Send to output callback (raw preferred)
       if (this.outputRawCallback) {
-        this.outputRawCallback(rawBuf);
+        this.outputRawCallback(convertedBuf);
       } else if (this.outputCallback) {
         console.log(`[dos.library] Write: Sending to socket callback`);
-        this.outputCallback(text);
+        this.outputCallback(convertedText);
       } else {
         console.log(`[dos.library] Write: WARNING - No output callback set!`);
       }

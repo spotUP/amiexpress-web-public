@@ -5,7 +5,8 @@
  * Based on aedoor.h specification from AmiExpress sources.
  */
 
-// XIM Protocol Command Codes (from aedoor.h and axcommon.e)
+// XIM Protocol Command Codes (from axcommon.e - dmcoles/AmiExpress GitHub)
+// CRITICAL: These values MUST match axcommon.e exactly for door compatibility
 export enum XIMCommand {
   // Terminal I/O commands (JH_*)
   JH_LI = 0,           // Line input
@@ -29,18 +30,16 @@ export enum XIMCommand {
   JH_SO = 18,          // Serial output
   JH_SMPTR = 19,       // Send message pointer
   JH_20 = 20,          // Command 20
-  JH_CK = 500,         // Check for key (QuicKey)
+  JH_CK = 500,         // Check for key (QuicKey) - alias
   JH_DL = 15,          // Alias used by glue for ExtHK/DL
   JH_MCI = 507,        // MCI processing
   SCREEN_ADDRESS = 139,
   RAWSCREEN_ADDRESS = 141,
-  DISPLAY_FILE = 617,      // Non-stop show file (DoorKit alias JH_SF_NSF)
-  CHECK_TO_DISPLAY = 618,  // Non-stop show gfile (DoorKit alias JH_SG_NSF)
 
-  // PG_* commands (express.e/axconsts.e)
-  PG_SM = 1,           // Serial/Screen Message (axconsts.e:94)
-  PG_UD = 13,          // User Data (axconsts.e:105)
-  PG_US = 14,          // User String (axconsts.e:106)
+  // PG_* commands (axconsts.e)
+  PG_SM = 1,           // Serial/Screen Message
+  PG_UD = 13,          // User Data
+  PG_US = 14,          // User String
 
   // Data query commands (DT_*)
   DT_NAME = 100,
@@ -69,21 +68,34 @@ export enum XIMCommand {
   ACTIVE_NODES = 123,
   DT_DUMP = 124,
   DT_TIMEOUT = 125,
+  DT_USERLOAD = 133,        // Load user data
   DT_STAMP_LASTON = 143,
-  DT_CURR_TIME = 145,
   DT_STAMP_CTIME = 144,
+  DT_CURR_TIME = 145,
   DT_CONFACCESS = 146,
   DT_LANGUAGE = 527,
   DT_QUICKFLAG = 528,
   DT_GOODFILE = 529,
-  DT_GOODFILE_FLAG = 531,
+  DT_GOODFILE_FLAG = 531, // Alias for DT_GOODFILE
   DT_ANSICOLOR = 530,
   DT_ISANSI = 541,
   DT_MSGCODE = 543,
   DT_FILECODE = 545,
   DT_REALNAME = 606,
+  DT_INTERNETNAME = 637,    // Internet/email name
+  DT_TRANSLATOR = 638,      // Translation setting
+  DT_HOST_LANGUAGE = 639,   // Host language
   DT_HOSTNAME = 700,
   DT_HOSTIP = 701,
+  DT_GEOGRAPHIC = 702,      // Geographic/BBS location
+  DT_SIZEUPLOAD = 703,      // Human-readable upload size
+  DT_SIZEDOWNLOAD = 704,    // Human-readable download size
+  DT_CONFACCESS2 = 900,     // Extended conference access (25 chars)
+  DT_CBYTESUPLOAD = 901,    // Conference bytes uploaded
+  DT_CBYTESDOWNLOAD = 902,  // Conference bytes downloaded
+  DT_CFILESUPLOAD = 903,    // Conference files uploaded
+  DT_CFILESDOWNLOAD = 904,  // Conference files downloaded
+  DT_CALLEDTODAY = 906,     // Times called today
   DT_ADDBIT = 1000,
   DT_REMBIT = 1001,
   DT_QUERYBIT = 1002,
@@ -92,20 +104,23 @@ export enum XIMCommand {
   BB_CONFNAME = 126,
   BB_CONFLOCAL = 127,
   BB_LOCAL = 128,
-  BB_MAINLINE = 131,
-  BB_TASKPRI = 140,
-  BB_CHATFLAG = 142,
-  BB_CHATSET = 162,
-  BB_PCONFNAME = 148,
-  BB_PCONFLOCAL = 147,
   BB_STATUS = 129,
   BB_COMMAND = 130,
+  BB_MAINLINE = 131,
+  BB_CONFIG = 134,
+  BB_TASKPRI = 140,
+  BB_CHATFLAG = 142,
+  BB_PCONFLOCAL = 147,
+  BB_PCONFNAME = 148,
   BB_NODEID = 149,
   BB_CALLERSLOG = 150,
   BB_UDLOG = 151,
+  BB_CHATSET = 162,
+  BB_CONFNUM = 510,
+  BB_DROPDTR = 511,         // Drop DTR (hangup)
+  BB_GETTASK = 512,         // Get task pointer
   BB_REMOVEPORT = 513,
   BB_SOPT = 514,
-  BB_CONFNUM = 510,
   BB_LOGONTYPE = 517,
   BB_SCRLEFT = 518,
   BB_SCRTOP = 519,
@@ -116,31 +131,71 @@ export enum XIMCommand {
   BB_PURGELINEEND = 524,
   BB_NONSTOPTEXT = 525,
   BB_LINECOUNT = 526,
-  BB_DROPDTR = 161,
-  BB_GETTASK = 164,
+  BB_CONFACCOUNT = 905,     // Conference accounting enabled
 
   // System commands
-  EXPRESS_VERSION = 152,
-  GETKEY = 500,            // Get keyboard input
-  RAWARROW = 501,          // Raw arrow keys
-  CHAIN = 502,             // Chain to another door
-  RETURNCOMMAND = 136,     // Return command
-  RETURNCOMMAND2 = 628,    // Return command 2
-  QUICK_KEY = 608,         // Quick key
-  ENVSTAT = 163,           // Environment status
-  SV_NEWMSG = 177,         // Server new message (express.e uses 177)
-  PRV_COMMAND = 133,       // Private command
-  PRV_GROUP = 134,         // Private group
-  ACP_COMMAND = 544,       // ACP command passthrough
-  GET_CMD_TOOLTYPE = 551,  // Reads tooltype from command's .info file
-  GET_CUSTOM_MSGBASE_MENUCMD = 605, // Menu command for custom message bases
-
-  // Transfers
+  NB_LOAD = 132,            // Load node bulletin
+  CHG_USER = 135,           // Change user
+  RETURNCOMMAND = 136,      // Return command
   ZMODEMSEND = 137,
   ZMODEMRECEIVE = 138,
-  BATCHZMODEMSEND = 542,
-  NETUPLOAD = 10001,       // Placeholder until confirmed from express.e
-  NETDOWNLOAD = 10002,     // Placeholder until confirmed from express.e
+  EXPRESS_VERSION = 152,
+  SV_UNICONIFY = 153,       // Un-iconify screen
+  SV_SYSOPLOG = 154,        // Sysop log
+  SV_LOCALLOG = 155,        // Local log
+  SV_ACCOUNTS = 156,        // Account management
+  SV_CHAT = 157,            // Chat request
+  SV_NODEOFFHOOK = 158,     // Node off hook
+  SV_EXITNODE = 159,        // Exit node
+  SV_INITMODEM = 160,       // Initialize modem
+  SV_WHATSUP = 161,         // What's up status
+  ENVSTAT = 163,            // Environment status
+  SV_INSTANT = 170,         // Instant message
+  SV_RESERVE = 171,         // Reserve node
+  SV_CHATTOGGLE = 172,      // Toggle chat
+  SV_TOPS = 173,            // Top statistics
+  SV_AESHELL = 174,         // AE Shell
+  SV_START = 176,           // Start node
+  SV_NEWMSG = 177,          // New message notification
+  SV_QUIETNODE = 178,       // Quiet node
+  SV_SETNRAMS = 179,        // Set NRAMs
+  SV_RESERVENODE = 180,     // Reserve node
+  SV_NODE_LOCK = 181,       // Lock node
+  SV_ACPALERT = 182,        // ACP alert
+  SV_INCOMING_MSG = 183,    // Incoming message
+  SV_KICKUSER = 184,        // Kick user
+  SV_STARTNODE = 185,       // Start node
+  SV_INFO = 199,            // Info request
+  INCOMING_TELNET = 200,    // Incoming telnet connection
+  INCOMING_FTP = 201,       // Incoming FTP connection
+  SV_ACPSHUTDOWN = 202,     // ACP shutdown
+  SV_CONFMAINT = 203,       // Conference maintenance
+  SV_VIEWLOGS = 204,        // View logs
+  SV_TOGGLESTATUS = 205,    // Toggle status
+  SV_TIMEINCREASE = 206,    // Increase time
+  SV_TIMEDECREASE = 207,    // Decrease time
+  SV_CAPTURE = 208,         // Capture
+  SV_DISPLAYFILE = 209,     // Display file
+  SV_GRANTTEMP = 210,       // Grant temporary access
+
+  // Keyboard/Arrow commands
+  GETKEY = 500,             // Get keyboard input
+  RAWARROW = 501,           // Raw arrow keys
+  CHAIN = 502,              // Chain to another door
+
+  // Node/Modem info
+  NODE_DEVICE = 503,        // Serial device name
+  NODE_UNIT = 504,          // Serial device unit
+  NODE_BAUD = 505,          // Online baud rate
+  NODE_NUMBER = 506,        // Node number
+
+  // Command routing
+  PRV_COMMAND = 508,        // Private command
+  PRV_GROUP = 509,          // Private group
+  NODE_BAUDRATE = 516,      // Online baud rate (raw)
+
+  // Multicom/Semaphore
+  MULTICOM = 531,           // Returns masterNode semaphore
 
   // Account / ConfDB helpers
   LOAD_ACCOUNT = 532,
@@ -152,11 +207,89 @@ export enum XIMCommand {
   APPEND_ACCOUNT = 538,
   LAST_ACCOUNTNUM = 539,
   MOD_TYPE = 540,
+  BATCHZMODEMSEND = 542,
+  ACP_COMMAND = 544,        // ACP command passthrough
   EDITOR_STRUCT = 546,
   BYPASS_CSI_CHECK = 547,
   SENTBY = 548,
+
+  // Override/control commands
+  SETOVERIDE = 549,         // Set override mode
+  FULLEDIT = 550,           // Full editor mode
+  SETMCIOFF = 551,          // Disable MCI processing
+
+  // Message base commands
+  GET_CUSTOM_MSGBASE_PARAM1 = 600,  // Custom msgbase param1
+  GET_CUSTOM_MSGBASE_PARAM2 = 601,  // Custom msgbase param2
+  LAST_READ = 602,                  // Last message read conference
+  LAST_SCANNED = 603,               // Last new message read conference
+  MSGBASE_LOC = 604,                // Message base location path
+  GET_CUSTOM_MSGBASE_MENUCMD = 605, // Menu command for custom message bases
+  UNKNOWN4 = 607,                   // Unknown value storage
+  QUICK_KEY = 608,                  // Quick key
+
+  // Serial I/O
+  SER_INOUT = 609,          // Serial I/O flags
+
+  // AXNet file transfer
+  AXNET_RECEIVE = 610,      // AXNet receive
+  AXNET_SEND = 611,         // AXNet send
+  MEMCONF = 612,            // Memory conference pointer
+  SET_SERSHARED = 613,      // Set serial shared flag
+
+  // Conference access - NOTE: 614 is CONF_ACCESS, NOT BB_NUMCONFS
+  CONF_ACCESS = 614,        // Check conference access (returns 0/1/2)
+  BB_NUMCONFS = 614,        // Alias - some doors use for num conferences
+
+  // Password/Display control
+  PASSWORD_HASH = 615,      // Get password hash
+  GET_GNSFLAG = 616,        // Get nonStopDisplayFlag
+  DISPLAY_FILE = 617,       // Non-stop show file
+  CHECK_TO_DISPLAY = 618,   // Non-stop show gfile
+  CHOOSE_NAME = 619,        // Name picker dialog
+  SET_FILEATTACH = 620,     // Set file attachment mode
+  INTERPRET_MCI = 621,      // Interpret MCI without display
+  GET_XIMPORT = 622,        // Get XIM port
+  GET_MENU_COMMAND_CHAR = 623, // Get menu command character
+  FILE_REQUEST = 624,       // ASL file requester
+  DISABLE_FILE_ATTACH = 625, // Disable file attachment
+  QWKZOOM_REC = 626,        // QWK zoom record number
+  REL_CONF = 627,           // Relative conference number
+  RETURNCOMMAND2 = 628,     // Return command 2
+  CANCEL_TRANSFER_OFFHOOK = 629, // Cancel transfer off hook
+  CLEAR_OLM_QUEUE = 630,    // Clear OLM message queue
+  QUIET_DOWNLOAD = 631,     // Quiet download mode
+  CHECK_PLAYPEN_EXISTS = 632, // Check if file exists in playpen
   EXT_LOAD_ACCOUNT = 633,
   EXT_SAVE_ACCOUNT = 634,
+  EXT_CHOOSE_NAME = 635,    // Extended name picker
+  CHECK_REALNAME = 636,     // Check realname setting for msgbase
+
+  // AXNet outbound
+  XNET_OUTBOUND = 640,      // AXNet outbound directory
+
+  // Console/Telnet commands
+  CON_CURSOR = 705,         // Console cursor on/off
+  TELNET_CONNECT = 706,     // Connect to telnet server
+  GET_CMD_TOOLTYPE = 707,   // Reads tooltype from command's .info file
+  TELNET_USERNAME_PROMPT = 708, // Telnet username prompt
+  TELNET_USERNAME = 709,    // Telnet username
+  TELNET_PASSWORD_PROMPT = 710, // Telnet password prompt
+  TELNET_PASSWORD = 711,    // Telnet password
+
+  // Playpen/Iconify/Logon
+  SIG_PLAYPEN = 908,        // Playpen directory path
+  ICONIFYQUERY = 909,       // Is screen iconified?
+  LOGON_UNAME = 910,        // Logon username
+  LOGON_UPASS = 911,        // Logon password
+  SIG_LI = 912,             // Secure line input (password mode)
+
+  // Maximum command value
+  MAX_CMD = 1003,
+
+  // Placeholders for network transfers (not in axcommon.e but referenced)
+  NETUPLOAD = 10001,
+  NETDOWNLOAD = 10002,
 }
 
 /**

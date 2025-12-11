@@ -281,6 +281,7 @@ export class XIMMessageParser {
       [XIMCommand.BB_MAINLINE]: 'BB_MAINLINE',
       [XIMCommand.BB_NODEID]: 'BB_NODEID',
       [XIMCommand.BB_CONFNUM]: 'BB_CONFNUM',
+      // Note: BB_NUMCONFS = 614 = CONF_ACCESS - duplicate removed
 
       // System commands
       [XIMCommand.EXPRESS_VERSION]: 'EXPRESS_VERSION',
@@ -301,6 +302,104 @@ export class XIMMessageParser {
       [XIMCommand.NETUPLOAD]: 'NETUPLOAD',
       [XIMCommand.NETDOWNLOAD]: 'NETDOWNLOAD',
       [XIMCommand.SV_NEWMSG]: 'SV_NEWMSG',
+
+      // Node/Modem info
+      [XIMCommand.NODE_BAUD]: 'NODE_BAUD',
+      [XIMCommand.NODE_BAUDRATE]: 'NODE_BAUDRATE',
+      [XIMCommand.NODE_DEVICE]: 'NODE_DEVICE',
+      [XIMCommand.NODE_UNIT]: 'NODE_UNIT',
+
+      // Multicom
+      [XIMCommand.MULTICOM]: 'MULTICOM',
+
+      // Message base commands
+      [XIMCommand.GET_CUSTOM_MSGBASE_PARAM1]: 'GET_CUSTOM_MSGBASE_PARAM1',
+      [XIMCommand.GET_CUSTOM_MSGBASE_PARAM2]: 'GET_CUSTOM_MSGBASE_PARAM2',
+      [XIMCommand.LAST_READ]: 'LAST_READ',
+      [XIMCommand.LAST_SCANNED]: 'LAST_SCANNED',
+      [XIMCommand.MSGBASE_LOC]: 'MSGBASE_LOC',
+
+      // Override/control
+      [XIMCommand.SETOVERIDE]: 'SETOVERIDE',
+      [XIMCommand.FULLEDIT]: 'FULLEDIT',
+      [XIMCommand.SETMCIOFF]: 'SETMCIOFF',
+
+      // Serial I/O
+      [XIMCommand.SER_INOUT]: 'SER_INOUT',
+
+      // AXNet
+      [XIMCommand.AXNET_SEND]: 'AXNET_SEND',
+      [XIMCommand.AXNET_RECEIVE]: 'AXNET_RECEIVE',
+      [XIMCommand.XNET_OUTBOUND]: 'XNET_OUTBOUND',
+
+      // Memory/Conference
+      [XIMCommand.MEMCONF]: 'MEMCONF',
+      [XIMCommand.SET_SERSHARED]: 'SET_SERSHARED',
+      [XIMCommand.CONF_ACCESS]: 'CONF_ACCESS',
+
+      // Password
+      [XIMCommand.PASSWORD_HASH]: 'PASSWORD_HASH',
+
+      // Display control
+      [XIMCommand.GET_GNSFLAG]: 'GET_GNSFLAG',
+      [XIMCommand.SET_FILEATTACH]: 'SET_FILEATTACH',
+      [XIMCommand.INTERPRET_MCI]: 'INTERPRET_MCI',
+      [XIMCommand.GET_XIMPORT]: 'GET_XIMPORT',
+      [XIMCommand.GET_MENU_COMMAND_CHAR]: 'GET_MENU_COMMAND_CHAR',
+      [XIMCommand.FILE_REQUEST]: 'FILE_REQUEST',
+      [XIMCommand.DISABLE_FILE_ATTACH]: 'DISABLE_FILE_ATTACH',
+
+      // QWK
+      [XIMCommand.QWKZOOM_REC]: 'QWKZOOM_REC',
+
+      // Conference
+      [XIMCommand.REL_CONF]: 'REL_CONF',
+      [XIMCommand.CHECK_PLAYPEN_EXISTS]: 'CHECK_PLAYPEN_EXISTS',
+      [XIMCommand.CHOOSE_NAME]: 'CHOOSE_NAME',
+      [XIMCommand.EXT_CHOOSE_NAME]: 'EXT_CHOOSE_NAME',
+      [XIMCommand.CHECK_REALNAME]: 'CHECK_REALNAME',
+
+      // Extended user data
+      [XIMCommand.DT_INTERNETNAME]: 'DT_INTERNETNAME',
+      [XIMCommand.DT_TRANSLATOR]: 'DT_TRANSLATOR',
+      [XIMCommand.DT_HOST_LANGUAGE]: 'DT_HOST_LANGUAGE',
+      [XIMCommand.DT_GEOGRAPHIC]: 'DT_GEOGRAPHIC',
+      [XIMCommand.DT_SIZEUPLOAD]: 'DT_SIZEUPLOAD',
+      [XIMCommand.DT_SIZEDOWNLOAD]: 'DT_SIZEDOWNLOAD',
+
+      // Console
+      [XIMCommand.CON_CURSOR]: 'CON_CURSOR',
+
+      // Telnet
+      [XIMCommand.TELNET_CONNECT]: 'TELNET_CONNECT',
+      [XIMCommand.TELNET_USERNAME_PROMPT]: 'TELNET_USERNAME_PROMPT',
+      [XIMCommand.TELNET_USERNAME]: 'TELNET_USERNAME',
+      [XIMCommand.TELNET_PASSWORD_PROMPT]: 'TELNET_PASSWORD_PROMPT',
+      [XIMCommand.TELNET_PASSWORD]: 'TELNET_PASSWORD',
+
+      // Extended stats
+      [XIMCommand.DT_CONFACCESS2]: 'DT_CONFACCESS2',
+      [XIMCommand.DT_CBYTESUPLOAD]: 'DT_CBYTESUPLOAD',
+      [XIMCommand.DT_CBYTESDOWNLOAD]: 'DT_CBYTESDOWNLOAD',
+      [XIMCommand.DT_CFILESUPLOAD]: 'DT_CFILESUPLOAD',
+      [XIMCommand.DT_CFILESDOWNLOAD]: 'DT_CFILESDOWNLOAD',
+      [XIMCommand.BB_CONFACCOUNT]: 'BB_CONFACCOUNT',
+      [XIMCommand.DT_CALLEDTODAY]: 'DT_CALLEDTODAY',
+
+      // Playpen/sig
+      [XIMCommand.SIG_PLAYPEN]: 'SIG_PLAYPEN',
+      [XIMCommand.ICONIFYQUERY]: 'ICONIFYQUERY',
+
+      // Logon
+      [XIMCommand.LOGON_UNAME]: 'LOGON_UNAME',
+      [XIMCommand.LOGON_UPASS]: 'LOGON_UPASS',
+
+      // Secure input
+      [XIMCommand.SIG_LI]: 'SIG_LI',
+
+      // Internal
+      [XIMCommand.UNKNOWN4]: 'UNKNOWN4',
+      [XIMCommand.QUIET_DOWNLOAD]: 'QUIET_DOWNLOAD',
     };
 
     return names[command] || `Unknown (${command})`;

@@ -8,6 +8,7 @@
 import { Socket } from 'socket.io';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
@@ -247,6 +248,29 @@ export class XIMBBSInfoHandler {
       case XIMCommand.BB_SOPT:
         this.reply(msg, 1);
         return;
+
+      case XIMCommand.BB_NUMCONFS:
+        {
+          // Return the number of conferences (cmds.numConf)
+          // Read from ConfConfig.info if available
+          let numConfs = 14; // Default
+          try {
+            const bbsRoot = this.getBbsRoot();
+            const confConfigPath = path.join(bbsRoot, 'ConfConfig.info');
+            if (fs.existsSync(confConfigPath)) {
+              const output = execSync(`strings "${confConfigPath}"`, { encoding: 'utf-8' });
+              const match = output.match(/NCONFS=(\d+)/);
+              if (match) {
+                numConfs = parseInt(match[1], 10);
+              }
+            }
+          } catch (err) {
+            console.warn('[XIMBBSInfo] BB_NUMCONFS: Could not read ConfConfig.info, using default');
+          }
+          console.log(`[XIMBBSInfo] BB_NUMCONFS: ${numConfs}`);
+          this.reply(msg, numConfs);
+          return;
+        }
     }
 
     if (isRead && value) {
@@ -555,6 +579,174 @@ export class XIMBBSInfoHandler {
     console.log('[XIMBBSInfo] BB_GETTASK - Get task pointer');
 
     this.messageParser.writeData(msg.msgAddr, 0);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle NODE_BAUD, NODE_BAUDRATE, NODE_DEVICE, NODE_UNIT
+   * From E sources (express.e:3842-3852)
+   */
+  handleNodeInfo(msg: XIMMessage): void {
+    switch (msg.command) {
+      case XIMCommand.NODE_BAUD:
+        // Return online baud rate (e.g., 115200)
+        const baud = (this.bbsSession as any)?.baudRate || 115200;
+        this.messageParser.writeMessageString(msg.msgAddr, baud.toString());
+        console.log(`[XIMBBSInfo] NODE_BAUD: ${baud}`);
+        break;
+
+      case XIMCommand.NODE_BAUDRATE:
+        // Same as NODE_BAUD
+        const baudRate = (this.bbsSession as any)?.baudRate || 115200;
+        this.messageParser.writeMessageString(msg.msgAddr, baudRate.toString());
+        console.log(`[XIMBBSInfo] NODE_BAUDRATE: ${baudRate}`);
+        break;
+
+      case XIMCommand.NODE_DEVICE:
+        // Return serial device name (web uses TCP)
+        const device = 'TCP:';
+        this.messageParser.writeMessageString(msg.msgAddr, device);
+        console.log(`[XIMBBSInfo] NODE_DEVICE: ${device}`);
+        break;
+
+      case XIMCommand.NODE_UNIT:
+        // Return serial device unit (0 for web)
+        this.messageParser.writeMessageString(msg.msgAddr, '0');
+        console.log('[XIMBBSInfo] NODE_UNIT: 0');
+        break;
+    }
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle MULTICOM - Return master node semaphore
+   * From E sources (express.e:3909)
+   */
+  handleMulticom(msg: XIMMessage): void {
+    console.log('[XIMBBSInfo] MULTICOM - Get master node semaphore');
+    // Return a dummy semaphore pointer (0 = no multicom)
+    this.messageParser.writeSemaphore(msg.msgAddr, 0);
+    this.reply(msg, 0);
+  }
+
+  /**
+   * Handle CONF_ACCESS - Check conference access
+   * From E sources (express.e:4023-4028)
+   */
+  handleConfAccess(msg: XIMMessage): void {
+    const confNum = msg.data;
+    console.log(`[XIMBBSInfo] CONF_ACCESS - Check access to conf ${confNum}`);
+
+    // Get number of conferences
+    let numConfs = 14;
+    try {
+      const confConfigPath = path.join(this.getBbsRoot(), 'ConfConfig.info');
+      if (fs.existsSync(confConfigPath)) {
+        const output = execSync(`strings "${confConfigPath}"`, { encoding: 'utf-8' });
+        const match = output.match(/NCONFS=(\d+)/);
+        if (match) numConfs = parseInt(match[1], 10);
+      }
+    } catch { /* use default */ }
+
+    if (confNum < 0 || confNum >= numConfs) {
+      // Invalid conference number
+      this.messageParser.writeData(msg.msgAddr, 2); // 2 = invalid
+    } else {
+      // Check access from confAccess string
+      const confAccess = this.bbsSession?.confAccess || this.state.confAccess || '';
+      const hasAccess = confAccess.length > confNum && confAccess[confNum].toUpperCase() === 'X';
+      this.messageParser.writeData(msg.msgAddr, hasAccess ? 1 : 0);
+      console.log(`  Access: ${hasAccess ? 'YES' : 'NO'}`);
+    }
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle SIG_PLAYPEN - Get playpen directory path
+   * From E sources (express.e:4196-4198)
+   */
+  handleSigPlaypen(msg: XIMMessage): void {
+    const nodeId = this.getNodeId();
+    // Return Amiga-style playpen path
+    const playpen = `BBS:Node${nodeId}/Playpen/`;
+    this.messageParser.writeMessageString(msg.msgAddr, playpen);
+    console.log(`[XIMBBSInfo] SIG_PLAYPEN: ${playpen}`);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle GET_GNSFLAG - Get non-stop display flag
+   * From E sources (express.e:4036-4037)
+   */
+  handleGetGNSFlag(msg: XIMMessage): void {
+    const flag = this.state.nonStopText ? 1 : 0;
+    console.log(`[XIMBBSInfo] GET_GNSFLAG: ${flag}`);
+    this.messageParser.writeData(msg.msgAddr, flag);
+    this.reply(msg, flag);
+  }
+
+  /**
+   * Handle BB_CONFACCOUNT - Conference accounting enabled
+   * From E sources (express.e:4183-4188)
+   */
+  handleConfAccount(msg: XIMMessage): void {
+    // Most doors just want to know if conference accounting is enabled
+    // Default to NO for simplicity
+    const enabled = (this.bbsSession as any)?.confAccountingEnabled ? 'YES' : 'NO';
+    this.messageParser.writeMessageString(msg.msgAddr, enabled);
+    console.log(`[XIMBBSInfo] BB_CONFACCOUNT: ${enabled}`);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle ICONIFYQUERY - Is screen iconified?
+   * From E sources (express.e:4199-4200)
+   */
+  handleIconifyQuery(msg: XIMMessage): void {
+    // Web is never iconified
+    this.messageParser.writeMessageString(msg.msgAddr, 'NO');
+    console.log('[XIMBBSInfo] ICONIFYQUERY: NO');
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle QUIET_DOWNLOAD - Get/set quiet download mode
+   * From E sources (express.e:4215-4220)
+   */
+  handleQuietDownload(msg: XIMMessage): void {
+    const isRead = !msg.string || msg.string[0] === '\0';
+    if (isRead) {
+      const quietMode = (this.state as any).quietDownload ? 1 : 0;
+      this.messageParser.writeData(msg.msgAddr, quietMode);
+      console.log(`[XIMBBSInfo] QUIET_DOWNLOAD [READ]: ${quietMode}`);
+    } else {
+      (this.state as any).quietDownload = msg.data !== 0;
+      console.log(`[XIMBBSInfo] QUIET_DOWNLOAD [WRITE]: ${msg.data}`);
+    }
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle GET_XIMPORT - Get XIM port number
+   * From E sources (express.e:4047-4048)
+   */
+  handleGetXimPort(msg: XIMMessage): void {
+    // 1 = console, 2 = serial, 3 = both
+    const ximPort = 3; // WebSocket acts like both
+    this.messageParser.writeData(msg.msgAddr, ximPort);
+    console.log(`[XIMBBSInfo] GET_XIMPORT: ${ximPort}`);
+    this.reply(msg, ximPort);
+  }
+
+  /**
+   * Handle password hash
+   * From E sources (express.e:4029-4035)
+   */
+  handlePasswordHash(msg: XIMMessage): void {
+    // For security, return a dummy hash
+    const hash = '00000000000000000000000000000000';
+    this.messageParser.writeMessageString(msg.msgAddr, hash);
+    console.log('[XIMBBSInfo] PASSWORD_HASH: (hidden)');
     this.reply(msg, 1);
   }
 

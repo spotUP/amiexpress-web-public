@@ -652,12 +652,35 @@ export class XIMProtocol {
       XIMCommand.BB_PCONFLOCAL,
       XIMCommand.BB_MAINLINE,
       XIMCommand.BB_CALLERSLOG,
+      XIMCommand.BB_NUMCONFS,
       XIMCommand.BB_UDLOG,
       XIMCommand.BB_TASKPRI,
       XIMCommand.BB_CHATFLAG,
       XIMCommand.BB_CHATSET,
       XIMCommand.BB_DROPDTR,
       XIMCommand.BB_GETTASK,
+      // Node info commands
+      XIMCommand.NODE_BAUD,
+      XIMCommand.NODE_BAUDRATE,
+      XIMCommand.NODE_DEVICE,
+      XIMCommand.NODE_UNIT,
+      // Multicom
+      XIMCommand.MULTICOM,
+      // Conference access
+      XIMCommand.CONF_ACCESS,
+      // Playpen
+      XIMCommand.SIG_PLAYPEN,
+      // Display flags
+      XIMCommand.GET_GNSFLAG,
+      XIMCommand.GET_XIMPORT,
+      // Conference accounting
+      XIMCommand.BB_CONFACCOUNT,
+      // Iconify
+      XIMCommand.ICONIFYQUERY,
+      // Quiet download
+      XIMCommand.QUIET_DOWNLOAD,
+      // Password
+      XIMCommand.PASSWORD_HASH,
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
       console.log(
@@ -759,6 +782,63 @@ export class XIMProtocol {
 
       case XIMCommand.BB_GETTASK:
         this.bbsInfoHandler.handleGetTask(msg);
+        break;
+
+      case XIMCommand.BB_NUMCONFS:
+        this.bbsInfoHandler.handleBBSInfo(msg);
+        break;
+
+      // Node/modem info commands
+      case XIMCommand.NODE_BAUD:
+      case XIMCommand.NODE_BAUDRATE:
+      case XIMCommand.NODE_DEVICE:
+      case XIMCommand.NODE_UNIT:
+        this.bbsInfoHandler.handleNodeInfo(msg);
+        break;
+
+      // Multicom semaphore
+      case XIMCommand.MULTICOM:
+        this.bbsInfoHandler.handleMulticom(msg);
+        break;
+
+      // Conference access check
+      case XIMCommand.CONF_ACCESS:
+        this.bbsInfoHandler.handleConfAccess(msg);
+        break;
+
+      // Playpen directory path
+      case XIMCommand.SIG_PLAYPEN:
+        this.bbsInfoHandler.handleSigPlaypen(msg);
+        break;
+
+      // Non-stop text flag
+      case XIMCommand.GET_GNSFLAG:
+        this.bbsInfoHandler.handleGetGNSFlag(msg);
+        break;
+
+      // Conference accounting
+      case XIMCommand.BB_CONFACCOUNT:
+        this.bbsInfoHandler.handleConfAccount(msg);
+        break;
+
+      // Screen iconified check
+      case XIMCommand.ICONIFYQUERY:
+        this.bbsInfoHandler.handleIconifyQuery(msg);
+        break;
+
+      // Quiet download mode
+      case XIMCommand.QUIET_DOWNLOAD:
+        this.bbsInfoHandler.handleQuietDownload(msg);
+        break;
+
+      // XIM port address
+      case XIMCommand.GET_XIMPORT:
+        this.bbsInfoHandler.handleGetXimPort(msg);
+        break;
+
+      // Password hash
+      case XIMCommand.PASSWORD_HASH:
+        this.bbsInfoHandler.handlePasswordHash(msg);
         break;
     }
   }

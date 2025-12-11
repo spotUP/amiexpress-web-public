@@ -3295,14 +3295,7 @@ export class ExecLibrary {
     msgAddr: number,
     options?: { suppressDoorCallback?: boolean }
   ): void {
-    // DEBUG: Log incoming options to trace suppression issue
-    console.log(`[ExecLibrary] putMsg called with options:`, JSON.stringify(options));
-    if (options?.suppressDoorCallback) {
-      console.log(`[ExecLibrary] Stack trace for suppressDoorCallback=true:`);
-      console.log(new Error().stack);
-    }
     const suppressDoorCallback = options?.suppressDoorCallback ?? false;
-    console.log(`[ExecLibrary] suppressDoorCallback resolved: ${suppressDoorCallback}`);
 
     console.log(
       `[ExecLibrary] PutMsg(port=0x${portAddr.toString(

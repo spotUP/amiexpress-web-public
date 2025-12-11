@@ -2,6 +2,7 @@ import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import * as amigafs from '../../utils/amigafs';
 
 /**
  * icon.library - Amiga Icon/Tooltype Library
@@ -100,12 +101,16 @@ export class IconLibrary {
 
     console.log(`[icon.library]   Looking for: ${infoPath}`);
 
-    // Check if file exists
-    if (!fs.existsSync(infoPath)) {
-      console.log(`[icon.library]   File not found - returning NULL`);
+    // Check if file exists (case-insensitive for AmigaOS compatibility)
+    // Try case-insensitive resolution first
+    const resolvedPath = amigafs.resolvePath(infoPath);
+    if (!resolvedPath) {
+      console.log(`[icon.library]   File not found (case-insensitive) - returning NULL`);
       this.emulator.setRegister(CPURegister.D0, 0);
       return;
     }
+    infoPath = resolvedPath;
+    console.log(`[icon.library]   Resolved (case-insensitive) to: ${infoPath}`);
 
     // Parse .info file to extract tooltypes
     const tooltypes = this.parseInfoFile(infoPath);
@@ -388,19 +393,8 @@ export class IconLibrary {
       for (const prefix of prefixes) {
         const iconPath = path.join(this.bbsRoot, `${prefix}${num}.info`);
 
-        // Case-insensitive file lookup
-        const dir = path.dirname(iconPath);
-        const baseName = path.basename(iconPath).toLowerCase();
-        let realPath: string | null = null;
-        try {
-          const files = fs.readdirSync(dir);
-          const found = files.find(f => f.toLowerCase() === baseName);
-          if (found) {
-            realPath = path.join(dir, found);
-          }
-        } catch (e) {
-          // Directory doesn't exist
-        }
+        // Case-insensitive file lookup using amigafs
+        const realPath = amigafs.resolvePath(iconPath);
 
         if (realPath) {
           console.log(`[icon.library]   Loading ${prefix}${num} icon from: ${realPath}`);
@@ -419,11 +413,21 @@ export class IconLibrary {
       return;
     }
 
-    // Special case: If typeString looks like a file path and value is empty,
-    // some doors like AquaScan use this as a combined existence check + load.
+    // Special case: If typeString looks like a file path with an Amiga device prefix,
+    // some doors (AquaScan, JoinCnf) use this as a combined existence check + load.
     // We load the icon and return the DiskObject pointer (not just TRUE/FALSE).
-    if (!value && (typeString.includes(':') || typeString.includes('/'))) {
-      console.log(`[icon.library]   Detected file path - loading icon`);
+    // NOTE: Some doors pass a value like "0." which we should ignore for path lookups.
+    const upperTypeString = typeString.toUpperCase();
+    const isAmigaDevicePath = upperTypeString.startsWith('BBS:') ||
+                               upperTypeString.startsWith('DOORS:') ||
+                               upperTypeString.startsWith('PROGDIR:') ||
+                               upperTypeString.startsWith('SYS:') ||
+                               upperTypeString.startsWith('LIBS:') ||
+                               upperTypeString.startsWith('ENV:') ||
+                               upperTypeString.startsWith('ENVARC:');
+
+    if (isAmigaDevicePath || (!value && (typeString.includes(':') || typeString.includes('/')))) {
+      console.log(`[icon.library]   Detected file path - loading icon (isAmigaDevicePath=${isAmigaDevicePath}, value="${value}")`);
 
       // Try to resolve the path and load the .info file
       let iconPath = typeString;
@@ -445,19 +449,8 @@ export class IconLibrary {
         iconPath += '.info';
       }
 
-      // Case-insensitive file lookup
-      const dir = path.dirname(iconPath);
-      const baseName = path.basename(iconPath).toLowerCase();
-      let realPath: string | null = null;
-      try {
-        const files = fs.readdirSync(dir);
-        const found = files.find(f => f.toLowerCase() === baseName);
-        if (found) {
-          realPath = path.join(dir, found);
-        }
-      } catch (e) {
-        // Directory doesn't exist
-      }
+      // Case-insensitive file lookup using amigafs
+      const realPath = amigafs.resolvePath(iconPath);
 
       if (realPath) {
         console.log(`[icon.library]   Loading icon from: ${realPath}`);

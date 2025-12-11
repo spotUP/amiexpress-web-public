@@ -137,22 +137,31 @@ export class AmigaDoorSession {
         return;
       }
 
+      // Check if XIM is waiting for input BEFORE queueing
+      // IMPORTANT: We must check this BEFORE calling queueInput because
+      // queueInput may complete a hotkey/line input which clears the waiting flag
+      const ximWaitingForInput =
+        this.sharedState.ximProtocol?.isWaitingForLineInput() ?? false;
+
       // Route to XIM protocol if active
       if (this.sharedState.ximProtocol) {
         console.log(
-          `[AmigaDoorSession] Forwarding input to XIM queue: "${data}"`
+          `[AmigaDoorSession] Forwarding input to XIM queue: "${data}" (ximWaiting=${ximWaitingForInput})`
         );
         this.sharedState.ximProtocol.queueInput(data);
       }
 
-      // Route to DOS stdin when either no XIM protocol or door isn't waiting on XIM line input
-      const ximWaitingForLine =
-        this.sharedState.ximProtocol?.isWaitingForLineInput() ?? false;
-      if (!this.sharedState.ximProtocol || !ximWaitingForLine) {
+      // Route to DOS stdin ONLY when XIM protocol is not active or wasn't waiting for input
+      // This prevents double-delivery: once via XIM (hotkey/line input) and once via DOS
+      if (!this.sharedState.ximProtocol || !ximWaitingForInput) {
         console.log(
           `[AmigaDoorSession] Queueing input for DOS stdin: "${data}"`
         );
         this.sharedState.dosLibrary.queueInput(data);
+      } else {
+        console.log(
+          `[AmigaDoorSession] Skipping DOS queue - input was consumed by XIM`
+        );
       }
     });
 

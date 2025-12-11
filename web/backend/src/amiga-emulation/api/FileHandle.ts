@@ -179,7 +179,13 @@ export class FileHandle {
 
     // Console output - return data for terminal
     if (this.isConsole && this.fd === -2) {
-      return { bytesWritten: data.length, consoleData: data };
+      // Convert bare LF to CR+LF for proper terminal display
+      // Amiga files often use LF only, but terminals expect CR+LF
+      // This fixes bulletin text offset issues in doors like Bulls
+      const text = data.toString('latin1');
+      const convertedText = text.replace(/(?<!\r)\n/g, '\r\n');
+      const convertedData = Buffer.from(convertedText, 'latin1');
+      return { bytesWritten: data.length, consoleData: convertedData };
     }
 
     try {
