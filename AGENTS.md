@@ -43,6 +43,36 @@ Never lie or overstate success. Do not claim behavior works unless verified agai
 
 When asked to debug or solve a bug, always read the backend log first and use it to drive the investigation before making changes.
 
+## Creating Doors/Games
+
+When a user asks to create a door or game, **ALWAYS read all SDK documentation FIRST** before writing any code:
+
+**Required Reading (in order):**
+1. `sdk/docs/GAME_DEVELOPMENT_GUIDE.md` - Complete game development reference (1300+ lines)
+2. `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` - TypeScript door patterns
+3. `sdk/README.md` - SDK overview and quick start
+
+**Why This Matters:**
+- SDK documentation covers critical patterns like game mode, input handling, and cleanup
+- Doors have specific requirements (package.json fields, .info files, runtime types)
+- Input handling differs between door types (raw escape sequences vs key events)
+- Game mode blocks 'command' events - wrong choice breaks input
+- Hybrid doors require specific esbuild externals to compile
+
+**Checklist Before Writing Door Code:**
+- [ ] Read GAME_DEVELOPMENT_GUIDE.md for complete patterns
+- [ ] Understand door types: server, client, hybrid
+- [ ] Know when to use game mode (real-time games) vs not (menu prompts)
+- [ ] Understand input format (raw strings for server doors, KeyEvent for hybrid)
+- [ ] Know the required package.json fields
+- [ ] Know how to create the .info file for command registration
+
+**Never:**
+- Create a door without reading SDK docs
+- Guess at input handling patterns
+- Assume game mode should be enabled
+- Skip the .info file registration
+
 When working on 68K door emulation, always review the generated 68K door logs (e.g., door-68k.log or run logs) early to guide debugging. If logs are missing or unwritable, fix the path or permissions before proceeding.
 
 When working on 68K doors:
