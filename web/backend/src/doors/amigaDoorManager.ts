@@ -106,10 +106,47 @@ export interface DoorArchive {
 export class AmigaDoorManager {
   public bbsRoot: string;
   private assigns: AmigaDOSAssigns;
+  private doorCache: DoorInfo[] | null = null;
+  private cacheTimestamp: number = 0;
 
   constructor(bbsRoot: string) {
     this.bbsRoot = bbsRoot;
     this.assigns = this.initializeAssigns();
+  }
+
+  /**
+   * Populate the door cache at startup
+   * This scans all .info files once and stores the results in memory
+   */
+  async populateCache(): Promise<void> {
+    const startTime = Date.now();
+    console.log('[DoorCache] Populating door cache...');
+    this.doorCache = await this.scanInstalledDoorsInternal();
+    this.cacheTimestamp = Date.now();
+    console.log(`[DoorCache] Cache populated with ${this.doorCache.length} doors in ${Date.now() - startTime}ms`);
+  }
+
+  /**
+   * Refresh the door cache (call after installing/uninstalling doors)
+   */
+  async refreshCache(): Promise<void> {
+    console.log('[DoorCache] Refreshing door cache...');
+    this.doorCache = null;
+    await this.populateCache();
+  }
+
+  /**
+   * Get cached doors (returns cached data if available, otherwise scans)
+   */
+  getCachedDoors(): DoorInfo[] | null {
+    return this.doorCache;
+  }
+
+  /**
+   * Check if cache is populated
+   */
+  isCachePopulated(): boolean {
+    return this.doorCache !== null;
   }
 
   /**
@@ -212,6 +249,12 @@ export class AmigaDoorManager {
         metadata.name = name.trim();
       }
 
+      // MENUNAME is the standard display name for AmiExpress doors
+      const menuName = tooltypes.get('MENUNAME');
+      if (menuName) {
+        metadata.name = menuName.trim(); // Prefer MENUNAME over NAME
+      }
+
       // Optional flags / behavior switches
       metadata.resident = tooltypes.get('RESIDENT')?.toUpperCase() === 'YES';
       metadata.expertMode = tooltypes.has('EXPERT_MODE');
@@ -252,9 +295,25 @@ export class AmigaDoorManager {
 
   /**
    * Scan Commands/BBSCmd/ for installed Amiga doors
-   * This is the CORRECT way - scan .info files, NOT executables
+   * Returns cached data if available, otherwise scans
    */
   async scanInstalledDoors(): Promise<DoorInfo[]> {
+    // Return cached data if available
+    if (this.doorCache !== null) {
+      console.log(`[scanInstalledDoors] Returning ${this.doorCache.length} cached doors (instant)`);
+      return this.doorCache;
+    }
+
+    // Cache not populated, do a full scan
+    console.log('[scanInstalledDoors] Cache miss - performing full scan...');
+    return this.scanInstalledDoorsInternal();
+  }
+
+  /**
+   * Internal method to scan Commands/BBSCmd/ for installed Amiga doors
+   * This is the CORRECT way - scan .info files, NOT executables
+   */
+  private async scanInstalledDoorsInternal(): Promise<DoorInfo[]> {
     const doors: DoorInfo[] = [];
     const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
 
@@ -268,9 +327,18 @@ export class AmigaDoorManager {
     }
 
     const files = fs.readdirSync(commandsPath);
-    const infoFiles = files.filter(f => f.toLowerCase().endsWith('.info'));
+    const infoFiles = files.filter(f => {
+      if (!f.toLowerCase().endsWith('.info')) return false;
+      // Filter out files like "BESTCONF.INFO" - command names shouldn't contain dots
+      const commandName = path.basename(f, '.info');
+      if (commandName.includes('.')) {
+        console.log(`[scanInstalledDoors] Skipping ${f} - command name contains dot`);
+        return false;
+      }
+      return true;
+    });
 
-    console.log(`[scanInstalledDoors] Found ${infoFiles.length} .info files in ${commandsPath}:`);
+    console.log(`[scanInstalledDoors] Found ${infoFiles.length} valid .info files in ${commandsPath}:`);
     infoFiles.forEach(f => console.log(`[scanInstalledDoors]   - ${f}`));
 
     for (const infoFile of infoFiles) {
@@ -1247,4 +1315,21 @@ export function getAmigaDoorManager(bbsRoot?: string): AmigaDoorManager {
     managerInstance = new AmigaDoorManager(root);
   }
   return managerInstance;
+}
+
+/**
+ * Initialize door cache at BBS startup
+ * Call this from server initialization to pre-populate the door cache
+ */
+export async function initializeDoorCache(): Promise<void> {
+  const manager = getAmigaDoorManager();
+  await manager.populateCache();
+}
+
+/**
+ * Refresh door cache (call after installing/uninstalling doors)
+ */
+export async function refreshDoorCache(): Promise<void> {
+  const manager = getAmigaDoorManager();
+  await manager.refreshCache();
 }

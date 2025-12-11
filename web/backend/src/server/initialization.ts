@@ -83,6 +83,7 @@ import { setMessageEntryDependencies } from '../handlers/message/message-entry.h
 import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
   setDoors,
+  getDoors,
   setDoorSessions,
   setDatabase as setDatabaseForDoorHandler,
   setHelpers as setHelpersForDoorHandler,
@@ -91,6 +92,7 @@ import {
   executeDoor,
   executePagerDoor
 } from '../handlers/door.handler';
+import { initializeDoorCache } from '../doors/amigaDoorManager';
 import {
   setChatState,
   setConstants as setConstantsForChatHandler,
@@ -346,8 +348,12 @@ export async function initializeData() {
     // Initialize doors (converts CommandDefinition from BBSCMD to Door objects)
     await initializeDoors();
 
+    // Pre-populate door cache for instant DOORS/DOORMAN command response
+    await initializeDoorCache();
+
     // Inject dependencies into door handler
-    setDoors(doors);
+    // Note: initializeDoors() already sets the doors internally, so we use getDoors()
+    setDoors(getDoors());
     setDoorSessions(doorSessions);
     setDatabaseForDoorHandler(db);
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
