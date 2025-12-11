@@ -44,6 +44,8 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
 
     // Mark sysop sockets available on connect, defaulting status to AVAILABLE
     if (session?.user && session.user.secLevel >= 100) {
+      // Join user-specific rooms so targeted emits reach this socket
+      socket.join(`user:${session.user.id}`);
       repository.updateSysopStatus(session.user.id, SysopAvailability.AVAILABLE, 'Online');
     }
 

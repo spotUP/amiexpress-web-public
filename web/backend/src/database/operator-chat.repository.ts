@@ -117,6 +117,15 @@ export class OperatorChatRepository {
         INSERT INTO operator_chat_config (id) VALUES (1)
       `).run();
     }
+
+    // Ensure at least one sysop status exists (default "sysop") so availability checks pass
+    const defaultSysop = this.db.prepare('SELECT sysop_id FROM operator_sysop_status WHERE sysop_id = ?').get('sysop');
+    if (!defaultSysop) {
+      this.db.prepare(`
+        INSERT INTO operator_sysop_status (sysop_id, availability, status_message, last_seen, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run('sysop', SysopAvailability.AVAILABLE, 'Online', Date.now(), Date.now());
+    }
   }
 
   /**

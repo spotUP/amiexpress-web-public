@@ -10,6 +10,8 @@ function batchRoots(): string[] {
   const roots = [
     config.getConfig().dataDir,
     process.env.BBS_ROOT || path.resolve(process.cwd(), '..'),
+    // Project root (two levels up from web/backend) to find default batch files in repo/default-data
+    path.resolve(process.cwd(), '..', '..'),
   ].filter(Boolean);
   return Array.from(new Set(roots));
 }
