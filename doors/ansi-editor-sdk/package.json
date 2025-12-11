@@ -1,0 +1,24 @@
+{
+  "name": "ansi-editor-sdk",
+  "version": "2.0.0",
+  "description": "State-of-the-art ANSI/ASCII art editor with full Moebius feature parity",
+  "main": "index.ts",
+  "type": "module",
+  "author": "AmiExpress-Web",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx index.ts",
+    "watch": "tsx watch index.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "@types/blessed": "^0.1.27",
+    "neo-blessed": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

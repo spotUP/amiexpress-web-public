@@ -1,0 +1,7 @@
+BBSCMD=RPG
+TYPE=TS
+LOCATION=doors/rpg-adventure
+DESCRIPTION=Maze exploration RPG with combat and treasure hunting
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

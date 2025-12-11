@@ -1,0 +1,7 @@
+BBSCMD=TCONNECT
+TYPE=TS
+LOCATION=doors/telnet-connect
+DESCRIPTION=Telnet to other BBSes from within this BBS
+ACCESS=50
+MULTINODE=YES
+PRIORITY=SAME

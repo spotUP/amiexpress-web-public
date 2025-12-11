@@ -13,7 +13,7 @@
 
 Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [34m----------------------------------------------------------------------------
-[31m19.2 3[37m [32mbamiga           [33mannapolis, md       [34m23:16:18 [35m[------] [36m0:03 [0m   0    0
+[31m19.2 4[37m [32mdiNO             [33m\O/:UP::dS!::TY:\O/ [34m14:52:04 [35m[------] [36m0:05 [0m   0    0
 [31m19.2 1[37m [32mMaRWic           [33m[dECiSiON&ShELTER]  [34m10:40:29 [35m[----U-] [36m0:02 [0m82mb    0
 [31m19.2 1[37m [32mRansom1122       [33mAus                 [34m06:57:26 [35m[-C----] [36m0:07 [0m   0    0
 [31m19.2 1[37m [32mRansom1122       [33mAus                 [34m06:33:30 [35m[-C-D--] [36m0:13 [0m   0 LOTS
@@ -29,7 +29,7 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [31m19.2 1[37m [32mRaGe             [33mUK                  [34m18:00:48 [35m[----U-] [36m0:03 [0m92mb    0
 [31m19.2 1[37m [32mlordnikon        [33mDekadence           [34m11:39:21 [35m[---d--] [36m0:03 [0m   0    0
 [34m----------------------------------------------------------------------------
-[0m                           ...And Justice For All                           
+[0m              Open your eyes to reality and throw it all away.              
 [0;4;33m                                                                      v2.00 [0m
 [44;4;33m Calls:    1 / Y'day:    4 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 [0m
 [44;4;33m The Records - Calls:  275 | U:  286 / D775mb | D: 3745 / @402mb | Hrs:  30 [0m

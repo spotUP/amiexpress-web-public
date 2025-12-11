@@ -1,0 +1,12 @@
+MENUNAME=Arkanoid Audio
+CMDNAME=arkanoid2
+DOORTYPE=SDK
+RUNTYPE=hybrid
+CLIENT_BUNDLE=dist/client.bundle.js
+DESCRIPTION=Arkanoid with Web Audio sounds and music (Enhanced Edition)
+CATEGORY=Games
+VERSION=2.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

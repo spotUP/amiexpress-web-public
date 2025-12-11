@@ -29,14 +29,47 @@ interface InfoFileMetadata {
 }
 
 /**
+ * Check if file is plain text (not binary)
+ */
+function isTextFile(filePath: string): boolean {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    // Check first 1KB for binary characters
+    const checkLength = Math.min(buffer.length, 1024);
+    for (let i = 0; i < checkLength; i++) {
+      const byte = buffer[i];
+      // Allow common text characters: printable ASCII, tab, newline, carriage return
+      if (byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && (byte < 0x20 || byte > 0x7e)) {
+        // Found a non-text byte
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parse tooltypes from .info file
+ * Handles both plain text .info files (our format) and binary Amiga .info files
  */
 function parseTooltypes(filePath: string): Tooltype[] {
   const tooltypes: Tooltype[] = [];
 
   try {
-    const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
-    const lines = output.split('\n');
+    let lines: string[];
+
+    // Check if file is plain text or binary
+    if (isTextFile(filePath)) {
+      // Plain text file - read directly
+      const content = fs.readFileSync(filePath, 'utf8');
+      lines = content.split(/\r?\n/);
+    } else {
+      // Binary file - use strings command
+      const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
+      lines = output.split('\n');
+    }
 
     for (const line of lines) {
       const trimmed = line.trim();

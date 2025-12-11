@@ -1,0 +1,7 @@
+BBSCMD=BULLVIEW
+TYPE=TS
+LOCATION=doors/bullview-debug
+DESCRIPTION=Debug utility for BullView XIM handshake
+ACCESS=255
+MULTINODE=YES
+PRIORITY=SAME

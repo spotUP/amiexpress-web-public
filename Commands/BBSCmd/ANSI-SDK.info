@@ -1,0 +1,7 @@
+BBSCMD=ANSI-SDK
+TYPE=TS
+LOCATION=doors/ansi-editor-sdk
+DESCRIPTION=State-of-the-art ANSI/ASCII art editor with Moebius feature parity
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

@@ -1,0 +1,7 @@
+BBSCMD=FRONTEND
+TYPE=TS
+LOCATION=doors/telnet-front
+DESCRIPTION=Telnet frontend - shows active nodes at login
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

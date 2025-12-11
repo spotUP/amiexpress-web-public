@@ -1,0 +1,7 @@
+BBSCMD=SHOOTER
+TYPE=TS
+LOCATION=doors/space-shooter
+DESCRIPTION=Complete space shooter game showcasing all AmiExpress SDK features
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

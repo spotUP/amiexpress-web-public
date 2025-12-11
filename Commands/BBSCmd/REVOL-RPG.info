@@ -1,0 +1,7 @@
+BBSCMD=REVOL-RPG
+TYPE=TS
+LOCATION=doors/revolutionary-rpg
+DESCRIPTION=AI-driven RPG with procedural worlds and dynamic economy
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

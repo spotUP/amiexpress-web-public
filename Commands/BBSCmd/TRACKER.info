@@ -1,0 +1,7 @@
+BBSCMD=TRACKER
+TYPE=TS
+LOCATION=doors/tracker-door
+DESCRIPTION=Professional music tracker BBS door inspired by Protracker
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
