@@ -118,24 +118,60 @@ async function touchFile(filePath: string): Promise<void> {
 
 /**
  * Ensure every conference has the directories/files AmiExpress expects
+ *
+ * From express.e analysis:
+ * - LCFILES/  - Lost carrier files (express.e:17486, 19404, 19484)
+ * - HOLD/     - Files needing sysop review (express.e:19405, 19488)
+ * - PartUpload/ - Partial/interrupted uploads (express.e:14574, 17536, 18127)
+ * - MsgBase/  - Message base storage (express.e:2068)
+ * - Screens/  - Conference-specific screens (express.e:5052)
+ * - SysopStats/ - Upload statistics (express.e:18772)
+ * - Upload/   - Default upload directory
+ *
+ * Note: Legacy BBS data may have some of these as files instead of directories.
+ * We skip creating directories when files already exist to preserve data.
  */
 export async function ensureConferenceStructure(
   bbsRoot: string,
   conferences: any[],
   _fileAreas: FileArea[]
 ): Promise<void> {
+  // All directories from express.e that should exist in each conference
+  // express.e creates these as directories, but legacy data may have files
+  const directories = [
+    'Upload',      // Default upload directory
+    'MsgBase',     // Message base storage (express.e:2068)
+    'Screens',     // Conference screens (express.e:5052)
+    'SysopStats',  // Statistics files (express.e:18772)
+    'PartUpload',  // Partial uploads (express.e:14574)
+    'LCFILES',     // Lost carrier files (express.e:17486)
+    'HOLD'         // Held files for review (express.e:19405)
+  ];
+
   for (const conf of conferences) {
     const confDir = path.join(bbsRoot, `Conf${conf.id}`);
-    const directories = ['Files', 'Upload', 'HOLD', 'LCFILES', 'Messages', 'Screens', 'SysopStats'];
+
     for (const subDir of directories) {
       const target = path.join(confDir, subDir);
       try {
-        await fs.promises.mkdir(target, { recursive: true });
-      } catch (error) {
-        console.error(`[FileAreas] Failed to ensure directory ${target}:`, error);
+        // Check if path already exists
+        const stat = await fs.promises.stat(target).catch(() => null);
+
+        if (stat === null) {
+          // Doesn't exist - create the directory
+          await fs.promises.mkdir(target, { recursive: true });
+        } else if (!stat.isDirectory()) {
+          // Exists as a file - skip silently to preserve legacy data
+          // This is common for LCFILES and HOLD in imported Amiga BBS data
+        }
+        // If it's already a directory, nothing to do
+      } catch (error: any) {
+        // Only log unexpected errors
+        if (error.code !== 'EEXIST' && error.code !== 'ENOENT') {
+          console.error(`[FileAreas] Failed to ensure directory ${target}:`, error.message);
+        }
       }
     }
-
   }
 }
 

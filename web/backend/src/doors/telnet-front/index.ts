@@ -186,7 +186,6 @@ function displayFrontend(socket: SocketIOSocket, user: any): void {
 
   // Bottom border
   socket.emit('ansi-output', '    \x1b[35m `----+-----------------+-----------------------+-------------------|/-|/\r\n');
-  socket.emit('ansi-output', '\r\n');
 
   // Show hostname and IPs
   const centeredHostname = hostname.substring(0, 26).padEnd(26);
@@ -209,17 +208,17 @@ export async function runDoor(doorSession: any): Promise<void> {
   // Auto-exit after 2 seconds or wait for any key
   const exitPromise = new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
-      socket.off('user-input', handleInput);
+      socket.off('command', handleInput);
       resolve();
     }, 2000);
 
     const handleInput = () => {
       clearTimeout(timeout);
-      socket.off('user-input', handleInput);
+      socket.off('command', handleInput);
       resolve();
     };
 
-    socket.once('user-input', handleInput);
+    socket.once('command', handleInput);
   });
 
   await exitPromise;

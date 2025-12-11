@@ -554,12 +554,12 @@ function doHelp(): void {
   // Wait for keypress
   return new Promise<void>((resolve) => {
     const handleInput = () => {
-      socket.off('user-input', handleInput);
+      socket.off('command', handleInput);
       showTitle();
       showChat();
       resolve();
     };
-    socket.once('user-input', handleInput);
+    socket.once('command', handleInput);
   }) as any;
 }
 

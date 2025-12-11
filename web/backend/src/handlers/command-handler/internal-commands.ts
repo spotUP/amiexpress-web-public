@@ -118,7 +118,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // Map commands to internalCommandX functions from AmiExpress
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
-      const { DownloadHandler } = require('../download.handler');
+      const { DownloadHandler } = require('../file/download.handler');
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
@@ -127,7 +127,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'DB': // Download Batch - Download all flagged files
-      const { BatchDownloadHandler } = require('../batch-download.handler');
+      const { BatchDownloadHandler } = require('../transfer/batch-download.handler');
       await BatchDownloadHandler.handleBatchDownload(socket, session);
       return;
 
@@ -432,10 +432,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         session.doorInputHandler = (data: string) => {
           try {
             const shared: any = (amigaSession as any).sharedState || {};
+            // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
+            // This prevents double-delivery when XIM completes a hotkey/line input
+            const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
             if (shared.ximProtocol) {
               shared.ximProtocol.queueInput(data);
             }
-            if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+            if (shared.dosLibrary && !ximWaitingForInput) {
               shared.dosLibrary.queueInput(data);
             }
           } catch (err) {

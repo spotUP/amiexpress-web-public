@@ -1385,7 +1385,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer || '';
       session.inputBuffer = '';
 
-      const { DownloadHandler } = require('./download.handler');
+      const { DownloadHandler } = require('./file/download.handler');
       await DownloadHandler.handleFilenameInput(socket, session, input);
     } else if (data === '\x7f' || data === '\b') { // Backspace
       if (session.inputBuffer.length > 0) {
@@ -1403,7 +1403,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   if (session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT) {
     console.log(' [DOWNLOAD] User confirming download');
     // Y/N confirmation can be hotkey mode
-    const { DownloadHandler } = require('./download.handler');
+    const { DownloadHandler } = require('./file/download.handler');
     await DownloadHandler.handleConfirmInput(socket, session, data);
     return;
   }
@@ -3306,7 +3306,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // Map commands to internalCommandX functions from AmiExpress
   switch (command) {
     case 'D': // Download File(s) (internalCommandD) - express.e:24853-24857
-      const { DownloadHandler } = require('./download.handler');
+      const { DownloadHandler } = require('./file/download.handler');
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
@@ -3631,10 +3631,13 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
           try {
             const shared: any = (amigaSession as any).sharedState || {};
             logDoorDebug(`KEY door=GA data=${JSON.stringify(data)}`);
+            // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
+            // This prevents double-delivery when XIM completes a hotkey/line input
+            const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
             if (shared.ximProtocol) {
               shared.ximProtocol.queueInput(data);
             }
-            if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+            if (shared.dosLibrary && !ximWaitingForInput) {
               shared.dosLibrary.queueInput(data);
             }
           } catch (err) {

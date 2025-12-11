@@ -16,6 +16,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { checkSecurity } from '../../utils/acs.util';
+import { getSocketIdByNodeId } from '../../server/session-manager';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -46,7 +47,14 @@ export function setOlmDependencies(deps: {
  * express.e:25406-25503 - PROC internalCommandOLM(params)
  */
 export async function handleOlmCommand(socket: Socket, session: BBSSession, params: string = '') {
-  console.log('📨 [OLM] handleOlmCommand called with params:', params);
+  console.log('[OLM] handleOlmCommand called with params:', params);
+
+  // Guard against missing user - prevent crash
+  if (!session.user) {
+    socket.emit('ansi-output', '\r\n\x1b[31mError: Not logged in.\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
 
   // express.e:25416 - Check security ACS_OLM and multinode enabled
   // IF((checkSecurity(ACS_OLM))=FALSE) OR (sopt.toggles[TOGGLES_MULTICOM]=FALSE) THEN RETURN RESULT_NOT_ALLOWED
@@ -57,7 +65,7 @@ export async function handleOlmCommand(socket: Socket, session: BBSSession, para
   }
 
   // Check if OLM is enabled (sopt.toggles[TOGGLES_MULTICOM])
-  if (!config.get('olmEnabled')) {
+  if (!config || !config.get('olmEnabled')) {
     socket.emit('ansi-output', '\r\n\x1b[31mOLM system is disabled.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
@@ -202,7 +210,16 @@ export async function handleOlmComposeInput(socket: Socket, session: BBSSession,
  * express.e:25449-25500
  */
 async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: number, messageLines: string[]) {
-  console.log('📨 [OLM] Sending message to node', nodenum);
+  console.log('[OLM] Sending message to node', nodenum);
+
+  // Guard against missing user
+  if (!session.user) {
+    socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    delete session.olmMessageLines;
+    delete session.olmNodeTarget;
+    return;
+  }
 
   // express.e:25451-25459 - Check if node is valid and not blocked
   if (nodenum < 0 || nodenum >= 100) {  // MAXNODES = 100 typically
@@ -214,17 +231,14 @@ async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: numb
   }
 
   // Find target user session by nodeId - express.e:25451
-  let targetSession: BBSSession | null = null;
-  let targetSocketId: string | null = null;
+  // Sessions are keyed by nodeId.toString(), so look up directly
+  const targetSession = sessions.get(nodenum.toString()) || null;
 
-  for (const [socketId, sess] of Array.from(sessions.entries())) {
-    // Match by nodeId (each connected user has a unique virtual node number 1-99)
-    if (sess.nodeId === nodenum && sess.user) {
-      targetSession = sess;
-      targetSocketId = socketId;
-      break;
-    }
-  }
+  // Get the actual Socket.IO socket ID for this node
+  // This is CRITICAL - the sessions map is keyed by nodeId, not socket ID!
+  const targetSocketId = getSocketIdByNodeId(nodenum);
+
+  console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, socketId=${targetSocketId}, user=${targetSession?.user?.username || 'none'}`)
 
   // express.e:25459 - Check if target is blocked
   if (targetSession && targetSession.blockOLM) {
@@ -233,8 +247,8 @@ async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: numb
     );
   }
 
-  // express.e:25470-25473 - Check if target exists
-  if (!targetSession || targetSession.blockOLM) {
+  // express.e:25470-25473 - Check if target exists and is logged in
+  if (!targetSession || !targetSocketId || !targetSession.user || targetSession.blockOLM) {
     socket.emit('ansi-output', '\r\n\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.olmMessageLines;
@@ -246,23 +260,23 @@ async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: numb
   let msgsent = true;
 
   // Build message header - express.e:25477-25478
-  const headerMsg = `\r\n\r\n\x1b[34m*\x1b[0mOnline Message!\x1b[0m From Node\x1b[32m:\x1b[36m(\x1b[33m${session.nodeId}\x1b[36m)\x1b[0m User\x1b[32m: \x1b[36m[\x1b[0m${session.user!.username}\x1b[36m]\x1b[0m\r\n\r\n`;
+  const headerMsg = `\r\n\r\n\x1b[34m*\x1b[0mOnline Message!\x1b[0m From Node\x1b[32m:\x1b[36m(\x1b[33m${session.nodeId}\x1b[36m)\x1b[0m User\x1b[32m: \x1b[36m[\x1b[0m${session.user.username}\x1b[36m]\x1b[0m\r\n\r\n`;
 
   // Send header packet - express.e:25478
-  if (!sendOlmPacket(targetSocketId!, targetSession, headerMsg, 0, session.nodeId)) {
+  if (!sendOlmPacket(targetSocketId, targetSession, headerMsg, 0, session.nodeId)) {
     msgsent = false;
   }
 
   // Send message lines - express.e:25480-25485
   for (const line of messageLines) {
-    if (!sendOlmPacket(targetSocketId!, targetSession, line + '\r\n', 0, session.nodeId)) {
+    if (!sendOlmPacket(targetSocketId, targetSession, line + '\r\n', 0, session.nodeId)) {
       msgsent = false;
     }
   }
 
   // Send footer packet - express.e:25494-25495
   const footerMsg = '\r\n\x1b[34m*\x1b[0mPress \x1b[36m[\x1b[33mReturn\x1b[36m]\x1b[0m To Resume BBS Operations.\r\n\r\n';
-  if (!sendOlmPacket(targetSocketId!, targetSession, footerMsg, -1, session.nodeId)) {
+  if (!sendOlmPacket(targetSocketId, targetSession, footerMsg, -1, session.nodeId)) {
     msgsent = false;
   }
 

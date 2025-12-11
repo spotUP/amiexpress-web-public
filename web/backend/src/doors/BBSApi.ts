@@ -268,6 +268,92 @@ export class BBSApi {
     });
   }
 
+  // ========================================
+  // GAME MODE INPUT (real-time key tracking)
+  // ========================================
+
+  /**
+   * Enable game mode for real-time keyboard input
+   * When enabled:
+   * - Frontend sends raw keydown/keyup events (no OS key repeat delay)
+   * - Multiple keys can be held simultaneously
+   * - Use isKeyPressed() to check key states
+   * - Use onKeyDown/onKeyUp for event callbacks
+   */
+  enableGameMode(): void {
+    this.socket.emit('game-mode', true);
+    console.log('[BBSApi] Game mode enabled');
+  }
+
+  /**
+   * Disable game mode and return to normal input
+   */
+  disableGameMode(): void {
+    this.socket.emit('game-mode', false);
+    // Clear key state
+    if (this.session.keyState) {
+      this.session.keyState = {};
+    }
+    console.log('[BBSApi] Game mode disabled');
+  }
+
+  /**
+   * Check if a key is currently pressed (game mode only)
+   * @param key Key to check (e.g., 'ArrowLeft', 'a', 'space')
+   */
+  isKeyPressed(key: string): boolean {
+    return this.session.keyState?.[key] === true;
+  }
+
+  /**
+   * Get all currently pressed keys (game mode only)
+   */
+  getPressedKeys(): string[] {
+    if (!this.session.keyState) return [];
+    return Object.keys(this.session.keyState).filter(k => this.session.keyState![k]);
+  }
+
+  /**
+   * Register callback for keydown events (game mode only)
+   * Callback receives key name and full keyState object
+   */
+  onKeyDown(callback: (key: string, keyState: Record<string, boolean>) => void): void {
+    const handler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+      if (data.pressed) {
+        callback(data.key, data.keyState);
+      }
+    };
+    this.session.doorKeyStateHandler = handler;
+  }
+
+  /**
+   * Register callback for keyup events (game mode only)
+   * Callback receives key name and full keyState object
+   */
+  onKeyUp(callback: (key: string, keyState: Record<string, boolean>) => void): void {
+    const existingHandler = this.session.doorKeyStateHandler;
+    const newHandler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+      if (!data.pressed) {
+        callback(data.key, data.keyState);
+      }
+      // Call existing handler if present (for onKeyDown)
+      if (existingHandler && data.pressed) {
+        existingHandler(data);
+      }
+    };
+    this.session.doorKeyStateHandler = newHandler;
+  }
+
+  /**
+   * Register callback for all key events (both down and up)
+   * More efficient than separate onKeyDown/onKeyUp calls
+   */
+  onKeyEvent(callback: (key: string, pressed: boolean, keyState: Record<string, boolean>) => void): void {
+    this.session.doorKeyStateHandler = (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
+      callback(data.key, data.pressed, data.keyState);
+    };
+  }
+
   /**
    * Display menu and get hotkey choice
    * Returns the key pressed (uppercase)

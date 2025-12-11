@@ -12,6 +12,9 @@
 import { z } from 'zod';
 import type { Database } from '../database';
 import type { ConfigRepository } from '../database/config-repository';
+import { ConferenceSetupService } from './conference-setup.service';
+import { loadConfConfig } from './conf-config.service';
+import { InfoFileParser } from './info-file-parser';
 import type {
   SystemConfig,
   NodeConfig,
@@ -29,6 +32,8 @@ import type {
 } from '../database/types';
 import { loadBBSConfig, saveBBSConfig, type BBSConfigData } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ===== Zod Validation Schemas =====
 
@@ -45,7 +50,7 @@ export const SystemConfigSchema = z.object({
   min_password_length: z.number().int().min(0).max(32).optional(),
   min_password_strength: z.number().int().min(0).max(4).optional(),
   max_password_fails: z.number().int().min(-1).optional(),
-  password_security: z.enum(['bcrypt', 'sha256', 'md5']).optional(),
+  password_security: z.enum(['bcrypt', 'sha256', 'md5', 'legacy']).optional(),
   strict_password_policy: z.boolean().optional(),
   auto_validate: z.boolean().optional(),
   confirm_deletions: z.boolean().optional(),
@@ -317,9 +322,12 @@ export interface RequestContext {
 
 export class ConfigService {
   private configRepo: ConfigRepository;
+  private conferenceSetup: ConferenceSetupService;
 
   constructor(private database: Database) {
     this.configRepo = database.getConfigRepository();
+    const bbsRoot = appConfig.get('dataDir');
+    this.conferenceSetup = new ConferenceSetupService(bbsRoot);
   }
 
   // ===== System Configuration =====
@@ -329,12 +337,16 @@ export class ConfigService {
     const bbsRoot = appConfig.get('dataDir');
     const diskConfig = loadBBSConfig(bbsRoot);
 
+    // Get file stats for stable timestamps
+    const configPath = path.join(bbsRoot, 'bbsConfig.info');
+    const stats = fs.existsSync(configPath) ? fs.statSync(configPath) : { birthtime: new Date(0), mtime: new Date(0) };
+
     // Convert BBSConfigData to SystemConfig format (add id and timestamps)
     const config: SystemConfig = {
       id: 1,
       ...diskConfig,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: stats.birthtime,
+      updated_at: stats.mtime,
     } as SystemConfig;
 
     return config;
@@ -376,7 +388,67 @@ export class ConfigService {
   // ===== Node Configuration =====
 
   async getNodeConfigs(): Promise<NodeConfig[]> {
-    return this.configRepo.getNodeConfigs();
+    // DISK-BASED: Load from Node{N}.info files
+    const bbsRoot = appConfig.get('dataDir');
+    const nodeConfigs: NodeConfig[] = [];
+
+    try {
+      // Check Node0.info through Node7.info (8 nodes)
+      for (let nodeNum = 0; nodeNum <= 7; nodeNum++) {
+        const nodeInfoPath = path.join(bbsRoot, `Node${nodeNum}.info`);
+
+        if (!fs.existsSync(nodeInfoPath)) {
+          continue; // Skip missing nodes
+        }
+
+        const buffer = fs.readFileSync(nodeInfoPath);
+        const stats = fs.statSync(nodeInfoPath);
+        const parser = new InfoFileParser();
+        const parsed = parser.parse(buffer);
+
+        // Convert tooltypes to uppercase map
+        const toolTypes = new Map<string, string>();
+        for (const [key, value] of parsed.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+
+        // Build NodeConfig from tooltypes
+        nodeConfigs.push({
+          id: nodeNum + 1,
+          node_number: nodeNum,
+          node_start: toolTypes.get('NODESTART') || 'BBS:Express',
+          priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
+          capitol_files: toolTypes.has('CAPITOL_FILES'),
+          def_screens: toolTypes.has('DEF_SCREENS'),
+          no_mci_msg: false,
+          sysop_chat_color: parseInt(toolTypes.get('SYSOP_CHAT_COLOR') || '33', 10),
+          user_chat_color: parseInt(toolTypes.get('USER_CHAT_COLOR') || '32', 10),
+          break_chat: false,
+          sentby_files: toolTypes.has('SENTBY_FILES'),
+          keep_upload_credit: false,
+          free_resuming: false,
+          callers_log: toolTypes.has('CALLERS_LOG'),
+          start_log: toolTypes.has('START_LOG'),
+          door_log: false,
+          ud_log: toolTypes.has('UD_LOG'),
+          log_host: false,
+          telnet: !toolTypes.has('NO_TELNET'),
+          ftp: toolTypes.has('FTP'),
+          disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
+          view_password: toolTypes.has('VIEW_PASSWORD'),
+          no_rad_boogie: false,
+          nrams: [],
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        });
+      }
+
+      console.log(`[ConfigService] Loaded ${nodeConfigs.length} node configs from disk files`);
+      return nodeConfigs;
+    } catch (error) {
+      console.error('[ConfigService] Error reading Node{N}.info files:', error);
+      return this.configRepo.getNodeConfigs();
+    }
   }
 
   async getNodeConfig(nodeNumber: number): Promise<NodeConfig | null> {
@@ -489,7 +561,104 @@ export class ConfigService {
   }
 
   async getConferenceConfigs(): Promise<ConferenceConfig[]> {
-    return this.configRepo.getConferenceConfigs();
+    // DISK-BASED: Load from ConfConfig.info and Conf{N}.info
+    const bbsRoot = appConfig.get('dataDir');
+    const confConfig = loadConfConfig(bbsRoot);
+
+    if (!confConfig || confConfig.confCount === 0) {
+      console.warn('[ConfigService] ConfConfig.info not found or empty, falling back to database');
+      return this.configRepo.getConferenceConfigs();
+    }
+
+    const configs: ConferenceConfig[] = [];
+    const parser = new InfoFileParser();
+
+    for (let i = 1; i <= confConfig.confCount; i++) {
+      const confInfoPath = path.join(bbsRoot, `Conf${i}.info`);
+
+      if (!fs.existsSync(confInfoPath)) {
+        console.warn(`[ConfigService] Conf${i}.info not found, skipping`);
+        continue;
+      }
+
+      try {
+        const buffer = fs.readFileSync(confInfoPath);
+        const stats = fs.statSync(confInfoPath);
+        const parsed = parser.parse(buffer);
+
+        // Convert tooltypes to uppercase map for case-insensitive access
+        const toolTypes = new Map<string, string>();
+        for (const [key, value] of parsed.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+
+        // Parse conference configuration from tooltypes
+        const ndirs = parseInt(toolTypes.get('NDIRS') || '0', 10);
+
+        // Build ConferenceConfig with individual dlpath_N and ulpath_N fields
+        const config: ConferenceConfig = {
+          id: i,
+          conference_id: i,
+          ndirs,
+          dlpath_1: toolTypes.get('DLPATH.1') || '',
+          dlpath_2: toolTypes.get('DLPATH.2') || '',
+          dlpath_3: toolTypes.get('DLPATH.3') || '',
+          dlpath_4: toolTypes.get('DLPATH.4') || '',
+          dlpath_5: toolTypes.get('DLPATH.5') || '',
+          dlpath_6: toolTypes.get('DLPATH.6') || '',
+          dlpath_7: toolTypes.get('DLPATH.7') || '',
+          dlpath_8: toolTypes.get('DLPATH.8') || '',
+          dlpath_9: toolTypes.get('DLPATH.9') || '',
+          dlpath_10: toolTypes.get('DLPATH.10') || '',
+          dlpath_11: toolTypes.get('DLPATH.11') || '',
+          dlpath_12: toolTypes.get('DLPATH.12') || '',
+          dlpath_13: toolTypes.get('DLPATH.13') || '',
+          dlpath_14: toolTypes.get('DLPATH.14') || '',
+          dlpath_15: toolTypes.get('DLPATH.15') || '',
+          dlpath_16: toolTypes.get('DLPATH.16') || '',
+          ulpath_1: toolTypes.get('ULPATH.1') || '',
+          ulpath_2: toolTypes.get('ULPATH.2') || '',
+          ulpath_3: toolTypes.get('ULPATH.3') || '',
+          ulpath_4: toolTypes.get('ULPATH.4') || '',
+          ulpath_5: toolTypes.get('ULPATH.5') || '',
+          ulpath_6: toolTypes.get('ULPATH.6') || '',
+          ulpath_7: toolTypes.get('ULPATH.7') || '',
+          ulpath_8: toolTypes.get('ULPATH.8') || '',
+          ulpath_9: toolTypes.get('ULPATH.9') || '',
+          ulpath_10: toolTypes.get('ULPATH.10') || '',
+          ulpath_11: toolTypes.get('ULPATH.11') || '',
+          ulpath_12: toolTypes.get('ULPATH.12') || '',
+          ulpath_13: toolTypes.get('ULPATH.13') || '',
+          ulpath_14: toolTypes.get('ULPATH.14') || '',
+          ulpath_15: toolTypes.get('ULPATH.15') || '',
+          ulpath_16: toolTypes.get('ULPATH.16') || '',
+          force_newscan: toolTypes.get('FORCENEWSCAN') === '1',
+          no_newscan: false,
+          show_new_files: true,
+          no_new_files: false,
+          free_downloads: false,
+          exclude_ftp: toolTypes.get('EXCLUDEFTP') === '1',
+          private_conf: toolTypes.get('PRIVATECONF') === '1',
+          read_only: toolTypes.get('READONLY') === '1',
+          menu_prompt: toolTypes.get('MENUPROMPT') || '',
+          confdb_shared: 0,
+          use_username: true,
+          use_realname: false,
+          use_internetname: false,
+          min_access_level: parseInt(toolTypes.get('MINACCESSLEVEL') || '0', 10),
+          max_access_level: parseInt(toolTypes.get('MAXACCESSLEVEL') || '255', 10),
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        };
+
+        configs.push(config);
+      } catch (error) {
+        console.error(`[ConfigService] Error reading Conf${i}.info:`, error);
+      }
+    }
+
+    console.log(`[ConfigService] Loaded ${configs.length} conferences from disk files`);
+    return configs;
   }
 
   async createConferenceConfig(
@@ -526,13 +695,45 @@ export class ConfigService {
     // Validate input
     const validated = ConferenceConfigSchema.partial().parse(updates);
 
-    // Get old values
+    // Get old values for audit
     const oldConfig = await this.getConferenceConfig(conferenceId);
     if (!oldConfig) {
       throw new Error(`Conference config ${conferenceId} not found`);
     }
 
-    // Update
+    // DISK-BASED: Write to Conf{N}.info (technical settings only)
+    // Note: Conference name/location are stored in ConfConfig.info, not here
+    const confInfoUpdates: any = {};
+    if (validated.ndirs !== undefined) confInfoUpdates.ndirs = validated.ndirs;
+    if (validated.min_access_level !== undefined) confInfoUpdates.minAccessLevel = validated.min_access_level;
+    if (validated.max_access_level !== undefined) confInfoUpdates.maxAccessLevel = validated.max_access_level;
+    if (validated.force_newscan !== undefined) confInfoUpdates.forceNewscan = validated.force_newscan;
+    if (validated.exclude_ftp !== undefined) confInfoUpdates.excludeFTP = validated.exclude_ftp;
+    if (validated.private_conf !== undefined) confInfoUpdates.privateConf = validated.private_conf;
+    if (validated.read_only !== undefined) confInfoUpdates.readOnly = validated.read_only;
+
+    // Handle file area paths
+    const dlpaths: { [key: number]: string } = {};
+    const ulpaths: { [key: number]: string } = {};
+    const validatedAny = validated as any;
+    for (let i = 1; i <= 16; i++) {
+      const dlKey = `dlpath_${i}`;
+      const ulKey = `ulpath_${i}`;
+      if (validatedAny[dlKey] && typeof validatedAny[dlKey] === 'string') {
+        dlpaths[i] = validatedAny[dlKey];
+      }
+      if (validatedAny[ulKey] && typeof validatedAny[ulKey] === 'string') {
+        ulpaths[i] = validatedAny[ulKey];
+      }
+    }
+    if (Object.keys(dlpaths).length > 0) confInfoUpdates.dlpaths = dlpaths;
+    if (Object.keys(ulpaths).length > 0) confInfoUpdates.ulpaths = ulpaths;
+
+    if (Object.keys(confInfoUpdates).length > 0) {
+      await this.conferenceSetup.updateConferenceInfoFile(conferenceId, confInfoUpdates);
+    }
+
+    // Also update database for backwards compatibility / audit trail
     const newConfig = this.configRepo.updateConferenceConfig(conferenceId, validated);
 
     // Log change
@@ -739,7 +940,55 @@ export class ConfigService {
   // ===== Languages =====
 
   async getLanguages(): Promise<Language[]> {
-    return this.configRepo.getLanguages();
+    // DISK-BASED: Load from Languages/*.info files
+    const bbsRoot = appConfig.get('dataDir');
+    const languagesDir = path.join(bbsRoot, 'Languages');
+
+    if (!fs.existsSync(languagesDir)) {
+      console.warn('[ConfigService] Languages/ directory not found, falling back to database');
+      return this.configRepo.getLanguages();
+    }
+
+    try {
+      const languages: Language[] = [];
+      const files = fs.readdirSync(languagesDir);
+      const infoFiles = files.filter(f => f.endsWith('.info'));
+
+      let languageNum = 1;
+      for (const infoFile of infoFiles) {
+        const infoPath = path.join(languagesDir, infoFile);
+        const buffer = fs.readFileSync(infoPath);
+        const stats = fs.statSync(infoPath);
+        const parser = new InfoFileParser();
+        const parsed = parser.parse(buffer);
+
+        // Convert tooltypes to uppercase map
+        const toolTypes = new Map<string, string>();
+        for (const [key, value] of parsed.toolTypes.entries()) {
+          toolTypes.set(key.toUpperCase(), value);
+        }
+
+        // Language name from filename (remove .info extension)
+        const languageName = infoFile.replace(/\.info$/i, '');
+
+        languages.push({
+          id: languageNum++,
+          language_number: languageNum - 1,
+          title: languageName,
+          language_code: languageName.substring(0, 2).toLowerCase(),
+          file_path: infoPath,
+          enabled: true,
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        });
+      }
+
+      console.log(`[ConfigService] Loaded ${languages.length} languages from disk files`);
+      return languages;
+    } catch (error) {
+      console.error('[ConfigService] Error reading Languages/ directory:', error);
+      return this.configRepo.getLanguages();
+    }
   }
 
   async getLanguage(id: number): Promise<Language | null> {
@@ -757,14 +1006,21 @@ export class ConfigService {
     // Validate input
     const validated = LanguageSchema.parse(language) as Omit<Language, 'id' | 'created_at' | 'updated_at'>;
 
-    // Check for duplicate code
-    const existing = await this.getLanguageByCode(validated.language_code);
+    // Check for duplicate code against all languages (disk-based)
+    const allLanguages = await this.getLanguages();
+    const existing = allLanguages.find(l =>
+      l.language_code.toUpperCase() === validated.language_code.toUpperCase()
+    );
     if (existing) {
       throw new Error(`Language code '${validated.language_code}' already exists`);
     }
 
     // Create
     const newLanguage = this.configRepo.createLanguage(validated);
+
+    if (!newLanguage) {
+      throw new Error('Failed to create language');
+    }
 
     // Log change
     this.configRepo.logConfigChange(
@@ -790,7 +1046,7 @@ export class ConfigService {
     // Validate input
     const validated = LanguageSchema.partial().parse(updates);
 
-    // Get old values
+    // Get old values (may be from disk, not database)
     const oldLanguage = await this.getLanguage(id);
     if (!oldLanguage) {
       throw new Error(`Language ${id} not found`);
@@ -798,14 +1054,25 @@ export class ConfigService {
 
     // Check for duplicate code if changing
     if (validated.language_code && validated.language_code !== oldLanguage.language_code) {
-      const existing = await this.getLanguageByCode(validated.language_code);
+      // Check against all languages (disk-based), not just database
+      const allLanguages = await this.getLanguages();
+      const existing = allLanguages.find(l =>
+        l.language_code.toUpperCase() === validated.language_code!.toUpperCase() && l.id !== id
+      );
       if (existing) {
         throw new Error(`Language code '${validated.language_code}' already exists`);
       }
     }
 
-    // Update
-    const newLanguage = this.configRepo.updateLanguage(id, validated);
+    // Try to update in database
+    const dbLanguage = this.configRepo.updateLanguage(id, validated);
+
+    // If database didn't have this item (disk-based), merge updates with old values
+    const newLanguage: Language = dbLanguage || {
+      ...oldLanguage,
+      ...validated,
+      updated_at: new Date()
+    };
 
     // Log change
     this.configRepo.logConfigChange(
@@ -854,15 +1121,77 @@ export class ConfigService {
   // ===== Protocols =====
 
   async getProtocols(): Promise<Protocol[]> {
-    return this.configRepo.getProtocols();
+    // DISK-BASED: Load from Protocols/XprTypes.info
+    const bbsRoot = appConfig.get('dataDir');
+    const xprTypesPath = path.join(bbsRoot, 'Protocols', 'XprTypes.info');
+
+    if (!fs.existsSync(xprTypesPath)) {
+      console.warn('[ConfigService] Protocols/XprTypes.info not found, falling back to database');
+      return this.configRepo.getProtocols();
+    }
+
+    try {
+      const buffer = fs.readFileSync(xprTypesPath);
+      const stats = fs.statSync(xprTypesPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+
+      // Convert tooltypes to uppercase map
+      const toolTypes = new Map<string, string>();
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        toolTypes.set(key.toUpperCase(), value);
+      }
+
+      // Parse protocols from LIBRARY.N and TITLE.N tooltypes
+      const protocols: Protocol[] = [];
+      let protocolNum = 1;
+
+      while (true) {
+        const library = toolTypes.get(`LIBRARY.${protocolNum}`);
+        const title = toolTypes.get(`TITLE.${protocolNum}`);
+
+        if (!library && !title) break; // No more protocols
+
+        if (library && title) {
+          protocols.push({
+            id: protocolNum,
+            protocol_name: title,
+            protocol_code: library,
+            command: library,
+            upload_command: '',
+            download_command: '',
+            batch_upload: library.toLowerCase().includes('zmodem') || library.toLowerCase().includes('ymodem'),
+            batch_download: library.toLowerCase().includes('zmodem') || library.toLowerCase().includes('ymodem'),
+            bidirectional: library.toLowerCase().includes('hydra'),
+            enabled: true,
+            is_default: protocolNum === 1,
+            created_at: stats.birthtime,
+            updated_at: stats.mtime
+          });
+        }
+
+        protocolNum++;
+        if (protocolNum > 50) break; // Safety limit
+      }
+
+      console.log(`[ConfigService] Loaded ${protocols.length} protocols from disk files`);
+      return protocols;
+    } catch (error) {
+      console.error('[ConfigService] Error reading Protocols/XprTypes.info:', error);
+      return this.configRepo.getProtocols();
+    }
   }
 
   async getProtocol(id: number): Promise<Protocol | null> {
-    return this.configRepo.getProtocol(id);
+    // DISK-BASED: Load all protocols from disk and find by ID
+    const protocols = await this.getProtocols();
+    return protocols.find(p => p.id === id) || null;
   }
 
   async getProtocolByCode(code: string): Promise<Protocol | null> {
-    return this.configRepo.getProtocolByCode(code);
+    // DISK-BASED: Load all protocols from disk and find by code
+    const protocols = await this.getProtocols();
+    return protocols.find(p => p.protocol_code.toUpperCase() === code.toUpperCase()) || null;
   }
 
   async createProtocol(
@@ -872,7 +1201,7 @@ export class ConfigService {
     // Validate input
     const validated = ProtocolSchema.parse(protocol) as Omit<Protocol, 'id' | 'created_at' | 'updated_at'>;
 
-    // Check for duplicate code
+    // Check for duplicate code against all protocols (disk-based)
     const existing = await this.getProtocolByCode(validated.protocol_code);
     if (existing) {
       throw new Error(`Protocol code '${validated.protocol_code}' already exists`);
@@ -880,6 +1209,10 @@ export class ConfigService {
 
     // Create
     const newProtocol = this.configRepo.createProtocol(validated);
+
+    if (!newProtocol) {
+      throw new Error('Failed to create protocol');
+    }
 
     // Log change
     this.configRepo.logConfigChange(
@@ -905,7 +1238,7 @@ export class ConfigService {
     // Validate input
     const validated = ProtocolSchema.partial().parse(updates);
 
-    // Get old values
+    // Get old values (may be from disk, not database)
     const oldProtocol = await this.getProtocol(id);
     if (!oldProtocol) {
       throw new Error(`Protocol ${id} not found`);
@@ -913,14 +1246,25 @@ export class ConfigService {
 
     // Check for duplicate code if changing
     if (validated.protocol_code && validated.protocol_code !== oldProtocol.protocol_code) {
-      const existing = await this.getProtocolByCode(validated.protocol_code);
+      // Check against all protocols (disk-based), not just database
+      const allProtocols = await this.getProtocols();
+      const existing = allProtocols.find(p =>
+        p.protocol_code.toUpperCase() === validated.protocol_code!.toUpperCase() && p.id !== id
+      );
       if (existing) {
         throw new Error(`Protocol code '${validated.protocol_code}' already exists`);
       }
     }
 
-    // Update
-    const newProtocol = this.configRepo.updateProtocol(id, validated);
+    // Try to update in database
+    const dbProtocol = this.configRepo.updateProtocol(id, validated);
+
+    // If database didn't have this item (disk-based), merge updates with old values
+    const newProtocol: Protocol = dbProtocol || {
+      ...oldProtocol,
+      ...validated,
+      updated_at: new Date()
+    };
 
     // Log change
     this.configRepo.logConfigChange(
@@ -1097,7 +1441,54 @@ export class ConfigService {
   // ===== Drive Configuration (TOOLTYPE_DRIVES) =====
 
   async getAllDrives(): Promise<DriveConfig[]> {
-    return this.configRepo.getAllDrives();
+    // DISK-BASED: Load from Drives.info
+    const bbsRoot = appConfig.get('dataDir');
+    const drivesInfoPath = path.join(bbsRoot, 'Drives.info');
+
+    if (!fs.existsSync(drivesInfoPath)) {
+      console.warn('[ConfigService] Drives.info not found, falling back to database');
+      return this.configRepo.getAllDrives();
+    }
+
+    try {
+      const buffer = fs.readFileSync(drivesInfoPath);
+      const stats = fs.statSync(drivesInfoPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+
+      // Convert tooltypes to uppercase map
+      const toolTypes = new Map<string, string>();
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        toolTypes.set(key.toUpperCase(), value);
+      }
+
+      // Parse DRIVE.N tooltypes
+      const drives: DriveConfig[] = [];
+      let driveNum = 1;
+
+      while (true) {
+        const drivePath = toolTypes.get(`DRIVE.${driveNum}`);
+        if (!drivePath) break;
+
+        drives.push({
+          id: driveNum,
+          drive_number: driveNum,
+          drive_path: drivePath,
+          enabled: true,
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        });
+
+        driveNum++;
+        if (driveNum > 50) break; // Safety limit
+      }
+
+      console.log(`[ConfigService] Loaded ${drives.length} drives from disk files`);
+      return drives;
+    } catch (error) {
+      console.error('[ConfigService] Error reading Drives.info:', error);
+      return this.configRepo.getAllDrives();
+    }
   }
 
   async getDrive(id: number): Promise<DriveConfig | null> {
@@ -1230,7 +1621,51 @@ export class ConfigService {
   // ===== Computer Types (TOOLTYPE_COMPUTERLIST) =====
 
   async getAllComputerTypes(): Promise<ComputerType[]> {
-    return this.configRepo.getAllComputerTypes();
+    // DISK-BASED: Load from ComputerList.info
+    const bbsRoot = appConfig.get('dataDir');
+    const computerListPath = path.join(bbsRoot, 'ComputerList.info');
+
+    if (!fs.existsSync(computerListPath)) {
+      console.warn('[ConfigService] ComputerList.info not found, falling back to database');
+      return this.configRepo.getAllComputerTypes();
+    }
+
+    try {
+      const buffer = fs.readFileSync(computerListPath);
+      const stats = fs.statSync(computerListPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+
+      // Convert tooltypes to uppercase map
+      const toolTypes = new Map<string, string>();
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        toolTypes.set(key.toUpperCase(), value);
+      }
+
+      // Parse COMPUTER.NUM and COMPUTER.N tooltypes
+      const computers: ComputerType[] = [];
+      const computerCount = parseInt(toolTypes.get('COMPUTER.NUM') || '0', 10);
+
+      for (let i = 1; i <= computerCount; i++) {
+        const computerName = toolTypes.get(`COMPUTER.${i}`);
+        if (computerName) {
+          computers.push({
+            id: i,
+            computer_number: i,
+            computer_name: computerName,
+            enabled: true,
+            created_at: stats.birthtime,
+            updated_at: stats.mtime
+          });
+        }
+      }
+
+      console.log(`[ConfigService] Loaded ${computers.length} computer types from disk files`);
+      return computers;
+    } catch (error) {
+      console.error('[ConfigService] Error reading ComputerList.info:', error);
+      return this.configRepo.getAllComputerTypes();
+    }
   }
 
   async getComputerType(id: number): Promise<ComputerType | null> {
@@ -1344,7 +1779,59 @@ export class ConfigService {
   // ===== Screen Types (TOOLTYPE_SCREENTYPES) =====
 
   async getAllScreenTypes(): Promise<ScreenType[]> {
-    return this.configRepo.getAllScreenTypes();
+    // DISK-BASED: Load from ScreenTypes.info
+    const bbsRoot = appConfig.get('dataDir');
+    const screenTypesPath = path.join(bbsRoot, 'ScreenTypes.info');
+
+    if (!fs.existsSync(screenTypesPath)) {
+      console.warn('[ConfigService] ScreenTypes.info not found, falling back to database');
+      return this.configRepo.getAllScreenTypes();
+    }
+
+    try {
+      const buffer = fs.readFileSync(screenTypesPath);
+      const stats = fs.statSync(screenTypesPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+
+      // Convert tooltypes to uppercase map
+      const toolTypes = new Map<string, string>();
+      for (const [key, value] of parsed.toolTypes.entries()) {
+        toolTypes.set(key.toUpperCase(), value);
+      }
+
+      // Parse TYPE.N and TITLE.N tooltypes
+      const screenTypes: ScreenType[] = [];
+      let typeNum = 1;
+
+      while (true) {
+        const type = toolTypes.get(`TYPE.${typeNum}`);
+        const title = toolTypes.get(`TITLE.${typeNum}`);
+
+        if (!type && !title) break;
+
+        if (type && title) {
+          screenTypes.push({
+            id: typeNum,
+            screen_number: typeNum,
+            screen_type: type,
+            screen_title: title,
+            enabled: true,
+            created_at: stats.birthtime,
+            updated_at: stats.mtime
+          });
+        }
+
+        typeNum++;
+        if (typeNum > 50) break; // Safety limit
+      }
+
+      console.log(`[ConfigService] Loaded ${screenTypes.length} screen types from disk files`);
+      return screenTypes;
+    } catch (error) {
+      console.error('[ConfigService] Error reading ScreenTypes.info:', error);
+      return this.configRepo.getAllScreenTypes();
+    }
   }
 
   async getScreenType(id: number): Promise<ScreenType | null> {
@@ -1459,7 +1946,93 @@ export class ConfigService {
   // ===== File Checkers (TOOLTYPE_FCHECK) =====
 
   async getAllFileCheckers(): Promise<FileChecker[]> {
-    return this.configRepo.getAllFileCheckers();
+    // DISK-BASED: Load from Fcheck/*.info files (express.e:18556-18614)
+    const bbsRoot = appConfig.get('dataDir');
+    const fcheckDir = path.join(bbsRoot, 'Fcheck');
+
+    if (!fs.existsSync(fcheckDir)) {
+      console.warn('[ConfigService] Fcheck/ directory not found, falling back to database');
+      return this.configRepo.getAllFileCheckers();
+    }
+
+    try {
+      const fileCheckers: FileChecker[] = [];
+      const files = fs.readdirSync(fcheckDir);
+      const infoFiles = files.filter(f => f.endsWith('.info'));
+
+      let checkerId = 1;
+      for (const infoFile of infoFiles) {
+        const infoPath = path.join(fcheckDir, infoFile);
+        const buffer = fs.readFileSync(infoPath);
+        const stats = fs.statSync(infoPath);
+        const parser = new InfoFileParser();
+        const parsed = parser.parse(buffer);
+
+        // Convert tooltypes to uppercase map
+        const toolTypes = new Map<string, string>();
+        for (const [key, value] of parsed.toolTypes.entries()) {
+          // Handle keys that start with & (continuation line indicator)
+          const cleanKey = key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase();
+          toolTypes.set(cleanKey, value);
+        }
+
+        // Get checker path (express.e:18556-18560)
+        let checkerPath = toolTypes.get('CHECKER') || '';
+
+        // Skip if no checker path defined
+        if (!checkerPath) {
+          continue;
+        }
+
+        // Extract file extension name (e.g., "LHA" from "LHA.info")
+        const checkerName = path.basename(infoFile, '.info');
+
+        // Get options (express.e:18562-18565)
+        const options = toolTypes.get('OPTIONS') || toolTypes.get('SOPTIONS') || '';
+
+        // Get stack size (express.e:18567-18571)
+        const stackStr = toolTypes.get('STACK');
+        let stackSize = 4096; // Default from express.e
+        if (stackStr && stackStr !== 'SAME') {
+          const parsedStack = parseInt(stackStr, 10);
+          if (!isNaN(parsedStack)) {
+            stackSize = parsedStack;
+          }
+        }
+
+        // Get priority (express.e:18573-18577)
+        const priorityStr = toolTypes.get('PRIORITY');
+        let priority = 0; // Default
+        if (priorityStr) {
+          const parsedPriority = parseInt(priorityStr, 10);
+          if (!isNaN(parsedPriority)) {
+            priority = parsedPriority;
+          }
+        }
+
+        // Get script path (express.e:18595)
+        const scriptPath = toolTypes.get('SCRIPT') || '';
+
+        fileCheckers.push({
+          id: checkerId++,
+          checker_name: checkerName,
+          checker_path: checkerPath,
+          options: options,
+          stack_size: stackSize,
+          priority: priority,
+          script_path: scriptPath,
+          enabled: true,
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        });
+      }
+
+      console.log(`[ConfigService] Loaded ${fileCheckers.length} file checkers from Fcheck/ directory`);
+      return fileCheckers;
+    } catch (error) {
+      console.error('[ConfigService] Error reading Fcheck/ directory:', error);
+      return this.configRepo.getAllFileCheckers();
+    }
   }
 
   async getFileChecker(id: number): Promise<FileChecker | null> {

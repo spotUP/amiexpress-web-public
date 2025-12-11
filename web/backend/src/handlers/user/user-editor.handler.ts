@@ -10,6 +10,7 @@ import { BBSSession, LoggedOnSubState } from '../../index';
 import { Database, User } from '../../database';
 import { AnsiUtil } from '../../utils/ansi.util';
 import * as bcrypt from 'bcryptjs';
+import { userFileManager } from '../../services/UserFileManager';
 
 // Account editor state tracking
 interface AccountEditorState {
@@ -283,6 +284,15 @@ async function handleBulkAccountEditor(socket: any, session: BBSSession, db: Dat
       const newUsers = await db.getUsers({ newUser: true });
       for (const user of newUsers) {
         await db.updateUser(user.id, { secLevel: level });
+        // DISK-BASED: Update user files after database update
+        try {
+          const updatedUser = await db.getUserById(user.id);
+          if (updatedUser) {
+            userFileManager.updateUserDataFile(updatedUser, parseInt(user.id, 10));
+          }
+        } catch (error) {
+          console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+        }
       }
       socket.emit('ansi-output', `\r\nUpdated ${newUsers.length} new account(s) to level ${level}.\r\n`);
     } catch (err) {
@@ -403,6 +413,13 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
       session.inputCallback = async (saveInput: string) => {
         if (saveInput.toUpperCase() === 'Y') {
           await db.updateUser(user.id, user);
+          // DISK-BASED: Update user files after database update
+          try {
+            userFileManager.updateUserDataFile(user, parseInt(user.id, 10));
+            console.log(`[UserEditor] Updated user ${user.username} disk files`);
+          } catch (error) {
+            console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+          }
           socket.emit('ansi-output', '\r\nSaved.\r\n');
         }
         // Exit to menu
@@ -444,6 +461,13 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
     socket.emit('ansi-output', '\r\nSave\r\n');
     user.newUser = false;
     await db.updateUser(user.id, user);
+    // DISK-BASED: Update user files after database update
+    try {
+      userFileManager.updateUserDataFile(user, parseInt(user.id, 10));
+      console.log(`[UserEditor] Updated user ${user.username} disk files`);
+    } catch (error) {
+      console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+    }
     state.changes = false;
     await displayAccount(socket, user, state.page!);
     // Continue in edit mode

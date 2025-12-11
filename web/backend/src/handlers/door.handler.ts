@@ -17,6 +17,7 @@ import { config } from '../config';
 import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
+import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -326,14 +327,22 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
+
+    // Enable game mode for real-time input (68K doors get backend key repeat)
+    const doorType = doorInfo.type || 'XIM';
+    enableGameMode(socket, session, doorType);
+
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
         logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
+        // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
+        // This prevents double-delivery when XIM completes a hotkey/line input
+        const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
         if (shared.ximProtocol) {
           shared.ximProtocol.queueInput(data);
         }
-        if (shared.dosLibrary && !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)) {
+        if (shared.dosLibrary && !ximWaitingForInput) {
           shared.dosLibrary.queueInput(data);
         }
       } catch (err) {
@@ -371,6 +380,9 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
 
     // Log door exit
     DebugLogger.doorSuccess(socket.id, `Door exited: ${doorInfo.name || doorInfo.command}`);
+
+    // Disable game mode when door exits
+    disableGameMode(socket, session);
 
     session.inDoorManager = false;
     delete session.doorInputHandler;
@@ -477,11 +489,47 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
  */
 export async function displayDoorMenu(socket: any, session: BBSSession, params: string) {
   // Get TypeScript doors for current user
-  const availableDoors = doors.filter(door =>
+  const filteredDoors = doors.filter(door =>
     door.enabled &&
     (!door.conferenceId || door.conferenceId === session.currentConf) &&
     (session.user?.secLevel || 0) >= door.accessLevel
   );
+
+  // Calculate size for TypeScript doors based on their path
+  const availableDoors = filteredDoors.map(door => {
+    let doorSize = 0;
+    if (door.path) {
+      try {
+        // Try to find the door path
+        const bbsRoot = config.get('dataDir');
+        const possiblePaths = [
+          path.join(bbsRoot, door.path),
+          path.join(bbsRoot, 'doors', door.id, 'index.ts'),
+          path.join(bbsRoot, 'doors', door.id, 'dist', 'index.js'),
+          path.join(process.cwd(), 'src', 'doors', door.id, 'index.ts')
+        ];
+        for (const testPath of possiblePaths) {
+          if (fs.existsSync(testPath)) {
+            const stats = fs.statSync(testPath);
+            if (stats.isDirectory()) {
+              // Sum up directory contents
+              doorSize = calculateDoorDirectorySize(testPath);
+            } else {
+              doorSize = stats.size;
+            }
+            break;
+          }
+        }
+      } catch (err) {
+        // Ignore errors, keep size as 0
+      }
+    }
+    return {
+      ...door,
+      doorType: door.type,
+      size: doorSize
+    };
+  });
 
   // Also scan for installed Amiga doors
   const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
@@ -507,7 +555,7 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     isAmigaDoor: true,
     command: door.command,
     doorInfo: door,  // Keep original door info for execution
-    doorType: door.doorType || 'AMI',
+    doorType: door.type || 'AMI',  // Use door.type (XIM, AIM, etc.), not doorType
     size: door.size || 0
   }));
 
@@ -576,7 +624,7 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
  * Show doors list with current selection highlighted (doorman-style)
  */
 function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean = false): void {
-  const { availableDoors, selectedIndex, scrollOffset, previousSelectedIndex } = session.tempData;
+  const { availableDoors, selectedIndex, scrollOffset, previousSelectedIndex, previousScrollOffset } = session.tempData;
 
   // Only clear screen on initial draw
   if (isInitialDraw) {
@@ -588,8 +636,11 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   const pageSize = 15;
   const visibleDoors = availableDoors.slice(scrollOffset, scrollOffset + pageSize);
 
-  // If not initial draw, only redraw changed lines
-  if (!isInitialDraw && previousSelectedIndex !== undefined) {
+  // Detect if scroll offset changed - requires full redraw
+  const scrollOffsetChanged = previousScrollOffset !== undefined && previousScrollOffset !== scrollOffset;
+
+  // If not initial draw AND scroll didn't change, only redraw changed lines
+  if (!isInitialDraw && !scrollOffsetChanged && previousSelectedIndex !== undefined) {
     const prevLine = 3 + (previousSelectedIndex - scrollOffset);
     const newLine = 3 + (selectedIndex - scrollOffset);
 
@@ -611,7 +662,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
     return;
   }
 
-  // Initial draw - show all doors
+  // Full redraw (initial draw OR scroll changed) - show all doors
   socket.emit('ansi-output', '\x1b[3;1H');
   visibleDoors.forEach((door: any, index: number) => {
     const globalIndex = scrollOffset + index;
@@ -619,28 +670,33 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
     socket.emit('ansi-output', formatDoorLine(door, isSelected) + '\r\n');
   });
 
+  // Clear any remaining lines from previous page
+  for (let i = visibleDoors.length; i < pageSize; i++) {
+    socket.emit('ansi-output', '\x1b[2K\r\n');
+  }
+
   // Footer with instructions
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
 
   session.tempData.previousSelectedIndex = selectedIndex;
+  session.tempData.previousScrollOffset = scrollOffset;
 }
 
 /**
  * Format a single door line for display
  */
 function formatDoorLine(door: any, isSelected: boolean): string {
-  // Get door type
-  const doorType = (door as any).doorType || door.type;
-  const type = doorType === 'TS' ? 'TS' :
-              doorType === 'PYTHON' ? 'PY' :
-              doorType === 'AREXX' ? 'RX' :
-              doorType === 'AMI' || doorType === 'amiga' ? 'AMI' :
-              door.type === 'typescript' ? 'TS' :
-              door.type === 'python' ? 'PY' :
-              door.type === 'arexx' ? 'RX' :
-              door.type === 'archive' ? 'ARC' : 'AMI';
+  // Get door type - handle both uppercase and lowercase variants
+  const doorType = (door as any).doorType || door.type || 'AMI';
+  const type = doorType === 'TS' || doorType === 'typescript' ? 'TS' :
+              doorType === 'PYTHON' || doorType === 'python' || doorType === 'PY' ? 'PY' :
+              doorType === 'AREXX' || doorType === 'arexx' || doorType === 'RX' ? 'RX' :
+              doorType === 'XIM' || doorType === 'xim' ? 'XIM' :
+              doorType === 'AMI' || doorType === 'amiga' || doorType === 'ami' ? 'AMI' :
+              doorType === 'ARC' || doorType === 'archive' ? 'ARC' :
+              doorType === 'WEB' || doorType === 'web' ? 'WEB' : 'AMI';
 
   // Format command (pad to 10 chars)
   const command = door.command || door.id;
@@ -649,8 +705,9 @@ function formatDoorLine(door: any, isSelected: boolean): string {
   // Format name (pad to 30 chars)
   const name = padString(door.name, 30);
 
-  // Format size
-  const size = formatDoorSize(door.size || 0);
+  // Format size (right-aligned, 8 chars wide for proper column alignment)
+  const sizeStr = formatDoorSize(door.size || 0);
+  const size = sizeStr.padStart(8);
 
   // Clear the entire line first (80 spaces)
   let line = '\x1b[2K';
@@ -658,10 +715,10 @@ function formatDoorLine(door: any, isSelected: boolean): string {
   // Display door line (no checkbox, just type/command/name/size)
   if (isSelected) {
     // Selected: blue background
-    line += `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name} ${size} \x1b[0m`;
+    line += `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name}${size} \x1b[0m`;
   } else {
     // Not selected: normal colors
-    line += ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name} \x1b[36m${size}\x1b[0m`;
+    line += ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name}\x1b[36m${size}\x1b[0m`;
   }
 
   return line;
@@ -671,7 +728,12 @@ function formatDoorLine(door: any, isSelected: boolean): string {
  * Handle input for DOOR_SELECT state (arrow keys to navigate, Enter to launch, Q to quit)
  */
 export async function handleDoorSelectInput(socket: any, session: BBSSession, data: string): Promise<void> {
-  console.log(`[DOOR Select] Input received: ${JSON.stringify(data)} (subState: ${session.subState})`);
+  console.log(`[DOOR Select] ===== INPUT RECEIVED =====`);
+  console.log(`[DOOR Select] Raw data: ${JSON.stringify(data)}`);
+  console.log(`[DOOR Select] Data length: ${data.length}`);
+  console.log(`[DOOR Select] Char codes: ${[...data].map(c => c.charCodeAt(0)).join(', ')}`);
+  console.log(`[DOOR Select] SubState: ${session.subState}`);
+  console.log(`[DOOR Select] Has tempData: ${!!session.tempData}`);
 
   // Validate that we have door selection state
   if (!session.tempData || !session.tempData.availableDoors) {
@@ -684,6 +746,7 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
   const key = data.toLowerCase();
   const { availableDoors, selectedIndex, scrollOffset } = session.tempData;
   console.log(`[DOOR Select] Current selection: ${selectedIndex}/${availableDoors.length - 1}`);
+  console.log(`[DOOR Select] Key after toLowerCase: ${JSON.stringify(key)}`);
 
   // Arrow Up
   if (data === '\x1b[A' || data === '\x1b\x5b\x41') {
@@ -722,6 +785,11 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
 
   // Enter - Launch selected door
   if (key === '\r' || key === '\n') {
+    console.log('[DOOR Select] *** ENTER KEY DETECTED ***');
+    console.log('[DOOR Select] Key value:', JSON.stringify(key));
+    console.log('[DOOR Select] Available doors count:', availableDoors?.length || 0);
+    console.log('[DOOR Select] Selected index:', selectedIndex);
+
     // Validate that we have valid data
     if (!availableDoors || availableDoors.length === 0) {
       console.error('[DOOR Select] No doors available');
@@ -781,6 +849,30 @@ function formatDoorSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/**
+ * Calculate total size of a door directory (for TypeScript doors)
+ */
+function calculateDoorDirectorySize(dirPath: string): number {
+  let totalSize = 0;
+  try {
+    const files = fs.readdirSync(dirPath);
+    for (const file of files) {
+      // Skip node_modules and .git
+      if (file === 'node_modules' || file === '.git') continue;
+      const filePath = path.join(dirPath, file);
+      const stats = fs.statSync(filePath);
+      if (stats.isDirectory()) {
+        totalSize += calculateDoorDirectorySize(filePath);
+      } else {
+        totalSize += stats.size;
+      }
+    }
+  } catch (err) {
+    // Ignore errors
+  }
+  return totalSize;
 }
 
 /**
@@ -957,6 +1049,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     session.inDoorManager = true;
     console.log(`[executeTypeScriptDoor] Set inDoorManager=true`);
 
+    // NOTE: Don't enable game mode by default - it blocks 'command' events which breaks bbs.getKey()
+    // Doors that need real-time keyboard input (games) should call bbs.enableGameMode() themselves
+    // enableGameMode(socket, session, 'TS');
+
     // Notify frontend that door is active
     socket.emit('door:status', { status: 'running' });
     console.log(`[executeTypeScriptDoor] Sent door:status: running`);
@@ -980,6 +1076,9 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
 
     console.log(`[executeTypeScriptDoor] Door completed successfully`);
+
+    // Disable game mode when door exits
+    disableGameMode(socket, session);
 
     // Clear door active flag
     delete session.inDoorManager;
@@ -1033,6 +1132,10 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
   console.log(`[executeSDKDoor] Starting SDK door: ${door.name}`);
   console.log(`[executeSDKDoor] Door path: ${door.path}`);
   disableShortcuts(session);
+
+  // Enable game mode for real-time input (SDK doors - no backend repeat)
+  session.inDoorManager = true;
+  enableGameMode(socket, session, 'SDK');
 
   try {
     // Build absolute path to door
@@ -1205,6 +1308,9 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
     });
 
     console.log('[executeSDKDoor] Door execution completed');
+
+    // Disable game mode when door exits
+    disableGameMode(socket, session);
 
     // Reset flags and return to menu
     delete session.inDoorManager;
@@ -1432,6 +1538,11 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
+
+    // Enable game mode for real-time input (68K doors get backend key repeat)
+    const doorType2 = door.type || 'XIM';
+    enableGameMode(socket, session, doorType2);
+
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
@@ -1440,13 +1551,13 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
             data
           )}`
         );
+        // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
+        // This prevents double-delivery when XIM completes a hotkey/line input
+        const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
         if (shared.ximProtocol) {
           shared.ximProtocol.queueInput(data);
         }
-        if (
-          shared.dosLibrary &&
-          !(shared.ximProtocol?.isWaitingForLineInput?.() ?? false)
-        ) {
+        if (shared.dosLibrary && !ximWaitingForInput) {
           shared.dosLibrary.queueInput(data);
         }
       } catch (err) {
@@ -1468,6 +1579,9 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     await amigaSession.start();
 
     console.log(`[executeAmigaDoor] Door execution completed`);
+
+    // Disable game mode when door exits
+    disableGameMode(socket, session);
 
     session.inDoorManager = false;
     delete session.doorInputHandler;

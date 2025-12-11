@@ -8,6 +8,9 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { startPagination } from '../screen.handler';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { finalizeCommand } from '../../utils/command-response.util';
+import { config } from '../../config';
+import * as path from 'path';
+import { fileAreaManager } from '../../services/FileAreaManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
 import { storeUploadContext } from '../../server/upload-session-store';
@@ -389,6 +392,28 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
   );
 
   await Promise.all(deletePromises);
+
+  // DISK-BASED: Delete files from DIR files
+  for (const file of filesToDelete) {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const confDir = path.join(bbsRoot, `Conf${session.currentConf || 1}`);
+      const areaId = file.areaId || file.area_id || 1;
+      const dirFilePath = path.join(confDir, `DIR${areaId}`);
+
+      // Load file area to pass to deleteFileEntry
+      const fileArea = {
+        id: areaId,
+        conferenceId: session.currentConf || 1,
+        dirFilePath: dirFilePath
+      };
+
+      fileAreaManager.deleteFileEntry(file.filename, fileArea as any);
+      console.log(`[FileDelete] Removed ${file.filename} from DIR${areaId}`);
+    } catch (error) {
+      console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, error);
+    }
+  }
 
   socket.emit('ansi-output', `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
 

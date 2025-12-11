@@ -61,7 +61,16 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
       }
 
       const pending = repository.getPendingPages();
-      socket.emit('operator:pending-pages', pending);
+      // Convert Date objects to timestamps for frontend
+      const pendingWithTimestamps = pending.map(page => ({
+        ...page,
+        createdAt: page.createdAt.getTime(),
+        acceptedAt: page.acceptedAt?.getTime(),
+        endedAt: page.endedAt?.getTime(),
+        cooldownUntil: page.cooldownUntil?.getTime(),
+        tokenExpiresAt: page.tokenExpiresAt?.getTime()
+      }));
+      socket.emit('operator:pending-pages', pendingWithTimestamps);
     });
 
     socket.on('operator:accept-page', async (data: { pageId: string }) => {
@@ -254,7 +263,7 @@ async function sendPageNotifications(
       conferenceName: page.conferenceName,
       timeOnline: page.timeOnline,
       lastCommand: page.lastCommand,
-      createdAt: page.createdAt
+      createdAt: page.createdAt.getTime() // Convert Date to timestamp for frontend
     });
     notificationUpdates.socketIO = true;
     console.log(`[Operator Chat] Socket.IO notification sent for page ${page.id}`);
@@ -449,8 +458,11 @@ async function sendChatMessage(
     }
   }
 
-  // Broadcast to both parties
-  io.to(`page:${pageId}`).emit('operator:message', saved);
+  // Broadcast to both parties (convert timestamp to number for frontend)
+  io.to(`page:${pageId}`).emit('operator:message', {
+    ...saved,
+    timestamp: saved.timestamp.getTime()
+  });
 
   // Also send ANSI output to user's terminal
   const page = repository.getPageRequest(pageId);

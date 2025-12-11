@@ -203,7 +203,12 @@ export class DoorManager {
         if (amigaDoor.resolvedPath && fs.existsSync(amigaDoor.resolvedPath)) {
           try {
             const stats = fs.statSync(amigaDoor.resolvedPath);
-            doorSize = stats.size;
+            if (stats.isDirectory()) {
+              // For directories, calculate total size of all files
+              doorSize = this.calculateDirectorySize(amigaDoor.resolvedPath);
+            } else {
+              doorSize = stats.size;
+            }
           } catch (error) {
             console.error(`[Door Manager] Error getting size for ${amigaDoor.resolvedPath}:`, error);
           }
@@ -218,7 +223,7 @@ export class DoorManager {
           location: amigaDoor.location,
           doorType: amigaDoor.type,
           size: doorSize,
-          uploadDate: new Date(),
+          uploadDate: new Date(0), // Use epoch 0 for stable timestamp
           installed: amigaDoor.installed,
           access: amigaDoor.access
         } as any);
@@ -478,7 +483,7 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\x1b[33mF\x1b[0m Filter  ');
     this.socket.emit('ansi-output', '\x1b[33mQ\x1b[0m Quit  ');
     this.socket.emit('ansi-output', '\x1b[33mL\x1b[0m Logs\r\n');
-    this.socket.emit('ansi-output', '\x1b[90m[H badge = hot reloadable; Filter matches name/cmd/type; L shows last reload log]\x1b[0m\r\n');
+    this.socket.emit('ansi-output', '\x1b[90m[H=hot reload; Filter: name/cmd/type; L=reload log]\x1b[0m\r\n');
   }
 
   /**
@@ -1482,11 +1487,10 @@ export class DoorManager {
 
     this.socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
 
-    const continueHandler = (data: string) => {
-      this.socket.off('command', continueHandler);
+    // Use 'once' to avoid conflict with main input handler
+    this.socket.once('command', () => {
       this.showInfo();
-    };
-    this.socket.on('command', continueHandler);
+    });
   }
 
   /**
@@ -1518,11 +1522,10 @@ export class DoorManager {
 
     this.socket.emit('ansi-output', '\r\nPress any key to continue...\r\n');
 
-    const continueHandler = (data: string) => {
-      this.socket.off('command', continueHandler);
+    // Use 'once' to avoid conflict with main input handler
+    this.socket.once('command', () => {
       this.showInfo();
-    };
-    this.socket.on('command', continueHandler);
+    });
   }
 
   /**
@@ -1931,6 +1934,33 @@ export class DoorManager {
     const left = Math.floor(padding / 2);
     const right = padding - left;
     return ' '.repeat(left) + str + ' '.repeat(right);
+  }
+
+  /**
+   * Utility: Calculate total size of directory recursively
+   */
+  private calculateDirectorySize(dirPath: string): number {
+    let totalSize = 0;
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        try {
+          if (entry.isDirectory()) {
+            totalSize += this.calculateDirectorySize(fullPath);
+          } else {
+            const stats = fs.statSync(fullPath);
+            totalSize += stats.size;
+          }
+        } catch (error) {
+          // Skip files we can't read
+          continue;
+        }
+      }
+    } catch (error) {
+      console.error(`[Door Manager] Error calculating directory size for ${dirPath}:`, error);
+    }
+    return totalSize;
   }
 
   /**

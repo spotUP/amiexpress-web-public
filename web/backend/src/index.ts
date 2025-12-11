@@ -290,6 +290,9 @@ export interface BBSSession {
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
   doorKeyStateHandler?: ((data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => void) | null; // Door key state handler for simultaneous key input
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
+  gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)
+  currentDoorType?: string; // Type of currently running door (XIM, AMI, TS, etc.)
+  keyRepeatManager?: import('./services/KeyRepeatManager').KeyRepeatManager | null; // Backend key repeat for 68K doors
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
   petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
@@ -910,6 +913,44 @@ io.on('connection', async (socket) => {
   } catch (error) {
     console.error('[SamiLog] Initial refresh failed:', error);
   }
+
+  // ===== CONNECTION BANNER (express.e:29507-29524) =====
+  // Display welcome banner before AWAITSCREEN like real AmiExpress
+  const expressVersion = '1.0.0-web'; // Web port version
+  const connectionTime = new Date();
+  const dateStr = connectionTime.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  // express.e:29507-29512 - Welcome to {bbsName}, located in {location}
+  if (bbsConfig.location && bbsConfig.location.length > 0) {
+    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsConfig.bbsName}, located in ${bbsConfig.location}`);
+  } else {
+    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsConfig.bbsName}.`);
+  }
+
+  // express.e:29514-29515 - Running AmiExpress {version} Copyright...
+  const currentYear = new Date().getFullYear();
+  socket.emit('ansi-output', `\r\n\r\nRunning AmiExpress ${expressVersion} Copyright (c) 2018-${currentYear} Darren Coles\r\n`);
+  socket.emit('ansi-output', `Web port by Spot/Up Rough\r\n`);
+
+  // express.e:29516-29517 - Registration and node info
+  const regKey = process.env.REG_KEY || 'UNREGISTERED';
+  socket.emit('ansi-output', `Registration ${regKey}. You are connected to Node ${session.nodeId} at ${session.connectionBaud} baud`);
+
+  // express.e:29518-29522 - Connection timestamp
+  socket.emit('ansi-output', `\r\nConnection occurred at ${dateStr}.\r\n`);
+  socket.emit('ansi-output', '\r\n');
+
+  // express.e:29524 - Run FRONTEND syscmd (optional - runs custom telnet frontend screen)
+  // This is typically a door or custom screen. For now we skip to AWAITSCREEN.
 
   // Display complete connection screen via AWAITSCREEN.TXT
   // reference-board BBS layout: everything shown via screen file with MCI codes

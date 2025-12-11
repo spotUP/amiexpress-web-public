@@ -177,7 +177,7 @@ export async function processBBSCommand(
   console.log("Entering switch statement for command:", command);
   switch (command) {
     case "D": // Download File(s) (internalCommandD) - express.e:24853-24857
-      const { DownloadHandler } = require("../download.handler");
+      const { DownloadHandler } = require("../file/download.handler");
       await DownloadHandler.handleDownloadCommand(socket, session, params);
       return;
 
@@ -186,7 +186,7 @@ export async function processBBSCommand(
       return;
 
     case "DB": // Download Batch - Download all flagged files
-      const { BatchDownloadHandler } = require("../batch-download.handler");
+      const { BatchDownloadHandler } = require("../transfer/batch-download.handler");
       await BatchDownloadHandler.handleBatchDownload(socket, session);
       return;
 

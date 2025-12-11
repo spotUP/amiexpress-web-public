@@ -435,7 +435,26 @@ export class UserFileManager {
     return offset + 4;
   }
 
-  // Helper methods for E enum conversions
+  // Helper methods for binary reading
+  private readString(buffer: Buffer, offset: number, maxLen: number): { value: string; bytesRead: number } {
+    let str = '';
+    for (let i = 0; i < maxLen; i++) {
+      const byte = buffer.readUInt8(offset + i);
+      if (byte === 0) break; // Null terminator
+      str += String.fromCharCode(byte);
+    }
+    return { value: str, bytesRead: maxLen };
+  }
+
+  private readInt16(buffer: Buffer, offset: number): number {
+    return buffer.readInt16LE(offset);
+  }
+
+  private readInt32(buffer: Buffer, offset: number): number {
+    return buffer.readInt32LE(offset);
+  }
+
+  // Helper methods for E enum conversions (write)
   private zoomTypeToInt(zoomType: string): number {
     const map: { [key: string]: number } = {
       'QWK': 0,
@@ -471,6 +490,354 @@ export class UserFileManager {
       'Full': 2,
     };
     return map[editor] || 0;
+  }
+
+  // Helper methods for E enum conversions (read)
+  private intToZoomType(value: number): string {
+    const map: { [key: number]: string } = {
+      0: 'QWK',
+      1: 'BlueWave',
+      2: 'OPX',
+    };
+    return map[value] || 'QWK';
+  }
+
+  private intToProtocol(value: number): string {
+    const map: { [key: number]: string } = {
+      0: '/X Zmodem',
+      1: 'Zmodem',
+      2: 'Ymodem',
+      3: 'Xmodem',
+    };
+    return map[value] || '/X Zmodem';
+  }
+
+  private intToScreenType(value: number): string {
+    const map: { [key: number]: string } = {
+      0: 'Amiga Ansi',
+      1: 'PC Ansi',
+      2: 'ASCII',
+    };
+    return map[value] || 'Amiga Ansi';
+  }
+
+  private intToEditorType(value: number): string {
+    const map: { [key: number]: string } = {
+      0: 'Prompt',
+      1: 'Line',
+      2: 'Full',
+    };
+    return map[value] || 'Prompt';
+  }
+
+  /**
+   * Deserialize UserFileStruct from binary buffer (239 bytes)
+   * Reverses serializeUserStruct()
+   */
+  private deserializeUserStruct(buffer: Buffer, offset: number = 0): UserFileStruct {
+    let pos = offset;
+
+    // Strings (null-padded to fixed width)
+    const name = this.readString(buffer, pos, 31);
+    pos += name.bytesRead;
+    const pass = this.readString(buffer, pos, 9);
+    pos += pass.bytesRead;
+    const location = this.readString(buffer, pos, 30);
+    pos += location.bytesRead;
+    const phoneNumber = this.readString(buffer, pos, 13);
+    pos += phoneNumber.bytesRead;
+
+    // INTs (2 bytes each, little-endian)
+    const slotNumber = this.readInt16(buffer, pos); pos += 2;
+    const secStatus = this.readInt16(buffer, pos); pos += 2;
+    const secBoard = this.readInt16(buffer, pos); pos += 2;
+    const secLibrary = this.readInt16(buffer, pos); pos += 2;
+    const secBulletin = this.readInt16(buffer, pos); pos += 2;
+    const messagesPosted = this.readInt16(buffer, pos); pos += 2;
+
+    // LONGs (4 bytes each, little-endian)
+    const newSinceDate = this.readInt32(buffer, pos); pos += 4;
+    const pwdHash = this.readInt32(buffer, pos); pos += 4;
+    const confRead2 = this.readInt32(buffer, pos); pos += 4;
+    const confRead3 = this.readInt32(buffer, pos); pos += 4;
+
+    // More INTs
+    const zoomType = this.readInt16(buffer, pos); pos += 2;
+    const unknown = this.readInt16(buffer, pos); pos += 2;
+    const unknown2 = this.readInt16(buffer, pos); pos += 2;
+    const unknown3 = this.readInt16(buffer, pos); pos += 2;
+    const xferProtocol = this.readInt16(buffer, pos); pos += 2;
+    const filler2 = this.readInt16(buffer, pos); pos += 2;
+    const lcFiles = this.readInt16(buffer, pos); pos += 2;
+    const badFiles = this.readInt16(buffer, pos); pos += 2;
+
+    // More LONGs
+    const accountDate = this.readInt32(buffer, pos); pos += 4;
+
+    // More INTs
+    const screenType = this.readInt16(buffer, pos); pos += 2;
+    const editorType = this.readInt16(buffer, pos); pos += 2;
+
+    // Conference access string
+    const conferenceAccess = this.readString(buffer, pos, 10);
+    pos += conferenceAccess.bytesRead;
+
+    // More INTs
+    const uploads = this.readInt16(buffer, pos); pos += 2;
+    const downloads = this.readInt16(buffer, pos); pos += 2;
+    const confRJoin = this.readInt16(buffer, pos); pos += 2;
+    const timesCalled = this.readInt16(buffer, pos); pos += 2;
+
+    // LONGs
+    const timeLastOn = this.readInt32(buffer, pos); pos += 4;
+    const timeUsed = this.readInt32(buffer, pos); pos += 4;
+    const timeLimit = this.readInt32(buffer, pos); pos += 4;
+    const timeTotal = this.readInt32(buffer, pos); pos += 4;
+    const bytesDownload = this.readInt32(buffer, pos); pos += 4;
+    const bytesUpload = this.readInt32(buffer, pos); pos += 4;
+    const dailyBytesLimit = this.readInt32(buffer, pos); pos += 4;
+    const dailyBytesDld = this.readInt32(buffer, pos); pos += 4;
+
+    // CHAR
+    const expert = buffer.readUInt8(pos); pos++;
+
+    // Padding for alignment (3 bytes)
+    pos += 3;
+
+    // More LONGs
+    const chatRemain = this.readInt32(buffer, pos); pos += 4;
+    const chatLimit = this.readInt32(buffer, pos); pos += 4;
+    const creditDays = this.readInt32(buffer, pos); pos += 4;
+    const creditAmount = this.readInt32(buffer, pos); pos += 4;
+    const creditStartDate = this.readInt32(buffer, pos); pos += 4;
+    const creditTotalToDate = this.readInt32(buffer, pos); pos += 4;
+    const creditTotalDate = this.readInt32(buffer, pos); pos += 4;
+
+    // CHARs
+    const creditTracking = buffer.readUInt8(pos); pos++;
+    const translatorID = buffer.readUInt8(pos); pos++;
+
+    // INT
+    const msgBaseRJoin = this.readInt16(buffer, pos); pos += 2;
+
+    // LONGs
+    const confYM9 = this.readInt32(buffer, pos); pos += 4;
+    const todaysBytesLimit = this.readInt32(buffer, pos); pos += 4;
+
+    // CHARs
+    const protocol = buffer.readUInt8(pos); pos++;
+    const uucpa = buffer.readUInt8(pos); pos++;
+    const lineLength = buffer.readUInt8(pos); pos++;
+    const newUser = buffer.readUInt8(pos); pos++;
+
+    return {
+      name: name.value,
+      pass: pass.value,
+      location: location.value,
+      phoneNumber: phoneNumber.value,
+      slotNumber,
+      secStatus,
+      secBoard,
+      secLibrary,
+      secBulletin,
+      messagesPosted,
+      newSinceDate,
+      pwdHash,
+      confRead2,
+      confRead3,
+      zoomType,
+      unknown,
+      unknown2,
+      unknown3,
+      xferProtocol,
+      filler2,
+      lcFiles,
+      badFiles,
+      accountDate,
+      screenType,
+      editorType,
+      conferenceAccess: conferenceAccess.value,
+      uploads,
+      downloads,
+      confRJoin,
+      timesCalled,
+      timeLastOn,
+      timeUsed,
+      timeLimit,
+      timeTotal,
+      bytesDownload,
+      bytesUpload,
+      dailyBytesLimit,
+      dailyBytesDld,
+      expert,
+      chatRemain,
+      chatLimit,
+      creditDays,
+      creditAmount,
+      creditStartDate,
+      creditTotalToDate,
+      creditTotalDate,
+      creditTracking,
+      translatorID,
+      msgBaseRJoin,
+      confYM9,
+      todaysBytesLimit,
+      protocol,
+      uucpa,
+      lineLength,
+      newUser,
+    };
+  }
+
+  /**
+   * Deserialize UserKeysFileStruct from binary buffer (54 bytes)
+   * Reverses serializeUserKeysStruct()
+   */
+  private deserializeUserKeysStruct(buffer: Buffer, offset: number = 0): UserKeysFileStruct {
+    let pos = offset;
+
+    const userName = this.readString(buffer, pos, 31);
+    pos += userName.bytesRead;
+    const number = this.readInt32(buffer, pos); pos += 4;
+    const newUser = buffer.readUInt8(pos); pos++;
+    const oldUpCPS = this.readInt16(buffer, pos); pos += 2;
+    const oldDnCPS = this.readInt16(buffer, pos); pos += 2;
+    const userFlags = this.readInt16(buffer, pos); pos += 2;
+    const baud = this.readInt16(buffer, pos); pos += 2;
+    const upCPS2 = this.readInt32(buffer, pos); pos += 4;
+    const dnCPS2 = this.readInt32(buffer, pos); pos += 4;
+    const timesOnToday = this.readInt16(buffer, pos); pos += 2;
+
+    return {
+      userName: userName.value,
+      number,
+      newUser,
+      oldUpCPS,
+      oldDnCPS,
+      userFlags,
+      baud,
+      upCPS2,
+      dnCPS2,
+      timesOnToday,
+    };
+  }
+
+  /**
+   * Deserialize UserMiscFileStruct from binary buffer (256 bytes)
+   * Reverses serializeUserMiscStruct()
+   */
+  private deserializeUserMiscStruct(buffer: Buffer, offset: number = 0): UserMiscFileStruct {
+    let pos = offset;
+
+    const internetName = this.readString(buffer, pos, 10);
+    pos += internetName.bytesRead;
+    const realName = this.readString(buffer, pos, 26);
+    pos += realName.bytesRead;
+    const downloadBytesBCD = buffer.subarray(pos, pos + 8); pos += 8;
+    const uploadBytesBCD = buffer.subarray(pos, pos + 8); pos += 8;
+    const eMail = this.readString(buffer, pos, 50);
+    pos += eMail.bytesRead;
+    const lastDlCPS = this.readInt32(buffer, pos); pos += 4;
+    const pwdHash = this.readString(buffer, pos, 32);
+    pos += pwdHash.bytesRead;
+    const salt = this.readString(buffer, pos, 8);
+    pos += salt.bytesRead;
+    const pwdType = buffer.readUInt8(pos); pos++;
+    const forcePwdReset = buffer.readUInt8(pos); pos++;
+    const accountLocked = buffer.readUInt8(pos); pos++;
+    const invalidAttempts = buffer.readUInt8(pos); pos++;
+    const pwdLastUpdated = this.readInt32(buffer, pos); pos += 4;
+    const lastIP = this.readInt32(buffer, pos); pos += 4;
+    const ipMask = this.readInt32(buffer, pos); pos += 4;
+    const unused = buffer.subarray(pos, pos + 86); pos += 86;
+
+    return {
+      internetName: internetName.value,
+      realName: realName.value,
+      downloadBytesBCD,
+      uploadBytesBCD,
+      eMail: eMail.value,
+      lastDlCPS,
+      pwdHash: pwdHash.value,
+      salt: salt.value,
+      pwdType,
+      forcePwdReset,
+      accountLocked,
+      invalidAttempts,
+      pwdLastUpdated,
+      lastIP,
+      ipMask,
+      unused,
+    };
+  }
+
+  /**
+   * Convert file structs back to User object
+   * Reverses userToFileStruct(), userToKeysStruct(), userToMiscStruct()
+   */
+  private fileStructsToUser(
+    userStruct: UserFileStruct,
+    keysStruct: UserKeysFileStruct,
+    miscStruct: UserMiscFileStruct,
+    userId: string,
+    fileModTime: Date
+  ): User {
+    return {
+      id: userId,
+      username: userStruct.name,
+      passwordHash: miscStruct.pwdHash || '',
+      realname: miscStruct.realName,
+      location: userStruct.location,
+      phone: userStruct.phoneNumber,
+      email: miscStruct.eMail,
+      secLevel: userStruct.secStatus,
+      uploads: userStruct.uploads,
+      downloads: userStruct.downloads,
+      bytesUpload: userStruct.bytesUpload,
+      bytesDownload: userStruct.bytesDownload,
+      ratio: userStruct.secLibrary,
+      ratioType: userStruct.secBoard,
+      timeTotal: userStruct.timeTotal,
+      timeLimit: userStruct.timeLimit,
+      timeUsed: userStruct.timeUsed,
+      chatLimit: userStruct.chatLimit,
+      chatUsed: Math.max(0, userStruct.chatLimit - userStruct.chatRemain),
+      lastLogin: userStruct.timeLastOn > 0 ? new Date(userStruct.timeLastOn * 1000) : undefined,
+      firstLogin: new Date(userStruct.accountDate * 1000),
+      calls: userStruct.timesCalled,
+      callsToday: keysStruct.timesOnToday,
+      messagesPosted: userStruct.messagesPosted,
+      newUser: userStruct.newUser > 0,
+      expert: userStruct.expert > 0 ? 'X' : 'N',
+      ansi: userStruct.screenType !== 2, // Not ASCII
+      linesPerScreen: userStruct.lineLength,
+      computer: '', // Not stored in binary files
+      screenType: this.intToScreenType(userStruct.screenType),
+      protocol: this.intToProtocol(userStruct.xferProtocol),
+      editor: this.intToEditorType(userStruct.editorType),
+      zoomType: this.intToZoomType(userStruct.zoomType),
+      availableForChat: true, // Default value
+      quietNode: false, // Default value
+      autoRejoin: userStruct.confRJoin,
+      confAccess: userStruct.conferenceAccess,
+      areaName: '', // Not stored in binary files
+      uuCP: userStruct.uucpa > 0,
+      topUploadCPS: keysStruct.upCPS2,
+      topDownloadCPS: keysStruct.dnCPS2,
+      byteLimit: userStruct.dailyBytesLimit,
+      dailyBytesDld: userStruct.dailyBytesDld,
+      newSinceDate: userStruct.newSinceDate > 0 ? new Date(userStruct.newSinceDate * 1000) : undefined,
+      creditDays: userStruct.creditDays,
+      creditAmount: userStruct.creditAmount,
+      creditStartDate: userStruct.creditStartDate,
+      creditTotalToDate: userStruct.creditTotalToDate,
+      creditTotalDate: userStruct.creditTotalDate,
+      creditTracking: userStruct.creditTracking,
+      baud: keysStruct.baud,
+      userFlags: keysStruct.userFlags,
+      created: new Date(userStruct.accountDate * 1000),
+      updated: fileModTime,
+    };
   }
 
   /**
@@ -515,20 +882,89 @@ export class UserFileManager {
       }
 
       const buffer = fs.readFileSync(this.userDataPath);
-      const numUsers = buffer.length / this.USER_STRUCT_SIZE;
+      const numUsers = Math.floor(buffer.length / this.USER_STRUCT_SIZE);
 
       if (buffer.length % this.USER_STRUCT_SIZE !== 0) {
         console.warn(`[UserFileManager] user.data file size ${buffer.length} is not a multiple of ${this.USER_STRUCT_SIZE}`);
       }
 
       const users: UserFileStruct[] = [];
-      // TODO: Implement deserialization
-      // For now, just log
-      console.log(`[UserFileManager] Read ${Math.floor(numUsers)} user records from user.data`);
+      for (let i = 0; i < numUsers; i++) {
+        const offset = i * this.USER_STRUCT_SIZE;
+        const userStruct = this.deserializeUserStruct(buffer, offset);
+        users.push(userStruct);
+      }
 
+      console.log(`[UserFileManager] Read ${users.length} user records from user.data`);
       return users;
     } catch (error) {
       console.error('[UserFileManager] Error reading user.data:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Read all users from all three binary files and convert to User objects
+   * DISK-BASED: Returns users from user.data/keys/misc files, NOT database
+   */
+  public readAllUsers(): User[] {
+    try {
+      this.ensureUserFilesReady();
+
+      // Check if all three files exist
+      if (!fs.existsSync(this.userDataPath)) {
+        console.log('[UserFileManager] user.data does not exist, returning empty array');
+        return [];
+      }
+      if (!fs.existsSync(this.userKeysPath)) {
+        console.log('[UserFileManager] user.keys does not exist, returning empty array');
+        return [];
+      }
+      if (!fs.existsSync(this.userMiscPath)) {
+        console.log('[UserFileManager] user.misc does not exist, returning empty array');
+        return [];
+      }
+
+      // Read all three files and get file stats for stable timestamps
+      const userDataBuffer = fs.readFileSync(this.userDataPath);
+      const userKeysBuffer = fs.readFileSync(this.userKeysPath);
+      const userMiscBuffer = fs.readFileSync(this.userMiscPath);
+      const userDataStats = fs.statSync(this.userDataPath);
+
+      const numUsersData = Math.floor(userDataBuffer.length / this.USER_STRUCT_SIZE);
+      const numUsersKeys = Math.floor(userKeysBuffer.length / this.USERKEYS_STRUCT_SIZE);
+      const numUsersMisc = Math.floor(userMiscBuffer.length / this.USERMISC_STRUCT_SIZE);
+
+      // All three files should have same number of records
+      if (numUsersData !== numUsersKeys || numUsersData !== numUsersMisc) {
+        console.warn(
+          `[UserFileManager] File record count mismatch: data=${numUsersData}, keys=${numUsersKeys}, misc=${numUsersMisc}`
+        );
+      }
+
+      const numUsers = Math.min(numUsersData, numUsersKeys, numUsersMisc);
+      const users: User[] = [];
+
+      for (let i = 0; i < numUsers; i++) {
+        const userStruct = this.deserializeUserStruct(userDataBuffer, i * this.USER_STRUCT_SIZE);
+        const keysStruct = this.deserializeUserKeysStruct(userKeysBuffer, i * this.USERKEYS_STRUCT_SIZE);
+        const miscStruct = this.deserializeUserMiscStruct(userMiscBuffer, i * this.USERMISC_STRUCT_SIZE);
+
+        // Skip empty slots (username is empty)
+        if (!userStruct.name || userStruct.name.trim().length === 0) {
+          continue;
+        }
+
+        // Generate user ID from slot number (1-indexed in AmiExpress)
+        const userId = `user-${i + 1}`;
+        const user = this.fileStructsToUser(userStruct, keysStruct, miscStruct, userId, userDataStats.mtime);
+        users.push(user);
+      }
+
+      console.log(`[UserFileManager] Read ${users.length} users from disk files (${numUsers} total slots)`);
+      return users;
+    } catch (error) {
+      console.error('[UserFileManager] Error reading user files:', error);
       return [];
     }
   }
@@ -563,6 +999,95 @@ export class UserFileManager {
       console.log(`[UserFileManager] Updated user files for ${user.username} (slot ${slotNumber})`);
     } catch (error) {
       console.error('[UserFileManager] Error updating user files:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Read a single user by slot number
+   * @param slotNumber 1-indexed slot number (from user-N ID format)
+   * @returns User object or null if slot is empty/invalid
+   */
+  public readUserBySlot(slotNumber: number): User | null {
+    try {
+      this.ensureUserFilesReady();
+
+      if (slotNumber < 1) {
+        return null;
+      }
+
+      // Check if all three files exist
+      if (!fs.existsSync(this.userDataPath) ||
+          !fs.existsSync(this.userKeysPath) ||
+          !fs.existsSync(this.userMiscPath)) {
+        return null;
+      }
+
+      const userDataBuffer = fs.readFileSync(this.userDataPath);
+      const userKeysBuffer = fs.readFileSync(this.userKeysPath);
+      const userMiscBuffer = fs.readFileSync(this.userMiscPath);
+      const userDataStats = fs.statSync(this.userDataPath);
+
+      const slotIndex = slotNumber - 1; // Convert to 0-indexed
+      const userOffset = slotIndex * this.USER_STRUCT_SIZE;
+      const keysOffset = slotIndex * this.USERKEYS_STRUCT_SIZE;
+      const miscOffset = slotIndex * this.USERMISC_STRUCT_SIZE;
+
+      // Check if slot is within file bounds
+      if (userOffset + this.USER_STRUCT_SIZE > userDataBuffer.length ||
+          keysOffset + this.USERKEYS_STRUCT_SIZE > userKeysBuffer.length ||
+          miscOffset + this.USERMISC_STRUCT_SIZE > userMiscBuffer.length) {
+        return null;
+      }
+
+      const userStruct = this.deserializeUserStruct(userDataBuffer, userOffset);
+      const keysStruct = this.deserializeUserKeysStruct(userKeysBuffer, keysOffset);
+      const miscStruct = this.deserializeUserMiscStruct(userMiscBuffer, miscOffset);
+
+      // Check if slot is empty
+      if (!userStruct.name || userStruct.name.trim().length === 0) {
+        return null;
+      }
+
+      const userId = `user-${slotNumber}`;
+      return this.fileStructsToUser(userStruct, keysStruct, miscStruct, userId, userDataStats.mtime);
+    } catch (error) {
+      console.error(`[UserFileManager] Error reading user at slot ${slotNumber}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a user by clearing their slot in user.data, user.keys, and user.misc
+   * In AmiExpress, "deleting" a user means zeroing out the slot
+   * @param slotNumber 1-indexed slot number (from user-N ID format)
+   */
+  public deleteUserSlot(slotNumber: number): void {
+    try {
+      this.ensureUserFilesReady();
+
+      if (slotNumber < 1) {
+        throw new Error(`Invalid slot number: ${slotNumber}`);
+      }
+
+      // Calculate file offsets (slots are 1-indexed)
+      const userOffset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
+      const keysOffset = (slotNumber - 1) * this.USERKEYS_STRUCT_SIZE;
+      const miscOffset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
+
+      // Create zero-filled buffers to clear each slot
+      const zeroUserBuffer = Buffer.alloc(this.USER_STRUCT_SIZE);
+      const zeroKeysBuffer = Buffer.alloc(this.USERKEYS_STRUCT_SIZE);
+      const zeroMiscBuffer = Buffer.alloc(this.USERMISC_STRUCT_SIZE);
+
+      // Zero out all three files at the slot position
+      this.updateFileAtOffset(this.userDataPath, zeroUserBuffer, userOffset);
+      this.updateFileAtOffset(this.userKeysPath, zeroKeysBuffer, keysOffset);
+      this.updateFileAtOffset(this.userMiscPath, zeroMiscBuffer, miscOffset);
+
+      console.log(`[UserFileManager] Deleted user at slot ${slotNumber} (zeroed out slot)`);
+    } catch (error) {
+      console.error('[UserFileManager] Error deleting user slot:', error);
       throw error;
     }
   }

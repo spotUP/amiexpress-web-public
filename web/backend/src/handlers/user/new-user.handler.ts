@@ -19,6 +19,7 @@ import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { displayScreen, doPause } from '../screen.handler';
 import { config } from '../../config';
 import { ConfigService } from '../../services/config.service';
+import { userFileManager } from '../../services/UserFileManager';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -1150,6 +1151,15 @@ async function createAccount(socket: Socket, session: any) {
       socket.emit('ansi-output', '\r\n\x1b[31mError fetching account. Please try again.\x1b[0m\r\n');
       session.state = BBSState.AWAIT;
       return;
+    }
+
+    // DISK-BASED: Write user to user.data, user.keys, user.misc files
+    try {
+      userFileManager.writeUserFiles(newUser, newUserId);
+      console.log(`[NewUser] Wrote user ${data.username} to disk files (slot ${newUserId})`);
+    } catch (error) {
+      console.error('[NewUser] Error writing user to disk files:', error);
+      // Continue anyway - database has the user, sync can happen later
     }
 
     socket.emit('ansi-output', '\x1b[32mAccount created successfully!\x1b[0m\r\n\r\n');

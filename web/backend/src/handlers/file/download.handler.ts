@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { userFileManager } from '../../services/UserFileManager';
 
 /**
  * Download Handler
@@ -549,7 +550,7 @@ export class DownloadHandler {
   }
 
   /**
-   * Persist updated download counters to the database
+   * Persist updated download counters to the database AND disk files
    */
   private static async persistDownloadStats(session: BBSSession): Promise<void> {
     const user = session.user;
@@ -565,6 +566,16 @@ export class DownloadHandler {
           bytesAvailableForDownload: user.bytesAvailableForDownload,
           lastDownloadTime: user.lastDownloadTime
         });
+
+        // DISK-BASED: Write updated download stats to user.data/keys/misc files
+        try {
+          const userId = parseInt(user.id, 10);
+          userFileManager.updateUserDataFile(user, userId);
+          console.log(`[DOWNLOAD] Updated user ${user.username} disk files with download stats`);
+        } catch (diskErr) {
+          console.error('[DOWNLOAD] Error writing user disk files:', diskErr);
+          // Continue anyway - database has the stats, sync can happen later
+        }
       }
     } catch (err) {
       console.error('[DOWNLOAD] Failed to persist download stats', err);

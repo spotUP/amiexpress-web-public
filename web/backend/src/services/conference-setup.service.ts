@@ -392,4 +392,92 @@ export class ConferenceSetupService {
     fs.writeFileSync(confConfigPath, infoData);
     console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(currentNconfs, conferenceId)}, NAME.${conferenceId}=${conferenceName}`);
   }
+
+  /**
+   * Update Conf{N}.info file with conference settings
+   * express.e:5006 - reads NDIRS, DLPATH.n, ULPATH.n from TOOLTYPE_CONF
+   */
+  async updateConferenceInfoFile(conferenceId: number, updates: Partial<{
+    name: string;
+    location: string;
+    ndirs: number;
+    minAccessLevel: number;
+    maxAccessLevel: number;
+    forceNewscan: boolean;
+    excludeFTP: boolean;
+    privateConf: boolean;
+    readOnly: boolean;
+    dlpaths: { [key: number]: string };
+    ulpaths: { [key: number]: string };
+  }>): Promise<void> {
+    const confInfoPath = path.join(this.bbsRoot, `Conf${conferenceId}.info`);
+
+    if (!fs.existsSync(confInfoPath)) {
+      throw new Error(`Conf${conferenceId}.info not found`);
+    }
+
+    // Read existing Conf{N}.info
+    const buffer = fs.readFileSync(confInfoPath);
+    const parser = new InfoFileParser();
+    const parsed = parser.parse(buffer);
+
+    const toolTypes = new Map<string, string>();
+    for (const [key, value] of parsed.toolTypes.entries()) {
+      toolTypes.set(key.toUpperCase(), value);
+    }
+
+    // Update basic fields
+    if (updates.name) toolTypes.set('NAME', updates.name);
+    if (updates.location) toolTypes.set('LOCATION', updates.location);
+    if (updates.ndirs !== undefined) toolTypes.set('NDIRS', updates.ndirs.toString());
+    if (updates.minAccessLevel !== undefined) toolTypes.set('MIN_ACCESS', updates.minAccessLevel.toString());
+    if (updates.maxAccessLevel !== undefined) toolTypes.set('MAX_ACCESS', updates.maxAccessLevel.toString());
+
+    // Update flags
+    if (updates.forceNewscan !== undefined) {
+      if (updates.forceNewscan) {
+        toolTypes.set('FORCE_NEWSCAN', '1');
+      } else {
+        toolTypes.delete('FORCE_NEWSCAN');
+      }
+    }
+    if (updates.excludeFTP !== undefined) {
+      if (updates.excludeFTP) {
+        toolTypes.set('EXCLUDE_FTP', '1');
+      } else {
+        toolTypes.delete('EXCLUDE_FTP');
+      }
+    }
+    if (updates.privateConf !== undefined) {
+      if (updates.privateConf) {
+        toolTypes.set('PRIVATE', '1');
+      } else {
+        toolTypes.delete('PRIVATE');
+      }
+    }
+    if (updates.readOnly !== undefined) {
+      if (updates.readOnly) {
+        toolTypes.set('READ_ONLY', '1');
+      } else {
+        toolTypes.delete('READ_ONLY');
+      }
+    }
+
+    // Update file area paths
+    if (updates.dlpaths) {
+      for (const [dirNum, path] of Object.entries(updates.dlpaths)) {
+        toolTypes.set(`DLPATH.${dirNum}`, path);
+      }
+    }
+    if (updates.ulpaths) {
+      for (const [dirNum, path] of Object.entries(updates.ulpaths)) {
+        toolTypes.set(`ULPATH.${dirNum}`, path);
+      }
+    }
+
+    // Write updated Conf{N}.info
+    const infoData = parser.write(toolTypes);
+    fs.writeFileSync(confInfoPath, infoData);
+    console.log(`[ConferenceSetup] Updated Conf${conferenceId}.info`);
+  }
 }

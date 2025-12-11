@@ -539,8 +539,14 @@ export async function runDoor(doorSession: any): Promise<void> {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  await new Promise<void>((resolve) => {
-    socket.once('user-input', () => resolve());
-  });
+  // Wait for any key press using BBSApi if available, otherwise fallback to command event
+  const { bbs } = doorSession;
+  if (bbs && typeof bbs.getKey === 'function') {
+    await bbs.getKey('\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  } else {
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    await new Promise<void>((resolve) => {
+      socket.once('command', () => resolve());
+    });
+  }
 }
