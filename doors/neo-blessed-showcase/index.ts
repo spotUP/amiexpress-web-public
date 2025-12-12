@@ -6,18 +6,24 @@
  * professional terminal UIs with neo-blessed.
  */
 
-import { Door, getTerminalDimensions } from '@amiexpress/bbs-door-sdk';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import { CoreDoor as Door, getTerminalDimensions } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext } from '@amiexpress/bbs-door-sdk';
+import * as blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import * as contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
 
-export default class NeoBlessedShowcaseDoor extends Door {
-  private screen!: blessed.Widgets.Screen;
+class NeoBlessedShowcaseDoor {
+  private context!: DoorContext;
+  private screen!: any;
   private carousel!: any;
   private currentPage = 0;
   private totalPages = 10;
   private animationInterval: NodeJS.Timeout | null = null;
 
-  async onStart() {
+  setContext(context: DoorContext): void {
+    this.context = context;
+  }
+
+  async start() {
     // Get BBS terminal dimensions
     const dims = getTerminalDimensions(this.context);
 
@@ -1839,3 +1845,32 @@ Press {cyan-fg}ESC{/cyan-fg} to close menu
     this.context.output.writeLine(`\nError in showcase door: ${error.message}`);
   }
 }
+
+// SDK v2.0 Pattern
+const door = new Door({
+  name: 'Neo-Blessed Showcase',
+  version: '2.0.0',
+  author: 'AmiExpress SDK v2.0',
+});
+
+let showcase: NeoBlessedShowcaseDoor;
+
+door.onStart(async (ctx) => {
+  showcase = new NeoBlessedShowcaseDoor();
+  showcase.setContext(ctx);
+  await showcase.start();
+});
+
+door.onClose(async (ctx) => {
+  if (showcase) {
+    await showcase.onClose();
+  }
+});
+
+door.onError(async (ctx, error) => {
+  if (showcase) {
+    await showcase.onError(error);
+  }
+});
+
+export default door;

@@ -110,30 +110,62 @@ class FireEmblemGame {
         this.ctx = ctx;
     }
     async start() {
-        // Show title
-        this.ctx.output.write('\x1b[2J\x1b[H');
-        this.ctx.output.write('\x1b[36m');
-        this.ctx.output.write('  ╔══════════════════════════════════════╗\r\n');
-        this.ctx.output.write('  ║  FIRE EMBLEM: EMBLEM OF VALOR v2.0  ║\r\n');
-        this.ctx.output.write('  ╚══════════════════════════════════════╝\r\n');
-        this.ctx.output.write('\x1b[0m\r\n');
-        this.ctx.output.write('  A tactical RPG for AmiExpress BBS\r\n\r\n');
-        this.ctx.output.write('  Chapter 1: Bandit Raid\r\n\r\n');
-        this.ctx.output.write('  Bandits are attacking the village!\r\n');
-        this.ctx.output.write('  Defeat all enemies to protect the people.\r\n\r\n');
-        this.ctx.output.write('\x1b[90m  Press SPACE to start or Q to quit\x1b[0m\r\n');
-        // Wait for input to start
-        const key = await this.waitForKey();
-        if (key === 'q' || key === 'Q') {
-            this.ctx.close();
-            return;
-        }
-        // Initialize game state
+        // Initialize game state first
         this.initializeChapter();
         // Create neo-blessed UI
         this.createUI();
+        // Show intro screen
+        this.showIntro();
         // Start game
         this.render();
+        // Wait for game to complete
+        await new Promise((resolve) => {
+            this.screen.on('destroy', () => resolve());
+        });
+    }
+    showIntro() {
+        // Create intro overlay
+        const intro = new blessed_1.Box({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 15,
+            content: `
+{center}{cyan-fg}╔══════════════════════════════════════╗{/cyan-fg}{/center}
+{center}{cyan-fg}║  FIRE EMBLEM: EMBLEM OF VALOR v2.0  ║{/cyan-fg}{/center}
+{center}{cyan-fg}╚══════════════════════════════════════╝{/cyan-fg}{/center}
+
+{center}A tactical RPG for AmiExpress BBS{/center}
+
+{center}{bold}Chapter 1: Bandit Raid{/bold}{/center}
+
+{center}Bandits are attacking the village!{/center}
+{center}Defeat all enemies to protect the people.{/center}
+
+{center}{gray-fg}Press SPACE to start or Q to quit{/gray-fg}{/center}
+`,
+            tags: true,
+            border: { type: 'line' },
+            style: {
+                border: { fg: 'cyan' }
+            }
+        });
+        // Handle intro key press
+        const introHandler = (_ch, key) => {
+            if (key.name === 'space') {
+                intro.destroy();
+                this.screen.unkey(['space', 'q'], introHandler);
+                this.screen.render();
+            }
+            else if (key.name === 'q') {
+                this.cleanup();
+                this.ctx.close();
+            }
+        };
+        this.screen.key(['space', 'q'], introHandler);
+        intro.focus();
+        this.screen.render();
     }
     initializeChapter() {
         // Place player units
@@ -371,9 +403,6 @@ class FireEmblemGame {
         if (this.screen) {
             this.screen.destroy();
         }
-    }
-    async waitForKey() {
-        return await this.ctx.input.getChar();
     }
 }
 // ===== SDK v2.0 Pattern =====
