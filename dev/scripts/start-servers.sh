@@ -90,8 +90,27 @@ mkdir -p "$LOGS_DIR"
 cleanup_logs_dir() {
   local retention_days=${LOG_RETENTION_DAYS:-7}
   local max_files=${LOG_MAX_FILES:-250}
+  local max_door_logs=${LOG_MAX_DOOR_LOGS:-20}  # Keep only 20 recent door logs
 
   printf "%b\n" "${CYAN}→ Cleaning up old logs (retain ${retention_days}d, max ${max_files} files)...${RESET}"
+
+  # Delete huge consolidated door log if it exists (prevents 800MB+ files)
+  if [ -f "$LOGS_DIR/door-68k.log" ]; then
+    local log_size
+    log_size=$(du -m "$LOGS_DIR/door-68k.log" 2>/dev/null | cut -f1)
+    if [ -n "$log_size" ] && [ "$log_size" -gt 100 ]; then
+      printf "%b\n" "${YELLOW}   [CLEANUP] Removing large door-68k.log (${log_size}MB)${RESET}"
+      rm -f "$LOGS_DIR/door-68k.log"
+    fi
+  fi
+
+  # Keep only recent door logs (prevent accumulation of hundreds of logs)
+  local door_log_count
+  door_log_count=$(ls -1 "$LOGS_DIR"/door-68k-*.log 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$door_log_count" -gt "$max_door_logs" ]; then
+    printf "%b\n" "${YELLOW}   [CLEANUP] Keeping ${max_door_logs} most recent door logs (deleting $(expr $door_log_count - $max_door_logs) old)${RESET}"
+    ls -t "$LOGS_DIR"/door-68k-*.log 2>/dev/null | tail -n +$(expr $max_door_logs + 1) | xargs rm -f 2>/dev/null
+  fi
 
   # Remove stale logs older than retention window
   find "$LOGS_DIR" -maxdepth 1 -type f -name "*.log" -mtime +"$retention_days" -print -delete 2>/dev/null

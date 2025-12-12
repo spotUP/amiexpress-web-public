@@ -1,18 +1,20 @@
 {
   "name": "arkanoid",
-  "version": "1.0.0",
-  "description": "Classic Arkanoid/Breakout game for BBS terminals with ANSI graphics",
+  "version": "2.0.0",
+  "description": "Classic Arkanoid/Breakout game for BBS terminals with ANSI graphics - SDK v2.0",
   "main": "index.ts",
   "bbsCommand": "ARKANOID",
   "doorType": "TS",
   "runtime": "server",
-  "doorPattern": "runDoor",
   "accessLevel": 0,
-  "author": "AmiExpress-Web",
-  "keywords": ["bbs", "door", "game", "arkanoid", "breakout", "arcade"],
+  "author": "SDK v2.0 Team",
+  "keywords": ["bbs", "door", "game", "arkanoid", "breakout", "arcade", "sdk-v2"],
   "scripts": {
     "build": "tsc",
     "start": "npx tsx index.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

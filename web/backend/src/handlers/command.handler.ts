@@ -7,8 +7,10 @@
 
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { EnvStat } from '../constants/env-codes';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { setEnvStat } from '../utils/acs.util';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -1013,6 +1015,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
           // Initialize security and track stats
           initializeSecurity(session);
+          setEnvStat(session, EnvStat.IDLE);
           try {
             const { systemStats } = await import('../services/SystemStatsService');
             await systemStats.incrementCalls(user.id);

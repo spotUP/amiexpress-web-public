@@ -16,6 +16,8 @@
  * - Q: Quit to menu
  */
 
+import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -430,29 +432,46 @@ const POWERUP_COLORS: Record<PowerUpType, { fg: string; bg: string; char: string
 
 class AudioSystem {
   private enabled: boolean = true;
+  private ctx!: DoorContext;
 
-  playBounce(): string {
-    return this.enabled ? '\x07' : ''; // Terminal bell
+  setContext(ctx: DoorContext): void {
+    this.ctx = ctx;
   }
 
-  playBrickHit(): string {
-    return this.enabled ? '\x07' : '';
+  playBounce(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07');
+    }
   }
 
-  playPowerUp(): string {
-    return this.enabled ? '\x07\x07' : ''; // Double beep
+  playBrickHit(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07');
+    }
   }
 
-  playLifeLost(): string {
-    return this.enabled ? '\x07\x07\x07' : ''; // Triple beep
+  playPowerUp(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07\x07'); // Double beep
+    }
   }
 
-  playLevelComplete(): string {
-    return this.enabled ? '\x07\x07\x07\x07' : '';
+  playLifeLost(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07\x07\x07'); // Triple beep
+    }
   }
 
-  playGameOver(): string {
-    return this.enabled ? '\x07\x07\x07\x07\x07' : '';
+  playLevelComplete(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07\x07\x07\x07');
+    }
+  }
+
+  playGameOver(): void {
+    if (this.enabled) {
+      this.ctx.output.write('\x07\x07\x07\x07\x07');
+    }
   }
 
   toggle(): void {
@@ -508,27 +527,27 @@ class ArkanoidGame {
   private data: GameData;
   private renderer: Renderer;
   private audio: AudioSystem;
-  private socket: any;
-  private bbsSession: any;
-  private user: any;
+  private ctx!: DoorContext;
   private gameLoop: NodeJS.Timeout | null = null;
   private lastUpdate: number = 0;
   private highscorePath: string;
   private keysPressed: Set<string> = new Set();
   private keyTimestamps: Map<string, number> = new Map();
-  private isQuitting: boolean = false;
-  private readonly KEY_TIMEOUT_MS = 200; // Auto-clear keys after 200ms without repeat
+  private readonly KEY_TIMEOUT_MS = 600; // Auto-clear keys after 600ms (accounts for keyboard repeat delay)
 
-  constructor(doorSession: any) {
-    this.socket = doorSession.socket;
-    this.bbsSession = doorSession.bbsSession;
-    this.user = doorSession.user;
+  constructor() {
     this.renderer = new Renderer();
     this.audio = new AudioSystem();
     this.highscorePath = path.join(__dirname, 'highscores.json');
-
     this.data = this.createInitialGameData();
     this.loadHighscores();
+  }
+
+  setContext(ctx: DoorContext): void {
+    this.ctx = ctx;
+    this.audio.setContext(ctx);
+    // Update player name from user
+    this.data.playerName = ctx.user.username?.substring(0, 10) || 'PLAYER';
   }
 
   private createInitialGameData(): GameData {
@@ -544,7 +563,7 @@ class ArkanoidGame {
       powerUps: [],
       highscores: [],
       menuSelection: 0,
-      playerName: this.user?.username?.substring(0, 10) || 'PLAYER',
+      playerName: 'PLAYER',
       startTime: 0,
       shineTimer: 0,
       comboCount: 0,
@@ -713,8 +732,7 @@ class ArkanoidGame {
     }
   }
 
-  private updateBalls(deltaTime: number): string {
-    let output = '';
+  private updateBalls(deltaTime: number): void {
     const paddle = this.data.paddle;
 
     for (let i = this.data.balls.length - 1; i >= 0; i--) {
@@ -737,17 +755,17 @@ class ArkanoidGame {
       if (ball.x <= GAME_LEFT) {
         ball.x = GAME_LEFT + 1;
         ball.vx = Math.abs(ball.vx);
-        output += this.audio.playBounce();
+        this.audio.playBounce();
       }
       if (ball.x >= GAME_RIGHT) {
         ball.x = GAME_RIGHT - 1;
         ball.vx = -Math.abs(ball.vx);
-        output += this.audio.playBounce();
+        this.audio.playBounce();
       }
       if (ball.y <= GAME_TOP) {
         ball.y = GAME_TOP + 1;
         ball.vy = Math.abs(ball.vy);
-        output += this.audio.playBounce();
+        this.audio.playBounce();
       }
 
       // Paddle collision
@@ -768,7 +786,7 @@ class ArkanoidGame {
           paddle.sticky = false;
         }
 
-        output += this.audio.playBounce();
+        this.audio.playBounce();
         this.data.comboCount = 0;
       }
 
@@ -807,7 +825,7 @@ class ArkanoidGame {
             }
           }
 
-          output += this.audio.playBrickHit();
+          this.audio.playBrickHit();
           break;
         }
       }
@@ -818,12 +836,10 @@ class ArkanoidGame {
           this.data.balls.splice(i, 1);
         } else {
           this.loseLife();
-          output += this.audio.playLifeLost();
+          this.audio.playLifeLost();
         }
       }
     }
-
-    return output;
   }
 
   private spawnPowerUp(x: number, y: number, type: PowerUpType): void {
@@ -838,8 +854,7 @@ class ArkanoidGame {
     });
   }
 
-  private updatePowerUps(): string {
-    let output = '';
+  private updatePowerUps(): void {
     const paddle = this.data.paddle;
 
     for (let i = this.data.powerUps.length - 1; i >= 0; i--) {
@@ -854,7 +869,7 @@ class ArkanoidGame {
 
         this.applyPowerUp(pu.type);
         pu.active = false;
-        output += this.audio.playPowerUp();
+        this.audio.playPowerUp();
       }
 
       // Remove if off screen
@@ -865,8 +880,6 @@ class ArkanoidGame {
 
     // Clean up inactive power-ups
     this.data.powerUps = this.data.powerUps.filter(p => p.active);
-
-    return output;
   }
 
   private applyPowerUp(type: PowerUpType): void {
@@ -972,31 +985,38 @@ class ArkanoidGame {
   // Rendering
   // =============================================================================
 
-  private render(): string {
+  render(): void {
     this.renderer.clear();
 
     switch (this.data.state) {
       case 'menu':
-        return this.renderMenu();
+        this.renderMenu();
+        break;
       case 'playing':
       case 'paused':
-        return this.renderGame();
+        this.renderGame();
+        break;
       case 'gameover':
-        return this.renderGameOver();
+        this.renderGameOver();
+        break;
       case 'victory':
-        return this.renderVictory();
+        this.renderVictory();
+        break;
       case 'highscores':
-        return this.renderHighscores();
+        this.renderHighscores();
+        break;
       case 'enterName':
-        return this.renderEnterName();
+        this.renderEnterName();
+        break;
       case 'help':
-        return this.renderHelp();
+        this.renderHelp();
+        break;
     }
 
-    return '';
+    this.ctx.output.write(this.renderer.flush());
   }
 
-  private renderMenu(): string {
+  private renderMenu(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     // Title
@@ -1047,11 +1067,9 @@ class ArkanoidGame {
     // Instructions
     this.renderer.drawText(20, 18, 'Use UP/DOWN to select, ENTER to confirm', ANSI.fg.brightBlack);
     this.renderer.drawText(30, 20, 'Classic Arcade Action!', ANSI.fg.cyan);
-
-    return this.renderer.flush();
   }
 
-  private renderGame(): string {
+  private renderGame(): void {
     this.renderer.add(ANSI.hide);
 
     // Clear game area
@@ -1138,11 +1156,9 @@ class ArkanoidGame {
     if (this.data.balls.some(b => !b.active)) {
       this.renderer.drawText(28, GAME_BOTTOM, 'Press SPACE to launch ball', ANSI.fg.brightBlack);
     }
-
-    return this.renderer.flush();
   }
 
-  private renderGameOver(): string {
+  private renderGameOver(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     this.renderer.drawText(33, 8, '  GAME OVER  ', ANSI.fg.white, ANSI.bg.red);
@@ -1154,11 +1170,9 @@ class ArkanoidGame {
     } else {
       this.renderer.drawText(30, 15, 'Press ENTER for menu', ANSI.fg.white);
     }
-
-    return this.renderer.flush();
   }
 
-  private renderVictory(): string {
+  private renderVictory(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     this.renderer.drawText(32, 7, '  VICTORY!  ', ANSI.fg.black, ANSI.bg.brightGreen);
@@ -1176,11 +1190,9 @@ class ArkanoidGame {
     } else {
       this.renderer.drawText(30, 17, 'Press ENTER for menu', ANSI.fg.white);
     }
-
-    return this.renderer.flush();
   }
 
-  private renderHighscores(): string {
+  private renderHighscores(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     this.renderer.drawText(32, 2, '  HIGH SCORES  ', ANSI.fg.black, ANSI.bg.yellow);
@@ -1207,11 +1219,9 @@ class ArkanoidGame {
     }
 
     this.renderer.drawText(30, 20, 'Press any key to return', ANSI.fg.white);
-
-    return this.renderer.flush();
   }
 
-  private renderEnterName(): string {
+  private renderEnterName(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     this.renderer.drawText(30, 8, '  NEW HIGH SCORE!  ', ANSI.fg.black, ANSI.bg.brightGreen);
@@ -1219,11 +1229,9 @@ class ArkanoidGame {
     this.renderer.drawText(28, 14, 'Enter your name:', ANSI.fg.white);
     this.renderer.drawText(28, 16, `> ${this.data.playerName}_`, ANSI.fg.brightCyan, ANSI.bg.blue);
     this.renderer.drawText(25, 19, 'Press ENTER when done (max 10 chars)', ANSI.fg.brightBlack);
-
-    return this.renderer.flush();
   }
 
-  private renderHelp(): string {
+  private renderHelp(): void {
     this.renderer.add(ANSI.clear + ANSI.home + ANSI.hide);
 
     this.renderer.drawText(32, 2, '  HOW TO PLAY  ', ANSI.fg.black, ANSI.bg.cyan);
@@ -1232,9 +1240,7 @@ class ArkanoidGame {
       '',
       '  CONTROLS:',
       '  ---------',
-      '  MOUSE             - Move paddle (hover)',
-      '  CLICK             - Launch ball',
-      '  LEFT/RIGHT or A/D - Move paddle (keyboard)',
+      '  LEFT/RIGHT or A/D - Move paddle',
       '  SPACE             - Launch ball / Pause',
       '  Q                 - Quit to menu',
       '',
@@ -1253,8 +1259,6 @@ class ArkanoidGame {
     }
 
     this.renderer.drawText(30, 23, 'Press any key to return', ANSI.fg.brightBlack);
-
-    return this.renderer.flush();
   }
 
   // =============================================================================
@@ -1284,9 +1288,8 @@ class ArkanoidGame {
     return keyMap[key] || key.toLowerCase();
   }
 
-  private handleInput(key: string): void {
+  handleInput(key: string): void {
     const k = this.translateKey(key);
-    console.log('[Arkanoid] Key input:', JSON.stringify(key), '→', k, 'state:', this.data.state);
 
     switch (this.data.state) {
       case 'menu':
@@ -1320,6 +1323,11 @@ class ArkanoidGame {
         this.handleNameInput(key);
         break;
     }
+
+    // Immediate render for menu/non-game states
+    if (this.data.state !== 'playing') {
+      this.render();
+    }
   }
 
   private handleMenuInput(k: string, key: string): void {
@@ -1330,7 +1338,6 @@ class ArkanoidGame {
     } else if (k === 'arrowdown' || k === 'down' || k === 's') {
       this.data.menuSelection = (this.data.menuSelection + 1) % (maxOptions + 1);
     } else if (k === 'q') {
-      // Quick quit from menu with 'q' key
       this.quit();
     } else if (k === 'enter' || k === '\r' || k === '\n') {
       switch (this.data.menuSelection) {
@@ -1395,66 +1402,13 @@ class ArkanoidGame {
     }
   }
 
-  private handleMouseInput(event: { type: string; x: number; y: number; button?: number }): void {
-    // Mouse events: mouse-hover, mouse-click, mouse-drag, mouse-up
-    // x and y are 1-indexed terminal coordinates
-    console.log('[Arkanoid] Mouse event:', event.type, 'x:', event.x, 'y:', event.y, 'state:', this.data.state);
-
-    if (this.data.state === 'playing') {
-      // Map mouse X position to paddle position
-      // Mouse x is 1-indexed, game area is GAME_LEFT to GAME_RIGHT
-      const mouseX = event.x;
-      const paddle = this.data.paddle;
-      const paddleHalfWidth = paddle.width / 2;
-
-      // Center the paddle on the mouse position
-      let newPaddleX = mouseX - paddleHalfWidth;
-
-      // Clamp to game boundaries
-      newPaddleX = Math.max(GAME_LEFT, Math.min(GAME_RIGHT - paddle.width + 1, newPaddleX));
-
-      paddle.x = newPaddleX;
-
-      // Move attached ball with paddle
-      for (const ball of this.data.balls) {
-        if (!ball.active) {
-          ball.x = paddle.x + Math.floor(paddle.width / 2);
-        }
-      }
-
-      // Click to launch ball or shoot (if sticky paddle has ball)
-      if (event.type === 'mouse-click') {
-        if (this.data.balls.some(b => !b.active)) {
-          this.launchBall();
-        }
-      }
-    } else if (this.data.state === 'menu' && event.type === 'mouse-click') {
-      // Menu click handling - check Y position for menu items
-      const menuStartY = 10;
-      const clickY = event.y;
-
-      if (clickY >= menuStartY && clickY <= menuStartY + 4) {
-        const selection = clickY - menuStartY;
-        this.data.menuSelection = selection;
-
-        switch (selection) {
-          case 0: this.startGame(); break;
-          case 1: this.cycleDifficulty(); break;
-          case 2: this.data.state = 'highscores'; break;
-          case 3: this.data.state = 'help'; break;
-          case 4: this.quit(); break;
-        }
-      }
-    }
-  }
-
   private cycleDifficulty(): void {
     const difficulties: Difficulty[] = ['easy', 'normal', 'hard'];
     const idx = difficulties.indexOf(this.data.difficulty);
     this.data.difficulty = difficulties[(idx + 1) % difficulties.length];
   }
 
-  private startGame(): void {
+  startGame(): void {
     this.data.score = 0;
     this.data.lives = INITIAL_LIVES;
     this.data.startTime = Date.now();
@@ -1463,36 +1417,18 @@ class ArkanoidGame {
   }
 
   private quit(): void {
-    // Set quitting flag to prevent further rendering
-    this.isQuitting = true;
-
-    // Stop game loop FIRST to prevent race conditions
+    // Stop game loop
     this.cleanup();
-
-    // Show cursor and reset colors after cleanup
-    this.socket.emit('ansi-output', ANSI.show + ANSI.reset);
-    this.socket.emit('ansi-output', ANSI.clear + ANSI.home);
-    this.socket.emit('ansi-output', '\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
-
-    // Emit door-exit last
-    this.socket.emit('door-exit');
+    // Close the door
+    this.ctx.close();
   }
 
-  private cleanup(): void {
-    // Set quitting flag immediately
-    this.isQuitting = true;
-
+  cleanup(): void {
     // Stop game loop first
     if (this.gameLoop) {
       clearInterval(this.gameLoop);
       this.gameLoop = null;
     }
-
-    // Disable mouse events
-    this.bbsSession.mouseEventsEnabled = false;
-
-    // Clear input handler
-    this.bbsSession.doorInputHandler = null;
 
     // Clear key tracking
     this.keysPressed.clear();
@@ -1503,48 +1439,12 @@ class ArkanoidGame {
   // Game Loop
   // =============================================================================
 
-  async run(): Promise<void> {
-    // Enable mouse events for paddle control
-    this.bbsSession.mouseEventsEnabled = true;
-
-    const inputHandler = (data: any) => {
-      // Check if this is a mouse event (JSON string)
-      if (typeof data === 'string' && data.startsWith('{')) {
-        try {
-          const mouseEvent = JSON.parse(data);
-          this.handleMouseInput(mouseEvent);
-          return;
-        } catch (e) {
-          // Not a mouse event, continue with keyboard handling
-        }
-      }
-
-      // Data can be either a string (direct key) or an object with key property
-      const key = typeof data === 'string' ? data : (data?.key || '');
-      this.handleInput(key);
-
-      // Immediate render for menu/non-game states
-      if (this.data.state !== 'playing') {
-        this.socket.emit('ansi-output', this.render());
-      }
-    };
-
-    this.bbsSession.doorInputHandler = inputHandler;
-
-    // Initial render
-    this.socket.emit('ansi-output', this.render());
-
+  startGameLoop(): void {
     // Game loop
     const FPS = 30;
     const frameTime = 1000 / FPS;
 
     this.gameLoop = setInterval(() => {
-      // Safety check: stop if quitting
-      if (this.isQuitting) {
-        this.cleanup();
-        return;
-      }
-
       if (this.data.state === 'playing') {
         const now = Date.now();
         const deltaTime = (now - this.lastUpdate) / 1000;
@@ -1567,41 +1467,66 @@ class ArkanoidGame {
         }
 
         // Update game state
-        let output = this.updateBalls(deltaTime);
-        output += this.updatePowerUps();
+        this.updateBalls(deltaTime);
+        this.updatePowerUps();
         this.updateShineEffect();
 
         // Check level complete
         if (this.checkLevelComplete()) {
-          output += this.audio.playLevelComplete();
+          this.audio.playLevelComplete();
           this.nextLevel();
         }
 
-        // Render (with safety check)
-        if (!this.isQuitting) {
-          this.socket.emit('ansi-output', output + this.render());
-        }
+        // Render
+        this.render();
       }
     }, frameTime);
-
-    // Wait for game to end
-    await new Promise<void>((resolve) => {
-      const closeHandler = () => {
-        this.cleanup();
-        resolve();
-      };
-
-      this.socket.once('door:close', closeHandler);
-      this.socket.once('disconnect', closeHandler);
-    });
   }
 }
 
 // =============================================================================
-// Door Entry Point
+// SDK v2.0 Door Entry Point
 // =============================================================================
 
-export async function runDoor(doorSession: any): Promise<void> {
-  const game = new ArkanoidGame(doorSession);
-  await game.run();
-}
+const door = new Door({
+  name: 'Arkanoid',
+  version: '2.0.0',
+  author: 'SDK v2.0 Team',
+  description: 'Classic Arkanoid/Breakout game',
+});
+
+let game: ArkanoidGame;
+
+door.onStart(async (ctx) => {
+  game = new ArkanoidGame();
+  game.setContext(ctx);
+
+  // Hide cursor
+  await ctx.output.write(ANSI.hide);
+
+  // Initial render
+  game.render();
+
+  // Start game loop
+  game.startGameLoop();
+});
+
+door.onInput(async (ctx, keyPress) => {
+  game.handleInput(keyPress.key);
+});
+
+door.onClose(async (ctx) => {
+  // Cleanup
+  game.cleanup();
+
+  // Show cursor and reset
+  await ctx.output.write(ANSI.show + ANSI.reset);
+  await ctx.output.write(ANSI.clear + ANSI.home);
+  await ctx.output.writeLine('\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
+});
+
+door.onError(async (ctx, error) => {
+  await ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+});
+
+export default door;

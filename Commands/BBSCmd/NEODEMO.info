@@ -1,0 +1,6 @@
+CMDNAME=NEODEMO
+CMDCODE=NEODEMO
+LOCATION=doors/neo-blessed-demo
+TYPE=TS
+SECLEVEL=0
+DESCRIPTION=Neo-Blessed UI demonstration - comprehensive widget showcase

@@ -1,0 +1,16 @@
+{
+  "name": "tic-tac-toe",
+  "version": "2.0.0",
+  "description": "Tic-Tac-Toe game using SDK v2.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "neo-blessed-demo",
+  "version": "1.0.0",
+  "description": "Comprehensive demonstration of neo-blessed UI capabilities",
+  "main": "index.ts",
+  "bbsCommand": "NEODEMO",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "ui",
+    "neo-blessed",
+    "demo"
+  ],
+  "author": "AmiExpress SDK",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "runtime": "server"
+}

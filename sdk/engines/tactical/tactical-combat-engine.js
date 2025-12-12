@@ -31,9 +31,44 @@
  * const targets = combat.getAttackTargets(unit);
  * ```
  */
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TacticalCombatEngine = exports.UnitClass = exports.WeaponRank = exports.WeaponType = exports.TerrainType = void 0;
-const events_1 = require("events");
+var events_1 = require("events");
 /**
  * Terrain types
  */
@@ -96,30 +131,32 @@ var UnitClass;
 /**
  * Tactical Combat Engine
  */
-class TacticalCombatEngine extends events_1.EventEmitter {
-    constructor(config) {
-        super();
-        this.units = new Map();
-        this.terrain = new Map();
-        this.currentPhase = 'player';
-        this.turnNumber = 1;
-        this.fogOfWar = false;
-        this.visionRange = 5;
+var TacticalCombatEngine = /** @class */ (function (_super) {
+    __extends(TacticalCombatEngine, _super);
+    function TacticalCombatEngine(config) {
+        var _this = _super.call(this) || this;
+        _this.units = new Map();
+        _this.terrain = new Map();
+        _this.currentPhase = 'player';
+        _this.turnNumber = 1;
+        _this.fogOfWar = false;
+        _this.visionRange = 5;
         // Weapon triangle advantages
-        this.weaponTriangle = new Map([
+        _this.weaponTriangle = new Map([
             [WeaponType.Sword, WeaponType.Axe],
             [WeaponType.Axe, WeaponType.Lance],
             [WeaponType.Lance, WeaponType.Sword]
         ]);
-        this.gridWidth = config.gridWidth;
-        this.gridHeight = config.gridHeight;
-        this.fogOfWar = config.fogOfWar || false;
-        this.initializeTerrainTypes();
+        _this.gridWidth = config.gridWidth;
+        _this.gridHeight = config.gridHeight;
+        _this.fogOfWar = config.fogOfWar || false;
+        _this.initializeTerrainTypes();
+        return _this;
     }
     /**
      * Initialize terrain types
      */
-    initializeTerrainTypes() {
+    TacticalCombatEngine.prototype.initializeTerrainTypes = function () {
         this.terrain.set('plains', {
             type: 'plains',
             defenseBonus: 0,
@@ -155,21 +192,18 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             movementCost: 1,
             healing: 10
         });
-    }
+    };
     /**
      * Create tactical unit
      */
-    createUnit(config) {
-        const unit = {
+    TacticalCombatEngine.prototype.createUnit = function (config) {
+        var unit = {
             id: config.id,
             name: config.name,
             class: config.class,
             level: config.level,
             exp: 0,
-            stats: {
-                ...config.stats,
-                maxHp: config.stats.hp
-            },
+            stats: __assign(__assign({}, config.stats), { maxHp: config.stats.hp }),
             growthRates: config.growthRates,
             position: config.position,
             team: config.team,
@@ -184,19 +218,19 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         this.units.set(unit.id, unit);
         this.emit('unit-created', unit);
         return unit;
-    }
+    };
     /**
      * Get movement range for unit
      */
-    getMovementRange(unit, terrainMap) {
-        const range = [];
-        const visited = new Set();
-        const queue = [
+    TacticalCombatEngine.prototype.getMovementRange = function (unit, terrainMap) {
+        var range = [];
+        var visited = new Set();
+        var queue = [
             { pos: unit.position, remaining: unit.stats.mov }
         ];
         while (queue.length > 0) {
-            const { pos, remaining } = queue.shift();
-            const key = `${pos.x},${pos.y}`;
+            var _a = queue.shift(), pos = _a.pos, remaining = _a.remaining;
+            var key = "".concat(pos.x, ",").concat(pos.y);
             if (visited.has(key))
                 continue;
             visited.add(key);
@@ -205,16 +239,16 @@ class TacticalCombatEngine extends events_1.EventEmitter {
                 continue;
             }
             // Check if another unit is blocking (can't move through enemies)
-            const blockingUnit = this.getUnitAtPosition(pos);
+            var blockingUnit = this.getUnitAtPosition(pos);
             if (blockingUnit && blockingUnit.id !== unit.id && blockingUnit.team !== unit.team) {
                 continue;
             }
             range.push(pos);
             if (remaining > 0) {
                 // Add adjacent tiles
-                const terrainKey = terrainMap?.get(key) || 'plains';
-                const terrain = this.terrain.get(terrainKey);
-                const cost = terrain.movementCost;
+                var terrainKey = (terrainMap === null || terrainMap === void 0 ? void 0 : terrainMap.get(key)) || 'plains';
+                var terrain = this.terrain.get(terrainKey);
+                var cost = terrain.movementCost;
                 if (remaining >= cost) {
                     queue.push({ pos: { x: pos.x + 1, y: pos.y }, remaining: remaining - cost });
                     queue.push({ pos: { x: pos.x - 1, y: pos.y }, remaining: remaining - cost });
@@ -224,60 +258,62 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             }
         }
         return range;
-    }
+    };
     /**
      * Get attack targets in range
      */
-    getAttackTargets(unit) {
+    TacticalCombatEngine.prototype.getAttackTargets = function (unit) {
         if (!unit.weapon)
             return [];
-        const [minRange, maxRange] = unit.weapon.range;
-        const targets = [];
-        for (const target of this.units.values()) {
+        var _a = unit.weapon.range, minRange = _a[0], maxRange = _a[1];
+        var targets = [];
+        for (var _i = 0, _b = this.units.values(); _i < _b.length; _i++) {
+            var target = _b[_i];
             if (target.team === unit.team)
                 continue;
-            const distance = this.getDistance(unit.position, target.position);
+            var distance = this.getDistance(unit.position, target.position);
             if (distance >= minRange && distance <= maxRange) {
                 targets.push(target);
             }
         }
         return targets;
-    }
+    };
     /**
      * Calculate battle forecast
      */
-    getBattleForecast(attacker, defender) {
+    TacticalCombatEngine.prototype.getBattleForecast = function (attacker, defender) {
+        var _a;
         if (!attacker.weapon)
             throw new Error('Attacker has no weapon');
         // Calculate weapon triangle
-        const triangle = this.getWeaponTriangle(attacker.weapon.type, defender.weapon?.type);
+        var triangle = this.getWeaponTriangle(attacker.weapon.type, (_a = defender.weapon) === null || _a === void 0 ? void 0 : _a.type);
         // Calculate hit rates
-        const attackerHit = this.calculateHitRate(attacker, defender, triangle === 'advantage');
-        const defenderHit = defender.weapon
+        var attackerHit = this.calculateHitRate(attacker, defender, triangle === 'advantage');
+        var defenderHit = defender.weapon
             ? this.calculateHitRate(defender, attacker, triangle === 'disadvantage')
             : 0;
         // Calculate damage
-        const attackerDamage = this.calculateDamage(attacker, defender, triangle === 'advantage');
-        const defenderDamage = defender.weapon
+        var attackerDamage = this.calculateDamage(attacker, defender, triangle === 'advantage');
+        var defenderDamage = defender.weapon
             ? this.calculateDamage(defender, attacker, triangle === 'disadvantage')
             : 0;
         // Calculate crit rates
-        const attackerCrit = this.calculateCritRate(attacker, defender);
-        const defenderCrit = defender.weapon ? this.calculateCritRate(defender, attacker) : 0;
+        var attackerCrit = this.calculateCritRate(attacker, defender);
+        var defenderCrit = defender.weapon ? this.calculateCritRate(defender, attacker) : 0;
         // Check for double attacks (speed difference >= 4)
-        const attackerSpeed = attacker.stats.spd - (attacker.weapon.weight - attacker.stats.str);
-        const defenderSpeed = defender.weapon
+        var attackerSpeed = attacker.stats.spd - (attacker.weapon.weight - attacker.stats.str);
+        var defenderSpeed = defender.weapon
             ? defender.stats.spd - (defender.weapon.weight - defender.stats.str)
             : defender.stats.spd;
-        const attackerDoubles = attackerSpeed - defenderSpeed >= 4;
-        const defenderDoubles = defenderSpeed - attackerSpeed >= 4;
+        var attackerDoubles = attackerSpeed - defenderSpeed >= 4;
+        var defenderDoubles = defenderSpeed - attackerSpeed >= 4;
         // Check if defender can counter
-        const distance = this.getDistance(attacker.position, defender.position);
-        const canCounter = defender.weapon
+        var distance = this.getDistance(attacker.position, defender.position);
+        var canCounter = defender.weapon
             ? distance >= defender.weapon.range[0] && distance <= defender.weapon.range[1]
             : false;
         // Break system (weapon advantage prevents counter)
-        const willBreak = triangle === 'advantage';
+        var willBreak = triangle === 'advantage';
         return {
             attacker: {
                 unit: attacker,
@@ -295,15 +331,15 @@ class TacticalCombatEngine extends events_1.EventEmitter {
                 canCounter: canCounter && !willBreak
             },
             weaponTriangle: triangle,
-            willBreak
+            willBreak: willBreak
         };
-    }
+    };
     /**
      * Execute combat between two units
      */
-    executeCombat(attacker, defender) {
-        const forecast = this.getBattleForecast(attacker, defender);
-        const result = {
+    TacticalCombatEngine.prototype.executeCombat = function (attacker, defender) {
+        var forecast = this.getBattleForecast(attacker, defender);
+        var result = {
             attackerDamage: [],
             defenderDamage: [],
             attackerCrits: [],
@@ -315,12 +351,12 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             expGained: 0
         };
         // Attacker's first strike
-        const attackerHit1 = Math.random() * 100 < forecast.attacker.hit;
-        const attackerCrit1 = Math.random() * 100 < forecast.attacker.crit;
+        var attackerHit1 = Math.random() * 100 < forecast.attacker.hit;
+        var attackerCrit1 = Math.random() * 100 < forecast.attacker.crit;
         result.attackerHits.push(attackerHit1);
         result.attackerCrits.push(attackerCrit1);
         if (attackerHit1) {
-            const damage = attackerCrit1 ? forecast.attacker.damage * 3 : forecast.attacker.damage;
+            var damage = attackerCrit1 ? forecast.attacker.damage * 3 : forecast.attacker.damage;
             result.attackerDamage.push(damage);
             defender.stats.hp -= damage;
             if (defender.stats.hp <= 0) {
@@ -333,12 +369,12 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         }
         // Defender's counter (if able)
         if (forecast.defender.canCounter) {
-            const defenderHit1 = Math.random() * 100 < forecast.defender.hit;
-            const defenderCrit1 = Math.random() * 100 < forecast.defender.crit;
+            var defenderHit1 = Math.random() * 100 < forecast.defender.hit;
+            var defenderCrit1 = Math.random() * 100 < forecast.defender.crit;
             result.defenderHits.push(defenderHit1);
             result.defenderCrits.push(defenderCrit1);
             if (defenderHit1) {
-                const damage = defenderCrit1 ? forecast.defender.damage * 3 : forecast.defender.damage;
+                var damage = defenderCrit1 ? forecast.defender.damage * 3 : forecast.defender.damage;
                 result.defenderDamage.push(damage);
                 attacker.stats.hp -= damage;
                 if (attacker.stats.hp <= 0) {
@@ -351,12 +387,12 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         }
         // Attacker's double attack
         if (forecast.attacker.doubles && defender.stats.hp > 0) {
-            const attackerHit2 = Math.random() * 100 < forecast.attacker.hit;
-            const attackerCrit2 = Math.random() * 100 < forecast.attacker.crit;
+            var attackerHit2 = Math.random() * 100 < forecast.attacker.hit;
+            var attackerCrit2 = Math.random() * 100 < forecast.attacker.crit;
             result.attackerHits.push(attackerHit2);
             result.attackerCrits.push(attackerCrit2);
             if (attackerHit2) {
-                const damage = attackerCrit2 ? forecast.attacker.damage * 3 : forecast.attacker.damage;
+                var damage = attackerCrit2 ? forecast.attacker.damage * 3 : forecast.attacker.damage;
                 result.attackerDamage.push(damage);
                 defender.stats.hp -= damage;
                 if (defender.stats.hp <= 0) {
@@ -370,12 +406,12 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         }
         // Defender's double attack
         if (forecast.defender.doubles && forecast.defender.canCounter && attacker.stats.hp > 0) {
-            const defenderHit2 = Math.random() * 100 < forecast.defender.hit;
-            const defenderCrit2 = Math.random() * 100 < forecast.defender.crit;
+            var defenderHit2 = Math.random() * 100 < forecast.defender.hit;
+            var defenderCrit2 = Math.random() * 100 < forecast.defender.crit;
             result.defenderHits.push(defenderHit2);
             result.defenderCrits.push(defenderCrit2);
             if (defenderHit2) {
-                const damage = defenderCrit2 ? forecast.defender.damage * 3 : forecast.defender.damage;
+                var damage = defenderCrit2 ? forecast.defender.damage * 3 : forecast.defender.damage;
                 result.defenderDamage.push(damage);
                 attacker.stats.hp -= damage;
                 if (attacker.stats.hp <= 0) {
@@ -398,11 +434,11 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         }
         this.emit('combat-complete', result);
         return result;
-    }
+    };
     /**
      * Get weapon triangle relationship
      */
-    getWeaponTriangle(attackerType, defenderType) {
+    TacticalCombatEngine.prototype.getWeaponTriangle = function (attackerType, defenderType) {
         if (!defenderType)
             return 'neutral';
         // Check advantage
@@ -414,74 +450,74 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             return 'disadvantage';
         }
         return 'neutral';
-    }
+    };
     /**
      * Calculate hit rate
      */
-    calculateHitRate(attacker, defender, hasAdvantage) {
+    TacticalCombatEngine.prototype.calculateHitRate = function (attacker, defender, hasAdvantage) {
         if (!attacker.weapon)
             return 0;
-        const weaponHit = attacker.weapon.hit;
-        const attackerSkill = attacker.stats.skl * 2;
-        const attackerLuck = attacker.stats.lck;
-        const defenderSpeed = defender.stats.spd * 2;
-        const defenderLuck = defender.stats.lck;
-        const triangleBonus = hasAdvantage ? 15 : 0;
-        const hit = weaponHit + attackerSkill + attackerLuck + triangleBonus - (defenderSpeed + defenderLuck);
+        var weaponHit = attacker.weapon.hit;
+        var attackerSkill = attacker.stats.skl * 2;
+        var attackerLuck = attacker.stats.lck;
+        var defenderSpeed = defender.stats.spd * 2;
+        var defenderLuck = defender.stats.lck;
+        var triangleBonus = hasAdvantage ? 15 : 0;
+        var hit = weaponHit + attackerSkill + attackerLuck + triangleBonus - (defenderSpeed + defenderLuck);
         return Math.max(0, Math.min(100, hit));
-    }
+    };
     /**
      * Calculate damage
      */
-    calculateDamage(attacker, defender, hasAdvantage) {
+    TacticalCombatEngine.prototype.calculateDamage = function (attacker, defender, hasAdvantage) {
         if (!attacker.weapon)
             return 0;
-        const weaponMight = attacker.weapon.might;
-        const attackStat = attacker.weapon.type === WeaponType.Tome ? attacker.stats.mag : attacker.stats.str;
-        const defenseStat = attacker.weapon.type === WeaponType.Tome ? defender.stats.res : defender.stats.def;
-        const triangleBonus = hasAdvantage ? 1 : 0;
-        const damage = weaponMight + attackStat + triangleBonus - defenseStat;
+        var weaponMight = attacker.weapon.might;
+        var attackStat = attacker.weapon.type === WeaponType.Tome ? attacker.stats.mag : attacker.stats.str;
+        var defenseStat = attacker.weapon.type === WeaponType.Tome ? defender.stats.res : defender.stats.def;
+        var triangleBonus = hasAdvantage ? 1 : 0;
+        var damage = weaponMight + attackStat + triangleBonus - defenseStat;
         return Math.max(0, damage);
-    }
+    };
     /**
      * Calculate critical hit rate
      */
-    calculateCritRate(attacker, defender) {
+    TacticalCombatEngine.prototype.calculateCritRate = function (attacker, defender) {
         if (!attacker.weapon)
             return 0;
-        const weaponCrit = attacker.weapon.crit;
-        const attackerSkill = Math.floor(attacker.stats.skl / 2);
-        const defenderLuck = defender.stats.lck;
-        const crit = weaponCrit + attackerSkill - defenderLuck;
+        var weaponCrit = attacker.weapon.crit;
+        var attackerSkill = Math.floor(attacker.stats.skl / 2);
+        var defenderLuck = defender.stats.lck;
+        var crit = weaponCrit + attackerSkill - defenderLuck;
         return Math.max(0, Math.min(100, crit));
-    }
+    };
     /**
      * Calculate experience gained
      */
-    calculateExp(attacker, defender, killed) {
-        const levelDiff = defender.level - attacker.level;
-        let exp = 10 + levelDiff * 2;
+    TacticalCombatEngine.prototype.calculateExp = function (attacker, defender, killed) {
+        var levelDiff = defender.level - attacker.level;
+        var exp = 10 + levelDiff * 2;
         if (killed)
             exp += 30;
         return Math.max(1, Math.min(100, exp));
-    }
+    };
     /**
      * Grant experience to unit
      */
-    grantExp(unit, exp) {
+    TacticalCombatEngine.prototype.grantExp = function (unit, exp) {
         unit.exp += exp;
         if (unit.exp >= 100) {
             unit.exp -= 100;
             return this.levelUp(unit);
         }
         return false;
-    }
+    };
     /**
      * Level up unit
      */
-    levelUp(unit) {
+    TacticalCombatEngine.prototype.levelUp = function (unit) {
         unit.level++;
-        const gains = {};
+        var gains = {};
         // Roll for stat increases
         if (Math.random() * 100 < unit.growthRates.hp) {
             unit.stats.hp++;
@@ -518,44 +554,45 @@ class TacticalCombatEngine extends events_1.EventEmitter {
         }
         this.emit('level-up', unit, gains);
         return true;
-    }
+    };
     /**
      * Get distance between two positions
      */
-    getDistance(a, b) {
+    TacticalCombatEngine.prototype.getDistance = function (a, b) {
         return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-    }
+    };
     /**
      * Get unit at position
      */
-    getUnitAt(pos) {
-        for (const unit of this.units.values()) {
+    TacticalCombatEngine.prototype.getUnitAt = function (pos) {
+        for (var _i = 0, _a = this.units.values(); _i < _a.length; _i++) {
+            var unit = _a[_i];
             if (unit.position.x === pos.x && unit.position.y === pos.y) {
                 return unit;
             }
         }
         return null;
-    }
+    };
     /**
      * Get unit at position (alias for backward compatibility)
      */
-    getUnitAtPosition(pos) {
+    TacticalCombatEngine.prototype.getUnitAtPosition = function (pos) {
         return this.getUnitAt(pos);
-    }
+    };
     /**
      * Load a tactical map
      */
-    loadMap(map) {
+    TacticalCombatEngine.prototype.loadMap = function (map) {
         this.gridWidth = map.width;
         this.gridHeight = map.height;
         // Store terrain information if needed
         this.emit('map-loaded', map);
-    }
+    };
     /**
      * Move unit to new position
      */
-    moveUnit(unitId, position) {
-        const unit = this.units.get(unitId);
+    TacticalCombatEngine.prototype.moveUnit = function (unitId, position) {
+        var unit = this.units.get(unitId);
         if (!unit)
             return false;
         // Check if position is valid
@@ -563,23 +600,23 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             return false;
         }
         // Update position
-        unit.position = { ...position };
+        unit.position = __assign({}, position);
         unit.hasMoved = true;
         this.emit('unit-moved', unit, position);
         return true;
-    }
+    };
     /**
      * Find path between two positions (simple A* pathfinding)
      */
-    findPath(from, to) {
+    TacticalCombatEngine.prototype.findPath = function (from, to) {
         // Simple breadth-first search pathfinding
-        const queue = [
+        var queue = [
             { pos: from, path: [from] }
         ];
-        const visited = new Set();
+        var visited = new Set();
         while (queue.length > 0) {
-            const { pos, path } = queue.shift();
-            const key = `${pos.x},${pos.y}`;
+            var _a = queue.shift(), pos = _a.pos, path = _a.path;
+            var key = "".concat(pos.x, ",").concat(pos.y);
             if (visited.has(key))
                 continue;
             visited.add(key);
@@ -588,30 +625,32 @@ class TacticalCombatEngine extends events_1.EventEmitter {
                 return path;
             }
             // Add neighbors
-            const neighbors = [
+            var neighbors = [
                 { x: pos.x + 1, y: pos.y },
                 { x: pos.x - 1, y: pos.y },
                 { x: pos.x, y: pos.y + 1 },
                 { x: pos.x, y: pos.y - 1 }
             ];
-            for (const next of neighbors) {
+            for (var _i = 0, neighbors_1 = neighbors; _i < neighbors_1.length; _i++) {
+                var next = neighbors_1[_i];
                 if (next.x < 0 || next.x >= this.gridWidth || next.y < 0 || next.y >= this.gridHeight) {
                     continue;
                 }
-                const nextKey = `${next.x},${next.y}`;
+                var nextKey = "".concat(next.x, ",").concat(next.y);
                 if (!visited.has(nextKey)) {
-                    queue.push({ pos: next, path: [...path, next] });
+                    queue.push({ pos: next, path: __spreadArray(__spreadArray([], path, true), [next], false) });
                 }
             }
         }
         return null; // No path found
-    }
+    };
     /**
      * End current phase
      */
-    endPhase() {
+    TacticalCombatEngine.prototype.endPhase = function () {
         // Reset units for the phase that just ended
-        for (const unit of this.units.values()) {
+        for (var _i = 0, _a = this.units.values(); _i < _a.length; _i++) {
+            var unit = _a[_i];
             if (unit.team === this.currentPhase) {
                 unit.hasActed = false;
                 unit.hasMoved = false;
@@ -632,37 +671,38 @@ class TacticalCombatEngine extends events_1.EventEmitter {
             this.turnNumber++;
         }
         this.emit('phase-changed', this.currentPhase, this.turnNumber);
-    }
+    };
     /**
      * Get current phase
      */
-    getCurrentPhase() {
+    TacticalCombatEngine.prototype.getCurrentPhase = function () {
         return this.currentPhase;
-    }
+    };
     /**
      * Get turn number
      */
-    getTurnNumber() {
+    TacticalCombatEngine.prototype.getTurnNumber = function () {
         return this.turnNumber;
-    }
+    };
     /**
      * Get all units
      */
-    getAllUnits() {
+    TacticalCombatEngine.prototype.getAllUnits = function () {
         return Array.from(this.units.values());
-    }
+    };
     /**
      * Get unit by ID
      */
-    getUnit(id) {
+    TacticalCombatEngine.prototype.getUnit = function (id) {
         return this.units.get(id);
-    }
+    };
     /**
      * Cleanup
      */
-    dispose() {
+    TacticalCombatEngine.prototype.dispose = function () {
         this.units.clear();
         this.removeAllListeners();
-    }
-}
+    };
+    return TacticalCombatEngine;
+}(events_1.EventEmitter));
 exports.TacticalCombatEngine = TacticalCombatEngine;

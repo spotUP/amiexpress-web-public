@@ -6,7 +6,10 @@
  * This controls user access to all BBS features.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { ACSPermission, ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
+import { EnvStat } from '../constants/env-codes';
 import type { User } from '../database';
 
 // ===== User Flag Constants (axenums.e:46) =====
@@ -103,6 +106,27 @@ let acsConfig: ACSConfig = {
   overrideDefaultAccess: false,
   userSpecificAccess: false
 };
+
+// ENV: assign path for node status files (STATS@N)
+const ENV_ASSIGN_DIR = path.join('/tmp/ram', 'ENV');
+
+function ensureEnvAssignDir(): string {
+  if (!fs.existsSync(ENV_ASSIGN_DIR)) {
+    fs.mkdirSync(ENV_ASSIGN_DIR, { recursive: true });
+  }
+  return ENV_ASSIGN_DIR;
+}
+
+function writeEnvStatus(nodeId: number, username: string, envStat: EnvStat): void {
+  const envDir = ensureEnvAssignDir();
+  const paddedName = (username || '').slice(0, 35).padEnd(35, ' ');
+  const code = envStat.toString().padStart(2, '0');
+  const status = `${paddedName}-${code}`;
+  const filePath = path.join(envDir, `STATS@${nodeId}`);
+
+  console.log(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
+  fs.writeFileSync(filePath, status, { encoding: 'ascii' });
+}
 
 // ===== Configuration Management =====
 export function setACSConfig(config: Partial<ACSConfig>) {
@@ -369,6 +393,15 @@ export function clearOverride(session: any): void {
  */
 export function setEnvStat(session: any, envStat: EnvStat): void {
   session.currentStat = envStat;
+
+  const nodeId = session?.nodeId ?? 0;
+  const username = session?.user?.username || '';
+
+  try {
+    writeEnvStatus(nodeId, username, envStat);
+  } catch (error) {
+    console.error(`[EnvStat] Failed to write STATS@${nodeId}:`, error);
+  }
 }
 
 /**

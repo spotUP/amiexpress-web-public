@@ -1,47 +1,41 @@
 /**
- * Tic-Tac-Toe - Simple BBS Door Game
+ * Tic-Tac-Toe - Simple BBS Door Game (SDK v2.0)
  * Single player vs AI
+ *
+ * This is a migrated version using the new SDK v2.0 Core API
  */
 
-import { Door, GraphicsEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
+import { CoreDoor as Door, AnsiColor } from '@amiexpress/bbs-door-sdk';
+import { GraphicsEngine } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 
 type Cell = 'X' | 'O' | ' ';
 
-class TicTacToe {
-  private door: Door;
-  private gfx: GraphicsEngine;
+class TicTacToeGame {
   private board: Cell[][] = [[' ', ' ', ' '], [' ', ' ', ' '], [' ', ' ', ' ']];
   private currentPlayer: 'X' | 'O' = 'X';
   private gameOver = false;
   private winner: string | null = null;
-  private currentUserId = 0;
+  private gfx: GraphicsEngine;
+  private ctx!: DoorContext;
 
   constructor() {
-    this.door = new Door({
-      name: 'Tic-Tac-Toe',
-      version: '1.0.0',
-      author: 'AmiExpress Team',
-    });
-
-    this.gfx = new GraphicsEngine({ width: 80, height: 24 });
-
-    this.door.onConnect((user) => {
-      this.currentUserId = user.id;
-      this.render();
-    });
-
-    this.door.onInput((_user, key) => {
-      this.handleInput(key.key);
-    });
+    this.gfx = new GraphicsEngine(null); // Will be initialized with BBS API in onStart
   }
 
-  private handleInput(key: string): void {
+  setContext(ctx: DoorContext): void {
+    this.ctx = ctx;
+    // Update graphics engine with BBS API
+    this.gfx = new GraphicsEngine(ctx.bbs);
+  }
+
+  handleInput(key: string): void {
     if (this.gameOver) {
       if (key === 'n' || key === 'N') {
         this.resetGame();
       } else if (key === 'q' || key === 'Q') {
-        this.door.disconnect(this.currentUserId);
+        // Exit door
+        this.ctx.output.write('\r\n');
       }
       return;
     }
@@ -63,16 +57,15 @@ class TicTacToe {
         this.render();
 
         if (!this.gameOver) {
-          // AI move
-          setTimeout(() => {
-            this.aiMove();
-            this.checkWinner();
-            this.render();
-          }, 500);
+          // AI move (immediate, no setTimeout needed)
+          this.aiMove();
+          this.checkWinner();
+          this.render();
         }
       }
     } else if (key === 'q' || key === 'Q') {
-      this.door.disconnect(this.currentUserId);
+      // Exit door
+      this.ctx.output.write('\r\n');
     }
   }
 
@@ -154,7 +147,7 @@ class TicTacToe {
     this.render();
   }
 
-  private render(): void {
+  render(): void {
     this.gfx.clear(AnsiColor.Black);
 
     // Title
@@ -206,19 +199,43 @@ class TicTacToe {
       this.gfx.drawText(28, 16, 'Q=QUIT', AnsiColor.White);
     }
 
-    this.door.sendAnsi(this.gfx.render(), this.currentUserId);
-  }
-
-  public start(): void {
-    this.door.start();
-  }
-
-  public getDoor(): Door {
-    return this.door;
+    // Output to user using SDK v2.0 context
+    this.ctx.output.write(this.gfx.render());
   }
 }
 
-export async function runDoor(doorSession: any): Promise<void> {
-  const game = new TicTacToe();
-  await runDoorWithSession(game.getDoor(), doorSession);
-}
+// =====  SDK v2.0 Pattern =====
+
+const door = new Door({
+  name: 'Tic-Tac-Toe',
+  version: '2.0.0',
+  author: 'AmiExpress Team',
+});
+
+let game: TicTacToeGame;
+
+door.onStart(async (ctx) => {
+  // Initialize game with context
+  game = new TicTacToeGame();
+  game.setContext(ctx);
+
+  // Initial render
+  game.render();
+});
+
+door.onInput(async (ctx, keyPress) => {
+  // Forward input to game
+  game.handleInput(keyPress.key);
+});
+
+door.onClose(async (ctx) => {
+  // Cleanup if needed
+  ctx.output.writeLine('\r\nThanks for playing!');
+});
+
+door.onError(async (ctx, error) => {
+  ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+});
+
+// Export Door instance (SDK v2.0 pattern)
+export default door;

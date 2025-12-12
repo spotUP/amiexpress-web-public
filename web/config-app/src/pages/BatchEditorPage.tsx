@@ -37,8 +37,8 @@ export function BatchEditorPage() {
   });
 
   useEffect(() => {
-    if (batchesQuery.data?.data?.batches?.length && !selectedBatch) {
-      setSelectedBatch(batchesQuery.data.data.batches[0]);
+    if (batchesQuery.data?.batches?.length && !selectedBatch) {
+      setSelectedBatch(batchesQuery.data.batches[0]);
     }
   }, [batchesQuery.data, selectedBatch]);
 
@@ -47,7 +47,7 @@ export function BatchEditorPage() {
       if (!selectedBatch) return;
       try {
         const res = await apiClient.getBatch(selectedBatch);
-        setContent(res.data.content || '');
+        setContent(res.content || '');
         setDirty(false);
         setValidation(null);
       } catch (err: any) {
@@ -157,7 +157,7 @@ export function BatchEditorPage() {
             onChange={(e) => setSelectedBatch(e.target.value)}
             className="input-field"
           >
-            {(batchesQuery.data?.data?.batches || []).map((b: string) => (
+            {(batchesQuery.data?.batches || []).map((b: string) => (
               <option key={b} value={b}>{b}</option>
             ))}
           </select>

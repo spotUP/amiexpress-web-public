@@ -1,82 +1,48 @@
 /**
- * AmiExpress BBS Door SDK - Core Exports
+ * AmiExpress BBS Door SDK - Core Module
  *
- * Main entry point for the SDK. Import everything you need from here.
- *
- * @example
- * ```typescript
- * import {
- *   Door,
- *   GraphicsEngine,
- *   PhysicsEngine,
- *   AudioEngine,
- *   MenuSystem,
- *   HUDBuilder
- * } from '@amiexpress/sdk';
- * ```
+ * Professional SDK for building BBS doors with TypeScript
  */
 
-// Core
-import { Door } from './door-api';
-export { Door };
-export * from './types';
-export * from './ansi-string-utils';
+// Export core classes
+export { Door } from './Door';
+export { Output } from './Output';
+export { Input } from './Input';
+export { Storage } from './Storage';
 
-// Engines
-export { GraphicsEngine } from '../engines/graphics/graphics-engine';
-export { PhysicsEngine } from '../engines/physics/physics-engine';
-export { AudioEngine } from '../engines/audio/audio-engine';
-export { NetworkEngine } from '../engines/network/network-engine';
-export { AIEngine } from '../engines/ai/ai-engine';
-export { InputEngine } from '../engines/input/input-engine';
-export { TacticalCombatEngine } from '../engines/tactical/tactical-combat-engine';
+// Export all types
+export type {
+  // User
+  User,
 
-// Components
-export { MenuSystem } from '../components/menus/menu-system';
-export { HUDBuilder } from '../components/hud/hud-builder';
-export { LevelManager } from '../components/level/level-manager';
-export { SaveManager } from '../components/save/save-manager';
-export { InventorySystem } from '../components/inventory/inventory-system';
-export { DialogueSystem } from '../components/dialogue/dialogue-system';
-export { QuestSystem } from '../components/quest/quest-system';
-export { ClassSystem } from '../components/tactical/class-system';
+  // Input
+  KeyPress,
 
-// Tools
-export { ReleasePacker } from '../tools/packer';
-export { DebugOverlay } from '../tools/debug/debug-overlay';
+  // Storage
+  StorageOptions,
+  SaveData,
 
-// Version
-export const SDK_VERSION = '1.0.0';
+  // Door Configuration
+  DoorConfig,
 
-/**
- * Quick start helper - Creates a door with sensible defaults
- *
- * @param name - Door name
- * @param callback - Main door logic
- *
- * @example
- * ```typescript
- * import { quickStart } from '@amiexpress/sdk';
- *
- * quickStart('My Game', async (door, user) => {
- *   door.send(`Welcome ${user.name}!`);
- *   // Your game logic here
- * });
- * ```
- */
-export function quickStart(
-  name: string,
-  callback: (door: Door, user: any) => void | Promise<void>
-): void {
-  const door = new Door({
-    name,
-    version: '1.0.0',
-    author: 'Unknown',
-  });
+  // Context
+  DoorContext,
 
-  door.onConnect(async (user) => {
-    await callback(door, user);
-  });
+  // APIs
+  OutputAPI,
+  InputAPI,
+  StorageAPI,
+  BBSApi,
 
-  door.start();
-}
+  // Lifecycle Hooks
+  StartHandler,
+  InputHandler,
+  CloseHandler,
+  ErrorHandler,
+
+  // Internal
+  RawDoorSession,
+} from './types';
+
+// Export enums (these are values, not types)
+export { AnsiColor, AnsiStyle, SpecialKey } from './types';

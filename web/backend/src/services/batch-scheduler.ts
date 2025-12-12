@@ -148,7 +148,11 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
   const amigaArgs = parts.slice(1);
-  const resolvedArgs = amigaArgs.map((arg) => resolveAssign(arg));
+  // CRITICAL FIX: Do NOT resolve Amiga assigns to full paths!
+  // 68K doors expect Amiga-style paths (doors:, bbs:, etc.)
+  // Long Unix paths cause infinite loops in door string copy routines
+  // The emulator's DOS library will resolve assigns during file operations
+  const resolvedArgs = amigaArgs; // Keep original Amiga paths
 
   const program = parts[0].toLowerCase();
   if (program === '.key' || program === 'key') {

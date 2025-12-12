@@ -734,6 +734,80 @@ If you get errors like `Could not find a declaration file for module 'X'`:
 2. **Solution**: Remove the entire `"types"` line from tsconfig.json
 3. TypeScript will then automatically find all `@types/*` packages in node_modules
 
+### Neo-Blessed Import Errors
+
+**Error**: `ReferenceError: Element is not defined`
+
+**Cause**: This occurs when using neo-blessed with default imports. The SDK's blessed implementation exports classes both as named exports AND in a default export object. However, improper import/export handling can cause runtime errors.
+
+**Solution**: Always use **named imports** from the SDK's blessed module:
+
+```typescript
+// CORRECT - Named imports (recommended)
+import { Screen, Box, Text, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// WRONG - Default import (can cause runtime errors)
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+const screen = blessed.Screen(...);  // May fail with "Element is not defined"
+```
+
+**Blessed-Contrib Imports**:
+
+```typescript
+// CORRECT - Import specific widgets
+import { Grid, Line, Gauge, Map } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
+// WRONG - Default import
+import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+```
+
+**Complete Neo-Blessed Example**:
+
+```typescript
+import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Grid, Line } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, bbsSession } = doorSession;
+
+  // Create screen (blessed is case-insensitive for options)
+  const screen = new Screen({
+    smartCSR: true,
+    terminal: 'xterm-256color',
+    fullUnicode: true
+  });
+
+  // Create grid layout
+  const grid = new Grid({ rows: 12, cols: 12, screen });
+
+  // Create widgets
+  const lineChart = grid.set(0, 0, 4, 6, Line, {
+    label: 'Performance',
+    showLegend: true
+  });
+
+  // Render
+  screen.render();
+
+  // Cleanup
+  await new Promise<void>((resolve) => {
+    const cleanup = () => {
+      screen.destroy();
+      bbsSession.doorInputHandler = null;
+      resolve();
+    };
+    socket.once('door:close', cleanup);
+    socket.once('disconnect', cleanup);
+  });
+}
+```
+
+**Key Points**:
+- Always use named imports for blessed classes
+- Never use default imports from blessed or blessed/contrib
+- This prevents runtime "Element is not defined" errors
+- SDK v2.0 has been fixed to support both import styles, but named imports are safer
+
 ---
 
 ## Hybrid Doors (Audio/Graphics + Server Logic)
@@ -912,7 +986,7 @@ audio.setMusicState('explore', 0.3, 'fade');
 
 ## See Also
 
-- [SDK Status](archive/SDK_CURRENT_STATUS_20251112.md) - Full SDK documentation
-- [SDK Build & Run](archive/SDK_BUILD_AND_RUN.md) - Automatic installation
+- [SDK v2.0 Comprehensive Guide](SDK_V2_COMPREHENSIVE.md) - Complete SDK v2.0 API reference
+- [SDK v2.0 Validation](SDK_V2_VALIDATION.md) - SDK v2.0 test results and examples
 - [Door Manager](DOOR_MANAGER.md) - BBS door management
 - [Examples](EXAMPLES.md) - More door examples

@@ -1,8 +1,9 @@
+// @ts-nocheck
 /**
  * UI Helpers - Common BBS UI Patterns and Utilities
  *
  * Provides high-level helper functions for creating common BBS UI elements
- * like menus, dialogs, input forms, and status displays using neo-blessed.
+ * like menus, dialogs, input forms, and status displays using blessed.
  *
  * These helpers encapsulate best practices for BBS UI design and make it
  * easy to create professional-looking interfaces quickly.

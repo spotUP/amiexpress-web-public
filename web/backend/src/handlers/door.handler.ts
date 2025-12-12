@@ -1108,9 +1108,15 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       return;
     }
 
-    // Legacy TypeScript door with runDoor() export
-    if (typeof doorModule.runDoor !== 'function') {
-      socket.emit('ansi-output', `\r\n\x1b[31mInvalid TypeScript door: No runDoor() export found\x1b[0m\r\n`);
+    // Detect door pattern: SDK v2.0 Door instance or legacy runDoor() function
+    const isSDKDoor = doorModule.default &&
+                     typeof doorModule.default.execute === 'function' &&
+                     typeof doorModule.default.getConfig === 'function';
+
+    const isLegacyDoor = typeof doorModule.runDoor === 'function';
+
+    if (!isSDKDoor && !isLegacyDoor) {
+      socket.emit('ansi-output', `\r\n\x1b[31mInvalid TypeScript door: Must export Door instance or runDoor() function\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -1118,7 +1124,12 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     }
 
     disableShortcuts(session);
-    console.log(`[executeTypeScriptDoor] Door module loaded, calling runDoor()`);
+
+    if (isSDKDoor) {
+      console.log(`[executeTypeScriptDoor] SDK v2.0 Door detected, calling execute()`);
+    } else {
+      console.log(`[executeTypeScriptDoor] Legacy door detected, calling runDoor()`);
+    }
 
     // Set door active flag - this blocks command handler but door can still receive events
     session.inDoorManager = true;
@@ -1136,19 +1147,36 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     const { createBBSApi } = require('../doors/BBSApi');
     const bbsApi = createBBSApi(socket, session);
 
-    // Create door session object with reference to BBS session and API
-    const doorSessionObj = {
-      socket,
-      user: session.user,
-      bbsSession: session,  // Pass reference to BBS session for input routing
-      bbs: bbsApi,          // BBS API with all functions
-      params: door.parameters || []  // Pass command-line parameters from .info PARAMS
-    };
+    // Execute door based on pattern
+    if (isSDKDoor) {
+      // SDK v2.0 pattern: Door instance with execute() method
+      console.log(`[executeTypeScriptDoor] Calling door.execute() with SDK context...`);
+      const doorInstance = doorModule.default;
 
-    // Execute the door (it registers its own input listeners)
-    console.log(`[executeTypeScriptDoor] Calling door's runDoor() function...`);
-    await doorModule.runDoor(doorSessionObj);
-    console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
+      await doorInstance.execute({
+        socket,
+        bbsSession: session,
+        user: session.user!,
+        bbs: bbsApi,
+        params: door.parameters || []
+      });
+
+      console.log(`[executeTypeScriptDoor] Door.execute() returned`);
+    } else {
+      // Legacy pattern: runDoor() function
+      console.log(`[executeTypeScriptDoor] Calling door's runDoor() function...`);
+
+      const doorSessionObj = {
+        socket,
+        user: session.user,
+        bbsSession: session,  // Pass reference to BBS session for input routing
+        bbs: bbsApi,          // BBS API with all functions
+        params: door.parameters || []  // Pass command-line parameters from .info PARAMS
+      };
+
+      await doorModule.runDoor(doorSessionObj);
+      console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
+    }
 
     console.log(`[executeTypeScriptDoor] Door completed successfully`);
 

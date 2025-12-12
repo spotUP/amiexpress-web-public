@@ -1,8 +1,0 @@
-BBSCMD=TRACKER
-TYPE=TS
-RUNTIME=HYBRID
-LOCATION=Doors/tracker
-DESCRIPTION=Professional music tracker BBS door inspired by Protracker
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

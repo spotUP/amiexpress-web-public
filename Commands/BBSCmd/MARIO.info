@@ -1,7 +1,0 @@
-BBSCMD=MARIO
-TYPE=TS
-LOCATION=Doors/mario
-DESCRIPTION=Mario-style platformer game using AmiExpress SDK game engine
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

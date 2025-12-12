@@ -24,6 +24,22 @@
       "types": "./dist/common/index.d.ts",
       "default": "./dist/common/index.js"
     },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
+    "./core/types": {
+      "types": "./dist/core/types.d.ts",
+      "default": "./dist/core/types.js"
+    },
+    "./engines/ui/blessed": {
+      "types": "./dist/engines/ui/blessed/index.d.ts",
+      "default": "./dist/engines/ui/blessed/index.js"
+    },
+    "./engines/ui/blessed/contrib": {
+      "types": "./dist/engines/ui/blessed/contrib/index.d.ts",
+      "default": "./dist/engines/ui/blessed/contrib/index.js"
+    },
     "./tools/runDoorSession": {
       "types": "./dist/tools/runDoorSession.d.ts",
       "default": "./dist/tools/runDoorSession.js"

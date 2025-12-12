@@ -620,11 +620,7 @@ setOlmDependencies({
   db,
   sessions,
   io,
-  setEnvStat: (session: any, envStat: number) => {
-    // Placeholder for setEnvStat - express.e:24360
-    console.log('📊 [ENV] Setting environment stat:', envStat);
-    // TODO: Implement full environment stat tracking
-  },
+  setEnvStat,
   config
 });
 

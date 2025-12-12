@@ -18,7 +18,7 @@
   "keywords": ["bbs", "door", "game", "arkanoid", "breakout", "arcade", "audio", "hybrid"],
   "scripts": {
     "build": "tsc && npm run bundle:client",
-    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --external:fs --external:path --external:child_process --external:neo-blessed",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
     "start": "npx tsx server.ts"
   },
   "dependencies": {

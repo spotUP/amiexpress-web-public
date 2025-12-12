@@ -1,9 +1,9 @@
 /**
- * UI Engine - Neo-Blessed Terminal UI Library Integration
+ * UI Engine - Blessed Terminal UI Library Integration
  *
  * Provides a powerful ncurses-like widget system for creating sophisticated
- * ASCII/ANSI user interfaces in BBS doors. Built on neo-blessed, this engine
- * offers a DOM-like API for terminal applications with:
+ * ASCII/ANSI user interfaces in BBS doors. Built on our browser-compatible blessed port,
+ * this engine offers a DOM-like API for terminal applications with:
  *
  * - Rich widget library (boxes, lists, forms, tables, progress bars, etc.)
  * - Efficient rendering (only draws screen changes)
@@ -60,8 +60,25 @@
  * ```
  */
 
-import blessed from 'neo-blessed';
-import type { Widgets } from 'blessed';
+import blessed from './blessed/index';
+import type {
+  Screen,
+  Element,
+  ElementOptions,
+  ListOptions,
+  FormOptions,
+  TextboxOptions,
+  ButtonOptions,
+  ProgressBarOptions,
+  TableOptions,
+  LogOptions,
+} from './blessed/core/types';
+
+// Type aliases for backward compatibility with neo-blessed API
+// TODO: Full neo-blessed API compatibility layer
+type WidgetNode = Element;
+type BoxOptions = ElementOptions;
+type TextOptions = ElementOptions;
 
 /**
  * UI Engine Options
@@ -125,40 +142,33 @@ export interface WidgetStyle {
 }
 
 /**
- * UI Engine - Neo-Blessed Integration
+ * UI Engine - Blessed Integration
  *
- * Main class for creating terminal UIs using neo-blessed widgets.
+ * Main class for creating terminal UIs using blessed widgets.
  * Handles screen management, widget creation, rendering, and output capture.
  */
 export class UIEngine {
-  private screen: Widgets.Screen;
-  private elements: Map<string, Widgets.Node> = new Map();
-  private focusStack: Widgets.Node[] = [];
+  private screen: any; // Screen type - using any to avoid circular type issues
+  private elements: Map<string, Element> = new Map();
+  private focusStack: Element[] = [];
 
   constructor(options: UIEngineOptions = {}) {
     // Create blessed screen with optimizations
     this.screen = blessed.screen({
-      width: options.width || 80,
-      height: options.height || 24,
       smartCSR: options.smartCSR !== false,
       fastCSR: options.fastCSR !== false,
-      useBCE: options.useBCE !== false,
+      resizeTimeout: 300,
       autoPadding: options.autoPadding !== false,
       fullUnicode: options.fullUnicode || false,
       terminal: options.terminal || 'ansi',
-      forceUnicode: false,
-      dockBorders: true,
-      input: options.input,
       output: options.output,
     });
 
-    // Enable input if requested
-    if (options.enableMouse !== false) {
-      this.screen.enableMouse();
-    }
-    if (options.enableKeys !== false) {
-      this.screen.enableKeys();
-    }
+    this.screen.width = options.width || 80;
+    this.screen.height = options.height || 24;
+
+    // Note: Mouse and keyboard support are always enabled in our blessed implementation
+    // enableMouse() and enableKeys() are not needed
 
     // Setup exit handler
     this.screen.key(['escape', 'q', 'C-c'], () => {
@@ -186,7 +196,7 @@ export class UIEngine {
    * });
    * ```
    */
-  createBox(options: Widgets.BoxOptions & { parent?: Widgets.Node; id?: string }): Widgets.BoxElement {
+  createBox(options: BoxOptions & { parent?: WidgetNode; id?: string }): Element {
     const box = blessed.box({
       ...options,
       parent: options.parent || this.screen,
@@ -202,7 +212,7 @@ export class UIEngine {
   /**
    * Create a text element - optimized for simple text display
    */
-  createText(options: Widgets.TextOptions & { parent?: Widgets.Node; id?: string }): Widgets.TextElement {
+  createText(options: TextOptions & { parent?: WidgetNode; id?: string }): Element {
     const text = blessed.text({
       ...options,
       parent: options.parent || this.screen,
@@ -218,8 +228,9 @@ export class UIEngine {
   /**
    * Create a line element - for dividers
    */
-  createLine(options: Widgets.LineOptions & { parent?: Widgets.Node; id?: string }): Widgets.LineElement {
-    const line = blessed.line({
+  createLine(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement line widget in blessed port
+    const line = blessed.box({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -255,22 +266,13 @@ export class UIEngine {
    * });
    * ```
    */
-  createList(options: Widgets.ListOptions<any> & { parent?: Widgets.Node; id?: string }): Widgets.ListElement {
+  createList(options: ListOptions & { parent?: WidgetNode; id?: string }): Element {
     const list = blessed.list({
       ...options,
       parent: options.parent || this.screen,
       keys: true,
       vi: true,
-      mouse: true,
-      scrollbar: !options.scrollbar ? undefined : {
-        ch: ' ',
-        track: {
-          bg: 'cyan'
-        },
-        style: {
-          inverse: true
-        }
-      },
+      scrollbar: options.scrollbar,
     });
 
     if (options.id) {
@@ -283,8 +285,9 @@ export class UIEngine {
   /**
    * Create a file manager widget for directory browsing
    */
-  createFileManager(options: Widgets.FileManagerOptions & { parent?: Widgets.Node; id?: string }): Widgets.FileManagerElement {
-    const fm = blessed.filemanager({
+  createFileManager(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement FileManager widget in blessed port
+    const fm = blessed.box({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -299,8 +302,9 @@ export class UIEngine {
   /**
    * Create a table with rows and columns
    */
-  createListTable(options: Widgets.ListTableOptions & { parent?: Widgets.Node; id?: string }): Widgets.ListTableElement {
-    const table = blessed.listtable({
+  createListTable(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement ListTable widget in blessed port
+    const table = blessed.table({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -334,12 +338,12 @@ export class UIEngine {
    * });
    * ```
    */
-  createForm(options: Widgets.FormOptions & { parent?: Widgets.Node; id?: string }): Widgets.FormElement<any> {
+  createForm(options: FormOptions & { parent?: WidgetNode; id?: string }): Element {
     const form = blessed.form({
       ...options,
       parent: options.parent || this.screen,
       keys: true,
-    }) as Widgets.FormElement<any>;
+    });
 
     if (options.id) {
       this.elements.set(options.id, form);
@@ -351,7 +355,7 @@ export class UIEngine {
   /**
    * Create a single-line text input
    */
-  createTextbox(options: Widgets.TextboxOptions & { parent?: Widgets.Node; id?: string }): Widgets.TextboxElement {
+  createTextbox(options: TextboxOptions & { parent?: WidgetNode; id?: string }): Element {
     const textbox = blessed.textbox({
       ...options,
       parent: options.parent || this.screen,
@@ -368,7 +372,7 @@ export class UIEngine {
   /**
    * Create a multi-line text input
    */
-  createTextarea(options: Widgets.TextareaOptions & { parent?: Widgets.Node; id?: string }): Widgets.TextareaElement {
+  createTextarea(options: TextboxOptions & { parent?: WidgetNode; id?: string }): Element {
     const textarea = blessed.textarea({
       ...options,
       parent: options.parent || this.screen,
@@ -385,7 +389,7 @@ export class UIEngine {
   /**
    * Create a button
    */
-  createButton(options: Widgets.ButtonOptions & { parent?: Widgets.Node; id?: string }): Widgets.ButtonElement {
+  createButton(options: ButtonOptions & { parent?: WidgetNode; id?: string }): Element {
     const button = blessed.button({
       ...options,
       parent: options.parent || this.screen,
@@ -403,11 +407,11 @@ export class UIEngine {
   /**
    * Create a checkbox
    */
-  createCheckbox(options: Widgets.CheckboxOptions & { parent?: Widgets.Node; id?: string }): Widgets.CheckboxElement {
-    const checkbox = blessed.checkbox({
+  createCheckbox(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement Checkbox widget in blessed port
+    const checkbox = blessed.button({
       ...options,
       parent: options.parent || this.screen,
-      mouse: true,
       keys: true,
     });
 
@@ -421,8 +425,9 @@ export class UIEngine {
   /**
    * Create a radio button set
    */
-  createRadioSet(options: Widgets.RadioSetOptions & { parent?: Widgets.Node; id?: string }): Widgets.RadioSetElement {
-    const radioSet = blessed.radioset({
+  createRadioSet(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement RadioSet widget in blessed port
+    const radioSet = blessed.form({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -441,8 +446,9 @@ export class UIEngine {
   /**
    * Create a prompt dialog
    */
-  createPrompt(options: Widgets.PromptOptions & { parent?: Widgets.Node; id?: string }): Widgets.PromptElement {
-    const prompt = blessed.prompt({
+  createPrompt(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement Prompt widget in blessed port
+    const prompt = blessed.box({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -457,8 +463,9 @@ export class UIEngine {
   /**
    * Create a message dialog
    */
-  createMessage(options: Widgets.MessageOptions & { parent?: Widgets.Node; id?: string }): Widgets.MessageElement {
-    const message = blessed.message({
+  createMessage(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement Message widget in blessed port
+    const message = blessed.box({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -473,8 +480,9 @@ export class UIEngine {
   /**
    * Create a loading spinner
    */
-  createLoading(options: Widgets.LoadingOptions & { parent?: Widgets.Node; id?: string }): Widgets.LoadingElement {
-    const loading = blessed.loading({
+  createLoading(options: any & { parent?: WidgetNode; id?: string }): Element {
+    // TODO: Implement Loading widget in blessed port
+    const loading = blessed.box({
       ...options,
       parent: options.parent || this.screen,
     });
@@ -507,16 +515,11 @@ export class UIEngine {
    * progress.setProgress(50); // 50%
    * ```
    */
-  createProgressBar(options: Widgets.ProgressBarOptions & { parent?: Widgets.Node; id?: string }): Widgets.ProgressBarElement {
+  createProgressBar(options: ProgressBarOptions & { parent?: WidgetNode; id?: string }): Element {
     const progressBar = blessed.progressbar({
       ...options,
       parent: options.parent || this.screen,
-      style: {
-        bar: {
-          bg: 'blue'
-        },
-        ...(options.style || {})
-      },
+      style: options.style as any,
     });
 
     if (options.id) {
@@ -529,20 +532,12 @@ export class UIEngine {
   /**
    * Create a scrollable log display
    */
-  createLog(options: Widgets.LogOptions & { parent?: Widgets.Node; id?: string }): Widgets.Log {
+  createLog(options: LogOptions & { parent?: WidgetNode; id?: string }): Element {
     const log = blessed.log({
       ...options,
       parent: options.parent || this.screen,
       scrollable: true,
-      scrollbar: {
-        ch: ' ',
-        track: {
-          bg: 'cyan'
-        },
-        style: {
-          inverse: true
-        }
-      },
+      scrollbar: options.scrollbar as any,
     });
 
     if (options.id) {
@@ -555,7 +550,7 @@ export class UIEngine {
   /**
    * Create a table
    */
-  createTable(options: Widgets.TableOptions & { parent?: Widgets.Node; id?: string }): Widgets.TableElement {
+  createTable(options: TableOptions & { parent?: WidgetNode; id?: string }): Element {
     const table = blessed.table({
       ...options,
       parent: options.parent || this.screen,
@@ -608,7 +603,7 @@ export class UIEngine {
   /**
    * Get an element by ID
    */
-  getElement(id: string): Widgets.Node | undefined {
+  getElement(id: string): Element | undefined {
     return this.elements.get(id);
   }
 
@@ -630,7 +625,7 @@ export class UIEngine {
   /**
    * Focus an element
    */
-  focus(element: Widgets.Node): void {
+  focus(element: Element): void {
     (element as any).focus();
   }
 
@@ -703,7 +698,7 @@ export class UIEngine {
   /**
    * Get the underlying blessed screen object for advanced usage
    */
-  getScreen(): Widgets.Screen {
+  getScreen(): any {
     return this.screen;
   }
 }

@@ -16,57 +16,110 @@ npm install @amiexpress/bbs-door-sdk
 
 ## Quick Start
 
-### Server Door (Simple)
+### SDK v2.0 - Simple Door
 
 ```typescript
-import { Door } from '@amiexpress/bbs-door-sdk';
+import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 
 const door = new Door({
   name: 'My Game',
   version: '1.0.0',
+  author: 'You',
+  description: 'A simple BBS door'
+});
+
+// Called when door starts
+door.onStart(async (ctx: DoorContext) => {
+  await ctx.output.clear();
+  await ctx.output.writeLine(`Hello, ${ctx.user.username}!`);
+});
+
+// Called on each keypress
+door.onInput(async (ctx: DoorContext, key: KeyPress) => {
+  if (key.key === 'q' || key.key === 'Q') {
+    await ctx.output.writeLine('Goodbye!');
+    ctx.close();  // Exit the door
+  }
+});
+
+// Called when door closes
+door.onClose(async (ctx: DoorContext) => {
+  // Cleanup, save state, etc.
+});
+
+// Export for BBS to load
+export default door;
+```
+
+**Key Concepts:**
+- **`ctx.close()`** - Immediately exits the door and returns to BBS
+- **`onClose`** - Runs cleanup before exit (always called)
+- **`ctx.output`** - All output methods (write, writeLine, clear, etc.)
+- **`ctx.input`** - Input methods (getLine, getChar, etc.)
+- **`ctx.storage`** - Save/load door data
+- **`ctx.user`** - Current user info
+
+### Hybrid Door (Browser + Server)
+
+Hybrid doors run client code in the browser (for Web Audio, Canvas, etc.) and server code in Node.js (for file I/O, database, etc.).
+
+**client.ts**:
+```typescript
+import { ClientDoor } from '@amiexpress/bbs-door-sdk/client';
+
+const door = new ClientDoor({
+  name: 'Music Tracker',
+  version: '1.0.0',
   author: 'You'
 });
 
-door.onConnect((user) => {
-  door.send(`Hello, ${user.name}!\r\n`);
+door.onConnect(async (user) => {
+  // Browser-side: Web Audio API
+  const audioContext = new AudioContext();
+  // ... setup audio
 });
 
-door.onInput((user, key) => {
-  if (key.key === 'q') door.shutdown();
+door.onInput(async (user, key) => {
+  if (key.key === 's') {
+    // Call server to save file
+    await door.rpc('saveSong', { filename: 'song.mod', data: songData });
+  }
 });
 
 door.start();
 ```
 
-### Hybrid Door (With Audio)
-
+**server.ts**:
 ```typescript
-import { ClientDoor, AudioEngine } from '@amiexpress/bbs-door-sdk/client';
+import { ServerDoor } from '@amiexpress/bbs-door-sdk/server';
+import * as fs from 'fs/promises';
 
-const door = new ClientDoor({
-  name: 'My Game',
+const door = new ServerDoor({
+  name: 'Music Tracker',
   version: '1.0.0',
-  author: 'You',
-  hybrid: true
+  author: 'You'
 });
 
-const audio = new AudioEngine();
-
-door.onConnect(async (user) => {
-  await audio.init();
-  audio.playSound('coin');
+// Handle RPC calls from client
+door.onRPC('saveSong', async (params) => {
+  await fs.writeFile(params.filename, params.data);
+  return { success: true };
 });
 
-door.setFPS(30);
 door.start();
 ```
 
 ## Door Types
 
-| Type | Runtime | Audio | Use Case |
-|------|---------|-------|----------|
-| **Server** | Node.js | Bell only | Simple games, text adventures |
-| **Hybrid** | Browser + Node | Web Audio | Games with sound/music |
+| Type | Import | Runtime | Audio | Use Case |
+|------|--------|---------|-------|----------|
+| **CoreDoor** | `@amiexpress/bbs-door-sdk` | BBS (tsx) | Bell only | Simple games, text doors |
+| **ServerDoor** | `.../server` | Node.js | Bell only | Complex server-side logic |
+| **ClientDoor** | `.../client` | Browser | Web Audio | Rich UI, graphics, audio |
+| **Hybrid** | Both | Browser + Node | Web Audio | Full-featured games with file I/O |
+
+**SDK v2.0 Recommendation**: Use **CoreDoor** for most new doors - it's the simplest and most integrated with the BBS.
 
 ## Package Structure
 

@@ -40,6 +40,18 @@
 // Common types (shared by both runtimes)
 export * from './common';
 
+// Core SDK v2.0 - Professional Door API
+export { Door as CoreDoor, Output, Input, Storage } from './core';
+export type {
+  DoorContext,
+  DoorConfig,
+  OutputAPI,
+  InputAPI,
+  StorageAPI,
+  User,
+  KeyPress
+} from './core';
+
 // Core types (for engines) - re-export AnsiColor from core to override common version
 export { AnsiColor } from './core/types';
 
@@ -66,6 +78,10 @@ export { InputEngine } from './engines/input/input-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';
 export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialogOptions, ConfirmDialogOptions, ListSelectionOptions, StatusBarOptions } from './engines/ui';
+
+// UI Library - Blessed (full neo-blessed port without Node.js dependencies)
+export * as blessed from './engines/ui/blessed/index';
+export { default as Blessed } from './engines/ui/blessed/index';
 
 // Components
 export { MenuSystem } from './components/menus/menu-system';

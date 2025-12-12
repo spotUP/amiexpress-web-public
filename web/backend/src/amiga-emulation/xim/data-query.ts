@@ -534,7 +534,7 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.ACTIVE_NODES:
         if (isRead) {
-          const { nodeFileManager } = require('../../../services/NodeFileManager');
+          const { nodeFileManager } = require('../../services/NodeFileManager');
           let nodesStatus = '';
           for (let i = 0; i < 32; i++) {
             const isActive = nodeFileManager.nodeUserFilesExist(i);

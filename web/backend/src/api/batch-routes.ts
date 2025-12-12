@@ -3,8 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
+import * as amigafs from '../utils/amigafs';
 
-const BATCH_FILES = ['batch0', 'batch1', 'batch2', 'batch3', 'batch4', 'batch5', 'batch6'];
+// Standard batch files to ensure they exist
+const STANDARD_BATCH_FILES = ['batch0', 'batch000', 'batch1', 'batch2', 'batch3', 'batch4', 'batch5', 'batch6'];
 
 function batchRoots(): string[] {
   const roots = [
@@ -19,24 +21,67 @@ function batchRoots(): string[] {
 function findBatchPath(name: string): string | null {
   for (const root of batchRoots()) {
     const p = path.join(root, name);
-    if (fs.existsSync(p)) return p;
+    if (amigafs.existsSync(p)) return p;
   }
   return null;
 }
 
 function listBatches(): string[] {
   ensureBatchFiles();
-  return BATCH_FILES.filter((name) => !!findBatchPath(name));
+
+  // Scan all batch roots for files starting with "batch" (case-insensitive)
+  const found = new Set<string>();
+  const roots = batchRoots();
+  console.log('[BatchEditor] Scanning roots:', roots);
+
+  for (const root of roots) {
+    if (!amigafs.existsSync(root)) {
+      console.log('[BatchEditor] Root does not exist:', root);
+      continue;
+    }
+
+    try {
+      const files = amigafs.readdirSync(root);
+      console.log(`[BatchEditor] Files in ${root}:`, files.filter(f => f.toLowerCase().startsWith('batch')));
+      files.forEach((file) => {
+        // Match files starting with "batch" but not ending with .info (case-insensitive)
+        if (file.toLowerCase().startsWith('batch') && !file.toLowerCase().endsWith('.info')) {
+          const fullPath = path.join(root, file);
+          // Only include regular files, not directories
+          if (amigafs.statSync(fullPath).isFile()) {
+            found.add(file);
+            console.log('[BatchEditor] Added batch file:', file);
+          }
+        }
+      });
+    } catch (err) {
+      console.error(`[BatchEditor] Error scanning ${root}:`, err);
+    }
+  }
+
+  // Sort batch files: batch0, batch000, batch1-6, then any others alphabetically
+  return Array.from(found).sort((a, b) => {
+    const aNum = a.match(/\d+/)?.[0];
+    const bNum = b.match(/\d+/)?.[0];
+    if (aNum && bNum) {
+      const aInt = parseInt(aNum, 10);
+      const bInt = parseInt(bNum, 10);
+      if (aInt !== bInt) return aInt - bInt;
+      // Same number - shorter name first (batch0 before batch000)
+      return a.length - b.length;
+    }
+    return a.localeCompare(b);
+  });
 }
 
 function readBatch(name: string): string {
   const file = findBatchPath(name);
-  return file ? fs.readFileSync(file, 'utf-8') : '';
+  return file ? amigafs.readFileSync(file, 'utf-8') : '';
 }
 
 function writeBatch(name: string, content: string) {
   const file = findBatchPath(name) || path.join(batchRoots()[0], name);
-  fs.writeFileSync(file, content, 'utf-8');
+  amigafs.writeFileSync(file, content, 'utf-8');
 }
 
 function resolveAssign(p: string): string {
@@ -61,7 +106,7 @@ function findInsensitiveFull(fullPath: string): string | null {
 
 function resolveExecutable(base: string): string | null {
   const direct = findInsensitiveFull(base) || base;
-  if (fs.existsSync(direct) && fs.statSync(direct).isFile()) {
+  if (amigafs.existsSync(direct) && amigafs.statSync(direct).isFile()) {
     return direct;
   }
 
@@ -74,7 +119,7 @@ function resolveExecutable(base: string): string | null {
 
   for (const cand of candidates) {
     const resolved = findInsensitiveFull(cand) || cand;
-    if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    if (amigafs.existsSync(resolved) && amigafs.statSync(resolved).isFile()) {
       return resolved;
     }
   }
@@ -89,16 +134,17 @@ function ensureBatchFiles() {
   }
 
   const primary = roots[0];
-  fs.mkdirSync(primary, { recursive: true });
+  amigafs.mkdirSync(primary, { recursive: true });
 
-  for (const name of BATCH_FILES) {
+  // Ensure standard batch files exist
+  for (const name of STANDARD_BATCH_FILES) {
     const target = path.join(primary, name);
     const existing = findBatchPath(name);
 
     if (existing) {
-      if (existing !== target && !fs.existsSync(target)) {
+      if (existing !== target && !amigafs.existsSync(target)) {
         try {
-          fs.copyFileSync(existing, target);
+          amigafs.copyFileSync(existing, target);
         } catch (err) {
           console.error(`[BatchEditor] Failed to copy ${existing} to ${target}:`, err);
         }
@@ -106,9 +152,9 @@ function ensureBatchFiles() {
       continue;
     }
 
-    if (!fs.existsSync(target)) {
+    if (!amigafs.existsSync(target)) {
       try {
-        fs.writeFileSync(target, '', 'utf-8');
+        amigafs.writeFileSync(target, '', 'utf-8');
       } catch (err) {
         console.error(`[BatchEditor] Failed to create ${target}:`, err);
       }
@@ -121,12 +167,15 @@ export function createBatchRouter(): ReturnType<typeof express.Router> {
   ensureBatchFiles();
 
   router.get('/', (_req: Request, res: Response) => {
-    res.json({ batches: listBatches() });
+    const batches = listBatches();
+    console.log('[BatchRouter] GET / - returning batches:', batches);
+    res.json({ batches });
   });
 
   router.get('/:name', (req: Request, res: Response) => {
     const { name } = req.params;
-    if (!BATCH_FILES.includes(name)) {
+    // Validate that name starts with "batch" and doesn't contain path separators
+    if (!name.toLowerCase().startsWith('batch') || name.includes('/') || name.includes('\\')) {
       return res.status(400).json({ error: 'Invalid batch name' });
     }
     res.json({ name, content: readBatch(name) });
@@ -134,7 +183,8 @@ export function createBatchRouter(): ReturnType<typeof express.Router> {
 
   router.put('/:name', (req: Request, res: Response) => {
     const { name } = req.params;
-    if (!BATCH_FILES.includes(name)) {
+    // Validate that name starts with "batch" and doesn't contain path separators
+    if (!name.toLowerCase().startsWith('batch') || name.includes('/') || name.includes('\\')) {
       return res.status(400).json({ error: 'Invalid batch name' });
     }
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
@@ -144,7 +194,8 @@ export function createBatchRouter(): ReturnType<typeof express.Router> {
 
   router.post('/validate', (req: Request, res: Response) => {
     const { name, content } = req.body || {};
-    if (name && !BATCH_FILES.includes(name)) {
+    // Validate that name starts with "batch" and doesn't contain path separators (if provided)
+    if (name && (!name.toLowerCase().startsWith('batch') || name.includes('/') || name.includes('\\'))) {
       return res.status(400).json({ error: 'Invalid batch name' });
     }
     if (typeof content !== 'string') {

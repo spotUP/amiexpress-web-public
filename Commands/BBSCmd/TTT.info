@@ -1,7 +1,6 @@
-BBSCMD=TTT
+CMDNAME=TTT
+CMDCODE=TICTACTOE
+LOCATION=doors/tic-tac-toe
 TYPE=TS
-LOCATION=Doors/tictactoe
-DESCRIPTION=Turn-based multiplayer Tic-Tac-Toe demonstrating Network Engine
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME
+SECLEVEL=0
+DESCRIPTION=Tic-Tac-Toe game (SDK v2.0 demo)

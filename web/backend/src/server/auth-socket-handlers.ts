@@ -10,7 +10,8 @@ import { db } from '../database';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
-import { initializeSecurity } from '../utils/security.util';
+import { initializeSecurity, setEnvStat } from '../utils/security.util';
+import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
 import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
 import { callersLog } from './database-helpers';
@@ -370,6 +371,7 @@ export function registerAuthHandlers(socket: Socket) {
 
       // Phase 9: Initialize security system (express.e:447-455)
       initializeSecurity(session);
+      setEnvStat(session, EnvStat.IDLE);
 
       // Log successful login (express.e:9493 callersLog)
       await callersLog(user.id, user.username, 'Logged on');

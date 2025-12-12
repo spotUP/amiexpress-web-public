@@ -1,8 +1,0 @@
-FORM
-ICON
-LOCATION=web/backend/src/doors/petscii-demo
-TYPE=TS
-MULTINODE=YES
-STACK=65536
-ACCESS=0
-NAME=PETSCII

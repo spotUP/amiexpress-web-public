@@ -6,7 +6,7 @@
  * ensuring type safety and enabling AI-friendly code generation.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnsiColor = void 0;
+exports.SpecialKey = exports.AnsiStyle = exports.AnsiColor = void 0;
 /**
  * ANSI Color codes (0-15 standard palette)
  */
@@ -30,3 +30,36 @@ var AnsiColor;
     AnsiColor[AnsiColor["BrightCyan"] = 14] = "BrightCyan";
     AnsiColor[AnsiColor["BrightWhite"] = 15] = "BrightWhite";
 })(AnsiColor || (exports.AnsiColor = AnsiColor = {}));
+/**
+ * ANSI text styles
+ */
+var AnsiStyle;
+(function (AnsiStyle) {
+    AnsiStyle[AnsiStyle["Normal"] = 0] = "Normal";
+    AnsiStyle[AnsiStyle["Bold"] = 1] = "Bold";
+    AnsiStyle[AnsiStyle["Dim"] = 2] = "Dim";
+    AnsiStyle[AnsiStyle["Italic"] = 3] = "Italic";
+    AnsiStyle[AnsiStyle["Underline"] = 4] = "Underline";
+    AnsiStyle[AnsiStyle["Blink"] = 5] = "Blink";
+    AnsiStyle[AnsiStyle["Reverse"] = 7] = "Reverse";
+})(AnsiStyle || (exports.AnsiStyle = AnsiStyle = {}));
+/**
+ * Special keys for easy reference
+ */
+var SpecialKey;
+(function (SpecialKey) {
+    SpecialKey["Enter"] = "\r";
+    SpecialKey["Escape"] = "\u001B";
+    SpecialKey["Backspace"] = "";
+    SpecialKey["Tab"] = "\t";
+    SpecialKey["Space"] = " ";
+    SpecialKey["ArrowUp"] = "\u001B[A";
+    SpecialKey["ArrowDown"] = "\u001B[B";
+    SpecialKey["ArrowRight"] = "\u001B[C";
+    SpecialKey["ArrowLeft"] = "\u001B[D";
+    SpecialKey["Delete"] = "\u001B[3~";
+    SpecialKey["Home"] = "\u001B[H";
+    SpecialKey["End"] = "\u001B[F";
+    SpecialKey["PageUp"] = "\u001B[5~";
+    SpecialKey["PageDown"] = "\u001B[6~";
+})(SpecialKey || (exports.SpecialKey = SpecialKey = {}));

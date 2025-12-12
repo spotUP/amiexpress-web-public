@@ -74,22 +74,39 @@ async function runDoor(opts: RunnerOptions) {
       return stream;
     };
 
+    // CRITICAL FIX: Batch doors need a minimal event emitter
+    // The door:input listener must be registered even though we won't send input
+    // This prevents doors from waiting forever for input events
+    const EventEmitter = require('events').EventEmitter;
+    const emitter = new EventEmitter();
+
     return debugEnabled
       ? {
           emit(event: string, payload?: any): void {
             if (event === 'ansi-output' && typeof payload === 'string') {
               ensureStream().write(payload);
             }
+            // Also emit to EventEmitter for internal event handling
+            emitter.emit(event, payload);
           },
-          on: () => {},
+          on(event: string, handler: Function): void {
+            emitter.on(event, handler);
+          },
           close(): void {
             stream?.end();
+            emitter.removeAllListeners();
           },
         }
       : {
-          emit: () => {},
-          on: () => {},
-          close: () => {},
+          emit(event: string, payload?: any): void {
+            emitter.emit(event, payload);
+          },
+          on(event: string, handler: Function): void {
+            emitter.on(event, handler);
+          },
+          close(): void {
+            emitter.removeAllListeners();
+          },
         };
   })();
 
