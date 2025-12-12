@@ -145,7 +145,7 @@ COPY Conf10 /app/default-data/Conf10
 COPY Conf11 /app/default-data/Conf11
 COPY Conf12 /app/default-data/Conf12
 COPY Conf13 /app/default-data/Conf13
-COPY Doors /app/default-data/doors
+COPY doors /app/default-data/doors
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

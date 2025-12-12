@@ -63,9 +63,9 @@ logs/*.log
 data/amiga-roms/*
 !data/amiga-roms/.gitkeep
 
-# Door binaries (will be in volume)
-# Render needs access to all doors during build
+# Door binaries (Render build needs them in context)
 !Doors/**
+!doors/**
 
 # User data (will be in volume)
 Users/*.db
