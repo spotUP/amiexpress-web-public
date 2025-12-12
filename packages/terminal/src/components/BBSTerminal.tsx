@@ -340,7 +340,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const finalBackendUrl = backendUrl ||
       (import.meta as any).env?.VITE_BBS_BACKEND_URL ||
-      (isDevelopment ? 'http://localhost:3001' : (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-backend.onrender.com');
+      (isDevelopment ? 'http://localhost:3001' : (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-bbs.onrender.com');
 
     console.log('[Terminal] Connecting to:', finalBackendUrl);
 
