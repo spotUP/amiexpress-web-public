@@ -58,6 +58,9 @@ export { AnsiColor } from './core/types';
 // Core utilities - ANSI string manipulation
 export * from './core/ansi-string-utils';
 
+// Screen utilities
+export { getTerminalDimensions, BBS_CONSTANTS } from './src/utils/screen-utils';
+
 // Server runtime (Node.js)
 export { ServerDoor } from './server';
 

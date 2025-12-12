@@ -106,6 +106,9 @@ const ENEMY_UNITS = [
 ];
 // ===== Game Class =====
 class FireEmblemGame {
+    constructor() {
+        this.exitResolve = null;
+    }
     setContext(ctx) {
         this.ctx = ctx;
     }
@@ -120,6 +123,7 @@ class FireEmblemGame {
         this.render();
         // Wait for game to complete
         await new Promise((resolve) => {
+            this.exitResolve = resolve;
             this.screen.on('destroy', () => resolve());
         });
     }
@@ -197,6 +201,7 @@ class FireEmblemGame {
         this.screen = new blessed_1.Screen({
             smartCSR: true,
             title: 'Fire Emblem: Emblem of Valor',
+            output: (data) => this.ctx.output.write(data),
         });
         // Map display
         this.mapBox = new blessed_1.Box({
@@ -402,6 +407,11 @@ class FireEmblemGame {
     cleanup() {
         if (this.screen) {
             this.screen.destroy();
+        }
+        // Resolve the exit promise to allow door to complete
+        if (this.exitResolve) {
+            this.exitResolve();
+            this.exitResolve = null;
         }
     }
 }

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 backend/node_modules/
+Doors/*/node_modules/
 
 # Build outputs
 dist/

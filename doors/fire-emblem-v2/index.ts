@@ -152,6 +152,7 @@ class FireEmblemGame {
   private mapBox!: Box;
   private statusBox!: Box;
   private state!: GameState;
+  private exitResolve: (() => void) | null = null;
 
   setContext(ctx: DoorContext): void {
     this.ctx = ctx;
@@ -172,6 +173,7 @@ class FireEmblemGame {
 
     // Wait for game to complete
     await new Promise<void>((resolve) => {
+      this.exitResolve = resolve;
       this.screen.on('destroy', () => resolve());
     });
   }
@@ -255,6 +257,7 @@ class FireEmblemGame {
     this.screen = new Screen({
       smartCSR: true,
       title: 'Fire Emblem: Emblem of Valor',
+      output: (data: string) => this.ctx.output.write(data),
     });
 
     // Map display
@@ -482,6 +485,11 @@ class FireEmblemGame {
   private cleanup(): void {
     if (this.screen) {
       this.screen.destroy();
+    }
+    // Resolve the exit promise to allow door to complete
+    if (this.exitResolve) {
+      this.exitResolve();
+      this.exitResolve = null;
     }
   }
 }

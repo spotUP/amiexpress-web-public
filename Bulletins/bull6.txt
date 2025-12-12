@@ -29,7 +29,7 @@ Baud N Name             Group / Location    On-Time  Actions  H:MM Up-K Dn-K
 [31m19.2 1[37m [32mRaGe             [33mUK                  [34m18:00:48 [35m[----U-] [36m0:03 [0m92mb    0
 [31m19.2 1[37m [32mlordnikon        [33mDekadence           [34m11:39:21 [35m[---d--] [36m0:03 [0m   0    0
 [34m----------------------------------------------------------------------------
-[0m        You can do it your own way, if it's done just how they say.         
+[0m                    YOU COULD BE MINE... But you smell.                     
 [0;4;33m                                                                      v2.00 [0m
 [44;4;33m Calls:    1 / Y'day:    4 | U:    0 /     0k | D:    0 /     0k | Hrs:   0 [0m
 [44;4;33m The Records - Calls:  275 | U:  286 / D775mb | D: 3745 / @402mb | Hrs:  30 [0m

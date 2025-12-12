@@ -2,5 +2,5 @@ CMDNAME=DASHBOARD
 CMDCODE=DASHBOARD
 LOCATION=doors/bbs-dashboard
 TYPE=TS
-SECLEVEL=255
-DESCRIPTION=Sysop BBS Dashboard - real-time monitoring and management
+SECLEVEL=0
+DESCRIPTION=BBS SysOp Dashboard - Real-time monitoring with neo-blessed UI

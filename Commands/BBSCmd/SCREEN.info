@@ -1,7 +1,0 @@
-BBSCMD=SCREEN
-TYPE=TS
-LOCATION=doors/screen
-DESCRIPTION=Display screen files from Screens/ directory
-ACCESS=0
-MULTINODE=YES
-PRIORITY=SAME

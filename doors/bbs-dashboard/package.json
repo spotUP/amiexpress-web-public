@@ -1,21 +1,28 @@
 {
   "name": "bbs-dashboard",
-  "version": "1.0.0",
-  "description": "Comprehensive BBS Dashboard for System Operators",
+  "version": "2.0.0",
+  "description": "BBS SysOp Dashboard - Real-time monitoring using SDK v2.0 and neo-blessed UI",
   "main": "compiled/index.js",
   "bbsCommand": "DASHBOARD",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
   "scripts": {
     "build": "tsc",
-    "watch": "tsc --watch"
+    "dev": "tsx --watch index.ts",
+    "start": "node compiled/index.js"
   },
+  "keywords": ["bbs", "dashboard", "sysop", "monitoring"],
+  "author": "AmiExpress SDK",
+  "license": "MIT",
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk",
-    "blessed-contrib": "^4.11.0",
     "neo-blessed": "^0.2.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.24",
-    "typescript": "^5.2.2"
-  },
-  "runtime": "server"
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
 }
