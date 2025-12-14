@@ -50,6 +50,7 @@ export interface LifecycleConfig {
   cycleTarget: number;
   debugLevel: "minimal" | "normal" | "verbose" | "comprehensive";
   disableGuard?: boolean;
+  disableInputWaitExtension?: boolean;
   progressTimeoutMs: number;
   pcProbeRanges?: Array<{ start: number; end: number }>;
   pcProbeMaxHits?: number;
@@ -132,7 +133,11 @@ export class DoorLifecycleManager {
     // Disable guard: must be explicitly set to 'true' or '1' to disable
     // Default is ENABLED (guard active) to prevent runaway doors
     const disableGuard = disableGuardTooltype === 'true' || disableGuardTooltype === '1' ||
-                         disableGuardEnv === 'true' || disableGuardEnv === '1';
+                          disableGuardEnv === 'true' || disableGuardEnv === '1';
+
+    // Disable input wait extension: for batch doors that should not wait for input
+    const disableInputWaitTooltype = toolTypes['DISABLE_INPUT_WAIT'];
+    const disableInputWait = disableInputWaitTooltype === 'true' || disableInputWaitTooltype === '1';
 
     this.lifecycleConfig = {
       timeout: config.timeout || 300,
@@ -140,10 +145,11 @@ export class DoorLifecycleManager {
       cycleTarget: 8, // 8MHz CPU cycles per microsecond
       debugLevel: (process.env.AEDOOR_DEBUG_LEVEL as any) || "normal",
       disableGuard: disableGuard,
+      disableInputWaitExtension: disableInputWait,
       progressTimeoutMs: Number(process.env.AEDOOR_PROGRESS_TIMEOUT_MS ?? 5000),
     };
     console.log(
-      `[DoorLifecycleManager] Config: loopGuard=${this.lifecycleConfig.loopGuardLimit} disableGuard=${this.lifecycleConfig.disableGuard} timeout=${this.lifecycleConfig.timeout}`
+      `[DoorLifecycleManager] Config: loopGuard=${this.lifecycleConfig.loopGuardLimit} disableGuard=${this.lifecycleConfig.disableGuard} disableInputWait=${this.lifecycleConfig.disableInputWaitExtension} timeout=${this.lifecycleConfig.timeout}`
     );
 
     this.executionState = this.initializeExecutionState();
@@ -1448,11 +1454,11 @@ export class DoorLifecycleManager {
       Date.now() - this.executionState.lastProgressTime;
     const guardTriggered =
       !this.lifecycleConfig.disableGuard &&
-      iterationsSinceProgress > this.lifecycleConfig.loopGuardLimit &&
-      timeSinceProgress > this.lifecycleConfig.progressTimeoutMs;
+      iterationsSinceProgress >= this.lifecycleConfig.loopGuardLimit &&
+      (this.lifecycleConfig.disableInputWaitExtension || timeSinceProgress > this.lifecycleConfig.progressTimeoutMs);
 
     if (guardTriggered) {
-      if (isWaitingForInput) {
+      if (isWaitingForInput && !this.lifecycleConfig.disableInputWaitExtension) {
         // Extend guard and continue looping to allow user input.
         this.lifecycleConfig.loopGuardLimit += 50000;
         console.log(
@@ -1481,7 +1487,8 @@ export class DoorLifecycleManager {
   private recordProgressByPc(pc: number): void {
     // SAmiLog3 busy loop lives around 0x5c90-0x5d10; count it as progress so the guard
     // doesn't kill a door that is still actively spinning.
-    if (pc >= 0x5c90 && pc <= 0x5d10) {
+    // For batch doors, don't record PC progress to allow guard to trigger.
+    if (!this.lifecycleConfig.disableInputWaitExtension && pc >= 0x5c90 && pc <= 0x5d10) {
       this.executionState.lastProgressIteration = this.executionState.iterationCount;
       this.executionState.lastProgressTime = Date.now();
     }

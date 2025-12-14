@@ -137,7 +137,7 @@ async function runDoor(opts: RunnerOptions) {
       cwd: opts.cwd || path.dirname(opts.execPath),
       assigns: opts.assigns || {},
       env: opts.env,
-      toolTypes: opts.toolTypes || {},
+       toolTypes: opts.toolTypes || { LOOP_LIMIT: '50000', DISABLE_INPUT_WAIT: '1' },
       doorType: inferredDoorType,
     } as any
   );
