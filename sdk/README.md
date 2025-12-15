@@ -7,6 +7,23 @@ The official SDK for creating doors (games, utilities, apps) for AmiExpress BBS.
 - **[Game Development Guide](./docs/GAME_DEVELOPMENT_GUIDE.md)** - Complete reference for game development
 - **[Examples](./examples/)** - Working door examples
 - **[Templates](./templates/)** - Starter templates
+- **[C SDK](../dev/c-doors/README.md)** - Create authentic 68K Amiga binaries
+
+## Two Development Approaches
+
+### TypeScript SDK (This Directory)
+- **Best for**: New doors, modern features, easy development
+- **Language**: TypeScript/JavaScript
+- **Execution**: Native Node.js (fast, no emulation)
+- **Libraries**: Full npm ecosystem available
+
+### C SDK (dev/c-doors/)
+- **Best for**: Porting classic doors, learning Amiga programming
+- **Language**: C (cross-compiled to 68K)
+- **Execution**: MOIRA 68K emulator (authentic Amiga experience)
+- **Compatibility**: 100% compatible with classic AmiExpress doors
+
+Both approaches produce doors that work identically from the user's perspective!
 
 ## Installation
 

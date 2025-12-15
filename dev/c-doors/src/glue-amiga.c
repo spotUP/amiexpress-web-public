@@ -65,6 +65,23 @@ struct MsgPort *port = NULL;
 /* WARNING: This hardcoded address is WRONG! Use OpenLibrary() instead! */
 struct Library *AEDoorBase = (struct Library *)0xc0000;
 
+/* Forward declaration of main() */
+extern int main(int argc, char *argv[]);
+
+/* C Runtime Entry Point for Amiga 68K */
+void _start(void) {
+    /* Simple entry point: call main() and exit */
+    /* argc/argv not supported in this minimal implementation */
+    int exitCode = main(0, NULL);
+
+    /* Exit - for now just return (door will terminate) */
+    /* TODO: Call proper Amiga Exit() when implemented */
+    (void)exitCode;
+
+    /* Infinite loop to prevent return (Amiga programs shouldn't return from _start) */
+    while(1) {}
+}
+
 /* Door API implementations - THESE ARE STUBS AND DO NOT WORK! */
 /* TODO: Replace with inline wrappers that call the real library */
 VOID Register(int node)
