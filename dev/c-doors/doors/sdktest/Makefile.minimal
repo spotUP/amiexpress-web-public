@@ -1,0 +1,70 @@
+# Makefile for Minimal SDK Test Door
+
+# Compiler selection (prioritize COMPILER variable)
+COMPILER ?= gcc
+VC := $(shell which vc 2>/dev/null)
+CC ?= gcc
+
+# Door name (derived from current directory)
+TARGET ?= minimal
+
+# Source files (door code + glue implementation)
+DOOR_SOURCES = $(TARGET).c
+ifeq ($(COMPILER),gcc)
+# GCC build - use GCC glue
+GLUE_SOURCES = ../../src/glue-gcc.c
+else ifeq ($(COMPILER),vbcc)
+# vbcc build - use vbcc glue
+GLUE_SOURCES = ../../src/glue-vbcc.c
+else
+# Default to GCC if COMPILER not recognized
+GLUE_SOURCES = ../../src/glue-gcc.c
+endif
+SOURCES = $(DOOR_SOURCES) $(GLUE_SOURCES)
+OBJECTS = $(SOURCES:.c=.o)
+
+# Include paths
+INCLUDES = -I../../includes
+
+# Build rules based on COMPILER selection
+ifeq ($(COMPILER),gcc)
+$(TARGET): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $@
+
+glue-gcc.o: ../../src/glue-gcc.c
+	cp ../../src/glue-gcc.c glue-gcc.c
+	$(CC) $(INCLUDES) -c glue-gcc.c -o $@
+	rm -f glue-gcc.c
+
+%.o: %.c
+	$(CC) $(INCLUDES) -c $< -o $@
+else ifeq ($(COMPILER),vbcc)
+# vbcc build for Amiga executable
+export VBCC := /opt/homebrew/opt/vbcc
+$(TARGET): $(OBJECTS)
+	vc +aos68k $(OBJECTS) -o $@
+
+glue-vbcc.o: ../../src/glue-vbcc.c
+	cp ../../src/glue-vbcc.c glue-vbcc.c
+	vc +aos68k -I$(VBCC)/targets/m68k-amigaos/include -c glue-vbcc.c -o $@
+	rm -f glue-vbcc.c
+
+%.o: %.c
+	vc +aos68k -I$(VBCC)/targets/m68k-amigaos/include $(INCLUDES) -c $< -o $@
+endif
+
+# Clean build artifacts
+clean:
+	rm -f *.o $(TARGET) glue-*.c
+
+# Show build info
+info:
+	@echo "Building door: $(TARGET)"
+	@echo "Compiler: $(COMPILER)"
+	@echo "vbcc available: $(if $(VC),yes,no)"
+
+# Phony targets
+.PHONY: clean all info
+
+# Default target
+all: $(TARGET)

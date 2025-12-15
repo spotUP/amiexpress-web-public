@@ -1,0 +1,7 @@
+AmiExpress Door
+SIMPLETEST
+Simple SDK functionality test
+LOCATION=Doors/SDKTEST/SIMPLETEST
+STACK=20000
+STARTUP=1
+FLAGS=0
