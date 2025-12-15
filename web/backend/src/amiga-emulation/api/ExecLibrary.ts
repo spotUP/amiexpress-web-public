@@ -1190,7 +1190,47 @@ export class ExecLibrary {
    */
   loadRealAEDoorLibrary(): boolean {
     try {
-      // Try multiple candidate locations (dataDir/Libs, repo root Libs, cwd Libs)
+      console.log(`[ExecLibrary] ============================================`);
+      console.log(`[ExecLibrary] Loading REAL AEDoor.library binary`);
+      console.log(`[ExecLibrary] Using LibraryLoader for proper HUNK parsing`);
+      console.log(`[ExecLibrary] ============================================`);
+
+      // Use LibraryLoader if available, fall back to manual load
+      if (this.libraryLoader) {
+        const loadedLib = this.libraryLoader.loadLibrary("AEDoor.library", 0);
+
+        if (loadedLib) {
+          console.log(`[ExecLibrary] ✅ AEDoor.library loaded via LibraryLoader`);
+          console.log(`[ExecLibrary]   Base address: 0x${loadedLib.baseAddress.toString(16)}`);
+          console.log(`[ExecLibrary]   Jump table entries: ${loadedLib.jumpTable.size}`);
+          console.log(`[ExecLibrary]   Code segments: ${loadedLib.codeSegments.length}`);
+          console.log(`[ExecLibrary]   Data segments: ${loadedLib.dataSegments.length}`);
+
+          // Register in libraries list
+          const lib: LibraryNode = {
+            address: loadedLib.baseAddress,
+            name: "AEDoor.library",
+            version: loadedLib.version,
+            revision: 0,
+            openCount: 0,
+            negSize: 30, // Standard Amiga library header size
+            posSize: 34,
+          };
+          this.libraries.set("AEDoor.library", lib);
+          this.libraries.set("aedoor.library", lib);
+          this.writeLibraryToMemory(lib);
+
+          console.log(`[ExecLibrary] ✅ AEDoor.library registered in library list`);
+          console.log(`[ExecLibrary] ============================================`);
+          return true;
+        } else {
+          console.log(`[ExecLibrary] ⚠️  LibraryLoader failed, trying fallback`);
+        }
+      }
+
+      // Fallback: Manual load (basic, for compatibility)
+      console.log(`[ExecLibrary] Using fallback manual loader`);
+
       const candidates: string[] = [];
       try {
         const { config } = require("../../config");
@@ -1198,61 +1238,40 @@ export class ExecLibrary {
         candidates.push(path.join(dataDir, "Libs", "AEDoor.library"));
         candidates.push(path.join(path.resolve(dataDir, ".."), "Libs", "AEDoor.library"));
       } catch (err) {
-        // config not available in some test contexts; ignore
+        // config not available in some test contexts
       }
       candidates.push(path.join(process.cwd(), "Libs", "AEDoor.library"));
 
-    const libPath = candidates.find(p => fs.existsSync(p));
-    console.log(`[ExecLibrary] Loading real AEDoor.library, candidates:`, candidates);
+      const libPath = candidates.find(p => fs.existsSync(p));
 
-    if (!libPath) {
-      const msg = `[ExecLibrary] ERROR: AEDoor.library not found in candidates`;
-      console.log(msg);
-      try {
-        const globalAny: any = global as any;
-        const session = globalAny?.currentBbsSession;
-        notifySysop(session, msg);
-      } catch (_) {
-        /* ignore */
+      if (!libPath) {
+        const msg = `[ExecLibrary] ❌ ERROR: AEDoor.library not found`;
+        console.log(msg);
+        console.log(`[ExecLibrary] Searched: ${candidates.join(", ")}`);
+        try {
+          const globalAny: any = global as any;
+          const session = globalAny?.currentBbsSession;
+          notifySysop(session, msg);
+        } catch (_) {
+          /* ignore */
+        }
+        return false;
       }
-      return false;
-    }
 
-    console.log(`[ExecLibrary] Using AEDoor.library from: ${libPath}`);
-
+      console.log(`[ExecLibrary] Found: ${libPath}`);
       const binary = fs.readFileSync(libPath);
-      console.log(
-        `[ExecLibrary] Read ${binary.length} bytes from AEDoor.library`
-      );
+      console.log(`[ExecLibrary] Read ${binary.length} bytes`);
 
-      // Parse Amiga hunk format
-      let offset = 0;
-
-      // Skip to HUNK_CODE (0x000003E9) after header
-      // The library starts at offset 0x20 based on hexdump
-      const codeStart = 0x20;
-      const codeSize = 0x3f0; // ~1KB of code+data
-
-      // Copy the library code to AEDOOR_LIB_ADDR
+      // Manual HUNK load (basic - just copy code section)
+      // NOTE: This doesn't handle relocations properly!
+      const codeStart = 0x20; // From hexdump analysis
+      const codeSize = 0x3f0;  // ~1KB code+data
       const destAddr = this.AEDOOR_LIB_ADDR;
-      console.log(
-        `[ExecLibrary] Copying library code to 0x${destAddr.toString(16)}`
-      );
 
       for (let i = 0; i < codeSize && codeStart + i < binary.length; i++) {
         this.emulator.writeMemory(destAddr + i, binary[codeStart + i]);
       }
 
-      console.log(`[ExecLibrary] AEDoor.library loaded successfully`);
-      console.log(`[ExecLibrary]   Base address: 0x${destAddr.toString(16)}`);
-      console.log(`[ExecLibrary]   Code size: ${codeSize} bytes`);
-
-      // The library has a jump table at negative offsets from the base
-      // LVO offsets are at: -30 (CreateComm), -36 (DeleteComm), etc.
-      // These are RTS instructions (0x4E75) or JMP instructions
-
-      // Pre-register the real library so getLibraryBase() returns nonzero even
-      // before the door explicitly opens it. OpenLibrary will bump openCount.
       const lib: LibraryNode = {
         address: destAddr,
         name: "AEDoor.library",
@@ -1265,13 +1284,14 @@ export class ExecLibrary {
       this.libraries.set("AEDoor.library", lib);
       this.libraries.set("aedoor.library", lib);
       this.writeLibraryToMemory(lib);
-      console.log(
-        `[ExecLibrary]   Registered AEDoor.library in library list (openCount=0)`
-      );
 
+      console.log(`[ExecLibrary] ⚠️  Fallback load complete (basic, no relocations)`);
+      console.log(`[ExecLibrary]   Base: 0x${destAddr.toString(16)}, Size: ${codeSize} bytes`);
+      console.log(`[ExecLibrary] ============================================`);
       return true;
+
     } catch (error) {
-      console.log(`[ExecLibrary] ERROR loading AEDoor.library:`, error);
+      console.log(`[ExecLibrary] ❌ ERROR loading AEDoor.library:`, error);
       return false;
     }
   }

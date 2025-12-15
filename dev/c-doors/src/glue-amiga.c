@@ -1,6 +1,41 @@
 /*
  * AmiExpress Door Glue API - m68k-amiga-elf-gcc Amiga Version
  * Minimal implementations for bare-metal Amiga cross-compilation
+ *
+ * ============================================================================
+ * WARNING - ARCHITECTURAL ISSUE (2025-12-15)
+ * ============================================================================
+ *
+ * This file contains STUB IMPLEMENTATIONS that are ARCHITECTURALLY WRONG!
+ *
+ * PROBLEM:
+ * - Hardcoded library base address (0xc0000)
+ * - Stub functions that do nothing (sendmessage, prompt, etc.)
+ * - Doors using this glue will appear to run but produce NO OUTPUT
+ *
+ * CORRECT APPROACH:
+ * C doors should call the REAL AEDoor.library via OpenLibrary():
+ *
+ *   struct Library *AEDoorBase = NULL;
+ *   struct ExecBase *SysBase = *(struct ExecBase **)4;
+ *
+ *   AEDoorBase = OpenLibrary("AEDoor.library", 0);
+ *   if (!AEDoorBase) return 20;
+ *
+ *   struct DoorInfo *di = CreateComm();  // Calls LVO -30 in REAL library
+ *   WriteStr("Hello!\n");                // Calls LVO -42 in REAL library
+ *   DeleteComm(di);
+ *   CloseLibrary(AEDoorBase);
+ *
+ * The REAL library (./Libs/AEDoor.library - 1128 bytes of 68K code) does
+ * all the work. The emulator intercepts message port I/O (PutMsg/GetMsg)
+ * to bridge between the real library and the BBS backend.
+ *
+ * See: C_DOOR_ARCHITECTURE_ISSUES.md for complete details
+ * See: AEDOOR_ARCHITECTURE_FIX.md for the correct architecture
+ *
+ * TODO: Replace this entire file with proper inline library call wrappers
+ * ============================================================================
  */
 
 #include "../includes/amiexpress.h"
@@ -27,9 +62,11 @@ struct MsgPort *replymp = NULL;
 struct MsgPort *port = NULL;
 
 /* AEDoor.library base - emulator loads it at 0xc0000 */
+/* WARNING: This hardcoded address is WRONG! Use OpenLibrary() instead! */
 struct Library *AEDoorBase = (struct Library *)0xc0000;
 
-/* Door API implementations - stubs for now */
+/* Door API implementations - THESE ARE STUBS AND DO NOT WORK! */
+/* TODO: Replace with inline wrappers that call the real library */
 VOID Register(int node)
 {
     /* Stub - emulator handles initialization */

@@ -46,7 +46,41 @@ const MESSAGE_LENGTH = 0x100;
 const MESSAGE_STRING_CAPACITY = 200;
 
 /**
- * AEDoor.library reimplementation
+ * AEDoor.library Bridge Class
+ *
+ * ============================================================================
+ * ARCHITECTURAL CHANGE (2025-12-15) - MOST OF THIS CLASS IS NOW UNUSED
+ * ============================================================================
+ *
+ * PREVIOUS (INCORRECT) ARCHITECTURE:
+ * - This class reimplemented AEDoor.library functions in TypeScript
+ * - LibraryTraps.ts installed ILLEGAL instruction traps at library vectors
+ * - When doors called library functions, traps intercepted and called methods
+ *   in this class (createComm, writeStr, etc.)
+ * - This TypeScript code constructed XIM messages and sent them to the BBS
+ *
+ * CURRENT (CORRECT) ARCHITECTURE:
+ * - We now use the REAL AEDoor.library binary (./Libs/AEDoor.library)
+ * - Library loaded via LibraryLoader with proper HUNK parsing
+ * - When doors call library functions, CPU executes REAL 68K code
+ * - Real library constructs XIM messages and calls PutMsg/GetMsg (Exec functions)
+ * - ExecLibrary intercepts PutMsg/GetMsg to bridge message port I/O
+ * - Messages route to XIMProtocol.handleMessage() (NOT to this class!)
+ *
+ * IMPACT:
+ * - All library function methods in this class are NOW UNUSED
+ * - createComm(), deleteComm(), writeStr(), prompt(), etc. are DEAD CODE
+ * - They were only called by trap handlers which are now disabled
+ * - The real library does all this work in native 68K code
+ *
+ * WHAT REMAINS:
+ * - This class is still instantiated but mostly unused
+ * - Could be removed entirely in future cleanup
+ * - For now, kept for backward compatibility
+ *
+ * See: AEDOOR_ARCHITECTURE_FIX.md for complete details
+ * See: LibraryTraps.ts (AEDOOR_VECTORS commented out)
+ * ============================================================================
  *
  * The real 68K AEDoor.library allocates a DIFace structure that contains:
  *   0x00: dif_AEPort   -> Pointer to AEDoorPortX (BBS message port)
@@ -104,6 +138,10 @@ export class AEDoorLibrary {
    * CreateComm() - LVO -30
    *
    * Establishes the DIFace, reply port, and jhMessage structure.
+   */
+  /**
+   * @deprecated UNUSED - Traps disabled, real library executes now
+   * @see AEDOOR_ARCHITECTURE_FIX.md
    */
   createComm(): number {
     const nodeId = this.resolveNodeId();
@@ -222,6 +260,9 @@ export class AEDoorLibrary {
   /**
    * DeleteComm() - LVO -36
    */
+  /**
+   * @deprecated UNUSED - Traps disabled, real library executes now
+   */
   deleteComm(): void {
     const state = this.getStateFromA1();
     if (!state) {
@@ -337,6 +378,9 @@ export class AEDoorLibrary {
   /**
    * Prompt() - LVO -78
    */
+  /**
+   * @deprecated UNUSED - Traps disabled, real library executes now
+   */
   prompt(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
@@ -364,6 +408,9 @@ export class AEDoorLibrary {
 
   /**
    * WriteStr() - LVO -84
+   */
+  /**
+   * @deprecated UNUSED - Traps disabled, real library executes now
    */
   writeStr(): number {
     const state = this.getStateFromA1();

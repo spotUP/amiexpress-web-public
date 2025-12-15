@@ -48,10 +48,26 @@ interface LibraryVector {
 }
 
 /**
- * AEDoor.library function vectors
- * Reference: AEDOOR_FUNCTION_OFFSETS.md & CRITICAL_AEDOOR_DISCOVERY.md
- * LVO = Library Vector Offset (in bytes from library base)
+ * AEDoor.library function vectors - DISABLED
+ *
+ * ARCHITECTURAL FIX (2025-12-15):
+ * These trap-based TypeScript reimplementations are DISABLED.
+ * We now use the REAL AEDoor.library binary (./Libs/AEDoor.library - 1128 bytes)
+ * loaded via LibraryLoader with proper HUNK parsing and relocations.
+ *
+ * WHY: The real library contains actual 68K code that:
+ * - Creates message ports and structures
+ * - Sends XIM messages via PutMsg/GetMsg
+ * - Manages door interface properly
+ *
+ * We intercept ONLY the Exec message port I/O (PutMsg/GetMsg) to bridge
+ * between the emulated environment and the Node.js BBS backend.
+ *
+ * See: AEDOOR_ARCHITECTURE_FIX.md for complete details
+ *
+ * Original trap vectors preserved below for reference:
  */
+/*
 const AEDOOR_VECTORS: LibraryVector[] = [
   {
     offset: -30, // LVO -30 (0xFFE2)
@@ -198,6 +214,7 @@ const AEDOOR_VECTORS: LibraryVector[] = [
     },
   },
 ];
+*/
 
 /**
  * DOS.library function vectors
@@ -2823,58 +2840,45 @@ export class LibraryTraps {
   }
 
   /**
-   * Install AEDoor.library vectors
+   * Install AEDoor.library vectors - DISABLED (2025-12-15)
+   *
+   * ARCHITECTURAL FIX:
+   * We no longer install ILLEGAL instruction traps for AEDoor.library functions.
+   * Instead, we use the REAL AEDoor.library binary loaded via LibraryLoader.
+   *
+   * When doors call library functions (CreateComm, WriteStr, etc.):
+   * 1. CPU executes the real 68K code in the library
+   * 2. Library code calls PutMsg/GetMsg (Exec functions)
+   * 3. ExecLibrary intercepts these Exec calls (not AEDoor calls)
+   * 4. Messages are routed to XIMProtocol for BBS communication
+   *
+   * This is the CORRECT architecture - the real library does all the work.
+   * See: AEDOOR_ARCHITECTURE_FIX.md
    */
   installAEDoorVectors(): void {
-    if (!this.aedoorLibrary) {
-      console.error(
-        "[LibraryTraps] Cannot install AEDoor vectors: library not set"
-      );
-      return;
-    }
-
     const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
-    if (aedoorBase === 0) {
-      console.error(
-        "[LibraryTraps] Cannot install AEDoor vectors: library not opened"
-      );
-      return;
-    }
 
     console.log(
-      `[LibraryTraps] Installing AEDoor.library vectors at base 0x${aedoorBase.toString(
-        16
-      )}`
+      `[LibraryTraps] ============================================`
     );
-
-    for (const vector of AEDOOR_VECTORS) {
-      const trapAddr = aedoorBase + vector.offset;
-
-      // CRITICAL FIX: Write ILLEGAL instruction at vector address!
-      this.emulator.writeMemory16(trapAddr, 0x4AFC);
-
-      // Store mapping of address to handler
-      this.trapMap.set(trapAddr, vector);
-      this.libraryMap.set(trapAddr, this.aedoorLibrary);
-
-      // NEW: Also store mapping by offset (array-based to handle collisions)
-      if (!this.offsetMap.has(vector.offset)) {
-        this.offsetMap.set(vector.offset, []);
-        this.offsetLibraryMap.set(vector.offset, []);
-      }
-      this.offsetMap.get(vector.offset)!.push(vector);
-      this.offsetLibraryMap.get(vector.offset)!.push(this.aedoorLibrary);
-
-      console.log(
-        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
-          vector.offset
-        })`
-      );
-    }
-
     console.log(
-      `[LibraryTraps] Installed ${AEDOOR_VECTORS.length} AEDoor.library vectors`
+      `[LibraryTraps] AEDoor.library trap installation SKIPPED`
     );
+    console.log(
+      `[LibraryTraps] Using REAL library at base 0x${aedoorBase.toString(16)}`
+    );
+    console.log(
+      `[LibraryTraps] Library functions will execute native 68K code`
+    );
+    console.log(
+      `[LibraryTraps] Message port I/O bridged via ExecLibrary.putMsg/getMsg`
+    );
+    console.log(
+      `[LibraryTraps] ============================================`
+    );
+
+    // NO trap installation - let the real library code execute!
+    // The CPU will JSR directly into the library's 68K code.
   }
 
   /**
