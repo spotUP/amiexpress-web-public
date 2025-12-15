@@ -1442,6 +1442,77 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
  * Execute Amiga door via 68000 CPU emulation
  * Handles XIM, AIM, SIM, TIM, IIM door types
  */
+async function executeNativeGccDoor(
+  socket: any,
+  session: BBSSession,
+  door: any,
+  doorConfig: any
+): Promise<void> {
+  const { spawn } = require('child_process');
+
+  console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePath}`);
+
+  // Enable game mode for GCC doors (they use different input handling)
+  enableGameMode(socket, session, 'XIM');
+
+  // Move to fresh line
+  socket.emit('ansi-output', '\r\n');
+
+  session.inDoorManager = true;
+  session.subState = LoggedOnSubState.DOOR_RUNNING;
+
+  // Spawn the GCC executable
+  const doorProcess = spawn(doorConfig.executablePath, [doorConfig.bbsSession.nodeId.toString()], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: process.cwd()
+  });
+
+  // Wire up input handling
+  session.doorInputHandler = (input: string) => {
+    // Send input to the door process
+    if (doorProcess && !doorProcess.killed) {
+      doorProcess.stdin.write(input + '\n');
+    }
+  };
+
+  // Handle stdout from the door
+  doorProcess.stdout.on('data', (data: Buffer) => {
+    const output = data.toString();
+    socket.emit('ansi-output', output);
+  });
+
+  // Handle stderr from the door
+  doorProcess.stderr.on('data', (data: Buffer) => {
+    const error = data.toString();
+    console.error(`[executeNativeGccDoor] Door stderr: ${error}`);
+  });
+
+  // Handle process exit
+  doorProcess.on('exit', (code: number) => {
+    console.log(`[executeNativeGccDoor] Door exited with code ${code}`);
+
+    // Clean up
+    disableGameMode(socket, session);
+    session.inDoorManager = false;
+    delete session.doorInputHandler;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    socket.emit('ansi-output', `\r\nDoor exited (code: ${code})\r\n`);
+  });
+
+  // Handle process errors
+  doorProcess.on('error', (err: Error) => {
+    console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
+
+    disableGameMode(socket, session);
+    session.inDoorManager = false;
+    delete session.doorInputHandler;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    socket.emit('ansi-output', `\r\nDoor execution failed: ${err.message}\r\n`);
+  });
+}
+
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
   console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
   console.log(`[executeAmigaDoor] Path: ${door.path}`);
@@ -1468,6 +1539,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
     console.log(`[executeAmigaDoor] Initial door path: ${doorPath}`);
 
+    const fs = require('fs');
     // Check if door executable exists - if not, try alternate paths
     if (!fs.existsSync(doorPath)) {
       console.log(`[executeAmigaDoor] Door not found at ${doorPath}, trying alternate paths...`);
@@ -1632,6 +1704,30 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       internal: door.internal,
       toolTypes: interactiveToolTypes
     };
+
+    // Check if this is a GCC-compiled development executable (ELF format)
+    // If so, run it natively instead of through Amiga emulation
+    let isGccExecutable = false;
+    try {
+      const buffer = Buffer.alloc(4);
+      const fd = fs.openSync(doorPath, 'r');
+      fs.readSync(fd, buffer, 0, 4, 0);
+      fs.closeSync(fd);
+      // ELF magic: 0x7F 0x45 0x4C 0x46 (Linux)
+      // Mach-O magic: 0xCF 0xFA 0xED 0xFE (macOS)
+      isGccExecutable = (buffer[0] === 0x7F && buffer[1] === 0x45 && buffer[2] === 0x4C && buffer[3] === 0x46) ||
+                        (buffer[0] === 0xCF && buffer[1] === 0xFA && buffer[2] === 0xED && buffer[3] === 0xFE);
+      console.log(`[executeAmigaDoor] File ${doorPath} magic bytes: ${buffer[0].toString(16)} ${buffer[1].toString(16)} ${buffer[2].toString(16)} ${buffer[3].toString(16)}, isGccExecutable: ${isGccExecutable}`);
+    } catch (err) {
+      console.log(`[executeAmigaDoor] Error reading file ${doorPath}: ${(err as Error).message}`);
+      // Not an executable or can't read, continue with normal Amiga execution
+    }
+
+    if (isGccExecutable) {
+      console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running natively for development testing`);
+      await executeNativeGccDoor(socket, session, door, doorConfig);
+      return;
+    }
 
     // Create AmigaDoorSession to run the native Amiga executable
     const amigaSession = new AmigaDoorSession(socket, doorConfig);

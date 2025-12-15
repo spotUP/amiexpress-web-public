@@ -5,12 +5,17 @@ import { XIMCommand } from "../xim/types";
 
 interface DoorInterfaceState {
   difaceAddr: number;
-  bbsPortAddr: number;
-  replyPortAddr: number;
-  messageAddr: number;
-  dataPtr: number;
-  stringPtr: number;
-  replyNameAddr: number;
+  bbsPortAddr: number;        // 0x00: dif_AEPort
+  replyPortAddr: number;      // 0x04: dif_ReplyPort
+  messageAddr: number;        // 0x08: dif_Message
+  eventHookAddr: number;      // 0x08: dif_EventHook (was missing)
+  nameBufAddr: number;        // 0x0C: dif_NameBuf (16 bytes)
+  bbsInfoAddr: number;        // 0x46: dif_BBSInfo
+  nodeBufAddr: number;        // 0xDC: dif_NodeBuf
+  nodeStateAddr: number;      // 0xE4: dif_NodeState (CRITICAL for Bulls)
+  dataPtr: number;            // 0x1C: dif_DataPtr
+  stringPtr: number;          // 0x20: dif_String
+  replyNameAddr: number;      // 0x0C: dif_ReplyName
   nodeId: number;
   stringCapacity: number;
 }
@@ -22,18 +27,22 @@ interface PromptState {
 }
 
 const MEMF_CLEAR = 1 << 16;
-const DIFACE_SIZE = 0x146;
+const DIFACE_SIZE = 0x146;  // Complete DoorInfo structure size
 const DIFACE_MSG_OFFSET = 0x46;
+const DIFACE_EVENT_HOOK_OFFSET = 0x08;
+const DIFACE_NAME_BUF_OFFSET = 0x0C;
+const DIFACE_BBS_INFO_OFFSET = 0x46;
+const DIFACE_NODE_BUF_OFFSET = 0xDC;
+const DIFACE_NODE_STATE_OFFSET = 0xE4;
 const DIFACE_REPLY_NAME_OFFSET = 0x0c;
 const DIFACE_DATA_PTR_OFFSET = 0x1c;
 const DIFACE_STRING_PTR_OFFSET = 0x20;
-const MESSAGE_STRING_OFFSET = 20;
-const MESSAGE_DATA_OFFSET = 220;
-const MESSAGE_COMMAND_OFFSET = 224;
+const MESSAGE_STRING_OFFSET = 28;
+const MESSAGE_DATA_OFFSET = 24;
+const MESSAGE_COMMAND_OFFSET = 20;
 const MESSAGE_REPLY_PORT_OFFSET = 14;
 const MESSAGE_LENGTH_OFFSET = 18;
 const MESSAGE_LENGTH = 0x100;
-const MESSAGE_NODE_OFFSET = 0xe4;
 const MESSAGE_STRING_CAPACITY = 200;
 
 /**
@@ -149,20 +158,55 @@ export class AEDoorLibrary {
     );
     this.emulator.writeMemory32(messageAddr + MESSAGE_COMMAND_OFFSET, 0);
     this.emulator.writeMemory32(messageAddr + MESSAGE_DATA_OFFSET, 0);
-    this.emulator.writeMemory32(messageAddr + MESSAGE_NODE_OFFSET, nodeId);
     this.clearBuffer(stringPtr, MESSAGE_STRING_CAPACITY);
+
+    // Allocate additional buffers required by DoorInfo structure
+    const eventHookAddr = this.execLibrary.allocMem(4, MEMF_CLEAR); // 4 bytes for event hook pointer
+    const nameBufAddr = this.execLibrary.allocMem(16, MEMF_CLEAR);  // 16 bytes for CLI/SysOp name
+    const bbsInfoAddr = this.execLibrary.allocMem(152, MEMF_CLEAR); // BBS info buffer
+    const nodeBufAddr = this.execLibrary.allocMem(8, MEMF_CLEAR);   // Per-node status buffer
+    const nodeStateAddr = this.execLibrary.allocMem(16, MEMF_CLEAR); // Node state data (CRITICAL)
+
+    // Initialize DoorInfo structure with all required fields
+    this.emulator.writeMemory32(difaceAddr + DIFACE_EVENT_HOOK_OFFSET, eventHookAddr);
+    this.emulator.writeMemory32(difaceAddr + DIFACE_NAME_BUF_OFFSET, nameBufAddr);
+    this.emulator.writeMemory32(difaceAddr + DIFACE_BBS_INFO_OFFSET, bbsInfoAddr);
+    this.emulator.writeMemory32(difaceAddr + DIFACE_NODE_BUF_OFFSET, nodeBufAddr);
+    this.emulator.writeMemory32(difaceAddr + DIFACE_NODE_STATE_OFFSET, nodeStateAddr);
+
+    // Initialize node state data (critical for Bulls door and others)
+    // Format: [word count][security level][user data...]
+    this.emulator.writeMemory16(nodeStateAddr, 8);     // Word count
+    this.emulator.writeMemory16(nodeStateAddr + 2, 100); // Security level
+    this.emulator.writeMemory16(nodeStateAddr + 4, nodeId); // Node ID
+    this.emulator.writeMemory16(nodeStateAddr + 6, 1); // Active flag
+    this.emulator.writeMemory16(nodeStateAddr + 8, 0); // Reserved
+    this.emulator.writeMemory16(nodeStateAddr + 10, 0); // Reserved
+    this.emulator.writeMemory16(nodeStateAddr + 12, 0); // Reserved
+    this.emulator.writeMemory16(nodeStateAddr + 14, 0); // Reserved
 
     const state: DoorInterfaceState = {
       difaceAddr,
       bbsPortAddr,
       replyPortAddr,
       messageAddr,
+      eventHookAddr,
+      nameBufAddr,
+      bbsInfoAddr,
+      nodeBufAddr,
+      nodeStateAddr,
       dataPtr,
       stringPtr,
       replyNameAddr,
       nodeId,
       stringCapacity: MESSAGE_STRING_CAPACITY,
     };
+
+    // Store door command name in name buffer (for doors that need to know how they were launched)
+    const commandName = this.getDoorCommandName();
+    if (commandName) {
+      this.writeCString(nameBufAddr, commandName, 16); // CLI name buffer is 16 bytes
+    }
 
     this.interfaces.set(difaceAddr, state);
     this.emulator.setRegister(0, difaceAddr);
@@ -472,38 +516,52 @@ export class AEDoorLibrary {
 
   /**
    * PreCreateComm() - LVO -132
+   * Called before door communication setup
    */
   preCreateComm(): number {
     const nodeNum = this.emulator.getRegister(0);
     console.log(`[AEDoorLibrary] PreCreateComm(node=${nodeNum})`);
-    this.emulator.setRegister(0, 0);
+
+    // Basic validation - could add more setup logic here
+    if (nodeNum < 1 || nodeNum > 99) {
+      console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
+      this.emulator.setRegister(0, 0);
+      return -1; // Error
+    }
+
+    this.emulator.setRegister(0, 1); // Success
     return 0;
   }
 
   /**
    * PostDeleteComm() - LVO -138
+   * Called after door communication cleanup
    */
   postDeleteComm(): number {
     const nodeNum = this.emulator.getRegister(0);
     console.log(`[AEDoorLibrary] PostDeleteComm(node=${nodeNum})`);
-    this.emulator.setRegister(0, 0);
+
+    // Basic cleanup validation
+    if (nodeNum < 1 || nodeNum > 99) {
+      console.warn(`[AEDoorLibrary] PostDeleteComm: Invalid node number ${nodeNum}`);
+      this.emulator.setRegister(0, 0);
+      return -1; // Error
+    }
+
+    this.emulator.setRegister(0, 1); // Success
     return 0;
   }
 
   /**
-   * Send initial ready message to door's reply port
-   *
-   * After CreateComm, XIM doors poll GetMsg waiting for
-   * the BBS to send a message. We send a properly formatted AEDoor message
-   * with JH_REGISTER (1) command as the initial handshake.
+   * Send a properly formatted JH message to door's reply port
    */
-  private sendInitialReadyMessage(state: DoorInterfaceState): void {
+  private sendJHMessage(state: DoorInterfaceState, command: number, data: number, strData: string): void {
     // Create properly formatted AEDoor message
     // struct Message (20 bytes) + AEDoor extension (variable size)
     const msgSize = 256; // Enough for full AEDoor message structure
     const msgAddr = this.execLibrary.allocMem(msgSize, MEMF_CLEAR);
     if (msgAddr === 0) {
-      console.warn("[AEDoorLibrary] Failed to allocate initial message");
+      console.warn("[AEDoorLibrary] Failed to allocate JH message");
       return;
     }
 
@@ -524,36 +582,52 @@ export class AEDoorLibrary {
     this.emulator.writeMemory16(msgAddr + 18, msgSize);
 
     // === AEDoor Message Extension (starts at offset 20) ===
-    // command = JH_REGISTER (1) - tells door to initialize and start
-    this.emulator.writeMemory32(msgAddr + 20, 1); // JH_REGISTER
-    // data = node ID
-    this.emulator.writeMemory32(msgAddr + 24, state.nodeId);
-    // string data = empty for initial registration
-    this.emulator.writeMemory(msgAddr + 28, 0); // null terminator
-
-    console.log(
-      `[AEDoorLibrary] Created properly formatted AEDoor message at 0x${msgAddr.toString(
-        16
-      )}`
-    );
-    console.log(`[AEDoorLibrary]   Command: JH_REGISTER (1)`);
-    console.log(`[AEDoorLibrary]   Node ID: ${state.nodeId}`);
-    console.log(
-      `[AEDoorLibrary]   Reply Port: 0x${state.replyPortAddr.toString(16)}`
-    );
-    console.log(`[AEDoorLibrary]   Message Size: ${msgSize} bytes`);
+    // command = specified command
+    this.emulator.writeMemory32(msgAddr + 20, command);
+    // data = specified data
+    this.emulator.writeMemory32(msgAddr + 24, data);
+    // string data = specified string
+    if (strData) {
+      for (let i = 0; i < strData.length && i < 200; i++) {
+        this.emulator.writeMemory(msgAddr + 28 + i, strData.charCodeAt(i));
+      }
+    }
+    this.emulator.writeMemory(msgAddr + 28 + (strData ? strData.length : 0), 0); // null terminator
 
     // Put message in door's reply port to trigger GetMsg() return
     this.execLibrary.putMsg(state.replyPortAddr, msgAddr);
 
-    console.log(
-      `[AEDoorLibrary] ✅ Sent initial AEDoor message to door reply port 0x${state.replyPortAddr.toString(
-        16
-      )}`
-    );
-    console.log(
-      `[AEDoorLibrary] XIM door should now receive JH_REGISTER and enter main processing loop`
-    );
+    console.log(`[AEDoorLibrary] Sent JH message: command=${command}, data=0x${data.toString(16)}`);
+  }
+
+  /**
+   * Send initial ready messages to door's reply port
+   *
+   * After CreateComm, AEDoor sends TWO messages (per express.e disassembly):
+   * 1. JH_INIT (command 0) - Basic initialization notification
+   * 2. JH_STAT (command 1) - Node status with user data (points to DoorInfo+0xE4)
+   */
+  private sendInitialReadyMessage(state: DoorInterfaceState): void {
+    // Send FIRST message: JH_INIT (command 0) - Basic initialization
+    this.sendJHMessage(state, 0, state.nodeId, ""); // JH_INIT with node ID
+
+    // Send SECOND message: JH_STAT (command 1) - Node status with user data
+    // Data points to DoorInfo+0xE4 (nodeStateAddr) containing node status
+    this.sendJHMessage(state, 1, state.nodeStateAddr, ""); // JH_STAT with pointer to node state data
+
+    console.log(`[AEDoorLibrary] ✅ Sent both AEDoor startup messages:`);
+    console.log(`[AEDoorLibrary]   1. JH_INIT (0) - Basic initialization`);
+    console.log(`[AEDoorLibrary]   2. JH_STAT (1) - Node status data at 0x${state.nodeStateAddr.toString(16)}`);
+    console.log(`[AEDoorLibrary] XIM door should now receive both messages and proceed`);
+  }
+
+  /**
+   * Get the door command name that launched this door
+   */
+  private getDoorCommandName(): string {
+    // This should come from the session/command that launched the door
+    // For now, return a default - this needs to be passed from the door handler
+    return "UNKNOWN";
   }
 
   /**
