@@ -205,3 +205,41 @@ dev/docs/radare2
 # NDK reference docs - too large for git
 Documentation/7-Reference Sources/NDK3.2R4/
 highscores.json
+
+# C Door development - build artifacts
+dev/c-doors/doors/**/*.o
+dev/c-doors/doors/**/amiga68k
+dev/c-doors/doors/**/minimal
+dev/c-doors/doors/**/simpletest
+dev/c-doors/doors/**/apitest
+dev/c-doors/doors/**/amiga-gcc-door
+dev/c-doors/doors/**/amiga-gcc-hunk
+dev/c-doors/templates/*.o
+dev/c-doors/src/*.o
+
+# Installed door binaries (keep source only)
+Doors/SDKTEST/amiga68k
+Doors/SDKTEST/minimal
+Doors/SDKTEST/simpletest
+Doors/apitest/apitest
+Doors/apitest/*.o
+Doors/testdoor/testdoor
+Doors/testdoor/*.o
+Doors/AMIGAGCC/amiga-gcc-door
+Doors/AMIGAGCC/amiga-gcc-hunk
+
+# Compiler toolchains (too large, install locally)
+amiga-gcc/
+elf2hunk/
+lha/
+lha.run
+vbcc.tar.gz
+~/homebrew-lha/
+~/homebrew-local/
+
+# Temporary build files
+a.out
+-o
+
+# Runtime bulletin updates
+Bulletins/bull*.txt
