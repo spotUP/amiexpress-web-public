@@ -86,6 +86,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
+
+  // Web transparency overlays (CSS-based, for web connections only)
+  const [overlays, setOverlays] = useState<Map<string, { opacity: number; show: boolean }>>(new Map());
   const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
   const zmodemSession = useRef<any | null>(null);
@@ -391,15 +394,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     window.addEventListener('keyup', handleGameKeyUp);
 
     // Connect to BBS backend
+    // In production, start with polling to wake up sleeping servers (Render free tier),
+    // then upgrade to WebSocket. In development, prefer WebSocket directly.
     const socket = io(finalBackendUrl, {
-      transports: ['websocket', 'polling'],
-      timeout: 10000,
+      transports: isDevelopment ? ['websocket', 'polling'] : ['polling', 'websocket'],
+      timeout: 20000,
       upgrade: true,
       rememberUpgrade: true,
       reconnection: true,
-      reconnectionAttempts: isDevelopment ? 3 : 10,
+      reconnectionAttempts: isDevelopment ? 3 : 15,
       reconnectionDelay: 2000,
-      reconnectionDelayMax: isDevelopment ? 5000 : 10000,
+      reconnectionDelayMax: isDevelopment ? 5000 : 15000,
     });
     socketRef.current = socket;
 
@@ -610,6 +615,37 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      // Debug: Check if data contains OSC 9999 sequence
+      if (data.includes('9999') || data.includes('overlay')) {
+        console.log('[Overlay] Raw data contains potential overlay command, length:', data.length);
+        console.log('[Overlay] Raw data hex:', Array.from(data.slice(0, 100)).map(c => c.charCodeAt(0).toString(16)).join(' '));
+      }
+
+      // Check for web transparency overlay OSC sequences
+      // Format: ESC ] 9999 ; overlay ; <json> BEL
+      const overlayRegex = /\x1b\]9999;overlay;({[^}]+})\x07/g;
+      let overlayMatch;
+      while ((overlayMatch = overlayRegex.exec(data)) !== null) {
+        try {
+          const overlayData = JSON.parse(overlayMatch[1]);
+          console.log('[Overlay] Parsed overlay command:', overlayData);
+          setOverlays(prev => {
+            const next = new Map(prev);
+            if (overlayData.show) {
+              next.set(overlayData.id, { opacity: overlayData.opacity || 0.5, show: true });
+            } else {
+              next.delete(overlayData.id);
+            }
+            console.log('[Overlay] Updated overlays map, size:', next.size);
+            return next;
+          });
+        } catch (e) {
+          console.error('[Overlay] Failed to parse overlay data:', e, 'Match:', overlayMatch[1]);
+        }
+      }
+      // Strip overlay sequences from output (they shouldn't display as text)
+      data = data.replace(overlayRegex, '');
+
       // Check for RIP mode escape codes (express.e:25679-25683)
       // [1! = Enter RIP pixel/graphics mode
       // [2! = Return to RIP text mode
@@ -1056,6 +1092,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       className={`min-h-screen w-full flex items-center justify-center ${className}`}
       style={{
         backgroundColor: '#000000',
+        position: 'relative',
       }}
     >
       <div
@@ -1070,6 +1107,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           maxWidth: '960px',
         }}
       />
+      {/* Web Transparency Overlays - CSS-based overlays for web connections */}
+      {Array.from(overlays.entries()).map(([id, overlay]) => {
+        console.log('[Overlay] Rendering overlay:', id, 'opacity:', overlay.opacity);
+        return (
+          <div
+            key={id}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
+              pointerEvents: 'none', // Allow clicks through to terminal
+              zIndex: 100, // High enough to be above terminal
+              outline: '2px solid red', // Debug: shows overlay bounds
+            }}
+          />
+        );
+      })}
       {/* RIP Graphics Canvas Overlay */}
       {ripMode && (
         <div
