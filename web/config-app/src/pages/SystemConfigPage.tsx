@@ -127,7 +127,7 @@ export function SystemConfigPage() {
     },
   });
 
-  const { register, watch, reset, setValue } = useForm<SystemConfig>({
+  const { register, watch, reset } = useForm<SystemConfig>({
     values: {
       language_base: 'Languages',
       default_language: 'English',
@@ -369,8 +369,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="min_password_strength"
-                value={watch('min_password_strength') ?? 0}
-                onChange={(e) => setValue('min_password_strength', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('min_password_strength', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 <option value={0}>0 - No check</option>
@@ -387,8 +386,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="max_password_fails"
-                value={watch('max_password_fails') ?? -1}
-                onChange={(e) => setValue('max_password_fails', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('max_password_fails', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 <option value={-1}>Unlimited (-1)</option>
@@ -497,8 +495,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="idle_timeout"
-                value={watch('idle_timeout') ?? 10}
-                onChange={(e) => setValue('idle_timeout', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('idle_timeout', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 {IDLE_TIMEOUTS.map((opt) => (
@@ -523,8 +520,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="new_user_sec_level"
-                value={watch('new_user_sec_level') ?? 30}
-                onChange={(e) => setValue('new_user_sec_level', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('new_user_sec_level', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 {SECURITY_LEVELS.map((level) => (
@@ -570,8 +566,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="new_user_lines_per_screen"
-                value={watch('new_user_lines_per_screen') ?? 24}
-                onChange={(e) => setValue('new_user_lines_per_screen', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('new_user_lines_per_screen', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 {LINES_PER_SCREEN.map((opt) => (
@@ -605,8 +600,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="new_user_screen_type"
-                value={watch('new_user_screen_type') ?? 'ANSI'}
-                onChange={(e) => setValue('new_user_screen_type', e.target.value, { shouldDirty: true })}
+                {...register('new_user_screen_type')}
                 className="input-field w-full"
               >
                 <option value="ANSI">ANSI</option>
@@ -631,8 +625,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="new_user_editor"
-                value={watch('new_user_editor') ?? 'FULL'}
-                onChange={(e) => setValue('new_user_editor', e.target.value, { shouldDirty: true })}
+                {...register('new_user_editor')}
                 className="input-field w-full"
               >
                 {EDITOR_TYPES.map((opt) => (
@@ -771,8 +764,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="default_language"
-                value={watch('default_language') ?? 'English'}
-                onChange={(e) => setValue('default_language', e.target.value, { shouldDirty: true })}
+                {...register('default_language')}
                 className="input-field w-full"
               >
                 <option value="English">English (default)</option>
@@ -1349,8 +1341,7 @@ export function SystemConfigPage() {
               </label>
               <select
                 id="log_retention_days"
-                value={watch('log_retention_days') ?? 30}
-                onChange={(e) => setValue('log_retention_days', parseInt(e.target.value, 10), { shouldDirty: true })}
+                {...register('log_retention_days', { setValueAs: (v) => parseInt(v, 10) })}
                 className="input-field w-full"
               >
                 {LOG_RETENTION_PRESETS.map((opt) => (

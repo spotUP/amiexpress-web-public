@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { MessageSquare, Send, Clock, User, Hash } from 'lucide-react';
+import { MessageSquare, Clock, User, Hash, Terminal } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import { OperatorChatTerminal } from '../components/OperatorChatTerminal';
 
 interface PageRequest {
   id: string;
@@ -40,13 +41,32 @@ export function OperatorChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [userTypingBuffer, setUserTypingBuffer] = useState('');
+  const [useTerminalMode, setUseTerminalMode] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    // Get auth token from localStorage
-    const token = localStorage.getItem('authToken');
+    // Get auth token from URL query params (for Discord links) or localStorage (for logged-in admins)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    const storageToken = localStorage.getItem('authToken');
+    const token = urlToken || storageToken;
+
+    if (!token) {
+      console.error('[Operator Chat] No auth token available');
+      return;
+    }
+
+    // If token came from URL, store it for this session
+    if (urlToken) {
+      console.log('[Operator Chat] Using token from URL for authentication');
+      // Don't persist to localStorage - only use for this session
+    } else {
+      console.log('[Operator Chat] Using stored auth token');
+    }
 
     // Use same-origin backend by default; allow override via env for deployments
     const socketUrl =
@@ -63,18 +83,41 @@ export function OperatorChatPage() {
     });
 
     socketInstance.on('connect', () => {
-      console.log('[Operator Chat] Connected to server');
+      console.log('[Operator Chat] Connected to server, socket ID:', socketInstance.id);
+      setConnectionError(null); // Clear any previous error
       // Request pending pages
       socketInstance.emit('operator:get-pending-pages');
+      console.log('[Operator Chat] Requested pending pages');
+    });
+
+    socketInstance.on('connect_error', (error) => {
+      console.error('[Operator Chat] Connection error:', error.message);
+      setConnectionError(error.message);
+      // If session expired, clear token and redirect to login
+      if (error.message.includes('Session expired') || error.message.includes('expired')) {
+        console.log('[Operator Chat] Session expired, clearing token');
+        localStorage.removeItem('authToken');
+      }
+    });
+
+    socketInstance.on('error', (error) => {
+      console.error('[Operator Chat] Socket error:', error);
+    });
+
+    socketInstance.on('disconnect', (reason) => {
+      console.log('[Operator Chat] Disconnected:', reason);
     });
 
     socketInstance.on('operator:page', (page: PageRequest) => {
-      console.log('[Operator Chat] New page request:', page);
-      setPendingPages(prev => [...prev, page]);
+      console.log('[Operator Chat] New page request received:', page);
+      setPendingPages(prev => {
+        console.log('[Operator Chat] Adding page to pending list, current count:', prev.length);
+        return [...prev, page];
+      });
 
       // Play notification sound
       const audio = new Audio('/notification.mp3');
-      audio.play().catch(() => console.log('Audio play failed'));
+      audio.play().catch((err) => console.log('Audio play failed:', err));
 
       // Vibrate if supported
       if ('vibrate' in navigator) {
@@ -83,8 +126,13 @@ export function OperatorChatPage() {
     });
 
     socketInstance.on('operator:pending-pages', (pages: PageRequest[]) => {
-      console.log('[Operator Chat] Pending pages:', pages);
+      console.log('[Operator Chat] Pending pages received:', pages.length, 'pages');
+      console.log('[Operator Chat] Pages data:', pages);
       setPendingPages(pages);
+    });
+
+    socketInstance.on('operator:error', (data: { message: string }) => {
+      console.error('[Operator Chat] Server error:', data.message);
     });
 
     socketInstance.on('operator:message', (message: ChatMessage) => {
@@ -92,9 +140,16 @@ export function OperatorChatPage() {
       setMessages(prev => [...prev, message]);
     });
 
-    socketInstance.on('operator:typing-status', ({ pageId, isTyping: typing }: { pageId: string; isTyping: boolean }) => {
-      if (activeChat?.id === pageId) {
+    socketInstance.on('operator:typing-status', ({ pageId, senderType, isTyping: typing }: { pageId: string; senderType: string; isTyping: boolean }) => {
+      if (activeChat?.id === pageId && senderType === 'user') {
         setIsTyping(typing);
+      }
+    });
+
+    // Real-time user typing (char-by-char like livechat)
+    socketInstance.on('operator:user-typing', ({ pageId, buffer }: { pageId: string; buffer: string }) => {
+      if (activeChat?.id === pageId) {
+        setUserTypingBuffer(buffer);
       }
     });
 
@@ -118,6 +173,16 @@ export function OperatorChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-focus input when chat becomes active
+  useEffect(() => {
+    if (activeChat && !useTerminalMode) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [activeChat, useTerminalMode]);
 
   const handleAcceptPage = (page: PageRequest) => {
     if (!socket) return;
@@ -193,6 +258,26 @@ export function OperatorChatPage() {
         </p>
       </div>
 
+      {/* Connection Error Banner */}
+      {connectionError && (
+        <div className="bg-red-900/50 border-b border-red-600 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-red-400 font-semibold">Connection Error:</span>
+              <span className="text-red-300">{connectionError}</span>
+            </div>
+            {connectionError.includes('expired') && (
+              <a
+                href="/login"
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+              >
+                Log In Again
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 overflow-hidden flex">
         {/* Active Chat */}
@@ -220,83 +305,122 @@ export function OperatorChatPage() {
                     {activeChat.conferenceName} | Last: {activeChat.lastCommand}
                   </div>
                 </div>
-                <button
-                  onClick={handleEndChat}
-                  className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
-                >
-                  End Chat
-                </button>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 bg-black">
-              <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
-                {messages.map((msg) => (
-                  <div key={msg.id} className="text-sm">
-                    <span className={msg.senderType === 'sysop' ? 'text-cyan-400' : 'text-yellow-300'}>
-                      [{formatTime(msg.timestamp)}]
-                    </span>
-                    {' '}
-                    <span className={msg.senderType === 'sysop' ? 'text-green-400' : 'text-blue-400'}>
-                      {msg.senderHandle}:
-                    </span>
-                    {' '}
-                    <span className="text-white whitespace-pre-wrap break-words">
-                      {msg.message}
-                    </span>
-                  </div>
-                ))}
-                {isTyping && (
-                  <div className="text-gray-500 text-xs italic">
-                    {activeChat.userHandle} is typing...
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Input Area */}
-            <div className="border-t border-bbs-border bg-bbs-surface p-4">
-              {/* Quick Replies */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {QUICK_REPLIES.map((reply) => (
+                <div className="flex items-center gap-2">
                   <button
-                    key={reply.label}
-                    onClick={() => handleQuickReply(reply.message)}
-                    className="px-3 py-2 bg-bbs-accent/20 hover:bg-bbs-accent/30 text-bbs-accent rounded text-sm"
+                    onClick={() => setUseTerminalMode(!useTerminalMode)}
+                    className={`px-3 py-1 rounded text-sm flex items-center gap-1 ${
+                      useTerminalMode
+                        ? 'bg-bbs-accent text-white'
+                        : 'bg-bbs-surface border border-bbs-border text-bbs-muted hover:border-bbs-accent'
+                    }`}
                   >
-                    {reply.label}
+                    <Terminal className="w-4 h-4" />
+                    Terminal
                   </button>
-                ))}
+                  <button
+                    onClick={handleEndChat}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+                  >
+                    End Chat
+                  </button>
+                </div>
               </div>
+            </div>
 
-              {/* Input */}
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
+            {/* Terminal Mode */}
+            {useTerminalMode ? (
+              <div className="flex-1 p-4 bg-black">
+                <OperatorChatTerminal
+                  messages={messages}
+                  userHandle={activeChat.userHandle}
+                  userTypingBuffer={userTypingBuffer}
+                  onSendMessage={(message) => handleSendMessage(message)}
+                  onEndChat={handleEndChat}
+                  onKeystroke={(keystroke) => {
+                    // Send real-time keystroke to BBS user (like livechat char-by-char)
+                    if (socket && activeChat) {
+                      socket.emit('operator:keystroke', {
+                        pageId: activeChat.id,
+                        keystroke
+                      });
                     }
                   }}
-                  placeholder="Type your message..."
-                  className="flex-1 px-4 py-3 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:border-bbs-accent"
                 />
-                <button
-                  onClick={() => handleSendMessage()}
-                  disabled={!inputMessage.trim()}
-                  className="px-6 py-3 bg-bbs-accent hover:bg-bbs-accent/80 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  Send
-                </button>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Classic Messages Mode */}
+                <div className="flex-1 overflow-y-auto p-4 bg-black">
+                  <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
+                    {messages.map((msg) => (
+                      <div key={msg.id} className="text-sm">
+                        <span className={msg.senderType === 'sysop' ? 'text-cyan-400' : 'text-yellow-300'}>
+                          [{formatTime(msg.timestamp)}]
+                        </span>
+                        {' '}
+                        <span className={msg.senderType === 'sysop' ? 'text-green-400' : 'text-blue-400'}>
+                          {msg.senderHandle}:
+                        </span>
+                        {' '}
+                        <span className="text-white whitespace-pre-wrap break-words">
+                          {msg.message}
+                        </span>
+                      </div>
+                    ))}
+                    {(isTyping || userTypingBuffer) && (
+                      <div className="text-gray-500 text-xs">
+                        <span className="italic">{activeChat.userHandle} is typing: </span>
+                        <span className="text-yellow-600">{userTypingBuffer}</span>
+                        <span className="animate-pulse">|</span>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+
+                {/* Input Area */}
+                <div className="border-t border-bbs-border bg-bbs-surface p-4">
+                  {/* Quick Replies */}
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {QUICK_REPLIES.map((reply) => (
+                      <button
+                        key={reply.label}
+                        onClick={() => handleQuickReply(reply.message)}
+                        className="px-3 py-2 bg-bbs-accent/20 hover:bg-bbs-accent/30 text-bbs-accent rounded text-sm"
+                      >
+                        {reply.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Input */}
+                  <div className="flex gap-2">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder="Type your message..."
+                      className="flex-1 px-4 py-3 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:border-bbs-accent"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSendMessage()}
+                      disabled={!inputMessage.trim()}
+                      className="px-6 py-3 bg-bbs-accent hover:bg-bbs-accent/80 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           /* Pending Pages List */

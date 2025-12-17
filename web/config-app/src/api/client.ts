@@ -579,6 +579,18 @@ class ApiClient {
       body: JSON.stringify({ path: relativePath, key }),
     });
   }
+
+  // Operator Chat Configuration
+  async getOperatorChatConfig() {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat`);
+  }
+
+  async updateOperatorChatConfig(config: any) {
+    return this.request<ApiResponse>(`${API_BASE}/config/operator-chat`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

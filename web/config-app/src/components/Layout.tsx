@@ -37,6 +37,7 @@ export function Layout() {
     { to: `${ADMIN_BASE}/system`, icon: Settings, label: 'System Config' },
     { to: `${ADMIN_BASE}/health`, icon: Activity, label: 'Health Check' },
     { to: `${ADMIN_BASE}/operator-chat`, icon: MessageSquare, label: 'Operator Chat' },
+    { to: `${ADMIN_BASE}/operator-chat-settings`, icon: Settings, label: 'Chat Settings' },
     { to: `${ADMIN_BASE}/nodes`, icon: Server, label: 'Nodes' },
     { to: `${ADMIN_BASE}/users`, icon: User, label: 'Users' },
     { to: `${ADMIN_BASE}/conferences`, icon: MessageSquare, label: 'Conferences' },
