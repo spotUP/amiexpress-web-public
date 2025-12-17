@@ -184,9 +184,9 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
         const typingPreview =
           '\x1b7' + // Save BBS user's cursor position (they're typing at line 24)
           '\x1b[22;1H' + // Move to line 22 (typing preview line)
-          '\x1b[K' + // Clear line
+          '\x1b[2K' + // Clear ENTIRE line (not just from cursor)
           (buffer.length > 0
-            ? `\x1b[90m\x1b[36m${sysopHandle}:\x1b[0m ${buffer}\x1b[36m|\x1b[0m`
+            ? `\x1b[36m${sysopHandle}:\x1b[0m ${buffer}\x1b[36m|\x1b[0m`
             : '') +
           '\x1b8'; // Restore BBS user's cursor position
 
@@ -761,13 +761,14 @@ async function sendChatMessage(
     // Insert message into scroll region while keeping cursor at line 24
     // This matches the livechat pattern exactly
     const insertMessage =
-      '\x1b7' + // Save cursor position (line 24)
-      '\x1b[22;1H\x1b[K' + // Clear typing preview at line 22
+      '\x1b7' + // Save cursor position
+      '\x1b[1;21r' + // Reinforce scroll region (lines 1-21) to prevent full-screen scroll
+      '\x1b[22;1H\x1b[2K' + // Move to line 22, clear ENTIRE line (typing preview)
+      '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
       '\x1b[S' + // Scroll Up (SU): Scroll the scroll region up by 1 line
       '\x1b[21;1H' + // Move to line 21 (now a blank line after scroll)
       `\x1b[36m${timestamp}\x1b[0m \x1b[${nameColor}m${senderHandle}:\x1b[0m ${message}` + // Write message
-      '\x1b8' + // Restore cursor to line 24
-      '\x1b[K'; // Clear input line (user's typing was already sent)
+      '\x1b8'; // Restore cursor position (don't clear line 24 - user may be typing)
 
     io.to(`user:${page.userId}`).emit('ansi-output', insertMessage);
   }
