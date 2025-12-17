@@ -2,116 +2,165 @@
 
 ## Overview
 
-This guide documents how to create authentic 68K Amiga executables that run on AmiExpress BBS using assembly language. These doors run natively on the Amiga emulator and provide maximum performance and compatibility.
+This guide documents how to create authentic 68K Amiga executables that run on AmiExpress BBS using C and assembly language. These doors run natively on the Amiga emulator and provide maximum performance and compatibility.
 
 ## Prerequisites
 
-### 1. Amiga NDK Headers
+### 1. vbcc Cross-Compiler
+
+```bash
+# Install vbcc via Homebrew
+brew tap tditlu/amiga
+brew install vbcc
+
+# Set environment variable (add to ~/.zshrc)
+export VBCC=/opt/homebrew/opt/vbcc
+
+# Verify installation
+vc -version
+# Should show: vbcc configuration
+```
+
+### 2. vasm Assembler (included with vbcc)
+
+```bash
+# Verify installation
+vasmm68k_mot -version
+# Should show: vasm 2.0d
+```
+
+### 3. Amiga NDK Headers
+
 The Amiga Native Development Kit (NDK) provides essential headers for Amiga development.
 
-**Location:** `Documentation/7-Reference Sources/NDK3.2R4/`
+**Included Location:** `sdk/68k/ndk-includes/`
+- `exec/` - Exec library headers
+- `dos/` - DOS library headers
+- `clib/` - C library prototypes
+- `pragmas/` - vbcc pragma files
+
+**Reference Location:** `Documentation/7-Reference Sources/NDK3.2R4/`
 - `Include_H/` - C headers (exec.h, dos.h, etc.)
 - `Include_I/` - Assembly includes (exec/types.i, etc.)
 
-### 2. vasm Assembler
-Virtual Assembler (vasm) creates Amiga hunk format executables.
-
-**Installation:**
-```bash
-brew install tditlu/amiga/vasm
-```
-
-**Usage:**
-```bash
-# Assembler executable
-/opt/homebrew/bin/vasmm68k_mot
-
-# Command format
-vasmm68k_mot -Fhunk -I<path/to/ndk/includes> -o <output> <input.s>
-```
-
 ## Door Structure
 
-### 1. Basic Assembly Template
+### 1. Basic C Door Template
+
+```c
+// mydoor.c
+#include <clib/exec_protos.h>
+#include <exec/types.h>
+
+extern struct Library *SysBase;
+struct Library *AEDoorBase = NULL;
+
+// Assembly wrapper declarations
+extern void WriteStr(char *text, struct Library *base);
+
+int main(int argc, char **argv) {
+    // Open AEDoor.library
+    AEDoorBase = OpenLibrary("AEDoor.library", 0);
+    if (!AEDoorBase) {
+        return 20;  // ERROR - library not found
+    }
+
+    // Your door logic here
+    WriteStr("Hello from my 68K door!\r\n", AEDoorBase);
+
+    // Clean up
+    CloseLibrary(AEDoorBase);
+    return 0;  // SUCCESS
+}
+```
+
+### 2. Assembly Wrapper for Library Calls
+
+```asm
+; writestr.asm - Assembly wrapper for AEDoor.library WriteStr
+        section code,code
+        xdef _WriteStr
+
+_WriteStr:
+        move.l  4(sp),a0        ; Get text parameter
+        move.l  8(sp),a6        ; Get AEDoorBase parameter
+        jsr     -84(a6)         ; Call WriteStr (LVO -84)
+        rts
+        end
+```
+
+### 3. Pure Assembly Door
 
 ```asm
 ;==============================================================================
 ; Amiga Door Template - 68K Assembly
 ;==============================================================================
 
-		include	"exec/types.i"
-		include	"exec/libraries.i"
-		include	"exec/execbase.i"
-		include	"dos/dos.i"
+        include "exec/types.i"
+        include "exec/libraries.i"
+        include "exec/execbase.i"
 
-		section	code,code
+        section code,code
 
 ;------------------------------------------------------------------------------
 ; Main entry point
 ;------------------------------------------------------------------------------
 start:
-		; Save registers (Amiga calling convention)
-		movem.l	d2-d7/a2-a6,-(sp)
+        ; Save registers (Amiga calling convention)
+        movem.l d2-d7/a2-a6,-(sp)
 
-		; Open DOS library
-		move.l	4.w,a6				; ExecBase
-		lea	dosname(pc),a1
-		moveq	#0,d0
-		jsr	_LVOOpenLibrary(a6)
-		move.l	d0,dosbase
-		beq.w	exit				; Failed to open DOS
+        ; Get ExecBase
+        move.l  4.w,a6
 
-		; Your door logic here
-		bsr	do_door_logic
+        ; Open AEDoor.library
+        lea     aedoor_name(pc),a1
+        moveq   #0,d0
+        jsr     _LVOOpenLibrary(a6)
+        move.l  d0,aedoor_base
+        beq.w   exit
 
-		; Clean shutdown
-		move.l	dosbase(pc),a6
-		jsr	_LVOCloseLibrary(a6)
+        ; Your door logic here
+        bsr     do_door_logic
+
+        ; Close library
+        move.l  4.w,a6
+        move.l  aedoor_base(pc),a1
+        jsr     _LVOCloseLibrary(a6)
 
 exit:
-		; Restore registers
-		movem.l	(sp)+,d2-d7/a2-a6
+        ; Restore registers
+        movem.l (sp)+,d2-d7/a2-a6
 
-		; Exit with success
-		moveq	#0,d0
-		rts
+        ; Exit with success
+        moveq   #0,d0
+        rts
 
 ;------------------------------------------------------------------------------
 ; Door logic functions
 ;------------------------------------------------------------------------------
 
 do_door_logic:
-		; Print welcome message
-		move.l	dosbase(pc),a6
-		lea	welcome_msg(pc),a0
-		jsr	_LVOPutStr(a6)
-
-		; Add your door functionality here
-		; Call C SDK functions via library interface
-
-		rts
+        ; Call AEDoor.library WriteStr
+        move.l  aedoor_base(pc),a6
+        lea     welcome_msg(pc),a0
+        jsr     -84(a6)         ; LVO_WriteStr = -84
+        rts
 
 ;------------------------------------------------------------------------------
 ; Data section
 ;------------------------------------------------------------------------------
 
-		section	data,data
+        section data,data
 
-dosname		dc.b	"dos.library",0
-welcome_msg	dc.b	"Welcome to my 68K Amiga Door!",10,0
+aedoor_name     dc.b    "AEDoor.library",0
+welcome_msg     dc.b    "Welcome to my 68K Amiga Door!",13,10,0
 
-dosbase		dc.l	0
+aedoor_base     dc.l    0
 
-;------------------------------------------------------------------------------
-; BSS section (uninitialized data)
-;------------------------------------------------------------------------------
-
-		section	bss,bss
-
-		end
+        end
 ```
 
-### 2. Key Components
+### 4. Key Components
 
 **Sections:**
 - `code,code` - Executable code
@@ -120,96 +169,48 @@ dosbase		dc.l	0
 
 **Library Access:**
 - `move.l 4.w,a6` - Get ExecBase
-- `_LVOOpenLibrary` - Open libraries
-- `_LVOPutStr` - DOS output function
+- `_LVOOpenLibrary` (-552) - Open libraries
+- `_LVOCloseLibrary` (-414) - Close libraries
 
 **Register Conventions:**
 - `d0-d1/a0-a1` - Scratch registers (can be modified)
 - `d2-d7/a2-a6` - Must be preserved
 - `a7` - Stack pointer
 
-## Integration with C SDK
+## Building Doors
 
-### 1. Calling C Functions
-
-To call C SDK functions from assembly, link with the glue library:
-
-```makefile
-# Link assembly object with C glue library
-$(TARGET): $(ASM_OBJECTS) glue-amiga.o
-	m68k-amiga-elf-gcc $(ASM_OBJECTS) glue-amiga.o -o $@ -nostdlib -Wl,--entry=_start
-
-# Compile glue library for Amiga
-glue-amiga.o: glue-amiga.c
-	m68k-amiga-elf-gcc -D__AMIGA_CROSS__ -Iincludes/amiga -c glue-amiga.c -o $@
-```
-
-### 2. Function Calling Convention
-
-```asm
-; Call C function: sendmessage("Hello", 1)
-		pea	1					; Push newline parameter
-		pea	message_string		; Push string parameter
-		jsr	_sendmessage		; Call C function
-		addq.l	#8,sp				; Clean stack (2 longs)
-```
-
-## Building the Door
-
-### 1. Directory Structure
-
-```
-dev/c-doors/doors/yourdoor/
-├── yourdoor.s          # Assembly source
-├── glue-amiga.c        # C glue functions
-├── Makefile           # Build configuration
-└── yourdoor.info      # BBS registration
-```
-
-### 2. Makefile Template
-
-```makefile
-# Amiga Door Makefile
-
-# Cross-compiler
-CC_AMIGA = m68k-amiga-elf-gcc
-ASSEMBLER = /opt/homebrew/bin/vasmm68k_mot
-NDK_PATH = ../../../../Documentation/7-Reference\ Sources/NDK3.2R4
-
-# Files
-TARGET = yourdoor
-ASM_SRC = $(TARGET).s
-GLUE_SRC = glue-amiga.c
-ASM_OBJ = $(ASM_SRC:.s=.o)
-GLUE_OBJ = glue-amiga.o
-
-# Build rules
-$(TARGET): $(ASM_OBJ) $(GLUE_OBJ)
-	$(CC_AMIGA) $(ASM_OBJ) $(GLUE_OBJ) -o $@ -nostdlib -Wl,--entry=_start
-
-$(ASM_OBJ): $(ASM_SRC)
-	$(ASSEMBLER) -Fhunk -I$(NDK_PATH)/Include_I -o $@ $<
-
-$(GLUE_OBJ): $(GLUE_SRC)
-	$(CC_AMIGA) -D__AMIGA_CROSS__ -I$(NDK_PATH)/Include_H -c $< -o $@
-
-clean:
-	rm -f $(TARGET) *.o
-
-.PHONY: clean
-```
-
-### 3. Compilation Steps
+### C Door Build Process
 
 ```bash
-# 1. Assemble 68K code
-vasmm68k_mot -Fhunk -Ipath/to/ndk/includes -o door.o door.s
+# 1. Assemble wrapper
+vasmm68k_mot -Fhunk -nowarn=62 writestr.asm -o writestr.o
 
-# 2. Compile C glue functions
-m68k-amiga-elf-gcc -D__AMIGA_CROSS__ -Ipath/to/ndk/includes -c glue.c -o glue.o
+# 2. Compile C code
+export VBCC=/opt/homebrew/opt/vbcc
+vc +aos68k -c -O2 -Indk-includes mydoor.c -o mydoor.o
 
 # 3. Link together
-m68k-amiga-elf-gcc door.o glue.o -o door -nostdlib -Wl,--entry=_start
+vc +aos68k -lamiga mydoor.o writestr.o -o mydoor
+```
+
+### Assembly Door Build Process
+
+```bash
+# Single step - vasm outputs HUNK directly
+vasmm68k_mot -Fhunk -nosym -Ipath/to/ndk/Include_I mydoor.asm -o mydoor
+```
+
+### Using the Makefile
+
+```bash
+# Build specific door
+make door NAME=mydoor
+
+# Build and install
+make install NAME=mydoor
+
+# Clean build artifacts
+make clean
 ```
 
 ## BBS Integration
@@ -218,150 +219,151 @@ m68k-amiga-elf-gcc door.o glue.o -o door -nostdlib -Wl,--entry=_start
 
 ```bash
 # Copy to BBS Doors directory
-cp yourdoor Doors/YOURDOOR/
-cp yourdoor.info Doors/YOURDOOR/
+cp mydoor Doors/MYDOOR/
 ```
 
-### 2. Register Command
+### 2. Create Door .info File
 
-```bash
-# Create command registration
-cp Commands/BBSCmd/WHO.info Commands/BBSCmd/YOURDOOR.info
-
-# Set door location
-npx tsx web/backend/src/scripts/info-editor.ts Commands/BBSCmd/YOURDOOR.info \
-  set LOCATION "DOORS:YOURDOOR/YOURDOOR"
+Create `Doors/MYDOOR/mydoor.info`:
+```
+TYPE=XIM
+LOCATION=doors/MYDOOR/mydoor
+ACCESS=0
+TIMELIMIT=60
 ```
 
-### 3. Door Configuration (.info file)
+### 3. Create Command .info File
 
-```text
-AmiExpress Door
-YOURDOOR
-Description of your door
-LOCATION=DOORS:YOURDOOR/YOURDOOR
-STACK=20000
-STARTUP=1
-FLAGS=0
+Create `Commands/BBSCmd/MYDOOR.info`:
+```
+TYPE=XIM
+LOCATION=doors/MYDOOR/mydoor
+ACCESS=0
+TIMELIMIT=60
 ```
 
 ## Testing
 
-### 1. Verify Executable Format
+### Verify Executable Format
 
 ```bash
-file Doors/YOURDOOR/yourdoor
+file mydoor
 # Should show: AmigaOS loadseg()ble executable/binary
 ```
 
-### 2. Test in BBS
+### Test with vamos
+
+```bash
+pip3 install amitools
+vamos mydoor
+# Exit code 20 = library not found (expected - vamos doesn't have AEDoor.library)
+# Exit code 0 = success
+```
+
+### Test in BBS
 
 ```bash
 # Start BBS
-npm run dev
+./dev/scripts/start-servers.sh
 
-# Connect and run: YOURDOOR
+# Connect and run: MYDOOR
 ```
 
-### 3. Debug Output
+### Debug Output
 
-The door will show output through the BBS interface. Use debug messages to verify execution:
-
-```asm
-		move.l	dosbase(pc),a6
-		lea	debug_msg(pc),a0
-		jsr	_LVOPutStr(a6)
-```
+Check door execution logs in `logs/door-68k-{DOORNAME}-{TIMESTAMP}.-N{NODE}.log`
 
 ## Advanced Features
 
-### 1. XIM Protocol Communication
+### XIM Protocol Communication
 
 For full door functionality, implement XIM message handling:
 
 ```asm
 ; Wait for BBS messages
 wait_message:
-		; WaitPort implementation
-		; GetMsg implementation
-		; Parse XIM commands
-		rts
+        ; WaitPort implementation
+        ; GetMsg implementation
+        ; Parse XIM commands
+        rts
 ```
 
-### 2. Memory Management
+### Memory Management
 
 ```asm
 ; Allocate memory
-		move.l	4.w,a6			; ExecBase
-		move.l	#1024,d0		; Size
-		move.l	#MEMF_PUBLIC,d1	; Flags
-		jsr	_LVOAllocMem(a6)
+        move.l  4.w,a6          ; ExecBase
+        move.l  #1024,d0        ; Size
+        move.l  #MEMF_PUBLIC,d1 ; Flags
+        jsr     _LVOAllocMem(a6)
 
 ; Free memory
-		move.l	d0,a1			; Address
-		move.l	#1024,d0		; Size
-		jsr	_LVOFreeMem(a6)
+        move.l  d0,a1           ; Address
+        move.l  #1024,d0        ; Size
+        jsr     _LVOFreeMem(a6)
 ```
 
-### 3. File I/O
+### File I/O
 
 ```asm
 ; Open file
-		move.l	dosbase,a6
-		move.l	#MODE_OLDFILE,d2
-		lea	filename(pc),a0
-		jsr	_LVOOpen(a6)
+        move.l  dosbase,a6
+        move.l  #MODE_OLDFILE,d2
+        lea     filename(pc),a0
+        jsr     _LVOOpen(a6)
 
 ; Read/Write operations
-		; Use _LVORead/_LVOWrite
+        ; Use _LVORead/_LVOWrite
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**1. "could not open include file"**
-- Wrong NDK path in assembler command
-- Missing NDK installation
+**1. "No config file!" error**
+- Set VBCC environment variable: `export VBCC=/opt/homebrew/opt/vbcc`
 
-**2. "HunkLoader error"**
+**2. "could not open include file"**
+- Wrong NDK path in compiler command
+- Check -I flag points to correct include directory
+
+**3. "HunkLoader error"**
 - Executable not in Amiga hunk format
-- Wrong assembler flags
+- Wrong compiler flags
 
-**3. "Library not found"**
-- DOS library not opened correctly
+**4. "Library not found"**
+- AEDoor.library not opened correctly
 - Wrong library name
 
-**4. Door doesn't start**
-- Wrong entry point (_start vs start)
+**5. Door doesn't start**
+- Check entry point
 - Missing stack setup
 
 ### Debug Tips
 
-1. **Test assembly separately:**
-   ```bash
-   vasmm68k_mot -Fhunk -Iincludes -o test test.s
-   hunktool info test
-   ```
-
-2. **Verify executable format:**
+1. **Verify executable format:**
    ```bash
    file door_executable
    # Should be: AmigaOS loadseg()ble executable/binary
    ```
 
-3. **Check door loading logs:**
+2. **Check door loading logs:**
    ```bash
    tail -f logs/backend.log | grep -i door
    ```
 
+3. **Test with vamos first:**
+   ```bash
+   vamos mydoor
+   ```
+
 ## Complete Example
 
-See `dev/c-doors/doors/sdktest/amiga68k.s` for a complete working example that demonstrates:
+See `sdk/68k/doors/hello-output/` for a complete working example that demonstrates:
 - Proper Amiga executable structure
 - Library opening/closing
-- DOS output functions
+- AEDoor.library output functions
 - Clean shutdown
 - BBS integration
 
-This 68K assembly approach provides the most authentic Amiga door experience with maximum performance and compatibility.
+This 68K C/assembly approach provides the most authentic Amiga door experience with maximum performance and compatibility.

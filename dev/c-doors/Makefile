@@ -1,6 +1,5 @@
-# AmiExpress C Door SDK - Unified Makefile
+# AmiExpress C/Assembly Door SDK - vbcc Makefile
 # Produces authentic 68K Amiga HUNK executables
-# Uses Bartman's m68k-amiga-elf-gcc cross-compiler
 
 # ============================================================================
 # CRITICAL: This Makefile ONLY produces 68K Amiga binaries
@@ -9,32 +8,31 @@
 # These binaries run in the MOIRA 68K emulator, NOT natively on the host.
 # They are identical to doors compiled on a real Amiga computer.
 #
-# Requirements:
-# - m68k-amiga-elf-gcc cross-compiler installed
-# - elf2hunk converter installed
+# Supported Languages:
+# - C:        vbcc -> Native Amiga HUNK
+# - Assembly: vasm -> HUNK (direct output)
 #
-# Installation:
-#   brew tap amiga-tools/amiga
-#   brew install m68k-amiga-elf-gcc
-#   git clone https://github.com/BartmanAbyss/elf2hunk && cd elf2hunk && make
+# Requirements:
+#   brew tap tditlu/amiga
+#   brew install vbcc
+#   export VBCC=/opt/homebrew/opt/vbcc
 # ============================================================================
 
-# Cross-compiler toolchain (REQUIRED)
-CC = m68k-amiga-elf-gcc
-LD = m68k-amiga-elf-ld
-ELF2HUNK = elf2hunk
+# vbcc cross-compiler
+CC = vc
+CFLAGS = +aos68k -c -O2 -cpu=68000
+LDFLAGS = +aos68k -lamiga
 
-# Amiga 68000 compilation flags
-CFLAGS = -m68000 -O2 -fomit-frame-pointer -nostdlib -nostdinc
-CFLAGS += -I./includes -D__AMIGA_CROSS__
-CFLAGS += -Wall -Wextra
+# Include paths
+INCLUDES = -I./includes -I../sdk/68k/ndk-includes
 
-# Linker flags
-LDFLAGS = -T amiga.ld
+# Amiga assembler (vasm with Motorola syntax)
+ASM = vasmm68k_mot
+ASMFLAGS = -Fhunk -kick1hunks -nosym -m68000
 
-# Glue code (AmiExpress API stubs - NEEDS FIXING per C_DOOR_ARCHITECTURE_ISSUES.md)
-GLUE_SRC = src/glue-amiga.c
-GLUE_OBJ = glue-amiga.o
+# Glue code (vbcc compatible)
+GLUE_SRC = src/glue-vbcc.c
+GLUE_OBJ = glue-vbcc.o
 
 # Default target
 .PHONY: all
@@ -43,21 +41,28 @@ all: help
 # Help message
 .PHONY: help
 help:
-	@echo "AmiExpress C Door SDK - 68K Amiga Binary Builder"
+	@echo "AmiExpress C/Assembly Door SDK - 68K Amiga Binary Builder (vbcc)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make door NAME=myDoor        Build 68K binary from doors/myDoor/myDoor.c"
-	@echo "  make test-doors               Build all test doors (minimal, simpletest, apitest)"
-	@echo "  make install-door NAME=myDoor Install door to BBS (copies to doors/MYDOOR/)"
+	@echo "  make door NAME=myDoor         Build C door (doors/myDoor/myDoor.c)"
+	@echo "  make asm NAME=myDoor          Build assembly door (doors/myDoor/myDoor.asm)"
+	@echo "  make test-doors               Build all test C doors"
+	@echo "  make install-door NAME=myDoor Install door to BBS (copies to Doors/MYDOOR/)"
 	@echo "  make clean                    Remove build artifacts"
 	@echo ""
-	@echo "Example:"
-	@echo "  make door NAME=minimal        → builds doors/minimal/minimal.c → minimal.hunk"
-	@echo "  make install-door NAME=minimal → copies to doors/MINIMAL/"
+	@echo "Examples:"
+	@echo "  make door NAME=apitest        -> builds apitest.c -> apitest (68K binary)"
+	@echo "  make asm NAME=hello-asm       -> builds hello-asm.asm -> hello-asm (68K binary)"
+	@echo "  make install-door NAME=apitest -> copies to Doors/APITEST/"
+	@echo ""
+	@echo "Supported Languages:"
+	@echo "  C:        Uses vbcc cross-compiler"
+	@echo "  Assembly: Uses vasm (Motorola 68000 syntax)"
 	@echo ""
 	@echo "Requirements:"
-	@echo "  - m68k-amiga-elf-gcc (brew install m68k-amiga-elf-gcc)"
-	@echo "  - elf2hunk converter"
+	@echo "  vbcc:     brew tap tditlu/amiga && brew install vbcc"
+	@echo "  vasm:     Included with vbcc"
+	@echo "  VBCC env: export VBCC=/opt/homebrew/opt/vbcc"
 
 # Build a specific door
 .PHONY: door
@@ -66,26 +71,45 @@ door:
 		echo "ERROR: NAME not specified. Usage: make door NAME=myDoor"; \
 		exit 1; \
 	fi
-	@echo "[1/5] Building 68K Amiga door: $(NAME)"
-	@echo "[2/5] Compiling $(NAME).c → $(NAME).o"
-	$(CC) $(CFLAGS) -c doors/$(NAME)/$(NAME).c -o doors/$(NAME)/$(NAME).o
-	@echo "[3/5] Compiling glue layer → glue-amiga.o"
-	$(CC) $(CFLAGS) -c $(GLUE_SRC) -o doors/$(NAME)/glue-amiga.o
-	@echo "[4/5] Linking ELF executable → $(NAME).elf"
-	$(LD) $(LDFLAGS) doors/$(NAME)/$(NAME).o doors/$(NAME)/glue-amiga.o -o doors/$(NAME)/$(NAME).elf
-	@echo "[5/5] Converting to Amiga HUNK → $(NAME)"
-	$(ELF2HUNK) doors/$(NAME)/$(NAME).elf doors/$(NAME)/$(NAME)
+	@if [ -z "$$VBCC" ]; then \
+		echo "ERROR: VBCC environment variable not set."; \
+		echo "Run: export VBCC=/opt/homebrew/opt/vbcc"; \
+		exit 1; \
+	fi
+	@echo "[1/4] Building 68K Amiga door: $(NAME)"
+	@echo "[2/4] Compiling $(NAME).c -> $(NAME).o"
+	$(CC) $(CFLAGS) $(INCLUDES) doors/$(NAME)/$(NAME).c -o doors/$(NAME)/$(NAME).o
+	@echo "[3/4] Compiling glue layer -> glue-vbcc.o"
+	$(CC) $(CFLAGS) $(INCLUDES) $(GLUE_SRC) -o doors/$(NAME)/glue-vbcc.o
+	@echo "[4/4] Linking -> $(NAME)"
+	$(CC) $(LDFLAGS) doors/$(NAME)/$(NAME).o doors/$(NAME)/glue-vbcc.o -o doors/$(NAME)/$(NAME)
 	@echo ""
 	@echo "[OK] Built 68K Amiga binary: doors/$(NAME)/$(NAME)"
 	@file doors/$(NAME)/$(NAME)
 	@ls -lh doors/$(NAME)/$(NAME)
 
+# Build an assembly door
+.PHONY: asm
+asm:
+	@if [ -z "$(NAME)" ]; then \
+		echo "ERROR: NAME not specified. Usage: make asm NAME=myDoor"; \
+		exit 1; \
+	fi
+	@echo "[1/2] Building 68K Amiga assembly door: $(NAME)"
+	@echo "[2/2] Assembling $(NAME).asm -> $(NAME) (HUNK)"
+	$(ASM) $(ASMFLAGS) -o doors/$(NAME)/$(NAME) doors/$(NAME)/$(NAME).asm
+	@echo ""
+	@echo "[OK] Built 68K Amiga binary: doors/$(NAME)/$(NAME)"
+	@file doors/$(NAME)/$(NAME)
+	@ls -lh doors/$(NAME)/$(NAME)
+	@echo ""
+	@echo "Note: Assembly doors are self-contained (no glue layer needed)"
+	@echo "They must handle library opening/closing directly in assembly code"
+
 # Build all test doors
 .PHONY: test-doors
 test-doors:
 	@echo "Building all test doors..."
-	$(MAKE) door NAME=minimal
-	$(MAKE) door NAME=simpletest
 	$(MAKE) door NAME=apitest
 	@echo ""
 	@echo "[OK] All test doors built"
@@ -99,15 +123,15 @@ install-door:
 	fi
 	@UPPER_NAME=$$(echo $(NAME) | tr '[:lower:]' '[:upper:]'); \
 	echo "[1/2] Installing $(NAME) to BBS..."; \
-	mkdir -p ../../doors/$$UPPER_NAME; \
-	cp doors/$(NAME)/$(NAME) ../../doors/$$UPPER_NAME/; \
+	mkdir -p ../../Doors/$$UPPER_NAME; \
+	cp doors/$(NAME)/$(NAME) ../../Doors/$$UPPER_NAME/; \
 	echo "[2/2] Verifying installation..."; \
-	file ../../doors/$$UPPER_NAME/$(NAME); \
+	file ../../Doors/$$UPPER_NAME/$(NAME); \
 	echo ""; \
-	echo "[OK] Installed to doors/$$UPPER_NAME/$(NAME)"; \
+	echo "[OK] Installed to Doors/$$UPPER_NAME/$(NAME)"; \
 	echo ""; \
 	echo "Next steps:"; \
-	echo "  1. Create .info file: doors/$$UPPER_NAME/$(NAME).info"; \
+	echo "  1. Create .info file: Doors/$$UPPER_NAME/$(NAME).info"; \
 	echo "  2. Register command in Commands/BBSCmd/$$UPPER_NAME.info"
 
 # Clean build artifacts
@@ -115,15 +139,19 @@ install-door:
 clean:
 	@echo "Cleaning build artifacts..."
 	find doors -name "*.o" -delete
-	find doors -name "*.elf" -delete
 	@echo "[OK] Clean complete"
 
 # Verify toolchain is installed
 .PHONY: check-tools
 check-tools:
 	@echo "Checking required tools..."
-	@command -v $(CC) >/dev/null 2>&1 || { echo "ERROR: $(CC) not found. Install with: brew install m68k-amiga-elf-gcc"; exit 1; }
-	@command -v $(ELF2HUNK) >/dev/null 2>&1 || { echo "ERROR: $(ELF2HUNK) not found. Build from: https://github.com/BartmanAbyss/elf2hunk"; exit 1; }
+	@if [ -z "$$VBCC" ]; then \
+		echo "ERROR: VBCC environment variable not set."; \
+		echo "Run: export VBCC=/opt/homebrew/opt/vbcc"; \
+		exit 1; \
+	fi
+	@command -v $(CC) >/dev/null 2>&1 || { echo "ERROR: vbcc (vc) not found. Install with: brew install tditlu/amiga/vbcc"; exit 1; }
+	@command -v $(ASM) >/dev/null 2>&1 || { echo "ERROR: vasm not found. Install with: brew install tditlu/amiga/vbcc"; exit 1; }
 	@echo "[OK] All required tools installed"
-	@$(CC) --version | head -1
-	@$(ELF2HUNK) --version 2>&1 | head -1 || echo "elf2hunk (no version info)"
+	@$(CC) -version 2>&1 | head -3 || echo "vbcc installed"
+	@$(ASM) -version 2>&1 | head -1 || echo "vasm installed"

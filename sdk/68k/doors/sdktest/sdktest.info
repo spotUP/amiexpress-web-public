@@ -1,0 +1,7 @@
+AmiExpress Door
+SDKTEST
+Test door that exercises all C SDK functions
+LOCATION=Doors/SDKTEST/SDKTEST
+STACK=20000
+STARTUP=1
+FLAGS=0

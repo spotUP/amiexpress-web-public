@@ -1,10 +1,15 @@
-# AmiExpress C Door SDK
+# AmiExpress C/Assembly Door SDK
 
-**Create authentic 68K Amiga door binaries using modern C development tools**
+**Create authentic 68K Amiga door binaries using vbcc and assembly development tools**
 
 ## Overview
 
-The C Door SDK allows you to write BBS doors in C that compile to authentic **Motorola 68000 machine code**, identical to doors written for classic Amiga computers in the 1990s. These doors run in the MOIRA 68K emulator, providing 100% compatibility with the original AmiExpress BBS system.
+The C/Assembly Door SDK allows you to write BBS doors in **C or 68000 assembly** that compile to authentic **Motorola 68000 machine code**, identical to doors written for classic Amiga computers in the 1990s. These doors run in the MOIRA 68K emulator, providing 100% compatibility with the original AmiExpress BBS system.
+
+**Supported Languages**:
+- **C**: Cross-compiled with vbcc -> Native Amiga HUNK
+- **Assembly**: Assembled with vasm -> HUNK (direct output)
+- **C + Assembly**: Mixed C/ASM for library calls and optimizations
 
 ## Two SDK Approaches
 
@@ -18,7 +23,7 @@ AmiExpress-Web offers two distinct door development approaches:
 - **Location**: `/sdk/`
 
 ### 2. C SDK (dev/c-doors/)
-- **Language**: C (cross-compiled to 68K)
+- **Language**: C (cross-compiled to 68K with vbcc)
 - **Execution**: MOIRA 68K emulator
 - **Performance**: Authentic Amiga experience
 - **Best for**: Porting classic doors, learning Amiga programming
@@ -30,16 +35,17 @@ Both approaches produce doors that work identically from the user's perspective!
 
 ### Prerequisites
 
-1. **m68k-amiga-elf-gcc cross-compiler**
+1. **vbcc cross-compiler**
    ```bash
-   brew tap amiga-tools/amiga
-   brew install m68k-amiga-elf-gcc
+   brew tap tditlu/amiga
+   brew install vbcc
+   export VBCC=/opt/homebrew/opt/vbcc
    ```
 
-2. **elf2hunk converter**
+2. **vasm assembler** (included with vbcc)
    ```bash
-   git clone https://github.com/BartmanAbyss/elf2hunk
-   cd elf2hunk && make && sudo cp elf2hunk /usr/local/bin/
+   vasmm68k_mot -version
+   # Should show: vasm 2.0d
    ```
 
 ### Create Your First Door
@@ -52,64 +58,188 @@ Both approaches produce doors that work identically from the user's perspective!
 
 2. **Write your door** (`mydoor.c`):
    ```c
-   #include "../../includes/amiexpress.h"
+   #include <clib/exec_protos.h>
+   #include <exec/types.h>
 
-   int main(int argc, char *argv[]) {
-       Register(1);  // Register with BBS (node 1)
+   extern struct Library *SysBase;
+   struct Library *AEDoorBase = NULL;
 
-       sendmessage("Hello from my C door!\\r\\n", 1);
-       sendmessage("This is running on a 68K CPU!\\r\\n", 1);
+   extern void WriteStr(char *text, struct Library *base);
 
-       ShutDown();   // Clean shutdown
+   int main(int argc, char **argv) {
+       AEDoorBase = OpenLibrary("AEDoor.library", 0);
+       if (!AEDoorBase) return 20;
+
+       WriteStr("Hello from my C door!\r\n", AEDoorBase);
+
+       CloseLibrary(AEDoorBase);
        return 0;
    }
    ```
 
-3. **Build to 68K binary**:
-   ```bash
-   cd ../.. && make door NAME=mydoor
+3. **Create assembly wrapper** (`writestr.asm`):
+   ```asm
+           section code,code
+           xdef _WriteStr
+
+   _WriteStr:
+           move.l  4(sp),a0        ; Get text parameter
+           move.l  8(sp),a6        ; Get AEDoorBase parameter
+           jsr     -84(a6)         ; Call WriteStr (LVO -84)
+           rts
+           end
    ```
 
-4. **Install to BBS**:
+4. **Build to 68K binary**:
    ```bash
-   make install-door NAME=mydoor
+   # Assemble wrapper
+   vasmm68k_mot -Fhunk -nowarn=62 writestr.asm -o writestr.o
+
+   # Compile C code
+   export VBCC=/opt/homebrew/opt/vbcc
+   vc +aos68k -c -O2 -I../../ndk-includes mydoor.c -o mydoor.o
+
+   # Link
+   vc +aos68k -lamiga mydoor.o writestr.o -o mydoor
    ```
 
-5. **Register command** (create `doors/MYDOOR/mydoor.info`):
+5. **Install to BBS**:
+   ```bash
+   cp mydoor ../../Doors/MYDOOR/
    ```
-   LOCATION=DOORS:MYDOOR/mydoor
-   DOORTYPE=Amiga68K
+
+6. **Register command** (create `Doors/MYDOOR/mydoor.info`):
+   ```
+   TYPE=XIM
+   LOCATION=doors/MYDOOR/mydoor
+   ACCESS=0
+   TIMELIMIT=60
    ```
 
    And `Commands/BBSCmd/MYDOOR.info`:
    ```
-   TYPE=DOOR
-   LOCATION=DOORS:MYDOOR/mydoor
+   TYPE=XIM
+   LOCATION=doors/MYDOOR/mydoor
+   ACCESS=0
+   TIMELIMIT=60
    ```
 
-6. **Test in BBS**: Type `MYDOOR` at the BBS prompt!
+7. **Test in BBS**: Type `MYDOOR` at the BBS prompt!
+
+### Create Your First Assembly Door
+
+1. **Create door directory**:
+   ```bash
+   mkdir dev/c-doors/doors/mydoor-asm
+   cd dev/c-doors/doors/mydoor-asm
+   ```
+
+2. **Write your door** (`mydoor-asm.asm`):
+   ```asm
+   ; AmigaOS Constants
+   ABSEXECBASE     EQU     4
+   LVO_OpenLibrary EQU     -552
+   LVO_CloseLibrary EQU    -414
+
+   ; AEDoor.library LVOs
+   LVO_Register    EQU     -132
+   LVO_WriteStr    EQU     -84
+   LVO_ShutDown    EQU     -138
+
+           SECTION code,CODE
+
+   start:
+           movem.l d0-d7/a0-a6,-(sp)
+
+           ; Get ExecBase and open AEDoor.library
+           move.l  ABSEXECBASE,a6
+           lea     aedoor_name(pc),a1
+           moveq   #0,d0
+           jsr     LVO_OpenLibrary(a6)
+           move.l  d0,aedoor_base
+           beq.s   .exit
+
+           ; Register with BBS
+           move.l  aedoor_base(pc),a6
+           moveq   #1,d0
+           jsr     LVO_Register(a6)
+
+           ; Display message
+           move.l  aedoor_base(pc),a6
+           lea     hello_msg(pc),a0
+           jsr     LVO_WriteStr(a6)
+
+           ; Shutdown
+           move.l  aedoor_base(pc),a6
+           jsr     LVO_ShutDown(a6)
+
+           ; Close library
+           move.l  ABSEXECBASE,a6
+           move.l  aedoor_base(pc),a1
+           jsr     LVO_CloseLibrary(a6)
+
+   .exit:
+           movem.l (sp)+,d0-d7/a0-a6
+           moveq   #0,d0
+           rts
+
+           SECTION data,DATA
+
+   aedoor_base:
+           dc.l    0
+
+   aedoor_name:
+           dc.b    'AEDoor.library',0
+           EVEN
+
+   hello_msg:
+           dc.b    'Hello from assembly!',13,10,0
+           EVEN
+
+           END
+   ```
+
+3. **Build to 68K binary**:
+   ```bash
+   vasmm68k_mot -Fhunk -nosym mydoor-asm.asm -o mydoor-asm
+   ```
+
+4. **Register and test**: Same as C door (create .info files and test in BBS)
+
+**Assembly Door Advantages**:
+- Direct HUNK output (no linking needed)
+- Smallest possible binaries (200-500 bytes typical)
+- Full control over register usage and calling conventions
+- Educational value for learning Amiga programming
 
 ## Architecture
 
 ### Compilation Flow
 
+**C Doors (vbcc)**:
 ```
-C Source → m68k-amiga-elf-gcc → ELF Binary → elf2hunk → Amiga HUNK → BBS Door
-   ↓                              ↓                        ↓
-mydoor.c                      mydoor.elf              mydoor (68K)
+C Source -> vbcc -> Object File -> vlink -> Amiga HUNK -> BBS Door
+   |                   |                        |
+mydoor.c           mydoor.o                 mydoor (68K)
+```
+
+**Assembly Doors**:
+```
+Assembly Source -> vasm -> Amiga HUNK -> BBS Door
+       |                       |
+mydoor.asm                 mydoor (68K)
 ```
 
 ### Execution Flow
 
 ```
 BBS User Types "MYDOOR"
-  → Door Handler loads mydoor (68K binary)
-  → MOIRA emulator executes 68K machine code
-  → Door calls AEDoor.library functions
-  → Real Amiga library (Libs/AEDoor.library) executes
-  → Library uses PutMsg/GetMsg for XIM protocol
-  → ExecLibrary bridges messages to BBS backend
-  → Output appears on user's terminal
+  -> Door Handler loads mydoor (68K binary)
+  -> MOIRA emulator executes 68K machine code
+  -> Door calls AEDoor.library functions
+  -> AEDoor.library uses PutMsg/GetMsg for XIM protocol
+  -> ExecLibrary bridges messages to BBS backend
+  -> Output appears on user's terminal
 ```
 
 ## API Reference
@@ -119,7 +249,7 @@ BBS User Types "MYDOOR"
 ```c
 // Lifecycle
 void Register(int node);        // Initialize door for node N
-void ShutDown(void);             // Clean shutdown
+void ShutDown(void);            // Clean shutdown
 
 // Output
 void sendmessage(char *text, int newline);  // Send text to user
@@ -128,7 +258,6 @@ void mciputstr(char *mci, int nl);          // Send MCI codes
 // Input
 int getkey(void);                          // Get single keypress
 void prompt(char *prompt, char *result, int maxlen);  // Get user input
-void lineinput(char *prompt, char *result, int maxlen);  // Get line of input
 
 // User Data
 int getlevel(void);              // Get user's security level
@@ -146,19 +275,16 @@ See `includes/amiexpress.h` for the complete API (60+ functions).
 
 ```
 dev/c-doors/
-├── Makefile               # Unified build system
-├── amiga.ld              # Linker script for 68K
-├── README.md             # This file
-├── includes/             # Header files
-│   ├── amiexpress.h     # AmiExpress API declarations
-│   └── amiga/           # Amiga OS headers (exec, dos, etc.)
-├── src/                  # Glue code (C runtime + API bridge)
-│   └── glue-amiga.c     # CURRENTLY STUBS - needs real library calls
-├── doors/                # Your door source code
-│   ├── minimal/         # Minimal example
-│   ├── simpletest/      # Simple test door
-│   └── apitest/         # API test door
-└── templates/            # Door templates
+├── Makefile               # vbcc build system
+├── README.md              # This file
+├── includes/              # Header files
+│   ├── amiexpress.h       # AmiExpress API declarations
+│   └── amiga/             # Amiga OS headers
+├── src/                   # Glue code
+│   └── glue-vbcc.c        # vbcc-compatible glue layer
+├── doors/                 # Your door source code
+│   └── apitest/           # API test door
+└── templates/             # Door templates
 ```
 
 ## Build Targets
@@ -183,32 +309,6 @@ make check-tools
 make help
 ```
 
-## Known Issues & TODO
-
-### ⚠️ CRITICAL: Glue Layer Needs Fixing
-
-The current `src/glue-amiga.c` contains **stub implementations** that do not work! This is documented in:
-- `C_DOOR_ARCHITECTURE_ISSUES.md`
-- `AEDOOR_ARCHITECTURE_FIX.md`
-
-**Problem**: Functions like `sendmessage()`, `prompt()`, etc. are stubs that do nothing.
-
-**Solution**: These should call the REAL AEDoor.library via:
-1. OpenLibrary("AEDoor.library", 0)
-2. Call library functions via LVO jumps
-3. Let the real library handle XIM protocol
-
-See `C_DOOR_ARCHITECTURE_ISSUES.md` for the correct implementation approach.
-
-### Current Limitations
-
-1. **No XIM Communication**: Doors compile and run but produce no output (stub functions)
-2. **argc/argv Not Supported**: Door CLI arguments not yet implemented
-3. **Limited API**: Only basic functions available, 60+ functions need implementation
-4. **No File I/O**: File operations not yet bridged to host filesystem
-
-These will be addressed in future updates.
-
 ## Testing
 
 ### Verify 68K Binary
@@ -218,8 +318,11 @@ These will be addressed in future updates.
 file doors/mydoor/mydoor
 # Should output: AmigaOS loadseg()ble executable/binary
 
-# Check size (should be small, <5KB for simple doors)
-ls -lh doors/mydoor/mydoor
+# Test with vamos
+pip3 install amitools
+vamos doors/mydoor/mydoor
+# Exit code 20 = library not found (expected)
+# Exit code 0 = success
 ```
 
 ### Test in BBS
@@ -228,10 +331,6 @@ ls -lh doors/mydoor/mydoor
 2. Connect via browser: `http://localhost:3001`
 3. Type door command: `MYDOOR`
 4. Check logs: `logs/door-68k-MYDOOR-*.log`
-
-## Examples
-
-See `doors/minimal/`, `doors/simpletest/`, and `doors/apitest/` for working examples.
 
 ## FAQ
 
@@ -261,9 +360,8 @@ Check door execution logs in `logs/door-68k-{DOORNAME}-{TIMESTAMP}.-N{NODE}.log`
 - **Amiga NDK**: `Documentation/7-Reference Sources/NDK3.2R4/`
 - **AmiExpress Sources**: `AmiExpress-Sources/express.e`
 - **MOIRA Emulator**: `web/backend/src/amiga-emulation/cpu/`
-- **Architecture Docs**:
-  - `AEDOOR_ARCHITECTURE_FIX.md`
-  - `C_DOOR_ARCHITECTURE_ISSUES.md`
+- **vbcc Manual**: http://sun.hasenbraten.de/vbcc/docs/vbcc.pdf
+- **vasm Manual**: http://sun.hasenbraten.de/vasm/
 
 ## Contributing
 
@@ -279,4 +377,4 @@ Same as main project - see LICENSE file.
 
 ---
 
-**Happy Amiga Coding!** 🖥️
+**Happy Amiga Coding!**
