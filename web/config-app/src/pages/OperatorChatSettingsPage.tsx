@@ -120,12 +120,12 @@ export function OperatorChatSettingsPage() {
           }
         });
         if (response.ok) {
-          const data = await response.json();
+          const result = await response.json();
           setVapidConfig({
-            vapid_public_key: data.vapid_public_key || '',
-            vapid_private_key: data.vapid_private_key || '',
-            vapid_contact_email: data.vapid_contact_email || '',
-            enabled: data.enabled || false
+            vapid_public_key: result.data.vapid_public_key || '',
+            vapid_private_key: result.data.vapid_private_key || '',
+            vapid_contact_email: result.data.vapid_contact_email || '',
+            enabled: result.data.enabled || false
           });
         }
       } catch (err) {
@@ -148,11 +148,11 @@ export function OperatorChatSettingsPage() {
         }
       });
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
         setVapidConfig(prev => ({
           ...prev,
-          vapid_public_key: data.publicKey,
-          vapid_private_key: data.privateKey
+          vapid_public_key: result.data.publicKey,
+          vapid_private_key: result.data.privateKey
         }));
         showSuccess('New VAPID keys generated - click Save to apply');
       } else {
@@ -183,14 +183,14 @@ export function OperatorChatSettingsPage() {
           vapid_contact_email: vapidConfig.vapid_contact_email
         })
       });
-      const data = await response.json();
+      const result = await response.json();
       if (response.ok) {
-        setVapidConfig(prev => ({ ...prev, enabled: data.enabled }));
-        showSuccess(data.message || 'VAPID configuration saved');
+        setVapidConfig(prev => ({ ...prev, enabled: result.data?.enabled }));
+        showSuccess(result.message || 'VAPID configuration saved');
         // Refresh push notifications state
         window.location.reload();
       } else {
-        setVapidError(data.error || 'Failed to save VAPID configuration');
+        setVapidError(result.error || 'Failed to save VAPID configuration');
       }
     } catch (err) {
       setVapidError('Failed to save VAPID configuration');
