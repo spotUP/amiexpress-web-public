@@ -840,13 +840,22 @@ export async function simulateNaturalTyping(
   let buffer = '';
 
   // Helper to display typing buffer at line 22
+  // IMPORTANT: Truncate to prevent overflow past line 22 into divider (line 23)
+  const MAX_PREVIEW_WIDTH = 65; // "GrumpyBot: " is 11 chars, "|" is 1, leave margin = 80-11-1-3
   const displayTyping = (text: string) => {
+    // Truncate text to prevent overflow - show last N characters if too long
+    let displayText = text;
+    if (text.length > MAX_PREVIEW_WIDTH) {
+      displayText = '...' + text.slice(-(MAX_PREVIEW_WIDTH - 3));
+    }
+
     const ansiOutput =
       '\x1b7' + // Save cursor position (user typing at line 24)
+      '\x1b[1;21r' + // Reinforce scroll region to prevent any full-screen scroll
       '\x1b[22;1H' + // Move to line 22 (typing preview line)
       '\x1b[K' + // Clear line
-      (text.length > 0
-        ? `\x1b[90m\x1b[36mGrumpyBot:\x1b[0m ${text}\x1b[36m|\x1b[0m`
+      (displayText.length > 0
+        ? `\x1b[90m\x1b[36mGrumpyBot:\x1b[0m ${displayText}\x1b[36m|\x1b[0m`
         : '') +
       '\x1b8'; // Restore cursor position
 

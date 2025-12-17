@@ -704,8 +704,9 @@ async function sendChatMessage(
   }
 
   // If bot-controlled and message is from user, generate bot response
+  console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSession as any).isBotControlled}, senderType=${senderType}`);
   if ((chatSession as any).isBotControlled && senderType === 'user') {
-    console.log(`[Operator Chat] User message in bot session, generating response`);
+    console.log(`[Operator Chat] User message in bot session, generating response for: "${message}"`);
 
     // Build context
     const page = repository.getPageRequest(pageId);
@@ -966,6 +967,9 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
       if (chatSession) {
         (chatSession as any).isBotControlled = true;
         (chatSession as any).botMessageHistory = [];
+        console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
+      } else {
+        console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
       }
 
       // Send intro message with natural typing simulation
