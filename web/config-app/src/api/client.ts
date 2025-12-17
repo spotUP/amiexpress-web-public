@@ -98,6 +98,28 @@ class ApiClient {
     this.setToken(null);
   }
 
+  // Generic HTTP methods for custom endpoints
+  async get<T>(url: string): Promise<{ data: T }> {
+    const data = await this.request<T>(url);
+    return { data };
+  }
+
+  async post<T>(url: string, body?: any): Promise<{ data: T }> {
+    const data = await this.request<T>(url, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { data };
+  }
+
+  async delete<T>(url: string, options?: { data?: any }): Promise<{ data: T }> {
+    const data = await this.request<T>(url, {
+      method: 'DELETE',
+      body: options?.data ? JSON.stringify(options.data) : undefined,
+    });
+    return { data };
+  }
+
   // System Configuration
   async getSystemConfig() {
     return this.request<ApiResponse>(`${API_BASE}/config/system`);
