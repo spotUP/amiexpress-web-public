@@ -594,7 +594,8 @@ async function acceptPage(
     `\x1b[36m              OPERATOR CHAT WITH ${sysopHandle.toUpperCase()}\x1b[0m\r\n` +
     '\x1b[32m===============================================================\x1b[0m\r\n' +
     '\r\n' +
-    'Type your messages and press ENTER to send. Type /END to exit.\r\n' +
+    'Type your messages and press ENTER to send.\r\n' +
+    'Type \x1b[33m/END\x1b[0m to exit, \x1b[33mCtrl+E\x1b[0m for smileys, \x1b[33m/HELP\x1b[0m for commands.\r\n' +
     '\r\n' +
     '\x1b[23;1H' + // Move to line 23
     '\x1b[36m-----------------------------------------------------------------\x1b[0m' +

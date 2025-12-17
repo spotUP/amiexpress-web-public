@@ -340,10 +340,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }, 100);
 
     // Determine backend URL
+    // In production, frontend and backend are served from same origin, so use window.location.origin
+    // In development, use localhost:3001
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const finalBackendUrl = backendUrl ||
       (import.meta as any).env?.VITE_BBS_BACKEND_URL ||
-      (isDevelopment ? 'http://localhost:3001' : (import.meta as any).env?.VITE_API_URL || 'https://amiexpress-bbs.onrender.com');
+      (isDevelopment ? 'http://localhost:3001' : window.location.origin);
 
     console.log('[Terminal] Connecting to:', finalBackendUrl);
 
