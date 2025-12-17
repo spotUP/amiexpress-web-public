@@ -56,10 +56,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user: fetched } = await apiClient.me();
       setUser(fetched);
       persistUser(fetched);
-    } catch (error) {
-      apiClient.logout();
-      setUser(null);
-      persistUser(null);
+    } catch (error: any) {
+      // Only log out on explicit auth errors (401/403)
+      // Keep user logged in on network errors (they may be temporary)
+      const isAuthError = error.message?.includes('401') ||
+                          error.message?.includes('403') ||
+                          error.message?.includes('Access token') ||
+                          error.message?.includes('Invalid') ||
+                          error.message?.includes('expired');
+
+      if (isAuthError) {
+        console.log('[Auth] Token invalid, logging out');
+        apiClient.logout();
+        setUser(null);
+        persistUser(null);
+      } else {
+        // Network error - keep stored user, try again later
+        console.warn('[Auth] Network error during token refresh, keeping stored user:', error.message);
+        const storedUser = readStoredUser();
+        if (storedUser) {
+          setUser(storedUser);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
