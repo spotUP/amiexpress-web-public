@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
@@ -419,9 +420,9 @@ export class XIMSystemCommandsHandler {
     console.log(`  Screen: "${screenName}"`);
 
     const resolved = this.resolvePath(screenName);
-    if (fs.existsSync(resolved)) {
+    if (amigafs.existsSync(resolved)) {
       try {
-        const content = fs.readFileSync(resolved, 'utf-8');
+        const content = amigafs.readFileSync(resolved, 'utf-8') as string;
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
@@ -445,9 +446,9 @@ export class XIMSystemCommandsHandler {
     console.log(`  File: "${fileName}"`);
 
     const resolved = this.resolvePath(fileName);
-    if (fs.existsSync(resolved)) {
+    if (amigafs.existsSync(resolved)) {
       try {
-        const content = fs.readFileSync(resolved, 'utf-8');
+        const content = amigafs.readFileSync(resolved, 'utf-8') as string;
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
@@ -743,7 +744,7 @@ export class XIMSystemCommandsHandler {
 
   private pathExists(target: string): boolean {
     try {
-      return fs.existsSync(target);
+      return amigafs.existsSync(target);
     } catch {
       return false;
     }
@@ -757,9 +758,9 @@ export class XIMSystemCommandsHandler {
     const maxNodes = 255;
     for (let i = 0; i < maxNodes; i++) {
       const nodeDir = path.join(root, `Node${i}`);
-      if (!fs.existsSync(nodeDir)) continue;
+      if (!amigafs.existsSync(nodeDir)) continue;
       const candidate = path.join(nodeDir, 'Playpen', filename);
-      if (fs.existsSync(candidate)) {
+      if (amigafs.existsSync(candidate)) {
         return candidate;
       }
     }
@@ -926,11 +927,11 @@ export class XIMSystemCommandsHandler {
 
   private handleLastAccountNumCommand(msg: XIMMessage): void {
     const dataPath = this.userDataPath();
-    if (!fs.existsSync(dataPath)) {
+    if (!amigafs.existsSync(dataPath)) {
       this.reply(msg, 0);
       return;
     }
-    const stats = fs.statSync(dataPath);
+    const stats = amigafs.statSync(dataPath);
     const total = Math.floor(stats.size / 239);
     this.reply(msg, total);
   }
@@ -1029,8 +1030,8 @@ export class XIMSystemCommandsHandler {
 
   private readSlot(filePath: string, slot: number, size: number): Buffer | null {
     try {
-      if (!fs.existsSync(filePath)) return null;
-      const fd = fs.openSync(filePath, 'r');
+      if (!amigafs.existsSync(filePath)) return null;
+      const fd = amigafs.openSync(filePath, 'r');
       try {
         const buffer = Buffer.alloc(size);
         const offset = (slot - 1) * size;
@@ -1053,8 +1054,8 @@ export class XIMSystemCommandsHandler {
 
     try {
       const dir = path.dirname(filePath);
-      fs.mkdirSync(dir, { recursive: true });
-      const fd = fs.openSync(filePath, fs.existsSync(filePath) ? 'r+' : 'w+');
+      amigafs.mkdirSync(dir, { recursive: true });
+      const fd = amigafs.openSync(filePath, amigafs.existsSync(filePath) ? 'r+' : 'w+');
       try {
         const stats = fs.fstatSync(fd);
         const needed = offset + size;
@@ -1109,12 +1110,12 @@ export class XIMSystemCommandsHandler {
 
   private findFreeUserSlot(): number {
     const dataPath = this.userDataPath();
-    if (!fs.existsSync(dataPath)) {
+    if (!amigafs.existsSync(dataPath)) {
       return 1;
     }
 
     try {
-      const fd = fs.openSync(dataPath, 'r');
+      const fd = amigafs.openSync(dataPath, 'r');
       try {
         const stats = fs.fstatSync(fd);
         const count = Math.floor(stats.size / 239);
@@ -1144,7 +1145,7 @@ export class XIMSystemCommandsHandler {
   private ensureUploadTarget(originalPath: string, resolvedPath: string): string | null {
     try {
       let targetPath = resolvedPath;
-      const stat = fs.existsSync(resolvedPath) ? fs.statSync(resolvedPath) : null;
+      const stat = amigafs.existsSync(resolvedPath) ? amigafs.statSync(resolvedPath) : null;
 
       // If a directory or trailing separator, place file in that directory using the provided filename (or default)
       if (stat?.isDirectory() || resolvedPath.endsWith(path.sep)) {
@@ -1160,7 +1161,7 @@ export class XIMSystemCommandsHandler {
         const playpen = this.getPaths()
           .node(this.bbsSession?.nodeId ?? 0)
           .playpen();
-        fs.mkdirSync(playpen, { recursive: true });
+        amigafs.mkdirSync(playpen, { recursive: true });
         const baseName =
           path.basename(originalPath) && path.basename(originalPath) !== path.sep
             ? path.basename(originalPath)
@@ -1168,7 +1169,7 @@ export class XIMSystemCommandsHandler {
         targetPath = path.join(playpen, baseName);
       }
 
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      amigafs.mkdirSync(path.dirname(targetPath), { recursive: true });
 
       return targetPath;
     } catch (err) {

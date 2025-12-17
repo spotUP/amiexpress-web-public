@@ -11,12 +11,14 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
 import { Socket } from 'socket.io';
 import AdmZip from 'adm-zip';
 import { getAmigaDoorManager, DoorArchive } from './amigaDoorManager';
+import { getDoors, Door } from '../handlers/door.handler';
 import { config } from '../config';
 import {
   ArchiveFileEntry,
@@ -100,8 +102,8 @@ export class DoorManager {
     this.archivesPath = path.join(config.get('dataDir'), 'Doors', 'archives');
 
     // Ensure directories exist
-    if (!fs.existsSync(this.archivesPath)) {
-      fs.mkdirSync(this.archivesPath, { recursive: true });
+    if (!amigafs.existsSync(this.archivesPath)) {
+      amigafs.mkdirSync(this.archivesPath, { recursive: true });
     }
 
     this.state = {
@@ -161,51 +163,52 @@ export class DoorManager {
   }
 
   /**
-   * Scan for installed doors
+   * Scan for installed doors - uses cached doors from door.handler for speed
    */
   private async scanDoors(): Promise<void> {
     const doors: DoorInfo[] = [];
 
-    // Scan doors directory for executables
-    if (fs.existsSync(this.doorsPath)) {
-      const files = fs.readdirSync(this.doorsPath);
+    // Use cached doors from door.handler.ts (same as DOORS command - fast!)
+    const cachedDoors = getDoors();
+    console.log(`[Door Manager] Using ${cachedDoors.length} cached doors from door.handler`);
 
-      for (const file of files) {
-        const fullPath = path.join(this.doorsPath, file);
-        const stats = fs.statSync(fullPath);
+    for (const door of cachedDoors) {
+      if (!door.enabled) continue;
 
-        if (stats.isFile()) {
-          const ext = path.extname(file).toLowerCase();
-
-          // TypeScript doors
-          if (ext === '.ts' || ext === '.js') {
-            doors.push({
-              id: crypto.createHash('md5').update(file).digest('hex'),
-              name: path.basename(file, ext),
-              filename: file,
-              type: 'typescript',
-              size: stats.size,
-              uploadDate: stats.mtime,
-              installed: true
-            });
+      // Calculate door size if path exists
+      let doorSize = 0;
+      if (door.path && amigafs.existsSync(door.path)) {
+        try {
+          const stats = amigafs.statSync(door.path);
+          if (stats.isDirectory()) {
+            doorSize = this.calculateDirectorySize(door.path);
+          } else {
+            doorSize = stats.size;
           }
-          // Amiga executables
-          else if (ext === '' || ext === '.exe') {
-            doors.push({
-              id: crypto.createHash('md5').update(file).digest('hex'),
-              name: path.basename(file, ext),
-              filename: file,
-              type: 'amiga',
-              size: stats.size,
-              uploadDate: stats.mtime,
-              installed: true
-            });
-          }
+        } catch (error) {
+          // Ignore size errors
         }
       }
+
+      doors.push({
+        id: crypto.createHash('md5').update(door.command).digest('hex'),
+        name: door.name || door.command,
+        filename: `${door.command}.info`,
+        type: door.type === 'typescript' ? 'typescript' :
+              door.type === 'python' ? 'python' as any :
+              door.type === 'AREXX' ? 'arexx' as any : 'amiga',
+        command: door.command,
+        location: door.path || '',
+        doorType: door.type,
+        size: doorSize,
+        uploadDate: new Date(0),
+        installed: true,
+        access: door.accessLevel
+      } as any);
     }
 
-    // Scan for installed Amiga doors (from Commands/BBSCmd/*.info files)
+    // Also scan for installed Amiga doors (from Commands/BBSCmd/*.info files)
+    // Use cached scan from amigaDoorManager
     try {
       const amigaDoorMgr = getAmigaDoorManager();
       const amigaDoors = await amigaDoorMgr.scanInstalledDoors();
@@ -213,13 +216,17 @@ export class DoorManager {
       console.log(`[Door Manager] Found ${amigaDoors.length} installed Amiga door(s)`);
 
       for (const amigaDoor of amigaDoors) {
+        // Skip if already added from cached doors
+        if (doors.some(d => (d as any).command === amigaDoor.command)) {
+          continue;
+        }
+
         // Calculate door size (executable + docs if exists)
         let doorSize = 0;
-        if (amigaDoor.resolvedPath && fs.existsSync(amigaDoor.resolvedPath)) {
+        if (amigaDoor.resolvedPath && amigafs.existsSync(amigaDoor.resolvedPath)) {
           try {
-            const stats = fs.statSync(amigaDoor.resolvedPath);
+            const stats = amigafs.statSync(amigaDoor.resolvedPath);
             if (stats.isDirectory()) {
-              // For directories, calculate total size of all files
               doorSize = this.calculateDirectorySize(amigaDoor.resolvedPath);
             } else {
               doorSize = stats.size;
@@ -238,23 +245,22 @@ export class DoorManager {
           location: amigaDoor.location,
           doorType: amigaDoor.type,
           size: doorSize,
-          uploadDate: new Date(0), // Use epoch 0 for stable timestamp
+          uploadDate: new Date(0),
           installed: amigaDoor.installed,
           access: amigaDoor.access
         } as any);
-        console.log(`[Door Manager]   - ${amigaDoor.command}: ${amigaDoor.name || amigaDoor.location} (${doorSize} bytes)`);
       }
     } catch (error) {
       console.error('[Door Manager] Error scanning Amiga doors:', error);
     }
 
-    // Scan archives directory
-    if (fs.existsSync(this.archivesPath)) {
-      const archives = fs.readdirSync(this.archivesPath);
+    // Scan archives directory for uninstalled archives
+    if (amigafs.existsSync(this.archivesPath)) {
+      const archives = amigafs.readdirSync(this.archivesPath);
 
       for (const archive of archives) {
         const fullPath = path.join(this.archivesPath, archive);
-        const stats = fs.statSync(fullPath);
+        const stats = amigafs.statSync(fullPath);
         const lowerArchive = archive.toLowerCase();
         const isArchive = lowerArchive.endsWith('.zip') ||
                          lowerArchive.endsWith('.lha') ||
@@ -445,8 +451,10 @@ export class DoorManager {
     } else {
       this.socket.emit('ansi-output', '\x1b[36mInstalled Doors:\x1b[0m\r\n\r\n');
 
-      // Calculate visible range (show 15 doors at a time)
-      const pageSize = 15;
+      // Calculate visible range (show 14 doors at a time to fit 24-row terminal)
+      // Layout: row 1 header, row 2 blank, row 3 section header, rows 4-5 blank lines,
+      // rows 6-19 = 14 doors, rows 20-21 pagination, rows 22-24 footer
+      const pageSize = 14;
       const start = this.state.scrollOffset;
       const end = Math.min(start + pageSize, doors.length);
 
@@ -669,8 +677,8 @@ export class DoorManager {
     }
 
     for (const candidate of candidates) {
-      if (candidate && fs.existsSync(candidate)) {
-        const stat = fs.statSync(candidate);
+      if (candidate && amigafs.existsSync(candidate)) {
+        const stat = amigafs.statSync(candidate);
         if (stat.isDirectory()) {
           return candidate;
         }
@@ -714,8 +722,8 @@ export class DoorManager {
 
     try {
       const pkgPath = path.join(doorPath, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (amigafs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(amigafs.readFileSync(pkgPath, 'utf8') as string);
         if (pkg.scripts && pkg.scripts.build) {
           await new Promise<void>((resolve) => {
             this.socket.emit('ansi-output', '\x1b[36m* Running npm run build...\x1b[0m\r\n');
@@ -945,7 +953,7 @@ export class DoorManager {
       const archivePath = data.path || path.join(this.archivesPath, data.originalname);
 
       // Verify file exists
-      if (!fs.existsSync(archivePath)) {
+      if (!amigafs.existsSync(archivePath)) {
         throw new Error(`Uploaded file not found: ${archivePath}`);
       }
 
@@ -1209,7 +1217,7 @@ export class DoorManager {
 
           // Make executable (Unix)
           try {
-            fs.chmodSync(targetPath, 0o755);
+            amigafs.chmodSync(targetPath, 0o755);
           } catch (e) {
             // Windows doesn't need this
           }
@@ -1250,8 +1258,8 @@ export class DoorManager {
     try {
       const doorPath = path.join(this.doorsPath, door.filename);
 
-      if (fs.existsSync(doorPath)) {
-        fs.unlinkSync(doorPath);
+      if (amigafs.existsSync(doorPath)) {
+        amigafs.unlinkSync(doorPath);
         door.installed = false;
         this.socket.emit('ansi-output', '\x1b[32mUninstallation successful!\x1b[0m\r\n');
 
@@ -1699,14 +1707,14 @@ export class DoorManager {
   private calculateDirectorySize(dirPath: string): number {
     let totalSize = 0;
     try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
+      const entries = amigafs.readdirSync(dirPath);
+      for (const name of entries) {
+        const fullPath = path.join(dirPath, name);
         try {
-          if (entry.isDirectory()) {
+          const stats = amigafs.statSync(fullPath);
+          if (stats.isDirectory()) {
             totalSize += this.calculateDirectorySize(fullPath);
           } else {
-            const stats = fs.statSync(fullPath);
             totalSize += stats.size;
           }
         } catch (error) {

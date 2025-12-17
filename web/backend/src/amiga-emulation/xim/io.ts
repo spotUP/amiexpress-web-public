@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
@@ -1023,7 +1024,7 @@ export class XIMIOHandler {
     msg: XIMMessage
   ): Promise<boolean> {
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const content = amigafs.readFileSync(filePath, 'utf-8') as string;
 
       // Process MCI codes in file contents (express.e:6790-6820)
       try {
@@ -1073,7 +1074,7 @@ export class XIMIOHandler {
 
   private findFirstExisting(candidates: string[]): string | null {
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate)) {
+      if (amigafs.existsSync(candidate)) {
         return candidate;
       }
     }

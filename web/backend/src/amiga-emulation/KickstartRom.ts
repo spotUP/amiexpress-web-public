@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { notifySysop } from '../utils/sysop-alert.util.js';
 
@@ -57,7 +58,7 @@ export class KickstartRom {
     const tryKickstart = (): boolean => {
       let romPath: string | null = null;
       for (const testPath of kickPaths) {
-        if (fs.existsSync(testPath)) {
+        if (amigafs.existsSync(testPath)) {
           romPath = testPath;
           break;
         }
@@ -66,7 +67,7 @@ export class KickstartRom {
         return false;
       }
       console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
-      const romBuffer = fs.readFileSync(romPath);
+      const romBuffer = amigafs.readFileSync(romPath) as Buffer;
       this.romSize = romBuffer.length;
       if (this.romSize !== this.ROM_SIZE) {
         console.warn(`[ROM] Warning: ROM size ${this.romSize} doesn't match expected ${this.ROM_SIZE}`);
@@ -82,10 +83,10 @@ export class KickstartRom {
         const arosRomFile = path.join(basePath, 'aros-rom.bin');
         const arosExtFile = path.join(basePath, 'aros-ext.bin');
 
-        if (fs.existsSync(arosRomFile) && fs.existsSync(arosExtFile)) {
+        if (amigafs.existsSync(arosRomFile) && amigafs.existsSync(arosExtFile)) {
           console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
-          const arosRom = fs.readFileSync(arosRomFile);
-          const arosExt = fs.readFileSync(arosExtFile);
+          const arosRom = amigafs.readFileSync(arosRomFile) as Buffer;
+          const arosExt = amigafs.readFileSync(arosExtFile) as Buffer;
           this.romSize = arosRom.length + arosExt.length;
           this.romData = new Uint8Array(this.romSize);
           this.romData.set(new Uint8Array(arosRom), 0);

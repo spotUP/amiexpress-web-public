@@ -28,6 +28,7 @@ import {
 import { IntuitionLibrary } from "./IntuitionLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import * as fs from "fs";
+import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 
 // Global named object registry for utility.library
@@ -3880,8 +3881,8 @@ export class LibraryTraps {
     let data: string | null = null;
     for (const candidate of candidates) {
       try {
-        if (fs.existsSync(candidate)) {
-          data = fs.readFileSync(candidate, "utf8");
+        if (amigafs.existsSync(candidate)) {
+          data = amigafs.readFileSync(candidate, "utf8") as string;
           console.log(`[LibraryTraps] Loaded LVOs from ${candidate}`);
           break;
         }

@@ -58,8 +58,8 @@ export class PathManager {
     const doorsUpper = path.join(this.baseDir, 'Doors/');
     const doorsLower = path.join(this.baseDir, 'doors/');
     const doorsPath =
-      (fs.existsSync(doorsUpper) && doorsUpper) ||
-      (fs.existsSync(doorsLower) && doorsLower) ||
+      (amigafs.existsSync(doorsUpper) && doorsUpper) ||
+      (amigafs.existsSync(doorsLower) && doorsLower) ||
       resolveCaseInsensitivePath(path.join(this.baseDir, 'doors')) ||
       doorsLower;
 

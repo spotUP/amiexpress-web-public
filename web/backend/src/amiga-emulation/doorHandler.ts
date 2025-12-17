@@ -5,6 +5,7 @@ import { AREXXDoorSession } from "./AREXXDoorSession";
 import * as path from "path";
 import { config } from "../config";
 import * as fs from "fs";
+import * as amigafs from "../utils/amigafs";
 
 /**
  * Door Handler - Manages door session lifecycle via Socket.io
@@ -162,20 +163,20 @@ export function terminateAllSessions(): void {
  */
 function resolveDoorPath(doorId: string, doorsDir: string): string | null {
   const directPath = path.join(doorsDir, doorId);
-  if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+  if (amigafs.existsSync(directPath) && amigafs.statSync(directPath).isFile()) {
     return directPath;
   }
 
   const dirPath = path.join(doorsDir, doorId);
-  if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+  if (amigafs.existsSync(dirPath) && amigafs.statSync(dirPath).isDirectory()) {
     const candidate = path.join(dirPath, doorId);
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+    if (amigafs.existsSync(candidate) && amigafs.statSync(candidate).isFile()) {
       return candidate;
     }
 
     // Fallback: any file in the directory
-    const entries = fs.readdirSync(dirPath);
-    const file = entries.find((f) => fs.statSync(path.join(dirPath, f)).isFile());
+    const entries = amigafs.readdirSync(dirPath) as string[];
+    const file = entries.find((f) => amigafs.statSync(path.join(dirPath, f)).isFile());
     if (file) return path.join(dirPath, file);
   }
 

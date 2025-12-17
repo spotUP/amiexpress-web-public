@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { User } from '../database';
@@ -103,7 +104,7 @@ export class PythonDoorSession {
     const executablePath = this.config.executablePath;
 
     // Verify Python file exists
-    if (!fs.existsSync(executablePath)) {
+    if (!amigafs.existsSync(executablePath)) {
       throw new Error(`Python door not found: ${executablePath}`);
     }
 

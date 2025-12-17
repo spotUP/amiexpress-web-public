@@ -98,7 +98,7 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
   (session as any).acpLastAction = { ...acp, timestamp: Date.now() };
 }
 
-interface Door {
+export interface Door {
   id: string;
   name: string;
   description: string;
@@ -256,8 +256,8 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     console.log(`[launchAmigaDoor] Location: ${doorInfo.location}`);
     console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
 
-    // Check if door executable exists
-    if (!fs.existsSync(doorInfo.resolvedPath)) {
+    // Check if door executable exists (use amigafs for case-insensitive matching)
+    if (!amigafs.existsSync(doorInfo.resolvedPath)) {
       socket.emit('ansi-output', `\r\n\x1b[31mDoor executable not found: ${doorInfo.resolvedPath}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -511,8 +511,8 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
           path.join(process.cwd(), 'src', 'doors', door.id, 'index.ts')
         ];
         for (const testPath of possiblePaths) {
-          if (fs.existsSync(testPath)) {
-            const stats = fs.statSync(testPath);
+          if (amigafs.existsSync(testPath)) {
+            const stats = amigafs.statSync(testPath);
             if (stats.isDirectory()) {
               // Sum up directory contents
               doorSize = calculateDoorDirectorySize(testPath);
@@ -859,12 +859,12 @@ function formatDoorSize(bytes: number): string {
 function calculateDoorDirectorySize(dirPath: string): number {
   let totalSize = 0;
   try {
-    const files = fs.readdirSync(dirPath);
+    const files = amigafs.readdirSync(dirPath);
     for (const file of files) {
       // Skip node_modules and .git
       if (file === 'node_modules' || file === '.git') continue;
       const filePath = path.join(dirPath, file);
-      const stats = fs.statSync(filePath);
+      const stats = amigafs.statSync(filePath);
       if (stats.isDirectory()) {
         totalSize += calculateDoorDirectorySize(filePath);
       } else {
@@ -1020,12 +1020,13 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     // For hybrid doors, use the server entry point from package.json
     // Check if path is a directory and if it has a package.json with server entry
-    if (fs.existsSync(path.join(projectRoot, doorPath)) &&
-        fs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
+    // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
+    if (amigafs.existsSync(path.join(projectRoot, doorPath)) &&
+        amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
       const packageJsonPath = path.join(projectRoot, doorPath, 'package.json');
-      if (fs.existsSync(packageJsonPath)) {
+      if (amigafs.existsSync(packageJsonPath)) {
         try {
-          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+          const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
           // Check if it's a hybrid door with explicit server entry
           if (packageJson.runtime === 'hybrid' && packageJson.server && packageJson.server.entry) {
             // Use server entry from manifest (e.g., "./server.ts")
@@ -1058,8 +1059,8 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
 
-    // Check if door exists
-    if (!fs.existsSync(doorPath)) {
+    // Check if door exists (use amigafs for case-insensitive matching)
+    if (!amigafs.existsSync(doorPath)) {
       socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -1077,8 +1078,8 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     let packageJson: any = null;
     try {
       const packageJsonPath = path.join(path.dirname(doorPath), 'package.json');
-      if (fs.existsSync(packageJsonPath)) {
-        packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      if (amigafs.existsSync(packageJsonPath)) {
+        packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
       }
     } catch (err) {
       // No package.json or parse error - not a problem
@@ -1257,15 +1258,16 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
     const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
     // If path is a directory, append index.js (compiled)
-    if (fs.existsSync(path.join(projectRoot, doorPath)) &&
-        fs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
+    // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
+    if (amigafs.existsSync(path.join(projectRoot, doorPath)) &&
+        amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
       // Try compiled version first, fall back to TypeScript
       const compiledPath = path.join(doorPath, 'dist', 'index.js');
       const tsPath = path.join(doorPath, 'index.ts');
 
-      if (fs.existsSync(path.join(projectRoot, compiledPath))) {
+      if (amigafs.existsSync(path.join(projectRoot, compiledPath))) {
         doorPath = compiledPath;
-      } else if (fs.existsSync(path.join(projectRoot, tsPath))) {
+      } else if (amigafs.existsSync(path.join(projectRoot, tsPath))) {
         doorPath = tsPath;
       } else {
         doorPath = path.join(doorPath, 'index.js');
@@ -1279,8 +1281,8 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
 
     console.log(`[executeSDKDoor] Resolved path: ${doorPath}`);
 
-    // Check if door exists
-    if (!fs.existsSync(doorPath)) {
+    // Check if door exists (use amigafs for case-insensitive matching)
+    if (!amigafs.existsSync(doorPath)) {
       socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -1539,9 +1541,9 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     console.log(`[executeAmigaDoor] BBS root: ${bbsRoot}`);
     console.log(`[executeAmigaDoor] Initial door path: ${doorPath}`);
 
-    const fs = require('fs');
     // Check if door executable exists - if not, try alternate paths
-    if (!fs.existsSync(doorPath)) {
+    // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
+    if (!amigafs.existsSync(doorPath)) {
       console.log(`[executeAmigaDoor] Door not found at ${doorPath}, trying alternate paths...`);
 
       // Try alternate path resolutions for common issues:
@@ -1576,12 +1578,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
         resolveCaseInsensitivePath(path.join(bbsRoot, 'Doors')) ||
         resolveCaseInsensitivePath(path.join(bbsRoot, 'doors'));
 
-      if (doorsDir && fs.existsSync(doorsDir)) {
+      if (doorsDir && amigafs.existsSync(doorsDir)) {
         try {
-          const entries = fs.readdirSync(doorsDir);
+          const entries = amigafs.readdirSync(doorsDir);
           for (const entry of entries) {
             const entryPath = path.join(doorsDir, entry);
-            const stat = fs.statSync(entryPath);
+            const stat = amigafs.statSync(entryPath);
 
             if (stat.isDirectory()) {
               // Check if this directory name matches any variation of the door name
@@ -1592,7 +1594,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
                 // Try the executable inside this directory
                 for (const nameVar of nameVariations) {
                   const execPath = path.join(entryPath, nameVar);
-                  if (fs.existsSync(execPath)) {
+                  if (amigafs.existsSync(execPath)) {
                     alternatePaths.push(execPath);
                   }
                 }
@@ -1606,7 +1608,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
 
       // Search for the file in alternate locations
       for (const altPath of alternatePaths) {
-        if (fs.existsSync(altPath)) {
+        if (amigafs.existsSync(altPath)) {
           console.log(`[executeAmigaDoor] Found door at alternate path: ${altPath}`);
           doorPath = altPath;
           break;
@@ -1614,7 +1616,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
 
       // If still not found, error out
-      if (!fs.existsSync(doorPath)) {
+      if (!amigafs.existsSync(doorPath)) {
         console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
         console.error(`[executeAmigaDoor] Tried alternate paths:`, alternatePaths);
         socket.emit('ansi-output', '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
@@ -1995,10 +1997,10 @@ async function executeNativeDoor(socket: any, session: BBSSession, door: Door, d
   console.log(` [DOOR] Executing native door: ${door.name} (${door.path})`);
   disableShortcuts(session);
 
-  // Check if door file exists
+  // Check if door file exists (use amigafs for case-insensitive matching)
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
-  if (!fs.existsSync(doorPath)) {
+  if (!amigafs.existsSync(doorPath)) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -2114,10 +2116,10 @@ async function executeScriptDoor(socket: any, session: BBSSession, door: Door, d
   console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
   disableShortcuts(session);
 
-  // Check if door script exists
+  // Check if door script exists (use amigafs for case-insensitive matching)
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
-  if (!fs.existsSync(doorPath)) {
+  if (!amigafs.existsSync(doorPath)) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: Script not found: ${door.path}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -2226,10 +2228,10 @@ async function executePythonDoor(socket: any, session: BBSSession, door: Door, d
   console.log(`[executePythonDoor] Door path: ${door.path}`);
   disableShortcuts(session);
 
-  // Check if door script exists
+  // Check if door script exists (use amigafs for case-insensitive matching)
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
-  if (!fs.existsSync(doorPath)) {
+  if (!amigafs.existsSync(doorPath)) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: Python script not found: ${door.path}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -2373,10 +2375,10 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
   console.log(`[executeARexxDoor] Door path: ${door.path}`);
   disableShortcuts(session);
 
-  // Check if door script exists
+  // Check if door script exists (use amigafs for case-insensitive matching)
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
-  if (!fs.existsSync(doorPath)) {
+  if (!amigafs.existsSync(doorPath)) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';

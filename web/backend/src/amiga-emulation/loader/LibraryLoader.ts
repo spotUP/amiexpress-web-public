@@ -1,6 +1,7 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { HunkLoader } from './HunkLoader';
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
 /**
@@ -62,7 +63,7 @@ export class LibraryLoader {
     for (const searchPath of this.librarySearchPaths) {
       const libraryPath = path.join(searchPath, libraryName);
 
-      if (fs.existsSync(libraryPath)) {
+      if (amigafs.existsSync(libraryPath)) {
         console.log(`[LibraryLoader] Found library: ${libraryPath}`);
         return libraryPath;
       }
@@ -107,7 +108,7 @@ export class LibraryLoader {
       }
 
       // Read library file
-      const libraryData = fs.readFileSync(libraryPath);
+      const libraryData = amigafs.readFileSync(libraryPath) as Buffer;
       console.log(`[LibraryLoader] Read ${libraryData.length} bytes from ${libraryPath}`);
 
       // Parse as Hunk file

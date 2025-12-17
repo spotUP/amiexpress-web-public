@@ -582,12 +582,12 @@ export class DosLibrary {
   private ensureDirectory(dir: string): void {
     try {
       // Skip if directory already exists
-      if (fs.existsSync(dir)) {
+      if (amigafs.existsSync(dir)) {
         return;
       }
 
       console.log(`[dos.library] Creating directory: ${dir}`);
-      fs.mkdirSync(dir, { recursive: true });
+      amigafs.mkdirSync(dir, { recursive: true });
     } catch (error) {
       console.warn(
         `[dos.library] ⚠️ Unable to create directory ${dir}:`,
@@ -844,14 +844,14 @@ export class DosLibrary {
 
           if (mode === MODE_OLDFILE || mode === MODE_READWRITE) {
             // Read mode - file must exist
-            if (!fs.existsSync(realPath)) {
+            if (!amigafs.existsSync(realPath)) {
               console.error(`[dos.library] Open: File not found: ${realPath}`);
               fileId = 0;
               this.lastError = this.ERROR_OBJECT_NOT_FOUND;
               this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=notfound`);
             } else {
               // Load entire file into memory
-              buffer = fs.readFileSync(realPath);
+              buffer = amigafs.readFileSync(realPath) as Buffer;
               fileId = this.nextFileId++;
               console.log(
                 `[dos.library] Open: File opened for reading (${buffer.length} bytes) -> handle ${fileId}`
@@ -1001,7 +1001,7 @@ export class DosLibrary {
       ) {
         if (fileHandle.realPath && fileHandle.buffer) {
           try {
-            fs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
+            amigafs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
             console.log(
               `[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`
             );
@@ -1386,9 +1386,9 @@ export class DosLibrary {
         // Don't create "BBS/" subdirectory - BBS: should resolve to project root
         if (parentDir.endsWith('/BBS') || parentDir.endsWith('\\BBS')) {
           console.warn(`[dos.library] Skipping creation of BBS/ subdirectory for redirect: ${amiPath} -> ${resolved}`);
-        } else if (!fs.existsSync(parentDir)) {
+        } else if (!amigafs.existsSync(parentDir)) {
           console.log(`[dos.library] Creating parent directory for stdout redirect: ${parentDir}`);
-          fs.mkdirSync(parentDir, { recursive: true });
+          amigafs.mkdirSync(parentDir, { recursive: true });
         }
       } catch {
         /* ignore directory creation failures; open() will report errors */
@@ -2095,7 +2095,7 @@ export class DosLibrary {
     }
 
     // Check if file exists
-    if (!fs.existsSync(realPath)) {
+    if (!amigafs.existsSync(realPath)) {
       console.error(`[dos.library] DeleteFile: File not found: ${realPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
@@ -2103,7 +2103,7 @@ export class DosLibrary {
     }
 
     // Check if it's a directory (DeleteFile should only delete files)
-    if (fs.statSync(realPath).isDirectory()) {
+    if (amigafs.statSync(realPath).isDirectory()) {
       console.error(
         `[dos.library] DeleteFile: Cannot delete directory with DeleteFile: ${realPath}`
       );
@@ -2164,14 +2164,14 @@ export class DosLibrary {
       return;
     }
 
-    if (!fs.existsSync(oldPath)) {
+    if (!amigafs.existsSync(oldPath)) {
       console.error(`[dos.library] Rename: Source file not found: ${oldPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
-    if (fs.existsSync(newPath)) {
+    if (amigafs.existsSync(newPath)) {
       console.error(
         `[dos.library] Rename: Destination already exists: ${newPath}`
       );
@@ -2256,7 +2256,7 @@ export class DosLibrary {
     }
 
     // Check if path exists
-    if (!fs.existsSync(realPath)) {
+    if (!amigafs.existsSync(realPath)) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
       console.log(
         `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${
@@ -2419,7 +2419,7 @@ export class DosLibrary {
     }
 
     try {
-      const stats = fs.statSync(lock.path);
+      const stats = amigafs.statSync(lock.path);
       const fileName = path.basename(lock.path);
 
       // Targeted trace for AquaScan FR gating: only for Dir1 examines
@@ -2550,7 +2550,7 @@ export class DosLibrary {
 
       // Initialize directory iterator for this lock if it's a directory
       if (stats.isDirectory()) {
-        const files = fs.readdirSync(lock.path);
+        const files = amigafs.readdirSync(lock.path);
         this.dirIterators.set(foundLockId, files);
         this.dirIteratorIndex.set(foundLockId, 0);
         console.log(
@@ -2598,7 +2598,7 @@ export class DosLibrary {
     if (!this.dirIterators.has(lockId)) {
       // Examine() should have been called first, but we'll initialize here too
       try {
-        const files = fs.readdirSync(lock.path);
+        const files = amigafs.readdirSync(lock.path);
         this.dirIterators.set(lockId, files);
         this.dirIteratorIndex.set(lockId, 0);
       } catch (error) {
@@ -2631,7 +2631,7 @@ export class DosLibrary {
     const filePath = path.join(lock.path, fileName);
 
     try {
-      const stats = fs.statSync(filePath);
+      const stats = amigafs.statSync(filePath);
 
       // Clear FileInfoBlock (260 bytes)
       for (let i = 0; i < 260; i++) {
@@ -2803,7 +2803,7 @@ export class DosLibrary {
     }
 
     // Check if directory already exists
-    if (fs.existsSync(realPath)) {
+    if (amigafs.existsSync(realPath)) {
       console.error(
         `[dos.library] CreateDir: Path already exists: ${realPath}`
       );
@@ -2814,7 +2814,7 @@ export class DosLibrary {
 
     try {
       // Create directory (recursive = true to create parent dirs)
-      fs.mkdirSync(realPath, { recursive: true });
+      amigafs.mkdirSync(realPath, { recursive: true });
       console.log(`[dos.library] CreateDir: Created directory ${realPath}`);
 
       // Return lock to new directory
@@ -2889,8 +2889,8 @@ export class DosLibrary {
 
     // Verify the lock points to a directory
     if (
-      !fs.existsSync(newLock.path) ||
-      !fs.statSync(newLock.path).isDirectory()
+      !amigafs.existsSync(newLock.path) ||
+      !amigafs.statSync(newLock.path).isDirectory()
     ) {
       console.error(
         `[dos.library] CurrentDir: Lock BPTR ${bptrIn} does not point to a directory: ${newLock.path}`
@@ -3037,7 +3037,7 @@ export class DosLibrary {
       return;
     }
 
-    if (!fs.existsSync(realPath)) {
+    if (!amigafs.existsSync(realPath)) {
       console.error(`[dos.library] SetComment: File not found: ${realPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
@@ -3048,13 +3048,13 @@ export class DosLibrary {
       // Store comment in .comment sidecar file
       const commentPath = realPath + ".comment";
       if (comment) {
-        fs.writeFileSync(commentPath, comment, "utf-8");
+        amigafs.writeFileSync(commentPath, comment, "utf-8");
         console.log(
           `[dos.library] SetComment: Wrote comment to ${commentPath}`
         );
       } else {
         // Empty comment = delete comment file
-        if (fs.existsSync(commentPath)) {
+        if (amigafs.existsSync(commentPath)) {
           fs.unlinkSync(commentPath);
           console.log(
             `[dos.library] SetComment: Removed comment file ${commentPath}`
@@ -3115,7 +3115,7 @@ export class DosLibrary {
     try {
       // Calculate absolute position based on mode
       let absoluteSize: number;
-      const stats = fs.statSync(handle.realPath);
+      const stats = amigafs.statSync(handle.realPath);
       const currentSize = stats.size;
 
       if (mode === -1) {
@@ -3183,7 +3183,7 @@ export class DosLibrary {
       return;
     }
 
-    if (!fs.existsSync(realPath)) {
+    if (!amigafs.existsSync(realPath)) {
       console.error(
         `[dos.library] SetProtection: File not found: ${realPath}`
       );

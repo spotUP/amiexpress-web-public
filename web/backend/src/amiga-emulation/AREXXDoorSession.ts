@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { User } from '../database';
 import { AREXXInterpreter } from '../services/arexx.service';
@@ -96,7 +97,7 @@ export class AREXXDoorSession {
     const executablePath = this.config.executablePath;
 
     // Verify AREXX file exists
-    if (!fs.existsSync(executablePath)) {
+    if (!amigafs.existsSync(executablePath)) {
       throw new Error(`AREXX door not found: ${executablePath}`);
     }
 
@@ -112,7 +113,7 @@ export class AREXXDoorSession {
     }
 
     // Read AREXX script
-    const scriptContent = fs.readFileSync(executablePath, 'utf-8');
+    const scriptContent = amigafs.readFileSync(executablePath, 'utf-8') as string;
 
     // Build context for AREXX interpreter
     const context = this.buildContext();

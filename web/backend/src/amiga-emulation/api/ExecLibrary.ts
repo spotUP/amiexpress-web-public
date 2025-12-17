@@ -10,6 +10,7 @@
 
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
+import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 import { notifySysop } from "../../utils/sysop-alert.util";
 
@@ -1275,7 +1276,7 @@ export class ExecLibrary {
       }
       candidates.push(path.join(process.cwd(), "Libs", "AEDoor.library"));
 
-      const libPath = candidates.find(p => fs.existsSync(p));
+      const libPath = candidates.find(p => amigafs.existsSync(p));
 
       if (!libPath) {
         const msg = `[ExecLibrary] ❌ ERROR: AEDoor.library not found`;
@@ -1292,7 +1293,7 @@ export class ExecLibrary {
       }
 
       console.log(`[ExecLibrary] Found: ${libPath}`);
-      const binary = fs.readFileSync(libPath);
+      const binary = amigafs.readFileSync(libPath) as Buffer;
       console.log(`[ExecLibrary] Read ${binary.length} bytes`);
 
       // Manual HUNK load (basic - just copy code section)

@@ -13,6 +13,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { setEnvStat } from '../utils/acs.util';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 
 // Import from other handlers
 import { displayScreen, doPause } from './screen.handler';
@@ -695,22 +696,22 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     const whoDir = path.join(process.cwd(), '../../doors/who');
 
     try {
-      // Ensure directory exists
-      if (!fs.existsSync(whoDir)) {
-        fs.mkdirSync(whoDir, { recursive: true });
+      // Ensure directory exists (use amigafs for case-insensitive matching)
+      if (!amigafs.existsSync(whoDir)) {
+        amigafs.mkdirSync(whoDir, { recursive: true });
       }
 
       if (data === 'DOORS:who/NI') {
         // NodeIn - create node tracking file on connection
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
         const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${new Date().toISOString()}\n`;
-        fs.writeFileSync(nodeFile, nodeData);
+        amigafs.writeFileSync(nodeFile, nodeData);
         console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
       } else {
         // NodeOut - remove node tracking file on logout
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
-        if (fs.existsSync(nodeFile)) {
-          fs.unlinkSync(nodeFile);
+        if (amigafs.existsSync(nodeFile)) {
+          amigafs.unlinkSync(nodeFile);
           console.log(`[WHO2] NO removed tracking file: ${nodeFile}`);
         }
       }
@@ -3783,7 +3784,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         console.log(`[GA] Door path: ${doorPath}`);
 
-        if (!fs.existsSync(doorPath)) {
+        if (!amigafs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = true;
@@ -3802,7 +3803,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
           try {
             const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
             const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
-            fs.appendFileSync(logPath, line, { encoding: 'utf8' });
+            amigafs.appendFileSync(logPath, line, { encoding: 'utf8' });
           } catch (err) {
             console.error('[GA] Failed to log door debug:', err);
           }
@@ -3880,7 +3881,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         console.log(`[MULTITOP] Door path: ${doorPath}`);
 
-        if (!fs.existsSync(doorPath)) {
+        if (!amigafs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = false;
@@ -3919,7 +3920,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
         console.log(`[WH] Door path: ${doorPath}`);
 
-        if (!fs.existsSync(doorPath)) {
+        if (!amigafs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = false;

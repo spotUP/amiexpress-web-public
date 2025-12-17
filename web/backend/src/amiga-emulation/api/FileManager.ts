@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import { FileHandle } from './FileHandle';
 import { PathManager } from './PathManager';
 import { AmigaFileCache } from './AmigaFileCache';
@@ -193,7 +194,7 @@ export class FileManager {
     const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
     const logToFile = (msg: string) => {
       try {
-        fs.appendFileSync(logPath, `[FileManager] ${new Date().toISOString()} ${msg}\n`, { encoding: 'utf8' });
+        amigafs.appendFileSync(logPath, `[FileManager] ${new Date().toISOString()} ${msg}\n`, { encoding: 'utf8' });
       } catch {
         /* ignore */
       }
@@ -234,8 +235,8 @@ export class FileManager {
       return 0; // Failed
     }
 
-    // Check if file exists and log it
-    const fileExists = fs.existsSync(sysPath);
+    // Check if file exists and log it (use amigafs for case-insensitive matching)
+    const fileExists = amigafs.existsSync(sysPath);
     if (fileExists) {
       console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (exists)`);

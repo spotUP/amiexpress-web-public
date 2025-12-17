@@ -761,15 +761,49 @@ async function sendChatMessage(
 
     // Insert message into scroll region while keeping cursor at line 24
     // This matches the livechat pattern exactly
-    const insertMessage =
+    // When USER sends a message, clear their input line (24) after
+    // When SYSOP sends a message, preserve user's input line (they may be typing)
+    const clearInputLine = senderType === 'user'
+      ? '\x1b[24;1H\x1b[2K' // Move to line 24 and clear it (user just submitted)
+      : '';
+
+    // Word-wrap long messages to prevent overflow past scroll region
+    // Terminal is 80 cols, prefix "HH:MM Handle: " is ~18 chars, leave margin
+    const maxLineWidth = 78;
+    const prefix = `\x1b[36m${timestamp}\x1b[0m \x1b[${nameColor}m${senderHandle}:\x1b[0m `;
+    const prefixVisibleLen = timestamp.length + 1 + senderHandle.length + 2; // "HH:MM Handle: "
+    const firstLineMaxChars = maxLineWidth - prefixVisibleLen;
+    const continuationIndent = '       '; // 7 spaces to align with message text
+    const continuationMaxChars = maxLineWidth - continuationIndent.length;
+
+    // Word-wrap the message
+    const wrappedLines = wordWrapMessage(message, firstLineMaxChars, continuationMaxChars);
+
+    // Build ANSI output for each line
+    let insertMessage =
       '\x1b7' + // Save cursor position
       '\x1b[1;21r' + // Reinforce scroll region (lines 1-21) to prevent full-screen scroll
-      '\x1b[22;1H\x1b[2K' + // Move to line 22, clear ENTIRE line (typing preview)
+      '\x1b[22;1H\x1b[2K'; // Move to line 22, clear ENTIRE line (typing preview)
+
+    // Insert first line with timestamp and handle
+    insertMessage +=
       '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
       '\x1b[S' + // Scroll Up (SU): Scroll the scroll region up by 1 line
       '\x1b[21;1H' + // Move to line 21 (now a blank line after scroll)
-      `\x1b[36m${timestamp}\x1b[0m \x1b[${nameColor}m${senderHandle}:\x1b[0m ${message}` + // Write message
-      '\x1b8'; // Restore cursor position (don't clear line 24 - user may be typing)
+      prefix + wrappedLines[0]; // Write first line with prefix
+
+    // Insert continuation lines (if any)
+    for (let i = 1; i < wrappedLines.length; i++) {
+      insertMessage +=
+        '\x1b[21;1H' + // Move to line 21
+        '\x1b[S' + // Scroll up
+        '\x1b[21;1H' + // Move to line 21
+        continuationIndent + wrappedLines[i]; // Write continuation line
+    }
+
+    insertMessage +=
+      clearInputLine + // Clear user's input line ONLY when user sent the message
+      '\x1b[24;1H'; // Move cursor back to line 24 for next input
 
     io.to(`user:${page.userId}`).emit('ansi-output', insertMessage);
   }
@@ -1011,6 +1045,45 @@ async function checkSysopAvailability(io: any, repository: OperatorChatRepositor
   });
 
   return availableSysops;
+}
+
+/**
+ * Word-wrap a message to fit within terminal width
+ * First line can be shorter (to account for timestamp + handle prefix)
+ * Continuation lines use full width minus indent
+ */
+function wordWrapMessage(message: string, firstLineMax: number, continuationMax: number): string[] {
+  const lines: string[] = [];
+  let remaining = message;
+  let isFirstLine = true;
+
+  while (remaining.length > 0) {
+    const maxChars = isFirstLine ? firstLineMax : continuationMax;
+
+    if (remaining.length <= maxChars) {
+      // Remaining text fits on one line
+      lines.push(remaining);
+      break;
+    }
+
+    // Find break point (prefer space, but force break if no space found)
+    let breakPoint = remaining.lastIndexOf(' ', maxChars);
+    if (breakPoint <= 0) {
+      // No space found, force break at maxChars
+      breakPoint = maxChars;
+    }
+
+    lines.push(remaining.substring(0, breakPoint));
+    remaining = remaining.substring(breakPoint).trimStart(); // Remove leading space from next line
+    isFirstLine = false;
+  }
+
+  // Ensure at least one line (empty message case)
+  if (lines.length === 0) {
+    lines.push('');
+  }
+
+  return lines;
 }
 
 /**

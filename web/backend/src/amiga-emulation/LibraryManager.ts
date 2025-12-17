@@ -24,6 +24,7 @@ import { DoorConfig, DoorConstants } from "./DoorTypes.js";
 import { Socket } from "socket.io";
 import * as path from "path";
 import * as fs from "fs";
+import * as amigafs from "../utils/amigafs";
 import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
 import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
@@ -93,7 +94,7 @@ export class LibraryManager {
       path.resolve(__dirname, "..", "..", "data", "amiga-roms", romName),
     ];
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate)) {
+      if (amigafs.existsSync(candidate)) {
         return candidate;
       }
     }
@@ -112,7 +113,7 @@ export class LibraryManager {
       const libsDir = path.join(projectRoot, "Libs");
 
       // If everything already exists, skip work
-      const missing = needed.filter((n) => !fs.existsSync(path.join(libsDir, n)));
+      const missing = needed.filter((n) => !amigafs.existsSync(path.join(libsDir, n)));
       if (missing.length === 0) {
         return;
       }
@@ -135,7 +136,7 @@ export class LibraryManager {
         return;
       }
 
-      const entries = fs.readdirSync(outDir);
+      const entries = amigafs.readdirSync(outDir);
       for (const need of missing) {
         const base = need.replace(".library", "").replace(".device", "");
         const candidate = entries.find((e) => e.toLowerCase().startsWith(base.toLowerCase()));
@@ -583,13 +584,13 @@ export class LibraryManager {
       const nodeDir = path.join(bbsRoot, `Node${amigaNodeId}`);
 
       // Ensure node directory exists
-      if (!fs.existsSync(nodeDir)) {
+      if (!amigafs.existsSync(nodeDir)) {
         fs.mkdirSync(nodeDir, { recursive: true });
       }
 
       // TempAns is a directory for temporary answer files
       const tempAnsDir = path.join(nodeDir, "TempAns");
-      if (!fs.existsSync(tempAnsDir)) {
+      if (!amigafs.existsSync(tempAnsDir)) {
         fs.mkdirSync(tempAnsDir, { recursive: true });
       }
 
@@ -604,11 +605,12 @@ export class LibraryManager {
   private registerLibrariesFromDisk(dir: string): void {
     if (!this.execLibrary) return;
     try {
-      if (!fs.existsSync(dir)) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        const name = entry.name;
+      if (!amigafs.existsSync(dir)) return;
+      const entries = amigafs.readdirSync(dir);
+      for (const name of entries) {
+        const entryPath = path.join(dir, name);
+        const stat = amigafs.statSync(entryPath);
+        if (!stat.isFile()) continue;
         if (!name.toLowerCase().endsWith(".library")) continue;
         this.execLibrary.registerLibraryPlaceholder(name);
       }

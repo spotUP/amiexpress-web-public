@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as amigafs from "../../utils/amigafs";
 import path from "path";
 
 // TypeScript interface for Moira WebAssembly module
@@ -164,7 +165,7 @@ export class MoiraEmulator {
     let moiraPath = "";
     let createMoiraModule: any = null;
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate)) {
+      if (amigafs.existsSync(candidate)) {
         moiraPath = candidate;
         createMoiraModule = require(candidate);
         break;

@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 
 export class DoorLogger {
@@ -35,8 +36,8 @@ export class DoorLogger {
     const projectRoot = path.resolve(__dirname, '../../../..');
     const logsDir = path.join(projectRoot, 'logs');
     console.log(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
+    if (!amigafs.existsSync(logsDir)) {
+      amigafs.mkdirSync(logsDir, { recursive: true });
     }
 
     this.logPath = path.join(logsDir, `door-68k-${this.doorName}-${this.sessionId}.log`);
@@ -64,7 +65,7 @@ export class DoorLogger {
   private writeRaw(message: string): void {
     if (!this.enabled) return;
     try {
-      fs.appendFileSync(this.logPath, message + '\n', { encoding: 'utf8' });
+      amigafs.appendFileSync(this.logPath, message + '\n', { encoding: 'utf8' });
     } catch {
       /* ignore write errors */
     }

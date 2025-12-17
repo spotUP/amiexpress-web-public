@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import { PathManager } from './PathManager';
 
 export interface CachedAmigaFile {
@@ -46,11 +47,11 @@ export class AmigaFileCache {
       return null;
     }
 
-    if (!fs.existsSync(sysPath)) {
+    if (!amigafs.existsSync(sysPath)) {
       return null;
     }
 
-    const stats = fs.statSync(sysPath);
+    const stats = amigafs.statSync(sysPath);
     let entry: CachedAmigaFile;
 
     if (stats.isDirectory()) {
@@ -63,7 +64,7 @@ export class AmigaFileCache {
         loadedAt: Date.now()
       };
     } else {
-      const data = fs.readFileSync(sysPath);
+      const data = amigafs.readFileSync(sysPath) as Buffer;
       entry = {
         amigaPath: amiPath,
         sysPath,

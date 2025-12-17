@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
 class XIMDebugLogger {
@@ -21,7 +22,7 @@ class XIMDebugLogger {
     if (this.enabled) {
       // Clear log file at start
       try {
-        fs.writeFileSync(this.logPath, `\n\n=== XIM DEBUG SESSION START: ${this.sessionStart.toISOString()} ===\n\n`, 'utf8');
+        amigafs.writeFileSync(this.logPath, `\n\n=== XIM DEBUG SESSION START: ${this.sessionStart.toISOString()} ===\n\n`, 'utf8');
         console.log(`[XIM Debug] Logging enabled: ${this.logPath}`);
       } catch (e) {
         console.error(`[XIM Debug] Failed to initialize log file: ${e}`);
@@ -45,7 +46,7 @@ class XIMDebugLogger {
     logLine += '\n';
 
     try {
-      fs.appendFileSync(this.logPath, logLine, 'utf8');
+      amigafs.appendFileSync(this.logPath, logLine, 'utf8');
     } catch (e) {
       // Silent fail
     }

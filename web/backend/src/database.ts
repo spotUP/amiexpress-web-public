@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from './utils/amigafs';
 import { userFileManager } from './services/UserFileManager';
 import { messageFileManager } from './services/MessageFileManager';
 import { conferenceFileManager } from './services/ConferenceFileManager';
@@ -90,9 +91,9 @@ export class Database {
 
     try {
       // Ensure database directory exists
-      if (!fs.existsSync(dbDir)) {
+      if (!amigafs.existsSync(dbDir)) {
         console.log(`Creating database directory: ${dbDir}`);
-        fs.mkdirSync(dbDir, { recursive: true });
+        amigafs.mkdirSync(dbDir, { recursive: true });
         console.log(`✓ Directory created`);
       } else {
         console.log(`✓ Directory exists: ${dbDir}`);

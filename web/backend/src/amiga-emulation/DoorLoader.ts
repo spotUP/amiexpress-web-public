@@ -45,10 +45,10 @@ export class DoorLoader {
     // Reset it here so doors can allocate signals for their own MsgPorts.
     this.execLibrary.resetSignalsForDoor();
 
-    // Read door binary
+    // Read door binary (use amigafs for case-insensitive path resolution)
     let binary: Buffer;
     try {
-      binary = fs.readFileSync(this.config.executablePath);
+      binary = amigafs.readFileSync(this.config.executablePath) as Buffer;
     } catch (error) {
       const socket = this.config.bbsSession?.socket;
       SysopDebugUtil.debugFileError(

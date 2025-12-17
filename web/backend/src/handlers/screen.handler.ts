@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 
 import type { BBSSession } from '../index';
@@ -187,12 +188,12 @@ interface ReadScreenResult {
 }
 
 function readScreenBuffer(filePath: string): Buffer {
-  const rawBuffer = fs.readFileSync(filePath);
+  const rawBuffer = amigafs.readFileSync(filePath) as Buffer;
   return stripSauceMetadata(rawBuffer);
 }
 
 function readScreenTextWithMetadata(filePath: string): ReadScreenResult {
-  const rawBuffer = fs.readFileSync(filePath);
+  const rawBuffer = amigafs.readFileSync(filePath) as Buffer;
   const sauceInfo = parseSauceMetadata(rawBuffer);
   const buffer = stripSauceMetadata(rawBuffer);
   const ext = path.extname(filePath).toLowerCase();
@@ -1456,7 +1457,7 @@ export function loadScreenFile(
       }
 
       for (const tryPath of pathsToTry) {
-        if (fs.existsSync(tryPath)) {
+        if (amigafs.existsSync(tryPath)) {
           screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${tryPath}`);
           if (isPetsciiSeqFile(tryPath)) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
@@ -1494,7 +1495,7 @@ export function loadScreenFile(
     ];
     for (const fallback of fallbackCandidates) {
       const candidate = findCaseInsensitive(path.dirname(fallback), path.basename(fallback));
-      if (candidate && fs.existsSync(candidate)) {
+      if (candidate && amigafs.existsSync(candidate)) {
         try {
         const content = readScreenText(candidate);
           screenDebug(`[loadScreenFile]  Using fallback screen for ${screenName}: ${candidate}`);
@@ -2197,9 +2198,9 @@ export function hasKeysFile(screenName: string, conferenceId?: number, nodeId: n
   const bbsPath = path.join(baseDir, 'Screens', `${screenName}.keys`);
   paths.push(bbsPath);
 
-  // Check each path in order
+  // Check each path in order (use amigafs for case-insensitive matching)
   for (const filePath of paths) {
-    if (fs.existsSync(filePath)) {
+    if (amigafs.existsSync(filePath)) {
       screenDebug(` Found .keys file: ${filePath}`);
       return true;
     }
