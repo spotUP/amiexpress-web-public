@@ -50,6 +50,7 @@ export interface LineOptions extends Omit<CanvasOptions, 'style'> {
  */
 export class Line extends Canvas {
   legend?: Box;
+  private _pendingData?: LineData | LineData[];
 
   constructor(options: LineOptions = {}) {
     options.showNthLabel = options.showNthLabel || 1;
@@ -67,6 +68,24 @@ export class Line extends Canvas {
     super(options as any);
     // Override options with correct type
     (this as any).options = options;
+
+    // Handle deferred setData - when widget is attached, render any pending data
+    const applyData = () => {
+      if (this._pendingData) {
+        this.setData(this._pendingData);
+        this._pendingData = undefined;
+      } else if (options.data) {
+        this.setData(options.data);
+      }
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   // Type-safe accessor for line-specific options
@@ -75,10 +94,23 @@ export class Line extends Canvas {
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) * 2 - 12,
-      height: (this.height as number) * 4 - 8
-    };
+    // Get widget dimensions, ensuring minimum sizes
+    const widgetWidth = Math.max(8, this.width as number);
+    const widgetHeight = Math.max(4, this.height as number);
+
+    // Calculate canvas size
+    let width = widgetWidth * 2 - 12;
+    let height = widgetHeight * 4 - 8;
+
+    // Ensure minimum canvas size
+    width = Math.max(4, width);
+    height = Math.max(4, height);
+
+    // Round to required multiples (width: 2, height: 4)
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -86,10 +118,10 @@ export class Line extends Canvas {
   }
 
   setData(dataInput: LineData | LineData[]): void {
+    // If context not ready yet, store data for later when widget is attached
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for line charts must be called after the chart has been added to the screen via screen.append()'
-      );
+      this._pendingData = dataInput;
+      return;
     }
 
     // Compatibility with older API - normalize to array

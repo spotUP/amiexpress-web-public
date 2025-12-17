@@ -5,25 +5,67 @@ The official SDK for creating doors (games, utilities, apps) for AmiExpress BBS.
 ## Quick Links
 
 - **[Game Development Guide](./docs/GAME_DEVELOPMENT_GUIDE.md)** - Complete reference for game development
-- **[Examples](./examples/)** - Working door examples
+- **[TypeScript Examples](./examples/)** - Working TypeScript door examples
 - **[Templates](./templates/)** - Starter templates
-- **[C SDK](../dev/c-doors/README.md)** - Create authentic 68K Amiga binaries
+- **[68K SDK](./68k/README.md)** - Create authentic 68K Amiga binaries (C/Assembly)
 
-## Two Development Approaches
+## SDK 2.0 - Three Development Approaches
 
-### TypeScript SDK (This Directory)
-- **Best for**: New doors, modern features, easy development
+### 1. TypeScript SDK (`/sdk/core/`, `/sdk/engines/`, etc.)
+- **Best for**: New doors, modern features, rapid development
 - **Language**: TypeScript/JavaScript
-- **Execution**: Native Node.js (fast, no emulation)
-- **Libraries**: Full npm ecosystem available
+- **Execution**: Native Node.js (fast, no emulation overhead)
+- **Libraries**: Full npm ecosystem (React, Tone.js, etc.)
+- **Development**: Hot reload, modern debugging tools
 
-### C SDK (dev/c-doors/)
-- **Best for**: Porting classic doors, learning Amiga programming
-- **Language**: C (cross-compiled to 68K)
-- **Execution**: MOIRA 68K emulator (authentic Amiga experience)
-- **Compatibility**: 100% compatible with classic AmiExpress doors
+### 2. 68K C SDK (`/sdk/68k/`)
+- **Best for**: Porting classic C doors, maximum compatibility
+- **Language**: C (cross-compiled to 68000 machine code)
+- **Execution**: MOIRA 68K emulator (authentic Amiga)
+- **Binary Size**: 1-10KB typical
+- **Performance**: Excellent (assembly glue layer calls real AEDoor.library)
 
-Both approaches produce doors that work identically from the user's perspective!
+### 3. 68K Assembly SDK (`/sdk/68k/`)
+- **Best for**: Time-critical code, smallest binaries, retro programming
+- **Language**: Motorola 68000 assembly (vasm)
+- **Execution**: MOIRA 68K emulator (authentic Amiga)
+- **Binary Size**: 200-500 bytes typical (smallest possible)
+- **Performance**: Maximum speed (direct hardware access)
+
+### 4. Mixed C + Assembly (`/sdk/68k/`)
+- **Best for**: Performance-critical doors with time-sensitive sections
+- **Approach**: Write most code in C, optimize hot paths in assembly
+- **Binary Size**: 2-15KB typical
+- **Performance**: Near-assembly speed for critical sections, C convenience elsewhere
+
+**All approaches produce doors that work identically from the user's perspective!**
+
+## 68K Binary Compilation Quick Reference
+
+**For detailed instructions, see [68K SDK README](./68k/README.md)**
+
+### Build a C Door to 68K Binary
+
+```bash
+cd sdk/68k
+make door NAME=mydoor      # Compiles doors/mydoor/mydoor.c → mydoor (68K HUNK binary)
+make install-door NAME=mydoor  # Installs to ../../doors/MYDOOR/
+```
+
+### Build an Assembly Door to 68K Binary
+
+```bash
+cd sdk/68k
+make asm NAME=mydoor       # Assembles doors/mydoor/mydoor.asm → mydoor (68K HUNK binary)
+make install-door NAME=mydoor  # Installs to ../../doors/MYDOOR/
+```
+
+### Build a Mixed C + Assembly Door
+
+See "Mixed C + Assembly Programming" section in [68K SDK README](./68k/README.md) for details on:
+- Inline assembly in C functions
+- Separate .asm files linked with C code
+- When to use assembly for time-critical sections
 
 ## Installation
 

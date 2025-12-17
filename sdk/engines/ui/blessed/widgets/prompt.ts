@@ -18,81 +18,115 @@ export class Prompt extends Box {
   private inputField: Textbox;
   private okButton: Button;
   private cancelButton: Button;
+  private buttonBox: Box;
 
   constructor(options: PromptOptions = {}) {
+    // Force fixed height - 'shrink' doesn't work well with nested elements
+    const height = typeof options.height === 'number' ? options.height : 12;
+
     super({
       ...options,
       border: options.border || { type: 'line' },
-      label: options.title || options.label || ' Prompt ',
-      width: options.width || '50%',
-      height: options.height || 'shrink',
+      label: options.title || options.label || ' Input ',
+      width: options.width || 50,
+      height: height,
       top: options.top || 'center',
       left: options.left || 'center',
-      padding: options.padding || 1,
+      padding: { left: 1, right: 1, top: 1, bottom: 1 },
       hidden: true,
       focusable: true,
-      shadow: options.shadow !== false,
+      shadow: false,  // Disable shadow - causes rendering issues
+      ch: ' ',  // Fill character for solid background
+      style: {
+        ...options.style,
+        bg: options.style?.bg || 'black',
+      },
     });
 
-    // Prompt text
+    // Prompt text - at top
     this.messageText = new Box({
       parent: this,
       top: 0,
       left: 0,
       width: '100%',
-      height: 1,
+      height: 2,
       content: options.text || '',
       tags: true,
+      style: {
+        fg: options.style?.fg || 'white',
+        bg: options.style?.bg || 'black',
+      },
     });
 
-    // Input field
+    // Input field - use right: 0 to respect parent boundaries
     this.inputField = new Textbox({
       parent: this,
       top: 2,
       left: 0,
-      width: '100%',
-      height: 1,
+      right: 0,
+      height: 3,
       border: { type: 'line' },
+      inputOnFocus: true,
+      mouse: true,
       value: options.value || '',
       style: {
         fg: 'white',
         bg: 'black',
+        border: { fg: 'gray' },
+      },
+    });
+
+    // Button container
+    this.buttonBox = new Box({
+      parent: this,
+      bottom: 0,
+      left: 'center',
+      width: 26,
+      height: 3,
+      style: {
+        bg: options.style?.bg || 'black',
       },
     });
 
     // OK button
     this.okButton = new Button({
-      parent: this,
-      bottom: 0,
-      left: 2,
-      width: 'shrink',
-      height: 1,
-      content: ' OK ',
-      padding: { left: 1, right: 1 },
+      parent: this.buttonBox,
+      top: 0,
+      left: 0,
+      width: 12,
+      height: 3,
+      content: '[ OK ]',
+      align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
+      mouse: true,
       style: {
         fg: 'white',
         bg: 'green',
-        focus: {
-          bg: 'lightgreen',
-        },
+        border: { fg: 'green' },
+        hover: { bg: 'lightgreen', fg: 'black' },
+        focus: { bg: 'lightgreen', fg: 'black' },
       },
     });
 
     // Cancel button
     this.cancelButton = new Button({
-      parent: this,
-      bottom: 0,
-      left: 10,
-      width: 'shrink',
-      height: 1,
-      content: ' Cancel ',
-      padding: { left: 1, right: 1 },
+      parent: this.buttonBox,
+      top: 0,
+      left: 14,
+      width: 12,
+      height: 3,
+      content: '[ Cancel ]',
+      align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
+      mouse: true,
       style: {
         fg: 'white',
         bg: 'red',
-        focus: {
-          bg: 'lightred',
-        },
+        border: { fg: 'red' },
+        hover: { bg: 'lightred', fg: 'black' },
+        focus: { bg: 'lightred', fg: 'black' },
       },
     });
 
@@ -122,6 +156,19 @@ export class Prompt extends Box {
       this.hide();
       this.emit('cancel');
       this.emit('hide');
+    });
+
+    // Tab between elements
+    this.key(['tab'], () => {
+      const focused = this.screen?.getFocused();
+      if (focused === this.inputField) {
+        this.okButton.focus();
+      } else if (focused === this.okButton) {
+        this.cancelButton.focus();
+      } else {
+        this.inputField.focus();
+      }
+      this.screen?.render();
     });
   }
 

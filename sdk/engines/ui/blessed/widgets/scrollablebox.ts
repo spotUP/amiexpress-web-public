@@ -23,47 +23,16 @@ export class ScrollableBox extends Box {
     // Enable mouse wheel scrolling
     this.enableMouse();
 
-    // Set up key bindings for scrolling
-    this.key(['up', 'k'], () => {
-      this.scroll(-1);
-      this.screen?.render();
-    });
+    // Set up key bindings for scrolling (scroll() auto-renders)
+    this.key(['up', 'k'], () => this.scroll(-1));
+    this.key(['down', 'j'], () => this.scroll(1));
+    this.key(['pageup', 'C-b'], () => this.scroll(-this.iheight));
+    this.key(['pagedown', 'C-f', 'space'], () => this.scroll(this.iheight));
+    this.key(['home', 'g'], () => this.scrollTo(0));
+    this.key(['end', 'G'], () => this.scrollTo(this.getScrollHeight()));
 
-    this.key(['down', 'j'], () => {
-      this.scroll(1);
-      this.screen?.render();
-    });
-
-    this.key(['pageup', 'C-b'], () => {
-      this.scroll(-this.iheight);
-      this.screen?.render();
-    });
-
-    this.key(['pagedown', 'C-f', 'space'], () => {
-      this.scroll(this.iheight);
-      this.screen?.render();
-    });
-
-    this.key(['home', 'g'], () => {
-      this.setScroll(0);
-      this.screen?.render();
-    });
-
-    this.key(['end', 'G'], () => {
-      this.setScroll(this.getScrollHeight());
-      this.screen?.render();
-    });
-
-    // Mouse wheel scrolling
-    this.on('wheelup', () => {
-      this.scroll(-1);
-      this.screen?.render();
-    });
-
-    this.on('wheeldown', () => {
-      this.scroll(1);
-      this.screen?.render();
-    });
+    // Note: Mouse wheel scrolling is handled by Element.onMouse()
+    // which calls scroll() automatically for wheelup/wheeldown events
   }
 
   /**

@@ -31,8 +31,8 @@ export class RadioButton extends Box {
 
     this._checked = options.checked || false;
     this.text = options.text || '';
-    this.checkChar = options.checkChar || '●';
-    this.uncheckChar = options.uncheckChar || '○';
+    this.checkChar = options.checkChar || 'O';
+    this.uncheckChar = options.uncheckChar || ' ';
     this.value = options.value !== undefined ? options.value : this.text;
 
     this.enableMouse();

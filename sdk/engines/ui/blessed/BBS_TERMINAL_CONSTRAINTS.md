@@ -132,6 +132,65 @@ User's `linesPerScreen` setting is stored in:
 - Context: `context.user.linesPerScreen` (number, optional)
 - Range: 20-23 (default 23)
 
+## Layout and Positioning
+
+### Use `right: 0` Instead of Percentage Widths
+
+When positioning elements, percentage-based widths like `width: '100%-2'` can cause elements to overflow their parent container. This is because the percentage is sometimes calculated relative to the screen rather than the parent.
+
+**Solution**: Use `right: 0` to make elements extend to the parent's right edge:
+
+```typescript
+// PROBLEMATIC - may overflow dialog boundaries
+const input = new Textbox({
+  parent: dialog,
+  left: 0,
+  width: '100%-2',  // May miscalculate parent width!
+});
+
+// CORRECT - respects parent boundaries
+const input = new Textbox({
+  parent: dialog,
+  left: 0,
+  right: 0,  // Extends exactly to parent's content edge
+});
+```
+
+### Side-by-Side Layouts
+
+For two elements side by side:
+
+```typescript
+// Left element - use width
+const leftBox = new Box({
+  parent: container,
+  left: 0,
+  width: '50%-2',  // Leave gap for right element
+});
+
+// Right element - use right: 0
+const rightBox = new Box({
+  parent: container,
+  left: '50%-1',
+  right: 0,  // Extends to container edge
+});
+```
+
+### Nested Dialogs and Overlays
+
+Dialog widgets (Prompt, Question, Message) automatically center themselves. Child elements inside dialogs should use `left: 0` and `right: 0` rather than percentage widths to stay within the dialog boundaries.
+
+### ASCII Characters Only
+
+For maximum terminal compatibility, avoid Unicode characters:
+
+| Widget | Selected | Unselected |
+|--------|----------|------------|
+| Checkbox | `[X]` | `[ ]` |
+| RadioButton | `(O)` | `( )` |
+
+Box drawing uses standard ASCII line-drawing characters that render correctly on all terminals.
+
 ## Common Issues
 
 ### Issue: Lines Wrapping Incorrectly
@@ -163,8 +222,30 @@ const contentHeight = screen.getDimensions().height - 2;
 screen.setDimensions(context.user.linesPerScreen);
 ```
 
+### Issue: Element Overflows Parent Container
+**Cause**: Using percentage width like `width: '100%-2'` in nested elements
+**Solution**: Use `right: 0` instead:
+```typescript
+// Before (overflows)
+new Textbox({ parent: dialog, width: '100%-2' });
+
+// After (correct)
+new Textbox({ parent: dialog, left: 0, right: 0 });
+```
+
+### Issue: Side-by-Side Elements Overlap
+**Cause**: Both elements use percentage widths that don't account for borders
+**Solution**: Use `right: 0` on the rightmost element:
+```typescript
+// Left: fixed or percentage width
+new Box({ left: 0, width: '50%-2' });
+
+// Right: extends to edge
+new Box({ left: '50%-1', right: 0 });
+```
+
 ## References
 
-- Original BBS standard: VT100/VT220 terminals (80×24)
+- Original BBS standard: VT100/VT220 terminals (80x24)
 - AmiExpress express.e: Lines 3029, 8497, 28540 (screen handling)
 - User configuration: `web/backend/src/database/types.ts` line 47

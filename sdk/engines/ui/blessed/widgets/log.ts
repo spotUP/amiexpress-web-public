@@ -13,11 +13,22 @@ export class Log extends Element {
     super({
       scrollable: true,
       alwaysScroll: true,
+      clickable: true,
+      mouse: true,
       ...options,
     });
 
     this.scrollback = options.scrollback || 1000;
     this.scrollOnInput = options.scrollOnInput !== false;
+
+    // Mouse wheel scrolling
+    this.on('wheelup', () => {
+      this.scroll(-1);
+    });
+
+    this.on('wheeldown', () => {
+      this.scroll(1);
+    });
   }
 
   log(text: string): void {

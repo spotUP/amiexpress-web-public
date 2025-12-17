@@ -15,67 +15,99 @@ export class Question extends Box {
   private messageText: Box;
   private yesButton: Button;
   private noButton: Button;
+  private buttonBox: Box;
 
   constructor(options: QuestionOptions = {}) {
+    // Force fixed height - 'shrink' doesn't work well with nested elements
+    const height = typeof options.height === 'number' ? options.height : 9;
+
     super({
       ...options,
       border: options.border || { type: 'line' },
-      label: options.title || options.label || ' Question ',
-      width: options.width || '50%',
-      height: options.height || 'shrink',
+      label: options.title || options.label || ' Confirm ',
+      width: options.width || 40,
+      height: height,
       top: options.top || 'center',
       left: options.left || 'center',
-      padding: options.padding || 1,
+      padding: { left: 1, right: 1, top: 1, bottom: 1 },
       hidden: true,
       focusable: true,
-      shadow: options.shadow !== false,
+      shadow: false,  // Disable shadow - causes rendering issues
+      ch: ' ',  // Fill character for solid background
+      style: {
+        ...options.style,
+        bg: options.style?.bg || 'black',
+      },
     });
 
-    // Question text
+    // Question text - centered at top
     this.messageText = new Box({
       parent: this,
       top: 0,
       left: 0,
       width: '100%',
-      height: 'shrink',
+      height: 3,
       content: options.text || '',
       tags: true,
       align: 'center',
+      valign: 'middle',
+      style: {
+        fg: options.style?.fg || 'white',
+        bg: options.style?.bg || 'black',
+      },
+    });
+
+    // Button container for centering both buttons
+    this.buttonBox = new Box({
+      parent: this,
+      bottom: 0,
+      left: 'center',
+      width: 22,
+      height: 3,
+      style: {
+        bg: options.style?.bg || 'black',
+      },
     });
 
     // Yes button
     this.yesButton = new Button({
-      parent: this,
-      bottom: 0,
-      left: 'center',
-      width: 'shrink',
-      height: 1,
-      content: ' Yes ',
-      padding: { left: 1, right: 1 },
+      parent: this.buttonBox,
+      top: 0,
+      left: 0,
+      width: 10,
+      height: 3,
+      content: '[ Yes ]',
+      align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
+      mouse: true,
       style: {
         fg: 'white',
         bg: 'green',
-        focus: {
-          bg: 'lightgreen',
-        },
+        border: { fg: 'green' },
+        hover: { bg: 'lightgreen', fg: 'black' },
+        focus: { bg: 'lightgreen', fg: 'black' },
       },
     });
 
     // No button
     this.noButton = new Button({
-      parent: this,
-      bottom: 0,
-      left: this.yesButton as any,
-      width: 'shrink',
-      height: 1,
-      content: ' No ',
-      padding: { left: 1, right: 1 },
+      parent: this.buttonBox,
+      top: 0,
+      left: 12,
+      width: 10,
+      height: 3,
+      content: '[ No ]',
+      align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
+      mouse: true,
       style: {
         fg: 'white',
         bg: 'red',
-        focus: {
-          bg: 'lightred',
-        },
+        border: { fg: 'red' },
+        hover: { bg: 'lightred', fg: 'black' },
+        focus: { bg: 'lightred', fg: 'black' },
       },
     });
 

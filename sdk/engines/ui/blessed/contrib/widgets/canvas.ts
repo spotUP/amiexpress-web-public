@@ -27,27 +27,50 @@ export class Canvas extends Box {
     super(options);
     this.options = options;
 
-    this.on('attach', () => {
+    // Initialize canvas context when attached
+    const initCanvas = () => {
+      if (this.ctx) return; // Already initialized
       this.calcSize();
-
       this._canvas = new InnerCanvas(this.canvasSize!.width, this.canvasSize!.height);
       this.ctx = this._canvas.getContext();
 
       if (this.options.data) {
         this.setData(this.options.data);
       }
-    });
+    };
+
+    // If already attached (parent was specified in options), initialize now
+    if (this.screen) {
+      initCanvas();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', initCanvas);
   }
 
   /**
    * Calculate canvas size based on widget dimensions
    * Braille characters are 2x4 pixels, so we multiply accordingly
+   * Width must be multiple of 2, height must be multiple of 4
    */
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) * 2 - 12,
-      height: (this.height as number) * 4
-    };
+    // Get widget dimensions, ensuring minimum sizes
+    const widgetWidth = Math.max(8, this.width as number);
+    const widgetHeight = Math.max(4, this.height as number);
+
+    // Calculate canvas size
+    let width = widgetWidth * 2 - 12;
+    let height = widgetHeight * 4;
+
+    // Ensure minimum canvas size
+    width = Math.max(4, width);
+    height = Math.max(4, height);
+
+    // Round to required multiples (width: 2, height: 4)
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   /**

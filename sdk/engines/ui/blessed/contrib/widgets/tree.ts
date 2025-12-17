@@ -52,6 +52,8 @@ export class Tree extends Box {
 
   constructor(options: TreeOptions = {}) {
     options.bold = true;
+    options.clickable = options.clickable !== false;
+    options.focusable = options.focusable !== false;
     super(options);
 
     this.options.extended = this.options.extended || false;
@@ -62,11 +64,12 @@ export class Tree extends Box {
     this.options.template.retract = this.options.template.retract || ' [-]';
     this.options.template.lines = this.options.template.lines || false;
 
-    // Create list widget
+    // Create list widget - fill the tree's content area
     this.rows = new List({
-      top: 1,
-      width: 0,
-      left: 1,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       style: this.options.style,
       padding: this.options.padding,
       keys: true,
@@ -82,7 +85,7 @@ export class Tree extends Box {
 
     this.append(this.rows);
 
-    // Set up key handlers
+    // Set up key handlers for toggle (space, enter, +)
     const keys = this.options.keys;
     if (keys && Array.isArray(keys)) {
       for (const key of keys) {
@@ -91,13 +94,53 @@ export class Tree extends Box {
           if (selectedNode && selectedNode.children) {
             selectedNode.extended = !selectedNode.extended;
             this.setData(this.data);
-            this.screen.render();
+            this.screen?.render();
           }
 
           this.emit('select', selectedNode, this.rows.selected);
         });
       }
     }
+
+    // Left arrow: collapse current node (or go to parent if already collapsed)
+    this.rows.key(['left'], () => {
+      const selectedNode = this.nodeLines[this.rows.selected];
+      if (selectedNode) {
+        if (selectedNode.extended && selectedNode.children) {
+          // Collapse current node
+          selectedNode.extended = false;
+          this.setData(this.data);
+          this.screen?.render();
+        } else if (selectedNode.parent) {
+          // Move to parent node
+          const parentIndex = this.nodeLines.indexOf(selectedNode.parent);
+          if (parentIndex >= 0) {
+            this.rows.select(parentIndex);
+            this.screen?.render();
+          }
+        }
+      }
+    });
+
+    // Right arrow: expand current node (or move to first child if already expanded)
+    this.rows.key(['right'], () => {
+      const selectedNode = this.nodeLines[this.rows.selected];
+      if (selectedNode && selectedNode.children) {
+        if (!selectedNode.extended) {
+          // Expand current node
+          selectedNode.extended = true;
+          this.setData(this.data);
+          this.screen?.render();
+        } else {
+          // Move to first child (it will be the next item in the list)
+          const currentIndex = this.rows.selected;
+          if (currentIndex < this.nodeLines.length - 1) {
+            this.rows.select(currentIndex + 1);
+            this.screen?.render();
+          }
+        }
+      }
+    });
   }
 
   walk(node: TreeNode, treeDepth: string): string[] {
@@ -208,14 +251,19 @@ export class Tree extends Box {
     this.rows.focus();
   }
 
+  // Forward keypress events to internal rows list
+  emit(event: string, ...args: any[]): boolean {
+    // Forward keypress events to rows for navigation
+    if (event === 'keypress' || event.startsWith('keypress ')) {
+      this.rows.emit(event, ...args);
+    }
+    return super.emit(event, ...args);
+  }
+
   render(): any {
-    if (this.screen.focused === this.rows) {
+    if (this.screen && this.screen.getFocused() === this.rows) {
       this.rows.focus();
     }
-
-    // Update dimensions using type assertion for internal access
-    (this.rows as any).width = (this.width as number) - 3;
-    (this.rows as any).height = (this.height as number) - 3;
     return super.render();
   }
 

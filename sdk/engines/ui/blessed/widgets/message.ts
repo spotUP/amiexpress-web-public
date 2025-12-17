@@ -16,30 +16,43 @@ export class Message extends Box {
   private okButton: Button;
 
   constructor(options: MessageOptions = {}) {
+    // Force fixed height - 'shrink' doesn't work well with nested elements
+    const height = typeof options.height === 'number' ? options.height : 9;
+
     super({
       ...options,
       border: options.border || { type: 'line' },
       label: options.title || options.label || ' Message ',
-      width: options.width || '50%',
-      height: options.height || 'shrink',
+      width: options.width || 40,
+      height: height,
       top: options.top || 'center',
       left: options.left || 'center',
-      padding: options.padding || 1,
+      padding: { left: 1, right: 1, top: 1, bottom: 1 },
       hidden: true,
       focusable: true,
-      shadow: options.shadow !== false,
+      shadow: false,  // Disable shadow - causes rendering issues
+      ch: ' ',  // Fill character for solid background
+      style: {
+        ...options.style,
+        bg: options.style?.bg || 'black',
+      },
     });
 
-    // Message text
+    // Message text - centered
     this.messageText = new Box({
       parent: this,
       top: 0,
       left: 0,
       width: '100%',
-      height: 'shrink',
+      height: 3,
       content: options.text || '',
       tags: true,
       align: 'center',
+      valign: 'middle',
+      style: {
+        fg: options.style?.fg || 'white',
+        bg: options.style?.bg || 'black',
+      },
     });
 
     // OK button
@@ -47,16 +60,19 @@ export class Message extends Box {
       parent: this,
       bottom: 0,
       left: 'center',
-      width: 'shrink',
-      height: 1,
-      content: ' OK ',
-      padding: { left: 1, right: 1 },
+      width: 10,
+      height: 3,
+      content: '[ OK ]',
+      align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
+      mouse: true,
       style: {
         fg: 'white',
         bg: 'blue',
-        focus: {
-          bg: 'lightblue',
-        },
+        border: { fg: 'blue' },
+        hover: { bg: 'lightblue', fg: 'black' },
+        focus: { bg: 'lightblue', fg: 'black' },
       },
     });
 
@@ -90,7 +106,7 @@ export class Message extends Box {
 
     this.show();
     this.setFront();
-    this.focus();
+    this.okButton.focus();
     this.screen?.render();
 
     if (callback) {

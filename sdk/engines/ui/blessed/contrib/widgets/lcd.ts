@@ -32,6 +32,7 @@ interface Point {
 export class LCD extends Canvas {
   declare options: LCDOptions;
   segment16: SixteenSegment | null = null;
+  private _pendingDisplay: string | number | null = null;
 
   constructor(options: LCDOptions = {}) {
     // Set default options before calling super
@@ -46,9 +47,9 @@ export class LCD extends Canvas {
 
     super(options);
 
-    this.on('attach', () => {
-      const display = this.options.display || 1234;
-      if (!this.segment16) {
+    // Initialize segment16 and apply display
+    const applyData = () => {
+      if (!this.segment16 && this.ctx) {
         this.segment16 = new SixteenSegment(
           this.options.elements!,
           this.ctx!,
@@ -60,8 +61,19 @@ export class LCD extends Canvas {
         );
       }
 
-      this.setDisplay(display);
-    });
+      // Apply pending display or default
+      const display = this._pendingDisplay ?? this.options.display ?? 1234;
+      this._pendingDisplay = null;
+      this._renderDisplay(display);
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   calcSize(): void {
@@ -123,10 +135,14 @@ export class LCD extends Canvas {
 
   setDisplay(display: number | string): void {
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for line charts must be called after the chart has been added to the screen via screen.append()'
-      );
+      this._pendingDisplay = display;
+      return;
     }
+    this._renderDisplay(display);
+  }
+
+  private _renderDisplay(display: number | string): void {
+    if (!this.ctx) return;
 
     this.ctx.clearRect(0, 0, this.canvasSize!.width, this.canvasSize!.height);
 

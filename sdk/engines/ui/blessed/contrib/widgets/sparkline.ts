@@ -28,6 +28,7 @@ export class Sparkline extends Box {
   constructor(options: SparklineOptions = {}) {
     options = options || {};
     options.bufferLength = options.bufferLength || 30;
+    options.tags = true; // Enable tag parsing for color formatting
 
     super(options);
     this.options = options;

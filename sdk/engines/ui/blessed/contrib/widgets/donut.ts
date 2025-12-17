@@ -32,6 +32,7 @@ export interface DonutOptions extends CanvasOptions {
 export class Donut extends Canvas {
   declare options: DonutOptions;
   currentData?: DonutData[];
+  private _pendingData?: DonutData[];
 
   constructor(options: DonutOptions = {}) {
     super(options);
@@ -45,9 +46,23 @@ export class Donut extends Canvas {
     this.options.remainColor = this.options.remainColor || 'black';
     this.options.data = this.options.data || [];
 
-    this.on('attach', () => {
-      this.setData(this.options.data!);
-    });
+    // Handle deferred setData - when widget is attached, render any pending data
+    const applyData = () => {
+      if (this._pendingData) {
+        this.setData(this._pendingData);
+        this._pendingData = undefined;
+      } else if (this.options.data && this.options.data.length > 0) {
+        this.setData(this.options.data);
+      }
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   calcSize(): void {
@@ -68,14 +83,19 @@ export class Donut extends Canvas {
   }
 
   setData(data: DonutData[]): void {
+    // If context not ready yet, store data for later when widget is attached
+    if (!this.ctx) {
+      this._pendingData = data;
+      return;
+    }
     this.update(data);
   }
 
   update(data: DonutData[]): void {
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for line charts must be called after the chart has been added to the screen via screen.append()'
-      );
+      // Should not happen if called through setData, but guard anyway
+      this._pendingData = data;
+      return;
     }
 
     const c = this.ctx;

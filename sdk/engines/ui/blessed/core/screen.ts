@@ -94,8 +94,23 @@ export class Screen extends Element {
       this.write(cursor.hide);
     }
 
-    // Setup mouse event routing
+    // Setup event routing from program to screen/elements
+    this.setupKeyRouting();
     this.setupMouseRouting();
+  }
+
+  // ============================================================================
+  // Key Event Routing
+  // ============================================================================
+
+  /**
+   * Setup key event routing from Program to Screen
+   */
+  private setupKeyRouting(): void {
+    // Listen to Program's keypress events
+    this.program.on('keypress', (ch: any, key: KeyEvent) => {
+      this._handleKey(ch, key);
+    });
   }
 
   // ============================================================================
@@ -325,13 +340,26 @@ export class Screen extends Element {
   }
 
   fillRegion(attr: number, ch: string, xi: number, xl: number, yi: number, yl: number): void {
+    // Check if background is transparent (0x1ff = no color)
+    const bgColor = attr & 0x1ff;
+    const isTransparentBg = bgColor === 0x1ff;
+
     for (let y = yi; y < yl; y++) {
       if (y < 0 || y >= this.height) continue;
 
       for (let x = xi; x < xl; x++) {
         if (x < 0 || x >= this.width) continue;
 
-        this.buffer[y][x] = [attr, ch];
+        if (isTransparentBg) {
+          // Preserve existing background, only update fg and character
+          const existingAttr = this.buffer[y][x][0];
+          const existingBg = existingAttr & 0x1ff;
+          // Combine new fg/flags with existing bg
+          const newAttr = (attr & ~0x1ff) | existingBg;
+          this.buffer[y][x] = [newAttr, ch];
+        } else {
+          this.buffer[y][x] = [attr, ch];
+        }
       }
     }
   }
@@ -464,56 +492,111 @@ export class Screen extends Element {
   private _renderContent(element: Element, pos: any): void {
     const lines = element.getLines();
     const padding = element.options.padding || 0;
-    const border = (element.options.border as any) !== 'none' ? 1 : 0;
+    const hasBorder = element.options.border && (element.options.border as any)?.type !== 'none';
+    const border = hasBorder ? 1 : 0;
 
     const padLeft = typeof padding === 'number' ? padding : (padding as any).left || 0;
     const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
+    const padBottom = typeof padding === 'number' ? padding : (padding as any).bottom || 0;
+    const padRight = typeof padding === 'number' ? padding : (padding as any).right || 0;
 
     const startY = pos.yi + border + padTop;
     const startX = pos.xi + border + padLeft;
-    const maxY = pos.yl - border - (typeof padding === 'number' ? padding : (padding as any).bottom || 0);
-    const maxX = pos.xl - border - (typeof padding === 'number' ? padding : (padding as any).right || 0);
+    const maxY = pos.yl - border - padBottom;
+    const maxX = pos.xl - border - padRight;
 
     // BBS Constraint: Enforce 80-column width limit
     const bbsMaxX = Math.min(maxX, 80);
 
-    // Get style attribute code
+    // Get base style attribute code
     const style = element.options.style || {};
-    const attr = this.styleToAttr(style);
+    const baseAttr = this.styleToAttr(style);
+
+    // Fill background (for elements without borders, this is essential for visibility)
+    const fillChar = (element.options as any).ch || ' ';
+    for (let y = startY; y < maxY; y++) {
+      if (y < 0 || y >= this.height) continue;
+      for (let x = startX; x < bbsMaxX; x++) {
+        if (x < 0 || x >= this.width) continue;
+        this.buffer[y][x] = [baseAttr, fillChar];
+      }
+    }
 
     // Render lines
     for (let i = 0; i < lines.length; i++) {
       const y = startY + i;
-      if (y < startY || y >= maxY) continue;
+      if (y < 0 || y >= this.height || y >= maxY) continue;
 
-      let line = lines[i];
+      const line = lines[i];
 
-      // Strip ANSI codes for now (TODO: parse inline styles)
-      line = this._stripAnsi(line);
-
-      // Apply alignment (respecting BBS 80-column limit)
-      const width = bbsMaxX - startX;
-      if (element.options.align === 'center') {
-        const textLen = line.length;
-        const padSize = Math.floor((width - textLen) / 2);
-        line = ' '.repeat(Math.max(0, padSize)) + line;
-      } else if (element.options.align === 'right') {
-        const textLen = line.length;
-        const padSize = width - textLen;
-        line = ' '.repeat(Math.max(0, padSize)) + line;
-      }
-
-      // BBS Constraint: Truncate lines that exceed 80 columns
-      if (line.length > 80) {
-        line = line.substring(0, 80);
-      }
-
-      // Write to buffer with packed attributes (respecting BBS 80-column limit)
+      // Parse line with ANSI codes and render character by character
+      let currentAttr = baseAttr;
       let x = startX;
-      for (let idx = 0; idx < line.length && x < bbsMaxX; idx++, x++) {
-        this.buffer[y][x] = [attr, line[idx]];
+      let idx = 0;
+
+      while (idx < line.length && x < bbsMaxX) {
+        // Check for ANSI escape sequence
+        if (line[idx] === '\x1b' && line[idx + 1] === '[') {
+          // Parse ANSI sequence
+          let end = idx + 2;
+          while (end < line.length && !/[mK]/.test(line[end])) {
+            end++;
+          }
+          if (end < line.length && line[end] === 'm') {
+            // Extract SGR parameters
+            const params = line.slice(idx + 2, end);
+            currentAttr = this._parseAnsiToAttr(params, currentAttr, baseAttr);
+            idx = end + 1;
+            continue;
+          }
+          // Skip unknown sequences
+          idx = end + 1;
+          continue;
+        }
+
+        // Regular character - write to buffer
+        if (x >= 0 && x < this.width) {
+          this.buffer[y][x] = [currentAttr, line[idx]];
+        }
+        x++;
+        idx++;
       }
     }
+  }
+
+  /**
+   * Parse ANSI SGR parameters and update attribute
+   */
+  private _parseAnsiToAttr(params: string, currentAttr: number, baseAttr: number): number {
+    const codes = params.split(';').map(n => parseInt(n, 10) || 0);
+    let { flags, fg, bg } = this.unpackAttr(currentAttr);
+
+    for (const code of codes) {
+      if (code === 0) {
+        // Reset - return to base attribute
+        return baseAttr;
+      } else if (code === 1) {
+        flags |= 1; // bold
+      } else if (code === 4) {
+        flags |= 2; // underline
+      } else if (code === 5) {
+        flags |= 4; // blink
+      } else if (code === 7) {
+        flags |= 8; // inverse
+      } else if (code === 8) {
+        flags |= 16; // invisible
+      } else if (code >= 30 && code <= 37) {
+        fg = code - 30; // foreground color 0-7
+      } else if (code >= 40 && code <= 47) {
+        bg = code - 40; // background color 0-7
+      } else if (code === 39) {
+        fg = 0x1ff; // default fg
+      } else if (code === 49) {
+        bg = 0x1ff; // default bg
+      }
+    }
+
+    return this.packAttr(flags, fg, bg);
   }
 
   private _renderBorder(element: Element, pos: any): void {
@@ -711,6 +794,50 @@ export class Screen extends Element {
   }
 
   /**
+   * Insert n lines at y position within scroll region (buffer manipulation)
+   * Neo-blessed compatible API - different from Element.insertLine which handles content
+   */
+  insertBufferLines(n: number, y: number, top: number, bottom: number): void {
+    this._insertBufferLine(n, y, top, bottom);
+  }
+
+  /**
+   * Delete n lines at y position within scroll region (buffer manipulation)
+   * Neo-blessed compatible API - different from Element.deleteLine which handles content
+   */
+  deleteBufferLines(n: number, y: number, top: number, bottom: number): void {
+    this._deleteBufferLine(n, y, top, bottom);
+  }
+
+  /**
+   * Insert line at top of scroll region (buffer manipulation)
+   */
+  insertBufferTop(top: number, bottom: number): void {
+    this.insertBufferLines(1, top, top, bottom);
+  }
+
+  /**
+   * Insert line at bottom of scroll region (buffer manipulation)
+   */
+  insertBufferBottom(top: number, bottom: number): void {
+    this.deleteBufferLines(1, top, top, bottom);
+  }
+
+  /**
+   * Delete line at top of scroll region (buffer manipulation)
+   */
+  deleteBufferTop(top: number, bottom: number): void {
+    this.deleteBufferLines(1, top, top, bottom);
+  }
+
+  /**
+   * Delete line at bottom of scroll region (buffer manipulation)
+   */
+  deleteBufferBottom(top: number, bottom: number): void {
+    this.clearRegion(0, this.width, bottom, bottom + 1);
+  }
+
+  /**
    * Set scroll region (uses terminal CSR)
    */
   setScrollRegion(top: number, bottom: number): void {
@@ -829,6 +956,13 @@ export class Screen extends Element {
   }
 
   /**
+   * Alias for focusPrevious
+   */
+  focusPrev(): void {
+    this.focusPrevious();
+  }
+
+  /**
    * Focus element at offset from current
    */
   focusOffset(offset: number): void {
@@ -895,17 +1029,36 @@ export class Screen extends Element {
     // Respect key locking
     if (this._lockKeys) return;
 
-    // Try exact key match first
+    // Try registered screen key handlers first
     const handlers = this.keyHandlers.get(key.full || key.name);
-    if (handlers) {
+    let handled = false;
+    if (handlers && handlers.length > 0) {
       for (const handler of handlers) {
         handler(ch, key);
       }
+      handled = true;
+    }
+
+    // Default Tab/Shift-Tab for focus navigation (only if no user handler)
+    if (!handled && key.name === 'tab') {
+      if (key.shift) {
+        this.focusPrevious();
+      } else {
+        this.focusNext();
+      }
+      this.render();
+      return;
     }
 
     // Emit to focused element
     if (this._focused) {
+      // Emit generic keypress event
       this._focused.emit('keypress', ch, key);
+      // Emit specific key event (for element.key() handlers)
+      const keyName = key.full || key.name;
+      if (keyName) {
+        this._focused.emit(`keypress ${keyName}`, ch, key);
+      }
     }
 
     this.emit('keypress', ch, key);
@@ -965,6 +1118,28 @@ export class Screen extends Element {
   // ============================================================================
   // Property Getters/Setters
   // ============================================================================
+
+  /**
+   * Get currently focused element
+   */
+  getFocused(): Element | null {
+    return this._focused;
+  }
+
+  /**
+   * Set focused element (called by Element.focus())
+   */
+  setFocused(element: Element | null): void {
+    if (this._focused && this._focused !== element) {
+      this._focused.focused = false;
+      this._focused.emit('blur');
+    }
+    this._focused = element;
+    if (element) {
+      element.focused = true;
+      element.emit('focus');
+    }
+  }
 
   /**
    * Get width (overrides Element.width for Screen)
@@ -1063,6 +1238,11 @@ export class Screen extends Element {
     if (typeof color === 'number') return color;
 
     const colors: Record<string, number> = {
+      // Special - transparent means keep existing background
+      transparent: 0x1ff,
+      none: 0x1ff,
+      default: 0x1ff,
+      // Standard colors
       black: 0,
       red: 1,
       green: 2,
@@ -1071,9 +1251,21 @@ export class Screen extends Element {
       magenta: 5,
       cyan: 6,
       white: 7,
+      // Bright colors
+      gray: 8,
+      grey: 8,
+      lightblack: 8,
+      lightred: 9,
+      lightgreen: 10,
+      lightyellow: 11,
+      lightblue: 12,
+      lightmagenta: 13,
+      lightcyan: 14,
+      lightwhite: 15,
     };
 
-    return colors[color] || 7;
+    const lowerColor = String(color).toLowerCase();
+    return colors[lowerColor] !== undefined ? colors[lowerColor] : 7;
   }
 
   private _stripAnsi(str: string): string {

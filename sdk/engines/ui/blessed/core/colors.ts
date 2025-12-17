@@ -9,7 +9,15 @@ const CSI = `${ESC}[`;
 // Color Name to Code Mapping
 // ============================================================================
 
+// Special value for transparent (no background)
+export const TRANSPARENT = -1;
+
 export const colorNames: Record<string, number> = {
+  // Special
+  transparent: TRANSPARENT,
+  none: TRANSPARENT,
+  default: TRANSPARENT,
+
   // Standard colors (0-7)
   black: 0,
   red: 1,
@@ -252,13 +260,19 @@ export function buildStyle(flags: StyleFlags): string {
 // Tag Parsing
 // ============================================================================
 
-const tagRegex = /\{(\/?)([\w-]+)(?::([\w-]+))?\}/g;
+// Match tags like {bold}, {cyan-fg}, {/bold}, {/cyan-fg}, and {/} (reset shorthand)
+const tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
 
 export function parseTags(text: string): string {
   return text.replace(tagRegex, (match, close, name, value) => {
     if (close) {
-      // Closing tag
+      // Closing tag or {/} shorthand - reset attributes
       return attrs.reset;
+    }
+
+    // Empty tag with no close (like {}) - return as-is
+    if (!name) {
+      return match;
     }
 
     // Opening tag
@@ -274,7 +288,7 @@ export function parseTags(text: string): string {
       case 'invisible':
         return attrs.invisible;
 
-      // Colors
+      // Basic colors (no suffix)
       case 'black':
       case 'red':
       case 'green':
@@ -283,9 +297,32 @@ export function parseTags(text: string): string {
       case 'magenta':
       case 'cyan':
       case 'white':
-        return fg(name);
+      case 'gray':
+      case 'grey':
+        return fg(name === 'grey' ? 'gray' : name);
 
-      // Background colors
+      // Foreground colors with -fg suffix (standard blessed format)
+      case 'black-fg':
+        return fg('black');
+      case 'red-fg':
+        return fg('red');
+      case 'green-fg':
+        return fg('green');
+      case 'yellow-fg':
+        return fg('yellow');
+      case 'blue-fg':
+        return fg('blue');
+      case 'magenta-fg':
+        return fg('magenta');
+      case 'cyan-fg':
+        return fg('cyan');
+      case 'white-fg':
+        return fg('white');
+      case 'gray-fg':
+      case 'grey-fg':
+        return fg('gray');
+
+      // Background colors with -bg suffix
       case 'black-bg':
         return bg('black');
       case 'red-bg':
@@ -302,8 +339,11 @@ export function parseTags(text: string): string {
         return bg('cyan');
       case 'white-bg':
         return bg('white');
+      case 'gray-bg':
+      case 'grey-bg':
+        return bg('gray');
 
-      // Custom color
+      // Custom color with value
       case 'fg':
         return value ? fg(value) : '';
       case 'bg':

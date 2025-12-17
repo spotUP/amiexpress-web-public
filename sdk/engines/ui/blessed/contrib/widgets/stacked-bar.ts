@@ -39,6 +39,7 @@ export interface StackedBarOptions extends CanvasOptions {
 export class StackedBar extends Canvas {
   declare options: StackedBarOptions;
   legend?: Box;
+  private _pendingData: StackedBarData | null = null;
 
   constructor(options: StackedBarOptions = {}) {
     super(options);
@@ -64,18 +65,43 @@ export class StackedBar extends Canvas {
       this.options.showLegend = true;
     }
 
-    this.on('attach', () => {
-      if (this.options.data) {
-        this.setData(this.options.data);
+    // Apply pending data or initial data once attached
+    const applyData = () => {
+      if (this._pendingData) {
+        this._renderData(this._pendingData);
+        this._pendingData = null;
+      } else if (this.options.data) {
+        this._renderData(this.options.data);
       }
-    });
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) - 2,
-      height: this.height as number
-    };
+    // Get widget dimensions, ensuring minimum sizes
+    const widgetWidth = Math.max(8, this.width as number);
+    const widgetHeight = Math.max(4, this.height as number);
+
+    // Calculate canvas size
+    let width = widgetWidth - 2;
+    let height = widgetHeight;
+
+    // Ensure minimum canvas size
+    width = Math.max(4, width);
+    height = Math.max(4, height);
+
+    // Round to required multiples (width: 2, height: 4)
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   getSummedBars(bars: number[][]): number[] {
@@ -91,10 +117,15 @@ export class StackedBar extends Canvas {
 
   setData(bars: StackedBarData): void {
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for bar charts must be called after the chart has been added to the screen via screen.append()'
-      );
+      // Defer rendering until attached to screen
+      this._pendingData = bars;
+      return;
     }
+    this._renderData(bars);
+  }
+
+  private _renderData(bars: StackedBarData): void {
+    if (!this.ctx) return;
 
     this.clear();
 

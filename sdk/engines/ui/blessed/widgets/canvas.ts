@@ -16,25 +16,73 @@ export class Canvas extends Box {
   private clearChar: string;
   private canvasWidth: number = 0;
   private canvasHeight: number = 0;
+  private _dirty: boolean = false;
+  private _renderTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: CanvasOptions = {}) {
     const { fillChar, clearChar, ...boxOptions } = options;
 
     super(boxOptions);
 
-    this.fillChar = fillChar || '█';
+    this.fillChar = fillChar || '*';
     this.clearChar = clearChar || ' ';
 
     // Initialize canvas buffer
     this.initializeBuffer();
+
+    // Reinitialize buffer when attached to screen (for percentage-based dimensions)
+    this.on('attach', () => {
+      this.initializeBuffer();
+    });
   }
 
   /**
    * Initialize canvas buffer
+   * Accounts for borders and padding to use actual content area
    */
   private initializeBuffer(): void {
-    this.canvasWidth = typeof this.width === 'number' ? this.width : 80;
-    this.canvasHeight = typeof this.height === 'number' ? this.height : 24;
+    // Try to get actual calculated dimensions from _getCoords
+    const coords = (this as any)._getCoords?.();
+    let width: number;
+    let height: number;
+
+    if (coords) {
+      // Use actual rendered dimensions (content area)
+      width = coords.xl - coords.xi;
+      height = coords.yl - coords.yi;
+
+      // Subtract borders
+      if (this.options.border) {
+        width -= 2;
+        height -= 2;
+      }
+    } else {
+      // Fallback to specified dimensions
+      width = typeof this.width === 'number' ? this.width : 80;
+      height = typeof this.height === 'number' ? this.height : 24;
+
+      // Account for borders
+      if (this.options.border) {
+        width -= 2;
+        height -= 2;
+      }
+
+      // Account for padding
+      const padding = this.options.padding;
+      if (padding) {
+        if (typeof padding === 'number') {
+          width -= padding * 2;
+          height -= padding * 2;
+        } else {
+          width -= (padding.left || 0) + (padding.right || 0);
+          height -= (padding.top || 0) + (padding.bottom || 0);
+        }
+      }
+    }
+
+    // Ensure positive dimensions
+    this.canvasWidth = Math.max(1, width);
+    this.canvasHeight = Math.max(1, height);
 
     this.buffer = [];
     for (let y = 0; y < this.canvasHeight; y++) {
@@ -47,10 +95,30 @@ export class Canvas extends Box {
 
   /**
    * Set pixel at coordinates
+   * @param autoRender - If true (default), schedules a debounced render. Set to false for batch operations.
    */
-  setPixel(x: number, y: number, char: string = this.fillChar): void {
+  setPixel(x: number, y: number, char: string = this.fillChar, autoRender: boolean = true): void {
     if (x >= 0 && x < this.canvasWidth && y >= 0 && y < this.canvasHeight) {
       this.buffer[y][x] = char;
+      if (autoRender) {
+        this._scheduleRender();
+      }
+    }
+  }
+
+  /**
+   * Schedule a debounced render (16ms = ~60fps)
+   */
+  private _scheduleRender(): void {
+    this._dirty = true;
+    if (!this._renderTimeout) {
+      this._renderTimeout = setTimeout(() => {
+        this._renderTimeout = null;
+        if (this._dirty) {
+          this._dirty = false;
+          this.render();
+        }
+      }, 16);
     }
   }
 

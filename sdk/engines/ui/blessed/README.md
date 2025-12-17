@@ -360,6 +360,85 @@ const footer = new Box({
 });
 ```
 
+## 🎯 Layout Best Practices
+
+When building layouts for BBS terminals, follow these guidelines to avoid rendering issues:
+
+### Use `right: 0` Instead of Percentage Widths
+
+Percentage widths like `width: '100%-2'` can cause elements to overflow their parent boundaries. Instead, use `right: 0` to make an element extend to the parent's right edge:
+
+```typescript
+// BAD - may overflow parent boundaries
+const input = new Textbox({
+  parent: dialog,
+  left: 0,
+  width: '100%-2',  // Can miscalculate!
+});
+
+// GOOD - respects parent boundaries
+const input = new Textbox({
+  parent: dialog,
+  left: 0,
+  right: 0,  // Extends to parent's right edge
+});
+```
+
+### Side-by-Side Layouts
+
+For side-by-side elements, use `right: 0` on the rightmost element:
+
+```typescript
+// Left panel - fixed width
+const leftPanel = new Box({
+  parent: container,
+  left: 0,
+  width: '50%-2',
+});
+
+// Right panel - extends to edge
+const rightPanel = new Box({
+  parent: container,
+  left: '50%-1',
+  right: 0,  // Fills remaining space correctly
+});
+```
+
+### Canvas Widgets (Line, Donut Charts)
+
+Canvas-based widgets like Line and Donut charts require the canvas context to be initialized before calling `setData()`. The widget handles this automatically by deferring data until the `attach` event, but if you're creating widgets dynamically:
+
+```typescript
+const chart = contrib.line({ parent: screen });
+
+// This works - widget defers until attached
+chart.setData(myData);
+
+// Alternative: wait for attach
+chart.on('attach', () => {
+  chart.setData(myData);
+});
+```
+
+### ASCII Characters for BBS Compatibility
+
+Neo-blessed uses ASCII characters for maximum terminal compatibility:
+
+- **Checkbox**: `[X]` checked, `[ ]` unchecked
+- **RadioButton**: `(O)` selected, `( )` unselected
+- **Borders**: Use `border: { type: 'line' }` for standard box drawing
+
+### Avoid Content Wrapping in Tables/Lists
+
+Tables and lists have `wrap: false` by default to prevent column layout from breaking. If you need wrapping, explicitly enable it:
+
+```typescript
+const list = new List({
+  parent: screen,
+  wrap: false,  // Default - items stay on one line
+});
+```
+
 ## 🔧 Advanced Features
 
 ### Canvas Drawing

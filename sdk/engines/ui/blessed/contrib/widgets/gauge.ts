@@ -28,6 +28,8 @@ export class Gauge extends Canvas {
   declare options: GaugeOptions;
   percent?: number;
   stack?: (number | GaugeStack)[];
+  private _pendingPercent: number | null = null;
+  private _pendingStack: (number | GaugeStack)[] | null = null;
 
   constructor(options: GaugeOptions = {}) {
     super(options);
@@ -36,15 +38,30 @@ export class Gauge extends Canvas {
     this.options.fill = this.options.fill || 'white';
     this.options.showLabel = this.options.showLabel !== false;
 
-    this.on('attach', () => {
-      if (this.options.stack) {
+    // Apply pending data first, then options data
+    const applyData = () => {
+      if (this._pendingStack) {
+        this._renderStack(this._pendingStack);
+        this._pendingStack = null;
+      } else if (this._pendingPercent !== null) {
+        this._renderPercent(this._pendingPercent);
+        this._pendingPercent = null;
+      } else if (this.options.stack) {
         this.stack = this.options.stack;
-        this.setStack(this.stack);
-      } else {
-        this.percent = this.options.percent || 0;
-        this.setData(this.percent);
+        this._renderStack(this.stack);
+      } else if (this.options.percent !== undefined) {
+        this.percent = this.options.percent;
+        this._renderPercent(this.percent);
       }
-    });
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   calcSize(): void {
@@ -68,10 +85,14 @@ export class Gauge extends Canvas {
 
   setPercent(percent: number): void {
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for gauges must be called after the gauge has been added to the screen via screen.append()'
-      );
+      this._pendingPercent = percent;
+      return;
     }
+    this._renderPercent(percent);
+  }
+
+  private _renderPercent(percent: number): void {
+    if (!this.ctx) return;
 
     const c = this.ctx;
 
@@ -99,14 +120,17 @@ export class Gauge extends Canvas {
   }
 
   setStack(stack: (number | GaugeStack)[]): void {
-    const colors = ['green', 'magenta', 'cyan', 'red', 'blue'];
-
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for gauges must be called after the gauge has been added to the screen via screen.append()'
-      );
+      this._pendingStack = stack;
+      return;
     }
+    this._renderStack(stack);
+  }
 
+  private _renderStack(stack: (number | GaugeStack)[]): void {
+    if (!this.ctx) return;
+
+    const colors = ['green', 'magenta', 'cyan', 'red', 'blue'];
     const c = this.ctx;
     let leftStart = 1;
     let textLeft = 5;

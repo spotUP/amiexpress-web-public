@@ -73,6 +73,7 @@ export interface ElementOptions {
   border?: Border | 'line' | 'bg';
   padding?: number | Padding;
   shadow?: boolean;  // Enable shadow effect
+  ch?: string;  // Character to fill background with (default: ' ')
 
   // Content
   content?: string;

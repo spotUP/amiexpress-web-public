@@ -14,7 +14,10 @@ export class List extends Element {
     super({
       scrollable: true,
       focusable: true,
+      clickable: true,
       keys: true,
+      mouse: true,
+      wrap: false, // List items should not wrap
       ...options,
     });
 
@@ -28,6 +31,34 @@ export class List extends Element {
     // Key handlers
     if (options.keys !== false) {
       this.on('keypress', this._onKeypress.bind(this));
+    }
+
+    // Mouse click handler - select item by click position
+    if (options.mouse !== false) {
+      this.on('click', this._onClick.bind(this));
+    }
+  }
+
+  private _onClick(event: any): void {
+    if (!this.interactive) return;
+
+    // Calculate which item was clicked
+    const pos = this._getCoords();
+    if (!pos) return;
+
+    const border = this.options.border ? 1 : 0;
+    const padding = this.options.padding || 0;
+    const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
+
+    // Get click position relative to content area
+    const relY = event.y - pos.yi - border - padTop;
+    const scroll = this.getScroll();
+    const itemIndex = relY + scroll;
+
+    if (itemIndex >= 0 && itemIndex < this.items.length) {
+      this.select(itemIndex);
+      this.emit('select', this.items[itemIndex], itemIndex);
+      this.emit('action', this.items[itemIndex], itemIndex);
     }
   }
 
@@ -46,11 +77,13 @@ export class List extends Element {
     const vi = (this.options as any).vi;
     if (key.name === 'up' || (vi && key.name === 'k')) {
       this.up();
+      this.screen?.render();
       return;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
       this.down();
+      this.screen?.render();
       return;
     }
 

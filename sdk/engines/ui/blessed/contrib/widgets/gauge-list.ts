@@ -33,6 +33,7 @@ export interface GaugeListOptions extends CanvasOptions {
 export class GaugeList extends Canvas {
   declare options: GaugeListOptions;
   gauges?: GaugeListItem[];
+  private _pendingGauges: GaugeListItem[] | null = null;
 
   constructor(options: GaugeListOptions = {}) {
     super(options);
@@ -43,19 +44,44 @@ export class GaugeList extends Canvas {
     this.options.gaugeSpacing = this.options.gaugeSpacing || 0;
     this.options.gaugeHeight = this.options.gaugeHeight || 1;
 
-    this.on('attach', () => {
-      const gauges = (this.gauges = this.options.gauges);
-      if (gauges) {
-        this.setGauges(gauges);
+    // Apply pending gauges or initial gauges once attached
+    const applyData = () => {
+      if (this._pendingGauges) {
+        this._renderGauges(this._pendingGauges);
+        this._pendingGauges = null;
+      } else if (this.options.gauges) {
+        this.gauges = this.options.gauges;
+        this._renderGauges(this.gauges);
       }
-    });
+    };
+
+    // If already attached (parent was specified in options), apply data now
+    if (this.screen && this.ctx) {
+      applyData();
+    }
+
+    // Also listen for future attach events
+    this.on('attach', applyData);
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) - 2,
-      height: this.height as number
-    };
+    // Get widget dimensions, ensuring minimum sizes
+    const widgetWidth = Math.max(8, this.width as number);
+    const widgetHeight = Math.max(4, this.height as number);
+
+    // Calculate canvas size
+    let width = widgetWidth - 2;
+    let height = widgetHeight;
+
+    // Ensure minimum canvas size
+    width = Math.max(4, width);
+    height = Math.max(4, height);
+
+    // Round to required multiples (width: 2, height: 4)
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -68,10 +94,14 @@ export class GaugeList extends Canvas {
 
   setGauges(gauges: GaugeListItem[]): void {
     if (!this.ctx) {
-      throw new Error(
-        'error: canvas context does not exist. setData() for gauges must be called after the gauge has been added to the screen via screen.append()'
-      );
+      this._pendingGauges = gauges;
+      return;
     }
+    this._renderGauges(gauges);
+  }
+
+  private _renderGauges(gauges: GaugeListItem[]): void {
+    if (!this.ctx) return;
 
     const c = this.ctx;
     c.clearRect(0, 0, this.canvasSize!.width, this.canvasSize!.height);

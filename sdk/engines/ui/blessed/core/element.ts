@@ -28,6 +28,7 @@ export class Element extends EventEmitter {
   // Content
   content: string = '';
   private _lines: string[] = [];
+  private _contentDirty: boolean = false;
 
   // State
   visible: boolean = true;
@@ -49,12 +50,10 @@ export class Element extends EventEmitter {
   constructor(options: ElementOptions = {}) {
     super();
 
+    // NOTE: We intentionally do NOT default width/height here.
+    // This allows the positioning logic to properly detect when the user
+    // specified left+right (to calculate width) or top+bottom (to calculate height).
     this.options = {
-      // Defaults
-      left: 0,
-      top: 0,
-      width: '100%',
-      height: '100%',
       hidden: false,
       focusable: false,
       clickable: false,
@@ -73,6 +72,16 @@ export class Element extends EventEmitter {
     // Set visibility
     if (this.options.hidden) {
       this.hide();
+    }
+
+    // Set clickable from options
+    if (this.options.clickable) {
+      this.clickable = true;
+    }
+
+    // Set mouse support (also enables clickable)
+    if (this.options.mouse) {
+      this.clickable = true;
     }
 
     // Attach to parent
@@ -151,37 +160,114 @@ export class Element extends EventEmitter {
     const padding = this.getPadding();
     const border = this.hasBorder() ? 1 : 0;
 
-    // Calculate position
-    let xi = this.calcPos(this.options.left || 0, 0, parentPos.xl - parentPos.xi);
+    // Calculate parent's inner content area (inside border and padding)
+    // Children are positioned within this inner area
+    const parentBorder = parent?.hasBorder?.() ? 1 : 0;
+    const parentPadding = parent?.getPadding?.() || { left: 0, right: 0, top: 0, bottom: 0 };
+
+    const parentContentXi = parentPos.xi + parentBorder + parentPadding.left;
+    const parentContentXl = parentPos.xl - parentBorder - parentPadding.right;
+    const parentContentYi = parentPos.yi + parentBorder + parentPadding.top;
+    const parentContentYl = parentPos.yl - parentBorder - parentPadding.bottom;
+
+    const parentWidth = parentContentXl - parentContentXi;
+    const parentHeight = parentContentYl - parentContentYi;
+
+    // Calculate horizontal position (xi, xl)
+    // Priority: left+right > left+width > right+width > width > defaults
+    let xi: number;
     let xl: number;
-    let yi = this.calcPos(this.options.top || 0, 0, parentPos.yl - parentPos.yi);
+
+    const hasLeft = this.options.left !== undefined;
+    const hasRight = this.options.right !== undefined;
+    const hasWidth = this.options.width !== undefined;
+
+    if (hasLeft && hasRight && !hasWidth) {
+      // Both left and right specified (no width) - calculate width from them
+      xi = this.calcPos(this.options.left!, 0, parentWidth);
+      xl = parentWidth - this.calcPos(this.options.right!, 0, parentWidth);
+    } else if (hasLeft && hasWidth) {
+      // Left and width specified
+      const elemWidth = this.calcPos(this.options.width!, 0, parentWidth);
+      // Handle 'center' positioning with width
+      if (this.options.left === 'center') {
+        xi = Math.floor((parentWidth - elemWidth) / 2);
+      } else {
+        xi = this.calcPos(this.options.left!, 0, parentWidth);
+      }
+      xl = xi + elemWidth;
+    } else if (hasRight && hasWidth) {
+      // Right and width specified
+      xl = parentWidth - this.calcPos(this.options.right!, 0, parentWidth);
+      xi = xl - this.calcPos(this.options.width!, 0, parentWidth);
+    } else if (hasLeft) {
+      // Only left specified - extend to right edge
+      xi = this.calcPos(this.options.left!, 0, parentWidth);
+      xl = parentWidth;
+    } else if (hasRight) {
+      // Only right specified - extend from left edge
+      xi = 0;
+      xl = parentWidth - this.calcPos(this.options.right!, 0, parentWidth);
+    } else if (hasWidth) {
+      // Only width specified - start from left edge
+      xi = 0;
+      xl = this.calcPos(this.options.width!, 0, parentWidth);
+    } else {
+      // No horizontal position specified - fill parent
+      xi = 0;
+      xl = parentWidth;
+    }
+
+    // Calculate vertical position (yi, yl)
+    // Priority: top+bottom > top+height > bottom+height > height > defaults
+    let yi: number;
     let yl: number;
 
-    // Width calculation
-    if (this.options.width !== undefined) {
-      const width = this.calcPos(this.options.width, 0, parentPos.xl - parentPos.xi);
-      xl = xi + width;
-    } else if (this.options.right !== undefined) {
-      xl = (parentPos.xl - parentPos.xi) - this.calcPos(this.options.right, 0, parentPos.xl - parentPos.xi);
+    const hasTop = this.options.top !== undefined;
+    const hasBottom = this.options.bottom !== undefined;
+    const hasHeight = this.options.height !== undefined;
+
+    if (hasTop && hasBottom && !hasHeight) {
+      // Both top and bottom specified (no height) - calculate height from them
+      yi = this.calcPos(this.options.top!, 0, parentHeight);
+      yl = parentHeight - this.calcPos(this.options.bottom!, 0, parentHeight);
+    } else if (hasTop && hasHeight) {
+      // Top and height specified
+      const elemHeight = this.calcPos(this.options.height!, 0, parentHeight);
+      // Handle 'center' positioning with height
+      if (this.options.top === 'center') {
+        yi = Math.floor((parentHeight - elemHeight) / 2);
+      } else {
+        yi = this.calcPos(this.options.top!, 0, parentHeight);
+      }
+      yl = yi + elemHeight;
+    } else if (hasBottom && hasHeight) {
+      // Bottom and height specified
+      yl = parentHeight - this.calcPos(this.options.bottom!, 0, parentHeight);
+      yi = yl - this.calcPos(this.options.height!, 0, parentHeight);
+    } else if (hasTop) {
+      // Only top specified - extend to bottom edge
+      yi = this.calcPos(this.options.top!, 0, parentHeight);
+      yl = parentHeight;
+    } else if (hasBottom) {
+      // Only bottom specified - extend from top edge
+      yi = 0;
+      yl = parentHeight - this.calcPos(this.options.bottom!, 0, parentHeight);
+    } else if (hasHeight) {
+      // Only height specified - start from top edge
+      yi = 0;
+      yl = this.calcPos(this.options.height!, 0, parentHeight);
     } else {
-      xl = parentPos.xl - parentPos.xi;
+      // No vertical position specified - fill parent
+      yi = 0;
+      yl = parentHeight;
     }
 
-    // Height calculation
-    if (this.options.height !== undefined) {
-      const height = this.calcPos(this.options.height, 0, parentPos.yl - parentPos.yi);
-      yl = yi + height;
-    } else if (this.options.bottom !== undefined) {
-      yl = (parentPos.yl - parentPos.yi) - this.calcPos(this.options.bottom, 0, parentPos.yl - parentPos.yi);
-    } else {
-      yl = parentPos.yl - parentPos.yi;
-    }
-
-    // Add parent offset
-    xi += parentPos.xi;
-    xl += parentPos.xi;
-    yi += parentPos.yi;
-    yl += parentPos.yi;
+    // Add parent content area offset (children positioned inside parent's border/padding)
+    xi += parentContentXi;
+    xl += parentContentXi;
+    yi += parentContentYi;
+    yl += parentContentYi;
 
     // Store position
     this.position = { xi, xl, yi, yl };
@@ -387,15 +473,23 @@ export class Element extends EventEmitter {
     if (this.destroyed) return;
 
     this.content = content;
+    this._contentDirty = true;  // Mark for re-parsing on next render
 
-    // Parse tags if enabled
-    let parsed = content;
-    if (this.options.tags) {
-      parsed = parseTags(content);
+    // Try to parse now if we have valid dimensions
+    const width = this.iwidth;
+    if (width > 0) {
+      this._lines = this.parseContent(content);
+      this._contentDirty = false;
+    } else {
+      // Fallback: split by lines, will re-parse during render
+      // Keep _contentDirty = true so getVisibleLines re-parses when dimensions are known
+      let parsed = content;
+      if (this.options.tags) {
+        parsed = parseTags(content);
+      }
+      this._lines = parsed.split(/\r?\n/);
+      // Note: _contentDirty stays true so content gets re-parsed with wrapping during render
     }
-
-    // Split into lines
-    this._lines = parsed.split(/\r?\n/);
 
     this.emit('set content');
   }
@@ -846,18 +940,19 @@ export class Element extends EventEmitter {
     if (this.destroyed || !this.screen) return;
 
     if (this.options.focusable !== false) {
-      this.screen.focused = this;
-      this.focused = true;
-      this.emit('focus');
+      // setFocused handles blur of previous, setting focused=true, and emitting focus
+      this.screen.setFocused(this);
     }
   }
 
   blur(): void {
     if (this.destroyed) return;
 
-    if (this.focused) {
-      this.focused = false;
-      this.emit('blur');
+    if (this.focused && this.screen) {
+      // setFocused(null) handles the blur
+      if (this.screen.getFocused() === this) {
+        this.screen.setFocused(null);
+      }
     }
   }
 
@@ -928,10 +1023,12 @@ export class Element extends EventEmitter {
     if (this.destroyed) return;
 
     this.setScroll(this.childBase + offset);
+    this.screen?.render();
   }
 
   scrollTo(index: number): void {
     this.setScroll(index);
+    this.screen?.render();
   }
 
   getScroll(): number {
@@ -972,10 +1069,12 @@ export class Element extends EventEmitter {
   setScrollPerc(perc: number): void {
     const max = this.getScrollHeight();
     this.setScroll(Math.floor((perc / 100) * max));
+    this.screen?.render();
   }
 
   resetScroll(): void {
     this.setScroll(0);
+    this.screen?.render();
   }
 
   // ============================================================================
@@ -1099,6 +1198,81 @@ export class Element extends EventEmitter {
   }
 
   /**
+   * Enable resizing for this element
+   * Resize by dragging the bottom-right corner (last 2 chars of bottom row)
+   */
+  enableResize(callback?: (data: { width: number; height: number }) => void): void {
+    this.enableMouse();
+
+    let resizeState: {
+      startX: number;
+      startY: number;
+      startWidth: number;
+      startHeight: number;
+    } | null = null;
+
+    // Mouse down - start resize if in corner
+    this.on('mousedown', (data: any) => {
+      const pos = this._getCoords();
+      if (!pos) return;
+
+      // Check if click is in resize corner (bottom-right 2x2 area)
+      const isResizeCorner =
+        data.x >= pos.xl - 3 &&
+        data.x < pos.xl &&
+        data.y >= pos.yl - 2 &&
+        data.y < pos.yl;
+
+      if (isResizeCorner) {
+        resizeState = {
+          startX: data.x,
+          startY: data.y,
+          startWidth: (this.width as number) || (pos.xl - pos.xi),
+          startHeight: (this.height as number) || (pos.yl - pos.yi),
+        };
+        this.emit('resize start', data);
+      }
+    });
+
+    // Global mouse move handler for resize
+    if (this.screen) {
+      this.screen.on('mouse', (data: any) => {
+        if (!resizeState || data.action !== 'mousemove') return;
+
+        const deltaX = data.x - resizeState.startX;
+        const deltaY = data.y - resizeState.startY;
+
+        const newWidth = Math.max(5, resizeState.startWidth + deltaX);
+        const newHeight = Math.max(3, resizeState.startHeight + deltaY);
+
+        this.options.width = newWidth;
+        this.options.height = newHeight;
+
+        const resizeData = { width: newWidth, height: newHeight };
+        if (callback) callback(resizeData);
+        this.emit('resize', resizeData);
+        if (this.screen) this.screen.render();
+      });
+    }
+
+    // Mouse up - end resize
+    this.on('mouseup', (data: any) => {
+      if (!resizeState) return;
+
+      resizeState = null;
+      this.emit('resize end', data);
+    });
+  }
+
+  /**
+   * Disable resizing
+   */
+  disableResize(): void {
+    // Note: We can't easily remove just the resize handlers
+    // without affecting other mouse handlers
+  }
+
+  /**
    * Check if mouse position is over this element
    */
   hasMouseOver(x: number, y: number): boolean {
@@ -1204,10 +1378,16 @@ export class Element extends EventEmitter {
       }
     } else if (event.action === 'wheelup') {
       this.emit('wheelup', event);
-      this.scroll(-1);
+      // Default scroll behavior - widgets can override by handling wheelup event
+      if (!this.listenerCount('wheelup')) {
+        this.scroll(-1);
+      }
     } else if (event.action === 'wheeldown') {
       this.emit('wheeldown', event);
-      this.scroll(1);
+      // Default scroll behavior - widgets can override by handling wheeldown event
+      if (!this.listenerCount('wheeldown')) {
+        this.scroll(1);
+      }
     }
   }
 
@@ -1577,6 +1757,12 @@ export class Element extends EventEmitter {
    * Get visible content lines (with scrolling applied)
    */
   getVisibleLines(): string[] {
+    // Re-parse content if marked dirty and we now have valid dimensions
+    if (this._contentDirty && this.iwidth > 0) {
+      this._lines = this.parseContent(this.content);
+      this._contentDirty = false;
+    }
+
     const start = this.childBase;
     const end = start + this.iheight;
     return this._lines.slice(start, end);

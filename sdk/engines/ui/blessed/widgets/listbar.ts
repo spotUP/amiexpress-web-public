@@ -8,7 +8,7 @@ import type { ElementOptions } from '../core/types';
 
 export interface ListbarOptions extends ElementOptions {
   items?: Record<string, ListbarItem>;
-  commands?: Record<string, () => void>;
+  commands?: Record<string, ListbarItem | { callback?: () => void }>;
   autoCommandKeys?: boolean;
 }
 
@@ -27,6 +27,8 @@ export class Listbar extends Box {
     super({
       ...options,
       height: options.height || 1,
+      clickable: true,
+      focusable: true,
       style: {
         fg: 'white',
         bg: 'blue',
@@ -37,9 +39,19 @@ export class Listbar extends Box {
     this.enableMouse();
     this.enableKeys();
 
-    // Add items
+    // Add items - support both 'items' and 'commands' (blessed-contrib compatibility)
     if (options.items) {
       this.setItems(options.items);
+    } else if (options.commands) {
+      // Convert commands format to items format
+      const items: Record<string, ListbarItem> = {};
+      for (const [key, cmd] of Object.entries(options.commands)) {
+        items[key] = {
+          text: key,
+          callback: cmd.callback,
+        };
+      }
+      this.setItems(items);
     }
 
     // Setup navigation keys
@@ -78,6 +90,8 @@ export class Listbar extends Box {
         height: 1,
         content: buttonText,
         padding: 0,
+        align: 'center',
+        border: undefined, // No border for tab buttons
         style: {
           fg: this.options.style?.fg || 'white',
           bg: this.options.style?.bg || 'blue',

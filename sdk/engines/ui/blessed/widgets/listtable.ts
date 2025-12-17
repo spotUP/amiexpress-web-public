@@ -31,6 +31,8 @@ export class ListTable extends Box {
       ...boxOptions,
       scrollable: true,
       mouse: true,
+      tags: true,  // Enable tag parsing for selection highlighting
+      wrap: false, // Tables should NOT wrap - it breaks column layout
       style: {
         fg: 'white',
         ...(options.style || {}),
@@ -207,9 +209,17 @@ export class ListTable extends Box {
 
   /**
    * Set table data
+   * First row is treated as headers (blessed-contrib compatible)
    */
   setData(rows: string[][]): void {
-    this.rows = rows;
+    if (rows.length > 0) {
+      // First row is headers, rest is data (blessed-contrib compatibility)
+      this.headers = rows[0];
+      this.rows = rows.slice(1);
+    } else {
+      this.headers = [];
+      this.rows = [];
+    }
     this.calculateColumnWidths();
     this.updateContent();
     if (this.screen) {

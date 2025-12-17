@@ -1,5 +1,8 @@
 /**
  * Overlay - Semi-transparent overlay widget
+ *
+ * For web connections: Uses actual CSS transparency via socket events
+ * For telnet/SSH: Falls back to solid dark background
  */
 
 import { Box } from './box';
@@ -10,7 +13,8 @@ export interface OverlayOptions extends ElementOptions {
 }
 
 export class Overlay extends Box {
-  private opacity: number;
+  private _opacity: number;
+  private _overlayId: string;
 
   constructor(options: OverlayOptions = {}) {
     super({
@@ -19,30 +23,91 @@ export class Overlay extends Box {
       left: options.left || 0,
       width: options.width || '100%',
       height: options.height || '100%',
+      focusable: true,  // Enable focus for key handling
+      keyable: true,    // Enable key events
+      clickable: true,  // Enable click events
       style: {
         bg: 'black',
         ...(options.style || {}),
       },
     });
 
-    this.opacity = options.opacity !== undefined ? options.opacity : 0.5;
+    this._opacity = options.opacity !== undefined ? options.opacity : 0.5;
+    this._overlayId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Enable key handling
+    this.enableKeys();
+
+    // Auto-focus when shown - also emit web transparency event
+    this.on('show', () => {
+      this.focus();
+      this._emitOverlayEvent(true);
+      if (this.screen) {
+        this.screen.render();
+      }
+    });
+
+    // Emit hide event for web transparency
+    this.on('hide', () => {
+      this._emitOverlayEvent(false);
+    });
+
+    // Default escape handler to hide overlay
+    this.key(['escape'], () => {
+      this.hide();
+      this.emit('cancel');
+      if (this.screen) {
+        this.screen.render();
+      }
+    });
+  }
+
+  /**
+   * Emit overlay event for web clients to render actual transparency
+   */
+  private _emitOverlayEvent(show: boolean): void {
+    if (!this.screen) {
+      console.log('[Overlay] No screen, cannot emit event');
+      return;
+    }
+
+    // Send a special escape sequence that the frontend can intercept
+    // Format: ESC ] 9999 ; overlay ; <json> BEL
+    const data = JSON.stringify({
+      id: this._overlayId,
+      show,
+      opacity: this._opacity,
+    });
+    const osc = `\x1b]9999;overlay;${data}\x07`;
+    console.log('[Overlay] Emitting OSC sequence:', show ? 'SHOW' : 'HIDE', 'opacity:', this._opacity, 'id:', this._overlayId);
+    // Use OSC (Operating System Command) format that won't display as text
+    // Write directly through the screen's program which handles output
+    this.screen.program.write(osc);
+  }
+
+  /**
+   * Get overlay opacity
+   */
+  get opacity(): number {
+    return this._opacity;
   }
 
   /**
    * Set overlay opacity (0-1)
    */
   setOpacity(opacity: number): void {
-    this.opacity = Math.max(0, Math.min(1, opacity));
-    if (this.screen) {
+    this._opacity = Math.max(0, Math.min(1, opacity));
+    if (this.screen && !this.hidden) {
+      this._emitOverlayEvent(true);
       this.screen.render();
     }
   }
 
   /**
-   * Get overlay opacity
+   * Get overlay opacity (legacy method)
    */
   getOpacity(): number {
-    return this.opacity;
+    return this._opacity;
   }
 
   /**

@@ -557,10 +557,22 @@ export class Program extends EventEmitter {
    * Parse mouse event from input
    */
   private parseMouseEvent(buf: string): MouseEvent | null {
-    // SGR mouse format: \x1b[<b;x;yM or \x1b[<b;x;ym
-    const match = buf.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
-    if (!match) return null;
+    // Try SGR mouse format first: \x1b[<b;x;yM or \x1b[<b;x;ym
+    const sgrMatch = buf.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+    if (sgrMatch) {
+      return this.parseSGRMouse(sgrMatch);
+    }
 
+    // Try X10 mouse format: \x1b[Mcbxcy (3 encoded bytes)
+    const x10Match = buf.match(/\x1b\[M(.)(.)(.)/);
+    if (x10Match) {
+      return this.parseX10Mouse(x10Match);
+    }
+
+    return null;
+  }
+
+  private parseSGRMouse(match: RegExpMatchArray): MouseEvent {
     const button = parseInt(match[1], 10);
     const x = parseInt(match[2], 10) - 1;
     const y = parseInt(match[3], 10) - 1;
@@ -591,15 +603,40 @@ export class Program extends EventEmitter {
       buttonName = b === 0 ? 'left' : b === 1 ? 'middle' : b === 2 ? 'right' : undefined;
     }
 
-    return {
-      x,
-      y,
-      action,
-      button: buttonName,
-      shift,
-      meta,
-      ctrl,
-    };
+    return { x, y, action, button: buttonName, shift, meta, ctrl };
+  }
+
+  private parseX10Mouse(match: RegExpMatchArray): MouseEvent {
+    const cb = match[1].charCodeAt(0) - 32;
+    const x = match[2].charCodeAt(0) - 32 - 1;
+    const y = match[3].charCodeAt(0) - 32 - 1;
+
+    const shift = !!(cb & 4);
+    const meta = !!(cb & 8);
+    const ctrl = !!(cb & 16);
+
+    const b = cb & 3;
+    let action: 'mousedown' | 'mouseup' | 'mousemove' | 'wheeldown' | 'wheelup';
+    let buttonName: 'left' | 'middle' | 'right' | undefined;
+
+    if (cb & 64) {
+      // Mouse wheel
+      action = b === 0 ? 'wheelup' : 'wheeldown';
+      buttonName = undefined;
+    } else if (cb & 32) {
+      // Mouse motion (or button release in some terminals)
+      action = 'mousemove';
+      buttonName = b === 0 ? 'left' : b === 1 ? 'middle' : b === 2 ? 'right' : undefined;
+    } else if (b === 3) {
+      // Button release in X10 mode
+      action = 'mouseup';
+      buttonName = undefined;
+    } else {
+      action = 'mousedown';
+      buttonName = b === 0 ? 'left' : b === 1 ? 'middle' : b === 2 ? 'right' : undefined;
+    }
+
+    return { x, y, action, button: buttonName, shift, meta, ctrl };
   }
 
   // ============================================================================
@@ -663,11 +700,34 @@ export class Program extends EventEmitter {
       full: '',
     };
 
-    // Single character
+    // Handle special single-byte keys FIRST (before general single-character handling)
+    // These are special keys that have length 1 but are NOT printable characters
+    if (buf === '\r' || buf === '\n') {
+      key.name = 'enter';
+      key.full = 'enter';
+      return key;
+    }
+    if (buf === '\t') {
+      key.name = 'tab';
+      key.full = 'tab';
+      return key;
+    }
+    if (buf === '\x7f' || buf === '\x08') {
+      key.name = 'backspace';
+      key.full = 'backspace';
+      return key;
+    }
+    if (buf === '\x1b') {
+      key.name = 'escape';
+      key.full = 'escape';
+      return key;
+    }
+
+    // Single character (printable characters and control codes 1-26)
     if (buf.length === 1) {
       const ch = buf.charCodeAt(0);
 
-      // Control characters
+      // Control characters (Ctrl+A through Ctrl+Z = 1-26)
       if (ch >= 1 && ch <= 26) {
         key.name = String.fromCharCode(ch + 96);
         key.ctrl = true;
@@ -678,11 +738,25 @@ export class Program extends EventEmitter {
         return key;
       }
 
-      // Regular character
-      key.name = buf;
-      if (buf >= 'A' && buf <= 'Z') {
-        key.shift = true;
+      // Space character
+      if (ch === 32) {
+        key.name = 'space';
+        key.full = 'space';
+        return key;
       }
+
+      // Regular printable character (ASCII 33-126)
+      if (ch >= 33 && ch <= 126) {
+        key.name = buf;
+        if (buf >= 'A' && buf <= 'Z') {
+          key.shift = true;
+        }
+        key.full = key.name;
+        return key;
+      }
+
+      // Other single-byte characters (extended ASCII, etc.)
+      key.name = buf;
       key.full = key.name;
       return key;
     }
@@ -697,8 +771,29 @@ export class Program extends EventEmitter {
         return key;
       }
 
+      // SS3 sequences (F1-F4 on many terminals like xterm)
+      if (buf[1] === 'O' && buf.length === 3) {
+        const final = buf[2];
+        if (final === 'P') key.name = 'f1';
+        else if (final === 'Q') key.name = 'f2';
+        else if (final === 'R') key.name = 'f3';
+        else if (final === 'S') key.name = 'f4';
+        // Arrow keys via SS3
+        else if (final === 'A') key.name = 'up';
+        else if (final === 'B') key.name = 'down';
+        else if (final === 'C') key.name = 'right';
+        else if (final === 'D') key.name = 'left';
+        else if (final === 'H') key.name = 'home';
+        else if (final === 'F') key.name = 'end';
+
+        if (key.name) {
+          key.full = key.name;
+          return key;
+        }
+      }
+
       // CSI sequences
-      if (buf[1] === '[' || buf[1] === 'O') {
+      if (buf[1] === '[') {
         const match = buf.match(/^\x1b\[([0-9;]+)?([A-Za-z~])/);
         if (match) {
           const params = match[1] ? match[1].split(';').map(Number) : [];
@@ -748,29 +843,7 @@ export class Program extends EventEmitter {
       }
     }
 
-    // Special keys
-    if (buf === '\r' || buf === '\n') {
-      key.name = 'enter';
-      key.full = 'enter';
-      return key;
-    }
-    if (buf === '\t') {
-      key.name = 'tab';
-      key.full = 'tab';
-      return key;
-    }
-    if (buf === '\x7f' || buf === '\x08') {
-      key.name = 'backspace';
-      key.full = 'backspace';
-      return key;
-    }
-    if (buf === '\x1b') {
-      key.name = 'escape';
-      key.full = 'escape';
-      return key;
-    }
-
-    // Set full key name with modifiers
+    // Fallback: Set full key name with modifiers
     key.full = '';
     if (key.ctrl) key.full += 'C-';
     if (key.meta) key.full += 'M-';
@@ -786,8 +859,8 @@ export class Program extends EventEmitter {
   _handleData(data: string): void {
     if (this._paused) return;
 
-    // Check for mouse events
-    if (this._mouseEnabled && data.includes('\x1b[<')) {
+    // Check for mouse events (SGR: \x1b[< or X10: \x1b[M)
+    if (this._mouseEnabled && (data.includes('\x1b[<') || data.includes('\x1b[M'))) {
       const mouseEvent = this.parseMouseEvent(data);
       if (mouseEvent) {
         this._lastMouseEvent = mouseEvent;

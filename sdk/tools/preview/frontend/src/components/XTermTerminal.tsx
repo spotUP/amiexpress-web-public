@@ -56,6 +56,20 @@ export const XTermTerminal = forwardRef<XTermTerminalRef, XTermTerminalProps>(({
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
 
+    // Prevent browser default actions for function keys (F1-F12)
+    // Otherwise browser captures them (e.g., F1 opens browser help)
+    term.attachCustomKeyEventHandler((event) => {
+      // Allow function keys to pass through to the terminal
+      if (event.key.startsWith('F') && event.key.length >= 2 && event.key.length <= 3) {
+        const keyNum = parseInt(event.key.slice(1), 10);
+        if (keyNum >= 1 && keyNum <= 12) {
+          event.preventDefault();
+          return true; // Let xterm.js handle it
+        }
+      }
+      return true; // Let xterm.js handle all other keys
+    });
+
     // Handle input using onKey for proper keyboard event handling
     // This gives us actual key values instead of raw escape sequences
     term.onKey(({ key }) => {
