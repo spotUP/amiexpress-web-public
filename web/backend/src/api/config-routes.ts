@@ -1683,5 +1683,248 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
     }
   });
 
+  // ===== Operator Chat Configuration =====
+
+  /**
+   * GET /api/config/operator-chat
+   * Get operator chat configuration
+   */
+  router.get('/operator-chat', async (req: Request, res: Response) => {
+    try {
+      const operatorChatRepo = database.getOperatorChatRepository();
+      const config = operatorChatRepo.getConfig();
+      sendResponse(res, config);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/operator-chat
+   * Update operator chat configuration
+   */
+  router.put('/operator-chat', async (req: any, res: Response) => {
+    try {
+      const context = getRequestContext(req);
+      const operatorChatRepo = database.getOperatorChatRepository();
+
+      // Update configuration
+      operatorChatRepo.updateConfig(req.body);
+
+      // Get updated config
+      const updatedConfig = operatorChatRepo.getConfig();
+
+      console.log(`[Config API] Operator chat config updated by ${context.username}`);
+      sendResponse(res, updatedConfig, 'Operator chat configuration updated');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // ============================================
+  // Push Notification Routes
+  // ============================================
+
+  /**
+   * GET /api/config/push/vapid-key
+   * Get VAPID public key for push subscription (public endpoint)
+   */
+  router.get('/push/vapid-key', (req: Request, res: Response) => {
+    const { getVapidPublicKey, isWebPushEnabled } = require('../utils/web-push.util');
+    const publicKey = getVapidPublicKey();
+
+    if (!publicKey || !isWebPushEnabled()) {
+      res.json({
+        enabled: false,
+        publicKey: null
+      });
+      return;
+    }
+
+    res.json({
+      enabled: true,
+      publicKey
+    });
+  });
+
+  /**
+   * POST /api/config/push/subscribe
+   * Save push subscription for current user
+   */
+  router.post('/push/subscribe', async (req: any, res: Response) => {
+    try {
+      const context = getRequestContext(req);
+      const { subscription } = req.body;
+
+      if (!subscription || !subscription.endpoint || !subscription.keys) {
+        res.status(400).json({ error: 'Invalid subscription data' });
+        return;
+      }
+
+      const operatorChatRepo = database.getOperatorChatRepository();
+      operatorChatRepo.savePushSubscription(
+        context.userId || 'anonymous',
+        subscription,
+        req.headers['user-agent']
+      );
+
+      console.log(`[Push] Saved subscription for user ${context.userId}`);
+      sendResponse(res, { success: true });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * DELETE /api/config/push/unsubscribe
+   * Remove push subscription
+   */
+  router.delete('/push/unsubscribe', async (req: any, res: Response) => {
+    try {
+      const { endpoint } = req.body;
+
+      if (!endpoint) {
+        res.status(400).json({ error: 'Endpoint required' });
+        return;
+      }
+
+      const operatorChatRepo = database.getOperatorChatRepository();
+      operatorChatRepo.removePushSubscription(endpoint);
+
+      console.log('[Push] Removed subscription');
+      sendResponse(res, { success: true });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/push/status
+   * Check if current user has push subscriptions
+   */
+  router.get('/push/status', async (req: any, res: Response) => {
+    try {
+      const context = getRequestContext(req);
+      const operatorChatRepo = database.getOperatorChatRepository();
+
+      const hasSubscription = operatorChatRepo.hasPushSubscriptions(context.userId || 'anonymous');
+      const subscriptions = operatorChatRepo.getPushSubscriptionsForSysop(context.userId || 'anonymous');
+
+      sendResponse(res, {
+        hasSubscription,
+        subscriptionCount: subscriptions.length
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/push/generate-vapid
+   * Generate new VAPID keys (admin only)
+   */
+  router.post('/push/generate-vapid', async (req: Request, res: Response) => {
+    try {
+      const { generateVapidKeys } = require('../utils/web-push.util');
+      const keys = generateVapidKeys();
+
+      sendResponse(res, {
+        publicKey: keys.publicKey,
+        privateKey: keys.privateKey
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/push/vapid-config
+   * Get current VAPID configuration (admin only - includes private key)
+   */
+  router.get('/push/vapid-config', async (req: Request, res: Response) => {
+    try {
+      const configRepo = database.getConfigRepository();
+      const systemConfig = configRepo.getSystemConfig();
+
+      if (!systemConfig) {
+        res.status(404).json({ error: 'System configuration not found' });
+        return;
+      }
+
+      const { isWebPushEnabled } = require('../utils/web-push.util');
+
+      sendResponse(res, {
+        vapid_public_key: systemConfig.vapid_public_key || '',
+        vapid_private_key: systemConfig.vapid_private_key || '',
+        vapid_contact_email: systemConfig.vapid_contact_email || '',
+        enabled: isWebPushEnabled()
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * PUT /api/config/push/vapid-config
+   * Update VAPID configuration and reinitialize web push (admin only)
+   */
+  router.put('/push/vapid-config', async (req: Request, res: Response) => {
+    try {
+      const { vapid_public_key, vapid_private_key, vapid_contact_email } = req.body;
+      const context = getRequestContext(req);
+
+      // Validate the keys are present together or both empty
+      if ((vapid_public_key && !vapid_private_key) || (!vapid_public_key && vapid_private_key)) {
+        res.status(400).json({ error: 'Both public and private VAPID keys must be provided together' });
+        return;
+      }
+
+      const configRepo = database.getConfigRepository();
+      const oldConfig = configRepo.getSystemConfig();
+
+      // Update config
+      const updatedConfig = configRepo.updateSystemConfig({
+        vapid_public_key: vapid_public_key || '',
+        vapid_private_key: vapid_private_key || '',
+        vapid_contact_email: vapid_contact_email || ''
+      });
+
+      // Log the change
+      configRepo.logConfigChange(
+        'system_config',
+        1,
+        'UPDATE',
+        context.userId,
+        context.username,
+        {
+          vapid_public_key: oldConfig?.vapid_public_key || '',
+          vapid_private_key: '***REDACTED***',
+          vapid_contact_email: oldConfig?.vapid_contact_email || ''
+        },
+        {
+          vapid_public_key: vapid_public_key || '',
+          vapid_private_key: '***REDACTED***',
+          vapid_contact_email: vapid_contact_email || ''
+        },
+        context.ipAddress,
+        context.userAgent
+      );
+
+      // Reinitialize web push with new config
+      const { reinitWebPush, isWebPushEnabled } = require('../utils/web-push.util');
+      reinitWebPush(updatedConfig);
+
+      sendResponse(res, {
+        success: true,
+        enabled: isWebPushEnabled(),
+        message: isWebPushEnabled()
+          ? 'VAPID configuration updated and web push enabled'
+          : 'VAPID configuration updated but web push is disabled (keys may be missing or invalid)'
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   return router;
 }

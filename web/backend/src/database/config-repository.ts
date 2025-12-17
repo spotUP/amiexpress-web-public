@@ -73,7 +73,8 @@ export class ConfigRepository extends BaseRepository<any> {
         http_enabled, http_host, http_port,
         telnet_port, ssh_port,
         quiet_join, convert_to_mb, reg_key,
-        debug_mode, log_level, log_retention_days
+        debug_mode, log_level, log_retention_days,
+        vapid_public_key, vapid_private_key, vapid_contact_email
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
@@ -91,6 +92,7 @@ export class ConfigRepository extends BaseRepository<any> {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?,
+        ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?
       )
@@ -161,7 +163,10 @@ export class ConfigRepository extends BaseRepository<any> {
       config.reg_key || '',
       config.debug_mode ? 1 : 0,
       config.log_level || 'info',
-      config.log_retention_days || 90
+      config.log_retention_days || 90,
+      config.vapid_public_key || '',
+      config.vapid_private_key || '',
+      config.vapid_contact_email || ''
     );
 
     return this.getSystemConfig()!;
@@ -1028,6 +1033,9 @@ export class ConfigRepository extends BaseRepository<any> {
       debug_mode: Boolean(row.debug_mode),
       log_level: row.log_level,
       log_retention_days: row.log_retention_days,
+      vapid_public_key: row.vapid_public_key || '',
+      vapid_private_key: row.vapid_private_key || '',
+      vapid_contact_email: row.vapid_contact_email || '',
       created_at: new Date(row.created_at * 1000),
       updated_at: new Date(row.updated_at * 1000)
     };

@@ -92,9 +92,9 @@ import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
   handleCommentToSysopCommand,
-  handlePageSysopCommand,
   setPreferenceChatCommandsDependencies
 } from './chat/preference-chat-commands.handler';
+import { handlePageSysopCommand } from './command-handler/page-sysop-command';
 import {
   handleLiveChatCommand
 } from './chat/chat-commands.handler';
@@ -182,7 +182,6 @@ import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
-import { EnvStat } from '../constants/env-codes';
 import {
   handleMessageToInput,
   handleMessageSubjectInput,
@@ -476,7 +475,7 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
         displayFlowLog('running confScan');
-        const { performConferenceScan } = require('./message-scan.handler');
+        const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);
         // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
         session.menuPause = true;
@@ -1072,6 +1071,47 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     const { handleChatKeystroke } = require('./internode-chat.handler');
+    const {
+      shouldOpenPicker,
+      createPickerState,
+      renderPicker,
+      handlePickerInput,
+      savePickerArea,
+      restorePickerArea
+    } = require('../utils/smiley-picker.util');
+
+    // Handle smiley picker mode
+    if (session.smileyPickerState?.isOpen) {
+      const result = handlePickerInput(session.smileyPickerState, data);
+      session.smileyPickerState = result.newState;
+
+      if (result.action === 'select' && result.smiley) {
+        // Insert smiley into input buffer
+        session.inputBuffer += result.smiley;
+        // Restore screen and echo smiley
+        socket.emit('ansi-output', restorePickerArea() + result.smiley);
+        // Transmit smiley to partner
+        for (const char of result.smiley) {
+          await handleChatKeystroke(socket, session, { keystroke: char });
+        }
+      } else if (result.action === 'cancel') {
+        // Just restore screen
+        socket.emit('ansi-output', restorePickerArea());
+      } else {
+        // Update picker display
+        socket.emit('ansi-output', renderPicker(session.smileyPickerState));
+      }
+      return;
+    }
+
+    // Ctrl+E opens smiley picker
+    if (shouldOpenPicker(data)) {
+      const pickerState = createPickerState();
+      pickerState.isOpen = true;
+      session.smileyPickerState = pickerState;
+      socket.emit('ansi-output', savePickerArea() + renderPicker(pickerState));
+      return;
+    }
 
     // Handle arrow keys for cursor movement (left/right navigation)
     if (data === '\x1b[D') {
@@ -1112,6 +1152,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
           '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
           '  \x1b[33m/HELP\x1b[0m             - Show this help\r\n' +
+          '  \x1b[33mCtrl+E\x1b[0m            - Open smiley picker\r\n' +
           '  \x1b[33m<text>\x1b[0m            - Send message (max 500 chars)\r\n' +
           '\r\n'
         );
@@ -1149,6 +1190,146 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {
         await handleChatKeystroke(socket, session, { keystroke: data });
+      }
+    }
+    return;
+  }
+
+  // PRIORITY 1.5: Handle operator chat input
+  // When user is waiting for sysop or in active chat, intercept all input
+  if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
+    console.log(' [COMMAND] User in OPERATOR_CHAT_WAITING state');
+    const input = data.trim().toUpperCase();
+
+    // Allow user to cancel with CTRL+C (code 3), Q, /QUIT, or /CANCEL
+    // express.e checks for stat=3 (CTRL+C) and shows "Aborted!"
+    if (data === '\x03' || input === 'Q' || input === '/QUIT' || input === '/CANCEL') {
+      const { handleUserCancelPage } = require('./operator-chat.handler');
+      const { container } = require('../container');
+      const { OperatorChatRepository } = require('../database/operator-chat.repository');
+      const repository = container.resolve(OperatorChatRepository);
+      await handleUserCancelPage(socket.server, repository, session, socket);
+    } else if (input) {
+      // Any other input while waiting - remind user they're waiting
+      socket.emit('ansi-output', '\r\n\x1b[33mWaiting for sysop... Press CTRL+C or Q to cancel.\x1b[0m\r\n');
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE) {
+    console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    const { handleOperatorChatKeystroke, handleUserChatMessage, handleUserQuitChat } = require('./operator-chat.handler');
+    const { container, DI_TOKENS } = require('../container');
+    const db = container.resolve(DI_TOKENS.Database);
+    const repository = db.getOperatorChatRepository();
+    const {
+      shouldOpenPicker,
+      createPickerState,
+      renderPicker,
+      handlePickerInput,
+      savePickerArea,
+      restorePickerArea
+    } = require('../utils/smiley-picker.util');
+
+    // Handle smiley picker mode
+    if (session.smileyPickerState?.isOpen) {
+      const result = handlePickerInput(session.smileyPickerState, data);
+      session.smileyPickerState = result.newState;
+
+      if (result.action === 'select' && result.smiley) {
+        // Insert smiley into input buffer
+        session.inputBuffer += result.smiley;
+        // Restore screen and echo smiley
+        socket.emit('ansi-output', restorePickerArea() + result.smiley);
+        // Transmit smiley to sysop
+        for (const char of result.smiley) {
+          await handleOperatorChatKeystroke(socket.server, session, char);
+        }
+      } else if (result.action === 'cancel') {
+        // Just restore screen
+        socket.emit('ansi-output', restorePickerArea());
+      } else {
+        // Update picker display
+        socket.emit('ansi-output', renderPicker(session.smileyPickerState));
+      }
+      return;
+    }
+
+    // Ctrl+E opens smiley picker
+    if (shouldOpenPicker(data)) {
+      const pickerState = createPickerState();
+      pickerState.isOpen = true;
+      session.smileyPickerState = pickerState;
+      socket.emit('ansi-output', savePickerArea() + renderPicker(pickerState));
+      return;
+    }
+
+    // Handle arrow keys - ignore for chat
+    if (data === '\x1b[D' || data === '\x1b[C' || data === '\x1b[A' || data === '\x1b[B') {
+      return;
+    }
+
+    // Handle Enter key - finalize and send message
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+
+      // Clear keystroke buffer on sysop panel
+      await handleOperatorChatKeystroke(socket.server, session, '\r');
+
+      session.inputBuffer = '';
+
+      if (!input) return;
+
+      // Check for /QUIT or /END command
+      if (input.toUpperCase() === '/QUIT' || input.toUpperCase() === '/END') {
+        await handleUserQuitChat(socket.server, repository, session, socket);
+        return;
+      }
+
+      // Check for /HELP command
+      if (input.toUpperCase() === '/HELP') {
+        // Show help in scroll region
+        const helpMessage =
+          '\x1b7' + // Save cursor
+          '\x1b[S\x1b[21;1H' + // Scroll up, move to line 21
+          '\x1b[36mCommands: /quit /end - Exit, /help - Help, Ctrl+E - Smileys\x1b[0m' +
+          '\x1b8\x1b[K'; // Restore cursor, clear input line
+        socket.emit('ansi-output', helpMessage);
+        return;
+      }
+
+      // Send complete message (sendChatMessage handles scroll region display)
+      await handleUserChatMessage(socket.server, repository, session, input);
+      // Note: Don't echo locally - sendChatMessage already displays the message in the scroll region
+    }
+    // Handle Backspace - real-time transmission
+    else if (data === '\x7f' || data === '\b') {
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        // Echo backspace at line 24 (current cursor position)
+        socket.emit('ansi-output', '\b \b');
+        // Don't transmit backspace if typing a command
+        const isCommand = session.inputBuffer.trim().startsWith('/');
+        if (!isCommand) {
+          await handleOperatorChatKeystroke(socket.server, session, '\x7f');
+        }
+      }
+    }
+    // Handle printable characters - real-time transmission
+    else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      // Echo character at line 24 (current cursor position)
+      socket.emit('ansi-output', data);
+      // Don't transmit commands (starting with /) to sysop
+      const isCommand = session.inputBuffer.trim().startsWith('/');
+      if (!isCommand) {
+        await handleOperatorChatKeystroke(socket.server, session, data);
       }
     }
     return;
@@ -3502,7 +3683,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'O': // Page Sysop (internalCommandO) - express.e:25372-25404
-      handlePageSysopCommand(socket, session);
+      await handlePageSysopCommand(socket, session, socket.server);
       return;
 
 

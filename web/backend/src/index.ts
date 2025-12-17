@@ -351,6 +351,7 @@ export interface BBSSession {
   lastTypingTime?: number; // Last time user was typing (for typing indicator)
   partnerTypingBuffer?: string; // Buffer for partner's typing indicator
   typingBlinkTimer?: NodeJS.Timeout; // Timer for typing indicator blinking
+  smileyPickerState?: import('./utils/smiley-picker.util').SmileyPickerState; // State for ASCII smiley picker (Ctrl+E)
 
   // Group chat properties
   userId?: string; // User ID for chat system
@@ -442,36 +443,94 @@ const io = new Server(server, {
 // Socket.IO authentication middleware for operator chat
 io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
+  const hasToken = !!token;
+  console.log(`[Socket.IO Auth] New connection, has token: ${hasToken}, socket id: ${socket.id}`);
 
   // If no token provided, allow connection (for BBS clients)
   if (!token) {
+    console.log('[Socket.IO Auth] No token provided, allowing anonymous connection');
     return next();
   }
 
   try {
-    const jwt = await import('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    // Try JWT authentication first (for logged-in admins)
+    try {
+      const jwtModule = await import('jsonwebtoken');
+      // Handle both ESM and CommonJS module formats
+      const jwt = jwtModule.default || jwtModule;
 
-    // Get user from database
-    const user = await db.getUserById(decoded.userId);
-    if (!user) {
-      return next(new Error('User not found'));
+      // Use same fallback as database.ts for JWT_SECRET consistency
+      const jwtSecret = process.env.JWT_SECRET || 'amiexpress-secret-key-change-in-production';
+      if (!process.env.JWT_SECRET) {
+        console.warn('[Socket.IO Auth] JWT_SECRET not set, using fallback (not recommended for production)');
+      }
+
+      const decoded = jwt.verify(token, jwtSecret) as any;
+      console.log('[Socket.IO Auth] JWT decoded successfully:', { userId: decoded.userId, username: decoded.username });
+
+      // Get user from database
+      const user = await db.getUserById(decoded.userId);
+      if (!user) {
+        console.error('[Socket.IO Auth] User not found in database:', decoded.userId);
+        throw new Error('User not found');
+      }
+
+      // Attach user info to socket for operator chat handlers
+      (socket as any).session = {
+        user: {
+          id: user.id,
+          username: user.username,
+          secLevel: user.secLevel
+        },
+        nodeId: 0 // Admin UI doesn't have a node
+      };
+
+      console.log(`[Socket.IO Auth] Admin authenticated: ${user.username} (secLevel: ${user.secLevel})`);
+      return next();
+    } catch (jwtError: any) {
+      // JWT failed - check if it's expired vs invalid
+      const isExpired = jwtError.name === 'TokenExpiredError';
+      const errorMsg = isExpired ? 'Session expired - please log in again' : (jwtError as Error).message;
+      console.log('[Socket.IO Auth] JWT verification failed:', errorMsg);
+      console.log('[Socket.IO Auth] Token preview:', token?.substring(0, 20) + '...');
+
+      // Try operator page token (UUID from Discord links) as fallback
+      console.log('[Socket.IO Auth] Checking if token is an operator page token instead...');
+      try {
+        const operatorChatRepo = db.getOperatorChatRepository();
+        const page = operatorChatRepo.getPageRequestByToken(token);
+
+        if (page) {
+          console.log(`[Socket.IO Auth] Valid operator page token for page ${page.id}`);
+
+          // Create a temporary sysop session for operator page access
+          (socket as any).session = {
+            user: {
+              id: 'operator-page-' + page.id,
+              username: 'Operator (Discord)',
+              secLevel: 100 // Sysop level for operator chat
+            },
+            nodeId: 0,
+            pageId: page.id // Attach page ID for context
+          };
+
+          return next();
+        } else {
+          console.log('[Socket.IO Auth] No operator page found for token (may be expired or invalid)');
+        }
+      } catch (repoError) {
+        console.error('[Socket.IO Auth] Error looking up operator page:', repoError);
+      }
+
+      // Neither JWT nor operator page token worked - provide specific error
+      if (isExpired) {
+        throw new Error('Session expired - please log in again');
+      }
+      throw new Error('Invalid authentication token');
     }
-
-    // Attach user info to socket for operator chat handlers
-    (socket as any).session = {
-      user: {
-        id: user.id,
-        username: user.username,
-        secLevel: user.secLevel
-      },
-      nodeId: 0 // Admin UI doesn't have a node
-    };
-
-    next();
-  } catch (error) {
-    console.error('[Socket.IO Auth] Token verification failed:', error);
-    next(new Error('Authentication failed'));
+  } catch (error: any) {
+    console.error('[Socket.IO Auth] Authentication failed:', error.message);
+    next(new Error(error.message || 'Authentication failed'));
   }
 });
 
@@ -918,6 +977,12 @@ io.on('connection', async (socket) => {
     modemBps: 0
   };
   setSession(socket.id, session); // Use helper to store by nodeId
+
+  // Setup operator chat listeners for this socket
+  // This allows the user to receive chat-accepted and chat-ended events
+  const { setupOperatorChatListeners } = await import('./handlers/operator-chat.handler');
+  setupOperatorChatListeners(socket, session);
+
   try {
     await triggerSamiLogRefresh();
   } catch (error) {
@@ -1019,6 +1084,15 @@ io.on('connection', async (socket) => {
     const operatorChatRepo = db.getOperatorChatRepository();
     initOperatorChatHandler(io, operatorChatRepo);
     console.log('[OK] Operator chat handler initialized');
+
+    // Initialize web push notifications with database config
+    const { initWebPush } = await import('./utils/web-push.util');
+    const sysConfigForPush = db.getConfigRepository().getSystemConfig();
+    if (initWebPush(sysConfigForPush || undefined)) {
+      console.log('[OK] Web push notifications enabled');
+    } else {
+      console.log('[INFO] Web push notifications disabled (VAPID keys not configured)');
+    }
 
     // Register HTTP routes (auth, sessions, config, upload, download, etc.)
     registerHttpRoutes(app);

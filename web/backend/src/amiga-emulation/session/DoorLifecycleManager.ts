@@ -459,6 +459,9 @@ export class DoorLifecycleManager {
         // === STEP 5: Execute exactly ONE instruction ===
         await this.executeInstruction(pc);
 
+        // === STEP 5B: Poll for XIM messages from native AEDoor.library ===
+        await this.pollXIMMessages();
+
         // === STEP 6: Track progress and yield ===
         await this.trackProgressAndYield();
       }
@@ -1399,6 +1402,87 @@ export class DoorLifecycleManager {
           16
         )}, cycles=${cyclesExecuted}`
       );
+    }
+  }
+
+  /**
+   * Poll for XIM messages from native AEDoor.library
+   * Native doors use PutMsg to send XIM messages, we need to poll with GetMsg
+   */
+  private pollCount = 0;
+  private lastPollLog = 0;
+
+  private async pollXIMMessages(): Promise<void> {
+    this.pollCount++;
+
+    // Log every 10000 polls to confirm polling is active
+    if (this.pollCount - this.lastPollLog >= 10000) {
+      console.log(`[DoorLifecycleManager] XIM polling active: ${this.pollCount} polls so far`);
+      this.lastPollLog = this.pollCount;
+    }
+
+    // Only poll for XIM doors
+    if (this.config.doorType !== "XIM") {
+      if (this.pollCount === 1) {
+        console.log(`[DoorLifecycleManager] XIM polling DISABLED: doorType=${this.config.doorType}`);
+      }
+      return;
+    }
+
+    const execLib = this.libraryManager?.execLibrary;
+    if (!execLib) {
+      if (this.pollCount === 1) {
+        console.log(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
+      }
+      return;
+    }
+
+    // Get the AEDoorPort address
+    // For XIM doors, port name is AEDoorPort{nodeId} (e.g., "AEDoorPort1")
+    const nodeId = this.config.bbsSession?.nodeNumber || 1;
+    const portName = `AEDoorPort${nodeId}`;
+
+    // Write port name to temporary memory for findPort
+    const portNameAddr = 0x500; // Temporary address for port name
+    this.emulator.writeString(portNameAddr, portName);
+
+    const aePortAddr = execLib.findPort(portNameAddr);
+    if (!aePortAddr || aePortAddr === 0) {
+      // Port not found yet, door might not have registered
+      if (this.pollCount === 1) {
+        console.log(`[DoorLifecycleManager] XIM polling: AEDoorPort not found yet (will retry)`);
+      }
+      return;
+    }
+
+    if (this.pollCount === 1) {
+      console.log(`[DoorLifecycleManager] XIM polling: Found AEDoorPort at 0x${aePortAddr.toString(16)}`);
+    }
+
+    // Poll for messages with GetMsg
+    try {
+      const msgAddr = execLib.getMsg(aePortAddr);
+      if (msgAddr && msgAddr !== 0) {
+        console.log(`[DoorLifecycleManager] XIM polling: Got message at 0x${msgAddr.toString(16)}`);
+
+        // Found a message! Parse and handle it
+        if (this.ximProtocol) {
+          // Parse the XIM message from memory
+          const msg = this.ximProtocol.parseMessage(msgAddr);
+          if (msg) {
+            console.log(`[DoorLifecycleManager] XIM polling: Parsed message command=${msg.command} data=${msg.data}`);
+            // Handle the message (this will route output to socket)
+            await this.ximProtocol.handleMessage(msg);
+            // Note: Reply is handled inside handleMessage via sendReply()
+          } else {
+            console.log(`[DoorLifecycleManager] XIM polling: Failed to parse message`);
+          }
+        } else {
+          console.log(`[DoorLifecycleManager] XIM polling: ximProtocol is null`);
+        }
+      }
+    } catch (error) {
+      console.error(`[DoorLifecycleManager] XIM polling error:`, error);
     }
   }
 

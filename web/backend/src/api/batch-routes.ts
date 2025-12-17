@@ -76,7 +76,7 @@ function listBatches(): string[] {
 
 function readBatch(name: string): string {
   const file = findBatchPath(name);
-  return file ? amigafs.readFileSync(file, 'utf-8') : '';
+  return file ? amigafs.readFileSync(file, 'utf-8').toString() : '';
 }
 
 function writeBatch(name: string, content: string) {

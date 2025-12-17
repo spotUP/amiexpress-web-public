@@ -306,6 +306,11 @@ export class MoiraEmulator {
   writeMemory(address: number, value: number): void {
     if (!this.cpu) throw new Error("Emulator not initialized");
 
+    // DEBUG: Catch writes to debug marker address 0xDEB000-0xDEB003
+    if (address >= 0xdeb000 && address <= 0xdeb003) {
+      console.log(`[DEBUG-MARKER] Write to 0x${address.toString(16)} = 0x${value.toString(16).padStart(2, '0')}`);
+    }
+
     // ULTRATHINK: Detect writes to ROM region (0xF80000-0xFFFFFF)
     // ROM should be READ-ONLY! Any writes indicate a bug
     if (address >= 0xf80000 && address <= 0xffffff) {

@@ -326,7 +326,6 @@ export function setUserFlag(user: User, flag: UserFlags, enabled: boolean): void
 // ===== Session-based Helper Functions (from security.util.ts) =====
 // These work with session objects that contain user + temporary security state
 
-import { EnvStat } from '../constants/env-codes';
 import { findAcsLevel } from '../constants/security-levels';
 
 /**

@@ -86,9 +86,9 @@ export class ChatHandler {
 
     socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
 
-    // Start the paging dots animation
+    // Start the paging dots animation - 30 dots over 30 seconds
     let dotCount = 0;
-    const maxDots = 20;
+    const maxDots = 30;
 
     const dotInterval = setInterval(() => {
       socket.emit('ansi-output', ' .');

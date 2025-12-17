@@ -97,7 +97,35 @@ export class OperatorChatRepository {
         sound_enabled INTEGER DEFAULT 1,
         vibrate_enabled INTEGER DEFAULT 1,
         discord_webhook TEXT,
-        allowed_sec_levels TEXT DEFAULT '[]'
+        allowed_sec_levels TEXT DEFAULT '[]',
+        notify_on_page INTEGER DEFAULT 1,
+        notify_discord INTEGER DEFAULT 1,
+        discord_user_id TEXT
+      )
+    `);
+
+    // Add new columns to existing tables (migrations for existing DBs)
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN notify_on_page INTEGER DEFAULT 1`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN notify_discord INTEGER DEFAULT 1`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN discord_user_id TEXT`);
+    } catch (e) { /* Column already exists */ }
+
+    // Push notification subscriptions table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS operator_push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sysop_id TEXT NOT NULL,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at INTEGER NOT NULL,
+        last_used INTEGER
       )
     `);
 
@@ -108,6 +136,7 @@ export class OperatorChatRepository {
       CREATE INDEX IF NOT EXISTS idx_operator_pages_created_at ON operator_pages(created_at);
       CREATE INDEX IF NOT EXISTS idx_operator_chat_messages_page_id ON operator_chat_messages(page_id);
       CREATE INDEX IF NOT EXISTS idx_operator_chat_messages_timestamp ON operator_chat_messages(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_operator_push_subscriptions_sysop_id ON operator_push_subscriptions(sysop_id);
     `);
 
     // Insert default config if not exists
@@ -403,7 +432,10 @@ export class OperatorChatRepository {
       soundEnabled: row.sound_enabled === 1,
       vibrateEnabled: row.vibrate_enabled === 1,
       discordWebhook: row.discord_webhook,
-      allowedSecLevels: JSON.parse(row.allowed_sec_levels || '[]')
+      discordUserId: row.discord_user_id,
+      allowedSecLevels: JSON.parse(row.allowed_sec_levels || '[]'),
+      notifyOnPage: row.notify_on_page !== 0, // Default true if null
+      notifyDiscord: row.notify_discord !== 0  // Default true if null
     };
   }
 
@@ -430,7 +462,10 @@ export class OperatorChatRepository {
         sound_enabled = ?,
         vibrate_enabled = ?,
         discord_webhook = ?,
-        allowed_sec_levels = ?
+        discord_user_id = ?,
+        allowed_sec_levels = ?,
+        notify_on_page = ?,
+        notify_discord = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -447,7 +482,10 @@ export class OperatorChatRepository {
       merged.soundEnabled ? 1 : 0,
       merged.vibrateEnabled ? 1 : 0,
       merged.discordWebhook ?? null,
-      JSON.stringify(merged.allowedSecLevels)
+      merged.discordUserId ?? null,
+      JSON.stringify(merged.allowedSecLevels),
+      merged.notifyOnPage ? 1 : 0,
+      merged.notifyDiscord ? 1 : 0
     );
   }
 
@@ -481,5 +519,100 @@ export class OperatorChatRepository {
       token: row.token,
       tokenExpiresAt: row.token_expires_at ? new Date(row.token_expires_at) : undefined
     };
+  }
+
+  // ============================================
+  // Push Subscription Management
+  // ============================================
+
+  /**
+   * Save or update a push subscription for a sysop
+   */
+  savePushSubscription(
+    sysopId: string,
+    subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+    userAgent?: string
+  ): void {
+    const now = Date.now();
+    this.db.prepare(`
+      INSERT INTO operator_push_subscriptions (sysop_id, endpoint, p256dh, auth, user_agent, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET
+        sysop_id = excluded.sysop_id,
+        p256dh = excluded.p256dh,
+        auth = excluded.auth,
+        user_agent = excluded.user_agent
+    `).run(sysopId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, userAgent ?? null, now);
+  }
+
+  /**
+   * Remove a push subscription by endpoint
+   */
+  removePushSubscription(endpoint: string): void {
+    this.db.prepare('DELETE FROM operator_push_subscriptions WHERE endpoint = ?').run(endpoint);
+  }
+
+  /**
+   * Remove all push subscriptions for a sysop
+   */
+  removePushSubscriptionsForSysop(sysopId: string): void {
+    this.db.prepare('DELETE FROM operator_push_subscriptions WHERE sysop_id = ?').run(sysopId);
+  }
+
+  /**
+   * Get all push subscriptions (for sending notifications to all sysops)
+   */
+  getAllPushSubscriptions(): Array<{
+    sysopId: string;
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+  }> {
+    const rows = this.db.prepare('SELECT * FROM operator_push_subscriptions').all() as any[];
+    return rows.map(row => ({
+      sysopId: row.sysop_id,
+      endpoint: row.endpoint,
+      keys: {
+        p256dh: row.p256dh,
+        auth: row.auth
+      }
+    }));
+  }
+
+  /**
+   * Get push subscriptions for a specific sysop
+   */
+  getPushSubscriptionsForSysop(sysopId: string): Array<{
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+  }> {
+    const rows = this.db.prepare(
+      'SELECT * FROM operator_push_subscriptions WHERE sysop_id = ?'
+    ).all(sysopId) as any[];
+    return rows.map(row => ({
+      endpoint: row.endpoint,
+      keys: {
+        p256dh: row.p256dh,
+        auth: row.auth
+      }
+    }));
+  }
+
+  /**
+   * Update last_used timestamp for a subscription
+   */
+  updatePushSubscriptionLastUsed(endpoint: string): void {
+    this.db.prepare(
+      'UPDATE operator_push_subscriptions SET last_used = ? WHERE endpoint = ?'
+    ).run(Date.now(), endpoint);
+  }
+
+  /**
+   * Check if a sysop has any push subscriptions
+   */
+  hasPushSubscriptions(sysopId: string): boolean {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM operator_push_subscriptions WHERE sysop_id = ?'
+    ).get(sysopId) as any;
+    return row.count > 0;
   }
 }

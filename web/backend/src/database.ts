@@ -500,6 +500,22 @@ export class Database {
         console.log('✓ Added new_user_auto_rejoin column');
       }
 
+      // VAPID Push Notification keys
+      if (!systemConfigColumns.includes('vapid_public_key')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_public_key TEXT DEFAULT \'\'');
+        console.log('✓ Added vapid_public_key column');
+      }
+
+      if (!systemConfigColumns.includes('vapid_private_key')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_private_key TEXT DEFAULT \'\'');
+        console.log('✓ Added vapid_private_key column');
+      }
+
+      if (!systemConfigColumns.includes('vapid_contact_email')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_contact_email TEXT DEFAULT \'\'');
+        console.log('✓ Added vapid_contact_email column');
+      }
+
       console.log('All migrations completed successfully');
     } catch (error) {
       console.error('Error running migrations:', error);
@@ -1082,6 +1098,11 @@ export class Database {
           debug_mode INTEGER DEFAULT 0,
           log_level TEXT DEFAULT 'info',
           log_retention_days INTEGER DEFAULT 90,
+
+          -- Push Notifications (VAPID)
+          vapid_public_key TEXT DEFAULT '',
+          vapid_private_key TEXT DEFAULT '',
+          vapid_contact_email TEXT DEFAULT '',
 
           -- Metadata
           created_at INTEGER DEFAULT (strftime('%s', 'now')),
@@ -2064,7 +2085,7 @@ export class Database {
       secLevel: user.secLevel
     };
 
-    return jwt.sign(payload, secret, { expiresIn: '1h' });
+    return jwt.sign(payload, secret, { expiresIn: '8h' });
   }
 
   async generateRefreshToken(user: any): Promise<string> {

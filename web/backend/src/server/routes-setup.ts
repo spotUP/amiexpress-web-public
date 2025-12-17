@@ -131,41 +131,93 @@ export function registerHttpRoutes(app: Application): void {
   // process.cwd() = ~/Code/amiexpress-web/web/backend
   const projectRoot = join(process.cwd(), '..', '..');
 
+  // Helper: Serve SPA with fallback to index.html
+  function serveSPA(prefix: string, distPath: string, name: string) {
+    // Check if dist directory exists
+    if (!fs.existsSync(distPath)) {
+      console.warn(`[Static] ${name} dist not found: ${distPath}`);
+      console.warn(`[Static] Run 'cd ${path.relative(projectRoot, path.dirname(distPath))} && npm run build'`);
+      return;
+    }
+
+    console.log(`[Static] Serving ${name} at ${prefix} from ${distPath}`);
+
+    // Serve static assets with caching
+    const staticOptions = process.env.NODE_ENV === 'production'
+      ? {
+          maxAge: '1y', // Cache static assets for 1 year in production
+          immutable: true
+        }
+      : {
+          maxAge: 0 // No caching in development
+        };
+
+    app.use(prefix, express.static(distPath, staticOptions));
+
+    // SPA fallback: serve index.html for non-asset requests
+    app.use(prefix, (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|map|json)$/)) {
+        return next(); // Let it 404 if asset doesn't exist
+      }
+      const indexPath = join(distPath, 'index.html');
+      if (!fs.existsSync(indexPath)) {
+        console.error(`[Static] ${name} index.html not found: ${indexPath}`);
+        return res.status(500).send(`${name} not built. Run 'npm run build' in ${path.relative(projectRoot, path.dirname(distPath))}`);
+      }
+      res.sendFile(indexPath);
+    });
+  }
+
   // Serve SDK Preview at /sdk/
   const sdkPreviewPath = join(projectRoot, 'sdk/tools/preview/frontend/dist');
-  app.use('/sdk', express.static(sdkPreviewPath));
-  app.use('/sdk', (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
-      return next(); // Let it 404 if file doesn't exist
-    }
-    res.sendFile(join(sdkPreviewPath, 'index.html'));
-  });
+  serveSPA('/sdk', sdkPreviewPath, 'SDK Preview');
 
   // Serve Admin Config at /admin/
   const adminConfigPath = join(projectRoot, 'web/config-app/dist');
-  app.use('/admin', express.static(adminConfigPath));
-  app.use('/admin', (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
-      return next(); // Let it 404 if file doesn't exist
-    }
-    res.sendFile(join(adminConfigPath, 'index.html'));
-  });
+  serveSPA('/admin', adminConfigPath, 'Admin Config');
 
   // Serve BBS Terminal Frontend at / (fallback)
   const bbsFrontendPath = join(projectRoot, 'web/frontend/dist');
-  app.use(express.static(bbsFrontendPath));
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/socket.io')) {
-      return next();
-    }
-    if (req.path.startsWith('/sdk') || req.path.startsWith('/admin')) {
-      return next();
-    }
-    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
-      return next(); // Let it 404 if file doesn't exist
-    }
-    res.sendFile(join(bbsFrontendPath, 'index.html'));
-  });
+
+  if (!fs.existsSync(bbsFrontendPath)) {
+    console.warn(`[Static] BBS Frontend dist not found: ${bbsFrontendPath}`);
+    console.warn(`[Static] Run 'cd web/frontend && npm run build'`);
+  } else {
+    console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
+
+    const bbsStaticOptions = process.env.NODE_ENV === 'production'
+      ? {
+          maxAge: '1y',
+          immutable: true
+        }
+      : {
+          maxAge: 0
+        };
+
+    app.use(express.static(bbsFrontendPath, bbsStaticOptions));
+
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      // Skip API routes
+      if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/socket.io')) {
+        return next();
+      }
+      // Skip sub-app routes
+      if (req.path.startsWith('/sdk') || req.path.startsWith('/admin')) {
+        return next();
+      }
+      // Skip asset files
+      if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|map|json)$/)) {
+        return next();
+      }
+      // Serve index.html for all other routes (SPA fallback)
+      const indexPath = join(bbsFrontendPath, 'index.html');
+      if (!fs.existsSync(indexPath)) {
+        console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
+        return res.status(500).send('BBS Frontend not built. Run \'npm run build\' in web/frontend');
+      }
+      res.sendFile(indexPath);
+    });
+  }
 
   // ===== Game Prompt Wizard API Endpoints =====
   app.post('/api/wizard/enhance', (req: Request, res: Response) => enhancePrompt(req, res));

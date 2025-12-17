@@ -310,6 +310,11 @@ export interface SystemConfig {
   log_level: string;
   log_retention_days: number;
 
+  // Push Notifications (VAPID)
+  vapid_public_key: string;
+  vapid_private_key: string;
+  vapid_contact_email: string;
+
   // Metadata
   created_at: Date;
   updated_at: Date;

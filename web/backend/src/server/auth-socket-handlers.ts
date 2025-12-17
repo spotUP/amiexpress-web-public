@@ -449,6 +449,19 @@ export function registerAuthHandlers(socket: Socket) {
         return;
       }
 
+      // TOKEN-BASED RECONNECTION: Skip LOGON/bulletin flow when reconnecting with JWT
+      // This prevents showing the LOGON screen when the user's socket reconnects
+      // (e.g., due to network blips, browser tab sleeping, page refresh)
+      if (data.token) {
+        console.log('[AUTH] Token-based reconnection - skipping LOGON/bulletin flow');
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        const { displayMainMenu } = require('./command-handler/menu');
+        await displayMainMenu(socket, session);
+        triggerSamiLogRefresh();
+        return;
+      }
+
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
       const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
       // If the screen didn't set up its own pause, add one so the user can read it

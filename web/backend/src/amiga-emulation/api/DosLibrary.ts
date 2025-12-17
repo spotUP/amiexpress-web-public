@@ -20,10 +20,11 @@ import { EnvironmentManager } from "../session/EnvironmentManager";
  * -126 = CurrentDir   -132 = IoErr        -138 = CreateProc   -144 = Exit
  * -150 = LoadSeg      -156 = UnLoadSeg    -162 = DeviceProc   -168 = SetComment
  * -174 = SetProtection -180 = DateStamp   -186 = Delay        -192 = WaitForChar
- * -198 = ParentDir    -204 = IsInteractive -210 = Execute
+ * -210 = ParentDir    -216 = IsInteractive -222 = Execute
+ * -948 = PutStr       -954 = VPrintf
  *
- * IMPORTANT: Standard dos.library uses -192/-198/-204 for DateStamp/Delay/WaitForChar
- * This table may have older/alternate offsets - doors use standard offsets
+ * CORRECTED: Fixed LVO offsets to match official AmigaOS documentation
+ * Previous offsets were incorrect (ParentDir was at -198, should be -210)
  *
  * Note: Some doors may also use undocumented/private offsets
  */
@@ -1202,18 +1203,28 @@ export class DosLibrary {
         return -1;
       }
 
+      // CRITICAL FIX: Explicitly check if writing to stdout BPTR and force console output
+      // FileHandle.write() should return consoleData, but as a failsafe, check the BPTR
+      const isStdout = (handle === this.stdoutBptr) || (handle === 2);
+
       // If console output, send to callback
-      if (result.consoleData) {
-        const text = result.consoleData.toString();
+      if (result.consoleData || isStdout) {
+        const outputData = result.consoleData || dataBuffer;
+        let text = outputData.toString('latin1');
+        // Convert bare LF to CR+LF for proper terminal display
+        text = text.replace(/(?<!\r)\n/g, '\r\n');
+
         console.log(
           `[dos.library] Write (FileManager): Console output (${length} bytes): ${JSON.stringify(
-            text
-          )}`
+            text.substring(0, 100)
+          )}${text.length > 100 ? '...' : ''}`
         );
         if (this.outputRawCallback) {
-          this.outputRawCallback(result.consoleData);
+          this.outputRawCallback(Buffer.from(text, 'latin1'));
         } else if (this.outputCallback) {
           this.outputCallback(text);
+        } else {
+          console.log(`[dos.library] Write: WARNING - No output callback set!`);
         }
       }
 
@@ -1722,72 +1733,67 @@ export class DosLibrary {
   }
 
   /**
-   * FSeek() - LVO -678 (P2)
+   * AddDosEntry() - LVO -678 (V36+)
    *
-   * Seek to a position in a buffered file.
+   * Add a device list entry to the system.
+   * Must be called with DosList locked via LockDosList().
    *
    * Parameters:
-   *   D1 = File handle
-   *   D2 = Offset (signed)
-   *   D3 = Mode (OFFSET_BEGINNING=-1, OFFSET_CURRENT=0, OFFSET_END=1)
+   *   D1 = dlist - Pointer to DosList entry to add
    *
    * Returns:
-   *   D0 = 0 on success, -1 on error
+   *   D0 = success (0=failure, non-zero=success)
+   *
+   * Official autodocs: http://amigadev.elowar.com/read/ADCD_2.1/Includes_and_Autodocs_3._guide/
    */
-  FSeek(): number {
-    const handle = this.emulator.getRegister(CPURegister.D1);
-    const offset = this.emulator.getRegister(CPURegister.D2);
-    const mode = this.emulator.getRegister(CPURegister.D3);
+  AddDosEntry(): number {
+    const dlistPtr = this.emulator.getRegister(CPURegister.D1);
 
-    console.log(`[dos.library] FSeek(handle=0x${handle.toString(16)}, offset=${offset}, mode=${mode})`);
+    console.log(`[dos.library] AddDosEntry(dlist=0x${dlistPtr.toString(16)})`);
 
-    // Call Seek() to perform the actual seek
-    this.emulator.setRegister(CPURegister.D1, handle);
-    this.emulator.setRegister(CPURegister.D2, offset);
-    this.emulator.setRegister(CPURegister.D3, mode);
-    const oldPos = this.Seek();
-
-    if (oldPos < 0) {
-      console.error(`[dos.library] FSeek: Seek failed`);
-      this.lastError = this.ERROR_SEEK_ERROR;
-      return -1;
+    // V50+: NULL check
+    if (dlistPtr === 0) {
+      console.error(`[dos.library] AddDosEntry: NULL dlist pointer`);
+      this.lastError = 120; // ERROR_REQUIRED_ARG_MISSING
+      return 0; // Failure
     }
 
+    // STUB: Proper implementation would add to DosList chain
+    // For now, return success to prevent crashes
+    console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success`);
     this.lastError = this.ERROR_NO_ERROR;
-    return 0; // Success
+    return 1; // Success
   }
 
   /**
-   * FTell() - LVO -684 (P2)
+   * FindDosEntry() - LVO -684 (V36+)
    *
-   * Get current position in a buffered file.
+   * Find a device list entry by name.
+   * Must be called with DosList locked via LockDosList().
    *
    * Parameters:
-   *   D1 = File handle
+   *   D1 = dlist - Starting DosList entry (or NULL to search from start)
+   *   D2 = name - Pointer to name string (without ':')
+   *   D3 = flags - Search control flags (LDF_DEVICES, LDF_VOLUMES, etc.)
    *
    * Returns:
-   *   D0 = Current position, or -1 on error
+   *   D0 = newdlist - Pointer to found DosList entry, or NULL if not found
+   *
+   * Official autodocs: http://amigadev.elowar.com/read/ADCD_2.1/Includes_and_Autodocs_3._guide/node0167.html
    */
-  FTell(): number {
-    const handle = this.emulator.getRegister(CPURegister.D1);
+  FindDosEntry(): number {
+    const dlistPtr = this.emulator.getRegister(CPURegister.D1);
+    const namePtr = this.emulator.getRegister(CPURegister.D2);
+    const flags = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(`[dos.library] FTell(handle=0x${handle.toString(16)})`);
+    const name = namePtr ? this.emulator.readString(namePtr) : "<null>";
+    console.log(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${name}", flags=0x${flags.toString(16)})`);
 
-    // Use Seek with offset=0, mode=OFFSET_CURRENT to get current position
-    this.emulator.setRegister(CPURegister.D1, handle);
-    this.emulator.setRegister(CPURegister.D2, 0); // offset = 0
-    this.emulator.setRegister(CPURegister.D3, 0); // OFFSET_CURRENT
-    const currentPos = this.Seek();
-
-    if (currentPos < 0) {
-      console.error(`[dos.library] FTell: Failed to get position`);
-      this.lastError = this.ERROR_SEEK_ERROR;
-      return -1;
-    }
-
-    console.log(`[dos.library] FTell: Current position = ${currentPos}`);
-    this.lastError = this.ERROR_NO_ERROR;
-    return currentPos;
+    // STUB: Proper implementation would search DosList chain
+    // For now, return NULL (not found) to prevent crashes
+    console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (not found)`);
+    this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    return 0; // NULL (not found)
   }
 
   /**
@@ -3065,6 +3071,90 @@ export class DosLibrary {
       );
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_WRITE_PROTECTED;
+    }
+  }
+
+  /**
+   * SetFileSize - Resize a file
+   * D1 = file handle (BPTR)
+   * D2 = new size (LONG)
+   * D3 = mode (OFFSET_BEGINNING=1, OFFSET_CURRENT=0, OFFSET_END=-1)
+   * Returns: D0 = new position or -1 on error
+   *
+   * Note: This is similar to Seek + truncate. The file is resized to the
+   * position specified by offset+mode, then the file pointer is positioned there.
+   */
+  SetFileSize(): void {
+    const fhBptr = this.emulator.getRegister(CPURegister.D1);
+    const newSize = this.emulator.getRegister(CPURegister.D2) | 0; // Signed 32-bit
+    const mode = this.emulator.getRegister(CPURegister.D3) | 0;    // Signed 32-bit
+
+    console.log(
+      `[dos.library] SetFileSize(fh=0x${fhBptr.toString(16)}, size=${newSize}, mode=${mode})`
+    );
+
+    // Find file handle
+    const handle = this.openFiles.get(fhBptr);
+    if (!handle) {
+      console.error(`[dos.library] SetFileSize: Invalid file handle 0x${fhBptr.toString(16)}`);
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_INVALID_LOCK;
+      return;
+    }
+
+    // Check if this is a real file (not console/NIL)
+    if (!handle.realPath) {
+      console.error(
+        `[dos.library] SetFileSize: Cannot resize console/NIL handle "${handle.name}"`
+      );
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_ACTION_NOT_KNOWN;
+      return;
+    }
+
+    try {
+      // Calculate absolute position based on mode
+      let absoluteSize: number;
+      const stats = fs.statSync(handle.realPath);
+      const currentSize = stats.size;
+
+      if (mode === -1) {
+        // OFFSET_END: size relative to end of file
+        absoluteSize = currentSize + newSize;
+      } else if (mode === 0) {
+        // OFFSET_CURRENT: size relative to current position
+        absoluteSize = handle.position + newSize;
+      } else {
+        // OFFSET_BEGINNING: absolute size
+        absoluteSize = newSize;
+      }
+
+      // Ensure size is non-negative
+      if (absoluteSize < 0) {
+        absoluteSize = 0;
+      }
+
+      // Truncate or extend the file
+      const fd = fs.openSync(handle.realPath, 'r+');
+      fs.ftruncateSync(fd, absoluteSize);
+      fs.closeSync(fd);
+
+      // Update handle position to new size
+      handle.position = absoluteSize;
+
+      console.log(
+        `[dos.library] SetFileSize: Resized ${handle.realPath} to ${absoluteSize} bytes`
+      );
+
+      this.emulator.setRegister(CPURegister.D0, absoluteSize);
+      this.lastError = this.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(
+        `[dos.library] SetFileSize: Error resizing file ${handle.realPath}:`,
+        error
+      );
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_SEEK_ERROR;
     }
   }
 
@@ -5176,7 +5266,7 @@ export class DosLibrary {
       case -132:
         this.IoErr();
         return true;
-      case -348: // SetIoErr - P2
+      case -462: // SetIoErr - CORRECTED from -348 (off by 114!)
         this.emulator.setRegister(CPURegister.D0, this.SetIoErr());
         return true;
 
@@ -5223,80 +5313,81 @@ export class DosLibrary {
         this.WaitForChar(); // Also at -204 for compatibility
         return true;
 
-      // Buffered I/O (V36+) - Phase B P1/P2 functions
-      case -588: // FOpen - P2
-        this.emulator.setRegister(CPURegister.D0, this.FOpen());
-        return true;
-      case -594: // FClose - P2
-        this.emulator.setRegister(CPURegister.D0, this.FClose());
-        return true;
-      case -600: // FRead - P2
-        this.emulator.setRegister(CPURegister.D0, this.FRead());
-        return true;
-      case -606: // FWrite - P2
-        this.emulator.setRegister(CPURegister.D0, this.FWrite());
-        return true;
-      case -612: // FGets - P1
-        this.emulator.setRegister(CPURegister.D0, this.FGets());
-        return true;
-      case -618: // FPuts - P1
-        this.emulator.setRegister(CPURegister.D0, this.FPuts());
-        return true;
-      case -636: // Flush - P2
-        this.emulator.setRegister(CPURegister.D0, this.Flush());
-        return true;
-      case -642: // FGetC - P2
+      // Buffered I/O (V36+) - CORRECTED LVO OFFSETS (was -588 to -684, now correct)
+      case -306: // FGetC - CORRECTED from -642
         this.emulator.setRegister(CPURegister.D0, this.FGetC());
         return true;
-      case -648: // FPutC - P2
+      case -312: // FPutC - CORRECTED from -648
         this.emulator.setRegister(CPURegister.D0, this.FPutC());
         return true;
-      case -678: // FSeek - P2
-        this.emulator.setRegister(CPURegister.D0, this.FSeek());
+      case -324: // FRead - CORRECTED from -600 (was conflicting with NameFromLock)
+        this.emulator.setRegister(CPURegister.D0, this.FRead());
         return true;
-      case -684: // FTell - P2
-        this.emulator.setRegister(CPURegister.D0, this.FTell());
+      case -330: // FWrite - CORRECTED from -606 (was conflicting with NameFromFH)
+        this.emulator.setRegister(CPURegister.D0, this.FWrite());
+        return true;
+      case -336: // FGets - CORRECTED from -612
+        this.emulator.setRegister(CPURegister.D0, this.FGets());
+        return true;
+      case -342: // FPuts - CORRECTED from -618
+        this.emulator.setRegister(CPURegister.D0, this.FPuts());
+        return true;
+      case -360: // FFlush - CORRECTED from -636
+        this.emulator.setRegister(CPURegister.D0, this.Flush());
+        return true;
+      case -678: // AddDosEntry - CORRECTED (was incorrectly FSeek)
+        this.emulator.setRegister(CPURegister.D0, this.AddDosEntry());
+        return true;
+      case -684: // FindDosEntry - CORRECTED (was incorrectly FTell)
+        this.emulator.setRegister(CPURegister.D0, this.FindDosEntry());
+        return true;
+      case -1302: // FOpen - CORRECTED from -588 (off by 714!)
+        this.emulator.setRegister(CPURegister.D0, this.FOpen());
+        return true;
+      case -1308: // FClose - CORRECTED from -594 (off by 714!)
+        this.emulator.setRegister(CPURegister.D0, this.FClose());
         return true;
 
-      // CLI functions (V36+) - Phase B P1 functions
-      case -462: // GetCurrentDirName - P1
-        this.GetCurrentDirName();
+      // CLI functions (V36+) - CORRECTED LVO OFFSETS
+      case -456: // SetFileSize - P2 (V36+) - CORRECT
+        this.SetFileSize();
         return true;
-      case -474: // GetProgramName - P1
-        this.GetProgramName();
+      case -564: // GetCliCurrentDirName - CORRECTED from -462
+        this.GetCurrentDirName(); // TODO: Rename function to GetCliCurrentDirName
         return true;
-      case -492: // SetProgramDir - P1
+      case -576: // GetCliProgramName - CORRECTED from -474
+        this.GetProgramName(); // TODO: Rename function to GetCliProgramName
+        return true;
+      case -594: // SetProgramDir - CORRECTED from -492 (off by 102!)
         this.SetProgramDir();
         return true;
-      case -498: // GetProgramDir - P1
+      case -600: // GetProgramDir - CORRECTED from -498 (off by 102!)
         this.GetProgramDir();
         return true;
 
-      // Phase 2: Path and error handling (V36+)
-      case -288:
-        this.FilePart();
-        return true;
-      case -294:
-        this.PathPart();
-        return true;
-      case -324:
-        this.NameFromLock();
-        return true;
-      case -330:
-        this.NameFromFH();
-        return true;
+      // Phase 2: Path and error handling (V36+) - CORRECTED LVO OFFSETS
       case -378:
         this.OpenFromLock();
         return true;
-      case -390:
+      case -402: // NameFromLock - CORRECTED from -324 (was conflicting with FRead)
+        this.NameFromLock();
+        return true;
+      case -408: // NameFromFH - CORRECTED from -330 (was conflicting with FWrite)
+        this.NameFromFH();
+        return true;
+      case -468: // Fault - CORRECTED from -390
         this.Fault();
         return true;
-      case -396:
+      case -474: // PrintFault - CORRECTED from -396
         this.PrintFault();
         return true;
-
-      // Phase 4: Critical missing functions for 68K door compatibility
-      case -300:
+      case -870: // FilePart - CORRECTED from -288 (off by 582!)
+        this.FilePart();
+        return true;
+      case -876: // PathPart - CORRECTED from -294 (off by 582!)
+        this.PathPart();
+        return true;
+      case -882: // AddPart - CORRECTED from -300 (off by 582!)
         this.AddPart();
         return true;
       case -744:
@@ -5305,27 +5396,31 @@ export class DosLibrary {
       case -750:
         this.StrToDate();
         return true;
-      case -804:
+      case -792: // CheckSignal - CORRECTED from -834 (off by 42!)
+        this.CheckSignal();
+        return true;
+      case -798: // ReadArgs - CORRECTED from -804 (off by 6)
         this.ReadArgs();
         return true;
-      case -810:
+      case -858: // FreeArgs - CORRECTED from -810 (off by 48!)
         this.FreeArgs();
+        return true;
+      case -918: // FindVar - CORRECTED from -924 (off by 6)
+        this.FindVarEnhanced();
         return true;
       case -126:
         this.CurrentDir();
         return true;
 
-      // Signals - P0 CRITICAL
-      case -210: // SetSignal
-        this.SetSignal();
+      // Directory operations - FIXED LVO offsets
+      case -210: // ParentDir (was incorrectly SetSignal - that's exec.library -306)
+        this.ParentDir();
         return true;
-
-      // Console I/O - P0 CRITICAL
-      case -216: // PutStr
-        this.PutStr();
+      case -216: // IsInteractive (was incorrectly PutStr - that's -948)
+        this.IsInteractive();
         return true;
-      case -222: // VPrintf
-        this.VPrintf();
+      case -222: // Execute (was incorrectly VPrintf - that's -954)
+        this.Execute();
         return true;
 
       // V36+ DOS object allocation
@@ -5334,11 +5429,6 @@ export class DosLibrary {
         return true;
       case -234:
         this.FreeDosObject();
-        return true;
-
-      // Signal checking - P0 CRITICAL
-      case -834: // CheckSignal
-        this.CheckSignal();
         return true;
 
       // V36+ Environment variables
@@ -5351,8 +5441,13 @@ export class DosLibrary {
       case -912:
         this.DeleteVar();
         return true;
-      case -924: // FindVar - P0 CRITICAL (Enhanced)
-        this.FindVarEnhanced();
+
+      // Console I/O - V36+ (moved from incorrect offsets -216/-222)
+      case -948: // PutStr
+        this.PutStr();
+        return true;
+      case -954: // VPrintf
+        this.VPrintf();
         return true;
 
       default:
@@ -5691,40 +5786,7 @@ export class DosLibrary {
   // ============================================================================
 
   /**
-   * SetSignal() - LVO -210 (V36+)
-   *
-   * Set and/or examine process signal flags
-   *
-   * Parameters:
-   *   D0 = newSignals (signal mask to set)
-   *   D1 = signalSet (mask of signals to change, -1 for all)
-   *
-   * Returns:
-   *   D0 = Old signal state
-   *
-   * P0 function - Critical for signal-based synchronization
-   */
-  public SetSignal(): void {
-    const newSignals = this.emulator.getRegister(CPURegister.D0);
-    const signalSet = this.emulator.getRegister(CPURegister.D1);
-
-    console.log(`[dos.library] SetSignal(newSignals=0x${newSignals.toString(16)}, signalSet=0x${signalSet.toString(16)})`);
-
-    // Get current process signal state (stubbed for BBS emulator)
-    const oldSignals = 0; // No signals pending
-
-    // In a full implementation, we would:
-    // 1. Get current process from FindTask(0)
-    // 2. Read tc_SigRecvd from Task structure (offset 0x12)
-    // 3. Modify signals according to newSignals & signalSet
-    // 4. Write back to tc_SigRecvd
-
-    this.emulator.setRegister(CPURegister.D0, oldSignals);
-    console.log(`[dos.library] SetSignal → oldSignals=0x${oldSignals.toString(16)}`);
-  }
-
-  /**
-   * PutStr() - LVO -216 (V36+)
+   * PutStr() - LVO -948 (V36+) - FIXED offset (was incorrectly at -216)
    *
    * Write a null-terminated string to stdout
    *
@@ -5760,7 +5822,7 @@ export class DosLibrary {
   }
 
   /**
-   * VPrintf() - LVO -222 (V36+)
+   * VPrintf() - LVO -954 (V36+) - FIXED offset (was incorrectly at -222)
    *
    * Formatted output to stdout (printf-style)
    *

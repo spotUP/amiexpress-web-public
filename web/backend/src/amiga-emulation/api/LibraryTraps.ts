@@ -65,9 +65,9 @@ interface LibraryVector {
  *
  * See: AEDOOR_ARCHITECTURE_FIX.md for complete details
  *
- * Original trap vectors preserved below for reference:
+ * The native approach did not work - messages sent to wrong ports.
+ * Re-enabling traps for output functions.
  */
-/*
 const AEDOOR_VECTORS: LibraryVector[] = [
   {
     offset: -30, // LVO -30 (0xFFE2)
@@ -214,7 +214,6 @@ const AEDOOR_VECTORS: LibraryVector[] = [
     },
   },
 ];
-*/
 
 /**
  * DOS.library function vectors
@@ -2840,20 +2839,20 @@ export class LibraryTraps {
   }
 
   /**
-   * Install AEDoor.library vectors - DISABLED (2025-12-15)
+   * Install AEDoor.library vectors - DISABLED (2025-12-16)
    *
    * ARCHITECTURAL FIX:
-   * We no longer install ILLEGAL instruction traps for AEDoor.library functions.
-   * Instead, we use the REAL AEDoor.library binary loaded via LibraryLoader.
+   * Use the REAL native AEDoor.library binary for ALL functions.
+   * Do NOT trap any AEDoor functions - let the native binary execute.
    *
-   * When doors call library functions (CreateComm, WriteStr, etc.):
-   * 1. CPU executes the real 68K code in the library
-   * 2. Library code calls PutMsg/GetMsg (Exec functions)
-   * 3. ExecLibrary intercepts these Exec calls (not AEDoor calls)
-   * 4. Messages are routed to XIMProtocol for BBS communication
+   * The native binary correctly creates DIFace structures and handles
+   * all door communication via XIM protocol (PutMsg/GetMsg to AEDoorPort).
    *
-   * This is the CORRECT architecture - the real library does all the work.
-   * See: AEDOOR_ARCHITECTURE_FIX.md
+   * The native library's jump table is set up by ExecLibrary.loadRealAEDoorLibrary()
+   * which creates JMP instructions at negative offsets pointing to the actual
+   * function code in the loaded library binary.
+   *
+   * See: Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm
    */
   installAEDoorVectors(): void {
     const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
@@ -2862,23 +2861,29 @@ export class LibraryTraps {
       `[LibraryTraps] ============================================`
     );
     console.log(
-      `[LibraryTraps] AEDoor.library trap installation SKIPPED`
+      `[LibraryTraps] AEDoor.library vectors: NATIVE MODE (no traps)`
     );
     console.log(
-      `[LibraryTraps] Using REAL library at base 0x${aedoorBase.toString(16)}`
+      `[LibraryTraps] Base address: 0x${aedoorBase.toString(16)}`
     );
     console.log(
-      `[LibraryTraps] Library functions will execute native 68K code`
+      `[LibraryTraps] JMP table created by ExecLibrary.loadRealAEDoorLibrary()`
     );
     console.log(
-      `[LibraryTraps] Message port I/O bridged via ExecLibrary.putMsg/getMsg`
+      `[LibraryTraps] Native 68K code will execute for all AEDoor calls`
     );
     console.log(
       `[LibraryTraps] ============================================`
     );
 
-    // NO trap installation - let the real library code execute!
-    // The CPU will JSR directly into the library's 68K code.
+    // DO NOT install traps - let native library code execute!
+    // The JMP table is set up by ExecLibrary.loadRealAEDoorLibrary()
+    // which points to the actual function code in the loaded binary.
+    //
+    // Native library uses XIM protocol:
+    // - CreateComm: FindPort("AEDoorPort"), creates reply port, sends INIT
+    // - WriteStr: Copies text to buffer, sends JH_SM (cmd=4) via PutMsg
+    // - Backend polls AEDoorPort with GetMsg, routes messages to XIMProtocol
   }
 
   /**

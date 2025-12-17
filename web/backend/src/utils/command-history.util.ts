@@ -2,17 +2,12 @@
  * Command History Utility
  * 1:1 port from AmiExpress express.e:2158-2168, 2669-2713
  * Manages command history storage, retrieval, and persistence
+ *
+ * Updated to use SQLite database for persistence instead of files
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { promisify } from 'util';
 import { BBSSession } from '../index';
-
-const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
-const mkdir = promisify(fs.mkdir);
-const access = promisify(fs.access);
+import { getDatabase } from '../handlers/command-handler/dependency-injection';
 
 // Maximum history size (express.e:2159)
 const MAX_HISTORY_SIZE = 20;
@@ -94,81 +89,86 @@ export function clearHistory(session: BBSSession): void {
 }
 
 /**
- * Load command history from disk (express.e:2669-2688)
+ * Load command history from database (express.e:2669-2688)
  * Loads user's command history from persistent storage
  * @param session - BBS session
- * @param userId - User ID (slot number)
+ * @param userId - User ID (string for database)
  */
-export async function loadHistory(session: BBSSession, userId: number): Promise<void> {
-  // express.e:31794-31795 - Check if history folder is configured
-  const historyFolder = process.env.HISTORY_FOLDER || path.join(process.cwd(), 'data', 'history');
-
-  if (!historyFolder) {
-    return; // History disabled
-  }
-
-  // express.e:2674 - Build history filename with user slot number
-  const historyFile = path.join(historyFolder, `history${userId}`);
-
+export async function loadHistory(session: BBSSession, userId: number | string): Promise<void> {
   try {
-    // express.e:2675 - Check if file exists and open
-    await access(historyFile, fs.constants.R_OK);
-    const content = await readFile(historyFile, 'utf-8');
-    const lines = content.split('\n').filter(line => line.trim().length > 0);
-
-    if (lines.length < 2) {
-      return; // Invalid file format
+    const db = getDatabase();
+    if (!db) {
+      console.log('[CommandHistory] Database not available for loadHistory');
+      return;
     }
 
-    // express.e:2676-2679 - Read historyNum and historyCycle from first 2 lines
-    session.historyIndex = parseInt(lines[0], 10);
-    session.historyCycle = parseInt(lines[1], 10);
+    // Query command history from database
+    const userIdStr = String(userId);
+    const result = await db.query(
+      'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = ?',
+      [userIdStr]
+    );
 
-    // express.e:2681-2685 - Clear and load history buffer
-    session.commandHistory = [];
-    for (let i = 2; i < lines.length; i++) {
-      if (lines[i].trim().length > 0) {
-        session.commandHistory.push(lines[i]);
+    if (!result.rows || result.rows.length === 0) {
+      // No history for this user yet - normal for new users
+      console.log(`[CommandHistory] No history found for user ${userIdStr}`);
+      return;
+    }
+
+    const row = result.rows[0];
+
+    // Restore session state from database
+    session.historyIndex = row.history_num || 0;
+    session.historyCycle = row.history_cycle || 0;
+
+    // Parse commands JSON array
+    try {
+      const commands = JSON.parse(row.commands || '[]');
+      if (Array.isArray(commands)) {
+        session.commandHistory = commands;
+        console.log(`[CommandHistory] Loaded ${commands.length} commands for user ${userIdStr}`);
       }
+    } catch {
+      // Invalid JSON - reset history
+      session.commandHistory = [];
+      console.log(`[CommandHistory] Invalid JSON for user ${userIdStr}, resetting history`);
     }
   } catch (error) {
-    // File doesn't exist or can't be read - no history to load (express.e:2675)
-    // This is normal for new users
+    // Database error - no history to load
+    console.error('[CommandHistory] Error loading history:', error);
   }
 }
 
 /**
- * Save command history to disk (express.e:2690-2713)
+ * Save command history to database (express.e:2690-2713)
  * Persists user's command history for next session
  * @param session - BBS session
- * @param userId - User ID (slot number)
+ * @param userId - User ID (string for database)
  */
-export async function saveHistory(session: BBSSession, userId: number): Promise<void> {
-  // express.e:31794-31795 - Check if history folder is configured
-  const historyFolder = process.env.HISTORY_FOLDER || path.join(process.cwd(), 'data', 'history');
-
-  if (!historyFolder) {
-    return; // History disabled
-  }
-
+export async function saveHistory(session: BBSSession, userId: number | string): Promise<void> {
   try {
-    // express.e:2695-2697 - Create history directory if it doesn't exist
-    await mkdir(historyFolder, { recursive: true });
-
-    // express.e:2699 - Build history filename with user slot number
-    const historyFile = path.join(historyFolder, `history${userId}`);
-
-    // express.e:2700-2707 - Write historyNum, historyCycle, and history entries
-    const lines: string[] = [];
-    lines.push(session.historyIndex.toString()); // express.e:2701-2702
-    lines.push(session.historyCycle.toString()); // express.e:2703-2704
-
-    // express.e:2705-2706 - Write all history entries
-    for (const command of session.commandHistory) {
-      lines.push(command);
+    const db = getDatabase();
+    if (!db) {
+      console.log('[CommandHistory] Database not available for saveHistory');
+      return;
     }
 
-    await writeFile(historyFile, lines.join('\n') + '\n', 'utf-8');
+    const userIdStr = String(userId);
+    const commandsJson = JSON.stringify(session.commandHistory);
+    const now = Math.floor(Date.now() / 1000);
+
+    // Upsert command history (insert or replace)
+    await db.run(
+      `INSERT INTO command_history (user_id, history_num, history_cycle, commands, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         history_num = excluded.history_num,
+         history_cycle = excluded.history_cycle,
+         commands = excluded.commands,
+         updated_at = excluded.updated_at`,
+      [userIdStr, session.historyIndex, session.historyCycle, commandsJson, now]
+    );
+    console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${userIdStr}`);
   } catch (error) {
     console.error('[CommandHistory] Error saving history:', error);
     // Don't throw - history save failures shouldn't break logout

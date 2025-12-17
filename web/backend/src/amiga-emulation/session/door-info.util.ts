@@ -41,26 +41,89 @@ export function populateDoorInfoStructs(
     // Node status pointer
     emulator.writeMemory32(doorInfoAddr + 0xdc, nodeStatusAddr);
     emulator.writeMemory16(doorInfoAddr + 0xe4, nodeId);
-    // Put user/location strings in-line and point to them
-    const userPtr = doorInfoAddr + 0x120;
-    const locPtr = doorInfoAddr + 0x160;
-    writeCString(emulator, userPtr, user);
-    writeCString(emulator, locPtr, loc);
-    emulator.writeMemory32(doorInfoAddr + 0x1c, userPtr);
-    emulator.writeMemory32(doorInfoAddr + 0x20, locPtr);
 
     // CLI name (mirrors AEDoor copying cli_CommandName)
     const cliPtr = doorInfoAddr + 0x1a0;
     writeCString(emulator, cliPtr, cli);
     emulator.writeMemory32(doorInfoAddr + 0x24, cliPtr);
-  } catch {
-    /* ignore */
+
+    // CRITICAL FIX: Populate BBSInfo structure at CORRECT offsets
+    // Based on AEDoor.library disassembly (aedoor_library_disasm.asm)
+    // Library expects strings at specific offsets within BBSInfo block
+    const bbsInfoAddr = doorInfoAddr + 0x46;  // BBSInfo structure offset within DIFace
+    const bbsName = "AmiExpress-Web";
+    const sysopName = "Sysop";
+
+    // Format current date and time
+    const now = new Date();
+    const dateStr = `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear()}`;
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
+    console.log(`[door-info.util] ===== BBSInfo Population Debug =====`);
+    console.log(`[door-info.util] doorInfoAddr=0x${doorInfoAddr.toString(16)} bbsInfoAddr=0x${bbsInfoAddr.toString(16)}`);
+    console.log(`[door-info.util] Writing: user="${user}" loc="${loc}" bbsName="${bbsName}"`);
+
+    // Write to BBSInfo structure at CORRECT offsets from library disassembly
+    // Library copies CLI name to BBSInfo + 0x14 (line 246-250 in disasm)
+    // Library sets DoorInfo + 0x20 → BBSInfo + 0x14 (line 262)
+    // Library sets DoorInfo + 0x1c → BBSInfo + 0xdc (line 256-260)
+    writeCString(emulator, bbsInfoAddr + 0x14, user.slice(0, 198));       // User name at +0x14 (max 198 bytes from disasm)
+    writeCString(emulator, bbsInfoAddr + 0xdc, loc.slice(0, 60));         // Location at +0xdc
+    writeCString(emulator, bbsInfoAddr + 0x120, bbsName.slice(0, 40));    // BBS name
+    writeCString(emulator, bbsInfoAddr + 0x150, dateStr.slice(0, 19));    // Date
+    writeCString(emulator, bbsInfoAddr + 0x170, timeStr.slice(0, 19));    // Time
+    writeCString(emulator, bbsInfoAddr + 0x190, sysopName.slice(0, 30));  // Sysop name
+
+    // Update DoorInfo pointers to match library expectations
+    emulator.writeMemory32(doorInfoAddr + 0x1c, bbsInfoAddr + 0xdc);  // Point to location string
+    emulator.writeMemory32(doorInfoAddr + 0x20, bbsInfoAddr + 0x14);  // Point to user name string
+
+    // VERIFY what was written
+    console.log(`[door-info.util] ===== Verification (Reading Back) =====`);
+    const readBackUser = readCString(emulator, bbsInfoAddr + 0x14, 198);
+    const readBackLoc = readCString(emulator, bbsInfoAddr + 0xdc, 60);
+    const readBackBBS = readCString(emulator, bbsInfoAddr + 0x120, 40);
+    const readBackDate = readCString(emulator, bbsInfoAddr + 0x150, 19);
+    const readBackTime = readCString(emulator, bbsInfoAddr + 0x170, 19);
+    const ptr1c = emulator.readMemory32(doorInfoAddr + 0x1c);
+    const ptr20 = emulator.readMemory32(doorInfoAddr + 0x20);
+
+    console.log(`[door-info.util] Read back from BBSInfo+0x14: "${readBackUser}" (length=${readBackUser.length})`);
+    console.log(`[door-info.util] Read back from BBSInfo+0xdc: "${readBackLoc}" (length=${readBackLoc.length})`);
+    console.log(`[door-info.util] Read back from BBSInfo+0x120: "${readBackBBS}"`);
+    console.log(`[door-info.util] Read back from BBSInfo+0x150: "${readBackDate}"`);
+    console.log(`[door-info.util] Read back from BBSInfo+0x170: "${readBackTime}"`);
+    console.log(`[door-info.util] DoorInfo+0x1c pointer: 0x${ptr1c.toString(16)} (should be 0x${(bbsInfoAddr + 0xdc).toString(16)})`);
+    console.log(`[door-info.util] DoorInfo+0x20 pointer: 0x${ptr20.toString(16)} (should be 0x${(bbsInfoAddr + 0x14).toString(16)})`);
+
+    // Verify pointers point to correct addresses
+    if (ptr1c === bbsInfoAddr + 0xdc && ptr20 === bbsInfoAddr + 0x14) {
+      console.log(`[door-info.util] ✓ Pointers are CORRECT`);
+    } else {
+      console.log(`[door-info.util] ✗ ERROR: Pointers are WRONG!`);
+    }
+
+    // Read what the pointers actually point to
+    if (ptr20 !== 0) {
+      const userViaPtr = readCString(emulator, ptr20, 198);
+      console.log(`[door-info.util] Via DoorInfo+0x20 pointer: "${userViaPtr}"`);
+    }
+    if (ptr1c !== 0) {
+      const locViaPtr = readCString(emulator, ptr1c, 60);
+      console.log(`[door-info.util] Via DoorInfo+0x1c pointer: "${locViaPtr}"`);
+    }
+
+    console.log(`[door-info.util] ===== End Verification =====`);
+  } catch (error) {
+    console.error("[door-info.util] ⚠️ Failed to populate DoorInfo/BBSInfo:", error);
   }
 
   if (!nodeStatusAddr || nodeStatusAddr < 0x100) return;
   try {
-    const userPtr = doorInfoAddr + 0x120;
-    const locPtr = doorInfoAddr + 0x160;
+    const bbsInfoAddr = doorInfoAddr + 0x46;
+    const userPtr = bbsInfoAddr + 0x14;  // User name pointer (matches library)
+    const locPtr = bbsInfoAddr + 0xdc;   // Location pointer (matches library)
+
     // Mirror pointers and values into node status block
     emulator.writeMemory32(nodeStatusAddr + 0x10, userPtr); // username ptr
     emulator.writeMemory32(nodeStatusAddr + 0x14, locPtr); // location ptr
@@ -82,4 +145,14 @@ function writeCString(emu: MoiraEmulator, addr: number, text: string): void {
     emu.writeMemory(addr + i, text.charCodeAt(i));
   }
   emu.writeMemory(addr + text.length, 0);
+}
+
+function readCString(emu: MoiraEmulator, addr: number, maxLen: number): string {
+  const bytes: number[] = [];
+  for (let i = 0; i < maxLen; i++) {
+    const byte = emu.readMemory(addr + i);
+    if (byte === 0) break;
+    bytes.push(byte);
+  }
+  return String.fromCharCode(...bytes);
 }

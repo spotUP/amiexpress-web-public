@@ -302,17 +302,24 @@ export class AmigaDoorSession {
         sentInitialMessage: this.sharedState.sentInitialMessage,
       });
 
-      // CRITICAL: Re-register door message callback now that messageHandler exists
-      // The callback was initially set in setupComponentCallbacks() but at that time
-      // messageHandler was null. The callback closure captures 'this.messageHandler',
-      // which is now non-null, so it will work correctly.
-      this.sharedState.execLibrary.setDoorMessageCallback(
-        async (portAddr: number, msgAddr: number) => {
-          if (this.messageHandler) {
-            await this.messageHandler.handleDoorMessage(portAddr, msgAddr);
-          }
-        }
-      );
+      // DISABLED: Door message callback
+      // Express.e does NOT use a callback on PutMsg. It uses a pure polling loop:
+      //   WHILE(exit=FALSE)
+      //     signals:=Wait(ximSig)
+      //     WHILE(msg:=GetMsg(mp))
+      //       processXimMsg(...)
+      //       ReplyMsg(msg)
+      //     ENDWHILE
+      //   ENDWHILE
+      // See express.e lines 4352-4370.
+      //
+      // Previously we had both:
+      // 1. Callback on PutMsg (immediate handling)
+      // 2. Polling via GetMsg in DoorLifecycleManager
+      // This caused DOUBLED OUTPUT because both paths processed the same message.
+      //
+      // Now we match express.e: only use polling via DoorLifecycleManager.pollXIMMessages()
+      this.sharedState.execLibrary.setDoorMessageCallback(null as any);
 
       // Optional watchpoints for debugging: set DOOR_WATCH_ADDRESSES as comma-separated hex
       const watchEnv = process.env.DOOR_WATCH_ADDRESSES;
@@ -369,6 +376,10 @@ export class AmigaDoorSession {
       console.log(
         `[AmigaDoorSession]   - DoorMessageHandler: IPC and message processing`
       );
+
+      // NOTE: BBSInfo structure population is now handled in door-info.util.ts
+      // It's done AFTER CreateComm() allocates the DIFace structure at the correct address
+      // See: sdk/68k/doors/diagnostic/BBSINFO_FIX_CORRECTED.md
 
       // Start door execution via Lifecycle Manager
       this.isRunning = true;
@@ -480,14 +491,10 @@ export class AmigaDoorSession {
       }
     );
 
-    // Set up door message callback
-    this.sharedState.execLibrary.setDoorMessageCallback(
-      async (portAddr: number, msgAddr: number) => {
-        if (this.messageHandler) {
-          await this.messageHandler.handleDoorMessage(portAddr, msgAddr);
-        }
-      }
-    );
+    // DISABLED: Door message callback - see comment in initializePhase5MessageHandler()
+    // Express.e uses ONLY polling, not callbacks. Matching that behavior fixes doubled output.
+    // Polling is handled by DoorLifecycleManager.pollXIMMessages()
+    this.sharedState.execLibrary.setDoorMessageCallback(null as any);
 
     // Set up library call monitoring
     this.sharedState.libraryTraps.setLibraryCallMonitor(

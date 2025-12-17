@@ -77,7 +77,7 @@ export class DoorMessageHandler {
     this.config = config;
 
     this.messageConfig = {
-      suppressCallbacks: true,
+      suppressCallbacks: false,
       enableMessageLogging: process.env.AEDOOR_MSG_LOG === "true",
       maxMessageSize: 1000,
       bufferSize: 256,

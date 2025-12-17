@@ -1681,6 +1681,23 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
     }
 
+    // Standard BBS environment variables (doors access via FindVar/GetVar)
+    const doorEnv: Record<string, string> = {
+      NODE: String(nodeNumber),
+      BBSNAME: 'AmiExpress BBS',
+      USERNAME: session.user?.username || 'Unknown',
+      USERLEVEL: String(session.user?.secLevel || 0),
+      LOCATION: session.user?.location || 'Unknown',
+      TIMELIMIT: String(session.timeRemaining || 999),
+      TIMEUSED: String(Math.floor((Date.now() - (session.loginTime || Date.now())) / 1000)),
+      CONFERENCE: String(session.currentConf || 1),
+      REALNAME: session.user?.realname || session.user?.username || 'Unknown',
+      SECSTATUS: String(session.user?.secStatus || 0),
+      PHONENUMBER: session.user?.phone || '000-000-0000',
+      BAUDRATE: session.connectionBaud ? String(session.connectionBaud) : '115200',
+      ANSIMODE: session.ansiEnabled ? '1' : '0',
+    };
+
     const doorConfig = {
       executablePath: doorPath,
       doorType: doorType,
@@ -1702,7 +1719,8 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       mimicVer: door.mimicVer,
       passParameters: door.passParameters,
       internal: door.internal,
-      toolTypes: interactiveToolTypes
+      toolTypes: interactiveToolTypes,
+      env: doorEnv,  // Environment variables
     };
 
     // Check if this is a GCC-compiled development executable (ELF format)

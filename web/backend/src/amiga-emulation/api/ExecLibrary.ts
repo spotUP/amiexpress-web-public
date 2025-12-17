@@ -317,6 +317,16 @@ export class ExecLibrary {
       )}`
     );
 
+    // CRITICAL: SAS/C compiled programs often read ExecBase from 0xC instead of 0x4!
+    // The DIAGNOSTIC door does: movea.l 0xc.l, a6 to get ExecBase
+    // Write ExecBase at 0xC as well to support this pattern
+    this.emulator.writeMemory32(0x00000C, this.execBase.address);
+    console.log(
+      `[ExecLibrary] Wrote ExecBase pointer at 0x00000C -> 0x${this.execBase.address.toString(
+        16
+      )} (SAS/C pattern)`
+    );
+
     // Create stub function for unknown system vectors
     // Some programs (like GetAnswer) load function pointers from low memory
     // We create a stub that just does RTS (return immediately)
@@ -810,9 +820,11 @@ export class ExecLibrary {
         console.log(
           `[ExecLibrary]   *** OpenLibrary trap called (LVO -552) ***`
         );
-        // FIXED: A0 = register 8 (not 12 which is A4)
-        const nameAddr = this.emulator.getRegister(8); // A0
-        const version = this.emulator.getRegister(0); // D0
+        // CORRECT: A1 = library name (register 9), D0 = version (register 0)
+        // Reference: https://wiki.amigaos.net/wiki/Exec_Libraries
+        // OpenLibrary(libName, version) -> A1=libName, D0=version, returns D0=library
+        const nameAddr = this.emulator.getRegister(9); // A1 = library name
+        const version = this.emulator.getRegister(0); // D0 = minimum version
         const libResult = this.openLibrary(nameAddr, version);
         this.emulator.setRegister(0, libResult); // Return library base in D0
         return true;
@@ -870,9 +882,9 @@ export class ExecLibrary {
         this.emulator.setRegister(0, portResult);
         return true;
 
-      case -282: // _LVOSetTaskPri (P2)
+      case -300: // _LVOSetTaskPri - CORRECTED from -282 (off by 18!)
         console.log(
-          `[ExecLibrary]   *** SetTaskPri trap called (LVO -282) ***`
+          `[ExecLibrary]   *** SetTaskPri trap called (LVO -300 CORRECTED) ***`
         );
         // FIXED: A1 = register 9 (not 13 which is A5)
         const taskAddr = this.emulator.getRegister(9); // A1
@@ -881,49 +893,49 @@ export class ExecLibrary {
         this.emulator.setRegister(0, priResult);
         return true;
 
-      // *** P1 SEMAPHORE FUNCTIONS (Phase B) ***
-      case -300: // _LVOObtainSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: ObtainSemaphore() (LVO -300) ***`);
-        const obtainSemAddr = this.emulator.getRegister(8); // A0
-        this.obtainSemaphore(obtainSemAddr);
-        return true;
-
-      case -312: // _LVOReleaseSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: ReleaseSemaphore() (LVO -312) ***`);
-        const releaseSemAddr = this.emulator.getRegister(8); // A0
-        this.releaseSemaphore(releaseSemAddr);
-        return true;
-
-      case -348: // _LVOInitSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: InitSemaphore() (LVO -348) ***`);
+      // *** SEMAPHORE FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
+      case -558: // _LVOInitSemaphore - CORRECTED from -348 (off by 210!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: InitSemaphore() (LVO -558 CORRECTED) ***`);
         const initSemAddr = this.emulator.getRegister(8); // A0
         this.initSemaphore(initSemAddr);
         return true;
 
-      case -432: // _LVOFindSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: FindSemaphore() (LVO -432) ***`);
+      case -564: // _LVOObtainSemaphore - CORRECTED from -300 (off by 264!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: ObtainSemaphore() (LVO -564 CORRECTED) ***`);
+        const obtainSemAddr = this.emulator.getRegister(8); // A0
+        this.obtainSemaphore(obtainSemAddr);
+        return true;
+
+      case -570: // _LVOReleaseSemaphore - CORRECTED from -312 (off by 258!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: ReleaseSemaphore() (LVO -570 CORRECTED) ***`);
+        const releaseSemAddr = this.emulator.getRegister(8); // A0
+        this.releaseSemaphore(releaseSemAddr);
+        return true;
+
+      case -576: // _LVOAttemptSemaphore - CORRECTED from -588 (off by 12)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AttemptSemaphore() (LVO -576 CORRECTED) ***`);
+        const attemptSemAddr = this.emulator.getRegister(8); // A0
+        const attemptResult = this.attemptSemaphore(attemptSemAddr);
+        this.emulator.setRegister(0, attemptResult);
+        return true;
+
+      case -594: // _LVOFindSemaphore - CORRECTED from -432 (off by 162!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: FindSemaphore() (LVO -594 CORRECTED) ***`);
         const findSemNameAddr = this.emulator.getRegister(9); // A1
         const findSemResult = this.findSemaphore(findSemNameAddr);
         this.emulator.setRegister(0, findSemResult);
         return true;
 
-      case -438: // _LVOAddSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: AddSemaphore() (LVO -438) ***`);
+      case -600: // _LVOAddSemaphore - CORRECTED from -438 (off by 162!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddSemaphore() (LVO -600 CORRECTED) ***`);
         const addSemAddr = this.emulator.getRegister(9); // A1
         this.addSemaphore(addSemAddr);
         return true;
 
-      case -444: // _LVORemSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: RemSemaphore() (LVO -444) ***`);
+      case -606: // _LVORemSemaphore - CORRECTED from -444 (off by 162!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemSemaphore() (LVO -606 CORRECTED) ***`);
         const remSemAddr = this.emulator.getRegister(9); // A1
         this.remSemaphore(remSemAddr);
-        return true;
-
-      case -588: // _LVOAttemptSemaphore - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: AttemptSemaphore() (LVO -588) ***`);
-        const attemptSemAddr = this.emulator.getRegister(8); // A0
-        const attemptResult = this.attemptSemaphore(attemptSemAddr);
-        this.emulator.setRegister(0, attemptResult);
         return true;
 
       case -330: // _LVOAllocSignal ✓
@@ -941,113 +953,121 @@ export class ExecLibrary {
         this.emulator.setRegister(0, oldSignals);
         return true;
 
-      // *** P1 I/O REQUEST FUNCTIONS (Phase B) ***
-      case -504: // _LVOCreateIORequest - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: CreateIORequest() (LVO -504) ***`);
+      // *** I/O REQUEST FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
+      case -456: // _LVODoIO - CORRECTED from -516 (off by 60!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: DoIO() (LVO -456 CORRECTED) ***`);
+        const doIOAddr = this.emulator.getRegister(9); // A1
+        const doIOResult = this.doIO(doIOAddr);
+        this.emulator.setRegister(0, doIOResult);
+        return true;
+
+      case -462: // _LVOSendIO - CORRECTED from -522 (off by 60!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: SendIO() (LVO -462 CORRECTED) ***`);
+        const sendIOAddr = this.emulator.getRegister(9); // A1
+        this.sendIO(sendIOAddr);
+        return true;
+
+      case -468: // _LVOCheckIO - CORRECTED from -528 (off by 60!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: CheckIO() (LVO -468 CORRECTED) ***`);
+        const checkIOAddr = this.emulator.getRegister(9); // A1
+        const checkIOResult = this.checkIO(checkIOAddr);
+        this.emulator.setRegister(0, checkIOResult);
+        return true;
+
+      case -654: // _LVOCreateIORequest - CORRECTED from -504 (off by 150!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: CreateIORequest() (LVO -654 CORRECTED) ***`);
         const createIOPort = this.emulator.getRegister(8); // A0
         const createIOSize = this.emulator.getRegister(0); // D0
         const createIOResult = this.createIORequest(createIOPort, createIOSize);
         this.emulator.setRegister(0, createIOResult);
         return true;
 
-      case -510: // _LVODeleteIORequest - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: DeleteIORequest() (LVO -510) ***`);
+      case -660: // _LVODeleteIORequest - CORRECTED from -510 (off by 150!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: DeleteIORequest() (LVO -660 CORRECTED) ***`);
         const deleteIOAddr = this.emulator.getRegister(8); // A0
         this.deleteIORequest(deleteIOAddr);
         return true;
 
-      case -516: // _LVODoIO - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: DoIO() (LVO -516) ***`);
-        const doIOAddr = this.emulator.getRegister(9); // A1
-        const doIOResult = this.doIO(doIOAddr);
-        this.emulator.setRegister(0, doIOResult);
-        return true;
-
-      case -522: // _LVOSendIO - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: SendIO() (LVO -522) ***`);
-        const sendIOAddr = this.emulator.getRegister(9); // A1
-        this.sendIO(sendIOAddr);
-        return true;
-
-      case -528: // _LVOCheckIO - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: CheckIO() (LVO -528) ***`);
-        const checkIOAddr = this.emulator.getRegister(9); // A1
-        const checkIOResult = this.checkIO(checkIOAddr);
-        this.emulator.setRegister(0, checkIOResult);
-        return true;
-
-      // *** P2 LIST OPERATIONS (Phase C) ***
-      case -234: // _LVORemHead - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: RemHead() (LVO -234) ***`);
-        const remHeadList = this.emulator.getRegister(8); // A0
-        const remHeadResult = this.remHead(remHeadList);
-        this.emulator.setRegister(0, remHeadResult);
-        return true;
-
-      case -240: // _LVORemTail - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: RemTail() (LVO -240) ***`);
-        const remTailList = this.emulator.getRegister(8); // A0
-        const remTailResult = this.remTail(remTailList);
-        this.emulator.setRegister(0, remTailResult);
-        return true;
-
-      case -246: // _LVORemove - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: Remove() (LVO -246) ***`);
-        const removeNode = this.emulator.getRegister(9); // A1
-        this.remove(removeNode);
-        return true;
-
-      case -252: // _LVOInsert - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: Insert() (LVO -252) ***`);
+      // *** LIST OPERATIONS - CORRECTED LVO OFFSETS ***
+      case -234: // _LVOInsert - CORRECTED from -252 (REVERSED with Remove!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Insert() (LVO -234 CORRECTED) ***`);
         const insertList = this.emulator.getRegister(8); // A0
         const insertNode = this.emulator.getRegister(9); // A1
         const insertAfter = this.emulator.getRegister(10); // A2
         this.insert(insertList, insertNode, insertAfter);
         return true;
 
-      case -258: // _LVOAddHead - P2
-        console.log(`[ExecLibrary] *** INTERCEPTED: AddHead() (LVO -258) ***`);
+      case -240: // _LVOAddHead - CORRECTED from -258 (off by 18!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddHead() (LVO -240 CORRECTED) ***`);
         const addHeadList = this.emulator.getRegister(8); // A0
         const addHeadNode = this.emulator.getRegister(9); // A1
         this.addHead(addHeadList, addHeadNode);
         return true;
 
-      case -264: // _LVOAddTail - P2
-        console.log(`[ExecLibrary] *** INTERCEPTED: AddTail() (LVO -264) ***`);
+      case -246: // _LVOAddTail - CORRECTED from -264 (off by 18!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AddTail() (LVO -246 CORRECTED) ***`);
         const addTailList = this.emulator.getRegister(8); // A0
         const addTailNode = this.emulator.getRegister(9); // A1
         this.addTail(addTailList, addTailNode);
         return true;
 
-      // *** P2 TASK CONTROL & MEMORY (Phase C) ***
-      case -162: // _LVODisable - P2
-        console.log(`[ExecLibrary] *** INTERCEPTED: Disable() (LVO -162) ***`);
+      case -252: // _LVORemove - CORRECTED from -246 (off by 6)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Remove() (LVO -252 CORRECTED) ***`);
+        const removeNode = this.emulator.getRegister(9); // A1
+        this.remove(removeNode);
+        return true;
+
+      case -258: // _LVORemHead - CORRECTED from -234 (off by 24!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemHead() (LVO -258 CORRECTED) ***`);
+        const remHeadList = this.emulator.getRegister(8); // A0
+        const remHeadResult = this.remHead(remHeadList);
+        this.emulator.setRegister(0, remHeadResult);
+        return true;
+
+      case -264: // _LVORemTail - CORRECTED from -240 (off by 24!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: RemTail() (LVO -264 CORRECTED) ***`);
+        const remTailList = this.emulator.getRegister(8); // A0
+        const remTailResult = this.remTail(remTailList);
+        this.emulator.setRegister(0, remTailResult);
+        return true;
+
+      // *** INTERRUPT CONTROL & MEMORY - CORRECTED LVO OFFSETS ***
+      case -120: // _LVODisable - CORRECTED from -162 (off by 42!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Disable() (LVO -120 CORRECTED) ***`);
         this.disable();
         return true;
 
-      case -168: // _LVOEnable - P2
-        console.log(`[ExecLibrary] *** INTERCEPTED: Enable() (LVO -168) ***`);
+      case -126: // _LVOEnable - CORRECTED from -168 (off by 42!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Enable() (LVO -126 CORRECTED) ***`);
         this.enable();
         return true;
 
-      case -174: // _LVOForbid - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: Forbid() (LVO -174) ***`);
+      case -132: // _LVOForbid - CORRECTED from -174 (off by 42!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Forbid() (LVO -132 CORRECTED) ***`);
         this.forbid();
         return true;
 
-      case -180: // _LVOPermit - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: Permit() (LVO -180) ***`);
+      case -138: // _LVOPermit - CORRECTED from -180 (off by 42!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Permit() (LVO -138 CORRECTED) ***`);
         this.permit();
         return true;
 
-      case -210: // _LVOAvailMem - P1
-        console.log(`[ExecLibrary] *** INTERCEPTED: AvailMem() (LVO -210) ***`);
+      case -216: // _LVOAvailMem - CORRECTED from -210 (off by 6, was conflicting with FreeMem!)
+        console.log(`[ExecLibrary] *** INTERCEPTED: AvailMem() (LVO -216 CORRECTED) ***`);
         const availMemReq = this.emulator.getRegister(1); // D1
         const availMemResult = this.availMem(availMemReq);
         this.emulator.setRegister(0, availMemResult);
         return true;
 
       // *** CRITICAL MISSING CASES FOR XIM DOORS ***
+      case -366: // _LVOPutMsg - CRITICAL for native AEDoor.library!
+        console.log(`[ExecLibrary] *** INTERCEPTED: PutMsg() (LVO -366) ***`);
+        // A0 = port address, A1 = message address
+        const putMsgPort = this.emulator.getRegister(8); // A0
+        const putMsgMsg = this.emulator.getRegister(9); // A1
+        this.putMsg(putMsgPort, putMsgMsg);
+        return true;
+
       case -372: // _LVOGetMsg - used by XIM doors
         console.log(`[ExecLibrary] *** INTERCEPTED: GetMsg() (LVO -372) ***`);
         // FIXED: A0 = register 8 (not 12 which is A4)
@@ -1064,21 +1084,21 @@ export class ExecLibrary {
         this.emulator.setRegister(0, waitResult);
         return true;
 
-      // *** P0 CRITICAL MEMORY FUNCTIONS ***
-      case -474: // _LVOCopyMem - Fast memory copy
-        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMem() (LVO -474) ***`);
-        const copySource = this.emulator.getRegister(8); // A0
-        const copyDest = this.emulator.getRegister(9); // A1
-        const copyLength = this.emulator.getRegister(0); // D0
-        this.copyMem(copySource, copyDest, copyLength);
+      // *** MEMORY COPY FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
+      case -624: // _LVOCopyMem - CORRECTED from -474 (duplicate removed)
+        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMem() (LVO -624 CORRECT) ***`);
+        const copySource624 = this.emulator.getRegister(8); // A0
+        const copyDest624 = this.emulator.getRegister(9); // A1
+        const copyLength624 = this.emulator.getRegister(0); // D0
+        this.copyMem(copySource624, copyDest624, copyLength624);
         return true;
 
-      case -480: // _LVOCopyMemQuick - Quick memory copy (aligned)
-        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMemQuick() (LVO -480) ***`);
-        const quickSource = this.emulator.getRegister(8); // A0
-        const quickDest = this.emulator.getRegister(9); // A1
-        const quickLength = this.emulator.getRegister(0); // D0
-        this.copyMemQuick(quickSource, quickDest, quickLength);
+      case -630: // _LVOCopyMemQuick - CORRECTED from -480 (duplicate removed)
+        console.log(`[ExecLibrary] *** INTERCEPTED: CopyMemQuick() (LVO -630 CORRECT) ***`);
+        const quickSource630 = this.emulator.getRegister(8); // A0
+        const quickDest630 = this.emulator.getRegister(9); // A1
+        const quickLength630 = this.emulator.getRegister(0); // D0
+        this.copyMemQuick(quickSource630, quickDest630, quickLength630);
         return true;
 
       case -684: // _LVOAllocVec - P0 CRITICAL (CORRECTED from -552)
@@ -1220,7 +1240,20 @@ export class ExecLibrary {
           this.libraries.set("aedoor.library", lib);
           this.writeLibraryToMemory(lib);
 
-          console.log(`[ExecLibrary] ✅ AEDoor.library registered in library list`);
+          // CRITICAL: Write system library bases that native AEDoor code expects!
+          // Native code does: movea.l 0x22(a6), a6 to get ExecBase
+          const execBaseAddr = this.execBase.address;
+          const dosBase = this.getLibraryBase("dos.library");
+
+          // lib+0x22 (34) = ExecBase - CRITICAL for PutMsg/GetMsg etc
+          this.emulator.writeMemory32(loadedLib.baseAddress + 0x22, execBaseAddr);
+          // lib+0x26 (38) = dos.library base
+          this.emulator.writeMemory32(loadedLib.baseAddress + 0x26, dosBase || 0);
+
+          console.log(`[ExecLibrary] CRITICAL: Set lib+0x22 = ExecBase 0x${execBaseAddr.toString(16)}`);
+          console.log(`[ExecLibrary] CRITICAL: Set lib+0x26 = dos.library 0x${(dosBase || 0).toString(16)}`);
+
+          console.log(`[ExecLibrary] AEDoor.library registered in library list`);
           console.log(`[ExecLibrary] ============================================`);
           return true;
         } else {
@@ -1272,6 +1305,52 @@ export class ExecLibrary {
         this.emulator.writeMemory(destAddr + i, binary[codeStart + i]);
       }
 
+      // CRITICAL: Create JMP table at negative offsets for native library calls
+      // When a door does JSR -84(A6), it needs a JMP instruction at base-84
+      // that points to the actual WriteStr code in the loaded library.
+      //
+      // LVO to file offset mapping (from disassembly analysis):
+      // Memory address = destAddr + (fileOffset - codeStart)
+      const aedoorFunctionTable: Array<{ lvo: number; fileOffset: number; name: string }> = [
+        // Standard library functions
+        { lvo: -6,   fileOffset: 0x100, name: "Open" },
+        { lvo: -12,  fileOffset: 0x10E, name: "Close" },
+        { lvo: -18,  fileOffset: 0x124, name: "Expunge" },
+        { lvo: -24,  fileOffset: 0x16C, name: "Reserved" },
+        // AEDoor.library specific functions
+        { lvo: -30,  fileOffset: 0x3F0, name: "CreateComm" },
+        { lvo: -36,  fileOffset: 0x278, name: "DeleteComm" },
+        { lvo: -42,  fileOffset: 0x388, name: "SendCmd" },
+        { lvo: -48,  fileOffset: 0x38E, name: "SendStrCmd" },
+        { lvo: -54,  fileOffset: 0x394, name: "SendDataCmd" },
+        { lvo: -60,  fileOffset: 0x39A, name: "SendStrDataCmd" },
+        { lvo: -66,  fileOffset: 0x3A0, name: "GetData" },
+        { lvo: -72,  fileOffset: 0x3A6, name: "GetString" },
+        { lvo: -78,  fileOffset: 0x338, name: "Prompt" },
+        { lvo: -84,  fileOffset: 0x350, name: "WriteStr" },  // sendmessage() uses this!
+        { lvo: -90,  fileOffset: 0x350, name: "ShowGFile" }, // fallback to WriteStr
+        { lvo: -96,  fileOffset: 0x350, name: "ShowFile" },  // fallback to WriteStr
+        { lvo: -102, fileOffset: 0x394, name: "SetDT" },
+        { lvo: -108, fileOffset: 0x38E, name: "GetDT" },
+        { lvo: -114, fileOffset: 0x3A6, name: "GetStr" },
+        { lvo: -120, fileOffset: 0x3C0, name: "CopyStr" },
+        { lvo: -126, fileOffset: 0x3D6, name: "HotKey" },
+        { lvo: -132, fileOffset: 0x3FE, name: "PreCreateComm" },
+        { lvo: -138, fileOffset: 0x278, name: "PostDeleteComm" }, // same as DeleteComm
+      ];
+
+      console.log(`[ExecLibrary] Creating native JMP table at negative offsets:`);
+      for (const func of aedoorFunctionTable) {
+        const targetAddr = destAddr + (func.fileOffset - codeStart);
+        const jmpAddr = destAddr + func.lvo; // Negative offset from base
+
+        // Write JMP.L instruction (0x4EF9) followed by target address
+        this.emulator.writeMemory16(jmpAddr, 0x4EF9);
+        this.emulator.writeMemory32(jmpAddr + 2, targetAddr);
+
+        console.log(`[ExecLibrary]   LVO ${func.lvo} (${func.name}): JMP at 0x${jmpAddr.toString(16)} -> 0x${targetAddr.toString(16)}`);
+      }
+
       const lib: LibraryNode = {
         address: destAddr,
         name: "AEDoor.library",
@@ -1285,7 +1364,21 @@ export class ExecLibrary {
       this.libraries.set("aedoor.library", lib);
       this.writeLibraryToMemory(lib);
 
-      console.log(`[ExecLibrary] ⚠️  Fallback load complete (basic, no relocations)`);
+      // CRITICAL: Write system library bases that native AEDoor code expects!
+      // Native code does: movea.l 0x22(a6), a6 to get ExecBase
+      // These offsets are AEDoor-specific, not standard Library fields
+      const execBaseAddr = this.execBase.address;
+      const dosBase = this.getLibraryBase("dos.library");
+
+      // lib+0x22 (34) = ExecBase - CRITICAL for PutMsg/GetMsg etc
+      this.emulator.writeMemory32(destAddr + 0x22, execBaseAddr);
+      // lib+0x26 (38) = dos.library base
+      this.emulator.writeMemory32(destAddr + 0x26, dosBase || 0);
+
+      console.log(`[ExecLibrary] CRITICAL: Set lib+0x22 = ExecBase 0x${execBaseAddr.toString(16)}`);
+      console.log(`[ExecLibrary] CRITICAL: Set lib+0x26 = dos.library 0x${(dosBase || 0).toString(16)}`);
+
+      console.log(`[ExecLibrary] Fallback load complete (basic, no relocations)`);
       console.log(`[ExecLibrary]   Base: 0x${destAddr.toString(16)}, Size: ${codeSize} bytes`);
       console.log(`[ExecLibrary] ============================================`);
       return true;
@@ -1545,15 +1638,27 @@ export class ExecLibrary {
       this.emulator.writeMemory32(portAddr + 10, namePtr); // ln_Name
       this.emulator.writeMemory(portAddr + 14, 0x02); // mp_Flags = PA_SIGNAL
 
-      // Allocate a signal bit; fall back to bit 1
-      let sigBit = this.AllocSignal(-1);
-      if (sigBit < 0 || sigBit > 31) {
-        sigBit = 1;
+      // Read the signal bit the door already set - DON'T allocate a new one!
+      // The door's CreatePort() already called AllocSignal() and set mp_SigBit.
+      // If we allocate a new bit here, Wait() will be waiting for the door's bit
+      // but Signal() will signal our new bit - no match, door hangs!
+      let sigBit = this.emulator.readMemory(portAddr + 15);
+      if (sigBit === 0 || sigBit > 31) {
+        // Only allocate if door didn't set one
+        sigBit = this.AllocSignal(-1);
+        if (sigBit < 0 || sigBit > 31) {
+          sigBit = 1;
+        }
+        this.emulator.writeMemory(portAddr + 15, sigBit);
       }
-      this.emulator.writeMemory(portAddr + 15, sigBit);
 
-      // Set SigTask to current door task
-      this.emulator.writeMemory32(portAddr + 16, this.currentTask.address);
+      // Read SigTask from memory - door may have set it via FindTask(NULL)
+      // Only set to current task if door didn't set one
+      let sigTask = this.emulator.readMemory32(portAddr + 16);
+      if (sigTask === 0) {
+        sigTask = this.currentTask.address;
+        this.emulator.writeMemory32(portAddr + 16, sigTask);
+      }
 
       // Empty message list
       this.emulator.writeMemory32(portAddr + 20, portAddr + 24); // lh_Head -> Tail
@@ -1567,7 +1672,7 @@ export class ExecLibrary {
         name,
         messages: [],
         sigBit,
-        sigTask: this.currentTask.address,
+        sigTask,
         signaled: false,
       };
 
@@ -1575,7 +1680,7 @@ export class ExecLibrary {
       console.log(
         `[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(16)} (${
           name || "private"
-        }), sigBit=${sigBit}, sigTask=0x${this.currentTask.address.toString(16)}`
+        }), sigBit=${sigBit}, sigTask=0x${sigTask.toString(16)}`
       );
       return port;
     } catch (error) {
@@ -2678,7 +2783,7 @@ export class ExecLibrary {
   // ============================================================================
 
   /**
-   * CopyMem() - LVO -474 (V36+)
+   * CopyMem() - LVO -624 (V36+) - CORRECTED (was incorrectly at -474)
    *
    * Fast memory copy (aligned, forward copy)
    *
@@ -2710,7 +2815,7 @@ export class ExecLibrary {
   }
 
   /**
-   * CopyMemQuick() - LVO -480 (V36+)
+   * CopyMemQuick() - LVO -630 (V36+) - CORRECTED (was incorrectly at -480)
    *
    * Quick memory copy (assumes longword aligned, multiple of 4)
    *

@@ -138,10 +138,9 @@ export class AEDoorLibrary {
    * CreateComm() - LVO -30
    *
    * Establishes the DIFace, reply port, and jhMessage structure.
-   */
-  /**
-   * @deprecated UNUSED - Traps disabled, real library executes now
-   * @see AEDOOR_ARCHITECTURE_FIX.md
+   *
+   * CRITICAL FIX 2025-12-16: Re-enabled trap to populate BBSInfo for native doors
+   * Previously disabled, causing user data queries to return garbage.
    */
   createComm(): number {
     const nodeId = this.resolveNodeId();
@@ -249,12 +248,83 @@ export class AEDoorLibrary {
     this.interfaces.set(difaceAddr, state);
     this.emulator.setRegister(0, difaceAddr);
 
+    // CRITICAL FIX 2025-12-16: Populate BBSInfo with actual user data
+    // This ensures getname(), getlocation(), getbbsname(), GetTheDate(), GetTheTime()
+    // return correct values instead of garbage
+    this.populateBBSInfo(difaceAddr);
+
     // Immediately post the initial AEDoor-style message so doors that expect
     // a startup notification (e.g., XIM doors) see traffic on their reply port
     // without needing an explicit host nudge.
     this.sendInitialReadyMessage(state);
 
     return difaceAddr;
+  }
+
+  /**
+   * Populate BBSInfo structure with actual user data
+   *
+   * CRITICAL FIX 2025-12-16: This method populates the BBSInfo structure
+   * that AEDoor.library's query functions (getname, getlocation, getbbsname,
+   * GetTheDate, GetTheTime) read from.
+   *
+   * Without this, doors see garbage data for user information.
+   *
+   * @param difaceAddr - Address of DIFace structure
+   */
+  private populateBBSInfo(difaceAddr: number): void {
+    console.log(`[AEDoorLibrary] Populating BBSInfo at DIFace 0x${difaceAddr.toString(16)}`);
+
+    // BBSInfo is at DIFace + 0x46
+    const bbsInfoAddr = difaceAddr + 0x46;
+
+    // Get user data from session
+    const username = this.sessionData?.user?.username || 'Guest';
+    const location = this.sessionData?.user?.location || 'Unknown';
+    const bbsName = 'AmiExpress-Web';
+
+    // Get current date and time
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    }).replace(/\//g, '-'); // MM-DD-YYYY
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }); // HH:MM:SS
+
+    // Write to BBSInfo structure at known offsets
+    // Based on AEDoor.library disassembly and XIM system-commands.ts
+    this.writeCString(bbsInfoAddr + 0x14, username, 198);  // User name at +0x14
+    this.writeCString(bbsInfoAddr + 0xdc, location, 60);   // Location at +0xdc
+    this.writeCString(bbsInfoAddr + 0x120, bbsName, 40);   // BBS name at +0x120
+    this.writeCString(bbsInfoAddr + 0x150, dateStr, 19);   // Date at +0x150
+    this.writeCString(bbsInfoAddr + 0x170, timeStr, 19);   // Time at +0x170
+
+    // Update DoorInfo pointers to point to BBSInfo data
+    this.emulator.writeMemory32(difaceAddr + 0x1c, bbsInfoAddr + 0xdc);  // Location ptr
+    this.emulator.writeMemory32(difaceAddr + 0x20, bbsInfoAddr + 0x14);  // User name ptr
+
+    console.log(`[AEDoorLibrary] BBSInfo populated:`);
+    console.log(`[AEDoorLibrary]   Username: "${username}" at 0x${(bbsInfoAddr + 0x14).toString(16)}`);
+    console.log(`[AEDoorLibrary]   Location: "${location}" at 0x${(bbsInfoAddr + 0xdc).toString(16)}`);
+    console.log(`[AEDoorLibrary]   BBS Name: "${bbsName}" at 0x${(bbsInfoAddr + 0x120).toString(16)}`);
+    console.log(`[AEDoorLibrary]   Date: "${dateStr}" at 0x${(bbsInfoAddr + 0x150).toString(16)}`);
+    console.log(`[AEDoorLibrary]   Time: "${timeStr}" at 0x${(bbsInfoAddr + 0x170).toString(16)}`);
+
+    // Read back verification
+    const verifyUser = this.readCString(bbsInfoAddr + 0x14, 198);
+    const verifyLoc = this.readCString(bbsInfoAddr + 0xdc, 60);
+    const verifyBbs = this.readCString(bbsInfoAddr + 0x120, 40);
+
+    console.log(`[AEDoorLibrary] Verification read-back:`);
+    console.log(`[AEDoorLibrary]   Username: "${verifyUser}"`);
+    console.log(`[AEDoorLibrary]   Location: "${verifyLoc}"`);
+    console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
   }
 
   /**
@@ -409,13 +479,20 @@ export class AEDoorLibrary {
   /**
    * WriteStr() - LVO -84
    */
-  /**
-   * @deprecated UNUSED - Traps disabled, real library executes now
-   */
   writeStr(): number {
     const state = this.getStateFromA1();
-    if (!state) return 0;
 
+    // Handle direct calls from vbcc/C doors (no XIM state)
+    if (!state) {
+      const stringAddr = this.emulator.getRegister(8); // A0 = text pointer
+      const text = this.readCString(stringAddr, 4096);
+      console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
+      this.socket.emit("ansi-output", text);
+      this.emulator.setRegister(0, 0); // Success
+      return 0;
+    }
+
+    // Handle XIM doors with state
     const stringAddr = this.emulator.getRegister(8);
     const mode = this.emulator.getRegister(1); // 0 = NOLF, 1 = LF
     let text = this.readCString(stringAddr, state.stringCapacity);
@@ -597,6 +674,470 @@ export class AEDoorLibrary {
 
     this.emulator.setRegister(0, 1); // Success
     return 0;
+  }
+
+  // ============================================================================
+  // NEW LVO IMPLEMENTATIONS - Based on disassembly analysis
+  // ============================================================================
+
+  /**
+   * SetNodeData (LVO -42, Address 0x02b2)
+   * Sets node-specific data at BBSInfo+0xdc
+   *
+   * Input: A1 = DoorInfo pointer, D1 = data value
+   * Output: none
+   */
+  setNodeData(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const dataValue = this.emulator.getRegister(1); // D1
+    const bbsInfoAddr = state.bbsInfoAddr;
+
+    // Write data to BBSInfo+0xdc (location area)
+    this.emulator.writeMemory32(bbsInfoAddr + 0xdc, dataValue);
+
+    console.log(`[AEDoorLibrary] SetNodeData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
+  }
+
+  /**
+   * SetStringData (LVO -48, Address 0x02c2)
+   * Sets string data in BBSInfo structure
+   *
+   * Input: A1 = DoorInfo pointer, D1 = data value
+   * Output: none
+   */
+  setStringData(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const dataValue = this.emulator.getRegister(1); // D1
+    const bbsInfoAddr = state.bbsInfoAddr;
+
+    // Write data to BBSInfo+0xdc
+    this.emulator.writeMemory32(bbsInfoAddr + 0xdc, dataValue);
+
+    console.log(`[AEDoorLibrary] SetStringData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
+  }
+
+  /**
+   * CopyUserString (LVO -54, Address 0x02d2)
+   * Copies user string to BBSInfo+0x14
+   *
+   * Input: A1 = DoorInfo pointer, A0 = source string pointer (optional)
+   * Output: none
+   */
+  copyUserString(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const sourceAddr = this.emulator.getRegister(8); // A0
+    const bbsInfoAddr = state.bbsInfoAddr;
+    const destAddr = bbsInfoAddr + 0x14; // User name location
+
+    if (sourceAddr && sourceAddr !== 0) {
+      // Copy string from source to BBSInfo+0x14
+      const sourceStr = this.readCString(sourceAddr, 198);
+      this.writeCString(destAddr, sourceStr, 198);
+      console.log(`[AEDoorLibrary] CopyUserString: copied "${sourceStr}" to BBSInfo+0x14`);
+    }
+  }
+
+  /**
+   * SendControlMessage (LVO -60, Address 0x02f2)
+   * Sends control message to AEDoorPort
+   *
+   * Input: A1 = DoorInfo pointer, D0 = command
+   * Output: none
+   */
+  sendControlMessage(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const command = this.emulator.getRegister(0); // D0
+    const bbsInfoAddr = state.bbsInfoAddr;
+
+    // Write command to BBSInfo+0xe0
+    this.emulator.writeMemory32(bbsInfoAddr + 0xe0, command);
+
+    // Send message to BBS port
+    this.execLibrary.putMsg(state.bbsPortAddr, state.messageAddr);
+
+    console.log(`[AEDoorLibrary] SendControlMessage: command=0x${command.toString(16)}`);
+  }
+
+  /**
+   * GetUserPtr (LVO -66, Address 0x032c)
+   * Returns pointer at DoorInfo+0x1c (location pointer)
+   *
+   * Based on disassembly line 328:
+   *   0x0000032c: move.l 0x1c(a1), d0
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: D0 = pointer to location string
+   */
+  getUserPtr(): number {
+    const state = this.getStateFromA1();
+    if (!state) return 0;
+
+    // Read pointer at DoorInfo+0x1c
+    const ptr = this.emulator.readMemory32(state.difaceAddr + 0x1c);
+    this.emulator.setRegister(0, ptr);
+
+    console.log(`[AEDoorLibrary] GetUserPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x1c`);
+    return ptr;
+  }
+
+  /**
+   * GetLocationPtr (LVO -72, Address 0x0332)
+   * Returns pointer at DoorInfo+0x20 (user name pointer)
+   *
+   * Based on disassembly line 330:
+   *   0x00000332: move.l 0x20(a1), d0
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: D0 = pointer to user name string
+   */
+  getLocationPtr(): number {
+    const state = this.getStateFromA1();
+    if (!state) return 0;
+
+    // Read pointer at DoorInfo+0x20
+    const ptr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    this.emulator.setRegister(0, ptr);
+
+    console.log(`[AEDoorLibrary] GetLocationPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x20`);
+    return ptr;
+  }
+
+  /**
+   * GetUserName (LVO -78, Address 0x0338)
+   * Gets user name string
+   *
+   * Based on disassembly lines 332-349:
+   *   - Calls SetStringData with command 5
+   *   - Checks if BBSInfo+0xdc contains valid data (not 0xffffffff)
+   *   - Returns pointer at DoorInfo+0x20 if valid, else 0
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: D0 = pointer to user name string (or 0)
+   */
+  getUserName(): number {
+    const state = this.getStateFromA1();
+    if (!state) return 0;
+
+    // Call SetStringData with command 5
+    this.emulator.setRegister(0, 5);
+    this.setStringData();
+
+    // Check if BBSInfo+0xdc contains valid data
+    const locationPtr = this.emulator.readMemory32(state.difaceAddr + 0x1c);
+    if (locationPtr !== 0) {
+      const checkValue = this.emulator.readMemory32(locationPtr);
+      if (checkValue === 0xffffffff) {
+        // Invalid - return 0
+        this.emulator.setRegister(0, 0);
+        console.log(`[AEDoorLibrary] GetUserName: invalid data (0xffffffff), returning 0`);
+        return 0;
+      }
+    }
+
+    // Return pointer at DoorInfo+0x20 (user name)
+    const userNamePtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    this.emulator.setRegister(0, userNamePtr);
+
+    console.log(`[AEDoorLibrary] GetUserName: returning 0x${userNamePtr.toString(16)}`);
+    return userNamePtr;
+  }
+
+  /**
+   * WriteUserData (LVO -84, Address 0x0350)
+   * Writes user data with buffering
+   *
+   * Input: A1 = DoorInfo pointer, A0 = string pointer, D1 = flags
+   * Output: none
+   */
+  writeUserData(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const stringAddr = this.emulator.getRegister(8); // A0
+    const flags = this.emulator.getRegister(1); // D1
+    const text = this.readCString(stringAddr, 198);
+
+    // Copy to BBSInfo+0x20 (user data area)
+    const userPtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    this.writeCString(userPtr, text, 198);
+
+    console.log(`[AEDoorLibrary] WriteUserData: wrote "${text}" with flags=0x${flags.toString(16)}`);
+  }
+
+  /**
+   * FlushBuffer (LVO -90, Address 0x0388)
+   * Flushes write buffer (sets command 4, data 0)
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: none
+   */
+  flushBuffer(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    // Set command 4, data 0
+    this.emulator.setRegister(0, 4);
+    this.emulator.setRegister(1, 0);
+    this.setStringData();
+
+    console.log(`[AEDoorLibrary] FlushBuffer: flushed buffer`);
+  }
+
+  /**
+   * SetBBSName (LVO -96, Address 0x038e)
+   * Sets BBS name string (command 7)
+   *
+   * Input: A1 = DoorInfo pointer, A0 = string pointer
+   * Output: none
+   */
+  setBBSName(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const stringAddr = this.emulator.getRegister(8); // A0
+
+    // Call SetStringData with command 7
+    this.emulator.setRegister(0, 7);
+    this.copyUserString();
+
+    console.log(`[AEDoorLibrary] SetBBSName: set BBS name`);
+  }
+
+  /**
+   * SetDateTime (LVO -102, Address 0x0394)
+   * Sets date/time strings (command 8)
+   *
+   * Input: A1 = DoorInfo pointer, A0 = string pointer
+   * Output: none
+   */
+  setDateTime(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const stringAddr = this.emulator.getRegister(8); // A0
+
+    // Call SetStringData with command 8
+    this.emulator.setRegister(0, 8);
+    this.copyUserString();
+
+    console.log(`[AEDoorLibrary] SetDateTime: set date/time`);
+  }
+
+  /**
+   * ClearNodeFlags (LVO -108, Address 0x039a)
+   * Clears node status flags (sets to 0)
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: none
+   */
+  clearNodeFlags(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    // Set data to 0
+    this.emulator.setRegister(1, 0);
+    this.setStringData();
+
+    console.log(`[AEDoorLibrary] ClearNodeFlags: cleared flags`);
+  }
+
+  /**
+   * SetNodeFlags (LVO -114, Address 0x03a0)
+   * Sets node status flags (sets to 1)
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: none
+   */
+  setNodeFlags(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    // Set data to 1
+    this.emulator.setRegister(1, 1);
+    this.setStringData();
+
+    console.log(`[AEDoorLibrary] SetNodeFlags: set flags`);
+  }
+
+  /**
+   * GetNodeStatus (LVO -120, Address 0x03a6)
+   * Gets node status (checks flags, returns location or user pointer)
+   *
+   * Based on disassembly lines 378-387:
+   *   - Calls SetStringData with command 0
+   *   - Checks if BBSInfo+0xdc contains valid data
+   *   - Returns DoorInfo+0x20 if valid, else 0
+   *
+   * Input: A1 = DoorInfo pointer
+   * Output: D0 = pointer to user/location string (or 0)
+   */
+  getNodeStatus(): number {
+    const state = this.getStateFromA1();
+    if (!state) return 0;
+
+    // Call SetStringData with command 0
+    this.emulator.setRegister(0, 0);
+    this.setStringData();
+
+    // Check if BBSInfo+0xdc contains valid data
+    const locationPtr = this.emulator.readMemory32(state.difaceAddr + 0x1c);
+    if (locationPtr !== 0) {
+      const checkValue = this.emulator.readMemory32(locationPtr);
+      if (checkValue === 0xffffffff) {
+        // Invalid - return 0
+        this.emulator.setRegister(0, 0);
+        console.log(`[AEDoorLibrary] GetNodeStatus: invalid data, returning 0`);
+        return 0;
+      }
+    }
+
+    // Return pointer at DoorInfo+0x20
+    const statusPtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    this.emulator.setRegister(0, statusPtr);
+
+    console.log(`[AEDoorLibrary] GetNodeStatus: returning 0x${statusPtr.toString(16)}`);
+    return statusPtr;
+  }
+
+  /**
+   * CopyLocationString (LVO -126, Address 0x03c0)
+   * Copies location string from DoorInfo+0x20 to output buffer
+   *
+   * Based on disassembly lines 388-396:
+   *   0x000003c0: move.l a1, -(a7)           ; Save A1
+   *   0x000003c2: movea.l 0x20(a1), a1      ; A1 = pointer at DoorInfo+0x20
+   *   0x000003c6: move.w 0xc6, d0           ; Max 198 bytes
+   *   0x000003ca: move.b (a1)+, (a0)+       ; Copy byte
+   *   0x000003cc: dbeq d0, 0x3ca            ; Loop until null or count
+   *   0x000003d0: clr.b (a0)                ; Null terminate
+   *   0x000003d2: movea.l (a7)+, a1         ; Restore A1
+   *
+   * Input: A1 = DoorInfo pointer, A0 = output buffer
+   * Output: String copied to buffer
+   */
+  copyLocationString(): void {
+    const state = this.getStateFromA1();
+    if (!state) return;
+
+    const outputAddr = this.emulator.getRegister(8); // A0
+    if (outputAddr === 0) return;
+
+    // Get pointer at DoorInfo+0x20
+    const sourcePtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    if (sourcePtr === 0) return;
+
+    // Copy up to 198 bytes (0xc6)
+    const sourceStr = this.readCString(sourcePtr, 198);
+    this.writeCString(outputAddr, sourceStr, 198);
+
+    console.log(`[AEDoorLibrary] CopyLocationString: copied "${sourceStr}" to 0x${outputAddr.toString(16)}`);
+  }
+
+  /**
+   * GetNodeInput (LVO -132, Address 0x03d6)
+   * Gets node input character
+   *
+   * Based on disassembly lines 397-407:
+   *   - Calls SetStringData with command 6
+   *   - Checks if data >= 0
+   *   - Returns first character from string if valid, else -1
+   *
+   * Input: A1 = DoorInfo pointer, A0 = string pointer
+   * Output: D0 = character code (or -1), D1 = 0
+   */
+  getNodeInput(): number {
+    const state = this.getStateFromA1();
+    if (!state) return -1;
+
+    const stringAddr = this.emulator.getRegister(8); // A0
+
+    // Call SetStringData with command 6
+    this.emulator.setRegister(0, 6);
+    this.copyUserString();
+
+    // Check if data is valid (>= 0)
+    const locationPtr = this.emulator.readMemory32(state.difaceAddr + 0x1c);
+    if (locationPtr !== 0) {
+      const dataValue = this.emulator.readMemory32(locationPtr);
+      if ((dataValue & 0x80000000) !== 0) {
+        // Negative - return -1
+        this.emulator.setRegister(0, -1);
+        this.emulator.setRegister(1, 0);
+        console.log(`[AEDoorLibrary] GetNodeInput: no input, returning -1`);
+        return -1;
+      }
+    }
+
+    // Get first character from string
+    const userPtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
+    if (userPtr !== 0) {
+      const charCode = this.emulator.readMemory(userPtr);
+      this.emulator.setRegister(0, charCode);
+      this.emulator.setRegister(1, 0);
+      console.log(`[AEDoorLibrary] GetNodeInput: returning character 0x${charCode.toString(16)}`);
+      return charCode;
+    }
+
+    this.emulator.setRegister(0, -1);
+    this.emulator.setRegister(1, 0);
+    return -1;
+  }
+
+  /**
+   * InitNewDoor (LVO -138, Address 0x03f0)
+   * Initializes new door (wrapper for CreateComm)
+   *
+   * Input: D1-D7/A2-A6 preserved
+   * Output: D0 = DoorInfo pointer, A1 = DoorInfo pointer
+   */
+  initNewDoor(): number {
+    console.log(`[AEDoorLibrary] InitNewDoor: calling CreateComm`);
+
+    // Call CreateComm
+    const difaceAddr = this.createComm();
+
+    // Set both D0 and A1 to DoorInfo pointer
+    this.emulator.setRegister(0, difaceAddr);
+    this.emulator.setRegister(9, difaceAddr); // A1
+
+    return difaceAddr;
+  }
+
+  /**
+   * InitAndSendStatus (LVO -144, Address 0x03fe)
+   * Initializes door and sends status message
+   *
+   * Input: D1-D7/A2-A6 preserved
+   * Output: D0 = DoorInfo pointer, A1 = DoorInfo pointer
+   */
+  initAndSendStatus(): number {
+    console.log(`[AEDoorLibrary] InitAndSendStatus: calling CreateComm`);
+
+    // Call CreateComm
+    const difaceAddr = this.createComm();
+
+    // Set both D0 and A1
+    this.emulator.setRegister(0, difaceAddr);
+    this.emulator.setRegister(9, difaceAddr); // A1
+
+    // Send status message (command 2)
+    if (difaceAddr !== 0) {
+      const state = this.interfaces.get(difaceAddr);
+      if (state) {
+        this.sendJHMessage(state, 2, 0, ""); // JH_STAT message
+        console.log(`[AEDoorLibrary] InitAndSendStatus: sent status message`);
+      }
+    }
+
+    return difaceAddr;
   }
 
   /**

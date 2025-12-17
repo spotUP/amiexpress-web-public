@@ -22,7 +22,9 @@ export const SystemConfigSchema = z.object({
   min_password_length: z.number().int().min(0).max(32).optional(),
   min_password_strength: z.number().int().min(0).max(4).optional(),
   max_password_fails: z.number().int().min(-1).optional(),
-  password_security: z.enum(['bcrypt', 'sha256', 'md5', 'legacy']).optional(),
+  password_security: z.string().transform(v => v?.toLowerCase()).pipe(
+    z.enum(['bcrypt', 'sha256', 'md5', 'legacy'])
+  ).optional(),
   strict_password_policy: z.boolean().optional(),
   auto_validate: z.boolean().optional(),
   confirm_deletions: z.boolean().optional(),
@@ -34,8 +36,8 @@ export const SystemConfigSchema = z.object({
 
   // New User Defaults
   new_user_sec_level: z.number().int().min(1).max(255).optional(),
-  new_user_time_limit: z.number().int().min(1).max(1440).optional(),
-  new_user_chat_limit: z.number().int().min(0).max(1440).optional(),
+  new_user_time_limit: z.number().int().min(-1).max(1440).optional(),
+  new_user_chat_limit: z.number().int().min(-1).max(1440).optional(),
   new_user_lines_per_screen: z.number().int().min(10).max(100).optional(),
   new_user_expert: z.boolean().optional(),
   new_user_ansi: z.boolean().optional(),
@@ -103,7 +105,12 @@ export const SystemConfigSchema = z.object({
   // Logging
   debug_mode: z.boolean().optional(),
   log_level: z.enum(['debug', 'info', 'warning', 'error']).optional(),
-  log_retention_days: z.number().int().min(1).max(365).optional()
+  log_retention_days: z.number().int().min(1).max(365).optional(),
+
+  // Push Notifications (VAPID)
+  vapid_public_key: z.string().max(500).optional(),
+  vapid_private_key: z.string().max(500).optional(),
+  vapid_contact_email: z.string().email().max(200).optional().or(z.literal(''))
 });
 
 export const NodeConfigSchema = z.object({

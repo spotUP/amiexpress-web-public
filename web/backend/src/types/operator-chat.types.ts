@@ -123,7 +123,10 @@ export interface OperatorChatConfig {
   soundEnabled: boolean;           // Play alert sound on page
   vibrateEnabled: boolean;         // Vibrate on mobile
   discordWebhook?: string;         // Discord webhook URL
+  discordUserId?: string;          // Discord user ID for @mention in notifications
   allowedSecLevels: number[];      // Security levels allowed to page (default: all)
+  notifyOnPage: boolean;           // Show in-system notifications when users page
+  notifyDiscord: boolean;          // Send Discord notifications via webhook
 }
 
 /**

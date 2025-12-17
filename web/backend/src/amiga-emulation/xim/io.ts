@@ -875,7 +875,12 @@ export class XIMIOHandler {
     autoPause: boolean = false,
     pendingMsg?: XIMMessage
   ): number {
-    let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // Convert Amiga CSI (0x9B) to standard ANSI ESC+[ (0x1B 0x5B)
+    // Amiga uses a single-byte CSI character for ANSI codes, but modern terminals
+    // expect the two-byte ESC+[ sequence. Without this conversion, colors appear
+    // as "[36m" instead of actual colored text.
+    let converted = text.replace(/\x9b/g, '\x1b[');
+    let normalized = converted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     if (addNewline) {
       normalized += '\n';
     }

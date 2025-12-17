@@ -26,6 +26,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
+import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
 
 /**
  * SAUCE metadata structure (Standard Architecture for Universal Comment Extensions)
@@ -512,6 +513,43 @@ export async function parseMciCodes(
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
 
+  // PHASE 5: ~Dx MCI Terminator Support (express.e:5651-5735)
+  // Parse ~D<char> codes to change MCI terminator dynamically
+  // Default terminator is |, but ~D. changes it to . for subsequent codes
+  // Example: ~D. changes terminator to ., then ~c3RED~c4GREEN. uses . instead of |
+  let mciTerminator = '|'; // Default MCI terminator
+
+  // Extract all ~D terminator changes and apply them sequentially
+  // This allows screen files to change terminators mid-stream
+  const terminatorRegex = /~D(.)/g;
+  let match;
+  const terminatorChanges: Array<{index: number, char: string}> = [];
+
+  while ((match = terminatorRegex.exec(parsed)) !== null) {
+    terminatorChanges.push({
+      index: match.index,
+      char: match[1]
+    });
+  }
+
+  // Helper function to escape special regex characters
+  const escapeRegex = (char: string): string => {
+    return char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Helper function to build MCI regex with current terminator
+  const mciRegex = (code: string): RegExp => {
+    const escapedTerm = escapeRegex(mciTerminator);
+    return new RegExp(`~${code}${escapedTerm}`, 'g');
+  };
+
+  // Remove ~D codes from output (they're control codes, not display codes)
+  parsed = parsed.replace(terminatorRegex, (match, newTerm) => {
+    screenDebug(`[MCI] Terminator changed from '${mciTerminator}' to '${newTerm}'`);
+    mciTerminator = newTerm;
+    return '';
+  });
+
   // Get user data safely
   const user = session.user || {};
   const username = user.username || 'Guest';
@@ -671,41 +709,42 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   }
 
   // User Information Codes (express.e:5291-5400)
-  parsed = parsed.replace(/~N\|/g, username);           // N - Username
+  // NOTE: Using dynamic MCI terminator from Phase 5 implementation
+  parsed = parsed.replace(mciRegex('N'), username);           // N - Username
   parsed = parsed.replace(/~N(?=\s|$)/g, username);
-  parsed = parsed.replace(/~P\|/g, '');  // P - Password (security - intentionally blank)
-  parsed = parsed.replace(/~UL\|/g, user.location || '');  // UL - User Location
-  parsed = parsed.replace(/~#\|/g, user.phoneNumber || '');  // # - Phone Number
-  parsed = parsed.replace(/~TC\|/g, timesCalled.toString());  // TC - Times Called
-  parsed = parsed.replace(/~TT\|/g, (user.callsToday || 0).toString());  // TT - Today's Calls
-  parsed = parsed.replace(/~LC\|/g, user.lastLoginDate || 'Never');  // LC - Last Call
-  parsed = parsed.replace(/~M\|/g, messagesPosted.toString());  // M - Messages Posted
-  parsed = parsed.replace(/~A\|/g, secLevel.toString());  // A - Access/Security Level
-  parsed = parsed.replace(/~S\|/g, user.id?.toString() || '0');  // S - Slot Number (user ID)
-  parsed = parsed.replace(/~CA\|/g, user.confAccess || 'XXX');  // CA - Conference Access String
-  parsed = parsed.replace(/~BR\|/g, '57600');  // BR - Baud Rate
-  parsed = parsed.replace(/~HW\|/g, 'Web Browser');  // HW - Hardware/Computer Type
-  parsed = parsed.replace(/~TL\|/g, Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
-  parsed = parsed.replace(/~TR\|/g, Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
-  parsed = parsed.replace(/~UB\|/g, uploadBytes.toString());  // UB - Upload Bytes
-  parsed = parsed.replace(/~DB\|/g, downloadBytes.toString());  // DB - Download Bytes
-  parsed = parsed.replace(/~SU\|/g, (uploadBytes / 1024).toFixed(0) + 'K');  // SU - Upload Size
-  parsed = parsed.replace(/~SD\|/g, (downloadBytes / 1024).toFixed(0) + 'K');  // SD - Download Size
-  parsed = parsed.replace(/~FU\|/g, uploads.toString());  // FU - Files Uploaded
-  parsed = parsed.replace(/~FD\|/g, downloads.toString());  // FD - Files Downloaded
-  parsed = parsed.replace(/~BD\|/g, (user.byteLimit || 0).toString());  // BD - Today's Byte Limit
-  parsed = parsed.replace(/~ON\|/g, '1');  // ON/LG - Node Number
-  parsed = parsed.replace(/~LG\|/g, '1');
-  parsed = parsed.replace(/~IN\|/g, user.email || '');  // IN - Internet Name (email)
-  parsed = parsed.replace(/~RN\|/g, user.realName || username);  // RN - Real Name
+  parsed = parsed.replace(mciRegex('P'), '');  // P - Password (security - intentionally blank)
+  parsed = parsed.replace(mciRegex('UL'), user.location || '');  // UL - User Location
+  parsed = parsed.replace(mciRegex('#'), user.phoneNumber || '');  // # - Phone Number
+  parsed = parsed.replace(mciRegex('TC'), timesCalled.toString());  // TC - Times Called
+  parsed = parsed.replace(mciRegex('TT'), (user.callsToday || 0).toString());  // TT - Today's Calls
+  parsed = parsed.replace(mciRegex('LC'), user.lastLoginDate || 'Never');  // LC - Last Call
+  parsed = parsed.replace(mciRegex('M'), messagesPosted.toString());  // M - Messages Posted
+  parsed = parsed.replace(mciRegex('A'), secLevel.toString());  // A - Access/Security Level
+  parsed = parsed.replace(mciRegex('S'), user.id?.toString() || '0');  // S - Slot Number (user ID)
+  parsed = parsed.replace(mciRegex('CA'), user.confAccess || 'XXX');  // CA - Conference Access String
+  parsed = parsed.replace(mciRegex('BR'), '57600');  // BR - Baud Rate
+  parsed = parsed.replace(mciRegex('HW'), 'Web Browser');  // HW - Hardware/Computer Type
+  parsed = parsed.replace(mciRegex('TL'), Math.floor((user.dailyTimeLimit || 120) / 60).toString());  // TL - Time Limit
+  parsed = parsed.replace(mciRegex('TR'), Math.floor(session.timeRemaining / 60).toString());  // TR - Time Remaining
+  parsed = parsed.replace(mciRegex('UB'), uploadBytes.toString());  // UB - Upload Bytes
+  parsed = parsed.replace(mciRegex('DB'), downloadBytes.toString());  // DB - Download Bytes
+  parsed = parsed.replace(mciRegex('SU'), (uploadBytes / 1024).toFixed(0) + 'K');  // SU - Upload Size
+  parsed = parsed.replace(mciRegex('SD'), (downloadBytes / 1024).toFixed(0) + 'K');  // SD - Download Size
+  parsed = parsed.replace(mciRegex('FU'), uploads.toString());  // FU - Files Uploaded
+  parsed = parsed.replace(mciRegex('FD'), downloads.toString());  // FD - Files Downloaded
+  parsed = parsed.replace(mciRegex('BD'), (user.byteLimit || 0).toString());  // BD - Today's Byte Limit
+  parsed = parsed.replace(mciRegex('ON'), '1');  // ON/LG - Node Number
+  parsed = parsed.replace(mciRegex('LG'), '1');
+  parsed = parsed.replace(mciRegex('IN'), user.email || '');  // IN - Internet Name (email)
+  parsed = parsed.replace(mciRegex('RN'), user.realName || username);  // RN - Real Name
 
   // Conference Information (express.e:5440-5490)
-  parsed = parsed.replace(/~CF\|/g, session.currentConfName || 'Main');  // CF - Current Conference
-  parsed = parsed.replace(/~CN\|/g, (session.currentConf + 1).toString());  // CN - Conference Number
+  parsed = parsed.replace(mciRegex('CF'), session.currentConfName || 'Main');  // CF - Current Conference
+  parsed = parsed.replace(mciRegex('CN'), (session.currentConf + 1).toString());  // CN - Conference Number
 
   // ~MB - Current Message Base Number (express.e:5442)
   const currentMsgBase = session.currentMsgBase || 1;
-  parsed = parsed.replace(/~MB\|/g, currentMsgBase.toString());
+  parsed = parsed.replace(mciRegex('MB'), currentMsgBase.toString());
 
   // ~MN - Message Base Name (express.e:5443)
   let msgBaseName = 'Default';
@@ -725,23 +764,23 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       DebugSeverity.WARNING
     );
   }
-  parsed = parsed.replace(/~MN\|/g, msgBaseName);
+  parsed = parsed.replace(mciRegex('MN'), msgBaseName);
 
-  parsed = parsed.replace(/~CT\|/g, conferences.length.toString());  // CT - Total Conferences
-  parsed = parsed.replace(/~VD\|/g, '2.00');  // VD - Version Number (display)
-  parsed = parsed.replace(/~VE\|/g, 'AmiExpress-Web 2.0');  // VE - Version (full)
+  parsed = parsed.replace(mciRegex('CT'), conferences.length.toString());  // CT - Total Conferences
+  parsed = parsed.replace(mciRegex('VD'), '2.00');  // VD - Version Number (display)
+  parsed = parsed.replace(mciRegex('VE'), 'AmiExpress-Web 2.0');  // VE - Version (full)
 
   // System Information
-  parsed = parsed.replace(/~ND\|/g, fullDateTime);  // ND - Node Date/Time
-  parsed = parsed.replace(/~DT\|/g, fullDateTime);  // DT - Date/Time
-  parsed = parsed.replace(/~OT\|/g, timeStr);  // OT - Time Only
-  parsed = parsed.replace(/~OD\|/g, `${day}-${month}-${year}`);  // OD - Date Only
+  parsed = parsed.replace(mciRegex('ND'), fullDateTime);  // ND - Node Date/Time
+  parsed = parsed.replace(mciRegex('DT'), fullDateTime);  // DT - Date/Time
+  parsed = parsed.replace(mciRegex('OT'), timeStr);  // OT - Time Only
+  parsed = parsed.replace(mciRegex('OD'), `${day}-${month}-${year}`);  // OD - Date Only
 
   // ~SC - System Calls Today (express.e:5407)
   // Use SystemStatsService to get real call count
   const { systemStats } = await import('../services/SystemStatsService');
   const todayCalls = systemStats.getTodayCalls();
-  parsed = parsed.replace(/~SC\|/g, todayCalls.toString());
+  parsed = parsed.replace(mciRegex('SC'), todayCalls.toString());
 
   // File Area Codes (express.e:5408-5410)
   // ~FC - Files Count (flagged/marked files count)
@@ -767,7 +806,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       DebugSeverity.WARNING
     );
   }
-  parsed = parsed.replace(/~FC\|/g, totalFiles.toString());
+  parsed = parsed.replace(mciRegex('FC'), totalFiles.toString());
 
   // ~FL - Flagged Files List (express.e:5445-5454)
   // Displays user's download queue (flagged files) one per line
@@ -779,14 +818,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     // Format matches express.e: 21 spaces + filename + backspace + newline
     flaggedFilesList += `                     ${file.fileName}\b\r\n`;
   }
-  parsed = parsed.replace(/~FL\|/g, flaggedFilesList);
+  parsed = parsed.replace(mciRegex('FL'), flaggedFilesList);
 
-  parsed = parsed.replace(/~FF\|/g, flaggedFilesManager.getCount(userId).toString());  // FF - Flagged files count
+  parsed = parsed.replace(mciRegex('FF'), flaggedFilesManager.getCount(userId).toString());  // FF - Flagged files count
 
-  parsed = parsed.replace(/~AK\|/g, user.alias || username);  // AK - Alias/Handle
-  parsed = parsed.replace(/~SP\|/g, ' ');  // SP - Space
-  parsed = parsed.replace(/~CR\|/g, '\r\n');  // CR - Carriage Return
-  parsed = parsed.replace(/~NS\|/g, '');  // NS - No Space (nothing)
+  parsed = parsed.replace(mciRegex('AK'), user.alias || username);  // AK - Alias/Handle
+  parsed = parsed.replace(mciRegex('SP'), ' ');  // SP - Space
+  parsed = parsed.replace(mciRegex('CR'), '\r\n');  // CR - Carriage Return
+  parsed = parsed.replace(mciRegex('NS'), '');  // NS - No Space (nothing)
   // Some screens use bare ~SP (no delimiter) to pause; strip and mark pause
   parsed = parsed.replace(/~SP(\s|$)/g, () => {
     hasPause = true;
@@ -794,44 +833,45 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   });
 
   // Color codes (c0-c7, b0-b7/z0-z7, n1-n9) (express.e:5651-5735)
+  // NOTE: Using dynamic MCI terminator from Phase 5 implementation
   // Foreground colors (c0-c7)
-  parsed = parsed.replace(/~c0\|/g, '\x1b[30m');  // Black
-  parsed = parsed.replace(/~c1\|/g, '\x1b[34m');  // Blue
-  parsed = parsed.replace(/~c2\|/g, '\x1b[32m');  // Green
-  parsed = parsed.replace(/~c3\|/g, '\x1b[36m');  // Cyan
-  parsed = parsed.replace(/~c4\|/g, '\x1b[31m');  // Red
-  parsed = parsed.replace(/~c5\|/g, '\x1b[35m');  // Magenta
-  parsed = parsed.replace(/~c6\|/g, '\x1b[33m');  // Yellow/Brown
-  parsed = parsed.replace(/~c7\|/g, '\x1b[37m');  // White
+  parsed = parsed.replace(mciRegex('c0'), '\x1b[30m');  // Black
+  parsed = parsed.replace(mciRegex('c1'), '\x1b[34m');  // Blue
+  parsed = parsed.replace(mciRegex('c2'), '\x1b[32m');  // Green
+  parsed = parsed.replace(mciRegex('c3'), '\x1b[36m');  // Cyan
+  parsed = parsed.replace(mciRegex('c4'), '\x1b[31m');  // Red
+  parsed = parsed.replace(mciRegex('c5'), '\x1b[35m');  // Magenta
+  parsed = parsed.replace(mciRegex('c6'), '\x1b[33m');  // Yellow/Brown
+  parsed = parsed.replace(mciRegex('c7'), '\x1b[37m');  // White
 
   // Background colors (b0-b7, z0-z7)
-  parsed = parsed.replace(/~b0\|/g, '\x1b[40m');  // Black bg
-  parsed = parsed.replace(/~b1\|/g, '\x1b[44m');  // Blue bg
-  parsed = parsed.replace(/~b2\|/g, '\x1b[42m');  // Green bg
-  parsed = parsed.replace(/~b3\|/g, '\x1b[46m');  // Cyan bg
-  parsed = parsed.replace(/~b4\|/g, '\x1b[41m');  // Red bg
-  parsed = parsed.replace(/~b5\|/g, '\x1b[45m');  // Magenta bg
-  parsed = parsed.replace(/~b6\|/g, '\x1b[43m');  // Yellow bg
-  parsed = parsed.replace(/~b7\|/g, '\x1b[47m');  // White bg
-  parsed = parsed.replace(/~z0\|/g, '\x1b[40m');  // z0-z7 same as b0-b7
-  parsed = parsed.replace(/~z1\|/g, '\x1b[44m');
-  parsed = parsed.replace(/~z2\|/g, '\x1b[42m');
-  parsed = parsed.replace(/~z3\|/g, '\x1b[46m');
-  parsed = parsed.replace(/~z4\|/g, '\x1b[41m');
-  parsed = parsed.replace(/~z5\|/g, '\x1b[45m');
-  parsed = parsed.replace(/~z6\|/g, '\x1b[43m');
-  parsed = parsed.replace(/~z7\|/g, '\x1b[47m');
+  parsed = parsed.replace(mciRegex('b0'), '\x1b[40m');  // Black bg
+  parsed = parsed.replace(mciRegex('b1'), '\x1b[44m');  // Blue bg
+  parsed = parsed.replace(mciRegex('b2'), '\x1b[42m');  // Green bg
+  parsed = parsed.replace(mciRegex('b3'), '\x1b[46m');  // Cyan bg
+  parsed = parsed.replace(mciRegex('b4'), '\x1b[41m');  // Red bg
+  parsed = parsed.replace(mciRegex('b5'), '\x1b[45m');  // Magenta bg
+  parsed = parsed.replace(mciRegex('b6'), '\x1b[43m');  // Yellow bg
+  parsed = parsed.replace(mciRegex('b7'), '\x1b[47m');  // White bg
+  parsed = parsed.replace(mciRegex('z0'), '\x1b[40m');  // z0-z7 same as b0-b7
+  parsed = parsed.replace(mciRegex('z1'), '\x1b[44m');
+  parsed = parsed.replace(mciRegex('z2'), '\x1b[42m');
+  parsed = parsed.replace(mciRegex('z3'), '\x1b[46m');
+  parsed = parsed.replace(mciRegex('z4'), '\x1b[41m');
+  parsed = parsed.replace(mciRegex('z5'), '\x1b[45m');
+  parsed = parsed.replace(mciRegex('z6'), '\x1b[43m');
+  parsed = parsed.replace(mciRegex('z7'), '\x1b[47m');
 
   // Text styles (n1-n9)
-  parsed = parsed.replace(/~n1\|/g, '\x1b[1m');   // Bold
-  parsed = parsed.replace(/~n2\|/g, '\x1b[2m');   // Dim
-  parsed = parsed.replace(/~n3\|/g, '\x1b[3m');   // Italic
-  parsed = parsed.replace(/~n4\|/g, '\x1b[4m');   // Underline
-  parsed = parsed.replace(/~n5\|/g, '\x1b[5m');   // Blink
-  parsed = parsed.replace(/~n6\|/g, '\x1b[7m');   // Reverse
-  parsed = parsed.replace(/~n7\|/g, '\x1b[8m');   // Hidden
-  parsed = parsed.replace(/~n8\|/g, '\x1b[0m');   // Reset
-  parsed = parsed.replace(/~n9\|/g, '\x1b[0m');   // Normal (reset)
+  parsed = parsed.replace(mciRegex('n1'), '\x1b[1m');   // Bold
+  parsed = parsed.replace(mciRegex('n2'), '\x1b[2m');   // Dim
+  parsed = parsed.replace(mciRegex('n3'), '\x1b[3m');   // Italic
+  parsed = parsed.replace(mciRegex('n4'), '\x1b[4m');   // Underline
+  parsed = parsed.replace(mciRegex('n5'), '\x1b[5m');   // Blink
+  parsed = parsed.replace(mciRegex('n6'), '\x1b[7m');   // Reverse
+  parsed = parsed.replace(mciRegex('n7'), '\x1b[8m');   // Hidden
+  parsed = parsed.replace(mciRegex('n8'), '\x1b[0m');   // Reset
+  parsed = parsed.replace(mciRegex('n9'), '\x1b[0m');   // Normal (reset)
 
   // ~f - Fill character (express.e:5471-5480)
   // Format: ~f or ~f<char> - clears screen or fills with character
@@ -847,12 +887,13 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Format: ~w or ~w<ms> - delay/pause
   // In screen files, this is typically ignored or minimal delay
   // We'll just remove it from output (delay would be client-side)
-  parsed = parsed.replace(/~w\d*\|/g, '');
+  const escapedTerm = escapeRegex(mciTerminator);
+  parsed = parsed.replace(new RegExp(`~w\\d*${escapedTerm}`, 'g'), '');
 
   // ~x - X position (cursor column) (express.e:5491-5500)
   // Format: ~x<number>| - moves cursor to column <number>
   // ANSI: ESC[<col>G (move to column)
-  const xRegex = /~x(\d+)\|/g;
+  const xRegex = new RegExp(`~x(\\d+)${escapedTerm}`, 'g');
   parsed = parsed.replace(xRegex, (match, col) => {
     const colNum = parseInt(col, 10);
     if (colNum >= 0) {
@@ -864,7 +905,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~y - Y position (cursor row) (express.e:5501-5510)
   // Format: ~y<number>| - moves cursor to row <number>
   // ANSI: ESC[<row>;H (move to row, column 1)
-  const yRegex = /~y(\d+)\|/g;
+  const yRegex = new RegExp(`~y(\\d+)${escapedTerm}`, 'g');
   parsed = parsed.replace(yRegex, (match, row) => {
     const rowNum = parseInt(row, 10);
     if (rowNum >= 0) {
@@ -875,11 +916,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
 
   // ~q - Query/Prompt reset (express.e:5571-5573)
   // Sends ANSI reset code [0m
-  parsed = parsed.replace(/~q\|/g, '\x1b[0m');
+  parsed = parsed.replace(mciRegex('q'), '\x1b[0m');
 
   // ~h - Hotkey/Backspace (express.e:5574-5576)
   // Sends backspace character
-  parsed = parsed.replace(/~h\|/g, '\x08');
+  parsed = parsed.replace(mciRegex('h'), '\x08');
 
   // Advanced File Display Codes (express.e:5490-5560)
   // ~SS_ - Show String / Display File (express.e:5490-5500)
@@ -1108,6 +1149,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       parsed = parsed.replace(placeholder, '');
     }
   }
+
+  // ~~ - Literal tilde (express.e escape character)
+  // This must be processed LAST so it doesn't interfere with other ~ codes
+  parsed = parsed.replace(/~~/g, '~');
 
   if (session) {
     session.lastScreenHadPause = hasPause;
@@ -1617,6 +1662,18 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       parsed += '\r\n';
     }
 
+    // Screen Wipe Animations (~WM, ~WH, ~WV, ~WS, ~WC, ~WR, ~WB, ~WN, ~WT, ~WE, ~WX)
+    // Detect and apply screen wipe animations before displaying content
+    const wipeResult = parseWipeMCI(parsed);
+    const hasWipeAnimation = wipeResult.wipeType !== null;
+    if (hasWipeAnimation) {
+      parsed = wipeResult.content; // Remove wipe MCI code from content
+      screenDebug(`[displayScreen] Screen wipe detected: ${wipeResult.wipeType}`);
+      DebugLogger.mci(socket.id, `Screen wipe animation: ~W${wipeResult.wipeType?.toUpperCase().charAt(0)}`, {
+        wipeType: wipeResult.wipeType
+      });
+    }
+
     // Auto-paginate long screens (e.g., >25 lines like real AmiExpress More prompt)
     const pageHeight = session?.screenHeight || 25;
     const lines = parsed.split(/\r\n|\n/);
@@ -1868,21 +1925,53 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     return true;
   }
 
-    // Double-buffered display: Build complete frame buffer before sending
-    // This prevents tearing and visible redraws by sending everything atomically
-    // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
-    const frameBuffer =
-      (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
-      HIDE_CURSOR +      // Hide cursor
-      '\x1b[H' +         // Move cursor to home (1,1)
-      parsed +           // Screen content
-      '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
-      SHOW_CURSOR;       // Show cursor
+    // Screen Wipe Animation Playback
+    // If a wipe animation is detected, generate and send frames instead of direct output
+    if (hasWipeAnimation && wipeResult.wipeType) {
+      screenDebug(`[displayScreen] Playing wipe animation: ${wipeResult.wipeType}`);
 
-    // Send entire frame in one atomic operation
-    // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
-    screenDebug(`[displayScreen] Emitting ${eventName} event`);
-    await emitWithModem(frameBuffer);
+      // Generate animation frames
+      const wipeFrames = getWipeFrames(wipeResult.wipeType, parsed);
+
+      // Play each frame with timing
+      for (let i = 0; i < wipeFrames.length; i++) {
+        const frame = wipeFrames[i];
+        const isLastFrame = i === wipeFrames.length - 1;
+
+        // Build frame buffer with cursor control
+        const frameContent =
+          HIDE_CURSOR +      // Hide cursor during animation
+          frame.content +    // Wipe frame content (includes clear/positioning)
+          (isLastFrame ? '\x1b[0m' + SHOW_CURSOR : ''); // Reset and show cursor on last frame
+
+        // Emit frame
+        await emitWithModem(frameContent);
+
+        // Delay before next frame (skip delay on last frame)
+        if (!isLastFrame) {
+          await new Promise(resolve => setTimeout(resolve, frame.delay));
+        }
+      }
+
+      screenDebug(`[displayScreen] Wipe animation complete: ${wipeFrames.length} frames`);
+    } else {
+      // Normal display: Double-buffered display
+      // Build complete frame buffer before sending
+      // This prevents tearing and visible redraws by sending everything atomically
+      // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
+      const frameBuffer =
+        (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
+        HIDE_CURSOR +      // Hide cursor
+        '\x1b[H' +         // Move cursor to home (1,1)
+        parsed +           // Screen content
+        '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
+        SHOW_CURSOR;       // Show cursor
+
+      // Send entire frame in one atomic operation
+      // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
+      screenDebug(`[displayScreen] Emitting ${eventName} event`);
+      await emitWithModem(frameBuffer);
+    }
 
     // If screen requested a pause (e.g., ~SP), set a minimal pagination state
     // so a keypress is required before continuing, without printing the raw MCI

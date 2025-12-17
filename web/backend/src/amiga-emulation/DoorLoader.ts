@@ -139,7 +139,9 @@ export class DoorLoader {
     // Set up CLI/argument string similar to AmigaDOS
     const nodeId = this.config.bbsSession?.nodeId || 0;
     const doorType = (this.config.doorType || "").toUpperCase();
-    const progName = path.basename(this.config.executablePath);
+    // CRITICAL FIX: AmiExpress convention requires argv[0] to contain node number, NOT program name
+    // This differs from standard AmigaDOS where argv[0] is the program name
+    const progName = nodeId.toString();
     let customArgs: string[] = [];
     if (this.config.args && this.config.args.length > 0) {
       // For XIM doors, prepend node number when explicit args are provided (matches ReadArgs templates like "NODE/N/A")

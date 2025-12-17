@@ -106,6 +106,130 @@ export class XIMSystemCommandsHandler {
     this.execLibrary.replyMsg(msg.msgAddr);
 
     console.log(`[XIMSystem] Registration acknowledged`);
+
+    // CRITICAL FIX: Populate BBSInfo AFTER library initialization
+    // The real AEDoor.library's CreateComm() has set up the DIFace structure
+    // and pointers. Now we populate the actual user data at those addresses.
+    this.populateBBSInfoPostRegister(msg);
+  }
+
+  /**
+   * Populate BBSInfo structure AFTER library initialization
+   * This ensures user data is written to the correct memory locations
+   * that the library's GetUserName/CopyLocationString functions will read from.
+   */
+  private populateBBSInfoPostRegister(msg: XIMMessage): void {
+    console.log('[BBSInfo] Post-register population starting...');
+
+    // Try to find the DIFace address - it may be in msg.data or we need to search
+    // The library creates a DIFace structure and the door passes it in Register
+    let difaceAddr = msg.data;
+
+    // If data looks invalid, try to find DIFace via known patterns
+    if (!difaceAddr || difaceAddr < 0x100 || difaceAddr > 0xFFFFFF) {
+      console.log('[BBSInfo] Invalid DIFace address in msg.data, searching...');
+      // The DIFace is typically allocated around 0x10000-0x20000 range
+      // We can search for the signature or use the reply port to find it
+      // For now, skip if we can't find a valid address
+      console.warn('[BBSInfo] Could not find valid DIFace address, skipping BBSInfo population');
+      return;
+    }
+
+    console.log(`[BBSInfo] DIFace address: 0x${difaceAddr.toString(16)}`);
+
+    // Read the pointers that the library set up
+    // DoorInfo+0x20 points to user name string location
+    // DoorInfo+0x1c points to location string location
+    const userPtr = this.emulator.readMemory32(difaceAddr + 0x20);
+    const locPtr = this.emulator.readMemory32(difaceAddr + 0x1c);
+
+    console.log(`[BBSInfo] User name pointer: 0x${userPtr.toString(16)}`);
+    console.log(`[BBSInfo] Location pointer: 0x${locPtr.toString(16)}`);
+
+    // Get actual user data from session
+    const username = this.bbsSession?.user?.username || 'Guest';
+    const location = this.bbsSession?.user?.location || 'Unknown';
+    const bbsName = 'AmiExpress-Web';
+
+    // Write user data to the addresses the library's pointers point to
+    if (userPtr > 0x100 && userPtr < 0xFFFFFF) {
+      this.writeCString(userPtr, username, 198);
+      console.log(`[BBSInfo] Wrote username "${username}" to 0x${userPtr.toString(16)}`);
+    }
+
+    if (locPtr > 0x100 && locPtr < 0xFFFFFF) {
+      this.writeCString(locPtr, location, 60);
+      console.log(`[BBSInfo] Wrote location "${location}" to 0x${locPtr.toString(16)}`);
+    }
+
+    // Also populate other BBSInfo fields at known offsets
+    // BBSInfo is at DIFace + 0x46
+    const bbsInfoAddr = difaceAddr + 0x46;
+    this.writeCString(bbsInfoAddr + 0x120, bbsName, 40); // BBS name at +0x120
+    this.writeCString(bbsInfoAddr + 0x150, this.getFormattedDate(), 19); // Date at +0x150
+    this.writeCString(bbsInfoAddr + 0x170, this.getFormattedTime(), 19); // Time at +0x170
+
+    console.log(`[BBSInfo] Wrote BBS name "${bbsName}"`);
+    console.log(`[BBSInfo] Wrote date "${this.getFormattedDate()}"`);
+    console.log(`[BBSInfo] Wrote time "${this.getFormattedTime()}"`);
+
+    // Read back verification
+    if (userPtr > 0x100) {
+      const verifyUser = this.readCString(userPtr, 198);
+      console.log(`[BBSInfo] Verify user: "${verifyUser}"`);
+    }
+    if (locPtr > 0x100) {
+      const verifyLoc = this.readCString(locPtr, 60);
+      console.log(`[BBSInfo] Verify location: "${verifyLoc}"`);
+    }
+
+    console.log('[BBSInfo] Post-register population complete');
+  }
+
+  /**
+   * Write C-style null-terminated string to memory
+   */
+  private writeCString(addr: number, text: string, maxLen: number): void {
+    const truncated = text.slice(0, maxLen - 1);
+    for (let i = 0; i < truncated.length; i++) {
+      this.emulator.writeMemory(addr + i, truncated.charCodeAt(i));
+    }
+    this.emulator.writeMemory(addr + truncated.length, 0); // Null terminator
+  }
+
+  /**
+   * Read C-style null-terminated string from memory
+   */
+  private readCString(addr: number, maxLen: number): string {
+    const bytes: number[] = [];
+    for (let i = 0; i < maxLen; i++) {
+      const byte = this.emulator.readMemory(addr + i);
+      if (byte === 0) break;
+      bytes.push(byte);
+    }
+    return String.fromCharCode(...bytes);
+  }
+
+  /**
+   * Get formatted date string (MM/DD/YYYY)
+   */
+  private getFormattedDate(): string {
+    const now = new Date();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const year = now.getFullYear();
+    return `${month}/${day}/${year}`;
+  }
+
+  /**
+   * Get formatted time string (HH:MM:SS)
+   */
+  private getFormattedTime(): string {
+    const now = new Date();
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
   }
 
   /**
