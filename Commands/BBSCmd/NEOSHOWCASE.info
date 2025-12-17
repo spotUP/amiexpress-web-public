@@ -1,6 +1,7 @@
-CMDNAME=NEOSHOWCASE
-CMDCODE=NEOSHOWCASE
-LOCATION=doors/neo-blessed-showcase
+BBSCMD=NEOSHOWCASE
 TYPE=TS
-SECLEVEL=0
-DESCRIPTION=Neo-Blessed showcase - interactive 10-page widget demonstration
+LOCATION=sdk/doors/neo-blessed-showcase
+DESCRIPTION=Neo-Blessed Widget Showcase - ALL widgets demo
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

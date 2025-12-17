@@ -1,0 +1,7 @@
+BBSCMD=LIVECHAT
+TYPE=TS
+LOCATION=sdk/doors/livechat
+DESCRIPTION=Multi-user chat with channels, DMs, and real-time typing
+ACCESS=10
+MULTINODE=YES
+PRIORITY=SAME
