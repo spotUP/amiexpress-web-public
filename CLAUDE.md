@@ -12,6 +12,38 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ## ⛔ CRITICAL RULES - READ FIRST ⛔
 
+**USE REAL LIBRARIES, NOT TYPESCRIPT REIMPLEMENTATIONS - NON-NEGOTIABLE**
+
+**CRITICAL ARCHITECTURAL PRINCIPLE**: The BBS uses REAL native Amiga library binaries executed by the 68K emulator (MOIRA), NOT TypeScript reimplementations.
+
+1. **NEVER trap library functions** with TypeScript implementations unless absolutely necessary
+2. **ALWAYS use native binaries** for:
+   - AEDoor.library (./Libs/AEDoor.library) - ALL functions execute natively
+   - dos.library - Native 68K code from Kickstart ROM
+   - exec.library - Native 68K code from Kickstart ROM
+   - Other AmigaOS libraries - Native binaries loaded via LibraryLoader
+
+3. **WHY this matters**:
+   - TypeScript implementations create DIFFERENT memory layouts than native code expects
+   - Native functions (like getname/getlocation) read from SPECIFIC offsets
+   - Trapping breaks compatibility with 4000+ existing Amiga doors
+   - Native binaries are battle-tested and correct
+
+4. **ONLY trap when**:
+   - Bridging to Node.js (PutMsg/GetMsg for BBS communication)
+   - Implementing functions that don't exist in ROM (utility functions)
+   - Absolutely required for emulation (never for convenience)
+
+5. **If a door doesn't work**:
+   - Check logs FIRST (don't assume library implementation is wrong)
+   - Verify native binary is executing (not TypeScript trap)
+   - Fix emulation environment, NOT library implementations
+   - Native code is correct - fix YOUR code
+
+**Violation = Architectural integrity compromised, doors will break**
+
+---
+
 **68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
 
 When debugging 68K door issues (doors not working, showing errors, hanging, etc.):

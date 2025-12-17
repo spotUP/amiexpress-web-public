@@ -1,5 +1,0 @@
-[4;33m                                                                             [0m
-[4;33;44m  MultiTop-II                              Design Created (c)1994 Bobo/Mystic[0m
-
-[35mNo# Username (Handle)             Msgs No# Username (Handle)             Msgs[0m
-[34m===-===========================-======-===-===========================-======[0m

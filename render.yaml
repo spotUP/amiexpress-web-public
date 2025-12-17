@@ -47,6 +47,8 @@ services:
         value: false
       - key: XIM_DEBUG
         value: 0
+      - key: CORS_ORIGINS
+        value: https://bbs.uprough.net,https://amiexpress-bbs-x0hv.onrender.com
 
     # Persistent disk for ALL BBS data (database, users, messages, files)
     # This data survives deployments and is NOT overwritten

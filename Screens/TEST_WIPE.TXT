@@ -1,0 +1,32 @@
+~WX
+[1;36m╔══════════════════════════════════════════════════════════════════════════════╗
+[1;36m║                                                                              ║
+[1;36m║  [1;33m██╗    ██╗██╗██████╗ ███████╗     █████╗ ███╗   ██╗██╗███╗   ███╗ █████╗ [1;36m ║
+[1;36m║  [1;33m██║    ██║██║██╔══██╗██╔════╝    ██╔══██╗████╗  ██║██║████╗ ████║██╔══██╗[1;36m ║
+[1;36m║  [1;33m██║ █╗ ██║██║██████╔╝█████╗      ███████║██╔██╗ ██║██║██╔████╔██║███████║[1;36m ║
+[1;36m║  [1;33m██║███╗██║██║██╔═══╝ ██╔══╝      ██╔══██║██║╚██╗██║██║██║╚██╔╝██║██╔══██║[1;36m ║
+[1;36m║  [1;33m╚███╔███╔╝██║██║     ███████╗    ██║  ██║██║ ╚████║██║██║ ╚═╝ ██║██║  ██║[1;36m ║
+[1;36m║  [1;33m ╚══╝╚══╝ ╚═╝╚═╝     ╚══════╝    ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝[1;36m ║
+[1;36m║                                                                              ║
+[1;36m║                         [1;37mScreen Wipe Animation Demo[1;36m                         ║
+[1;36m║                                                                              ║
+[1;36m╚══════════════════════════════════════════════════════════════════════════════╝
+
+[0;32m    ~WM - Matrix Rain      [0;37m(Scrambling cascade, Matrix-style)
+[0;33m    ~WH - Horizontal Blinds[0;37m(Reveal in horizontal strips)
+[0;35m    ~WV - Vertical Blinds  [0;37m(Reveal in vertical strips)
+[0;36m    ~WS - Spiral Wipe      [0;37m(Hypnotic spiral from edges)
+[0;31m    ~WC - Checkerboard     [0;37m(Alternating square pattern)
+[0;34m    ~WR - Radial/Radar     [0;37m(Sweeps like radar)
+[0;32m    ~WB - Block Wipe       [0;37m(Random blocks appear)
+[0;33m    ~WN - Noise Fade       [0;37m(Static to signal)
+[0;35m    ~WT - Typewriter       [0;37m(Types out line by line)
+[0;36m    ~WE - Explode          [0;37m(From center outward)
+[0;37m    ~WX - Random Wipe      [1;32m(RANDOM - Different every time!)[0m
+
+[1;33m  This screen uses ~WX so you'll see a different animation each time!
+
+[0;37m  Try adding any of these codes to your screen files in [1;36mScreens/[0;37m directory.
+  Place the code at the start of the file, before your content.
+
+[1;37m  Example: [0;32m~WM[0;37m at the top of [1;36mLOGON.TXT[0;37m for Matrix effect on login!
