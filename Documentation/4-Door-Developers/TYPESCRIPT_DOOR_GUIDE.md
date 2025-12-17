@@ -101,11 +101,23 @@ cd doors/my-door
 
 ### 4. Create index.ts
 
+**CRITICAL**: Your door MUST export a `runDoor()` function. Without this export, the BBS cannot load your door.
+
 ```typescript
 /**
  * My Door - Description
  */
 
+/** Optional metadata for SDK tools */
+export const metadata = {
+  name: 'My Door',
+  version: '1.0.0',
+  description: 'My awesome BBS door',
+  author: 'Your Name',
+  command: 'MYDOOR',
+};
+
+/** REQUIRED: Main entry point - BBS calls this function */
 export async function runDoor(doorSession: any): Promise<void> {
   // IMPORTANT: Use bbsSession, not session!
   const { socket, bbsSession, user } = doorSession;
@@ -658,6 +670,28 @@ export async function runDoor(doorSession: any): Promise<void> {
 ---
 
 ## Troubleshooting
+
+### Invalid TypeScript door: Must export Door instance or runDoor() function
+
+This error means your door's entry point is missing the required `runDoor()` export.
+
+**Fix**: Ensure your `index.ts` exports a `runDoor()` function:
+
+```typescript
+// REQUIRED - named export
+export async function runDoor(session: any): Promise<void> {
+  // Your door code here
+}
+
+// OPTIONAL - default export (for compatibility)
+export default { runDoor };
+```
+
+**Common causes:**
+1. Exporting a helper function like `createApp()` instead of `runDoor()`
+2. Missing the `export` keyword on `runDoor()`
+3. Typo in function name (must be exactly `runDoor`)
+4. Build not run after changes (`npm run build`)
 
 ### Door Not Found
 
