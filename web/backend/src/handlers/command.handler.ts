@@ -1493,7 +1493,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer || '';
       session.inputBuffer = '';
 
-      const newUserHandler = require('./new-user.handler');
+      const newUserHandler = require('./user/new-user.handler');
 
       switch (session.subState) {
         case LoggedOnSubState.NEW_USER_NAME:
