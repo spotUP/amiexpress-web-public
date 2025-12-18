@@ -16,6 +16,10 @@ import { DoorMessageHandler } from "./DoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 
+// Performance: Verbose 68K debugging is disabled by default
+// Set DEBUG_68K=1 to enable detailed execution tracing
+const DEBUG_68K = process.env.DEBUG_68K === "1";
+
 export interface ExecutionState {
   iterationCount: number;
   totalCycles: number;
@@ -350,16 +354,18 @@ export class DoorLifecycleManager {
           const a5Now = this.emulator.getRegister(13);
           const a6Now = this.emulator.getRegister(14);
           if (a4Now !== prevA4 || a5Now !== prevA5) {
-            console.log(
-              `[DoorLifecycleManager] Early A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
-                16
-              )} A4=0x${a4Now.toString(16)} A5=0x${a5Now.toString(16)}`
-            );
+            if (DEBUG_68K) {
+              console.log(
+                `[DoorLifecycleManager] Early A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
+                  16
+                )} A4=0x${a4Now.toString(16)} A5=0x${a5Now.toString(16)}`
+              );
+            }
             prevA4 = a4Now;
             prevA5 = a5Now;
           }
           // DEBUG: Track A6 changes in early iterations
-          if (earlyTraceCount <= 10) {
+          if (earlyTraceCount <= 10 && DEBUG_68K) {
             const memAt4 = this.emulator.readMemory32(0x4);
             console.log(
               `[DoorLifecycleManager] Early trace iter=${this.executionState.iterationCount} PC=0x${pc.toString(16)} A6=0x${a6Now.toString(16)} Memory[0x4]=0x${memAt4.toString(16)}`
@@ -749,19 +755,21 @@ export class DoorLifecycleManager {
       (a4 !== 0 && a4 !== this.executionState.lastSignificantPC) ||
       a5 !== this.executionState.lastInterceptedTrap
     ) {
-      const memA4m40 =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x40) >>> 0) : 0;
-      const memA4m1c =
-        a4 !== 0 ? this.emulator.readMemory32((a4 - 0x1c) >>> 0) : 0;
-      console.log(
-        `[DoorLifecycleManager] A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
-          16
-        )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
-          16
-        )} [-0x40]=0x${memA4m40.toString(16)} [-0x1c]=0x${memA4m1c.toString(
-          16
-        )}`
-      );
+      if (DEBUG_68K) {
+        const memA4m40 =
+          a4 !== 0 ? this.emulator.readMemory32((a4 - 0x40) >>> 0) : 0;
+        const memA4m1c =
+          a4 !== 0 ? this.emulator.readMemory32((a4 - 0x1c) >>> 0) : 0;
+        console.log(
+          `[DoorLifecycleManager] A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
+            16
+          )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
+            16
+          )} [-0x40]=0x${memA4m40.toString(16)} [-0x1c]=0x${memA4m1c.toString(
+            16
+          )}`
+        );
+      }
       this.executionState.lastSignificantPC = a4;
       this.executionState.lastInterceptedTrap = a5;
     }
@@ -1247,6 +1255,69 @@ export class DoorLifecycleManager {
   private async executeInstruction(pc: number): Promise<void> {
     const wasAt24a6 = pc === 0x24a6;
 
+    // DEBUG: Trace NCONFS parsing in joincnf door
+    // Runtime addresses: FindToolType call=0x196c, save A5=0x1970, setup A0=0x1976
+    // BSR atoi=0x1978, store NCONFS=0x197c, atoi entry=0x6320
+    const DEBUG_NCONFS = process.env.DEBUG_NCONFS === '1';
+    if (DEBUG_NCONFS) {
+      if (pc === 0x196c) {
+        // JSR FindToolType
+        const a0 = this.emulator.getRegister(8);
+        const a1 = this.emulator.getRegister(9);
+        console.log(`[NCONFS] PC=0x196c JSR FindToolType A0=0x${a0.toString(16)} A1=0x${a1.toString(16)}`);
+        // Read A1 string (tooltype name)
+        const name = this.emulator.readString(a1);
+        console.log(`[NCONFS]   Looking for: "${name}"`);
+      } else if (pc === 0x1970) {
+        // MOVEA.L D0, A5 - save FindToolType result
+        const d0 = this.emulator.getRegister(0);
+        console.log(`[NCONFS] PC=0x1970 MOVEA.L D0,A5  D0=0x${d0.toString(16)} (FindToolType result)`);
+        if (d0 !== 0) {
+          const value = this.emulator.readString(d0);
+          console.log(`[NCONFS]   Value at D0: "${value}"`);
+        }
+      } else if (pc === 0x1976) {
+        // MOVEA.L A5, A0 - setup A0 for atoi
+        const a5 = this.emulator.getRegister(13);
+        console.log(`[NCONFS] PC=0x1976 MOVEA.L A5,A0  A5=0x${a5.toString(16)}`);
+      } else if (pc === 0x1978) {
+        // BSR atoi
+        const a0 = this.emulator.getRegister(8);
+        console.log(`[NCONFS] PC=0x1978 BSR atoi  A0=0x${a0.toString(16)}`);
+        if (a0 !== 0) {
+          const value = this.emulator.readString(a0);
+          console.log(`[NCONFS]   String to convert: "${value}"`);
+        }
+      } else if (pc === 0x197c) {
+        // MOVE.L D0, -0x6fd0(A4) - store NCONFS result
+        const d0 = this.emulator.getRegister(0);
+        const a4 = this.emulator.getRegister(12);
+        console.log(`[NCONFS] PC=0x197c MOVE.L D0,-0x6fd0(A4)  D0=${d0} A4=0x${a4.toString(16)}`);
+        console.log(`[NCONFS]   NCONFS value: ${d0}`);
+      } else if (pc === 0x6320) {
+        // atoi entry
+        const a0 = this.emulator.getRegister(8);
+        console.log(`[NCONFS] PC=0x6320 atoi entry  A0=0x${a0.toString(16)}`);
+        if (a0 !== 0) {
+          const value = this.emulator.readString(a0);
+          console.log(`[NCONFS]   atoi input string: "${value}"`);
+          // Dump memory at A0
+          const bytes: string[] = [];
+          for (let i = 0; i < 8; i++) {
+            bytes.push(this.emulator.readMemory(a0 + i).toString(16).padStart(2, '0'));
+          }
+          console.log(`[NCONFS]   Memory at A0: [${bytes.join(' ')}]`);
+        }
+      } else if (pc === 0x19b6) {
+        // CMP.L -0x6fd0(A4), D7 - loop comparison
+        const d7 = this.emulator.getRegister(7);
+        const a4 = this.emulator.getRegister(12);
+        const nconfsAddr = (a4 - 0x6fd0) >>> 0;
+        const nconfs = this.emulator.readMemory32(nconfsAddr);
+        console.log(`[NCONFS] PC=0x19b6 CMP.L -0x6fd0(A4),D7  D7=${d7} NCONFS=${nconfs} at 0x${nconfsAddr.toString(16)}`);
+      }
+    }
+
     // Track PC history (circular buffer)
     this.pcHistory.push(pc);
     if (this.pcHistory.length > this.PC_HISTORY_SIZE) {
@@ -1305,6 +1376,35 @@ export class DoorLifecycleManager {
     const cyclesExecuted = this.emulator.executeInstruction();
     this.executionState.totalCycles += cyclesExecuted;
 
+    // Check for native Moira debug events (DEBUG_68K_NATIVE=1)
+    const cpu = this.emulator['cpu'];
+    if (process.env.DEBUG_68K_NATIVE === '1' && cpu?.hasNativeWatchpointHit?.()) {
+      const watchAddr = cpu.getNativeWatchpointAddr?.() || 0;
+      console.log(`\n[NATIVE DEBUG] *** WATCHPOINT HIT at 0x${watchAddr.toString(16)} ***`);
+      console.log(`[NATIVE DEBUG]   PC: 0x${pc.toString(16)}`);
+      console.log(`[NATIVE DEBUG]   Iteration: ${this.executionState.iterationCount}`);
+
+      // Dump last 20 logged instructions for context
+      const logCount = cpu.nativeLoggedInstructions?.() || 0;
+      if (logCount > 0) {
+        console.log(`[NATIVE DEBUG]   Last ${Math.min(logCount, 20)} instructions:`);
+        const start = Math.max(0, logCount - 20);
+        for (let i = start; i < logCount; i++) {
+          const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
+          const disasm = cpu.nativeDisassemble?.(logPc) || '???';
+          console.log(`[NATIVE DEBUG]     0x${logPc.toString(16)}: ${disasm}`);
+        }
+      }
+      cpu.clearNativeWatchpointHit?.();
+    }
+
+    if (process.env.DEBUG_68K_NATIVE === '1' && cpu?.hasNativeBreakpointHit?.()) {
+      const bpAddr = cpu.getNativeBreakpointAddr?.() || 0;
+      console.log(`\n[NATIVE DEBUG] *** BREAKPOINT HIT at 0x${bpAddr.toString(16)} ***`);
+      (this.emulator as any).dumpRegisters?.();
+      cpu.clearNativeBreakpointHit?.();
+    }
+
     // CRITICAL: Check if we ended up at an exception handler
     // This means MOIRA triggered an exception internally (not through our ILLEGAL check)
     const pcAfterExec = this.emulator.getRegister(16);
@@ -1336,11 +1436,12 @@ export class DoorLifecycleManager {
     }
 
     // Check for unexpected PC jumps (not normal instruction flow)
+    // Note: This fires frequently for library calls which are legitimate, so only log in debug mode
     const newPc = this.emulator.getRegister(16);
     const pcDelta = newPc - pc;
     // Normal instructions advance PC by 2-10 bytes, branches go backwards or small forward
     // A jump from 0x2xxx to 0x9xxx is suspicious
-    if (pcDelta > 0x2000 || (pcDelta < 0 && pcDelta > -0x8000 && newPc > 0x8000 && newPc < 0xa000)) {
+    if (DEBUG_68K && (pcDelta > 0x2000 || (pcDelta < 0 && pcDelta > -0x8000 && newPc > 0x8000 && newPc < 0xa000))) {
       console.error(`\n*** UNEXPECTED PC JUMP DETECTED ***`);
       console.error(`  PC before: 0x${pc.toString(16)}`);
       console.error(`  PC after:  0x${newPc.toString(16)}`);

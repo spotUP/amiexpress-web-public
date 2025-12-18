@@ -349,6 +349,41 @@ export class AmigaDoorSession {
         );
       }
 
+      // Native Moira debugging: enable with DEBUG_68K_NATIVE=1
+      // This uses Moira's built-in debugger for instruction logging and watchpoints
+      if (process.env.DEBUG_68K_NATIVE === '1') {
+        const cpu = this.emulator['cpu'];
+        if (cpu?.nativeEnableLogging) {
+          console.log('[AmigaDoorSession] [NATIVE DEBUG] Enabling Moira native debugger...');
+
+          // Enable instruction logging (256-entry circular buffer)
+          cpu.nativeEnableLogging();
+          console.log('[AmigaDoorSession] [NATIVE DEBUG] Instruction logging enabled');
+
+          // Set watchpoints on DiskObject/tooltypes memory regions
+          // These addresses are used by icon.library for ConfConfig.info
+          const nativeWatchAddrs = [
+            0x60000,  // DiskObject base
+            0x60036,  // do_ToolTypes field (offset 54)
+            0x60100,  // Tooltypes array
+            0x60104,  // Tooltypes[1]
+            0x60108,  // Tooltypes[2]
+            0x60200,  // First tooltype string (NCONFS)
+          ];
+
+          for (const addr of nativeWatchAddrs) {
+            cpu?.nativeSetWatchpoint?.(addr);
+          }
+          console.log(`[AmigaDoorSession] [NATIVE DEBUG] Watchpoints set on: ${nativeWatchAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
+
+          // Set catchpoint for illegal instructions
+          cpu?.nativeSetCatchpoint?.(4); // Vector 4 = Illegal instruction
+          console.log('[AmigaDoorSession] [NATIVE DEBUG] Catchpoint set for illegal instructions');
+        } else {
+          console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger not available');
+        }
+      }
+
       // Initialize Lifecycle Manager (Phase 5A)
       this.lifecycleManager = new DoorLifecycleManager(
         this.emulator,
@@ -726,6 +761,7 @@ export class AmigaDoorSession {
    */
   getExitState() {
     const ximState = this.sharedState.ximProtocol?.getStateSnapshot();
+    console.log(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximProtocol}, returnCommand="${ximState?.returnCommand || 'NONE'}"`);
     return {
       ximState,
       bbsSession: this.config.bbsSession,
