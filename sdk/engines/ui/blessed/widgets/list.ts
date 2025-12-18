@@ -44,6 +44,16 @@ export class List extends Element {
     // Mouse click handler - select item by click position
     if (options.mouse !== false) {
       this.on('click', this._onClick.bind(this));
+
+      // Mouse wheel handlers - move selection up/down
+      this.on('wheelup', () => {
+        this.up();
+        this.screen?.render();
+      });
+      this.on('wheeldown', () => {
+        this.down();
+        this.screen?.render();
+      });
     }
   }
 

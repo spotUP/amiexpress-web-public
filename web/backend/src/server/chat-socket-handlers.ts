@@ -142,4 +142,46 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     const { handleRoomMute } = require('../handlers/chat/group-chat.handler');
     await handleRoomMute(socket, session, data);
   });
+
+  // ===== LIVE TYPING PREVIEW (Keystroke relaying) =====
+
+  socket.on('chat:keystroke', (data: { channelId: string; userId: number; char: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session || !session.currentRoomId) return;
+
+    // Broadcast keystroke to other users in the same room (not back to sender)
+    const socketRoom = 'room:' + session.currentRoomId;
+    socket.to(socketRoom).emit('chat:keystroke', {
+      channelId: session.currentRoomId,
+      userId: data.userId,
+      username: session.username,
+      char: data.char
+    });
+  });
+
+  socket.on('chat:keystroke-submit', (data: { channelId: string; userId: number }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session || !session.currentRoomId) return;
+
+    // Notify other users that this user submitted their message (stopped typing)
+    const socketRoom = 'room:' + session.currentRoomId;
+    socket.to(socketRoom).emit('chat:keystroke-submit', {
+      channelId: session.currentRoomId,
+      userId: data.userId,
+      username: session.username
+    });
+  });
+
+  socket.on('chat:keystroke-clear', (data: { channelId: string; userId: number }) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session || !session.currentRoomId) return;
+
+    // Notify other users that this user cleared their input
+    const socketRoom = 'room:' + session.currentRoomId;
+    socket.to(socketRoom).emit('chat:keystroke-clear', {
+      channelId: session.currentRoomId,
+      userId: data.userId,
+      username: session.username
+    });
+  });
 }

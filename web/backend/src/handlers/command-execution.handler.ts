@@ -247,7 +247,14 @@ async function runCommand(
       { userSecLevel, requiredAccess, username: session.user?.username },
       DebugSeverity.WARNING
     );
-    socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to that command.'));
+    // Only show error message if NOT a screen-initiated command
+    // Screen commands (from ~CC_, ~XC_, ~XI MCI codes) should fail silently
+    // because the user didn't explicitly type them
+    if (!session.executingScreenCommand) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to that command.'));
+    } else {
+      console.log(`  (Screen command - failing silently)`);
+    }
     return RESULT_NOT_ALLOWED;
   } else {
     console.log(`  Access granted: user level ${userSecLevel} >= required ${requiredAccess}`);

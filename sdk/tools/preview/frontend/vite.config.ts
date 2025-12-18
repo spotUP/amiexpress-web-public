@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
   base: '/sdk/',
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@amiexpress/terminal': path.resolve(__dirname, '../../../../packages/terminal/src')
+    }
+  },
   server: {
     port: 3000,
     proxy: {

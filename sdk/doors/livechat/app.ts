@@ -3,7 +3,7 @@
  *
  * Full-featured chat with advanced neo-blessed UI:
  * - Menu bar with keyboard shortcuts
- * - Tree view for channels/DMs
+ * - Simple list for channels with selection
  * - Table view for users with columns
  * - Popup dialogs and overlays
  * - Loading spinners
@@ -12,7 +12,7 @@
  */
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib, { log as createLog, tree as createTree } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import contrib, { log as createLog } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
 
 // Core state and services
 import { createInitialState, addMessage, setChannel, AppState } from './core/state';
@@ -298,7 +298,7 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== CHANNEL LIST (Left Sidebar) ==========
-  const channelTree = createTree({
+  const channelList = blessed.list({
     parent: screen,
     top: MENU_HEIGHT + 1,  // Below tab bar
     left: 0,
@@ -309,15 +309,19 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       border: { fg: 'cyan' },
-    },
+      selected: { fg: 'white', bg: 'blue' },
+    } as any,
     mouse: true,
     keys: true,
     vi: true,
-    template: {
-      lines: true,
-      extend: ' [+]',
-      retract: ' [-]',
-    },
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: '|',
+      track: { ch: '|', bg: 'black' },
+      style: { fg: 'cyan', bg: 'cyan' }
+    } as any,
+    items: [],
   });
 
   // Default channels to show when server hasn't responded
@@ -327,31 +331,15 @@ export async function createApp(session: DoorSession) {
     { id: 'help', name: 'help', type: 'public' as const },
   ];
 
-  // Initialize channel tree data
-  function updateChannelTree() {
-    const treeData: any = {
-      name: 'Channels',
-      extended: true,
-      children: {
-        'Public': {
-          extended: true,
-          children: {} as Record<string, any>,
-        },
-        'Private': {
-          extended: false,
-          children: {} as Record<string, any>,
-        },
-        'DMs': {
-          extended: false,
-          children: {} as Record<string, any>,
-        },
-      },
-    };
+  // Track channel data for selection handling
+  let channelItems: Array<{ id: string; name: string }> = [];
 
+  // Initialize channel list data
+  function updateChannelList() {
     // Use state channels if available, otherwise show defaults
     const channelsToShow = state.channels.length > 0 ? state.channels : defaultChannels.map(c => ({
       ...c,
-      displayName: '#' + c.name,
+      displayName: c.name,
       topic: '',
       createdBy: 'system',
       createdAt: new Date(),
@@ -359,43 +347,44 @@ export async function createApp(session: DoorSession) {
       unreadCount: 0,
     }));
 
-    // Add channels to tree
-    for (const ch of channelsToShow) {
-      const target = ch.type === 'public' ? treeData.children['Public'].children
-        : ch.type === 'private' ? treeData.children['Private'].children
-        : treeData.children['DMs'].children;
-
-      const prefix = ch.id === state.currentChannel ? '> ' : '  ';
+    // Build simple list items (no # prefix, no tree structure)
+    channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name }));
+    const items = channelsToShow.map(ch => {
       const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
-      target[ch.name] = { name: prefix + '#' + ch.name + unread };
+      return ch.name + unread;
+    });
+
+    channelList.setItems(items);
+
+    // Select current channel if in the list
+    const currentIdx = channelItems.findIndex(ch => ch.id === state.currentChannel);
+    if (currentIdx >= 0) {
+      channelList.select(currentIdx);
     }
 
-    channelTree.setData(treeData);
+    screen.render();
   }
 
   // Handle channel selection
-  channelTree.on('select', (node: any) => {
-    if (node && node.name) {
-      const match = node.name.match(/#(\w+)/);
-      if (match) {
-        const channelName = match[1];
-        if (state.currentChannel) socket.emit('room:leave');
-        socket.emit('room:join', { roomName: channelName });
-        // Return focus to input after selecting
-        inputBox.focus();
-      }
+  channelList.on('select', (_item: any, index: number) => {
+    const channel = channelItems[index];
+    if (channel) {
+      if (state.currentChannel) socket.emit('room:leave');
+      socket.emit('room:join', { roomName: channel.name });
+      // Return focus to input after selecting
+      inputBox.focus();
     }
   });
 
-  // Escape from channel tree returns to input
-  channelTree.key(['escape'], () => {
+  // Escape from channel list returns to input
+  channelList.key(['escape'], () => {
     inputBox.focus();
     screen.render();
   });
 
-  // Direct click handler for channelTree - ensures focus on click
-  channelTree.on('click', () => {
-    channelTree.focus();
+  // Direct click handler for channelList - ensures focus on click
+  channelList.on('click', () => {
+    channelList.focus();
     screen.render();
   });
 
@@ -442,9 +431,9 @@ export async function createApp(session: DoorSession) {
     updateSidebarTabs();
     if (tab === 'channels') {
       userList.hide();
-      channelTree.show();
+      channelList.show();
     } else {
-      channelTree.hide();
+      channelList.hide();
       userList.show();
     }
     screen.render();
@@ -523,7 +512,7 @@ export async function createApp(session: DoorSession) {
   // Highlight focused panel with white border
   const panelDefaultBorders = new Map<any, string>();
   panelDefaultBorders.set(inputBox, 'yellow');
-  panelDefaultBorders.set(channelTree, 'cyan');
+  panelDefaultBorders.set(channelList, 'cyan');
   panelDefaultBorders.set(userList, 'magenta');
   panelDefaultBorders.set(chatLog, 'green');
 
@@ -1438,7 +1427,7 @@ Features 25+ widget types including:
       // Join the previous channel
       socket.emit('room:join', { roomName: previousChannel });
       state.currentChannel = previousChannel;
-      updateChannelTree();
+      updateChannelList();
       addSystemMessage(`Returned to #${previousChannel}`);
     }
     previousChannel = null;
@@ -1773,19 +1762,14 @@ Features 25+ widget types including:
       return;
     }
 
-    if (!channelTree.hidden && isInBounds(channelTree)) {
+    if (!channelList.hidden && isInBounds(channelList)) {
       if (event.button === 'left') {
-        channelTree.focus();
+        channelList.focus();
         screen.render();
       } else if (event.button === 'right') {
-        const nodeLines = (channelTree as any).nodeLines || [];
-        const selected = (channelTree as any).rows?.selected;
-        if (selected !== undefined && nodeLines[selected]) {
-          const node = nodeLines[selected];
-          const match = node.name?.match(/#(\w+)/);
-          if (match) {
-            showContextMenu(x, y, 'channel', match[1]);
-          }
+        const selected = (channelList as any).selected;
+        if (selected !== undefined && channelItems[selected]) {
+          showContextMenu(x, y, 'channel', channelItems[selected].name);
         }
       }
       return;
@@ -1814,13 +1798,13 @@ Features 25+ widget types including:
     screen.render();
   });
 
-  // Channel tree scroll - 2 lines per wheel tick
-  channelTree.on('wheelup', () => {
-    (channelTree as any).scroll?.(-2);
+  // Channel list scroll - 2 lines per wheel tick
+  channelList.on('wheelup', () => {
+    channelList.up(2);
     screen.render();
   });
-  channelTree.on('wheeldown', () => {
-    (channelTree as any).scroll?.(2);
+  channelList.on('wheeldown', () => {
+    channelList.down(2);
     screen.render();
   });
 
@@ -2007,7 +1991,7 @@ Features 25+ widget types including:
         memberCount: r.member_count || 0,
         unreadCount: 0,
       }));
-      updateChannelTree();
+      updateChannelList();
       addSystemMessage(`Found ${rooms.length} room${rooms.length === 1 ? '' : 's'}`);
 
       // Auto-join default room if not already in one
@@ -2049,8 +2033,8 @@ Features 25+ widget types including:
       }
     }
 
-    chatLog.setLabel(` Chat - #${data.roomName} `);
-    updateChannelTree();
+    chatLog.setLabel(` ${data.roomName} `);
+    updateChannelList();
     updateUserTable();
     updateStatusBar();
     addSystemMessage(`Joined #${data.roomName} (${data.memberCount || onlineUsers.size} users)`);
@@ -2062,7 +2046,7 @@ Features 25+ widget types including:
   socket.on('room:left', (data: any) => {
     setChannel(state, '');
     chatLog.setLabel(' Chat ');
-    updateChannelTree();
+    updateChannelList();
     updateStatusBar();
     addSystemMessage(`Left ${data.roomName}`);
   });
@@ -2080,7 +2064,7 @@ Features 25+ widget types including:
       memberCount: 1,
       unreadCount: 0,
     });
-    updateChannelTree();
+    updateChannelList();
     addSystemMessage(`Room "#${data.roomName}" created!`);
     addActivity(`Created #${data.roomName}`);
 
@@ -2148,6 +2132,22 @@ Features 25+ widget types including:
     if (data.channelId !== state.currentChannel) return;
     if (data.userId === userId) return;
     processKeystroke(state.typingBuffers, data.userId, data.username, data.char, getUserColor(data.username));
+    updateTypingPreview();
+  });
+
+  // User submitted their message (stopped typing)
+  socket.on('chat:keystroke-submit', (data: any) => {
+    if (data.channelId !== state.currentChannel) return;
+    if (data.userId === userId) return;
+    processKeystroke(state.typingBuffers, data.userId, data.username, 'SUBMIT', '');
+    updateTypingPreview();
+  });
+
+  // User cleared their input
+  socket.on('chat:keystroke-clear', (data: any) => {
+    if (data.channelId !== state.currentChannel) return;
+    if (data.userId === userId) return;
+    processKeystroke(state.typingBuffers, data.userId, data.username, 'CLEAR', '');
     updateTypingPreview();
   });
 
@@ -2429,15 +2429,15 @@ Features 25+ widget types including:
     if (sidebarVisible) {
       sidebarTabs.show();
       if (sidebarTab === 'channels') {
-        channelTree.show();
+        channelList.show();
         userList.hide();
       } else {
-        channelTree.hide();
+        channelList.hide();
         userList.show();
       }
     } else {
       sidebarTabs.hide();
-      channelTree.hide();
+      channelList.hide();
       userList.hide();
     }
 
@@ -2468,7 +2468,7 @@ Features 25+ widget types including:
   const focusablePanels = () => {
     const panels: any[] = [inputBox];
     if (sidebarVisible) {
-      panels.push(sidebarTab === 'channels' ? channelTree : userList);
+      panels.push(sidebarTab === 'channels' ? channelList : userList);
     }
     panels.push(chatLog);
     return panels;
@@ -2590,7 +2590,7 @@ Features 25+ widget types including:
 
       // Initial UI setup
       updateSidebarTabs();
-      updateChannelTree();
+      updateChannelList();
       updateUserTable();
       updateStatusBar();
       screen.render();

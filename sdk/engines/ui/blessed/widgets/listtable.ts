@@ -76,6 +76,15 @@ export class ListTable extends Box {
           this.selectRow(rowIndex);
         }
       });
+
+      // Mouse wheel handlers - move selection up/down
+      this.on('wheelup', () => {
+        this.selectPrevious();
+      });
+
+      this.on('wheeldown', () => {
+        this.selectNext();
+      });
     }
   }
 

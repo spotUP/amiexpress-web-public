@@ -1177,10 +1177,8 @@ async function createAccount(socket: Socket, session: any) {
     session.user = newUser;
 
     // Initialize security
-    const { initializeSecurity } = require('../index');
-    if (initializeSecurity) {
-      initializeSecurity(session);
-    }
+    const { initializeSecurity } = require('../../utils/acs.util');
+    initializeSecurity(session);
 
     // Set user preferences
     session.confRJoin = 1; // Default to General conference

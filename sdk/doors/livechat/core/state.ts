@@ -20,7 +20,7 @@ export interface AppState {
 export function createInitialState(): AppState {
   return {
     running: true,
-    currentChannel: 'general',
+    currentChannel: '',  // Empty until user actually joins a room
     inputBuffer: '',
     focusedPane: 'input',
     channels: [],

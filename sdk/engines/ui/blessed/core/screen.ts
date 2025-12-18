@@ -1139,6 +1139,8 @@ export class Screen extends Element {
       element.focused = true;
       element.emit('focus');
     }
+    // Re-render to update focus border styling
+    this.render();
   }
 
   /**
