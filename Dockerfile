@@ -61,6 +61,9 @@ COPY sdk ./
 # Install dependencies (skip prepare script) and build
 RUN npm ci --ignore-scripts && npm run build
 
+# Copy terminal package (required by SDK preview frontend)
+COPY --from=terminal-builder /app/packages/terminal /app/packages/terminal
+
 # Build SDK preview frontend
 WORKDIR /app/sdk/tools/preview/frontend
 COPY sdk/tools/preview/frontend/package*.json ./
