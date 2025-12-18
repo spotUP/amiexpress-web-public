@@ -861,16 +861,20 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
       return;
     }
 
-    // Clear temp data and change state before launching
+    // Clear temp data and set up command for processing
     session.tempData = {};
-    session.subState = LoggedOnSubState.READ_COMMAND;  // Exit DOOR_SELECT state
 
     // Execute through normal BBS command system - handles all door types consistently
     const doorCommand = selectedDoor.command || selectedDoor.id;
     console.log(`[DOOR Select] Executing via BBS command: ${doorCommand}`);
 
+    // Set PROCESS_COMMAND state with the command text ready
+    // This bypasses READ_COMMAND's character-by-character buffering
+    session.commandText = doorCommand.toUpperCase();
+    session.subState = LoggedOnSubState.PROCESS_COMMAND;
+
     const { handleCommand } = require('./command.handler');
-    await handleCommand(socket, session, doorCommand);
+    await handleCommand(socket, session, '');  // Empty string triggers command processing
     return;
   }
 
