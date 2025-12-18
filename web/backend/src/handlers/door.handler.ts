@@ -1110,7 +1110,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
 
     // Check if door exists (use amigafs for case-insensitive matching)
-    if (!amigafs.existsSync(doorPath)) {
+    // IMPORTANT: Use amigafs.resolvePath() to get the actual path with correct casing
+    // because import() requires exact paths on case-sensitive filesystems
+    const resolvedDoorPath = amigafs.resolvePath(doorPath);
+    if (!resolvedDoorPath) {
       socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -1118,10 +1121,12 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       return;
     }
 
+    console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
+
     // Dynamically import the door module with cache busting for development
     // Use timestamp query parameter to force fresh load every time
     const cacheBuster = `?t=${Date.now()}`;
-    const doorModule = await import(`${doorPath}${cacheBuster}`);
+    const doorModule = await import(`${resolvedDoorPath}${cacheBuster}`);
 
     // Check if this is a hybrid door using SDK's ServerDoor class
     // These doors call door.start() when imported and don't export runDoor()
