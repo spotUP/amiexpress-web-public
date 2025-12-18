@@ -1,0 +1,8 @@
+BBSCMD=MTOP
+TYPE=XIM
+LOCATION=doors:multitop/mtop
+ARGS=doors:multitop/designs/MTopDLCPS1.dsg bbs:bulletins/bull5.txt
+ACCESS=10
+MULTINODE=YES
+PRIORITY=SAME
+DESCRIPTION=MultiTop II - Top 10 Statistics Display
