@@ -16,6 +16,14 @@ export class Log extends Element {
       clickable: true,
       mouse: true,
       ...options,
+      // Add scrollbar by default (unless explicitly disabled)
+      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
+        ch: '█',
+        track: {
+          ch: '│',
+        },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+      } : undefined,
     });
 
     this.scrollback = options.scrollback || 1000;

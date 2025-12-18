@@ -591,6 +591,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // an empty string (internal advanceDisplayFlow tick).
   if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
+    // Actually display the menu when transitioning from DISPLAY_MENU
+    session.menuPause = false;
+    await displayMainMenu(socket, session);
+    return;
   }
 
   const trimmedScreenCommand = (data || '').trim();
@@ -1279,7 +1283,8 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     }
 
     // Handle Enter key - finalize and send message
-    if (data === '\r' || data === '\n') {
+    // Note: Some terminals send '\r\n' together, so we check for that too
+    if (data === '\r' || data === '\n' || data === '\r\n') {
       const input = (session.inputBuffer || '').trim();
 
       // Clear keystroke buffer on sysop panel
@@ -1600,6 +1605,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // immediately drop to READ_COMMAND so input is not lost to the display flow loop.
   if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
+    // Actually display the menu when transitioning from DISPLAY_MENU
+    // This ensures the menu is shown after pressing any key
+    session.menuPause = false;
+    await displayMainMenu(socket, session);
+    return;
   }
 
   if (isDisplayFlowState(session.subState)) {
@@ -3416,6 +3426,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       session.subState === LoggedOnSubState.ACCOUNT_EDITOR_MENU
     ) {
       session.subState = LoggedOnSubState.READ_COMMAND;
+      // Actually display the menu when transitioning from DISPLAY_MENU
+      session.menuPause = false;
+      await displayMainMenu(socket, session);
+      return;
     } else {
       console.log(' Not in command input state, current subState:', session.subState, '- IGNORING COMMAND');
       console.log('=== handleCommand end ===\n');

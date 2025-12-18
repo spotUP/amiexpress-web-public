@@ -400,6 +400,26 @@ export class UserDatabaseManager {
   }
 
   /**
+   * Convert a number to 8-byte BCD (Binary Coded Decimal) buffer
+   * Amiga BCD format: each byte holds two decimal digits (upper nibble, lower nibble)
+   * 8 bytes = 16 decimal digits, stored big-endian (most significant first)
+   */
+  private numberToBCD(value: number): Buffer {
+    const buffer = Buffer.alloc(8, 0);
+    if (value <= 0 || !Number.isFinite(value)) {
+      return buffer;
+    }
+    const str = Math.floor(value).toString();
+    const padded = str.padStart(16, '0');
+    for (let i = 0; i < 8; i++) {
+      const highDigit = parseInt(padded[i * 2], 10);
+      const lowDigit = parseInt(padded[i * 2 + 1], 10);
+      buffer[i] = (highDigit << 4) | lowDigit;
+    }
+    return buffer;
+  }
+
+  /**
    * Append user to all three database files
    */
   appendUser(user: UserStruct, keys: UserKeysStruct, misc: UserMiscStruct): void {
@@ -835,11 +855,15 @@ export class UserDatabaseManager {
    * Convert database User to UserMiscStruct
    */
   userToMisc(user: any): UserMiscStruct {
+    // Convert bytesUpload/bytesDownload to BCD format for Amiga compatibility
+    const downloadBytes = user.bytesDownload || user.downloadBytes || 0;
+    const uploadBytes = user.bytesUpload || user.uploadBytes || 0;
+
     return {
       internetName: '',
       realName: user.realName || '',
-      downloadBytesBCD: Buffer.alloc(8, 0),
-      uploadBytesBCD: Buffer.alloc(8, 0),
+      downloadBytesBCD: this.numberToBCD(downloadBytes),
+      uploadBytesBCD: this.numberToBCD(uploadBytes),
       eMail: user.email || '',
       lastDlCPS: 0,
       pwdHash: Buffer.alloc(32, 0),

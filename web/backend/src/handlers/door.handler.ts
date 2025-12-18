@@ -20,6 +20,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
+import { displayMainMenu } from './command-handler/menu';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -579,6 +580,9 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${availableAmigaDoors.length} Amiga doors`);
 
   // Convert Amiga doors to the format expected by this function
+  // Only mark as Amiga door if it's actually an Amiga binary type (XIM, AIM, SIM, TIM, IIM)
+  // TypeScript doors (TS) and others should NOT be marked as Amiga doors
+  const amigaDoorTypes = ['XIM', 'AIM', 'SIM', 'TIM', 'IIM'];
   const amigaDoorsList = availableAmigaDoors.map((door: any) => ({
     id: door.command,
     name: door.name || door.command,
@@ -586,40 +590,40 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
     accessLevel: door.access || 0,
     enabled: true,
     conferenceId: null,
-    isAmigaDoor: true,
+    isAmigaDoor: amigaDoorTypes.includes((door.type || '').toUpperCase()),
     command: door.command,
     doorInfo: door,  // Keep original door info for execution
     doorType: door.type || 'AMI',  // Use door.type (XIM, AIM, etc.), not doorType
+    type: door.type,  // Also pass through the type for executeDoor routing
+    path: door.location,  // Pass location as path for executeDoor
     size: door.size || 0
   }));
 
   // Combine both lists
   const allDoors = [...availableDoors, ...amigaDoorsList];
 
-  // If a door name was specified, try to launch it directly
+  // If a door name was specified, try to launch it directly via normal command system
   if (params && params.trim()) {
-    const doorName = params.trim().toLowerCase();
+    const doorName = params.trim();
     console.log(`[DOOR Command] Looking for door: ${doorName}`);
 
     const matchedDoor = allDoors.find(d =>
-      d.id.toLowerCase() === doorName ||
-      d.name.toLowerCase() === doorName ||
-      (d.command && d.command.toLowerCase() === doorName)
+      d.id.toLowerCase() === doorName.toLowerCase() ||
+      d.name.toLowerCase() === doorName.toLowerCase() ||
+      (d.command && d.command.toLowerCase() === doorName.toLowerCase())
     );
 
     if (matchedDoor) {
-      console.log(`[DOOR Command] Found matching door: ${matchedDoor.name}`);
+      const doorCommand = matchedDoor.command || matchedDoor.id;
+      console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand}`);
 
-      // Check if it's an Amiga door
-      if (matchedDoor.isAmigaDoor && matchedDoor.doorInfo) {
-        console.log(`[DOOR Command] Launching Amiga door: ${matchedDoor.name}`);
-        await launchAmigaDoor(socket, session, matchedDoor.doorInfo);
-        return;
-      } else {
-        // TypeScript door
-        await executeDoor(socket, session, matchedDoor);
-        return;
-      }
+      // Ensure we're in READ_COMMAND state before executing
+      session.subState = LoggedOnSubState.READ_COMMAND;
+
+      // Execute through normal BBS command system - handles all door types consistently
+      const { handleCommand } = require('./command.handler');
+      await handleCommand(socket, session, doorCommand);
+      return;
     } else {
       socket.emit('ansi-output', `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
@@ -782,38 +786,47 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
   console.log(`[DOOR Select] Current selection: ${selectedIndex}/${availableDoors.length - 1}`);
   console.log(`[DOOR Select] Key after toLowerCase: ${JSON.stringify(key)}`);
 
-  // Arrow Up
+  // Arrow Up - wrap to bottom if at top
   if (data === '\x1b[A' || data === '\x1b\x5b\x41') {
+    const pageSize = 15;
     if (selectedIndex > 0) {
       session.tempData.selectedIndex--;
 
       // Adjust scroll offset
-      const pageSize = 15;
       if (session.tempData.selectedIndex < scrollOffset) {
         session.tempData.scrollOffset = Math.max(0, scrollOffset - pageSize);
       }
-
-      showDoorsList(socket, session);
+    } else {
+      // Wrap to bottom
+      session.tempData.selectedIndex = availableDoors.length - 1;
+      // Scroll to show the last page
+      session.tempData.scrollOffset = Math.max(0, availableDoors.length - pageSize);
     }
+
+    showDoorsList(socket, session);
     return;
   }
 
-  // Arrow Down
+  // Arrow Down - wrap to top if at bottom
   if (data === '\x1b[B' || data === '\x1b\x5b\x42') {
+    const pageSize = 15;
     if (selectedIndex < availableDoors.length - 1) {
       session.tempData.selectedIndex++;
 
       // Adjust scroll offset
-      const pageSize = 15;
       if (session.tempData.selectedIndex >= scrollOffset + pageSize) {
         session.tempData.scrollOffset = Math.min(
           availableDoors.length - pageSize,
           scrollOffset + pageSize
         );
       }
-
-      showDoorsList(socket, session);
+    } else {
+      // Wrap to top
+      session.tempData.selectedIndex = 0;
+      session.tempData.scrollOffset = 0;
     }
+
+    showDoorsList(socket, session);
     return;
   }
 
@@ -848,17 +861,16 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
       return;
     }
 
-    // Clear temp data before launching
+    // Clear temp data and change state before launching
     session.tempData = {};
+    session.subState = LoggedOnSubState.READ_COMMAND;  // Exit DOOR_SELECT state
 
-    // Check if it's an Amiga door
-    if (selectedDoor.isAmigaDoor && selectedDoor.doorInfo) {
-      console.log(`[DOOR Command] Launching Amiga door: ${selectedDoor.name}`);
-      await launchAmigaDoor(socket, session, selectedDoor.doorInfo);
-    } else {
-      // TypeScript door
-      await executeDoor(socket, session, selectedDoor);
-    }
+    // Execute through normal BBS command system - handles all door types consistently
+    const doorCommand = selectedDoor.command || selectedDoor.id;
+    console.log(`[DOOR Select] Executing via BBS command: ${doorCommand}`);
+
+    const { handleCommand } = require('./command.handler');
+    await handleCommand(socket, session, doorCommand);
     return;
   }
 
@@ -867,7 +879,8 @@ export async function handleDoorSelectInput(socket: any, session: BBSSession, da
     socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
     session.tempData = {};
     session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Actually display the menu instead of just setting state
+    await displayMainMenu(socket, session);
     return;
   }
 
@@ -1216,9 +1229,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     // Disable game mode when door exits
     disableGameMode(socket, session);
 
-    // Clear door active flag
+    // Clear door active flag and input handler
     delete session.inDoorManager;
-    console.log(`[executeTypeScriptDoor] Cleared inDoorManager`);
+    delete session.doorInputHandler;
+    console.log(`[executeTypeScriptDoor] Cleared inDoorManager and doorInputHandler`);
 
     // Reset menu input mode (express.e returns to MENU with shortcuts off)
     session.cmdShortcuts = false;
@@ -1230,9 +1244,11 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     socket.emit('door:status', { status: 'stopped' });
     console.log(`[executeTypeScriptDoor] Sent door:status: stopped`);
 
-    // Return to menu and pause before showing
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Return to menu and pause before showing (only if user is logged in)
+    session.menuPause = false;
+    if (session.state === BBSState.LOGGEDON && session.user) {
+      await displayMainMenu(socket, session);
+    }
 
   } catch (error) {
     console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
@@ -1245,8 +1261,9 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       DebugSeverity.CRITICAL
     );
 
-    // Clear door active flag on error
+    // Clear door active flag and input handler on error
     delete session.inDoorManager;
+    delete session.doorInputHandler;
     session.cmdShortcuts = false;
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
@@ -1254,8 +1271,11 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+    // Only display menu if user is logged in
+    if (session.state === BBSState.LOGGEDON && session.user) {
+      await displayMainMenu(socket, session);
+    }
   }
 }
 
@@ -1456,19 +1476,20 @@ async function executeSDKDoor(socket: any, session: BBSSession, door: Door, door
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
     }
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+    // Actually display the menu instead of just setting state
+    await displayMainMenu(socket, session);
 
   } catch (error) {
     console.error('[executeSDKDoor] Error:', error);
     socket.emit('ansi-output', `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.cmdShortcuts = false;
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
     }
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
+    // Actually display the menu instead of just setting state
+    await displayMainMenu(socket, session);
   }
 }
 
@@ -1928,9 +1949,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
     }
 
-    // Return to menu
+    // Return to menu (only if user is logged in)
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.menuPause = false;
+    if (session.state === BBSState.LOGGEDON && session.user) {
+      await displayMainMenu(socket, session);
+    }
 
   } catch (error) {
     console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
@@ -1947,6 +1971,9 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       /* ignore */
     }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+    if (session.state === BBSState.LOGGEDON && session.user) {
+      await displayMainMenu(socket, session);
+    }
   }
 }
 

@@ -254,36 +254,55 @@ export class DoorManager {
       console.error('[Door Manager] Error scanning Amiga doors:', error);
     }
 
-    // Scan archives directory for uninstalled archives
+    // Scan archives directory for uninstalled archives (with timeout protection)
     if (amigafs.existsSync(this.archivesPath)) {
       const archives = amigafs.readdirSync(this.archivesPath);
+      console.log(`[Door Manager] Scanning ${archives.length} files in archives directory`);
 
       for (const archive of archives) {
         const fullPath = path.join(this.archivesPath, archive);
-        const stats = amigafs.statSync(fullPath);
-        const lowerArchive = archive.toLowerCase();
-        const isArchive = lowerArchive.endsWith('.zip') ||
-                         lowerArchive.endsWith('.lha') ||
-                         lowerArchive.endsWith('.lzh') ||
-                         lowerArchive.endsWith('.lzx');
+        try {
+          const stats = amigafs.statSync(fullPath);
+          const lowerArchive = archive.toLowerCase();
+          const isArchive = lowerArchive.endsWith('.zip') ||
+                           lowerArchive.endsWith('.lha') ||
+                           lowerArchive.endsWith('.lzh') ||
+                           lowerArchive.endsWith('.lzx');
 
-        if (stats.isFile() && isArchive) {
-          const doorInfo = await this.extractDoorInfo(fullPath);
-          const ext = path.extname(archive);
-          doors.push({
-            id: crypto.createHash('md5').update(archive).digest('hex'),
-            name: path.basename(archive, ext),
-            filename: archive,
-            type: 'archive',
-            size: stats.size,
-            uploadDate: stats.mtime,
-            installed: false,
-            archivePath: fullPath,
-            ...doorInfo
-          });
+          if (stats.isFile() && isArchive) {
+            // Use timeout to prevent hanging on corrupted archives
+            let doorInfo: Partial<DoorInfo> = {};
+            try {
+              const timeoutPromise = new Promise<Partial<DoorInfo>>((_, reject) =>
+                setTimeout(() => reject(new Error('Archive extraction timeout')), 3000)
+              );
+              doorInfo = await Promise.race([
+                this.extractDoorInfo(fullPath),
+                timeoutPromise
+              ]);
+            } catch (extractError) {
+              console.warn(`[Door Manager] Skipping archive ${archive}: ${(extractError as Error).message}`);
+            }
+
+            const ext = path.extname(archive);
+            doors.push({
+              id: crypto.createHash('md5').update(archive).digest('hex'),
+              name: path.basename(archive, ext),
+              filename: archive,
+              type: 'archive',
+              size: stats.size,
+              uploadDate: stats.mtime,
+              installed: false,
+              archivePath: fullPath,
+              ...doorInfo
+            });
+          }
+        } catch (statError) {
+          console.warn(`[Door Manager] Skipping file ${archive}: ${(statError as Error).message}`);
         }
       }
     }
+    console.log('[Door Manager] Archive scan complete');
 
     // Sort by name
     this.state.doors = doors.sort((a, b) => a.name.localeCompare(b.name));
@@ -1703,17 +1722,25 @@ export class DoorManager {
 
   /**
    * Utility: Calculate total size of directory recursively
+   * Skips node_modules and .git to prevent hanging on large directories
    */
-  private calculateDirectorySize(dirPath: string): number {
+  private calculateDirectorySize(dirPath: string, depth: number = 0): number {
+    // Limit recursion depth to prevent hanging
+    if (depth > 5) return 0;
+
     let totalSize = 0;
     try {
       const entries = amigafs.readdirSync(dirPath);
       for (const name of entries) {
+        // Skip problematic directories
+        if (name === 'node_modules' || name === '.git' || name === 'dist') {
+          continue;
+        }
         const fullPath = path.join(dirPath, name);
         try {
           const stats = amigafs.statSync(fullPath);
           if (stats.isDirectory()) {
-            totalSize += this.calculateDirectorySize(fullPath);
+            totalSize += this.calculateDirectorySize(fullPath, depth + 1);
           } else {
             totalSize += stats.size;
           }
@@ -1723,7 +1750,7 @@ export class DoorManager {
         }
       }
     } catch (error) {
-      console.error(`[Door Manager] Error calculating directory size for ${dirPath}:`, error);
+      // Silently skip directories we can't read
     }
     return totalSize;
   }

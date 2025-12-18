@@ -228,8 +228,18 @@ export class FileListingHandler {
           return;
         }
       } else {
-        // Display entries (reverse if needed)
-        const displayEntries = reverse ? entries.reverse() : entries;
+        // Display entries (sort by date when reverse, newest first)
+        // For FR command (reverse=true), sort by uploadDate descending (newest first)
+        // For F command (reverse=false), keep original order (oldest first)
+        let displayEntries = entries;
+        if (reverse) {
+          // Sort by upload date descending (newest first)
+          displayEntries = [...entries].sort((a, b) => {
+            const dateA = a.uploadDate?.getTime() || 0;
+            const dateB = b.uploadDate?.getTime() || 0;
+            return dateB - dateA;  // Descending order (newest first)
+          });
+        }
 
         for (const entry of displayEntries) {
           const displayLines = this.getDisplayLines(entry);

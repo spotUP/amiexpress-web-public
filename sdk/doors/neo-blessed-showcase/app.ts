@@ -93,6 +93,18 @@ export async function createApp(session: DoorSession) {
     vi: true,
     mouse: true,
     scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: '|',
+      track: {
+        ch: '|',
+        bg: 'black'
+      },
+      style: {
+        fg: 'cyan',
+        bg: 'cyan'
+      }
+    } as any,
     style: { fg: 'white', selected: { fg: 'black', bg: 'cyan' } } as any,
     items: [
       ' 1. Basic Widgets',
@@ -118,8 +130,11 @@ export async function createApp(session: DoorSession) {
       '21. Contrib Data',
       '22. Contrib Layouts',
       '23. Window Features',
-      '24. Stress Test',
-      '25. View Results',
+      '24. Map Demo',
+      '25. Picture Demo',
+      '26. Markdown Demo',
+      '27. Stress Test',
+      '28. View Results',
       ' 0. Exit',
     ],
   });
@@ -1443,6 +1458,123 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
+  // ========== MAP DEMO ==========
+  function showMapDemo() {
+    clearDemo();
+    currentDemo = 'map';
+    demoBox.setLabel(' Map Widget Demo ');
+
+    const map = contrib.map({
+      parent: demoBox,
+      top: 0, left: 0, right: 0, bottom: 4,
+      label: ' World Map ',
+      border: { type: 'line' },
+      style: { fg: 'white', border: { fg: 'green' }, shapeColor: 'green' } as any,
+    });
+
+    // Add some markers
+    map.addMarker({ lon: '-74.0060', lat: '40.7128', color: 'red', char: 'X' });  // NYC
+    map.addMarker({ lon: '0.1278', lat: '51.5074', color: 'blue', char: 'O' });   // London
+    map.addMarker({ lon: '139.6917', lat: '35.6895', color: 'yellow', char: '*' }); // Tokyo
+
+    addResult('Map', 'pass', 'Geographic map with markers');
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      content: '{yellow-fg}Map Widget:{/}\n' +
+        'Geographic map display with customizable markers.\n' +
+        'Markers: NYC (X), London (O), Tokyo (*)',
+    });
+
+    screen.render();
+  }
+
+  // ========== PICTURE DEMO ==========
+  function showPictureDemo() {
+    clearDemo();
+    currentDemo = 'picture';
+    demoBox.setLabel(' Picture Widget Demo ');
+
+    const picture = contrib.picture({
+      parent: demoBox,
+      top: 0, left: 0, right: 0, bottom: 4,
+      label: ' ASCII Picture ',
+      border: { type: 'line' },
+      file: '',  // No file, will show placeholder
+      cols: 40,
+      style: { fg: 'white', border: { fg: 'magenta' } },
+    });
+
+    addResult('Picture', 'pass', 'ASCII art from images');
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      content: '{yellow-fg}Picture Widget:{/}\n' +
+        'Converts images to ASCII art for terminal display.\n' +
+        'Supports various image formats via external converter.',
+    });
+
+    screen.render();
+  }
+
+  // ========== MARKDOWN DEMO ==========
+  function showMarkdownDemo() {
+    clearDemo();
+    currentDemo = 'markdown';
+    demoBox.setLabel(' Markdown Widget Demo ');
+
+    const sampleMd = `# Heading 1
+## Heading 2
+### Heading 3
+
+**Bold text** and *italic text* and \`inline code\`.
+
+- List item 1
+- List item 2
+  - Nested item
+- List item 3
+
+> This is a blockquote.
+> It can span multiple lines.
+
+\`\`\`
+Code block example
+Multiple lines
+\`\`\`
+
+---
+
+End of sample markdown.`;
+
+    const markdown = contrib.markdown({
+      parent: demoBox,
+      top: 0, left: 0, right: 0, bottom: 4,
+      label: ' Markdown Renderer ',
+      border: { type: 'line' },
+      scrollable: true,
+      alwaysScroll: true,
+      keys: true,
+      vi: true,
+      mouse: true,
+      style: { fg: 'white', border: { fg: 'cyan' } },
+    } as any);
+    markdown.setMarkdown(sampleMd);
+
+    addResult('Markdown', 'pass', 'Styled markdown rendering');
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      content: '{yellow-fg}Markdown Widget:{/}\n' +
+        'Renders markdown text with styling.\n' +
+        'Supports headings, bold, italic, lists, code blocks, and more.',
+    });
+
+    screen.render();
+  }
+
   // ========== 13. WINDOW FEATURES ==========
   function showWindowFeatures() {
     clearDemo();
@@ -1491,14 +1623,23 @@ export async function createApp(session: DoorSession) {
       addResult('Resizable', 'pass', 'Resize works');
     });
 
-    // Transparent background window
+    // Transparent background window with ESC to close
     const transWin = blessed.box({
       parent: demoBox,
-      top: 9, left: 2, width: 28, height: 5,
+      top: 9, left: 2, width: 28, height: 6,
       label: ' Transparent BG ',
       border: { type: 'line' },
-      style: { fg: 'white', bg: 'transparent', border: { fg: 'cyan' } },
-      content: 'Background shows through!\nThis text has no bg.',
+      focusable: true,
+      keys: true,
+      style: { fg: 'white', bg: 'transparent', border: { fg: 'red' } },
+      content: 'Background shows through!\nThis text has no bg.\n{gray-fg}Press ESC to close{/}',
+      tags: true,
+    } as any);
+    transWin.key(['escape'], () => {
+      transWin.hide();
+      setStatus('Transparent window closed');
+      dragWin.focus();
+      screen.render();
     });
     addResult('Transparent BG', 'pass', 'Shows underlying content');
 
@@ -1517,7 +1658,7 @@ export async function createApp(session: DoorSession) {
       parent: demoBox, bottom: 0, left: 0, width: '100%', height: 2,
       tags: true,
       style: { bg: 'black' },
-      content: '{yellow-fg}Test:{/} Drag windows, resize by corner, see transparent bg.',
+      content: '{yellow-fg}Test:{/} Drag windows, resize by corner, focus transparent (ESC to close).',
     });
 
     dragWin.focus();
@@ -1613,9 +1754,12 @@ export async function createApp(session: DoorSession) {
       case 20: showContribData(); break;
       case 21: showContribLayouts(); break;
       case 22: showWindowFeatures(); break;
-      case 23: showStressTest(); break;
-      case 24: showResults(); break;
-      case 25: cleanup(); break;
+      case 23: showMapDemo(); break;
+      case 24: showPictureDemo(); break;
+      case 25: showMarkdownDemo(); break;
+      case 26: showStressTest(); break;
+      case 27: showResults(); break;
+      case 28: cleanup(); break;
     }
   });
 

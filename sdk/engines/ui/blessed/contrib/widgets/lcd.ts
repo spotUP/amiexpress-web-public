@@ -77,10 +77,26 @@ export class LCD extends Canvas {
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) * 2 - 8,
-      height: (this.height as number) * 4 - 12
-    };
+    // LCD segments use fractional dimensions (segmentWidth = 0.06 * elementWidth).
+    // We need a large canvas so segments are at least several pixels wide.
+    // Multiply by larger factors to ensure segment visibility.
+    const widgetWidth = Math.max(10, this.width as number);
+    const widgetHeight = Math.max(6, this.height as number);
+
+    // Use 4x horizontal and 6x vertical scaling for proper segment rendering
+    // This ensures segment widths are at least 2-3 pixels
+    let width = widgetWidth * 4;
+    let height = widgetHeight * 6;
+
+    // Ensure minimum canvas size for readable LCD
+    width = Math.max(80, width);
+    height = Math.max(24, height);
+
+    // Round to required multiples (width: 2, height: 4) for braille mapping
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -147,6 +163,9 @@ export class LCD extends Canvas {
     this.ctx.clearRect(0, 0, this.canvasSize!.width, this.canvasSize!.height);
 
     this.segment16!.DisplayText(display);
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   getOptionsPrototype(): LCDOptions {

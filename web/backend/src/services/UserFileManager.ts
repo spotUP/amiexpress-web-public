@@ -230,11 +230,15 @@ export class UserFileManager {
    * Convert User to UserMiscFileStruct
    */
   private userToMiscStruct(user: User): UserMiscFileStruct {
+    // Convert bytesUpload/bytesDownload to BCD format for Amiga compatibility
+    const downloadBytes = user.bytesDownload || (user as any).downloadBytes || 0;
+    const uploadBytes = user.bytesUpload || (user as any).uploadBytes || 0;
+
     return {
       internetName: '', // Not used
       realName: user.realname,
-      downloadBytesBCD: Buffer.alloc(8), // BCD encoding not implemented
-      uploadBytesBCD: Buffer.alloc(8),
+      downloadBytesBCD: this.numberToBCD(downloadBytes),
+      uploadBytesBCD: this.numberToBCD(uploadBytes),
       eMail: user.email || '',
       lastDlCPS: user.topDownloadCPS,
       pwdHash: user.passwordHash.substring(0, 32),
@@ -528,6 +532,37 @@ export class UserFileManager {
       2: 'Full',
     };
     return map[value] || 'Prompt';
+  }
+
+  /**
+   * Convert a number to 8-byte BCD (Binary Coded Decimal) buffer
+   * Amiga BCD format: each byte holds two decimal digits (upper nibble, lower nibble)
+   * 8 bytes = 16 decimal digits, stored big-endian (most significant first)
+   *
+   * Example: 12345 -> [0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x23, 0x45]
+   */
+  private numberToBCD(value: number): Buffer {
+    const buffer = Buffer.alloc(8, 0);
+
+    // Handle edge cases
+    if (value <= 0 || !Number.isFinite(value)) {
+      return buffer; // Return all zeros
+    }
+
+    // Convert to string to get decimal digits
+    const str = Math.floor(value).toString();
+
+    // Pad to 16 digits (for 8 bytes)
+    const padded = str.padStart(16, '0');
+
+    // Pack two digits per byte, starting from the left (big-endian)
+    for (let i = 0; i < 8; i++) {
+      const highDigit = parseInt(padded[i * 2], 10);
+      const lowDigit = parseInt(padded[i * 2 + 1], 10);
+      buffer[i] = (highDigit << 4) | lowDigit;
+    }
+
+    return buffer;
   }
 
   /**

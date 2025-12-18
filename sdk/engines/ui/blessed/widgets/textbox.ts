@@ -246,6 +246,304 @@ export class Textbox extends Element {
 
 // Alias
 export class Input extends Textbox {}
-export class Textarea extends Textbox {
-  // TODO: Multi-line support
+
+/**
+ * Textarea - Multi-line text input with vertical scrolling
+ */
+export class Textarea extends Element {
+  value: string = '';
+  private cursorPos: number = 0;  // Position in flat string
+  private viewOffsetY: number = 0;  // Vertical scroll offset (line number)
+
+  constructor(options: TextboxOptions = {}) {
+    super({
+      focusable: true,
+      clickable: true,
+      keys: true,
+      scrollable: true,
+      alwaysScroll: true,
+      ...options,
+      // Add scrollbar by default (unless explicitly disabled)
+      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
+        ch: '█',
+        track: {
+          ch: '│',
+        },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+      } : undefined,
+    });
+
+    this.value = options.value || '';
+    this.cursorPos = this.value.length;
+
+    this._updateContent();
+
+    if (options.keys !== false) {
+      this.on('keypress', this._onKeypress.bind(this));
+    }
+
+    this.on('focus', () => {
+      this._updateContent();
+    });
+
+    this.on('blur', () => {
+      this._updateContent();
+    });
+
+    this.on('click', () => {
+      this.focus();
+    });
+  }
+
+  private _onKeypress(ch: any, key: KeyEvent): void {
+    if (!this.focused) return;
+
+    // Character input - printable characters
+    if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
+      const charCode = ch.charCodeAt(0);
+      if (charCode >= 32 && charCode < 127) {
+        this.insertChar(ch);
+        return;
+      }
+    }
+
+    switch (key.name) {
+      case 'backspace':
+        this.deleteChar();
+        break;
+
+      case 'delete':
+        this.deleteCharForward();
+        break;
+
+      case 'left':
+        this.cursorLeft();
+        break;
+
+      case 'right':
+        this.cursorRight();
+        break;
+
+      case 'up':
+        this.cursorUp();
+        break;
+
+      case 'down':
+        this.cursorDown();
+        break;
+
+      case 'home':
+        this.cursorHome();
+        break;
+
+      case 'end':
+        this.cursorEnd();
+        break;
+
+      case 'enter':
+        // Multi-line: Enter inserts newline
+        this.insertChar('\n');
+        break;
+
+      case 'escape':
+        this.cancel();
+        break;
+
+      case 'tab':
+        // Shift+Tab submits, Tab inserts spaces
+        if (key.shift) {
+          this.submit();
+        } else {
+          this.insertChar('  ');  // Insert 2 spaces
+        }
+        break;
+    }
+  }
+
+  private _getLines(): string[] {
+    return this.value.split('\n');
+  }
+
+  private _getCursorLineCol(): { line: number; col: number } {
+    const textBeforeCursor = this.value.slice(0, this.cursorPos);
+    const linesBeforeCursor = textBeforeCursor.split('\n');
+    const line = linesBeforeCursor.length - 1;
+    const col = linesBeforeCursor[linesBeforeCursor.length - 1].length;
+    return { line, col };
+  }
+
+  private _getVisibleHeight(): number {
+    return Math.max(1, this.iheight > 0 ? this.iheight : 10);
+  }
+
+  private _ensureCursorVisible(): void {
+    const { line } = this._getCursorLineCol();
+    const visibleHeight = this._getVisibleHeight();
+
+    if (line < this.viewOffsetY) {
+      this.viewOffsetY = line;
+    }
+
+    if (line >= this.viewOffsetY + visibleHeight) {
+      this.viewOffsetY = line - visibleHeight + 1;
+    }
+
+    this.viewOffsetY = Math.max(0, this.viewOffsetY);
+  }
+
+  private _updateContent(): void {
+    this._ensureCursorVisible();
+
+    const lines = this._getLines();
+    const visibleHeight = this._getVisibleHeight();
+    const visibleLines = lines.slice(this.viewOffsetY, this.viewOffsetY + visibleHeight);
+    const { line: cursorLine, col: cursorCol } = this._getCursorLineCol();
+
+    let display = '';
+    for (let i = 0; i < visibleLines.length; i++) {
+      const lineIndex = this.viewOffsetY + i;
+      let lineText = visibleLines[i];
+
+      if (this.focused && lineIndex === cursorLine) {
+        // Show cursor on this line
+        const beforeCursor = lineText.slice(0, cursorCol);
+        const atCursor = lineText[cursorCol] || ' ';
+        const afterCursor = lineText.slice(cursorCol + 1);
+        lineText = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+      }
+
+      display += lineText;
+      if (i < visibleLines.length - 1) {
+        display += '\n';
+      }
+    }
+
+    this.setContent(display);
+    if (this.screen) {
+      this.screen.render();
+    }
+  }
+
+  insertChar(ch: string): void {
+    this.value = this.value.slice(0, this.cursorPos) + ch + this.value.slice(this.cursorPos);
+    this.cursorPos += ch.length;
+    this._updateContent();
+    this.emit('change', this.value);
+  }
+
+  deleteChar(): void {
+    if (this.cursorPos > 0) {
+      this.value = this.value.slice(0, this.cursorPos - 1) + this.value.slice(this.cursorPos);
+      this.cursorPos--;
+      this._updateContent();
+      this.emit('change', this.value);
+    }
+  }
+
+  deleteCharForward(): void {
+    if (this.cursorPos < this.value.length) {
+      this.value = this.value.slice(0, this.cursorPos) + this.value.slice(this.cursorPos + 1);
+      this._updateContent();
+      this.emit('change', this.value);
+    }
+  }
+
+  cursorLeft(): void {
+    if (this.cursorPos > 0) {
+      this.cursorPos--;
+      this._updateContent();
+    }
+  }
+
+  cursorRight(): void {
+    if (this.cursorPos < this.value.length) {
+      this.cursorPos++;
+      this._updateContent();
+    }
+  }
+
+  cursorUp(): void {
+    const { line, col } = this._getCursorLineCol();
+    if (line > 0) {
+      const lines = this._getLines();
+      const prevLineLength = lines[line - 1].length;
+      const newCol = Math.min(col, prevLineLength);
+      // Calculate new position: sum of all previous lines + newlines + newCol
+      let newPos = 0;
+      for (let i = 0; i < line - 1; i++) {
+        newPos += lines[i].length + 1;  // +1 for newline
+      }
+      newPos += newCol;
+      this.cursorPos = newPos;
+      this._updateContent();
+    }
+  }
+
+  cursorDown(): void {
+    const { line, col } = this._getCursorLineCol();
+    const lines = this._getLines();
+    if (line < lines.length - 1) {
+      const nextLineLength = lines[line + 1].length;
+      const newCol = Math.min(col, nextLineLength);
+      // Calculate new position
+      let newPos = 0;
+      for (let i = 0; i <= line; i++) {
+        newPos += lines[i].length + 1;  // +1 for newline
+      }
+      newPos += newCol;
+      this.cursorPos = newPos;
+      this._updateContent();
+    }
+  }
+
+  cursorHome(): void {
+    const { line } = this._getCursorLineCol();
+    const lines = this._getLines();
+    let newPos = 0;
+    for (let i = 0; i < line; i++) {
+      newPos += lines[i].length + 1;
+    }
+    this.cursorPos = newPos;
+    this._updateContent();
+  }
+
+  cursorEnd(): void {
+    const { line } = this._getCursorLineCol();
+    const lines = this._getLines();
+    let newPos = 0;
+    for (let i = 0; i <= line; i++) {
+      newPos += lines[i].length;
+      if (i < line) newPos++;  // Add newline char
+    }
+    this.cursorPos = newPos;
+    this._updateContent();
+  }
+
+  submit(): void {
+    this.emit('submit', this.value);
+  }
+
+  cancel(): void {
+    this.emit('cancel');
+  }
+
+  setValue(value: string): void {
+    this.value = value;
+    this.cursorPos = value.length;
+    this.viewOffsetY = 0;
+    this._updateContent();
+    this.emit('change', this.value);
+  }
+
+  getValue(): string {
+    return this.value;
+  }
+
+  clearValue(): void {
+    this.setValue('');
+  }
+
+  readInput(): void {
+    this.emit('readInput');
+  }
 }

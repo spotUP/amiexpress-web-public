@@ -44,6 +44,12 @@ export class KeyStateTracker {
   /** Whether tracker is active */
   private active: boolean = false;
 
+  /** Keys that this tracker handles (only these will preventDefault) */
+  private handledKeys: Set<string> = new Set([
+    'arrowleft', 'arrowright', 'arrowup', 'arrowdown',
+    'a', 'd', 'w', 's'  // Common game movement keys
+  ]);
+
   /**
    * Start tracking key states
    *
@@ -116,13 +122,19 @@ export class KeyStateTracker {
    * @private
    */
   private handleKeyDown = (event: KeyboardEvent): void => {
+    const key = this.normalizeKey(event.key);
+
+    // Only handle keys we're tracking (movement keys)
+    // Let other keys (space, enter, etc.) pass through to terminal
+    if (!this.handledKeys.has(key)) {
+      return;
+    }
+
     // Ignore repeat events from browser (we generate our own)
     if (event.repeat) {
       event.preventDefault();
       return;
     }
-
-    const key = this.normalizeKey(event.key);
 
     // Update key state
     this.keyStates.set(key, {
@@ -145,6 +157,11 @@ export class KeyStateTracker {
    */
   private handleKeyUp = (event: KeyboardEvent): void => {
     const key = this.normalizeKey(event.key);
+
+    // Only handle keys we're tracking
+    if (!this.handledKeys.has(key)) {
+      return;
+    }
 
     // Remove key state
     this.keyStates.delete(key);

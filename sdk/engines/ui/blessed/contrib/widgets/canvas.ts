@@ -90,13 +90,23 @@ export class Canvas extends Box {
   }
 
   /**
+   * Sync canvas content to element content
+   * Call this after drawing operations to make content visible
+   */
+  syncContent(): void {
+    if (this.ctx) {
+      const frame = this.ctx._canvas.frame();
+      super.setContent(frame);
+    }
+  }
+
+  /**
    * Render the canvas
    */
   render(): any {
     if (!this.ctx) return super.render();
 
-    const inner = this.ctx._canvas.frame();
-    this.setContent(inner);
+    this.syncContent();
     return super.render();
   }
 }

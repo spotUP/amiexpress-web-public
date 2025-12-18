@@ -153,7 +153,8 @@ export class Context {
   lineWidth: number;
 
   constructor(width: number, height: number, canvasClass?: typeof DrawilleCanvas) {
-    const CanvasClass = canvasClass || DrawilleCanvas;
+    // Use EnhancedDrawilleCanvas by default for color support
+    const CanvasClass = canvasClass || EnhancedDrawilleCanvas;
     this._canvas = new CanvasClass(width, height);
     this.canvas = this._canvas; // compatibility
     this._matrix = mat2d.create();
@@ -307,7 +308,86 @@ export class Context {
   // ============================================================================
 
   fill(): void {
-    // Stub
+    if (this._currentPath.length < 3) return;
+
+    // Get all points in the path
+    const points = this._currentPath.map(p => ({
+      x: Math.floor(p.point[0]),
+      y: Math.floor(p.point[1])
+    }));
+
+    // Find bounding box
+    let minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity;
+    for (const p of points) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+    }
+
+    const set = this._canvas.set.bind(this._canvas);
+
+    // For very thin polygons (1-2 pixels tall), use outline drawing
+    // This handles degenerate cases where scanline fill fails
+    if (maxY - minY <= 2) {
+      // Draw all edges using bresenham to ensure visibility
+      for (let i = 0; i < points.length; i++) {
+        const p1 = points[i];
+        const p2 = points[(i + 1) % points.length];
+        bresenham(p1.x, p1.y, p2.x, p2.y, set);
+      }
+      // Also fill any horizontal spans
+      for (let y = minY; y <= maxY; y++) {
+        const xVals: number[] = [];
+        for (const p of points) {
+          if (p.y === y) xVals.push(p.x);
+        }
+        if (xVals.length >= 2) {
+          const xMin = Math.min(...xVals);
+          const xMax = Math.max(...xVals);
+          for (let x = xMin; x <= xMax; x++) {
+            set(x, y);
+          }
+        }
+      }
+      return;
+    }
+
+    // Standard scanline fill algorithm for larger polygons
+    for (let y = minY; y <= maxY; y++) {
+      // Find intersections with all edges
+      const intersections: number[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const p1 = points[i];
+        const p2 = points[(i + 1) % points.length];
+
+        // Skip horizontal edges
+        if (p1.y === p2.y) continue;
+
+        // Check if edge crosses this scanline (using inclusive lower bound)
+        const yMin = Math.min(p1.y, p2.y);
+        const yMax = Math.max(p1.y, p2.y);
+
+        // Edge crosses if scanline is within edge's y range (exclusive of top vertex)
+        if (y >= yMin && y < yMax) {
+          // Calculate x intersection using linear interpolation
+          const t = (y - p1.y) / (p2.y - p1.y);
+          const x = p1.x + t * (p2.x - p1.x);
+          intersections.push(Math.floor(x));
+        }
+      }
+
+      // Sort intersections
+      intersections.sort((a, b) => a - b);
+
+      // Fill between pairs of intersections
+      for (let i = 0; i < intersections.length - 1; i += 2) {
+        for (let x = intersections[i]; x <= intersections[i + 1]; x++) {
+          set(x, y);
+        }
+      }
+    }
   }
 
   stroke(): void {

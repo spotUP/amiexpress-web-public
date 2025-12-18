@@ -1492,9 +1492,21 @@ export class Element extends EventEmitter {
     const chars = this.getBorderChars();
     if (!chars) return;
 
-    const borderStyle = typeof this.options.border === 'object'
+    // Determine border style - use focus style if element is focused
+    let borderStyle = typeof this.options.border === 'object'
       ? this.options.border.style || this.options.style
       : this.options.style;
+
+    // If focused, use focus border style (white border)
+    if (this.focused) {
+      const focusStyle = (this.options.style as any)?.focus;
+      if (focusStyle?.border) {
+        borderStyle = { ...borderStyle, ...focusStyle.border };
+      } else {
+        // Default: white border when focused
+        borderStyle = { ...borderStyle, fg: 'white' };
+      }
+    }
     const attr = this.sattr(borderStyle);
 
     // Top border
@@ -2241,6 +2253,9 @@ export class Element extends EventEmitter {
 
     this.destroyed = true;
 
+    // Emit 'destroy' event BEFORE removing listeners so handlers can respond
+    this.emit('destroy');
+
     // Destroy all children
     for (const child of this.children.slice()) {
       child.destroy();
@@ -2249,10 +2264,8 @@ export class Element extends EventEmitter {
     // Detach from parent
     this.detach();
 
-    // Clear all event listeners
+    // Clear all event listeners (after emitting destroy)
     this.removeAllListeners();
-
-    this.emit('destroy');
   }
 
   free(): void {

@@ -29,7 +29,17 @@ export class Markdown extends Box {
   private markdownOptions: { style?: MarkdownStyle } = {};
 
   constructor(options: MarkdownOptions = {}) {
-    super(options);
+    super({
+      ...options,
+      // Add scrollbar by default for scrollable markdown (unless explicitly disabled)
+      scrollbar: options.scrollable && (options.scrollbar === undefined || options.scrollbar) ? {
+        ch: '█',
+        track: {
+          ch: '│',
+        },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+      } : options.scrollbar,
+    });
 
     this.markdownOptions = {
       style: options.markdownStyle

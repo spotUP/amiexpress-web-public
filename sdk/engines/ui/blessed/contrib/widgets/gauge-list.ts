@@ -109,6 +109,9 @@ export class GaugeList extends Canvas {
     for (let i = 0; i < gauges.length; i++) {
       this.setSingleGauge(gauges[i], i);
     }
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   setSingleGauge(gauge: GaugeListItem, offset: number): void {

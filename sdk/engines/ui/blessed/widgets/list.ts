@@ -19,6 +19,14 @@ export class List extends Element {
       mouse: true,
       wrap: false, // List items should not wrap
       ...options,
+      // Add scrollbar by default (unless explicitly disabled)
+      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
+        ch: '█',
+        track: {
+          ch: '│',
+        },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+      } : undefined,
     });
 
     this.items = options.items || [];

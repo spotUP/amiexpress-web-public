@@ -65,10 +65,23 @@ export class Gauge extends Canvas {
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) - 2,
-      height: this.height as number
-    };
+    // Get widget dimensions with minimums
+    const widgetWidth = Math.max(8, this.width as number);
+    const widgetHeight = Math.max(4, this.height as number);
+
+    // Calculate canvas size (gauge uses text-like coordinates, so multiply by braille factors)
+    let width = widgetWidth * 2 - 4;
+    let height = widgetHeight * 4;
+
+    // Ensure minimum canvas size for gauge bar (needs y=2 + height=2)
+    width = Math.max(8, width);
+    height = Math.max(8, height);
+
+    // Round to required multiples (width: 2, height: 4) for braille mapping
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -117,6 +130,9 @@ export class Gauge extends Canvas {
     if (this.options.showLabel) {
       c.fillText(Math.round(adjustedPercent) + '%', textX, 3);
     }
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   setStack(stack: (number | GaugeStack)[]): void {
@@ -171,6 +187,9 @@ export class Gauge extends Canvas {
 
       leftStart += width;
     }
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   getOptionsPrototype(): GaugeOptions {

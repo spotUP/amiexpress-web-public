@@ -41,6 +41,8 @@ export class Question extends Box {
     });
 
     // Question text - centered at top
+    // Use 'transparent' for bg to inherit from parent dialog
+    const dialogBg = options.style?.bg || 'black';
     this.messageText = new Box({
       parent: this,
       top: 0,
@@ -53,7 +55,7 @@ export class Question extends Box {
       valign: 'middle',
       style: {
         fg: options.style?.fg || 'white',
-        bg: options.style?.bg || 'black',
+        bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
     });
 
@@ -65,7 +67,7 @@ export class Question extends Box {
       width: 22,
       height: 3,
       style: {
-        bg: options.style?.bg || 'black',
+        bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
     });
 

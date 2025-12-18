@@ -82,6 +82,9 @@ export class Map extends Canvas {
           this.addMarker(m);
         }
       }
+
+      // Sync canvas content to element
+      this.syncContent();
     });
   }
 
@@ -108,10 +111,23 @@ export class Map extends Canvas {
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: (this.width as number) * 2 - 12,
-      height: (this.height as number) * 4
-    };
+    // Get widget dimensions with minimums
+    const widgetWidth = Math.max(20, this.width as number);
+    const widgetHeight = Math.max(10, this.height as number);
+
+    // Calculate canvas size
+    let width = widgetWidth * 2 - 8;
+    let height = widgetHeight * 4;
+
+    // Ensure minimum canvas size for map rendering
+    width = Math.max(32, width);
+    height = Math.max(24, height);
+
+    // Round to required multiples (width: 2, height: 4) for braille mapping
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -140,6 +156,8 @@ export class Map extends Canvas {
     } else {
       this._drawPlaceholder();
     }
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   getOptionsPrototype(): MapOptions {

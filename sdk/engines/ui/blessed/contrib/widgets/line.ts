@@ -334,6 +334,9 @@ export class Line extends Canvas {
         c.fillText(labels[i], getXPixel(i), this.canvasSize!.height - yPadding + yLabelPadding);
       }
     }
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   getOptionsPrototype(): LineOptions {

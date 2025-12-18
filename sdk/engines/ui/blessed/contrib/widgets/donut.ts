@@ -66,16 +66,23 @@ export class Donut extends Canvas {
   }
 
   calcSize(): void {
-    this.canvasSize = {
-      width: Math.round((this.width as number) * 2 - 5),
-      height: (this.height as number) * 4 - 12
-    };
-    if (this.canvasSize.width % 2 == 1) {
-      this.canvasSize.width--;
-    }
-    if (this.canvasSize.height % 4 != 1) {
-      this.canvasSize.height += this.canvasSize.height % 4;
-    }
+    // Get widget dimensions with minimums
+    const widgetWidth = Math.max(10, this.width as number);
+    const widgetHeight = Math.max(6, this.height as number);
+
+    // Calculate canvas size
+    let width = Math.round(widgetWidth * 2 - 5);
+    let height = widgetHeight * 4 - 8;
+
+    // Ensure minimum canvas size for donut rendering (needs radius * 2)
+    width = Math.max(20, width);
+    height = Math.max(16, height);
+
+    // Round to required multiples (width: 2, height: 4) for braille mapping
+    width = Math.floor(width / 2) * 2;
+    height = Math.floor(height / 4) * 4;
+
+    this.canvasSize = { width, height };
   }
 
   get type(): string {
@@ -209,6 +216,9 @@ export class Donut extends Canvas {
     c.strokeStyle = 'magenta';
 
     c.restore();
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   getOptionsPrototype(): DonutOptions {

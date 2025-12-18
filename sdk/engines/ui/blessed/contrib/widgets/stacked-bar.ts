@@ -46,6 +46,9 @@ export class StackedBar extends Canvas {
 
     this.options.barWidth = this.options.barWidth || 6;
     this.options.barSpacing = this.options.barSpacing || 9;
+    this.options.barBgColor = this.options.barBgColor || [
+      'green', 'magenta', 'cyan', 'red', 'blue', 'yellow', 'white'
+    ];
 
     if (this.options.barSpacing! - this.options.barWidth! < 3) {
       this.options.barSpacing = this.options.barWidth! + 3;
@@ -89,15 +92,16 @@ export class StackedBar extends Canvas {
     const widgetWidth = Math.max(8, this.width as number);
     const widgetHeight = Math.max(4, this.height as number);
 
-    // Calculate canvas size
-    let width = widgetWidth - 2;
-    let height = widgetHeight;
+    // Calculate canvas size with braille multipliers
+    // Each terminal cell = 2 braille pixels wide, 4 braille pixels tall
+    let width = (widgetWidth - 2) * 2;
+    let height = widgetHeight * 4;
 
-    // Ensure minimum canvas size
-    width = Math.max(4, width);
-    height = Math.max(4, height);
+    // Ensure minimum canvas size for bar rendering
+    width = Math.max(16, width);
+    height = Math.max(16, height);
 
-    // Round to required multiples (width: 2, height: 4)
+    // Round to required multiples (width: 2, height: 4) for braille mapping
     width = Math.floor(width / 2) * 2;
     height = Math.floor(height / 4) * 4;
 
@@ -141,6 +145,9 @@ export class StackedBar extends Canvas {
     }
 
     this.addLegend(bars, x);
+
+    // Sync canvas content to element
+    this.syncContent();
   }
 
   renderBar(

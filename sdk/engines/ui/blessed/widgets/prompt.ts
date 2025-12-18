@@ -44,6 +44,8 @@ export class Prompt extends Box {
     });
 
     // Prompt text - at top
+    // Use 'transparent' for bg to inherit from parent dialog
+    const dialogBg = options.style?.bg || 'black';
     this.messageText = new Box({
       parent: this,
       top: 0,
@@ -54,11 +56,12 @@ export class Prompt extends Box {
       tags: true,
       style: {
         fg: options.style?.fg || 'white',
-        bg: options.style?.bg || 'black',
+        bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
     });
 
     // Input field - use right: 0 to respect parent boundaries
+    // Input field keeps solid background for readability
     this.inputField = new Textbox({
       parent: this,
       top: 2,
@@ -84,7 +87,7 @@ export class Prompt extends Box {
       width: 26,
       height: 3,
       style: {
-        bg: options.style?.bg || 'black',
+        bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
     });
 
