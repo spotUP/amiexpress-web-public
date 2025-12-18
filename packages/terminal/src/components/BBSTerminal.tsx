@@ -483,9 +483,70 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       resetZmodem();
     });
 
+    // Track pending files for batch upload - send one at a time
+    let pendingUploadFiles: File[] = [];
+    let currentUploadOptions: { accept?: string; maxSize?: number; multiple?: boolean } | null = null;
+
+    // Helper to upload the next file in the queue
+    const uploadNextFile = () => {
+      if (pendingUploadFiles.length === 0) {
+        console.log('[BBSTerminal] No more files to upload, signaling batch complete');
+        socket.emit('upload-batch-complete');
+        return;
+      }
+
+      const file = pendingUploadFiles.shift()!;
+      console.log(`[BBSTerminal] Uploading file: ${file.name} (${pendingUploadFiles.length} remaining)`);
+
+      // Check file size
+      if (currentUploadOptions?.maxSize && file.size > currentUploadOptions.maxSize) {
+        socket.emit('ansi-output', `\r\n\x1b[31mFile ${file.name} exceeds maximum size of ${currentUploadOptions.maxSize} bytes\x1b[0m\r\n`);
+        // Try next file
+        uploadNextFile();
+        return;
+      }
+
+      // Read file as ArrayBuffer
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+
+        // Track upload start time for CPS calculation
+        const uploadStartTime = Date.now();
+
+        // Send file data to backend
+        socket.emit('file-upload', {
+          filename: file.name,
+          size: file.size,
+          type: file.type,
+          data: Array.from(new Uint8Array(arrayBuffer)),
+          uploadStartTime  // Include start time for CPS tracking
+        });
+        // Backend will emit 'show-file-upload' when ready for next file
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
     // Handle file upload request from backend
-    socket.on('show-file-upload', (options: { accept?: string; maxSize?: number; multiple?: boolean }) => {
+    socket.on('show-file-upload', (options: { accept?: string; maxSize?: number; multiple?: boolean; batchContinue?: boolean }) => {
       console.log('[BBSTerminal] show-file-upload event received:', options);
+
+      // If we have pending files from a batch selection, upload the next one
+      if (pendingUploadFiles.length > 0) {
+        console.log(`[BBSTerminal] Uploading next file from queue (${pendingUploadFiles.length} remaining)`);
+        uploadNextFile();
+        return;
+      }
+
+      // If backend signals batchContinue but we have no pending files, batch is complete
+      if (options.batchContinue) {
+        console.log('[BBSTerminal] Batch continue received but no pending files, signaling batch complete');
+        socket.emit('upload-batch-complete');
+        return;
+      }
+
+      // Store options for batch uploads
+      currentUploadOptions = options;
 
       // Create a hidden file input element
       const fileInput = document.createElement('input');
@@ -506,32 +567,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
         console.log('[BBSTerminal] Files selected:', files.length);
 
-        // Upload each file
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          console.log(`[BBSTerminal] Uploading file ${i + 1}/${files.length}:`, file.name);
+        // Queue all files for upload
+        pendingUploadFiles = Array.from(files);
 
-          // Check file size
-          if (options.maxSize && file.size > options.maxSize) {
-            socket.emit('ansi-output', `\r\n\x1b[31mFile ${file.name} exceeds maximum size of ${options.maxSize} bytes\x1b[0m\r\n`);
-            continue;
-          }
-
-          // Read file as ArrayBuffer
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-            const arrayBuffer = e.target?.result as ArrayBuffer;
-
-            // Send file data to backend
-            socket.emit('file-upload', {
-              filename: file.name,
-              size: file.size,
-              type: file.type,
-              data: Array.from(new Uint8Array(arrayBuffer))
-            });
-          };
-          reader.readAsArrayBuffer(file);
-        }
+        // Start uploading the first file
+        uploadNextFile();
 
         // Clean up
         document.body.removeChild(fileInput);
@@ -549,26 +589,65 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     // Handle file download request from backend
-    socket.on('download-file', (fileInfo: { filename: string; size: number; url: string; path?: string }) => {
+    socket.on('download-file', async (fileInfo: { filename: string; size: number; url: string; path?: string }) => {
       console.log('[BBSTerminal] download-file event received:', fileInfo);
 
-      // Create a temporary anchor element to trigger download
-      const link = document.createElement('a');
-      link.href = fileInfo.url;
-      link.download = fileInfo.filename;
-      link.style.display = 'none';
-
-      // Add to DOM, click, and remove
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      console.log('[BBSTerminal] Download initiated for:', fileInfo.filename);
+      // Track download start time for CPS calculation
+      const downloadStartTime = Date.now();
 
       // Notify backend that download started
       socket.emit('file-download-started', {
-        filename: fileInfo.filename
+        filename: fileInfo.filename,
+        startTime: downloadStartTime
       });
+
+      try {
+        // Use fetch to download so we can track completion time
+        const response = await fetch(fileInfo.url);
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.statusText}`);
+        }
+
+        const blob = await response.blob();
+        const downloadEndTime = Date.now();
+        const durationMs = downloadEndTime - downloadStartTime;
+
+        // Calculate CPS (characters per second)
+        const durationSec = durationMs / 1000;
+        const cps = durationSec > 0 ? Math.floor(fileInfo.size / durationSec) : 0;
+
+        console.log(`[BBSTerminal] Download complete: ${fileInfo.filename}, ${fileInfo.size} bytes in ${durationMs}ms (${cps} CPS)`);
+
+        // Create download link for the blob
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileInfo.filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+
+        // Send completion stats to backend for CPS tracking
+        socket.emit('file-download-complete', {
+          filename: fileInfo.filename,
+          size: fileInfo.size,
+          durationMs,
+          cps,
+          path: fileInfo.path
+        });
+      } catch (error) {
+        console.error('[BBSTerminal] Download error:', error);
+        // Fallback to anchor download (won't track CPS)
+        const link = document.createElement('a');
+        link.href = fileInfo.url;
+        link.download = fileInfo.filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     });
 
     socket.on('disconnect', (reason: string) => {
