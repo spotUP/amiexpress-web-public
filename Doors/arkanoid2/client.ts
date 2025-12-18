@@ -413,12 +413,19 @@ class ArkanoidGame {
         }
       }
 
-      // Handle non-movement keys (space, q, enter, etc.)
+      // Handle all keys including movement keys
+      // Note: KeyStateTracker only works with direct window events, not BBS terminal input
       const k = key.key?.toLowerCase() || '';
 
-      // Ignore arrow keys - handled by KeyStateTracker
-      if (k === 'arrowleft' || k === 'arrowright' || k === 'a' || k === 'd') {
-        return;
+      // Handle arrow/movement keys for paddle control
+      if (this.data.state === 'playing') {
+        if (k === 'arrowleft' || k === 'a') {
+          this.movePaddle(-1);
+          return;
+        } else if (k === 'arrowright' || k === 'd') {
+          this.movePaddle(1);
+          return;
+        }
       }
 
       this.handleInput(k);
