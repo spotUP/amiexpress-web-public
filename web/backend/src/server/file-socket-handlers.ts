@@ -9,16 +9,18 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
 import { config } from '../config';
 import { extractAndReadDiz, getNodeWorkDir, getPlaypenDir } from '../utils/file-diz.util';
+import { formatFileSize, formatUploadDate } from '../utils/file-upload.util';
 import { testFile, TestResult } from '../utils/file-test.util';
 import { moveUploadedFile, getConferenceDir } from '../utils/file-hold.util';
 import { writeUploadToDirFile } from '../utils/dir-file.util';
+import { getMaxDirs } from '../utils/max-dirs.util';
 import { updateSysopUploadStats, doUploadNotify } from '../utils/upload-notify.util';
-import { ConferenceRepository } from '../database/conference-repository';
-import { creditAccountTrackUploads } from '../utils/download-ratios.util';
+import { creditAccountTrackUploads, updateUploadStats } from '../utils/download-ratios.util';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
 import { SysopDebugUtil } from '../utils/sysop-debug.util';
+import { userFileManager } from '../services/UserFileManager';
 import { getUploadContextById, deleteUploadContextById } from './upload-session-store';
 
 /**
@@ -29,8 +31,8 @@ async function loadConferences(session: any, database: any) {
     return session.conferences;
   }
   try {
-    const repo = new ConferenceRepository(database);
-    const confs = await repo.getConferences();
+    // Use db's delegated method instead of creating new repository
+    const confs = await database.getConferences();
     session.conferences = confs;
     return confs;
   } catch (err) {
@@ -50,8 +52,9 @@ function clearUploadContext(session: BBSSession, socket?: Socket) {
 
 /**
  * Process batch file - handles file testing, database entry, and stats updates
+ * Exported for use by command.handler.ts when processing uploads after description entry
  */
-async function processBatchFile(
+export async function processBatchFile(
   socket: Socket,
   session: BBSSession,
   data: { filename: string; originalname: string; size: number; path?: string },
@@ -210,21 +213,32 @@ async function processBatchFile(
     await db.createFileEntry(fileEntry as any);
 
     // Write to DIR file (express.e:19473-19509)
+    // Express.e: Uploads go to DIR{maxDirs} - always numbered, never named
     try {
       const conferencePath = getConferenceDir(session.currentConf, config.get('dataDir'));
+      // Get maxDirs for this conference (express.e:19475-19478)
+      const maxDirs = await getMaxDirs(session.currentConf, config.get('dataDir'));
+      const uploadDirNum = maxDirs > 0 ? maxDirs : 1;  // Default to DIR1 if no dirs exist
+
+      // Get SENTBY_FILES setting from node config (express.e:19506)
+      // checkToolTypeExists(TOOLTYPE_NODE, node, 'SENTBY_FILES')
+      const configRepo = (db as any).getConfigRepository();
+      const nodeConfig = configRepo.getNodeConfig(session.nodeId || 1);
+      const addSentBy = nodeConfig?.sentby_files ?? true;  // Default to true if not configured
+
       await writeUploadToDirFile(
         currentFile.filename,
         data.size,
         new Date(),
         finalDescription,
         checkedMarker,
-        session.user!.name || session.user!.username,
+        session.user!.username,  // express.e:19507 uses loggedOnUser.name which is the BBS handle
         conferencePath,
         fileStatus,
-        1,  // maxDirs - TODO: Make configurable
-        true  // addSentBy - TODO: Make configurable via SENTBY_FILES
+        uploadDirNum,  // express.e: uploads go to DIR{maxDirs}
+        addSentBy  // SENTBY_FILES from node config
       );
-      console.log(`[Upload] Wrote DIR entry for ${currentFile.filename}`);
+      console.log(`[Upload] Wrote DIR entry for ${currentFile.filename} to DIR${uploadDirNum}`);
     } catch (error: any) {
       console.error(`[Upload] Error writing DIR file: ${error.message}`);
       // Don't fail upload on DIR write error
@@ -234,18 +248,54 @@ async function processBatchFile(
     // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
     const trackUploads = creditAccountTrackUploads(session.user!);
     if (trackUploads) {
-      await db.run(`
-        UPDATE users
-        SET uploads = uploads + 1,
-            bytesupload = bytesupload + $1,
-            updated = CURRENT_TIMESTAMP
-        WHERE id = $2
-      `, [data.size, session.user!.id]);
+      // Update CPS tracking on user object using real transfer speed from frontend
+      const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
+      await updateUploadStats(session.user!, data.size, realUploadCPS);
+
+      // Build SET clause conditionally - only update topuploadcps if we have a new high
+      const userTopCPS = session.user!.topUploadCPS || 0;
+      const updateTopCPS = userTopCPS > 0;
+
+      if (updateTopCPS) {
+        // Note: SQLite uses positional ? placeholders, so we need to provide
+        // the CPS value twice since it appears twice in the CASE expression
+        await db.run(`
+          UPDATE users
+          SET uploads = uploads + 1,
+              bytesupload = bytesupload + $1,
+              topuploadcps = CASE WHEN topuploadcps < $3 THEN $4 ELSE topuploadcps END,
+              updated = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [data.size, session.user!.id, userTopCPS, userTopCPS]);
+      } else {
+        await db.run(`
+          UPDATE users
+          SET uploads = uploads + 1,
+              bytesupload = bytesupload + $1,
+              updated = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [data.size, session.user!.id]);
+      }
 
       await db.run(
         'UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2',
         [data.size, session.user!.id]
       );
+
+      // Update session.user with new values BEFORE writing to disk
+      // This ensures User.Data gets the updated stats for mtop/bulletins
+      session.user!.uploads = (session.user!.uploads || 0) + 1;
+      session.user!.bytesUpload = (session.user!.bytesUpload || 0) + data.size;
+
+      // DISK-BASED: Write updated upload stats to user.data/keys/misc files
+      try {
+        const userId = parseInt(session.user!.id, 10);
+        userFileManager.updateUserDataFile(session.user!, userId);
+        console.log(`[Upload] Updated user ${session.user!.username} disk files with upload stats (uploads=${session.user!.uploads}, bytes=${session.user!.bytesUpload})`);
+      } catch (diskErr) {
+        console.error('[Upload] Error writing user disk files:', diskErr);
+        // Continue anyway - database has the stats, sync can happen later
+      }
     }
 
     // Update per-conference upload stats (express.e:19530+)
@@ -255,8 +305,8 @@ async function processBatchFile(
       if (target && trackUploads) {
         target.uploads = (target.uploads || 0) + 1;
         target.bytesUpload = (target.bytesUpload || 0) + data.size;
-        const repo = new ConferenceRepository(db);
-        await repo.updateConference(target.id, {
+        // Use db's delegated method instead of creating new repository
+        await db.updateConference(target.id, {
           uploads: target.uploads,
           bytesUpload: target.bytesUpload
         });
@@ -297,56 +347,27 @@ async function processBatchFile(
       console.error(`[Upload] Error updating sysop stats: ${error.message}`);
     }
 
-    // Check if more files to upload
-    if (currentIndex + 1 < session.tempData.uploadBatch.length) {
-      // More files - trigger next upload
-      session.tempData.currentUploadIndex = currentIndex + 1;
-      const nextFile = session.tempData.uploadBatch[currentIndex + 1];
+    // Clear currentUploadedFile so next file can be processed
+    // This is critical for batch uploads - without this, subsequent files are ignored
+    session.tempData.currentUploadedFile = undefined;
+    session.tempData.currentDescription = undefined;
+    session.tempData.hasDiz = false;
+    session.tempData.skipDizExtraction = false;
 
-      socket.emit('show-file-upload', {
-        accept: '*/*',
-        maxSize: 10 * 1024 * 1024, // 10MB max
-        uploadUrl: '/api/upload',
-        fieldName: 'file',
-        expectedFilename: nextFile.filename
-      });
+    // Always emit show-file-upload to let frontend send more files
+    // Frontend tracks pending files and will emit 'upload-batch-complete' when done
+    socket.emit('show-file-upload', {
+      accept: '*/*',
+      maxSize: 10 * 1024 * 1024, // 10MB max
+      uploadUrl: '/api/upload',
+      fieldName: 'file',
+      batchContinue: true  // Signal that this is part of a batch upload
+    });
 
-      session.subState = LoggedOnSubState.FILES_UPLOAD;
-      return;
-    }
-
-    // All files uploaded - show statistics (express.e:19059-19083)
-    const uploadTime = Math.floor((Date.now() - session.tempData.uploadStartTime) / 1000); // seconds
-    const minutes = Math.floor(uploadTime / 60);
-    const seconds = uploadTime % 60;
-    const bytesKB = Math.floor(session.tempData.uploadedBytes / 1024);
-    const cps = uploadTime > 0 ? Math.floor(session.tempData.uploadedBytes / uploadTime) : 0;
-
-    socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
-    socket.emit('ansi-output', ` ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.\r\n`);
-    socket.emit('ansi-output', '\r\n');
-
-    // Log batch upload summary
-    const summaryLog = `\t ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.`;
-    await callersLog(session.user!.id, session.user!.username, summaryLog);
-
-    // Notify sysop of upload (express.e:19098)
-    try {
-      await doUploadNotify(
-        session.user!.name || session.user!.username,
-        session.user!.location || 'Unknown',
-        config.get('bbsName') || 'AmiExpress BBS',
-        undefined,  // TODO: Get sysop email from config
-        false  // TODO: Get MAIL_ON_UPLOAD from config
-      );
-    } catch (error: any) {
-      console.error(`[Upload] Error sending upload notification: ${error.message}`);
-    }
-
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    clearUploadContext(session, socket);
+    session.subState = LoggedOnSubState.FILES_UPLOAD;
+    // Note: Frontend will emit 'upload-batch-complete' when all files are uploaded
+    // That handler will show the completion statistics
+    return;
 
   } catch (error: any) {
     console.error('File upload error:', error);
@@ -359,6 +380,50 @@ async function processBatchFile(
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     clearUploadContext(session, socket);
   }
+}
+
+/**
+ * Handle upload batch complete event from frontend
+ * This is emitted when the frontend has no more files to upload
+ */
+export async function handleUploadBatchComplete(socket: Socket, session: BBSSession) {
+  if (!session.tempData) {
+    console.log('[Upload] No upload context for batch complete');
+    return;
+  }
+
+  // Show completion statistics (express.e:19059-19083)
+  const uploadTime = Math.floor((Date.now() - session.tempData.uploadStartTime) / 1000); // seconds
+  const minutes = Math.floor(uploadTime / 60);
+  const seconds = uploadTime % 60;
+  const bytesKB = Math.floor(session.tempData.uploadedBytes / 1024);
+  const cps = uploadTime > 0 ? Math.floor(session.tempData.uploadedBytes / uploadTime) : 0;
+
+  socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+  socket.emit('ansi-output', ` ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.\r\n`);
+  socket.emit('ansi-output', '\r\n');
+
+  // Log batch upload summary
+  const summaryLog = `\t ${session.tempData.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps.`;
+  await callersLog(session.user!.id, session.user!.username, summaryLog);
+
+  // Notify sysop of upload (express.e:19098)
+  try {
+    await doUploadNotify(
+      session.user!.name || session.user!.username,
+      session.user!.location || 'Unknown',
+      config.get('bbsName') || 'AmiExpress BBS',
+      undefined,  // TODO: Get sysop email from config
+      false  // TODO: Get MAIL_ON_UPLOAD from config
+    );
+  } catch (error: any) {
+    console.error(`[Upload] Error sending upload notification: ${error.message}`);
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = false;
+  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  clearUploadContext(session, socket);
 }
 
 /**
@@ -442,38 +507,55 @@ async function processFileUpload(
             session.tempData.hasDiz = true;
             session.tempData.skipDizExtraction = true;
 
-            // Process upload immediately
+            // Process upload immediately - add file and set index to the newly added file
             session.tempData.uploadBatch.push({
               filename: data.originalname,
               description: dizLines.join('\n'),
               isPrivate: false
             });
-            session.tempData.currentUploadIndex = 0;
+            // Set index to the newly added file, not 0 (avoids re-processing earlier files)
+            session.tempData.currentUploadIndex = session.tempData.uploadBatch.length - 1;
 
             // Trigger batch processing for this file
             await processBatchFile(socket, session, data, config);
           } else {
-            // No DIZ found - prompt for description
+            // No DIZ found - prompt for description (express.e:19290-19301)
+            const maxDescLines = 10;
+            const sizeStr = formatFileSize(data.size);
+            const dateStr = formatUploadDate(new Date());
+            const filename13 = data.originalname.substring(0, 13).padEnd(13);
+
             socket.emit('ansi-output', 'No FILE_ID.DIZ found.\r\n\r\n');
-            socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
-            socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
+            socket.emit('ansi-output', `Enter a description, you only have ${maxDescLines} lines.\r\n`);
+            socket.emit('ansi-output', "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n");
+            socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
+            socket.emit('ansi-output', `${filename13}${sizeStr}  ${dateStr} :`);
 
             session.tempData.currentDescription = [];
-            session.tempData.maxDescLines = 10;
+            session.tempData.maxDescLines = maxDescLines;
             session.tempData.descLineCount = 0;
+            session.tempData.currentLineBuffer = ''; // Clear any buffered input
             session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
             return;
           }
         } catch (error) {
           console.error('[processFileUpload] Error extracting DIZ:', error);
-          // Continue with manual description entry
+          // Continue with manual description entry (express.e:19290-19301)
+          const maxDescLines = 10;
+          const sizeStr = formatFileSize(data.size);
+          const dateStr = formatUploadDate(new Date());
+          const filename13 = data.originalname.substring(0, 13).padEnd(13);
+
           socket.emit('ansi-output', 'Error reading FILE_ID.DIZ.\r\n\r\n');
-          socket.emit('ansi-output', 'Please enter a description:\r\n');
-          socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
+          socket.emit('ansi-output', `Enter a description, you only have ${maxDescLines} lines.\r\n`);
+          socket.emit('ansi-output', "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n");
+          socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
+          socket.emit('ansi-output', `${filename13}${sizeStr}  ${dateStr} :`);
 
           session.tempData.currentDescription = [];
-          session.tempData.maxDescLines = 10;
+          session.tempData.maxDescLines = maxDescLines;
           session.tempData.descLineCount = 0;
+          session.tempData.currentLineBuffer = ''; // Clear any buffered input
           session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
           return;
         }
@@ -490,8 +572,24 @@ export function registerFileHandlers(socket: Socket) {
   if (!session) return;
 
   // Handle file upload from browser (receives file data directly)
-  socket.on('file-upload', async (data: { filename: string; size: number; type: string; data: number[] }) => {
+  socket.on('file-upload', async (data: { filename: string; size: number; type: string; data: number[]; uploadStartTime?: number }) => {
+    const receiveTime = Date.now();
     console.log('[file-upload] Received file from browser:', data.filename, data.size, 'bytes');
+
+    // Calculate real upload CPS from frontend timing
+    let uploadCPS = 0;
+    if (data.uploadStartTime && data.size > 0) {
+      const durationMs = receiveTime - data.uploadStartTime;
+      const durationSec = durationMs / 1000;
+      uploadCPS = durationSec > 0 ? Math.floor(data.size / durationSec) : 0;
+      console.log(`[file-upload] Transfer time: ${durationMs}ms, CPS: ${uploadCPS}`);
+    }
+
+    // Store CPS in session for later use when updating user stats
+    if (!session.tempData) {
+      session.tempData = {} as any;
+    }
+    session.tempData.lastUploadCPS = uploadCPS;
 
     const fs = require('fs');
     const path = require('path');
@@ -535,6 +633,51 @@ export function registerFileHandlers(socket: Socket) {
       const filePath = `${playpenDir || 'unknown'}/${data.filename}`;
       SysopDebugUtil.debugFileError(socket, session, 'write', filePath, error);
       socket.emit('ansi-output', `\r\n\x1b[31mError saving file: ${error.message}\x1b[0m\r\n`);
+    }
+  });
+
+  // Handle upload batch complete from frontend
+  // Frontend emits this when all pending files have been uploaded
+  socket.on('upload-batch-complete', async () => {
+    console.log('[upload-batch-complete] Frontend signaled batch upload complete');
+    await handleUploadBatchComplete(socket, session);
+  });
+
+  // Handle file download completion with real CPS from frontend
+  socket.on('file-download-complete', async (data: { filename: string; size: number; durationMs: number; cps: number; path?: string }) => {
+    console.log(`[file-download-complete] ${data.filename}: ${data.size} bytes in ${data.durationMs}ms (${data.cps} CPS)`);
+
+    if (!session.user) {
+      console.log('[file-download-complete] No user in session, skipping CPS update');
+      return;
+    }
+
+    // Update user's top download CPS if this is a new record
+    const currentTopCPS = session.user.topDownloadCPS || 0;
+    if (data.cps > currentTopCPS) {
+      session.user.topDownloadCPS = data.cps;
+      console.log(`[file-download-complete] New top download CPS for ${session.user.username}: ${data.cps} (was ${currentTopCPS})`);
+
+      // Persist to database
+      try {
+        await db.run(`
+          UPDATE users
+          SET topdownloadcps = CASE WHEN topdownloadcps < $1 THEN $1 ELSE topdownloadcps END,
+              updated = CURRENT_TIMESTAMP
+          WHERE id = $2
+        `, [data.cps, session.user.id]);
+
+        // DISK-BASED: Write updated CPS to user.keys file for mtop
+        try {
+          const userId = parseInt(session.user.id, 10);
+          userFileManager.updateUserDataFile(session.user, userId);
+          console.log(`[file-download-complete] Updated user ${session.user.username} disk files with download CPS`);
+        } catch (diskErr) {
+          console.error('[file-download-complete] Error writing user disk files:', diskErr);
+        }
+      } catch (err) {
+        console.error('[file-download-complete] Failed to persist download CPS', err);
+      }
     }
   });
 
@@ -605,19 +748,26 @@ export function registerFileHandlers(socket: Socket) {
                 description: dizLines.join('\n'),
                 isPrivate: false
               });
-              session.tempData.currentUploadIndex = 0;
+              // Set index to the newly added file, not 0 (avoids re-processing earlier files)
+              session.tempData.currentUploadIndex = session.tempData.uploadBatch.length - 1;
 
               // Continue processing (fall through to batch processing below)
             } else {
-              // No DIZ found - prompt for description (express.e:17720-17731)
+              // No DIZ found - prompt for description (express.e:19290-19301)
+              const maxDescLines = 10;
+              const sizeStr = formatFileSize(data.size);
+              const dateStr = formatUploadDate(new Date());
+              const filename13 = data.originalname.substring(0, 13).padEnd(13);
+
               socket.emit('ansi-output', 'No FILE_ID.DIZ found.\r\n\r\n');
-              socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
-              // express.e:17731 - filename (13 chars) + 19 spaces + ':'
-              socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
+              socket.emit('ansi-output', `Enter a description, you only have ${maxDescLines} lines.\r\n`);
+              socket.emit('ansi-output', "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n");
+              socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
+              socket.emit('ansi-output', `${filename13}${sizeStr}  ${dateStr} :`);
 
               // Initialize description storage
               session.tempData.currentDescription = [];
-              session.tempData.maxDescLines = 10;
+              session.tempData.maxDescLines = maxDescLines;
               session.tempData.descLineCount = 0;
 
               // Switch to line input mode (disable hotkeys)
@@ -627,13 +777,20 @@ export function registerFileHandlers(socket: Socket) {
             }
           } catch (error) {
             console.error('[FILE_ID.DIZ] Extraction error:', error);
-            // On error, fall back to prompting for description (express.e:17720-17731)
-            socket.emit('ansi-output', 'Please enter a description (press Enter alone to finish):\r\n');
-            // express.e:17731 - filename (13 chars) + 19 spaces + ':'
-            socket.emit('ansi-output', `${data.originalname.substring(0, 13).padEnd(13)}                   :`);
+            // On error, fall back to prompting for description (express.e:19290-19301)
+            const maxDescLines = 10;
+            const sizeStr = formatFileSize(data.size);
+            const dateStr = formatUploadDate(new Date());
+            const filename13 = data.originalname.substring(0, 13).padEnd(13);
+
+            socket.emit('ansi-output', 'Error reading FILE_ID.DIZ.\r\n\r\n');
+            socket.emit('ansi-output', `Enter a description, you only have ${maxDescLines} lines.\r\n`);
+            socket.emit('ansi-output', "Press return alone to end.  Begin description with (/) to make upload 'Private'.\r\n");
+            socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
+            socket.emit('ansi-output', `${filename13}${sizeStr}  ${dateStr} :`);
 
             session.tempData.currentDescription = [];
-            session.tempData.maxDescLines = 10;
+            session.tempData.maxDescLines = maxDescLines;
             session.tempData.descLineCount = 0;
 
             // Switch to line input mode (disable hotkeys)
@@ -730,18 +887,4 @@ export function registerFileHandlers(socket: Socket) {
     }
   });
 
-  async function loadConferences(session: any, database: any) {
-    if (session.conferences && Array.isArray(session.conferences)) {
-      return session.conferences;
-    }
-    try {
-      const repo = new ConferenceRepository(database);
-      const confs = await repo.getConferences();
-      session.conferences = confs;
-      return confs;
-    } catch (err) {
-      console.error('[Upload] Failed to load conferences for accounting', err);
-      return undefined;
-    }
-  }
 }
