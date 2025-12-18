@@ -7,7 +7,35 @@
  * 2. Emitting continuous events while keys are held
  * 3. Providing instant response (no initial delay)
  *
- * Usage in ClientDoor (hybrid/client doors):
+ * IMPORTANT LIMITATION - BBS TERMINAL CONTEXT:
+ * =============================================
+ * KeyStateTracker ONLY works when the door runs in a STANDALONE browser context
+ * (e.g., SDK Preview tool, or door running in its own browser tab).
+ *
+ * It does NOT work in the BBS terminal (xterm.js) because:
+ * - xterm.js intercepts all keyboard events before they reach `window`
+ * - Input in BBS terminal comes through `door.onInput()`, not window events
+ *
+ * For hybrid doors running in the BBS terminal, handle arrow keys directly
+ * in the `door.onInput()` callback instead:
+ *
+ * ```typescript
+ * door.onInput((user, key) => {
+ *   const k = key.key?.toLowerCase() || '';
+ *   if (this.state === 'playing') {
+ *     if (k === 'arrowleft' || k === 'a') {
+ *       this.movePaddle(-1);
+ *       return;
+ *     } else if (k === 'arrowright' || k === 'd') {
+ *       this.movePaddle(1);
+ *       return;
+ *     }
+ *   }
+ *   // Handle other keys...
+ * });
+ * ```
+ *
+ * Usage in SDK Preview or standalone browser context:
  * ```typescript
  * const keyTracker = new KeyStateTracker();
  * door.onConnect((user) => {

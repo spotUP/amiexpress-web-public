@@ -727,6 +727,45 @@ export default { runDoor };
 - Utilities with "Press any key to continue..." flows
 - Text-based applications with line input
 
+### Hybrid/Client Door Input (IMPORTANT)
+
+**KeyStateTracker Does NOT Work in BBS Terminal:**
+
+The SDK's `KeyStateTracker` class listens to browser `window.keydown`/`window.keyup` events for instant key repeat. However, when running in the BBS terminal (xterm.js):
+
+1. xterm.js intercepts all keyboard events before they reach `window`
+2. Input comes through `door.onInput()`, not window events
+3. KeyStateTracker will never receive any key presses
+
+**Solution for Hybrid Doors:**
+
+Handle arrow/movement keys directly in the `door.onInput()` callback:
+
+```typescript
+door.onInput((user, key) => {
+  const k = key.key?.toLowerCase() || '';
+
+  // Handle movement keys during gameplay
+  if (this.state === 'playing') {
+    if (k === 'arrowleft' || k === 'a') {
+      this.movePaddle(-1);
+      return;
+    } else if (k === 'arrowright' || k === 'd') {
+      this.movePaddle(1);
+      return;
+    }
+  }
+
+  // Handle other keys (space, enter, etc.)
+  this.handleOtherInput(k);
+});
+```
+
+**When KeyStateTracker DOES Work:**
+- SDK Preview tool (runs in its own browser tab)
+- Standalone browser context (door opens in separate window)
+- NOT in BBS terminal (xterm.js embeds the door output)
+
 ### Mouse Not Working
 
 1. Ensure `bbsSession.mouseEventsEnabled = true` (NOT `session.mouseEventsEnabled`)
