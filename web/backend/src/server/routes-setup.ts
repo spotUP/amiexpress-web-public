@@ -15,6 +15,7 @@ import { join } from 'path';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../utils/amigafs';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
@@ -336,8 +337,74 @@ export function registerHttpRoutes(app: Application): void {
     }
   });
 
-  // ===== File Download Endpoint =====
-  // express.e:20075+ (downloadAFile)
+  // ===== File Download Endpoint (by path) =====
+  // express.e:20075+ (downloadAFile) - disk-based file serving
+  // Route: /api/download/:confNum/:dirNum/:filename
+  // Uses amigafs for case-insensitive file lookups (AmigaOS compatibility)
+  app.get('/api/download/:confNum/:dirNum/:filename', async (req: Request, res: Response) => {
+    try {
+      const confNum = parseInt(req.params.confNum);
+      const dirNum = parseInt(req.params.dirNum);
+      const filename = decodeURIComponent(req.params.filename);
+
+      if (isNaN(confNum) || isNaN(dirNum) || !filename) {
+        return res.status(400).json({ error: 'Invalid download parameters' });
+      }
+
+      const dataDir = config.get('dataDir');
+      const conferencePath = getConferenceDir(confNum, dataDir);
+
+      // Search for file in conference directories - express.e disk-based approach
+      // AmiExpress stores files in Conf{N}/Files/ directory
+      // Use amigafs for case-insensitive matching (AmigaOS is case-insensitive)
+      const possiblePaths = [
+        path.join(conferencePath, 'Files', filename),
+        path.join(conferencePath, `Dir${dirNum}`, filename),
+        path.join(dataDir, 'Node0', 'Playpen', filename),
+        path.join(conferencePath, 'HOLD', filename),
+        path.join(conferencePath, 'PRIVATE', filename)
+      ];
+
+      let filePath: string | null = null;
+      let resolvedPath: string | null = null;
+      for (const testPath of possiblePaths) {
+        // Use amigafs.existsSync for case-insensitive check
+        if (amigafs.existsSync(testPath)) {
+          // Get the actual resolved path (with correct case)
+          try {
+            resolvedPath = amigafs.realpathSync(testPath);
+            filePath = resolvedPath;
+          } catch {
+            filePath = testPath;
+          }
+          break;
+        }
+      }
+
+      if (!filePath) {
+        console.error(`[Download] File not found: ${filename} in conf ${confNum}`);
+        return res.status(404).json({ error: 'File not found on server' });
+      }
+
+      const stats = amigafs.statSync(filePath);
+      const actualFilename = path.basename(filePath);
+      console.log(`[Download] Serving file: ${actualFilename} from ${filePath} (${stats.size} bytes)`);
+
+      res.setHeader('Content-Disposition', `attachment; filename="${actualFilename}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', stats.size.toString());
+
+      // Use standard fs for streaming (amigafs doesn't have createReadStream)
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('[Download] Error:', error);
+      res.status(500).json({ error: 'Download failed' });
+    }
+  });
+
+  // ===== File Download Endpoint (by ID - legacy) =====
+  // For backward compatibility with database-based file IDs
   app.get('/api/download/:fileId', async (req: Request, res: Response) => {
     try {
       const fileId = parseInt(req.params.fileId);

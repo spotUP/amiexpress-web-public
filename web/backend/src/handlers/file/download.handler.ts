@@ -208,14 +208,22 @@ export class DownloadHandler {
       return 'FAILURE';
     }
     const totalSize = fileList.reduce((sum, file) => sum + file.size, 0);
+    const totalKb = Math.floor(totalSize / 1024);
 
-    // Display file list
-    socket.emit('ansi-output', `\r\n\x1b[32mFiles to download (${fileList.length}):\x1b[0m\r\n`);
-    fileList.forEach((file, index) => {
-      socket.emit('ansi-output', `  ${index + 1}. ${file.name} (${file.size} bytes)\r\n`);
-    });
-    socket.emit('ansi-output', `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
+    // Get estimated CPS from user stats or default to 10000 (100kbps)
+    const estCPS = session.user?.topDownloadCPS || 10000;
+    const estSecs = estCPS > 0 ? Math.floor(totalSize / estCPS) : 0;
+    const estMins = Math.floor(estSecs / 60);
+    const estSecsRem = estSecs % 60;
+
+    // express.e:20182-20195 - Protocol and estimate header
+    socket.emit('ansi-output', '\r\nHTTP Batch Download Estimate:\r\n');
+
+    // express.e:20202 - File count, size, time estimate
+    socket.emit('ansi-output', `   ${fileList.length} files, ${totalKb}k bytes, ${estMins} mins ${estSecsRem} secs\r\n`);
+
+    // express.e:20210 - LAST CHANCE prompt
+    socket.emit('ansi-output', '\r\nLAST CHANCE!   (Enter) to Start, (G)oodbye after transfer, (A)bort? ');
 
     // Set state to wait for confirmation
     session.subState = LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT;
@@ -253,6 +261,7 @@ export class DownloadHandler {
 
   /**
    * Handle download confirmation input
+   * express.e:20212-20231 - Handle Enter/G/A responses
    */
   static async handleConfirmInput(
     socket: Socket,
@@ -265,18 +274,32 @@ export class DownloadHandler {
       const isBatch = session.tempData.downloadBatch || false;
 
       const answer = input.trim().toUpperCase();
+      let goodbyeAfter = false;
 
-      if (answer === 'Y' || answer === 'YES') {
-        // User confirmed - initiate download(s)
-        if (isBatch) {
-          await this.initiateBatchDownload(socket, session, fileList);
-        } else {
-          await this.initiateDownload(socket, session, fileList[0]);
-        }
-      } else {
-        // User cancelled
-        socket.emit('ansi-output', '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
+      // express.e:20219-20221 - A = Abort
+      if (answer === 'A') {
+        socket.emit('ansi-output', 'Abort!\r\n\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.tempData.downloadFile = null;
+        session.tempData.downloadFileList = null;
+        session.tempData.downloadBatch = false;
+        return;
+      }
+
+      // express.e:20228 - G = Goodbye after transfer
+      if (answer === 'G') {
+        socket.emit('ansi-output', 'Goodbye!\r\n\r\n');
+        goodbyeAfter = true;
+      } else {
+        // Enter or Y = Start transfer - express.e:20231
+        socket.emit('ansi-output', '\r\n\r\n');
+      }
+
+      // User confirmed - initiate download(s)
+      if (isBatch) {
+        await this.initiateBatchDownload(socket, session, fileList, goodbyeAfter);
+      } else {
+        await this.initiateDownload(socket, session, fileList[0], goodbyeAfter);
       }
 
       session.tempData.downloadFile = null;
@@ -287,16 +310,17 @@ export class DownloadHandler {
 
   /**
    * Initiate the actual download (single file)
+   * express.e:15731-15740 - Ready to Send message
+   * express.e:20251 - File transfer Completed
    */
   private static async initiateDownload(
     socket: Socket,
     session: BBSSession,
-    fileInfo: any
+    fileInfo: any,
+    goodbyeAfter: boolean = false
   ): Promise<void> {
-    // In web context, we'll provide an HTTP download link
-    // express.e would call downloadFiles() here which does protocol-based transfer
-
-    socket.emit('ansi-output', '\r\n\x1b[32mInitiating download...\x1b[0m\r\n');
+    // express.e:15732 - "Protocol: Ready to Send"
+    socket.emit('ansi-output', 'HTTP: Ready to Send\r\n');
 
     // Generate download URL
     const downloadUrl = `/api/download/${fileInfo.confNum}/${fileInfo.dirNum}/${encodeURIComponent(fileInfo.name)}`;
@@ -308,9 +332,6 @@ export class DownloadHandler {
       url: downloadUrl,
       path: fileInfo.fullPath
     });
-
-    socket.emit('ansi-output', `\r\n\x1b[36mDownload link: ${downloadUrl}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mClick the download link or use your browser\'s download feature.\x1b[0m\r\n');
 
     // Log download activity - express.e:9475+
     if (session.user) {
@@ -325,26 +346,39 @@ export class DownloadHandler {
       await this.updateConferenceDownloadStats(session, fileInfo, isFree);
     }
 
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // express.e:20251 - "File transfer Completed."
+    socket.emit('ansi-output', '\r\n\r\nFile transfer Completed.\r\n');
+
+    // Handle goodbye after transfer - express.e:20317
+    if (goodbyeAfter) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      // Trigger goodbye flow
+      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+      handleGoodbyeCommand(socket, session, 'Y');
+    } else {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
   }
 
   /**
    * Initiate batch download (multiple files)
    * Port from express.e:15571-15720 (downloadFiles)
+   * express.e:15732 - "Protocol: Ready to Send"
+   * express.e:20251 - "File transfer Completed."
    */
   private static async initiateBatchDownload(
     socket: Socket,
     session: BBSSession,
-    fileList: any[]
+    fileList: any[],
+    goodbyeAfter: boolean = false
   ): Promise<void> {
-    socket.emit('ansi-output', '\r\n\x1b[32mInitiating batch download...\x1b[0m\r\n');
+    // express.e:15732 - "Protocol: Ready to Send"
+    socket.emit('ansi-output', 'HTTP: Ready to Send\r\n');
 
     // Send all files to client for download
     for (let i = 0; i < fileList.length; i++) {
       const fileInfo = fileList[i];
       const downloadUrl = `/api/download/${fileInfo.confNum}/${fileInfo.dirNum}/${encodeURIComponent(fileInfo.name)}`;
-
-      socket.emit('ansi-output', `\r\n\x1b[36m[${i + 1}/${fileList.length}] ${fileInfo.name}\x1b[0m\r\n`);
 
       // Send download event to client
       socket.emit('download-file', {
@@ -367,10 +401,18 @@ export class DownloadHandler {
       }
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[32mBatch download complete! (${fileList.length} files)\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // express.e:20251 - "File transfer Completed."
+    socket.emit('ansi-output', '\r\n\r\nFile transfer Completed.\r\n');
+
+    // Handle goodbye after transfer - express.e:20317
+    if (goodbyeAfter) {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      // Trigger goodbye flow
+      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+      handleGoodbyeCommand(socket, session, 'Y');
+    } else {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
   }
 
   /**
@@ -557,14 +599,15 @@ export class DownloadHandler {
     if (!user) return;
 
     try {
-      const db = require('../database').db;
+      // Use the imported db from ../../database
       if (db?.updateUser) {
         await db.updateUser(user.id, {
           downloads: user.downloads,
           bytesDownload: user.bytesDownload,
           dailyBytesDld: user.dailyBytesDld,
           bytesAvailableForDownload: user.bytesAvailableForDownload,
-          lastDownloadTime: user.lastDownloadTime
+          lastDownloadTime: user.lastDownloadTime,
+          topDownloadCPS: user.topDownloadCPS
         });
 
         // DISK-BASED: Write updated download stats to user.data/keys/misc files
@@ -605,7 +648,8 @@ export class DownloadHandler {
       target.downloads = (target.downloads || 0) + 1;
       target.bytesDownload = (target.bytesDownload || 0) + (fileInfo.size || 0);
 
-      const rawDb = (require('../database').db as any).db ?? require('../database').db;
+      // Use imported db - get underlying db if it's a proxy
+      const rawDb = (db as any).db ?? db;
       const repo = new ConferenceRepository(rawDb);
       await repo.updateConference(target.id, {
         downloads: target.downloads,
@@ -621,7 +665,8 @@ export class DownloadHandler {
       return session.conferences;
     }
     try {
-      const repo = new ConferenceRepository(require('../database').db);
+      // Use imported db
+      const repo = new ConferenceRepository(db);
       const confs = await repo.getConferences();
       session.conferences = confs;
       return confs;
