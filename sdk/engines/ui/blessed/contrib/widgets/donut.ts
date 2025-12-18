@@ -170,7 +170,12 @@ export class Donut extends Canvas {
       color: string | number | number[],
       percentAltNumber?: number
     ): void => {
-      makeRound(1, radius, width, cxx, middle, remainColor);
+      // Skip drawing remain circle if remainColor is 'black' (invisible on black terminals)
+      // or 'none'/'transparent' (explicit skip)
+      const skipRemain = remainColor === 'black' || remainColor === 'none' || remainColor === 'transparent';
+      if (!skipRemain) {
+        makeRound(1, radius, width, cxx, middle, remainColor);
+      }
       makeRound(percent, radius, width, cxx, middle, color);
       const ptext = percentAltNumber
         ? percentAltNumber.toFixed(0)

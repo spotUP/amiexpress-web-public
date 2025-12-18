@@ -20,7 +20,15 @@
  */
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import contrib, { CanvasMode } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
+/**
+ * Global canvas rendering mode for all chart widgets
+ * - 'braille': Unicode braille (2x4 resolution) - best quality, needs Unicode
+ * - 'halfblock': Half-block chars (2x2 resolution) - good BBS compatibility
+ * - 'ascii': ASCII only - universal compatibility
+ */
+const CANVAS_MODE: CanvasMode = 'halfblock';
 
 interface DoorSession {
   socket: any;
@@ -1043,6 +1051,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Line Chart - Multiple Series ', border: { type: 'line' },
       showLegend: true,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'cyan' } },
     });
 
@@ -1073,6 +1082,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Bar Chart - Monthly Stats ', border: { type: 'line' },
       barWidth: 6, barSpacing: 3, maxHeight: 10,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' } },
     });
 
@@ -1102,6 +1112,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Stacked Bar - Quarterly Revenue ', border: { type: 'line' },
       barWidth: 8, barSpacing: 4,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'yellow' } },
     });
 
@@ -1131,6 +1142,7 @@ export async function createApp(session: DoorSession) {
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Donut Chart - Market Share ', border: { type: 'line' },
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'magenta' } },
     });
 
@@ -1197,6 +1209,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, height: 6,
       label: ' Animated Gauge (Single) ', border: { type: 'line' },
       stroke: 'green', fill: 'white', showLabel: true,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' } },
     });
     let gaugeVal = 0;
@@ -1213,6 +1226,7 @@ export async function createApp(session: DoorSession) {
       parent: demoBox,
       top: 6, left: 0, right: 0, height: 6,
       label: ' Stacked Gauge (Multiple Segments) ', border: { type: 'line' },
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'cyan' } },
     });
     gauge2.setStack([
@@ -1244,6 +1258,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' Multiple Gauges - System Resources ', border: { type: 'line' },
       gaugeSpacing: 1, gaugeHeight: 2,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'cyan' } },
       gauges: [
         { showLabel: true, stack: [{ percent: 85, stroke: 'red' }] },
@@ -1281,6 +1296,7 @@ export async function createApp(session: DoorSession) {
       strokeWidth: 0.11, elements: 6,
       display: '000000',
       elementSpacing: 4, elementPadding: 2,
+      canvasMode: CANVAS_MODE,
       style: { fg: 'green', border: { fg: 'blue' } },
     });
 
@@ -1469,6 +1485,7 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' World Map ',
       border: { type: 'line' },
+      canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' }, shapeColor: 'green' } as any,
     });
 
