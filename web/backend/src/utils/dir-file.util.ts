@@ -10,11 +10,14 @@ import * as fs from 'fs/promises';
 import { formatFileSize, formatUploadDate } from './file-upload.util';
 import { looksLikeAsciiArt } from './ascii-art.util';
 
-const LINE_BREAK = '\r';
+const LINE_BREAK = '\n';
 
 /**
  * Get DIR file path based on upload status
  * Express.e:19473-19489
+ *
+ * DIR files are ALWAYS numbered: DIR1, DIR2, DIR3, etc.
+ * Uploads go to DIR{maxDirs} (the upload directory)
  *
  * @param conferencePath Path to conference directory (e.g., Conf1)
  * @param status File status (active, hold, lcfiles)
@@ -35,6 +38,10 @@ export function getDirFilePath(
     return path.join(conferencePath, 'LCFILES', 'uploads.lc');
   } else {
     // Express.e:19475-19478 - currentConfDir/DIR#
+    // StrCopy(ray,currentConfDir);
+    // StrAdd(ray,'DIR')
+    // StringF(ray2,'\d',maxDirs)
+    // StrAdd(ray,ray2)
     return path.join(conferencePath, `DIR${maxDirs}`);
   }
 }
@@ -195,7 +202,8 @@ export async function writeDirEntry(
     // f:=Open(ray,MODE_READWRITE)
     // Seek(f,0,OFFSET_END)
     // fileWrite(f,fmtstr)
-    await fs.appendFile(dirFilePath, entry);
+    // Use 'latin1' encoding to preserve Amiga ASCII art characters (e.g., ¬ = \xac)
+    await fs.appendFile(dirFilePath, entry, 'latin1');
 
     console.log(`[DIR] Wrote entry to ${path.basename(dirFilePath)}: ${filename}`);
   } catch (error: any) {
@@ -208,6 +216,9 @@ export async function writeDirEntry(
  * Complete DIR file writing for uploaded file
  * Express.e:19473-19509
  *
+ * DIR files are ALWAYS numbered: DIR1, DIR2, DIR3, etc.
+ * Uploads go to DIR{maxDirs} (the upload directory)
+ *
  * @param filename Uploaded filename
  * @param fileSize File size in bytes
  * @param uploadDate Upload date
@@ -216,7 +227,7 @@ export async function writeDirEntry(
  * @param username Uploader's username
  * @param conferencePath Path to conference directory
  * @param fileStatus File status (active/hold/lcfiles/private)
- * @param maxDirs Maximum DIR file number
+ * @param maxDirs Maximum DIR file number (uploads go to DIR{maxDirs})
  * @param addSentBy Whether to add 'Sent by:' line
  */
 export async function writeUploadToDirFile(
@@ -231,7 +242,7 @@ export async function writeUploadToDirFile(
   maxDirs: number = 1,
   addSentBy: boolean = true
 ): Promise<void> {
-  // Get appropriate DIR file path
+  // Get appropriate DIR file path (express.e:19473-19489)
   const dirFilePath = getDirFilePath(conferencePath, fileStatus, maxDirs);
 
   // Write entry

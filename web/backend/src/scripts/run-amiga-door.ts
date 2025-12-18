@@ -220,7 +220,7 @@ async function main() {
       doorId: doorIdArg,
       doorType: doorTypeArg,
       assigns: assignsArg,
-      toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { LOOP_LIMIT: '10000000' }, // batch doors: higher limit but keep guard enabled
+      toolTypes: Object.keys(toolTypesArg).length ? toolTypesArg : { LOOP_LIMIT: '10000000' }, // batch doors: higher limit
       env: process.env,
     });
     process.exit(0);

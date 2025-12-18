@@ -221,11 +221,17 @@ async function checkFileByExtension(
 
   if (diskChecker) {
     console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
-    return await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir);
+    const diskResult = await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir);
+    // If disk checker returned a result (not null), use it
+    // null means the checker wasn't available, so fall through to built-in
+    if (diskResult !== null) {
+      return diskResult;
+    }
+    console.log(`[FileTest] Disk checker not available, trying built-in checker`);
   }
 
   // FALLBACK: Built-in JavaScript checkers for common archive formats
-  console.log(`[FileTest] No disk checker for .${extUpper}, using built-in checker`);
+  console.log(`[FileTest] Using built-in checker for .${extUpper}`);
   switch (extUpper) {
     case 'ZIP':
       return await testZipFile(filepath, nodeWorkDir);
@@ -252,13 +258,28 @@ async function checkFileByExtension(
  * @param checker FileCheckerInfo from Fcheck/*.info
  * @param filepath Full path to file being tested
  * @param nodeWorkDir Work directory for output
+ * @returns TestResult, or null if checker is not available (fall back to built-in)
  */
 async function runDiskBasedChecker(
   checker: FileCheckerInfo,
   filepath: string,
   nodeWorkDir: string
-): Promise<TestResult> {
+): Promise<TestResult | null> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
+
+  // Check if the checker path looks like an Amiga path (contains : like "DOORS:" or "DH0:")
+  // These won't work on macOS/Linux, so skip disk checker and fall back to built-in
+  if (checker.checker.includes(':') && !checker.checker.startsWith('/')) {
+    console.log(`[FileTest] Disk checker "${checker.checker}" appears to be Amiga path, skipping`);
+    return null; // Signal to fall back to built-in checker
+  }
+
+  // Check if the checker executable actually exists
+  const checkerPath = checker.checker.split(' ')[0]; // Get just the executable, not arguments
+  if (!fsSync.existsSync(checkerPath)) {
+    console.log(`[FileTest] Disk checker "${checkerPath}" not found, skipping`);
+    return null; // Signal to fall back to built-in checker
+  }
 
   try {
     // Build command with file path substitution
@@ -306,14 +327,24 @@ async function runDiskBasedChecker(
   } catch (error: any) {
     // Command execution failed (non-zero exit code or timeout)
     console.error(`[FileTest] Disk checker error: ${error.message}`);
+
+    // Check if error is due to command not found (ENOENT) or permission denied
+    const errMsg = error.message?.toLowerCase() || '';
+    if (errMsg.includes('enoent') || errMsg.includes('not found') ||
+        errMsg.includes('no such file') || errMsg.includes('permission denied') ||
+        errMsg.includes('command not found')) {
+      console.log(`[FileTest] Disk checker not available, falling back to built-in`);
+      return null; // Signal to fall back to built-in checker
+    }
+
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
 
-    // Non-zero exit code usually means test failure
-    if (error.code !== undefined) {
+    // Non-zero exit code from an actual test usually means test failure
+    if (error.code !== undefined && typeof error.code === 'number') {
       return TestResult.FAILURE;
     }
 
-    // Other errors (timeout, command not found) - mark as not tested
+    // Other errors - mark as not tested
     return TestResult.NOT_TESTED;
   }
 }
@@ -345,21 +376,43 @@ async function testZipFile(filepath: string, nodeWorkDir: string): Promise<TestR
 
 /**
  * Test LHA/LZH file integrity
- * Uses lha.js (JavaScript extractor)
+ *
+ * Since we don't have a proper native LHA validator (only a JavaScript parser
+ * that doesn't support all LHA variants), we just check for valid magic bytes
+ * and return NOT_TESTED. This avoids rejecting legitimate Amiga LHA files.
+ *
+ * For proper validation, configure an external checker in Fcheck/LHA.info
  */
 async function testLhaFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
 
   try {
-    // Use JavaScript LHA library to test archive
-    const { listLhaFiles } = require('./lha-extractor');
-    const files = await listLhaFiles(filepath);
+    // Read the file header
+    const buffer = await fs.readFile(filepath);
 
-    const output = `LHA file integrity test\nFiles: ${files.length}\nStatus: OK`;
-    await fs.writeFile(outputFile, output);
+    if (buffer.length < 7) {
+      await fs.writeFile(outputFile, `File too small to be valid LHA archive`);
+      return TestResult.FAILURE;
+    }
 
-    console.log(`[testFile] LHA file passed integrity test (${files.length} files)`);
-    return TestResult.SUCCESS;
+    // LHA method ID is at offset 2, should be like "-lhX-" or "-lzX-"
+    // Format: [headerSize(1)][checksum(1)][methodID(5)]...
+    const methodId = buffer.slice(2, 7).toString('ascii');
+
+    // Check if it looks like a valid LHA method ID (starts with "-l", ends with "-")
+    // This covers -lh0- through -lh7-, -lhd-, -lzs-, -lz4-, -lz5-, etc.
+    if (methodId.startsWith('-l') && methodId.endsWith('-')) {
+      // Valid LHA magic bytes - return NOT_TESTED since we don't have a full validator
+      const output = `LHA file has valid magic bytes: ${methodId}\nNo full validation available - configure external checker for detailed testing`;
+      await fs.writeFile(outputFile, output);
+      console.log(`[testFile] LHA file has valid magic (${methodId}), marking as not tested`);
+      return TestResult.NOT_TESTED;
+    }
+
+    // Doesn't look like LHA despite the extension
+    console.log(`[testFile] File has .lha extension but invalid magic: "${methodId}"`);
+    await fs.writeFile(outputFile, `Invalid LHA magic bytes: ${methodId}`);
+    return TestResult.FAILURE;
   } catch (error: any) {
     console.error(`[testFile] LHA test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);

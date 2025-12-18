@@ -96,6 +96,8 @@ import {
   setPreferenceChatCommandsDependencies
 } from './chat/preference-chat-commands.handler';
 import { handlePageSysopCommand } from './command-handler/page-sysop-command';
+import { processBatchFile } from '../server/file-socket-handlers';
+import { config } from '../config';
 import {
   handleLiveChatCommand
 } from './chat/chat-commands.handler';
@@ -1891,6 +1893,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
     if (data === '\x7f' || data === '\b') {
       if (session.tempData.currentLineBuffer.length > 0) {
         session.tempData.currentLineBuffer = session.tempData.currentLineBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b'); // Echo backspace (move back, space, move back)
       }
       return;
     }
@@ -1913,19 +1916,19 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           isPrivate: session.tempData.currentDescription[0]?.startsWith('/')
         });
 
-        // Set currentUploadIndex to 0 so file-uploaded handler can process it
+        // Set currentUploadIndex to 0 so processBatchFile can process it
         session.tempData.currentUploadIndex = 0;
 
-        // Trigger file processing by manually calling file-uploaded logic
+        // Trigger file processing by calling processBatchFile directly
         socket.emit('ansi-output', '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');
 
-        // Re-emit file-uploaded event with stored file data
-        socket.emit('file-uploaded', {
+        // Process the upload directly (not via socket event - that doesn't work)
+        await processBatchFile(socket, session, {
           filename: uploadedFile.filename,
           originalname: uploadedFile.filename,
           size: uploadedFile.size,
           path: uploadedFile.path
-        });
+        }, config);
         return;
       }
 
@@ -1964,15 +1967,16 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       return;
     }
 
-      // Prompt for next description line (express.e:17747)
-      // Format: 32 spaces + ':' (aligns with first line at column 33)
-      socket.emit('ansi-output', '                                :');
+      // Prompt for next description line (express.e:19326)
+      // Format: newline + 32 spaces + ':' (aligns with first line at column 33)
+      socket.emit('ansi-output', '\r\n                                :');
       return;
     }
 
-    // Regular character - add to buffer (accumulate until Enter)
+    // Regular character - add to buffer and echo to terminal
     if (data.length === 1 && data >= ' ' && data <= '~') {
       session.tempData.currentLineBuffer += data;
+      socket.emit('ansi-output', data); // Echo character to terminal
     }
     return;
   }

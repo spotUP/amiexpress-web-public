@@ -120,7 +120,7 @@ export interface UserMiscStruct {
 
 export class UserDatabaseManager {
   // Struct sizes calculated from field types
-  private readonly USER_SIZE = 232;       // user struct size
+  private readonly USER_SIZE = 239;       // user struct size (from original Amiga format)
   private readonly USERKEYS_SIZE = 54;    // userKeys struct size
   private readonly USERMISC_SIZE = 228;   // userMisc struct size
 
@@ -385,6 +385,21 @@ export class UserDatabaseManager {
   }
 
   /**
+   * Convert confAccess string to 10-byte buffer for user.data
+   * 'X' = 0x58 (access), anything else = 0x00 (no access)
+   * Note: AmiExpress stores 'X' character (0x58), not 0xFF
+   */
+  private confAccessToBuffer(confAccess: string | undefined): Buffer {
+    const buffer = Buffer.alloc(10, 0);
+    if (confAccess) {
+      for (let i = 0; i < Math.min(confAccess.length, 10); i++) {
+        buffer[i] = confAccess[i].toUpperCase() === 'X' ? 0x58 : 0x00;
+      }
+    }
+    return buffer;
+  }
+
+  /**
    * Append user to all three database files
    */
   appendUser(user: UserStruct, keys: UserKeysStruct, misc: UserMiscStruct): void {
@@ -452,6 +467,106 @@ export class UserDatabaseManager {
   }
 
   /**
+   * Read confAccess from user.data disk file by slot number
+   * Returns string of X's for access (e.g., "XXXXXXXXXXXX")
+   * This is used for 68K door compatibility - doors expect disk-based data
+   */
+  readConfAccessFromDisk(slotNumber: number): string {
+    if (!fs.existsSync(this.userDataPath)) {
+      return '';
+    }
+
+    const userCount = this.getUserCount();
+    if (slotNumber < 0 || slotNumber >= userCount) {
+      return '';
+    }
+
+    // conferenceAccess offset in user struct:
+    // name(31) + pass(9) + location(30) + phoneNumber(13) + slotNumber(2) +
+    // secStatus(2) + secBoard(2) + secLibrary(2) + secBulletin(2) + messagesPosted(2) +
+    // newSinceDate(4) + pwdHash(4) + confRead2(4) + confRead3(4) + zoomType(2) +
+    // unknown(2) + unknown2(2) + unknown3(2) + xferProtocol(2) + filler2(2) +
+    // lcFiles(2) + badFiles(2) + accountDate(4) + screenType(2) + editorType(2) = 135
+    const CONF_ACCESS_OFFSET = 135;
+    const CONF_ACCESS_SIZE = 10;
+
+    const userOffset = slotNumber * this.USER_SIZE;
+    const fd = fs.openSync(this.userDataPath, 'r');
+    try {
+      const buffer = Buffer.alloc(CONF_ACCESS_SIZE);
+      fs.readSync(fd, buffer, 0, CONF_ACCESS_SIZE, userOffset + CONF_ACCESS_OFFSET);
+
+      // Convert buffer to string: 0x58 ('X') = access, anything else = no access
+      let result = '';
+      for (let i = 0; i < CONF_ACCESS_SIZE; i++) {
+        result += buffer[i] === 0x58 ? 'X' : '_';
+      }
+      return result;
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  /**
+   * Write confAccess to user.data disk file by slot number
+   * Used to sync SQLite changes to disk for 68K door compatibility
+   */
+  writeConfAccessToDisk(slotNumber: number, confAccess: string): boolean {
+    if (!fs.existsSync(this.userDataPath)) {
+      return false;
+    }
+
+    const userCount = this.getUserCount();
+    if (slotNumber < 0 || slotNumber >= userCount) {
+      return false;
+    }
+
+    const CONF_ACCESS_OFFSET = 135;
+    const CONF_ACCESS_SIZE = 10;
+
+    const userOffset = slotNumber * this.USER_SIZE;
+    const buffer = this.confAccessToBuffer(confAccess);
+
+    const fd = fs.openSync(this.userDataPath, 'r+');
+    try {
+      fs.writeSync(fd, buffer, 0, CONF_ACCESS_SIZE, userOffset + CONF_ACCESS_OFFSET);
+      console.log(`[UserDatabaseManager] Wrote confAccess="${confAccess}" to slot ${slotNumber}`);
+      return true;
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  /**
+   * Read username from user.data disk file by slot number
+   * Used to find slot number by username for door compatibility
+   */
+  findUserSlotByName(username: string): number {
+    if (!fs.existsSync(this.userDataPath)) {
+      return -1;
+    }
+
+    const userCount = this.getUserCount();
+    const fd = fs.openSync(this.userDataPath, 'r');
+    const nameBuffer = Buffer.alloc(31);
+    const searchName = username.toLowerCase();
+
+    try {
+      for (let slot = 0; slot < userCount; slot++) {
+        const userOffset = slot * this.USER_SIZE;
+        fs.readSync(fd, nameBuffer, 0, 31, userOffset);
+        const name = nameBuffer.toString('ascii').replace(/\0+$/, '').toLowerCase();
+        if (name === searchName) {
+          return slot;
+        }
+      }
+      return -1;
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  /**
    * Convert database User to UserStruct
    */
   userToStruct(user: any): UserStruct {
@@ -481,7 +596,7 @@ export class UserDatabaseManager {
       accountDate: Math.floor(new Date(user.created).getTime() / 1000),
       screenType: 0,
       editorType: 0,
-      conferenceAccess: Buffer.alloc(10, 0xFF), // All conferences accessible
+      conferenceAccess: this.confAccessToBuffer(user.confAccess), // From user's confAccess string
       uploads: user.uploads || 0,
       downloads: user.downloads || 0,
       confRJoin: 0,
@@ -530,6 +645,190 @@ export class UserDatabaseManager {
       dnCPS2: 0,
       timesOnToday: 0
     };
+  }
+
+  // ========================================
+  // Disk-based user stat offsets (for 68K door compatibility)
+  // ========================================
+  private static readonly MESSAGES_POSTED_OFFSET = 93;   // INT (2 bytes)
+  private static readonly UPLOADS_OFFSET = 145;          // INT (2 bytes)
+  private static readonly DOWNLOADS_OFFSET = 147;        // INT (2 bytes)
+  private static readonly TIMES_CALLED_OFFSET = 151;     // INT (2 bytes)
+  private static readonly TIME_LAST_ON_OFFSET = 153;     // LONG (4 bytes)
+  private static readonly TIME_USED_OFFSET = 157;        // LONG (4 bytes)
+  private static readonly TIME_LIMIT_OFFSET = 161;       // LONG (4 bytes)
+  private static readonly TIME_TOTAL_OFFSET = 165;       // LONG (4 bytes)
+  private static readonly BYTES_DOWNLOAD_OFFSET = 169;   // LONG (4 bytes)
+  private static readonly BYTES_UPLOAD_OFFSET = 173;     // LONG (4 bytes)
+  private static readonly DAILY_BYTES_LIMIT_OFFSET = 177;// LONG (4 bytes)
+  private static readonly DAILY_BYTES_DLD_OFFSET = 181;  // LONG (4 bytes)
+  private static readonly EXPERT_OFFSET = 185;           // CHAR (1 byte)
+  private static readonly LINE_LENGTH_OFFSET = 133;      // screenType INT (2 bytes) - used for line length
+
+  /**
+   * Read user statistics from user.data disk file
+   * Used by 68K doors via XIM protocol - must read from disk, not database
+   */
+  readUserStatsFromDisk(slotNumber: number): {
+    messagesPosted: number;
+    uploads: number;
+    downloads: number;
+    timesCalled: number;
+    timeLastOn: number;
+    timeUsed: number;
+    timeLimit: number;
+    timeTotal: number;
+    bytesDownload: number;
+    bytesUpload: number;
+    dailyBytesLimit: number;
+    dailyBytesDld: number;
+    expert: number;
+    lineLength: number;
+  } | null {
+    if (!fs.existsSync(this.userDataPath)) {
+      return null;
+    }
+
+    const userOffset = slotNumber * this.USER_SIZE;
+    const fd = fs.openSync(this.userDataPath, 'r');
+
+    try {
+      const buffer = Buffer.alloc(200);
+      fs.readSync(fd, buffer, 0, 200, userOffset);
+
+      return {
+        messagesPosted: buffer.readUInt16LE(UserDatabaseManager.MESSAGES_POSTED_OFFSET - 0) > 200 ? 0 :
+          this.readInt16At(fd, userOffset + UserDatabaseManager.MESSAGES_POSTED_OFFSET),
+        uploads: this.readInt16At(fd, userOffset + UserDatabaseManager.UPLOADS_OFFSET),
+        downloads: this.readInt16At(fd, userOffset + UserDatabaseManager.DOWNLOADS_OFFSET),
+        timesCalled: this.readInt16At(fd, userOffset + UserDatabaseManager.TIMES_CALLED_OFFSET),
+        timeLastOn: this.readInt32At(fd, userOffset + UserDatabaseManager.TIME_LAST_ON_OFFSET),
+        timeUsed: this.readInt32At(fd, userOffset + UserDatabaseManager.TIME_USED_OFFSET),
+        timeLimit: this.readInt32At(fd, userOffset + UserDatabaseManager.TIME_LIMIT_OFFSET),
+        timeTotal: this.readInt32At(fd, userOffset + UserDatabaseManager.TIME_TOTAL_OFFSET),
+        bytesDownload: this.readInt32At(fd, userOffset + UserDatabaseManager.BYTES_DOWNLOAD_OFFSET),
+        bytesUpload: this.readInt32At(fd, userOffset + UserDatabaseManager.BYTES_UPLOAD_OFFSET),
+        dailyBytesLimit: this.readInt32At(fd, userOffset + UserDatabaseManager.DAILY_BYTES_LIMIT_OFFSET),
+        dailyBytesDld: this.readInt32At(fd, userOffset + UserDatabaseManager.DAILY_BYTES_DLD_OFFSET),
+        expert: this.readByteAt(fd, userOffset + UserDatabaseManager.EXPERT_OFFSET),
+        lineLength: this.readInt16At(fd, userOffset + UserDatabaseManager.LINE_LENGTH_OFFSET),
+      };
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  private readInt16At(fd: number, offset: number): number {
+    const buf = Buffer.alloc(2);
+    fs.readSync(fd, buf, 0, 2, offset);
+    return buf.readUInt16LE(0);
+  }
+
+  private readInt32At(fd: number, offset: number): number {
+    const buf = Buffer.alloc(4);
+    fs.readSync(fd, buf, 0, 4, offset);
+    return buf.readUInt32LE(0);
+  }
+
+  private readByteAt(fd: number, offset: number): number {
+    const buf = Buffer.alloc(1);
+    fs.readSync(fd, buf, 0, 1, offset);
+    return buf.readUInt8(0);
+  }
+
+  /**
+   * Write a user stat field to user.data disk file
+   * Used when 68K doors modify user stats via XIM protocol
+   */
+  writeUserStatToDisk(slotNumber: number, field: string, value: number): boolean {
+    if (!fs.existsSync(this.userDataPath)) {
+      return false;
+    }
+
+    const userOffset = slotNumber * this.USER_SIZE;
+    const fd = fs.openSync(this.userDataPath, 'r+');
+
+    try {
+      let offset: number;
+      let size: number;
+
+      switch (field) {
+        case 'messagesPosted':
+          offset = UserDatabaseManager.MESSAGES_POSTED_OFFSET;
+          size = 2;
+          break;
+        case 'uploads':
+          offset = UserDatabaseManager.UPLOADS_OFFSET;
+          size = 2;
+          break;
+        case 'downloads':
+          offset = UserDatabaseManager.DOWNLOADS_OFFSET;
+          size = 2;
+          break;
+        case 'timesCalled':
+          offset = UserDatabaseManager.TIMES_CALLED_OFFSET;
+          size = 2;
+          break;
+        case 'timeLastOn':
+          offset = UserDatabaseManager.TIME_LAST_ON_OFFSET;
+          size = 4;
+          break;
+        case 'timeUsed':
+          offset = UserDatabaseManager.TIME_USED_OFFSET;
+          size = 4;
+          break;
+        case 'timeLimit':
+          offset = UserDatabaseManager.TIME_LIMIT_OFFSET;
+          size = 4;
+          break;
+        case 'timeTotal':
+          offset = UserDatabaseManager.TIME_TOTAL_OFFSET;
+          size = 4;
+          break;
+        case 'bytesDownload':
+          offset = UserDatabaseManager.BYTES_DOWNLOAD_OFFSET;
+          size = 4;
+          break;
+        case 'bytesUpload':
+          offset = UserDatabaseManager.BYTES_UPLOAD_OFFSET;
+          size = 4;
+          break;
+        case 'dailyBytesLimit':
+          offset = UserDatabaseManager.DAILY_BYTES_LIMIT_OFFSET;
+          size = 4;
+          break;
+        case 'dailyBytesDld':
+          offset = UserDatabaseManager.DAILY_BYTES_DLD_OFFSET;
+          size = 4;
+          break;
+        case 'expert':
+          offset = UserDatabaseManager.EXPERT_OFFSET;
+          size = 1;
+          break;
+        case 'lineLength':
+          offset = UserDatabaseManager.LINE_LENGTH_OFFSET;
+          size = 2;
+          break;
+        default:
+          console.log(`[UserDatabaseManager] Unknown stat field: ${field}`);
+          return false;
+      }
+
+      const buffer = Buffer.alloc(size);
+      if (size === 1) {
+        buffer.writeUInt8(value, 0);
+      } else if (size === 2) {
+        buffer.writeUInt16LE(value, 0);
+      } else {
+        buffer.writeUInt32LE(value, 0);
+      }
+
+      fs.writeSync(fd, buffer, 0, size, userOffset + offset);
+      console.log(`[UserDatabaseManager] Wrote ${field}=${value} to disk at slot ${slotNumber}`);
+      return true;
+    } finally {
+      fs.closeSync(fd);
+    }
   }
 
   /**

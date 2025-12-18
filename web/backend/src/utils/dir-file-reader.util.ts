@@ -187,11 +187,16 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
 /**
  * Read and parse entire DIR file
  * Port from express.e displayFileList() -> displayIt() -> displayIt2()
+ *
+ * DIR files use the classic BBS format ONLY:
+ * filename     P  123K  23-Oct-25  description
+ *                                  continuation line (33 spaces indent)
  */
 export function parseDirFile(content: string): DirFileEntry[] {
   const lines = content.split(/\r?\n/);
   const entries: DirFileEntry[] = [];
 
+  // Parse classic BBS format only (express.e format)
   let i = 0;
   while (i < lines.length) {
     const entry = parseDirEntry(lines, i);
@@ -227,7 +232,8 @@ export function formatDirEntry(entry: DirFileEntry): string {
  * Read DIR file from disk
  */
 export async function readDirFile(dirFilePath: string): Promise<DirFileEntry[]> {
-  const content = await fs.promises.readFile(dirFilePath, 'utf-8');
+  // Use 'latin1' encoding to preserve Amiga ASCII art characters (e.g., ¬ = \xac)
+  const content = await fs.promises.readFile(dirFilePath, 'latin1');
   return parseDirFile(content);
 }
 

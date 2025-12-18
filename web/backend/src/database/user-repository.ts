@@ -272,6 +272,11 @@ export class UserRepository extends BaseRepository<User> {
       throw new Error(`User with ID ${id} not found`);
     }
 
+    // Find user's slot in disk files (1-indexed position in user list)
+    const allUsers = await this.getUsers({ limit: 10000 });
+    const slotIndex = allUsers.findIndex(u => u.id === id);
+    const slotNumber = slotIndex >= 0 ? slotIndex + 1 : -1; // Convert to 1-indexed
+
     // Delete from database
     const result = this.run('DELETE FROM users WHERE id = ?', [id]);
 
@@ -281,9 +286,15 @@ export class UserRepository extends BaseRepository<User> {
 
     console.log(`[Database] Deleted user ${user.username} (ID: ${id})`);
 
-    // Note: Disk file synchronization for deletions would need additional logic
-    // to update user.data/keys/misc files and reindex slots
-    // This is complex and would require full user database rebuild
-    // For now, we only handle database deletion
+    // DISK-BASED: Clear user slot in user.data/keys/misc files
+    if (slotNumber > 0) {
+      try {
+        userFileManager.deleteUserSlot(slotNumber);
+        console.log(`[Database] Cleared disk slot ${slotNumber} for deleted user ${user.username}`);
+      } catch (error) {
+        console.error(`[Database] Failed to clear disk slot for user ${user.username}:`, error);
+        // Don't throw - database deletion already succeeded
+      }
+    }
   }
 }

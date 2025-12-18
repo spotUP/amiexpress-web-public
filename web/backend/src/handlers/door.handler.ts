@@ -13,6 +13,8 @@ import { resolvePath as resolveCaseInsensitivePath } from '../utils/amigafs';
 import { AmigaDoorSession } from '../amiga-emulation/AmigaDoorSession';
 import { callersLogManager } from '../services/CallersLogManager';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
+import { userDatabaseManager } from '../services/UserDatabaseManager';
+import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { config } from '../config';
 import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -301,6 +303,33 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
       ) ?? 80;
 
     // Create AmigaDoorSession - interactive doors need guard disabled
+    // Read confAccess and user stats from disk files for 68K door compatibility
+    // 68K doors expect disk-based data, not SQLite database
+    let confAccess = '';
+    let userSlotNumber = -1;
+    let diskUserStats: ReturnType<typeof userDatabaseManager.readUserStatsFromDisk> = null;
+    const username = session.user?.username;
+    if (username) {
+      userSlotNumber = userDatabaseManager.findUserSlotByName(username);
+      if (userSlotNumber >= 0) {
+        confAccess = userDatabaseManager.readConfAccessFromDisk(userSlotNumber);
+        diskUserStats = userDatabaseManager.readUserStatsFromDisk(userSlotNumber);
+        console.log(`[launchAmigaDoor] Read from disk: slot=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`);
+      } else {
+        // Fallback to session data if user not found in disk files
+        confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
+        console.log(`[launchAmigaDoor] User not found in disk, fallback to session: "${confAccess}"`);
+      }
+    }
+    console.log(`[launchAmigaDoor] Using confAccess = "${confAccess}" (len=${confAccess.length})`);
+
+    // Load BBS config from disk (bbsConfig.info) instead of hardcoding
+    const bbsRoot = config.get('dataDir');
+    const bbsConfig = loadBBSConfig(bbsRoot);
+    const bbsName = bbsConfig.bbs_name || 'AmiExpress-Web BBS';
+    const sysopName = bbsConfig.sysop_name || 'Sysop';
+    console.log(`[launchAmigaDoor] Loaded from bbsConfig.info: bbsName="${bbsName}" sysopName="${sysopName}"`);
+
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
       timeout: 600,
@@ -311,16 +340,19 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         user: session.user,
         nodeNumber: session.nodeId || 0,
         nonStopText: false,
-        bbsName: 'AmiExpress-Web BBS',
-        sysopName: 'Sysop',
+        bbsName: bbsName,
+        sysopName: sysopName,
         timeRemaining: 60,
         doorCommand: doorInfo.command,
         doorName: doorInfo.name,
-        dataDir: config.get('dataDir'),
+        dataDir: bbsRoot,
         doorId: doorInfo.command || doorInfo.id,
         pauseLines: terminalHeight,
         lineWrap: terminalWidth,
-        lineCount: 0
+        lineCount: 0,
+        confAccess: confAccess,
+        userSlotNumber: userSlotNumber,
+        diskUserStats: diskUserStats
       }
     } as any);
 
@@ -1683,10 +1715,13 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
     }
 
+    // Load BBS config from disk (bbsConfig.info) for environment variables
+    const bbsConfigForEnv = loadBBSConfig(bbsRoot);
+
     // Standard BBS environment variables (doors access via FindVar/GetVar)
     const doorEnv: Record<string, string> = {
       NODE: String(nodeNumber),
-      BBSNAME: 'AmiExpress BBS',
+      BBSNAME: bbsConfigForEnv.bbs_name || 'AmiExpress BBS',
       USERNAME: session.user?.username || 'Unknown',
       USERLEVEL: String(session.user?.secLevel || 0),
       LOCATION: session.user?.location || 'Unknown',
@@ -1698,6 +1733,16 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       PHONENUMBER: session.user?.phone || '000-000-0000',
       BAUDRATE: session.connectionBaud ? String(session.connectionBaud) : '115200',
       ANSIMODE: session.ansiEnabled ? '1' : '0',
+    };
+
+    // Node-specific assigns for 68K door compatibility
+    // These allow doors to access node-specific directories via Amiga assigns
+    const nodeAssigns: Record<string, string> = {
+      [`node${nodeNumber}:`]: path.join(bbsRoot, `Node${nodeNumber}`),
+      [`node:`]: path.join(bbsRoot, `Node${nodeNumber}`),  // Current node shortcut
+      [`nodedata:`]: path.join(bbsRoot, `Node${nodeNumber}`),
+      [`playpen:`]: path.join(bbsRoot, `Node${nodeNumber}`, 'Playpen'),
+      [`work:`]: bbsRoot,
     };
 
     const doorConfig = {
@@ -1723,6 +1768,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       internal: door.internal,
       toolTypes: interactiveToolTypes,
       env: doorEnv,  // Environment variables
+      assigns: nodeAssigns,  // Node-specific assigns for 68K door compatibility
     };
 
     // Check if this is a GCC-compiled development executable (ELF format)
@@ -1817,6 +1863,74 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     } catch {
       /* ignore */
     }
+
+    // Capture any return/chain/PRV/ACP requests from the door
+    if (typeof (amigaSession as any).getExitState === 'function') {
+      const exitState = (amigaSession as any).getExitState();
+      const ximState = exitState?.ximState || {};
+      if (ximState.returnCommand) {
+        (session as any).returnCommand = ximState.returnCommand;
+        console.log(`[executeAmigaDoor] RETURNCOMMAND requested: ${ximState.returnCommand}`);
+      }
+      if (ximState.chainCommand) {
+        (session as any).chainCommand = ximState.chainCommand;
+        console.log(`[executeAmigaDoor] CHAIN requested: ${ximState.chainCommand}`);
+      }
+      if (ximState.prvCommand) {
+        (session as any).prvCommand = ximState.prvCommand;
+        console.log(`[executeAmigaDoor] PRV_COMMAND requested: ${ximState.prvCommand}`);
+      }
+      if ((exitState as any).bbsSession?.acpCommand) {
+        (session as any).acpCommand = (exitState as any).bbsSession.acpCommand;
+        console.log(
+          `[executeAmigaDoor] ACP_COMMAND requested: ${
+            (exitState as any).bbsSession.acpCommand.command || ''
+          } (code=${(exitState as any).bbsSession.acpCommand.code}, target=${(exitState as any).bbsSession.acpCommand.targetNode})`
+        );
+      }
+
+      // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
+      try {
+        const { handleCommand } = require('./command.handler');
+        const runCommand = async (cmd?: string) => {
+          if (cmd && cmd.trim().length > 0) {
+            await handleCommand(socket, session, cmd.trim());
+          }
+        };
+
+        if ((session as any).chainCommand) {
+          const cmd = (session as any).chainCommand;
+          (session as any).chainCommand = undefined;
+          (session as any).returnCommand = undefined;
+          (session as any).prvCommand = undefined;
+          (session as any).acpCommand = undefined;
+          await runCommand(cmd);
+        } else {
+          if ((session as any).returnCommand) {
+            const cmd = (session as any).returnCommand;
+            (session as any).returnCommand = undefined;
+            await runCommand(cmd);
+          }
+          if ((session as any).prvCommand) {
+            const cmd = (session as any).prvCommand;
+            (session as any).prvCommand = undefined;
+            await runCommand(cmd);
+          }
+          const acp = (session as any).acpCommand;
+          if (acp && acp.command) {
+            (session as any).acpCommand = undefined;
+            await runCommand(acp.command);
+            applyAcpSideEffect(session, acp);
+          }
+        }
+      } catch (err) {
+        console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err);
+      }
+    }
+
+    // Return to menu
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = false;
 
   } catch (error) {
     console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);

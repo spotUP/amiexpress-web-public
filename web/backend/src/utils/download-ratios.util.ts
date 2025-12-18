@@ -259,16 +259,35 @@ export async function checkDownloadRatios(
 }
 
 /**
+ * Simulate modem CPS (characters per second) for download stats
+ * Classic BBS modems: 2400bps=240cps, 9600bps=960cps, 14400bps=1440cps,
+ * 28800bps=2880cps, 33600bps=3360cps, 56000bps=5600cps
+ * We simulate a range from 14.4k to 56k modem with some variance
+ */
+function simulateDownloadCPS(): number {
+  // Base speeds representing common modem speeds (in CPS)
+  const modemSpeeds = [1440, 2880, 3360, 5600];
+  const baseSpeed = modemSpeeds[Math.floor(Math.random() * modemSpeeds.length)];
+  // Add 10% variance to simulate real-world conditions
+  const variance = 0.1;
+  const factor = 1 - variance + (Math.random() * variance * 2);
+  return Math.floor(baseSpeed * factor);
+}
+
+/**
  * Update user download statistics after successful download
  * Port from express.e download tracking
  *
  * @param user User who downloaded
  * @param fileSize Size of file in bytes
+ * @param isFree Whether file is marked as free download
+ * @param cps Optional CPS value (if not provided, will be simulated)
  */
 export async function updateDownloadStats(
   user: User,
   fileSize: number,
-  isFree: boolean = false
+  isFree: boolean = false,
+  cps?: number
 ): Promise<void> {
   const effectiveSize = Math.max(0, fileSize || 0);
   const shouldTrack = creditAccountTrackDownloads(user) && !isFree;
@@ -291,6 +310,15 @@ export async function updateDownloadStats(
 
   // Update last download time
   user.lastDownloadTime = new Date();
+
+  // Update topDownloadCPS if this download achieved a higher CPS
+  // Use provided CPS or simulate modem speed
+  const downloadCPS = cps ?? simulateDownloadCPS();
+  const currentTopCPS = user.topDownloadCPS || 0;
+  if (downloadCPS > currentTopCPS) {
+    user.topDownloadCPS = downloadCPS;
+    console.log(`[DOWNLOAD] New top download CPS for ${user.username}: ${downloadCPS} (was ${currentTopCPS})`);
+  }
 }
 
 /**
@@ -317,4 +345,27 @@ export function calculateAvailableBytes(user: User): number {
   const averageFileSize = 100000; // 100KB
 
   return Math.max(0, allowedDownloads * averageFileSize);
+}
+
+/**
+ * Update user upload statistics after successful upload
+ * Port from express.e upload tracking
+ *
+ * @param user User who uploaded
+ * @param fileSize Size of file in bytes
+ * @param cps Optional CPS value (if not provided, will be simulated)
+ */
+export async function updateUploadStats(
+  user: User,
+  fileSize: number,
+  cps?: number
+): Promise<void> {
+  // Update topUploadCPS if this upload achieved a higher CPS
+  // Use provided CPS or simulate modem speed
+  const uploadCPS = cps ?? simulateDownloadCPS(); // Same modem speeds for upload
+  const currentTopCPS = user.topUploadCPS || 0;
+  if (uploadCPS > currentTopCPS) {
+    user.topUploadCPS = uploadCPS;
+    console.log(`[UPLOAD] New top upload CPS for ${user.username}: ${uploadCPS} (was ${currentTopCPS})`);
+  }
 }

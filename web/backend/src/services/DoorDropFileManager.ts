@@ -62,6 +62,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../database';
+import { loadBBSConfig } from './bbs-config-file.service';
 
 export class DoorDropFileManager {
   private bbsRoot: string;
@@ -70,13 +71,26 @@ export class DoorDropFileManager {
 
   constructor() {
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    // Load BBS name and sysop name from disk (bbsConfig.info)
+    this.loadConfigFromDisk();
     console.log('[DoorDropFile] Initialized');
     console.log(`  BBS root: ${this.bbsRoot}`);
+    console.log(`  BBS name: ${this.bbsName} (from bbsConfig.info)`);
+    console.log(`  Sysop: ${this.sysopName} (from bbsConfig.info)`);
+  }
+
+  private loadConfigFromDisk(): void {
+    const bbsConfig = loadBBSConfig(this.bbsRoot);
+    this.bbsName = bbsConfig.bbs_name || 'AmiExpress BBS';
+    this.sysopName = bbsConfig.sysop_name || 'Sysop';
   }
 
   setBbsRoot(bbsRoot: string): void {
     this.bbsRoot = bbsRoot;
+    // Reload config when BBS root changes
+    this.loadConfigFromDisk();
     console.log(`[DoorDropFile] Root updated -> ${bbsRoot}`);
+    console.log(`[DoorDropFile] Config reloaded: bbsName="${this.bbsName}" sysopName="${this.sysopName}"`);
   }
 
   /**

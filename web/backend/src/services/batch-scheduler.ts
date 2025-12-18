@@ -347,13 +347,14 @@ function runAmigaDoorViaRunner(
 
     const useTsRunner = resolvedRunner.endsWith('.ts');
     const command = useTsRunner ? 'npx' : 'node';
-    // For batch doors, use default loop limit (500K) with guard enabled by default
-    // Batch doors should complete quickly - if they exceed 500K iterations they're stuck
-    // The 60s timeout provides an additional safety net
-    const toolTypes = {}; // Empty toolTypes = use DoorLifecycleManager defaults (500K loop limit, guard enabled)
+    // For batch doors: use default loop limit with guard enabled
+    // The 60s timeout provides the primary safety net for stuck doors
+    // IMPORTANT: Batch doors are SIM-type (plain AmigaDOS executables), NOT XIM doors
+    // Setting doortype=SIM disables XIM protocol polling which batch doors don't use
+    const toolTypes = {}; // Use DoorLifecycleManager defaults
     const execArgs = useTsRunner
-      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)]
-      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes)];
+      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', 'SIM']
+      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', 'SIM'];
 
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),

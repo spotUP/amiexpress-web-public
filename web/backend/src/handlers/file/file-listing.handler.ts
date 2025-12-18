@@ -21,7 +21,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { config } from '../../config';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
-import { getMaxDirs } from '../../utils/max-dirs.util';
+import { getMaxDirs, getDirFiles, DirFileInfo } from '../../utils/max-dirs.util';
 
 /**
  * Display file list for a conference
@@ -165,34 +165,37 @@ export class FileListingHandler {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.headerBox('FILE LISTING'));
 
-    // Determine loop direction
-    let currentDir: number;
+    // Get list of DIR files (express.e: numbered DIR1, DIR2, etc. only)
+    const allDirFiles = await getDirFiles(session.currentConf, bbsDataPath);
+
+    // Filter to the requested range (1-indexed)
+    let dirsToShow = allDirFiles.filter(df =>
+      df.index >= dirSpan.startDir && df.index <= dirSpan.endDir
+    );
+
+    // Handle HOLD directory if requested
+    if (dirSpan.startDir === -1 || dirSpan.endDir === -1) {
+      const holdPath = getHoldDirFilePath(conferencePath);
+      dirsToShow.unshift({
+        index: -1,
+        name: 'HOLD',
+        path: holdPath,
+        filename: 'HELD'
+      });
+    }
+
+    // Reverse if needed
     if (reverse) {
-      currentDir = dirSpan.endDir;
-    } else {
-      currentDir = dirSpan.startDir;
+      dirsToShow = dirsToShow.reverse();
     }
 
     // Loop through directories
-    while (
-      (reverse && currentDir >= dirSpan.startDir) ||
-      (!reverse && currentDir <= dirSpan.endDir)
-    ) {
-      // Get DIR file path
-      let dirFilePath: string;
-      let dirDisplayName: string;
+    for (const dirInfo of dirsToShow) {
+      const dirFilePath = dirInfo.path;
+      // Express.e:27667-27669 - Show directory number, or "HOLD" for hold directory
+      const dirDisplayName = dirInfo.index === -1 ? 'HOLD' : String(dirInfo.index);
 
-      if (currentDir === -1) {
-        // HOLD directory
-        dirFilePath = getHoldDirFilePath(conferencePath);
-        dirDisplayName = 'HOLD';
-      } else {
-        // Normal directory
-        dirFilePath = getDirFilePath(conferencePath, currentDir);
-        dirDisplayName = getDirDisplayName(currentDir, maxDirs);
-      }
-
-      // Display scanning message
+      // Display scanning message (express.e:27667-27669, 27683-27684)
       if (reverse) {
         socket.emit('ansi-output', `Reverse scanning directory ${dirDisplayName}\r\n`);
       } else {
@@ -211,8 +214,10 @@ export class FileListingHandler {
       try {
         entries = await readDirFile(dirFilePath);
       } catch (error: any) {
-        this.handleDirFileReadError(socket, session, dirDisplayName, error);
-        return;
+        // Log error but continue to next directory instead of failing completely
+        console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
+        socket.emit('ansi-output', `\x1b[33mCould not read directory ${dirDisplayName}\x1b[0m\r\n`);
+        continue;
       }
 
       if (entries.length === 0) {
@@ -243,13 +248,6 @@ export class FileListingHandler {
       if (!shouldContinue4) {
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
-      }
-
-      // Move to next directory
-      if (reverse) {
-        currentDir--;
-      } else {
-        currentDir++;
       }
     }
 
