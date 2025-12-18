@@ -348,6 +348,8 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
   // Note: "Now, part one of our questioning" comes from SCRIPT questionnaire (join.txt), not core flow
 
   if (!session.newUserData.introShown) {
+    // Clear screen before showing intro screens (express.e clears before JOIN/GUESTLOGON)
+    socket.emit('ansi-output', '\x1b[2J\x1b[H');
     // Show GUESTLOGON screen if it exists
     const guestShown = await showScreen(socket, session, screenConfig.GUESTLOGON);
     if (guestShown) {

@@ -1099,7 +1099,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         if (key === '\r') {
           term.write('\r\n');
           sendResponse('');
-          loginState.current = 'registering';
+          // Delay state change so onData (which fires after onKey) still sees
+          // 'new-user-prompt' and skips this keystroke - prevents double echo
+          setTimeout(() => { loginState.current = 'registering'; }, 0);
         } else {
           const lower = key.toLowerCase();
           if (lower === 'c') {
@@ -1107,12 +1109,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             // express.e:6845 lineInput echoes char, then adds \b\n after
             term.write('C');
             sendResponse('C');
-            loginState.current = 'registering';
+            // Delay state change so onData still sees 'new-user-prompt' and skips
+            setTimeout(() => { loginState.current = 'registering'; }, 0);
           } else if (lower === 'r') {
             // Echo character only - backend sends \r\nUsername: which provides newline
             term.write('R');
             sendResponse('R');
-            loginState.current = 'username';
+            // Delay state change so onData still sees 'new-user-prompt' and skips
+            setTimeout(() => { loginState.current = 'username'; }, 0);
             username.current = '';
             password.current = '';
           } else {
