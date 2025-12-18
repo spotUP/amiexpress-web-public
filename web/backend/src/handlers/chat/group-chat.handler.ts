@@ -72,15 +72,34 @@ function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: 
 /**
  * Broadcast a chat message to all room members
  */
-function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string) {
+function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number) {
   const socketRoom = 'room:' + roomId;
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const output = AnsiUtil.line('[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message);
 
+  // Emit raw ANSI output for simple terminal clients
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
   } else {
     io.to(socketRoom).emit('ansi-output', output);
+  }
+
+  // Also emit structured chat:message event for advanced clients (LiveChat door)
+  // This allows UI-based chat clients to parse and display messages properly
+  const structuredMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    channelId: roomId,
+    userId: String(senderId || 0),
+    username: senderUsername,
+    content: message,
+    type: 'message',
+    createdAt: new Date(),
+  };
+
+  if (excludeSocketId) {
+    io.to(socketRoom).except(excludeSocketId).emit('chat:message', structuredMessage);
+  } else {
+    io.to(socketRoom).emit('chat:message', structuredMessage);
   }
 }
 
@@ -380,8 +399,8 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
       messageType: 'message'
     });
 
-    // Broadcast message to all room members
-    broadcastRoomMessage(session.currentRoomId!, session.username!, message);
+    // Broadcast message to all room members (pass senderId for structured events)
+    broadcastRoomMessage(session.currentRoomId!, session.username!, message, undefined, parseInt(session.userId || '0', 10));
 
     console.log('💬 Room message:', session.username, '→', session.currentRoomName, message.substring(0, 50));
 

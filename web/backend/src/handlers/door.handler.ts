@@ -946,10 +946,15 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
   }
 
   // Hybrid doors: Load client bundle but ALSO continue to execute server part
+  let hybridSessionId: string | null = null;
   if (doorManifest && doorManifest.runtime === 'hybrid') {
     console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
-    // Load client bundle
-    await executeClientDoor(socket, session, door, doorManifest);
+    // Load client bundle and get session ID for RPC registration
+    hybridSessionId = await executeClientDoor(socket, session, door, doorManifest);
+    if (!hybridSessionId) {
+      console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name}`);
+      return;
+    }
     // Continue to execute server part below (don't return)
   }
 
@@ -980,7 +985,7 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       break;
     case 'TS': // TypeScript door type from BBSCMD file
     case 'typescript': // TypeScript door with runDoor() export
-      await executeTypeScriptDoor(socket, session, door, doorSession);
+      await executeTypeScriptDoor(socket, session, door, doorSession, hybridSessionId);
       break;
     case 'SDK': // SDK door with Door wrapper class (separate process)
       await executeSDKDoor(socket, session, door, doorSession);
@@ -1043,7 +1048,7 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
  * Execute TypeScript door with runDoor() export
  * Dynamically imports the door module and calls its runDoor() function
  */
-async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
+async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession, hybridSessionId?: string | null): Promise<void> {
   console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
   console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
 
@@ -1138,6 +1143,31 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       // The door.start() call in the module handles everything
       console.log(`[executeTypeScriptDoor] Hybrid SDK door detected - server component started via import`);
       console.log(`[executeTypeScriptDoor] Door server is running, client bundle already loaded`);
+
+      // Register RPC handlers from server module with ClientDoorBridge
+      // This enables client-to-server RPC calls (e.g., highscore saving)
+      const rpcHandlers = doorModule.rpcHandlers || doorModule.default?.rpcHandlers || doorModule.default;
+      if (rpcHandlers && typeof rpcHandlers === 'object') {
+        const { getClientDoorBridge } = require('../doors/client-door-bridge');
+        const bridge = getClientDoorBridge();
+
+        // Find the session ID - it should be stored from executeClientDoor
+        // We need to get it from the session or socket
+        const sessionId = (session as any).clientDoorSessionId || hybridSessionId;
+
+        if (sessionId) {
+          for (const [method, handler] of Object.entries(rpcHandlers)) {
+            if (typeof handler === 'function') {
+              bridge.registerRPCHandler(sessionId, method, async (params: any) => {
+                return (handler as Function)(params);
+              });
+              console.log(`[executeTypeScriptDoor] Registered RPC handler: ${method}`);
+            }
+          }
+        } else {
+          console.warn(`[executeTypeScriptDoor] No sessionId available for RPC handler registration`);
+        }
+      }
 
       // Set door active flag so BBS knows door is running
       session.inDoorManager = true;
@@ -2777,7 +2807,7 @@ export function executePagerDoor(socket: any, session: BBSSession, chatSession: 
  * Execute client door (browser-based)
  * Serves bundled JavaScript to browser and establishes WebSocket bridge
  */
-async function executeClientDoor(socket: any, session: BBSSession, door: Door, manifest: any): Promise<void> {
+async function executeClientDoor(socket: any, session: BBSSession, door: Door, manifest: any): Promise<string | null> {
   console.log(`[executeClientDoor] Starting client door: ${door.name}`);
 
   const { getClientDoorBridge } = require('../doors/client-door-bridge');
@@ -2794,6 +2824,11 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     // Enable mouse events for client doors (needed for games like Arkanoid)
     session.mouseEventsEnabled = true;
     console.log(`[executeClientDoor] Set mouseEventsEnabled=true for session`);
+
+    // Enable game mode for smooth key input (bypasses OS key repeat delay)
+    // This makes frontend send key-down/key-up events instead of regular key events
+    socket.emit('game-mode', true);
+    console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
 
     // Set a no-op input handler to prevent BBS from echoing input
     // The actual input handling is done by the client-door-bridge
@@ -2823,6 +2858,8 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     callersLog(isGuest ? null : clientDoorUser.id, clientDoorUser.username, 'Executed client door', door.name);
     callersLogManager.logDoor(nodeId, door.name);
 
+    return sessionId;
+
   } catch (error) {
     console.error(`[executeClientDoor] Error starting client door:`, error);
     socket.emit('ansi-output', `\r\n\x1b[31mError starting door: ${(error as Error).message}\x1b[0m\r\n`);
@@ -2830,6 +2867,7 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.inDoorManager;
+    return null;
   }
 }
 

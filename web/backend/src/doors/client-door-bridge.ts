@@ -221,6 +221,84 @@ export class ClientDoorBridge {
     // Store handler reference for cleanup
     (doorSession as any).inputHandler = inputHandler;
 
+    // Mouse event handlers for client doors
+    const mouseClickHandler = (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+      if (!doorSession.active) return;
+      console.log(`[ClientDoorBridge] mouse-click received:`, data);
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: JSON.stringify({ type: 'mouse-click', ...data }) },
+        timestamp: Date.now(),
+      });
+    };
+
+    const mouseDragHandler = (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+      if (!doorSession.active) return;
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: JSON.stringify({ type: 'mouse-drag', ...data }) },
+        timestamp: Date.now(),
+      });
+    };
+
+    const mouseUpHandler = (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+      if (!doorSession.active) return;
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: JSON.stringify({ type: 'mouse-up', ...data }) },
+        timestamp: Date.now(),
+      });
+    };
+
+    const mouseHoverHandler = (data: { x: number; y: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+      if (!doorSession.active) return;
+      // Send hover events (these may be throttled by frontend)
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: JSON.stringify({ type: 'mouse-hover', ...data }) },
+        timestamp: Date.now(),
+      });
+    };
+
+    socket.on('mouse-click', mouseClickHandler);
+    socket.on('mouse-drag', mouseDragHandler);
+    socket.on('mouse-up', mouseUpHandler);
+    socket.on('mouse-hover', mouseHoverHandler);
+
+    // Store handler references for cleanup
+    (doorSession as any).mouseClickHandler = mouseClickHandler;
+    (doorSession as any).mouseDragHandler = mouseDragHandler;
+    (doorSession as any).mouseUpHandler = mouseUpHandler;
+    (doorSession as any).mouseHoverHandler = mouseHoverHandler;
+
+    // Game mode key event handlers (for smooth key repeat without OS delay)
+    const keyDownHandler = (data: { key: string; code: string }) => {
+      if (!doorSession.active) return;
+      // Send key-down as INPUT with special format so door can track held keys
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: data.key, code: data.code, type: 'keydown' },
+        timestamp: Date.now(),
+      });
+    };
+
+    const keyUpHandler = (data: { key: string; code: string }) => {
+      if (!doorSession.active) return;
+      // Send key-up as INPUT with special format
+      this.sendMessage(doorSession, {
+        type: MessageType.INPUT,
+        data: { key: data.key, code: data.code, type: 'keyup' },
+        timestamp: Date.now(),
+      });
+    };
+
+    socket.on('key-down', keyDownHandler);
+    socket.on('key-up', keyUpHandler);
+
+    // Store handler references for cleanup
+    (doorSession as any).keyDownHandler = keyDownHandler;
+    (doorSession as any).keyUpHandler = keyUpHandler;
+
     // Handle disconnection
     socket.once('disconnect', () => {
       this.endSession(sessionId);
@@ -376,6 +454,28 @@ export class ClientDoorBridge {
       session.socket.off('door:client:message', (session as any).clientMessageHandler);
     }
 
+    // Clean up mouse event handlers
+    if ((session as any).mouseClickHandler) {
+      session.socket.off('mouse-click', (session as any).mouseClickHandler);
+    }
+    if ((session as any).mouseDragHandler) {
+      session.socket.off('mouse-drag', (session as any).mouseDragHandler);
+    }
+    if ((session as any).mouseUpHandler) {
+      session.socket.off('mouse-up', (session as any).mouseUpHandler);
+    }
+    if ((session as any).mouseHoverHandler) {
+      session.socket.off('mouse-hover', (session as any).mouseHoverHandler);
+    }
+
+    // Clean up key event handlers
+    if ((session as any).keyDownHandler) {
+      session.socket.off('key-down', (session as any).keyDownHandler);
+    }
+    if ((session as any).keyUpHandler) {
+      session.socket.off('key-up', (session as any).keyUpHandler);
+    }
+
     // Clear keepalive
     if ((session as any).keepaliveInterval) {
       clearInterval((session as any).keepaliveInterval);
@@ -391,6 +491,8 @@ export class ClientDoorBridge {
     delete session.bbsSession.inDoorManager;
     // Disable mouse events when door exits
     session.bbsSession.mouseEventsEnabled = false;
+    // Disable game mode (raw key events)
+    session.socket.emit('game-mode', false);
     if ((session.bbsSession as any).shortcuts?.clear) {
       (session.bbsSession as any).shortcuts.clear();
     }

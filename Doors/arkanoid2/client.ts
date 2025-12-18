@@ -108,11 +108,11 @@ const PADDLE_WIDTH_DEFAULT = 10;
 const PADDLE_WIDTH_SMALL = 6;
 const PADDLE_WIDTH_LARGE = 14;
 const PADDLE_Y = GAME_BOTTOM - 1;
-const PADDLE_SPEED = 3;
+const PADDLE_SPEED = 2;  // Reduced from 3 for smoother keyboard control
 
-const BALL_SPEED_DEFAULT = 1;
-const BALL_SPEED_FAST = 1.5;
-const BALL_SPEED_SLOW = 0.6;
+const BALL_SPEED_DEFAULT = 0.7;   // Reduced 30% from 1.0
+const BALL_SPEED_FAST = 1.05;     // Reduced 30% from 1.5
+const BALL_SPEED_SLOW = 0.42;     // Reduced 30% from 0.6
 
 const BRICK_WIDTH = 6;
 const BRICK_HEIGHT = 1;
@@ -301,6 +301,7 @@ class ArkanoidGame {
   private lastUpdate: number = 0;
   private musicStarted: boolean = false;
   private keyTracker: KeyStateTracker;
+  private heldKeys: Set<string> = new Set();  // Track held keys for smooth movement
 
   constructor() {
     this.door = new ClientDoor({
@@ -413,8 +414,31 @@ class ArkanoidGame {
         }
       }
 
-      // Handle all keys including movement keys
-      // Note: KeyStateTracker only works with direct window events, not BBS terminal input
+      // Handle keydown/keyup events for smooth movement (game mode)
+      // These come from ClientDoorBridge with type: 'keydown' or 'keyup'
+      const keyType = (key as any).type;
+      const keyName = (key as any).key || key.key || '';
+      const normalizedKey = keyName.toLowerCase();
+
+      if (keyType === 'keydown') {
+        // Track key as held
+        this.heldKeys.add(normalizedKey);
+        // Also handle immediate actions for non-movement keys
+        if (normalizedKey !== 'arrowleft' && normalizedKey !== 'arrowright' &&
+            normalizedKey !== 'a' && normalizedKey !== 'd') {
+          this.handleInput(normalizedKey);
+          if (this.data.state !== 'playing') {
+            this.door.send(this.render());
+          }
+        }
+        return;
+      } else if (keyType === 'keyup') {
+        // Stop tracking key
+        this.heldKeys.delete(normalizedKey);
+        return;
+      }
+
+      // Fallback for regular key events (non-game-mode)
       const k = key.key?.toLowerCase() || '';
 
       // Handle arrow/movement keys for paddle control
@@ -436,6 +460,14 @@ class ArkanoidGame {
 
     this.door.onUpdate((delta) => {
       if (this.data.state === 'playing') {
+        // Process held keys for smooth paddle movement (no key repeat delay!)
+        if (this.heldKeys.has('arrowleft') || this.heldKeys.has('a')) {
+          this.movePaddle(-1);
+        }
+        if (this.heldKeys.has('arrowright') || this.heldKeys.has('d')) {
+          this.movePaddle(1);
+        }
+
         this.update(delta);
         this.door.send(this.render());
       }
@@ -1142,7 +1174,10 @@ class ArkanoidGame {
         this.data.state = 'menu';
         break;
       case 'enterName':
-        this.handleNameInput(key);
+        // handleNameInput is async - need to re-render after it completes
+        this.handleNameInput(key).then(() => {
+          this.door.send(this.render());
+        });
         break;
     }
   }
@@ -1199,16 +1234,17 @@ class ArkanoidGame {
 
   private handleMouseInput(event: { type: string; x: number; y: number; button?: number }): void {
     // Mouse events: mouse-hover, mouse-click, mouse-drag, mouse-up
-    // x and y are 1-indexed terminal coordinates
+    // x and y are 0-indexed from frontend, convert to 1-indexed for ANSI positioning
+    const mouseX = event.x + 1;
+    const mouseY = event.y + 1;
 
     if (this.data.state === 'playing') {
       // Map mouse X position to paddle position
-      // Mouse x is 1-indexed, game area is GAME_LEFT to GAME_RIGHT
-      const mouseX = event.x;
+      // Game area is GAME_LEFT to GAME_RIGHT (1-indexed)
       const paddle = this.data.paddle;
       const paddleHalfWidth = paddle.width / 2;
 
-      // Center the paddle on the mouse position
+      // Center the paddle on the mouse position (mouseX already 1-indexed)
       let newPaddleX = mouseX - paddleHalfWidth;
 
       // Clamp to game boundaries
@@ -1232,24 +1268,72 @@ class ArkanoidGame {
 
       // Render immediately for smooth mouse movement
       this.door.send(this.render());
-    } else if (this.data.state === 'menu' && event.type === 'mouse-click') {
-      // Menu click handling - check Y position for menu items
+    } else if (this.data.state === 'menu') {
+      // Menu mouse handling - check Y position for menu items
       const menuStartY = 10;
-      const clickY = event.y;
 
-      if (clickY >= menuStartY && clickY <= menuStartY + 4) {
-        const selection = clickY - menuStartY;
-        this.data.menuSelection = selection;
+      if (mouseY >= menuStartY && mouseY <= menuStartY + 4) {
+        const selection = mouseY - menuStartY;
 
-        switch (selection) {
-          case 0: this.startGame(); break;
-          case 1: this.cycleDifficulty(); break;
-          case 2: this.data.state = 'highscores'; break;
-          case 3: this.data.state = 'help'; break;
-          case 4: this.quit(); break;
+        // Update selection highlight on hover
+        if (event.type === 'mouse-hover') {
+          if (this.data.menuSelection !== selection) {
+            this.data.menuSelection = selection;
+            this.door.send(this.render());
+          }
         }
 
-        this.door.send(this.render());
+        // Execute action on click
+        if (event.type === 'mouse-click') {
+          this.data.menuSelection = selection;
+
+          switch (selection) {
+            case 0: this.startGame(); break;
+            case 1: this.cycleDifficulty(); break;
+            case 2: this.data.state = 'highscores'; break;
+            case 3: this.data.state = 'help'; break;
+            case 4: this.quit(); return;  // Return immediately, don't render after quit
+          }
+
+          this.door.send(this.render());
+        }
+      }
+    } else if (event.type === 'mouse-click') {
+      // Handle mouse clicks on prompt screens as equivalent to pressing Enter
+      switch (this.data.state) {
+        case 'gameover':
+        case 'victory':
+          // Click anywhere to proceed
+          if (this.isHighScore()) {
+            this.data.state = 'enterName';
+          } else {
+            this.data.state = 'menu';
+          }
+          this.door.send(this.render());
+          break;
+
+        case 'highscores':
+        case 'help':
+          // Click anywhere to return to menu
+          this.data.state = 'menu';
+          this.door.send(this.render());
+          break;
+
+        case 'enterName':
+          // Click to confirm name entry (like pressing Enter)
+          if (this.data.playerName.length > 0) {
+            this.saveHighscore().then(() => {
+              this.data.state = 'highscores';
+              this.door.send(this.render());
+            });
+          }
+          break;
+
+        case 'paused':
+          // Click to resume
+          this.data.state = 'playing';
+          this.door.send(this.render());
+          break;
       }
     }
   }

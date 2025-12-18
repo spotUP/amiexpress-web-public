@@ -12,6 +12,7 @@ This guide shows how to use ALL the features available in the SDK v2.0:
 2. [Game Engines](#game-engines)
 3. [UI Components](#ui-components)
 4. [Complete Game Example](#complete-game-example)
+5. [ClientDoor API](#clientdoor-api-hybridclient-doors)
 
 ---
 
@@ -819,6 +820,122 @@ export default door;
 
 ---
 
+## ClientDoor API (Hybrid/Client Doors)
+
+For hybrid and client doors that run in the browser, the `ClientDoor` class provides additional methods.
+
+### Cursor Visibility
+
+Control the text cursor visibility for games:
+
+```typescript
+import { ClientDoor } from '@amiexpress/bbs-door-sdk/client';
+
+const door = new ClientDoor({ name: 'My Game', version: '1.0.0' });
+
+door.onConnect(async (user) => {
+  // Hide cursor during gameplay
+  door.hideCursor();
+  // or: door.setCursorVisible(false);
+
+  // Game code here...
+
+  // Show cursor before exiting
+  door.showCursor();
+  // or: door.setCursorVisible(true);
+});
+```
+
+**Methods:**
+- `setCursorVisible(visible: boolean)` - Show or hide text cursor
+- `hideCursor()` - Hide the text cursor (convenience method)
+- `showCursor()` - Show the text cursor (convenience method)
+
+### Game Mode Input (Smooth Keyboard)
+
+Hybrid/client doors automatically receive game mode input with `keydown`/`keyup` events for smooth, real-time keyboard control:
+
+```typescript
+class MyGame {
+  private heldKeys: Set<string> = new Set();
+  private door: ClientDoor;
+
+  constructor() {
+    this.door = new ClientDoor({ name: 'Game', version: '1.0.0' });
+
+    // Input handler receives keydown/keyup events
+    this.door.onInput((user, key) => {
+      const keyType = (key as any).type;  // 'keydown' or 'keyup'
+      const keyName = ((key as any).key || '').toLowerCase();
+
+      if (keyType === 'keydown') {
+        this.heldKeys.add(keyName);
+      } else if (keyType === 'keyup') {
+        this.heldKeys.delete(keyName);
+      }
+    });
+
+    // Process held keys in update loop for smooth movement
+    this.door.onUpdate((delta) => {
+      if (this.heldKeys.has('arrowleft')) {
+        this.movePlayer(-1, 0);
+      }
+      if (this.heldKeys.has('arrowright')) {
+        this.movePlayer(1, 0);
+      }
+    });
+  }
+}
+```
+
+### Mouse Events
+
+Mouse events come through `onInput()` as JSON-encoded strings:
+
+```typescript
+door.onInput((user, key) => {
+  const keyStr = typeof key === 'string' ? key : key.key;
+
+  if (keyStr?.startsWith('{')) {
+    try {
+      const event = JSON.parse(keyStr);
+      // event.type: 'mouse-click', 'mouse-hover', 'mouse-drag', 'mouse-up'
+      // event.x: column (0-indexed, add 1 for ANSI positioning)
+      // event.y: row (0-indexed, add 1 for ANSI positioning)
+      // event.button: 0=left, 1=middle, 2=right
+
+      const mouseX = event.x + 1;  // Convert to 1-indexed
+      const mouseY = event.y + 1;
+
+      if (event.type === 'mouse-click') {
+        this.handleClick(mouseX, mouseY);
+      } else if (event.type === 'mouse-hover') {
+        this.handleHover(mouseX, mouseY);
+      }
+    } catch (e) {
+      // Not a mouse event
+    }
+  }
+});
+```
+
+**Best Practice:** Make all "Press Enter" prompts respond to mouse clicks:
+
+```typescript
+if (event.type === 'mouse-click') {
+  switch (this.state) {
+    case 'gameover':
+    case 'victory':
+    case 'help':
+      // Click anywhere acts like pressing Enter
+      this.state = 'menu';
+      break;
+  }
+}
+```
+
+---
+
 ## Summary
 
 The SDK v2.0 provides:
@@ -826,7 +943,8 @@ The SDK v2.0 provides:
 1. **Full BBS API** - 40+ functions matching native AmiExpress capabilities
 2. **Game Engines** - Audio, Graphics, Physics, AI, Combat
 3. **UI Components** - Menus, HUD, Inventory, Dialogs
-4. **Type Safety** - Full TypeScript types for everything
-5. **Easy Integration** - All features work together seamlessly
+4. **ClientDoor API** - Cursor control, game mode input, mouse events
+5. **Type Safety** - Full TypeScript types for everything
+6. **Easy Integration** - All features work together seamlessly
 
 You can mix and match any combination of these features to create sophisticated BBS games and applications!

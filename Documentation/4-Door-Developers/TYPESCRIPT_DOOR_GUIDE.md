@@ -330,14 +330,23 @@ export async function runDoor(doorSession: any): Promise<void> {
 
 interface MouseEvent {
   type: 'mouse-hover' | 'mouse-click' | 'mouse-drag' | 'mouse-up';
-  x: number;
-  y: number;
-  button?: number;
+  x: number;   // 0-indexed column (add 1 for ANSI positioning)
+  y: number;   // 0-indexed row (add 1 for ANSI positioning)
+  button?: number;  // 0=left, 1=middle, 2=right
   shift?: boolean;
   ctrl?: boolean;
   alt?: boolean;
 }
 ```
+
+**IMPORTANT - Coordinate Systems:**
+- Frontend sends **0-indexed** coordinates (0-79 for columns, 0-23 for rows)
+- ANSI escape sequences use **1-indexed** coordinates (1-80, 1-24)
+- Always add 1 when converting mouse coordinates to ANSI positions:
+  ```typescript
+  const mouseX = event.x + 1;  // 0-indexed -> 1-indexed
+  const mouseY = event.y + 1;
+  ```
 
 **Mouse Control Example (Paddle Game):**
 
@@ -729,6 +738,55 @@ export default { runDoor };
 
 ### Hybrid/Client Door Input (IMPORTANT)
 
+**Game Mode for Smooth Keyboard Input:**
+
+For real-time games (Arkanoid, shooters, etc.), the BBS supports **game mode** which sends `keydown` and `keyup` events instead of regular key presses. This eliminates OS key repeat delay and allows tracking multiple simultaneous keys.
+
+**How Game Mode Works:**
+1. Game mode is automatically enabled for hybrid/client doors
+2. Instead of single key events, you receive `type: 'keydown'` and `type: 'keyup'` events
+3. Track held keys in a `Set` and process them in `onUpdate()` for smooth movement
+
+**Example: Smooth Paddle Movement:**
+
+```typescript
+class MyGame {
+  private heldKeys: Set<string> = new Set();
+
+  constructor() {
+    this.door.onInput((user, key) => {
+      const keyType = (key as any).type;
+      const keyName = ((key as any).key || key.key || '').toLowerCase();
+
+      if (keyType === 'keydown') {
+        this.heldKeys.add(keyName);
+        // Handle non-movement keys immediately (space, enter, etc.)
+        if (keyName !== 'arrowleft' && keyName !== 'arrowright') {
+          this.handleInput(keyName);
+        }
+        return;
+      } else if (keyType === 'keyup') {
+        this.heldKeys.delete(keyName);
+        return;
+      }
+
+      // Fallback for non-game-mode input
+      this.handleInput(keyName);
+    });
+
+    this.door.onUpdate((delta) => {
+      // Process held keys every frame for smooth movement
+      if (this.heldKeys.has('arrowleft') || this.heldKeys.has('a')) {
+        this.movePaddle(-1);
+      }
+      if (this.heldKeys.has('arrowright') || this.heldKeys.has('d')) {
+        this.movePaddle(1);
+      }
+    });
+  }
+}
+```
+
 **KeyStateTracker Does NOT Work in BBS Terminal:**
 
 The SDK's `KeyStateTracker` class listens to browser `window.keydown`/`window.keyup` events for instant key repeat. However, when running in the BBS terminal (xterm.js):
@@ -771,7 +829,45 @@ door.onInput((user, key) => {
 1. Ensure `bbsSession.mouseEventsEnabled = true` (NOT `session.mouseEventsEnabled`)
 2. Mouse events come as JSON strings - check `typeof data === 'string' && data.startsWith('{')`
 3. Parse with `JSON.parse(data)` to get `{ type, x, y, button }`
-4. Remember to set `bbsSession.mouseEventsEnabled = false` on cleanup
+4. **IMPORTANT**: Mouse coordinates are **0-indexed** from frontend. For ANSI positioning (1-indexed), add 1:
+   ```typescript
+   const mouseX = event.x + 1;  // Convert to 1-indexed for ANSI
+   const mouseY = event.y + 1;
+   ```
+5. Remember to set `bbsSession.mouseEventsEnabled = false` on cleanup
+
+### Mouse Events on Prompts
+
+For a better user experience, **make all "Press Enter" prompts also respond to mouse clicks**. Users expect clicking to work as a confirmation action.
+
+```typescript
+private handleMouseInput(event: { type: string; x: number; y: number }): void {
+  if (event.type !== 'mouse-click') return;
+
+  switch (this.state) {
+    case 'gameover':
+    case 'victory':
+      // Click anywhere to proceed (like pressing Enter)
+      if (this.isHighScore()) {
+        this.state = 'enterName';
+      } else {
+        this.state = 'menu';
+      }
+      break;
+
+    case 'highscores':
+    case 'help':
+      // Click anywhere to return
+      this.state = 'menu';
+      break;
+
+    case 'paused':
+      // Click to resume
+      this.state = 'playing';
+      break;
+  }
+}
+```
 
 ### Screen Not Clearing
 
@@ -1044,6 +1140,51 @@ audio.generateMusic({
 audio.setMusicState('combat', 0.9, 'crossfade');
 audio.setMusicState('explore', 0.3, 'fade');
 ```
+
+### Cursor Visibility Control
+
+For games where you don't want the blinking text cursor visible, use the SDK's cursor visibility methods:
+
+```typescript
+import { ClientDoor } from '@amiexpress/bbs-door-sdk/client';
+
+const door = new ClientDoor({
+  name: 'My Game',
+  version: '1.0.0',
+  runtime: 'client',
+});
+
+door.onConnect(async (user) => {
+  // Hide cursor during gameplay
+  door.hideCursor();
+  // or: door.setCursorVisible(false);
+
+  // ... game code ...
+
+  // Show cursor again before exiting
+  door.showCursor();
+  // or: door.setCursorVisible(true);
+});
+```
+
+**Available Methods:**
+- `door.setCursorVisible(visible: boolean)` - Main method to show/hide cursor
+- `door.hideCursor()` - Convenience method to hide cursor
+- `door.showCursor()` - Convenience method to show cursor
+
+**Best Practice:** Always show the cursor before exiting your door:
+
+```typescript
+private quit(): void {
+  door.showCursor();  // Always restore cursor visibility
+  door.send('\x1b[0m');  // Reset colors
+  door.shutdown();
+}
+```
+
+**Note:** You can also use ANSI escape codes directly:
+- Hide cursor: `\x1b[?25l`
+- Show cursor: `\x1b[?25h`
 
 ### When to Use Each Door Type
 

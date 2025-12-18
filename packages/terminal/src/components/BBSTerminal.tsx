@@ -77,6 +77,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
+  const mouseButtonDown = useRef<boolean>(false);  // Track mouse button state for drag events
+  const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
@@ -314,6 +316,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
+
+    // Custom key event handler - intercepts keys before xterm processes them
+    // This is critical for game mode because xterm normally intercepts all keys
+    term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
+      // In game mode, emit key-down/key-up events and prevent xterm from processing
+      if (gameMode.current && socketRef.current?.connected) {
+        if (ev.type === 'keydown') {
+          // Ignore browser key repeat - we handle our own
+          if (ev.repeat) {
+            return false; // Prevent xterm from processing
+          }
+          const key = ev.key;
+          if (!keyState.current[key]) {
+            keyState.current[key] = true;
+            socketRef.current.emit('key-down', { key, code: ev.code });
+          }
+          return false; // Prevent xterm from processing (we handle it)
+        } else if (ev.type === 'keyup') {
+          const key = ev.key;
+          if (keyState.current[key]) {
+            delete keyState.current[key];
+            socketRef.current.emit('key-up', { key, code: ev.code });
+          }
+          return false; // Prevent xterm from processing
+        }
+      }
+      // Not in game mode - let xterm handle normally
+      return true;
+    });
 
     // Force cursor blinking immediately after open
     term.options.cursorBlink = true;
@@ -1151,6 +1182,110 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     terminalInstance.current?.focus();
   };
 
+  // Calculate terminal cell coordinates from mouse event
+  const getTerminalCoords = (event: React.MouseEvent): { x: number; y: number } | null => {
+    const term = terminalInstance.current;
+    if (!term || !terminalRef.current) return null;
+
+    // Get the viewport element (where cells are rendered)
+    const viewport = terminalRef.current.querySelector('.xterm-screen');
+    if (!viewport) return null;
+
+    const rect = viewport.getBoundingClientRect();
+    const cellWidth = rect.width / term.cols;
+    const cellHeight = rect.height / term.rows;
+
+    // Calculate cell position (0-indexed)
+    const x = Math.floor((event.clientX - rect.left) / cellWidth);
+    const y = Math.floor((event.clientY - rect.top) / cellHeight);
+
+    // Clamp to valid range
+    return {
+      x: Math.max(0, Math.min(term.cols - 1, x)),
+      y: Math.max(0, Math.min(term.rows - 1, y))
+    };
+  };
+
+  // Mouse event handlers for game mode / doors
+  const handleMouseDown = (event: React.MouseEvent) => {
+    // Only send mouse events when door is active or in game mode
+    if (!doorActive.current && !gameMode.current) return;
+
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    const coords = getTerminalCoords(event);
+    if (!coords) return;
+
+    mouseButtonDown.current = true;
+
+    socket.emit('mouse-click', {
+      x: coords.x,
+      y: coords.y,
+      button: event.button,
+      shift: event.shiftKey,
+      ctrl: event.ctrlKey,
+      alt: event.altKey
+    });
+  };
+
+  const handleMouseUp = (event: React.MouseEvent) => {
+    if (!mouseButtonDown.current) return;
+
+    mouseButtonDown.current = false;
+
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    const coords = getTerminalCoords(event);
+    if (!coords) return;
+
+    socket.emit('mouse-up', {
+      x: coords.x,
+      y: coords.y,
+      button: event.button,
+      shift: event.shiftKey,
+      ctrl: event.ctrlKey,
+      alt: event.altKey
+    });
+  };
+
+  const handleMouseMove = (event: React.MouseEvent) => {
+    // Only send mouse events when door is active or in game mode
+    if (!doorActive.current && !gameMode.current) return;
+
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    const coords = getTerminalCoords(event);
+    if (!coords) return;
+
+    if (mouseButtonDown.current) {
+      // Dragging - send drag event
+      socket.emit('mouse-drag', {
+        x: coords.x,
+        y: coords.y,
+        button: event.buttons === 1 ? 0 : event.buttons === 2 ? 2 : event.buttons === 4 ? 1 : 0,
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey,
+        alt: event.altKey
+      });
+    } else {
+      // Hovering - throttle to ~60fps (16ms) to avoid flooding
+      const now = Date.now();
+      if (now - lastMouseHoverTime.current < 16) return;
+      lastMouseHoverTime.current = now;
+
+      socket.emit('mouse-hover', {
+        x: coords.x,
+        y: coords.y,
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey,
+        alt: event.altKey
+      });
+    }
+  };
+
   // Handle RIP canvas click to send commands back to BBS
   const handleRipCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = ripCanvasRef.current;
@@ -1179,6 +1314,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       <div
         ref={terminalRef}
         onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => { mouseButtonDown.current = false; }}
         tabIndex={0}
         style={{
           overflow: 'hidden',

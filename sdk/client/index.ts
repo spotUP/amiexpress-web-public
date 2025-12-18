@@ -399,6 +399,39 @@ export class ClientDoor extends EventEmitter {
   }
 
   /**
+   * Show or hide the text cursor
+   * Use this for games where you don't want the blinking cursor visible
+   *
+   * @param visible - true to show cursor, false to hide
+   *
+   * @example
+   * ```typescript
+   * // Hide cursor during gameplay
+   * door.setCursorVisible(false);
+   *
+   * // Show cursor again when returning to menu
+   * door.setCursorVisible(true);
+   * ```
+   */
+  public setCursorVisible(visible: boolean): void {
+    this.sendAnsi(visible ? '\x1b[?25h' : '\x1b[?25l');
+  }
+
+  /**
+   * Hide the text cursor (convenience method)
+   */
+  public hideCursor(): void {
+    this.setCursorVisible(false);
+  }
+
+  /**
+   * Show the text cursor (convenience method)
+   */
+  public showCursor(): void {
+    this.setCursorVisible(true);
+  }
+
+  /**
    * Get connected user
    */
   public getUser(): BBSUser | null {
@@ -452,6 +485,9 @@ export class ClientDoor extends EventEmitter {
     if (this.state === 'shutdown') return;
 
     this.state = 'shutdown';
+
+    // Send DISCONNECT message to backend to properly close the session
+    this.sendMessage({ type: MessageType.DISCONNECT, timestamp: Date.now() });
 
     if (this.user) {
       this.emit('disconnect', this.user);
