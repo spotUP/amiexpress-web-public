@@ -185,6 +185,10 @@ export class DoorMessageHandler {
       session.doorId ||
       "XIM";
 
+    // Get BBS name and sysop name from disk-based config (passed via bbsSession)
+    const bbsName = (this.config.bbsSession as any)?.bbsName || 'AmiExpress-Web';
+    const sysopName = (this.config.bbsSession as any)?.sysopName || 'Sysop';
+
     populateDoorInfoStructs(this.emulator, this.doorInfoAddr, this.nodeStatusAddr, {
       aePort: this.doorPortAddress || this.execLibrary.getDoorPortAddress() || 0,
       replyPort: this.doorReplyPortAddr,
@@ -192,6 +196,8 @@ export class DoorMessageHandler {
       userName,
       location,
       cliName,
+      bbsName,
+      sysopName,
     });
     if (!this.doorInfoAddr || !this.nodeStatusAddr) {
       console.warn(
@@ -1729,11 +1735,12 @@ export class DoorMessageHandler {
         break;
 
       // Conference-related XIM commands
-      // Note: CONF_ACCESS=614 is also used for BB_NUMCONFS in some contexts
-      case XIMCommand.CONF_ACCESS: // CONF_ACCESS=614 - Also used as BB_NUMCONFS
+      // CONF_ACCESS (614) - Check user's access to a specific conference
+      // Per axcommon.e, this is the ONLY command at 614 (BB_NUMCONFS does NOT exist)
+      // Returns: 0=no access, 1=has access, 2=invalid conference
+      case XIMCommand.CONF_ACCESS:
         {
-          // express.e:3922-3929: Return number of conferences from cmds.numConf
-          // Load from ConfConfig.info NCONFS tooltype
+          const confNum = data; // Conference number to check (0-indexed)
           const fs = require('fs');
           const path = require('path');
           const bbsRoot = this.config.bbsSession?.dataDir ||
@@ -1750,10 +1757,17 @@ export class DoorMessageHandler {
               }
             }
           } catch (e) {
-            console.log(`[DoorMessageHandler]   BB_NUMCONFS: Error reading ConfConfig.info: ${e}`);
+            console.log(`[DoorMessageHandler]   CONF_ACCESS: Error reading ConfConfig.info: ${e}`);
           }
-          console.log(`[DoorMessageHandler]   BB_NUMCONFS: ${numConfs}`);
-          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, numConfs);
+          // Check if conference is valid and user has access
+          // For now, grant access to all valid conferences (0 to numConfs-1)
+          let accessStatus = 2; // 2 = invalid conference
+          if (confNum >= 0 && confNum < numConfs) {
+            // TODO: Check user's actual conference access from confAccess string
+            accessStatus = 1; // 1 = has access
+          }
+          console.log(`[DoorMessageHandler]   CONF_ACCESS: conf=${confNum}, status=${accessStatus}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, accessStatus);
         }
         break;
 
@@ -1837,10 +1851,10 @@ export class DoorMessageHandler {
         {
           // express.e:3777-3778: Conference access string (25 chars, X=access)
           // Returns user's conference access permissions
-          const confAccess = (this.config.bbsSession as any)?.confAccess ||
-                            (this.config.bbsSession as any)?.user?.confAccess ||
-                            "XXXXXXXXXXXXXX"; // Default: access to first 14
-          console.log(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}"`);
+          // bbsSession.confAccess comes from disk (user.data) via door.handler.ts
+          // Do NOT fall back to user?.confAccess - that's SQLite database data
+          const confAccess = (this.config.bbsSession as any)?.confAccess || '';
+          console.log(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}" (from disk)`);
           this.writeStringToMessage(msgAddr, confAccess);
         }
         break;

@@ -13,6 +13,275 @@ using namespace moira;
 // Custom CPU implementation following vAmiga's architecture
 class MoiraCPU : public Moira {
 private:
+    // ========== Debug Flags (can be toggled at runtime from JavaScript) ==========
+    bool debugEnabled = false;      // Master debug switch (enables all below)
+    bool debugInstructions = false; // Log each instruction executed
+    bool debugRegisters = false;    // Log register changes (D0-D7, A0-A7)
+    bool debugPrefetch = false;     // Log prefetch queue operations
+    bool debugMemory = false;       // Log memory read/write operations
+    bool debugLibraryCalls = false; // Log library calls (JSR to negative offsets)
+    bool debugStack = false;        // Log stack push/pop operations
+    bool debugBranches = false;     // Log branch/jump instructions
+
+    // ========== Breakpoint Support ==========
+    std::vector<uint32_t> breakpoints;  // PC addresses to break on
+    bool breakpointHit = false;
+    uint32_t lastBreakpoint = 0;
+
+    // ========== Memory Watch Support ==========
+    std::vector<uint32_t> watchAddresses;  // Memory addresses to watch
+    uint32_t watchRangeStart = 0;
+    uint32_t watchRangeEnd = 0;
+
+    // ========== Instruction Counter ==========
+    uint64_t instructionCount = 0;
+    uint64_t maxInstructions = 0;  // 0 = unlimited
+
+    // ========== Execution Trace Buffer (circular buffer of recent PCs) ==========
+    static const int TRACE_BUFFER_SIZE = 256;
+    uint32_t traceBuffer[TRACE_BUFFER_SIZE];
+    int traceIndex = 0;
+    bool traceEnabled = false;
+
+    // ========== Memory Corruption Detection ==========
+    bool memoryProtectionEnabled = false;
+    uint32_t protectedRangeStart = 0;
+    uint32_t protectedRangeEnd = 0;
+    uint32_t lastCorruptedAddress = 0;
+    bool corruptionDetected = false;
+
+    // ========== Stack Monitoring ==========
+    uint32_t stackBase = 0;       // Initial SP value
+    uint32_t stackLimit = 0;      // Lowest allowed SP
+    bool stackOverflow = false;
+    uint32_t maxStackDepth = 0;   // Track deepest SP seen
+
+    // ========== Jump/Call Tracking ==========
+    static const int CALL_STACK_SIZE = 64;
+    uint32_t callStack[CALL_STACK_SIZE];  // Return addresses
+    uint32_t callSites[CALL_STACK_SIZE];  // Where JSR was called from
+    int callStackDepth = 0;
+    bool trackCalls = false;
+
+    // ========== Wild Pointer Detection ==========
+    uint32_t validMemoryStart = 0;
+    uint32_t validMemoryEnd = 0x1000000;  // Default 16MB
+    uint32_t lastWildAccess = 0;
+    bool wildAccessDetected = false;
+
+    // ========== Statistics ==========
+    uint64_t readCount = 0;
+    uint64_t writeCount = 0;
+    uint64_t jsrCount = 0;
+    uint64_t rtsCount = 0;
+    uint64_t branchCount = 0;
+    uint64_t trapCount = 0;
+
+public:
+    // ========== Runtime Debug Control (callable from JavaScript) ==========
+    void setDebug(bool enabled) { debugEnabled = enabled; }
+    void setDebugInstructions(bool enabled) { debugInstructions = enabled; }
+    void setDebugRegisters(bool enabled) { debugRegisters = enabled; }
+    void setDebugPrefetch(bool enabled) { debugPrefetch = enabled; }
+    void setDebugMemory(bool enabled) { debugMemory = enabled; }
+    void setDebugLibraryCalls(bool enabled) { debugLibraryCalls = enabled; }
+    void setDebugStack(bool enabled) { debugStack = enabled; }
+    void setDebugBranches(bool enabled) { debugBranches = enabled; }
+
+    bool getDebug() const { return debugEnabled; }
+    bool getDebugInstructions() const { return debugInstructions; }
+
+    // ========== Breakpoint Control ==========
+    void addBreakpoint(uint32_t addr) { breakpoints.push_back(addr); }
+    void removeBreakpoint(uint32_t addr) {
+        breakpoints.erase(std::remove(breakpoints.begin(), breakpoints.end(), addr), breakpoints.end());
+    }
+    void clearBreakpoints() { breakpoints.clear(); }
+    bool hasBreakpointHit() const { return breakpointHit; }
+    uint32_t getLastBreakpoint() const { return lastBreakpoint; }
+    void clearBreakpointHit() { breakpointHit = false; }
+
+    // ========== Memory Watch Control ==========
+    void addWatchAddress(uint32_t addr) { watchAddresses.push_back(addr); }
+    void clearWatchAddresses() { watchAddresses.clear(); }
+    void setWatchRange(uint32_t start, uint32_t end) { watchRangeStart = start; watchRangeEnd = end; }
+
+    // ========== Instruction Limit (for runaway detection) ==========
+    void setMaxInstructions(uint64_t max) { maxInstructions = max; }
+    uint64_t getInstructionCount() const { return instructionCount; }
+    void resetInstructionCount() { instructionCount = 0; }
+
+    // ========== Debug Helpers ==========
+    // Get current instruction disassembly (returns opcode for now)
+    uint16_t getCurrentOpcode() const {
+        return const_cast<MoiraCPU*>(this)->read16(reg.pc);
+    }
+
+    // Dump all registers to console
+    void dumpRegisters() {
+        EM_ASM({
+            console.log('[MOIRA DUMP] D0-D7: ' +
+                $0.toString(16) + ' ' + $1.toString(16) + ' ' +
+                $2.toString(16) + ' ' + $3.toString(16) + ' ' +
+                $4.toString(16) + ' ' + $5.toString(16) + ' ' +
+                $6.toString(16) + ' ' + $7.toString(16));
+        }, reg.d[0], reg.d[1], reg.d[2], reg.d[3], reg.d[4], reg.d[5], reg.d[6], reg.d[7]);
+        EM_ASM({
+            console.log('[MOIRA DUMP] A0-A7: ' +
+                $0.toString(16) + ' ' + $1.toString(16) + ' ' +
+                $2.toString(16) + ' ' + $3.toString(16) + ' ' +
+                $4.toString(16) + ' ' + $5.toString(16) + ' ' +
+                $6.toString(16) + ' ' + $7.toString(16));
+        }, reg.a[0], reg.a[1], reg.a[2], reg.a[3], reg.a[4], reg.a[5], reg.a[6], reg.a[7]);
+        EM_ASM({
+            console.log('[MOIRA DUMP] PC=' + $0.toString(16) + ' SR=' + $1.toString(16));
+        }, reg.pc, getSR());
+    }
+
+    // Dump stack (show N words from current SP)
+    void dumpStack(int words) {
+        uint32_t sp = reg.a[7];
+        EM_ASM({ console.log('[MOIRA STACK] SP=0x' + $0.toString(16) + ':'); }, sp);
+        for (int i = 0; i < words && i < 16; i++) {
+            // Read 4 bytes manually using getMemoryByte
+            uint32_t addr = sp + i * 4;
+            uint32_t val = (getMemoryByte(addr) << 24) |
+                          (getMemoryByte(addr + 1) << 16) |
+                          (getMemoryByte(addr + 2) << 8) |
+                          getMemoryByte(addr + 3);
+            EM_ASM({ console.log('  [SP+' + ($0*4) + '] = 0x' + $1.toString(16)); }, i, val);
+        }
+    }
+
+    // ========== Execution Trace Buffer Control ==========
+    void enableTrace(bool enabled) { traceEnabled = enabled; }
+    bool isTraceEnabled() const { return traceEnabled; }
+    void clearTrace() { traceIndex = 0; memset(traceBuffer, 0, sizeof(traceBuffer)); }
+
+    // Get trace buffer as string (for debugging)
+    void dumpTrace() {
+        EM_ASM({ console.log('[MOIRA TRACE] Last ' + $0 + ' PCs:'); }, TRACE_BUFFER_SIZE);
+        for (int i = 0; i < TRACE_BUFFER_SIZE; i++) {
+            int idx = (traceIndex + i) % TRACE_BUFFER_SIZE;
+            if (traceBuffer[idx] != 0) {
+                EM_ASM({ console.log('  [' + $0 + '] PC=0x' + $1.toString(16)); }, i, traceBuffer[idx]);
+            }
+        }
+    }
+
+    // Get specific trace entry (for JavaScript inspection)
+    uint32_t getTraceEntry(int index) const {
+        if (index < 0 || index >= TRACE_BUFFER_SIZE) return 0;
+        return traceBuffer[(traceIndex + index) % TRACE_BUFFER_SIZE];
+    }
+
+    // ========== Memory Corruption Detection Control ==========
+    void enableMemoryProtection(uint32_t start, uint32_t end) {
+        memoryProtectionEnabled = true;
+        protectedRangeStart = start;
+        protectedRangeEnd = end;
+        corruptionDetected = false;
+        EM_ASM({
+            console.log('[MOIRA] Memory protection enabled: 0x' + $0.toString(16) + ' - 0x' + $1.toString(16));
+        }, start, end);
+    }
+    void disableMemoryProtection() { memoryProtectionEnabled = false; }
+    bool isMemoryProtectionEnabled() const { return memoryProtectionEnabled; }
+    bool hasCorruptionDetected() const { return corruptionDetected; }
+    uint32_t getLastCorruptedAddress() const { return lastCorruptedAddress; }
+    void clearCorruptionFlag() { corruptionDetected = false; }
+
+    // ========== Stack Monitoring Control ==========
+    void setStackBounds(uint32_t base, uint32_t limit) {
+        stackBase = base;
+        stackLimit = limit;
+        maxStackDepth = base;
+        stackOverflow = false;
+        EM_ASM({
+            console.log('[MOIRA] Stack bounds set: base=0x' + $0.toString(16) + ' limit=0x' + $1.toString(16));
+        }, base, limit);
+    }
+    bool hasStackOverflow() const { return stackOverflow; }
+    uint32_t getMaxStackDepth() const { return maxStackDepth; }
+    void clearStackOverflow() { stackOverflow = false; }
+
+    // ========== Jump/Call Tracking Control ==========
+    void enableCallTracking(bool enabled) { trackCalls = enabled; }
+    bool isCallTrackingEnabled() const { return trackCalls; }
+    int getCallStackDepth() const { return callStackDepth; }
+
+    // Get call stack entry (return address)
+    uint32_t getCallStackEntry(int index) const {
+        if (index < 0 || index >= callStackDepth) return 0;
+        return callStack[index];
+    }
+
+    // Get call site (where JSR was called from)
+    uint32_t getCallSite(int index) const {
+        if (index < 0 || index >= callStackDepth) return 0;
+        return callSites[index];
+    }
+
+    // Dump call stack
+    void dumpCallStack() {
+        EM_ASM({ console.log('[MOIRA CALL STACK] Depth: ' + $0); }, callStackDepth);
+        for (int i = 0; i < callStackDepth; i++) {
+            EM_ASM({
+                console.log('  [' + $0 + '] Called from 0x' + $1.toString(16) + ', return to 0x' + $2.toString(16));
+            }, i, callSites[i], callStack[i]);
+        }
+    }
+
+    void clearCallStack() { callStackDepth = 0; }
+
+    // ========== Wild Pointer Detection Control ==========
+    void setValidMemoryRange(uint32_t start, uint32_t end) {
+        validMemoryStart = start;
+        validMemoryEnd = end;
+        wildAccessDetected = false;
+        EM_ASM({
+            console.log('[MOIRA] Valid memory range: 0x' + $0.toString(16) + ' - 0x' + $1.toString(16));
+        }, start, end);
+    }
+    bool hasWildAccessDetected() const { return wildAccessDetected; }
+    uint32_t getLastWildAccess() const { return lastWildAccess; }
+    void clearWildAccessFlag() { wildAccessDetected = false; }
+
+    // ========== Statistics Access ==========
+    uint64_t getReadCount() const { return readCount; }
+    uint64_t getWriteCount() const { return writeCount; }
+    uint64_t getJsrCount() const { return jsrCount; }
+    uint64_t getRtsCount() const { return rtsCount; }
+    uint64_t getBranchCount() const { return branchCount; }
+    uint64_t getTrapCount() const { return trapCount; }
+
+    void resetStatistics() {
+        readCount = writeCount = jsrCount = rtsCount = branchCount = trapCount = 0;
+        instructionCount = 0;
+    }
+
+    void dumpStatistics() {
+        EM_ASM({
+            console.log('[MOIRA STATS] Instructions: ' + $0);
+            console.log('[MOIRA STATS] Reads: ' + $1 + ', Writes: ' + $2);
+            console.log('[MOIRA STATS] JSR: ' + $3 + ', RTS: ' + $4);
+            console.log('[MOIRA STATS] Branches: ' + $5 + ', Traps: ' + $6);
+        }, (int)instructionCount, (int)readCount, (int)writeCount,
+           (int)jsrCount, (int)rtsCount, (int)branchCount, (int)trapCount);
+    }
+
+    // ========== File Operation Debug Logging ==========
+    // Call this from JavaScript when a file operation occurs
+    void logFileOperation(const char* op, uint32_t handle, uint32_t result) {
+        if (debugEnabled || debugMemory) {
+            EM_ASM({
+                var opStr = UTF8ToString($0);
+                console.log('[68K FILE] ' + opStr + ' handle=' + $1.toString(16) + ' result=' + $2);
+            }, op, handle, result);
+        }
+    }
+
+private:
     // ========== vAmiga-Style Memory Architecture ==========
     // Separate memory buffers for each region (like vAmiga)
     std::vector<uint8_t> chipRam;   // Chip RAM (typically 512KB-2MB)
@@ -583,13 +852,6 @@ public:
 
     // Set registers
     void setRegister(int reg, uint32_t value) {
-        // DEBUG: Log when D0 is being set
-        if (reg == 0) {
-            EM_ASM({
-                console.log('[MOIRA setRegister] Setting D0 to 0x' + $0.toString(16));
-            }, value);
-        }
-
         if (reg < 8) this->reg.d[reg] = value;
         else if (reg < 16) this->reg.a[reg - 8] = value;
         else if (reg == 16) {
@@ -598,14 +860,6 @@ public:
             this->reg.pc0 = value;
         }
         else if (reg == 17) setSR(value);
-
-        // DEBUG: Verify D0 was actually set
-        if (reg == 0) {
-            uint32_t verify = this->reg.d[0];
-            EM_ASM({
-                console.log('[MOIRA setRegister] Verified D0 is now: 0x' + $0.toString(16));
-            }, verify);
-        }
     }
 
     // Get total cycles executed
@@ -640,12 +894,188 @@ public:
         // IRC = instruction at PC+2 (will be executed after IRD)
         u16 irc_val = read16(this->reg.pc + 2);
         setIRC(irc_val);
+    }
 
-        EM_ASM({
-            console.log('[MOIRA] Prefetch queue refilled at PC=0x' + $0.toString(16));
-            console.log('  IRD (current) = 0x' + $1.toString(16).padStart(4, '0'));
-            console.log('  IRC (next) = 0x' + $2.toString(16).padStart(4, '0'));
-        }, this->reg.pc, ird_val, irc_val);
+    // ========================================================================
+    // MOIRA NATIVE DEBUGGER INTEGRATION
+    // Using Moira's built-in debugger for breakpoints, watchpoints, logging
+    // ========================================================================
+
+    // ---------- Native Breakpoint Control (uses Moira's debugger.breakpoints) ----------
+    void nativeSetBreakpoint(uint32_t addr) {
+        debugger.breakpoints.setAt(addr);
+    }
+    void nativeRemoveBreakpoint(uint32_t addr) {
+        debugger.breakpoints.removeAt(addr);
+    }
+    void nativeEnableBreakpoint(uint32_t addr) {
+        debugger.breakpoints.enableAt(addr);
+    }
+    void nativeDisableBreakpoint(uint32_t addr) {
+        debugger.breakpoints.disableAt(addr);
+    }
+    void nativeClearAllBreakpoints() {
+        debugger.breakpoints.removeAll();
+    }
+    int nativeBreakpointCount() {
+        return debugger.breakpoints.elements();
+    }
+
+    // ---------- Native Watchpoint Control (uses Moira's debugger.watchpoints) ----------
+    void nativeSetWatchpoint(uint32_t addr) {
+        debugger.watchpoints.setAt(addr);
+    }
+    void nativeRemoveWatchpoint(uint32_t addr) {
+        debugger.watchpoints.removeAt(addr);
+    }
+    void nativeEnableWatchpoint(uint32_t addr) {
+        debugger.watchpoints.enableAt(addr);
+    }
+    void nativeDisableWatchpoint(uint32_t addr) {
+        debugger.watchpoints.disableAt(addr);
+    }
+    void nativeClearAllWatchpoints() {
+        debugger.watchpoints.removeAll();
+    }
+    int nativeWatchpointCount() {
+        return debugger.watchpoints.elements();
+    }
+
+    // ---------- Native Catchpoint Control (for exception catching) ----------
+    void nativeSetCatchpoint(uint32_t vector) {
+        debugger.catchpoints.setAt(vector);
+    }
+    void nativeRemoveCatchpoint(uint32_t vector) {
+        debugger.catchpoints.removeAt(vector);
+    }
+    void nativeClearAllCatchpoints() {
+        debugger.catchpoints.removeAll();
+    }
+    int nativeCatchpointCount() {
+        return debugger.catchpoints.elements();
+    }
+
+    // ---------- Native Step Control ----------
+    void nativeStepInto() {
+        debugger.stepInto();
+    }
+    void nativeStepOver() {
+        debugger.stepOver();
+    }
+
+    // ---------- Native Instruction Logging (256-entry circular buffer) ----------
+    void nativeEnableLogging() {
+        debugger.enableLogging();
+    }
+    void nativeDisableLogging() {
+        debugger.disableLogging();
+    }
+    int nativeLoggedInstructions() {
+        return debugger.loggedInstructions();
+    }
+    void nativeClearLog() {
+        debugger.clearLog();
+    }
+
+    // Get logged register state (returns PC of logged instruction)
+    uint32_t nativeGetLogEntryPC(int index) {
+        if (index < 0 || index >= debugger.loggedInstructions()) return 0;
+        return debugger.logEntryAbs(index).pc;
+    }
+
+    // ---------- Native Disassembler ----------
+    std::string nativeDisassemble(uint32_t addr) {
+        char buf[256];
+        disassemble(buf, addr);
+        return std::string(buf);
+    }
+
+    int nativeDisassembleSize(uint32_t addr) {
+        char buf[256];
+        return disassemble(buf, addr);
+    }
+
+    std::string nativeDisassembleSR() {
+        char buf[64];
+        disassembleSR(buf);
+        return std::string(buf);
+    }
+
+    // ---------- Callback Overrides (notify JavaScript of debug events) ----------
+
+    // Flag to track if we hit a native breakpoint/watchpoint/catchpoint
+    bool nativeBreakpointHitFlag = false;
+    uint32_t nativeBreakpointAddr = 0;
+    bool nativeWatchpointHitFlag = false;
+    uint32_t nativeWatchpointAddr = 0;
+    bool nativeCatchpointHitFlag = false;
+    uint8_t nativeCatchpointVector = 0;
+
+    void didReachBreakpoint(u32 addr) override {
+        nativeBreakpointHitFlag = true;
+        nativeBreakpointAddr = addr;
+        if (debugEnabled) {
+            EM_ASM({
+                console.log('[MOIRA DBG] Breakpoint hit at PC=0x' + $0.toString(16));
+            }, addr);
+        }
+    }
+
+    void didReachWatchpoint(u32 addr) override {
+        nativeWatchpointHitFlag = true;
+        nativeWatchpointAddr = addr;
+        if (debugEnabled) {
+            EM_ASM({
+                console.log('[MOIRA DBG] Watchpoint hit at addr=0x' + $0.toString(16));
+            }, addr);
+        }
+    }
+
+    void didReachCatchpoint(u8 vector) override {
+        nativeCatchpointHitFlag = true;
+        nativeCatchpointVector = vector;
+        if (debugEnabled) {
+            EM_ASM({
+                console.log('[MOIRA DBG] Catchpoint hit for vector ' + $0);
+            }, vector);
+        }
+    }
+
+    void didReachSoftstop(u32 addr) override {
+        if (debugEnabled) {
+            EM_ASM({
+                console.log('[MOIRA DBG] Softstop (step) at PC=0x' + $0.toString(16));
+            }, addr);
+        }
+    }
+
+    void didJumpToVector(int nr, u32 addr) override {
+        if (debugEnabled) {
+            EM_ASM({
+                console.log('[MOIRA DBG] Exception vector ' + $0 + ' -> PC=0x' + $1.toString(16));
+            }, nr, addr);
+        }
+    }
+
+    // Check and clear flags for JavaScript
+    bool hasNativeBreakpointHit() { return nativeBreakpointHitFlag; }
+    uint32_t getNativeBreakpointAddr() { return nativeBreakpointAddr; }
+    void clearNativeBreakpointHit() { nativeBreakpointHitFlag = false; }
+
+    bool hasNativeWatchpointHit() { return nativeWatchpointHitFlag; }
+    uint32_t getNativeWatchpointAddr() { return nativeWatchpointAddr; }
+    void clearNativeWatchpointHit() { nativeWatchpointHitFlag = false; }
+
+    bool hasNativeCatchpointHit() { return nativeCatchpointHitFlag; }
+    uint8_t getNativeCatchpointVector() { return nativeCatchpointVector; }
+    void clearNativeCatchpointHit() { nativeCatchpointHitFlag = false; }
+
+    // ---------- Instruction Info (for advanced debugging) ----------
+    uint16_t getInstrInfo(uint16_t opcode) {
+        InstrInfo info = Moira::getInstrInfo(opcode);
+        // Pack instruction info into 16-bit value:
+        // bits 0-7: Instr enum, bits 8-11: Mode enum, bits 12-15: Size enum
+        return ((uint16_t)info.I & 0xFF) | (((uint16_t)info.M & 0xF) << 8) | (((uint16_t)info.S & 0xF) << 12);
     }
 };
 
@@ -664,6 +1094,121 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("setRegister", &MoiraCPU::setRegister)
         .function("getCycles", &MoiraCPU::getCycles)
         .function("refillPrefetch", &MoiraCPU::refillPrefetch)
+        // ========== Debug Control Functions (toggle at runtime without rebuild) ==========
+        .function("setDebug", &MoiraCPU::setDebug)
+        .function("setDebugInstructions", &MoiraCPU::setDebugInstructions)
+        .function("setDebugRegisters", &MoiraCPU::setDebugRegisters)
+        .function("setDebugPrefetch", &MoiraCPU::setDebugPrefetch)
+        .function("setDebugMemory", &MoiraCPU::setDebugMemory)
+        .function("setDebugLibraryCalls", &MoiraCPU::setDebugLibraryCalls)
+        .function("setDebugStack", &MoiraCPU::setDebugStack)
+        .function("setDebugBranches", &MoiraCPU::setDebugBranches)
+        .function("getDebug", &MoiraCPU::getDebug)
+        .function("getDebugInstructions", &MoiraCPU::getDebugInstructions)
+        // ========== Breakpoint Control ==========
+        .function("addBreakpoint", &MoiraCPU::addBreakpoint)
+        .function("removeBreakpoint", &MoiraCPU::removeBreakpoint)
+        .function("clearBreakpoints", &MoiraCPU::clearBreakpoints)
+        .function("hasBreakpointHit", &MoiraCPU::hasBreakpointHit)
+        .function("getLastBreakpoint", &MoiraCPU::getLastBreakpoint)
+        .function("clearBreakpointHit", &MoiraCPU::clearBreakpointHit)
+        // ========== Memory Watch Control ==========
+        .function("addWatchAddress", &MoiraCPU::addWatchAddress)
+        .function("clearWatchAddresses", &MoiraCPU::clearWatchAddresses)
+        .function("setWatchRange", &MoiraCPU::setWatchRange)
+        // ========== Instruction Counting ==========
+        .function("setMaxInstructions", &MoiraCPU::setMaxInstructions)
+        .function("getInstructionCount", &MoiraCPU::getInstructionCount)
+        .function("resetInstructionCount", &MoiraCPU::resetInstructionCount)
+        // ========== Debug Helpers ==========
+        .function("getCurrentOpcode", &MoiraCPU::getCurrentOpcode)
+        .function("dumpRegisters", &MoiraCPU::dumpRegisters)
+        .function("dumpStack", &MoiraCPU::dumpStack)
+        // ========== Execution Trace Buffer ==========
+        .function("enableTrace", &MoiraCPU::enableTrace)
+        .function("isTraceEnabled", &MoiraCPU::isTraceEnabled)
+        .function("clearTrace", &MoiraCPU::clearTrace)
+        .function("dumpTrace", &MoiraCPU::dumpTrace)
+        .function("getTraceEntry", &MoiraCPU::getTraceEntry)
+        // ========== Memory Corruption Detection ==========
+        .function("enableMemoryProtection", &MoiraCPU::enableMemoryProtection)
+        .function("disableMemoryProtection", &MoiraCPU::disableMemoryProtection)
+        .function("isMemoryProtectionEnabled", &MoiraCPU::isMemoryProtectionEnabled)
+        .function("hasCorruptionDetected", &MoiraCPU::hasCorruptionDetected)
+        .function("getLastCorruptedAddress", &MoiraCPU::getLastCorruptedAddress)
+        .function("clearCorruptionFlag", &MoiraCPU::clearCorruptionFlag)
+        // ========== Stack Monitoring ==========
+        .function("setStackBounds", &MoiraCPU::setStackBounds)
+        .function("hasStackOverflow", &MoiraCPU::hasStackOverflow)
+        .function("getMaxStackDepth", &MoiraCPU::getMaxStackDepth)
+        .function("clearStackOverflow", &MoiraCPU::clearStackOverflow)
+        // ========== Jump/Call Tracking ==========
+        .function("enableCallTracking", &MoiraCPU::enableCallTracking)
+        .function("isCallTrackingEnabled", &MoiraCPU::isCallTrackingEnabled)
+        .function("getCallStackDepth", &MoiraCPU::getCallStackDepth)
+        .function("getCallStackEntry", &MoiraCPU::getCallStackEntry)
+        .function("getCallSite", &MoiraCPU::getCallSite)
+        .function("dumpCallStack", &MoiraCPU::dumpCallStack)
+        .function("clearCallStack", &MoiraCPU::clearCallStack)
+        // ========== Wild Pointer Detection ==========
+        .function("setValidMemoryRange", &MoiraCPU::setValidMemoryRange)
+        .function("hasWildAccessDetected", &MoiraCPU::hasWildAccessDetected)
+        .function("getLastWildAccess", &MoiraCPU::getLastWildAccess)
+        .function("clearWildAccessFlag", &MoiraCPU::clearWildAccessFlag)
+        // ========== Statistics ==========
+        .function("getReadCount", &MoiraCPU::getReadCount)
+        .function("getWriteCount", &MoiraCPU::getWriteCount)
+        .function("getJsrCount", &MoiraCPU::getJsrCount)
+        .function("getRtsCount", &MoiraCPU::getRtsCount)
+        .function("getBranchCount", &MoiraCPU::getBranchCount)
+        .function("getTrapCount", &MoiraCPU::getTrapCount)
+        .function("resetStatistics", &MoiraCPU::resetStatistics)
+        .function("dumpStatistics", &MoiraCPU::dumpStatistics)
+        // ========== MOIRA NATIVE DEBUGGER ==========
+        // Native Breakpoints (uses Moira's built-in debugger)
+        .function("nativeSetBreakpoint", &MoiraCPU::nativeSetBreakpoint)
+        .function("nativeRemoveBreakpoint", &MoiraCPU::nativeRemoveBreakpoint)
+        .function("nativeEnableBreakpoint", &MoiraCPU::nativeEnableBreakpoint)
+        .function("nativeDisableBreakpoint", &MoiraCPU::nativeDisableBreakpoint)
+        .function("nativeClearAllBreakpoints", &MoiraCPU::nativeClearAllBreakpoints)
+        .function("nativeBreakpointCount", &MoiraCPU::nativeBreakpointCount)
+        // Native Watchpoints (memory access monitoring)
+        .function("nativeSetWatchpoint", &MoiraCPU::nativeSetWatchpoint)
+        .function("nativeRemoveWatchpoint", &MoiraCPU::nativeRemoveWatchpoint)
+        .function("nativeEnableWatchpoint", &MoiraCPU::nativeEnableWatchpoint)
+        .function("nativeDisableWatchpoint", &MoiraCPU::nativeDisableWatchpoint)
+        .function("nativeClearAllWatchpoints", &MoiraCPU::nativeClearAllWatchpoints)
+        .function("nativeWatchpointCount", &MoiraCPU::nativeWatchpointCount)
+        // Native Catchpoints (exception catching)
+        .function("nativeSetCatchpoint", &MoiraCPU::nativeSetCatchpoint)
+        .function("nativeRemoveCatchpoint", &MoiraCPU::nativeRemoveCatchpoint)
+        .function("nativeClearAllCatchpoints", &MoiraCPU::nativeClearAllCatchpoints)
+        .function("nativeCatchpointCount", &MoiraCPU::nativeCatchpointCount)
+        // Native Step Control
+        .function("nativeStepInto", &MoiraCPU::nativeStepInto)
+        .function("nativeStepOver", &MoiraCPU::nativeStepOver)
+        // Native Instruction Logging (256-entry circular buffer)
+        .function("nativeEnableLogging", &MoiraCPU::nativeEnableLogging)
+        .function("nativeDisableLogging", &MoiraCPU::nativeDisableLogging)
+        .function("nativeLoggedInstructions", &MoiraCPU::nativeLoggedInstructions)
+        .function("nativeClearLog", &MoiraCPU::nativeClearLog)
+        .function("nativeGetLogEntryPC", &MoiraCPU::nativeGetLogEntryPC)
+        // Native Disassembler
+        .function("nativeDisassemble", &MoiraCPU::nativeDisassemble)
+        .function("nativeDisassembleSize", &MoiraCPU::nativeDisassembleSize)
+        .function("nativeDisassembleSR", &MoiraCPU::nativeDisassembleSR)
+        // Debug Event Flags (check after execution)
+        .function("hasNativeBreakpointHit", &MoiraCPU::hasNativeBreakpointHit)
+        .function("getNativeBreakpointAddr", &MoiraCPU::getNativeBreakpointAddr)
+        .function("clearNativeBreakpointHit", &MoiraCPU::clearNativeBreakpointHit)
+        .function("hasNativeWatchpointHit", &MoiraCPU::hasNativeWatchpointHit)
+        .function("getNativeWatchpointAddr", &MoiraCPU::getNativeWatchpointAddr)
+        .function("clearNativeWatchpointHit", &MoiraCPU::clearNativeWatchpointHit)
+        .function("hasNativeCatchpointHit", &MoiraCPU::hasNativeCatchpointHit)
+        .function("getNativeCatchpointVector", &MoiraCPU::getNativeCatchpointVector)
+        .function("clearNativeCatchpointHit", &MoiraCPU::clearNativeCatchpointHit)
+        // Instruction Info
+        .function("getInstrInfo", &MoiraCPU::getInstrInfo)
         ;
 
     register_vector<uint8_t>("VectorUint8");

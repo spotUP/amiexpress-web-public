@@ -36,10 +36,8 @@ export enum XIMCommand {
   SCREEN_ADDRESS = 139,
   RAWSCREEN_ADDRESS = 141,
 
-  // PG_* commands (axconsts.e)
-  PG_SM = 1,           // Serial/Screen Message
-  PG_UD = 13,          // User Data
-  PG_US = 14,          // User String
+  // NOTE: PG_* commands (1, 13, 14) were removed - they don't exist in axcommon.e
+  // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
 
   // Data query commands (DT_*)
   DT_NAME = 100,
@@ -76,7 +74,7 @@ export enum XIMCommand {
   DT_LANGUAGE = 527,
   DT_QUICKFLAG = 528,
   DT_GOODFILE = 529,
-  DT_GOODFILE_FLAG = 531, // Alias for DT_GOODFILE
+  DT_GOODFILE_FLAG = 529, // Alias for DT_GOODFILE (was incorrectly 531, conflicting with MULTICOM)
   DT_ANSICOLOR = 530,
   DT_ISANSI = 541,
   DT_MSGCODE = 543,
@@ -237,9 +235,9 @@ export enum XIMCommand {
   MEMCONF = 612,            // Memory conference pointer
   SET_SERSHARED = 613,      // Set serial shared flag
 
-  // Conference access - NOTE: 614 is CONF_ACCESS, NOT BB_NUMCONFS
+  // Conference access - 614 is ONLY CONF_ACCESS per axcommon.e
+  // BB_NUMCONFS does NOT exist in original AmiExpress sources
   CONF_ACCESS = 614,        // Check conference access (returns 0/1/2)
-  BB_NUMCONFS = 614,        // Alias - some doors use for num conferences
 
   // Password/Display control
   PASSWORD_HASH = 615,      // Get password hash
@@ -368,6 +366,7 @@ export interface XIMState {
   language: string;
   confAccess: string;
   carrierDropped: boolean;
+  rawArrow: boolean;  // When true, pass raw escape sequences; when false, convert to arrow codes
   ximPortAddr?: number;
   aePortAddr?: number;
   doorPortAddr?: number;
@@ -377,3 +376,14 @@ export interface XIMState {
   chainCommand?: string;
   logonType?: number;
 }
+
+/**
+ * Arrow key codes from axconsts.e
+ * These are the internal codes used when rawArrow=FALSE
+ */
+export const ArrowKeyCodes = {
+  LEFTARROW: 2,
+  RIGHTARROW: 3,
+  UPARROW: 4,
+  DOWNARROW: 5,
+} as const;

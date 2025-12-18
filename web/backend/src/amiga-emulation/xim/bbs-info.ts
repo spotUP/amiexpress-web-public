@@ -249,28 +249,12 @@ export class XIMBBSInfoHandler {
         this.reply(msg, 1);
         return;
 
-      case XIMCommand.BB_NUMCONFS:
-        {
-          // Return the number of conferences (cmds.numConf)
-          // Read from ConfConfig.info if available
-          let numConfs = 14; // Default
-          try {
-            const bbsRoot = this.getBbsRoot();
-            const confConfigPath = path.join(bbsRoot, 'ConfConfig.info');
-            if (fs.existsSync(confConfigPath)) {
-              const output = execSync(`strings "${confConfigPath}"`, { encoding: 'utf-8' });
-              const match = output.match(/NCONFS=(\d+)/);
-              if (match) {
-                numConfs = parseInt(match[1], 10);
-              }
-            }
-          } catch (err) {
-            console.warn('[XIMBBSInfo] BB_NUMCONFS: Could not read ConfConfig.info, using default');
-          }
-          console.log(`[XIMBBSInfo] BB_NUMCONFS: ${numConfs}`);
-          this.reply(msg, numConfs);
-          return;
-        }
+      // CONF_ACCESS (614) - Check user's access to a specific conference
+      // Returns: 0=no access, 1=has access, 2=invalid conference
+      // Per axcommon.e, this is the ONLY command at 614 (BB_NUMCONFS does NOT exist)
+      case XIMCommand.CONF_ACCESS:
+        this.handleConfAccess(msg);
+        return;
     }
 
     if (isRead && value) {
@@ -652,11 +636,13 @@ export class XIMBBSInfoHandler {
       // Invalid conference number
       this.messageParser.writeData(msg.msgAddr, 2); // 2 = invalid
     } else {
-      // Check access from confAccess string
-      const confAccess = this.bbsSession?.confAccess || this.state.confAccess || '';
+      // Check access from confAccess string (disk-based only)
+      // state.confAccess comes from disk (user.data) via door.handler.ts
+      // Do NOT fall back to bbsSession.confAccess - that may be SQLite data
+      const confAccess = this.state.confAccess || '';
       const hasAccess = confAccess.length > confNum && confAccess[confNum].toUpperCase() === 'X';
       this.messageParser.writeData(msg.msgAddr, hasAccess ? 1 : 0);
-      console.log(`  Access: ${hasAccess ? 'YES' : 'NO'}`);
+      console.log(`  confAccess="${confAccess}" (len=${confAccess.length}, from disk), check index ${confNum}, Access: ${hasAccess ? 'YES' : 'NO'}`);
     }
     this.reply(msg, 1);
   }

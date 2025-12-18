@@ -12,6 +12,7 @@ import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
+import { userDatabaseManager } from '../../services/UserDatabaseManager';
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
@@ -283,106 +284,211 @@ export class XIMDataQueryHandler {
         break;
 
       case XIMCommand.DT_MESSAGESPOSTED:
-        if (isRead) {
-          const msgs = user?.messagesPosted || 0;
-          this.messageParser.writeString(stringAddr, msgs.toString(), 200);
-          console.log(`  [READ] DT_MESSAGESPOSTED: ${msgs}`);
+        {
+          // Read from disk (user.data) via diskUserStats, not from session.user (database)
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const msgs = diskStats?.messagesPosted ?? user?.messagesPosted ?? 0;
+            this.messageParser.writeString(stringAddr, msgs.toString(), 200);
+            console.log(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newMsgs = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newMsgs)) {
+              if (user) user.messagesPosted = newMsgs;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'messagesPosted', newMsgs);
+            }
+            console.log(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
+          }
         }
         break;
 
       case XIMCommand.DT_UPLOADS:
-        if (isRead) {
-          const uploads = user?.uploads || 0;
-          this.messageParser.writeString(stringAddr, uploads.toString(), 200);
-          console.log(`  [READ] DT_UPLOADS: ${uploads}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
+            this.messageParser.writeString(stringAddr, uploads.toString(), 200);
+            console.log(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newUploads = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newUploads)) {
+              if (user) user.uploads = newUploads;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'uploads', newUploads);
+            }
+            console.log(`  [WRITE] DT_UPLOADS: ${newUploads}`);
+          }
         }
         break;
 
       case XIMCommand.DT_DOWNLOADS:
-        if (isRead) {
-          const downloads = user?.downloads || 0;
-          this.messageParser.writeString(stringAddr, downloads.toString(), 200);
-          console.log(`  [READ] DT_DOWNLOADS: ${downloads}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
+            this.messageParser.writeString(stringAddr, downloads.toString(), 200);
+            console.log(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newDownloads = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newDownloads)) {
+              if (user) user.downloads = newDownloads;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'downloads', newDownloads);
+            }
+            console.log(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
+          }
         }
         break;
 
       case XIMCommand.DT_TIMESCALLED:
-        if (isRead) {
-          const calls = user?.timesCalled || 0;
-          this.messageParser.writeString(stringAddr, calls.toString(), 200);
-          console.log(`  [READ] DT_TIMESCALLED: ${calls}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const calls = diskStats?.timesCalled ?? user?.timesCalled ?? 0;
+            this.messageParser.writeString(stringAddr, calls.toString(), 200);
+            console.log(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newCalls = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newCalls)) {
+              if (user) user.timesCalled = newCalls;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timesCalled', newCalls);
+            }
+            console.log(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
+          }
         }
         break;
 
       case XIMCommand.DT_TIMELASTON:
-        if (isRead) {
-          const lastOn = user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0;
-          this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-          console.log(`  [READ] DT_TIMELASTON: ${lastOn}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const lastOn = diskStats?.timeLastOn ?? (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
+            this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
+            console.log(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newLastOn = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newLastOn)) {
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', newLastOn);
+            }
+            console.log(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
+          }
         }
         break;
 
       case XIMCommand.DT_TIMEUSED:
-        if (isRead) {
-          const timeUsed = user?.timeUsed || 0;
-          this.messageParser.writeString(stringAddr, timeUsed.toString(), 200);
-          console.log(`  [READ] DT_TIMEUSED: ${timeUsed}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const timeUsed = diskStats?.timeUsed ?? user?.timeUsed ?? 0;
+            this.messageParser.writeString(stringAddr, timeUsed.toString(), 200);
+            console.log(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newTimeUsed = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newTimeUsed)) {
+              if (user) user.timeUsed = newTimeUsed;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeUsed', newTimeUsed);
+            }
+            console.log(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
+          }
         }
         break;
 
       case XIMCommand.DT_TIMETOTAL:
-        if (isRead) {
-          const timeTotal = user?.timeTotal || 0;
-          this.messageParser.writeString(stringAddr, timeTotal.toString(), 200);
-          console.log(`  [READ] DT_TIMETOTAL: ${timeTotal}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const timeTotal = diskStats?.timeTotal ?? user?.timeTotal ?? 0;
+            this.messageParser.writeString(stringAddr, timeTotal.toString(), 200);
+            console.log(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newTimeTotal = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newTimeTotal)) {
+              if (user) user.timeTotal = newTimeTotal;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeTotal', newTimeTotal);
+            }
+            console.log(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
+          }
         }
         break;
 
       case XIMCommand.DT_BYTESUPLOAD:
-        if (isRead) {
-          const bytesUp = user?.bytesUpload || 0;
-          this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
-          console.log(`  [READ] DT_BYTESUPLOAD: ${bytesUp}`);
-        } else {
-          const newBytes = parseInt(this.messageParser.readString(stringAddr));
-          if (user && !isNaN(newBytes)) user.bytesUpload = newBytes;
-          console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
+            this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
+            console.log(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newBytes = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newBytes)) {
+              if (user) user.bytesUpload = newBytes;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesUpload', newBytes);
+            }
+            console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
+          }
         }
         break;
 
       case XIMCommand.DT_BYTEDOWNLOAD:
-        if (isRead) {
-          const bytesDown = user?.bytesDownload || 0;
-          this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
-          console.log(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown}`);
-        } else {
-          const newBytes = parseInt(this.messageParser.readString(stringAddr));
-          if (user && !isNaN(newBytes)) user.bytesDownload = newBytes;
-          console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
+            this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
+            console.log(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newBytes = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newBytes)) {
+              if (user) user.bytesDownload = newBytes;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesDownload', newBytes);
+            }
+            console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
+          }
         }
         break;
 
       case XIMCommand.DT_DAILYBYTELIMIT:
-        if (isRead) {
-          const limit = user?.dailyBytesLimit || 0;
-          this.messageParser.writeString(stringAddr, limit.toString(), 200);
-          console.log(`  [READ] DT_DAILYBYTELIMIT: ${limit}`);
-        } else {
-          const newLimit = parseInt(this.messageParser.readString(stringAddr));
-          if (user && !isNaN(newLimit)) user.dailyBytesLimit = newLimit;
-          console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const limit = diskStats?.dailyBytesLimit ?? user?.dailyBytesLimit ?? 0;
+            this.messageParser.writeString(stringAddr, limit.toString(), 200);
+            console.log(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newLimit = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newLimit)) {
+              if (user) user.dailyBytesLimit = newLimit;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesLimit', newLimit);
+            }
+            console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
+          }
         }
         break;
 
       case XIMCommand.DT_DAILYBYTEDLD:
-        if (isRead) {
-          const dailyDld = user?.dailyBytesDld || 0;
-          this.messageParser.writeString(stringAddr, dailyDld.toString(), 200);
-          console.log(`  [READ] DT_DAILYBYTEDLD: ${dailyDld}`);
-        } else {
-          const newDld = parseInt(this.messageParser.readString(stringAddr));
-          if (user && !isNaN(newDld)) user.dailyBytesDld = newDld;
-          console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          const userSlot = (this.bbsSession as any)?.userSlotNumber ?? -1;
+          if (isRead) {
+            const dailyDld = diskStats?.dailyBytesDld ?? user?.dailyBytesDld ?? 0;
+            this.messageParser.writeString(stringAddr, dailyDld.toString(), 200);
+            console.log(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'session'})`);
+          } else {
+            const newDld = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newDld)) {
+              if (user) user.dailyBytesDld = newDld;
+              if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesDld', newDld);
+            }
+            console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
+          }
         }
         break;
 
@@ -465,13 +571,19 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_CONFACCESS:
         if (isRead) {
-          const confAccess =
-            this.state.confAccess || user?.confAccess || '';
-          this.messageParser.writeString(stringAddr, confAccess, 10);
-          console.log(`  [READ] DT_CONFACCESS: "${confAccess}"`);
+          // confAccess comes from disk (user.data) via state, set by door.handler.ts
+          // Do NOT fall back to user?.confAccess - that's SQLite data
+          // express.e uses 25 chars for conference access string
+          // If confAccess is short, pad with underscores (no access) - don't assume full access
+          let confAccess = this.state.confAccess || '';
+          if (confAccess.length < 25) {
+            confAccess = confAccess.padEnd(25, '_');
+          }
+          this.messageParser.writeString(stringAddr, confAccess, 25);
+          console.log(`  [READ] DT_CONFACCESS: "${confAccess}" (from disk)`);
         } else {
+          // Write operation - update state (will need to sync to disk separately)
           const newAccess = this.messageParser.readString(stringAddr, 10);
-          if (user) user.confAccess = newAccess;
           this.state.confAccess = newAccess;
           console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
         }

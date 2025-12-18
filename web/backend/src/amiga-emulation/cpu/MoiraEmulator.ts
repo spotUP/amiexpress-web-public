@@ -2,6 +2,10 @@ import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import path from "path";
 
+// Performance: Verbose 68K debugging is disabled by default
+// Set DEBUG_68K=1 to enable detailed execution tracing
+const DEBUG_68K = process.env.DEBUG_68K === "1";
+
 // TypeScript interface for Moira WebAssembly module
 
 export interface MoiraModule {
@@ -20,6 +24,122 @@ export interface MoiraCPU {
   setRegister(reg: number, value: number): void;
   getCycles(): number;
   delete(): void;
+  // Debug control (toggle at runtime)
+  setDebug?(enabled: boolean): void;
+  setDebugInstructions?(enabled: boolean): void;
+  setDebugRegisters?(enabled: boolean): void;
+  setDebugPrefetch?(enabled: boolean): void;
+  setDebugMemory?(enabled: boolean): void;
+  setDebugLibraryCalls?(enabled: boolean): void;
+  setDebugStack?(enabled: boolean): void;
+  setDebugBranches?(enabled: boolean): void;
+  getDebug?(): boolean;
+  getDebugInstructions?(): boolean;
+  // Breakpoint control
+  addBreakpoint?(addr: number): void;
+  removeBreakpoint?(addr: number): void;
+  clearBreakpoints?(): void;
+  hasBreakpointHit?(): boolean;
+  getLastBreakpoint?(): number;
+  clearBreakpointHit?(): void;
+  // Memory watch
+  addWatchAddress?(addr: number): void;
+  clearWatchAddresses?(): void;
+  setWatchRange?(start: number, end: number): void;
+  // Instruction counting
+  setMaxInstructions?(max: number): void;
+  getInstructionCount?(): number;
+  resetInstructionCount?(): void;
+  // Debug helpers
+  getCurrentOpcode?(): number;
+  dumpRegisters?(): void;
+  dumpStack?(words: number): void;
+  // Execution trace buffer
+  enableTrace?(enabled: boolean): void;
+  isTraceEnabled?(): boolean;
+  clearTrace?(): void;
+  dumpTrace?(): void;
+  getTraceEntry?(index: number): number;
+  // Memory corruption detection
+  enableMemoryProtection?(start: number, end: number): void;
+  disableMemoryProtection?(): void;
+  isMemoryProtectionEnabled?(): boolean;
+  hasCorruptionDetected?(): boolean;
+  getLastCorruptedAddress?(): number;
+  clearCorruptionFlag?(): void;
+  // Stack monitoring
+  setStackBounds?(base: number, limit: number): void;
+  hasStackOverflow?(): boolean;
+  getMaxStackDepth?(): number;
+  clearStackOverflow?(): void;
+  // Jump/call tracking
+  enableCallTracking?(enabled: boolean): void;
+  isCallTrackingEnabled?(): boolean;
+  getCallStackDepth?(): number;
+  getCallStackEntry?(index: number): number;
+  getCallSite?(index: number): number;
+  dumpCallStack?(): void;
+  clearCallStack?(): void;
+  // Wild pointer detection
+  setValidMemoryRange?(start: number, end: number): void;
+  hasWildAccessDetected?(): boolean;
+  getLastWildAccess?(): number;
+  clearWildAccessFlag?(): void;
+  // Statistics
+  getReadCount?(): number;
+  getWriteCount?(): number;
+  getJsrCount?(): number;
+  getRtsCount?(): number;
+  getBranchCount?(): number;
+  getTrapCount?(): number;
+  resetStatistics?(): void;
+  dumpStatistics?(): void;
+
+  // ========== MOIRA NATIVE DEBUGGER ==========
+  // Native Breakpoints (uses Moira's built-in debugger)
+  nativeSetBreakpoint?(addr: number): void;
+  nativeRemoveBreakpoint?(addr: number): void;
+  nativeEnableBreakpoint?(addr: number): void;
+  nativeDisableBreakpoint?(addr: number): void;
+  nativeClearAllBreakpoints?(): void;
+  nativeBreakpointCount?(): number;
+  // Native Watchpoints (memory access monitoring)
+  nativeSetWatchpoint?(addr: number): void;
+  nativeRemoveWatchpoint?(addr: number): void;
+  nativeEnableWatchpoint?(addr: number): void;
+  nativeDisableWatchpoint?(addr: number): void;
+  nativeClearAllWatchpoints?(): void;
+  nativeWatchpointCount?(): number;
+  // Native Catchpoints (exception catching)
+  nativeSetCatchpoint?(vector: number): void;
+  nativeRemoveCatchpoint?(vector: number): void;
+  nativeClearAllCatchpoints?(): void;
+  nativeCatchpointCount?(): number;
+  // Native Step Control
+  nativeStepInto?(): void;
+  nativeStepOver?(): void;
+  // Native Instruction Logging (256-entry circular buffer)
+  nativeEnableLogging?(): void;
+  nativeDisableLogging?(): void;
+  nativeLoggedInstructions?(): number;
+  nativeClearLog?(): void;
+  nativeGetLogEntryPC?(index: number): number;
+  // Native Disassembler
+  nativeDisassemble?(addr: number): string;
+  nativeDisassembleSize?(addr: number): number;
+  nativeDisassembleSR?(): string;
+  // Debug Event Flags (check after execution)
+  hasNativeBreakpointHit?(): boolean;
+  getNativeBreakpointAddr?(): number;
+  clearNativeBreakpointHit?(): void;
+  hasNativeWatchpointHit?(): boolean;
+  getNativeWatchpointAddr?(): number;
+  clearNativeWatchpointHit?(): void;
+  hasNativeCatchpointHit?(): boolean;
+  getNativeCatchpointVector?(): number;
+  clearNativeCatchpointHit?(): void;
+  // Instruction Info
+  getInstrInfo?(opcode: number): number;
 }
 
 // CPU Register indices
@@ -427,6 +547,27 @@ export class MoiraEmulator {
   }
 
   /**
+   * Write a buffer to memory efficiently (bulk write)
+   * Optimized for large data transfers (file I/O, etc.) - avoids per-byte overhead
+   * @param address Starting address in emulator memory
+   * @param buffer Buffer containing data to write
+   */
+  writeMemoryBuffer(address: number, buffer: Buffer): void {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+
+    // Quick bounds check for ROM region (single check for entire buffer)
+    const endAddr = address + buffer.length - 1;
+    if (address >= 0xf80000 || endAddr >= 0xf80000) {
+      console.error(`!!! ROM WRITE DETECTED (bulk) !!! Range: 0x${address.toString(16)}-0x${endAddr.toString(16)}`);
+    }
+
+    // Direct bulk write without per-byte overhead
+    for (let i = 0; i < buffer.length; i++) {
+      this.cpu.setMemoryByte(address + i, buffer[i]);
+    }
+  }
+
+  /**
    * Read a null-terminated string from memory
    * @param address Starting address
    * @param maxLength Maximum length to read (default 256)
@@ -463,8 +604,10 @@ export class MoiraEmulator {
     // Call refillPrefetch on WASM CPU if available
     // TypeScript doesn't have type definitions for this C++ method
     if (typeof (this.cpu as any).refillPrefetch === "function") {
-      const pcBefore = this.cpu.getRegister(16);
-      console.log(`[MOIRA] refillPrefetch() called at PC=0x${pcBefore.toString(16)}`);
+      if (DEBUG_68K) {
+        const pcBefore = this.cpu.getRegister(16);
+        console.log(`[MOIRA] refillPrefetch() called at PC=0x${pcBefore.toString(16)}`);
+      }
       (this.cpu as any).refillPrefetch();
     } else {
       console.warn(`[MOIRA] refillPrefetch() not available in WASM module!`);
@@ -486,25 +629,31 @@ export class MoiraEmulator {
    * This is called by the main execution loop when ILLEGAL is detected.
    */
   handleIllegal(pc: number): boolean {
-    console.log(
-      `[MoiraEmulator] *** ILLEGAL instruction detected at PC=0x${pc.toString(
-        16
-      )} ***`
-    );
+    if (DEBUG_68K) {
+      console.log(
+        `[MoiraEmulator] *** ILLEGAL instruction detected at PC=0x${pc.toString(
+          16
+        )} ***`
+      );
+    }
 
     if (this.libraryTrapHandler) {
       const handled = this.libraryTrapHandler(pc);
       if (handled) {
-        console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
+        if (DEBUG_68K) {
+          console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
+        }
         this.refillPrefetch();
         return true;
       }
     }
 
     // Fallback: Simulate RTS with D0=0 for unhandled ILLEGAL
-    console.log(
-      "[MoiraEmulator] ⚠️  Unhandled ILLEGAL - simulating RTS (D0=0)"
-    );
+    if (DEBUG_68K) {
+      console.log(
+        "[MoiraEmulator] Unhandled ILLEGAL - simulating RTS (D0=0)"
+      );
+    }
     this.setRegister(CPURegister.D0, 0);
 
     // Pop return address and continue

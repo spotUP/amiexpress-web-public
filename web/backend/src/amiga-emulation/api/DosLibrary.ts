@@ -8,6 +8,11 @@ import { AmigaFileCache } from "./AmigaFileCache";
 import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
 
+// ========== File Operation Debugging ==========
+// Set DEBUG_FILE_OPS=1 to log all file operations (Open, Close, Read, Write, Lock, etc.)
+// This is extremely useful for debugging 68K doors that can't find files
+const DEBUG_FILE_OPS = process.env.DEBUG_FILE_OPS === "1";
+
 /**
  * dos.library - Amiga DOS Library
  * Provides file I/O, console I/O, and file system operations
@@ -1054,11 +1059,7 @@ export class DosLibrary {
     const bufferAddr = this.emulator.getRegister(CPURegister.D2);
     const length = this.emulator.getRegister(CPURegister.D3);
 
-    console.log(
-      `[dos.library] Read(handle=${handle}, buffer=0x${bufferAddr.toString(
-        16
-      )}, length=${length})`
-    );
+    // Log to door file only (no console spam)
     this.logDoorFile(`READ handle=${handle} len=${length}`);
 
     // NEW: Use FileManager if enabled
@@ -1066,15 +1067,12 @@ export class DosLibrary {
       const dataBuffer = this.fileManager.read(handle, length);
       const bytesRead = dataBuffer.length;
 
-      // Copy data to emulator memory
-      for (let i = 0; i < bytesRead; i++) {
-        this.emulator.writeMemory(bufferAddr + i, dataBuffer[i]);
+      // Bulk copy data to emulator memory (much faster than byte-by-byte)
+      if (bytesRead > 0) {
+        this.emulator.writeMemoryBuffer(bufferAddr, dataBuffer);
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-      console.log(
-        `[dos.library] Read (FileManager) returned: ${bytesRead} bytes`
-      );
       return bytesRead;
     }
 

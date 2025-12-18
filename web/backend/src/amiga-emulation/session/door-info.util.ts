@@ -15,6 +15,8 @@ export function populateDoorInfoStructs(
     userName?: string;
     location?: string;
     cliName?: string;
+    bbsName?: string;      // From bbsConfig.info (disk-based)
+    sysopName?: string;    // From bbsConfig.info (disk-based)
   }
 ): void {
   if (!doorInfoAddr || doorInfoAddr < 0x100) return;
@@ -51,8 +53,9 @@ export function populateDoorInfoStructs(
     // Based on AEDoor.library disassembly (aedoor_library_disasm.asm)
     // Library expects strings at specific offsets within BBSInfo block
     const bbsInfoAddr = doorInfoAddr + 0x46;  // BBSInfo structure offset within DIFace
-    const bbsName = "AmiExpress-Web";
-    const sysopName = "Sysop";
+    // Use disk-based config (bbsConfig.info) passed via opts, with fallbacks
+    const bbsName = opts.bbsName || "AmiExpress-Web";
+    const sysopName = opts.sysopName || "Sysop";
 
     // Format current date and time
     const now = new Date();

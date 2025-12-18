@@ -31,6 +31,10 @@ import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 
+// Performance: Verbose logging is disabled by default
+// Set DEBUG_LIBRARY_TRAPS=1 to enable detailed library call tracing
+const DEBUG_LIBRARY_TRAPS = process.env.DEBUG_LIBRARY_TRAPS === "1";
+
 // Global named object registry for utility.library
 const namedObjectRegistry = new Map<string, number>();
 let nextNamedObjectAddr = 0x00200000; // Start allocating at 2MB
@@ -3438,63 +3442,64 @@ export class LibraryTraps {
     const library = this.libraryMap.get(pc);
     const libraryName = this.getLibraryName(library);
 
-    console.log(
-      `[LibraryTraps] *** INTERCEPTED: ${libraryName}.${vector.name}() at PC=0x${pc.toString(
-        16
-      )} ***`
-    );
-
-    // DETAILED TRACING: Show door context on library calls for debugging
-    if (
-      vector.name === "OpenLibrary" ||
-      vector.name === "AllocMem" ||
-      vector.name === "SetSignal" ||
-      vector.name === "CreatePool" ||
-      vector.name === "AllocPooled"
-    ) {
-      const d0 = this.emulator.getRegister(0);
-      const d1 = this.emulator.getRegister(1);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const a4 = this.emulator.getRegister(12); // A4 = data segment
-      const a5 = this.emulator.getRegister(13);
-      const a6 = this.emulator.getRegister(14);
-
-      console.log(`[LibraryTraps]   Door state during ${vector.name}():`);
-      console.log(`[LibraryTraps]     A4: 0x${a4.toString(16)}`);
+    if (DEBUG_LIBRARY_TRAPS) {
       console.log(
-        `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(16)}`
-      );
-      console.log(
-        `[LibraryTraps]     A0: 0x${a0.toString(16)}, A1: 0x${a1.toString(16)}`
-      );
-    }
-
-    // Highlight output-related AEDoor functions
-    if (
-      vector.name === "WriteStr" ||
-      vector.name === "Prompt" ||
-      vector.name === "SendCmd"
-    ) {
-      console.log(
-        `[LibraryTraps] OUTPUT FUNCTION: ${vector.name}() - this should produce terminal output`
-      );
-    }
-
-    // Additional AEDoor-specific tracing
-    if (libraryName === "AEDoor.library") {
-      const d0 = this.emulator.getRegister(0);
-      const d1 = this.emulator.getRegister(1);
-      const a0 = this.emulator.getRegister(8);
-      const a1 = this.emulator.getRegister(9);
-      const a4 = this.emulator.getRegister(4);
-      console.log(
-        `[LibraryTraps][AEDoor] offset=${vector.offset} d0=0x${d0.toString(
+        `[LibraryTraps] *** INTERCEPTED: ${libraryName}.${vector.name}() at PC=0x${pc.toString(
           16
-        )} d1=0x${d1.toString(16)} a0=0x${a0.toString(
-          16
-        )} a1=0x${a1.toString(16)} a4=0x${a4.toString(16)}`
+        )} ***`
       );
+
+      // DETAILED TRACING: Show door context on library calls for debugging
+      if (
+        vector.name === "OpenLibrary" ||
+        vector.name === "AllocMem" ||
+        vector.name === "SetSignal" ||
+        vector.name === "CreatePool" ||
+        vector.name === "AllocPooled"
+      ) {
+        const d0 = this.emulator.getRegister(0);
+        const d1 = this.emulator.getRegister(1);
+        const a0 = this.emulator.getRegister(8);
+        const a1 = this.emulator.getRegister(9);
+        const a4 = this.emulator.getRegister(12); // A4 = data segment
+        const a6 = this.emulator.getRegister(14);
+
+        console.log(`[LibraryTraps]   Door state during ${vector.name}():`);
+        console.log(`[LibraryTraps]     A4: 0x${a4.toString(16)}`);
+        console.log(
+          `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(16)}`
+        );
+        console.log(
+          `[LibraryTraps]     A0: 0x${a0.toString(16)}, A1: 0x${a1.toString(16)}`
+        );
+      }
+
+      // Highlight output-related AEDoor functions
+      if (
+        vector.name === "WriteStr" ||
+        vector.name === "Prompt" ||
+        vector.name === "SendCmd"
+      ) {
+        console.log(
+          `[LibraryTraps] OUTPUT FUNCTION: ${vector.name}() - this should produce terminal output`
+        );
+      }
+
+      // Additional AEDoor-specific tracing
+      if (libraryName === "AEDoor.library") {
+        const d0 = this.emulator.getRegister(0);
+        const d1 = this.emulator.getRegister(1);
+        const a0 = this.emulator.getRegister(8);
+        const a1 = this.emulator.getRegister(9);
+        const a4 = this.emulator.getRegister(4);
+        console.log(
+          `[LibraryTraps][AEDoor] offset=${vector.offset} d0=0x${d0.toString(
+            16
+          )} d1=0x${d1.toString(16)} a0=0x${a0.toString(
+            16
+          )} a1=0x${a1.toString(16)} a4=0x${a4.toString(16)}`
+        );
+      }
     }
 
     // Notify monitor if callback is set
@@ -3508,39 +3513,44 @@ export class LibraryTraps {
     const sp = this.emulator.getRegister(15); // A7 (stack pointer)
     const a6 = this.emulator.getRegister(14); // A6 (library base)
     const a6Before = a6; // CRITICAL: Save A6 before trap handler
-    console.log(
-      `[LibraryTraps]   SP before pop: 0x${sp.toString(
-        16
-      )}, A6: 0x${a6.toString(16)}`
-    );
     const returnAddr = this.emulator.readMemory32(sp);
-    console.log(
-      `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
-    );
     this.emulator.setRegister(15, sp + 4); // Pop return address from ORIGINAL stack
     const spAfter = this.emulator.getRegister(15);
-    console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
 
-    // DEBUG: Dump stack contents where A6 should be saved
-    // MOVEM.L (SP)+,D0-D7/A0-A6 reads A6 from SP+56
-    // (D0-D7 = 8 regs = 32 bytes, A0-A5 = 6 regs = 24 bytes, total offset = 56)
-    const a6OnStack = this.emulator.readMemory32(spAfter + 56);
-    console.log(
-      `[LibraryTraps]   A6 value saved on stack at SP+56 (0x${(
-        spAfter + 56
-      ).toString(16)}): 0x${a6OnStack.toString(16)}`
-    );
+    if (DEBUG_LIBRARY_TRAPS) {
+      console.log(
+        `[LibraryTraps]   SP before pop: 0x${sp.toString(
+          16
+        )}, A6: 0x${a6.toString(16)}`
+      );
+      console.log(
+        `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
+      );
+      console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+
+      // DEBUG: Dump stack contents where A6 should be saved
+      // MOVEM.L (SP)+,D0-D7/A0-A6 reads A6 from SP+56
+      // (D0-D7 = 8 regs = 32 bytes, A0-A5 = 6 regs = 24 bytes, total offset = 56)
+      const a6OnStack = this.emulator.readMemory32(spAfter + 56);
+      console.log(
+        `[LibraryTraps]   A6 value saved on stack at SP+56 (0x${(
+          spAfter + 56
+        ).toString(16)}): 0x${a6OnStack.toString(16)}`
+      );
+    }
 
     // Also dump the surrounding stack to see the pattern
-    console.log(`[LibraryTraps]   Stack dump (after return address pop):`);
-    for (let i = 0; i < 15; i++) {
-      const regValue = this.emulator.readMemory32(spAfter + i * 4);
-      const regName = i < 8 ? `D${i}` : `A${i - 8}`;
-      console.log(
-        `[LibraryTraps]     SP+${i * 4} (${regName}): 0x${regValue.toString(
-          16
-        )}`
-      );
+    if (DEBUG_LIBRARY_TRAPS) {
+      console.log(`[LibraryTraps]   Stack dump (after return address pop):`);
+      for (let i = 0; i < 15; i++) {
+        const regValue = this.emulator.readMemory32(spAfter + i * 4);
+        const regName = i < 8 ? `D${i}` : `A${i - 8}`;
+        console.log(
+          `[LibraryTraps]     SP+${i * 4} (${regName}): 0x${regValue.toString(
+            16
+          )}`
+        );
+      }
     }
 
     // Call the handler with the correct library instance
@@ -3589,18 +3599,20 @@ export class LibraryTraps {
     }
 
     this.emulator.setRegister(14, properA6);
-    const a6AfterRestore = this.emulator.getRegister(14);
-    console.log(
-      `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
-        16
-      )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
-    );
-    if (a6AfterRestore !== properA6) {
+    if (DEBUG_LIBRARY_TRAPS) {
+      const a6AfterRestore = this.emulator.getRegister(14);
       console.log(
-        `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
+        `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
           16
-        )}, Got: 0x${a6AfterRestore.toString(16)}`
+        )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
       );
+      if (a6AfterRestore !== properA6) {
+        console.log(
+          `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
+            16
+          )}, Got: 0x${a6AfterRestore.toString(16)}`
+        );
+      }
     }
 
     // CRITICAL FIX: Update Status Register condition codes after setting D0
@@ -3610,11 +3622,13 @@ export class LibraryTraps {
     // M68K SR format: Bits 15-8 = system byte, Bits 4-0 = CCR (X N Z V C)
     if (preserveRegs) {
       this.emulator.setRegister(17, prevSr); // Preserve SR for void calls
-      console.log(
-        `[LibraryTraps] ${vector.name}() preserved SR: 0x${prevSr
-          .toString(16)
-          .padStart(4, "0")}`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] ${vector.name}() preserved SR: 0x${prevSr
+            .toString(16)
+            .padStart(4, "0")}`
+        );
+      }
     } else {
       const sr = this.emulator.getRegister(17); // Get current SR
       let newSr = sr & 0xfff0; // Clear N, Z, V, C flags (bits 0-3), preserve X flag (bit 4)
@@ -3633,23 +3647,25 @@ export class LibraryTraps {
 
       this.emulator.setRegister(17, newSr); // Update SR
 
-      // Verify SR was actually set
-      const verifySr = this.emulator.getRegister(17);
-      console.log(
-        `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
-      );
-      console.log(
-        `[LibraryTraps]   Set SR to: 0x${newSr
-          .toString(16)
-          .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
-          newSr & 0x08 ? 1 : 0
-        })`
-      );
-      console.log(
-        `[LibraryTraps]   Verified SR: 0x${verifySr
-          .toString(16)
-          .padStart(4, "0")} (Z=${verifySr & 0x04 ? 1 : 0})`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        // Verify SR was actually set
+        const verifySr = this.emulator.getRegister(17);
+        console.log(
+          `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
+        );
+        console.log(
+          `[LibraryTraps]   Set SR to: 0x${newSr
+            .toString(16)
+            .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
+            newSr & 0x08 ? 1 : 0
+          })`
+        );
+        console.log(
+          `[LibraryTraps]   Verified SR: 0x${verifySr
+            .toString(16)
+            .padStart(4, "0")} (Z=${verifySr & 0x04 ? 1 : 0})`
+        );
+      }
     }
 
     // Set PC to return address
@@ -3657,42 +3673,50 @@ export class LibraryTraps {
     const currentPC = this.emulator.getRegister(16);
     if (vector.name === "Supervisor") {
       // Supervisor already set PC to the supervisor function, don't overwrite it
-      console.log(
-        `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
-          16
-        )}, not setting return address`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
+            16
+          )}, not setting return address`
+        );
+      }
     } else if (vector.name === "Exit") {
       // Exit() already set PC to exit trap address (0xFFFF00), don't overwrite it
-      console.log(
-        `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
-          16
-        )} (exit trap), not setting return address`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
+            16
+          )} (exit trap), not setting return address`
+        );
+      }
     } else {
-      console.log(
-        `[LibraryTraps] Setting PC to return address 0x${returnAddr.toString(
-          16
-        )}`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] Setting PC to return address 0x${returnAddr.toString(
+            16
+          )}`
+        );
+      }
       this.emulator.setRegister(16, returnAddr);
       // CRITICAL: Refill prefetch queue after changing PC!
       // Without this, MOIRA executes stale instructions from the old PC location
       this.emulator.refillPrefetch();
-      const verifyPC = this.emulator.getRegister(16);
-      console.log(
-        `[LibraryTraps] Verified PC is now: 0x${verifyPC.toString(16)}`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        const verifyPC = this.emulator.getRegister(16);
+        console.log(
+          `[LibraryTraps] Verified PC is now: 0x${verifyPC.toString(16)}`
+        );
 
-      // Also check what instruction is at return address
-      const op0 = this.emulator.readMemory(returnAddr);
-      const op1 = this.emulator.readMemory(returnAddr + 1);
-      const opcode = (op0 << 8) | op1;
-      console.log(
-        `[LibraryTraps] Instruction at return address: 0x${opcode
-          .toString(16)
-          .padStart(4, "0")}`
-      );
+        // Also check what instruction is at return address
+        const op0 = this.emulator.readMemory(returnAddr);
+        const op1 = this.emulator.readMemory(returnAddr + 1);
+        const opcode = (op0 << 8) | op1;
+        console.log(
+          `[LibraryTraps] Instruction at return address: 0x${opcode
+            .toString(16)
+            .padStart(4, "0")}`
+        );
+      }
     }
 
     // CRITICAL FIX: Refill instruction prefetch queue!
@@ -3701,16 +3725,18 @@ export class LibraryTraps {
     // The fixed refillPrefetch() now properly sets IRD and IRC without executing.
     this.emulator.refillPrefetch();
 
-    // Verify final register state
-    const finalSp = this.emulator.getRegister(15);
-    const finalA6 = this.emulator.getRegister(14);
+    if (DEBUG_LIBRARY_TRAPS) {
+      // Verify final register state
+      const finalSp = this.emulator.getRegister(15);
+      const finalA6 = this.emulator.getRegister(14);
 
-    console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
-    console.log(
-      `[LibraryTraps]   Final SP: 0x${finalSp.toString(
-        16
-      )}, Final A6: 0x${finalA6.toString(16)}`
-    );
+      console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
+      console.log(
+        `[LibraryTraps]   Final SP: 0x${finalSp.toString(
+          16
+        )}, Final A6: 0x${finalA6.toString(16)}`
+      );
+    }
 
     return true; // Trap handled
   }
@@ -3750,11 +3776,13 @@ export class LibraryTraps {
     const library = libraries![0];
     const libraryName = this.getLibraryName(library);
 
-    console.log(
-      `[LibraryTraps] Intercepted: ${libraryName}.${vector.name}() at offset ${offset} (A6=0x${baseAddr.toString(
-        16
-      )})`
-    );
+    if (DEBUG_LIBRARY_TRAPS) {
+      console.log(
+        `[LibraryTraps] Intercepted: ${libraryName}.${vector.name}() at offset ${offset} (A6=0x${baseAddr.toString(
+          16
+        )})`
+      );
+    }
 
     // Notify monitor if callback is set
     if (this.onLibraryCall) {
@@ -3765,18 +3793,21 @@ export class LibraryTraps {
     const sp = this.emulator.getRegister(15); // A7 (stack pointer)
     const a6 = this.emulator.getRegister(14); // A6 (library base)
     const a6Before = a6; // CRITICAL: Save A6 before trap handler
-    console.log(
-      `[LibraryTraps]   SP before pop: 0x${sp.toString(
-        16
-      )}, A6: 0x${a6.toString(16)}`
-    );
     const returnAddr = this.emulator.readMemory32(sp);
-    console.log(
-      `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
-    );
     this.emulator.setRegister(15, sp + 4); // Pop return address
     const spAfter = this.emulator.getRegister(15);
-    console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+
+    if (DEBUG_LIBRARY_TRAPS) {
+      console.log(
+        `[LibraryTraps]   SP before pop: 0x${sp.toString(
+          16
+        )}, A6: 0x${a6.toString(16)}`
+      );
+      console.log(
+        `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
+      );
+      console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+    }
 
     // Call the handler
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
@@ -3802,18 +3833,20 @@ export class LibraryTraps {
     }
 
     this.emulator.setRegister(14, properA6);
-    const a6After = this.emulator.getRegister(14);
-    console.log(
-      `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
-        16
-      )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
-    );
-    if (a6After !== properA6) {
+    if (DEBUG_LIBRARY_TRAPS) {
+      const a6After = this.emulator.getRegister(14);
       console.log(
-        `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
+        `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
           16
-        )}, Got: 0x${a6After.toString(16)}`
+        )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
       );
+      if (a6After !== properA6) {
+        console.log(
+          `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
+            16
+          )}, Got: 0x${a6After.toString(16)}`
+        );
+      }
     }
 
     // Update Status Register condition codes
@@ -3832,32 +3865,38 @@ export class LibraryTraps {
 
     this.emulator.setRegister(17, newSr);
 
-    console.log(
-      `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
-    );
-    console.log(
-      `[LibraryTraps]   Set SR to: 0x${newSr
-        .toString(16)
-        .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
-        newSr & 0x08 ? 1 : 0
-      })`
-    );
+    if (DEBUG_LIBRARY_TRAPS) {
+      console.log(
+        `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
+      );
+      console.log(
+        `[LibraryTraps]   Set SR to: 0x${newSr
+          .toString(16)
+          .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
+          newSr & 0x08 ? 1 : 0
+        })`
+      );
+    }
 
     // Set PC to return address
     // EXCEPTIONS: Supervisor() and Exit() set PC themselves
     const currentPC = this.emulator.getRegister(16);
     if (vector.name === "Supervisor") {
-      console.log(
-        `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
-          16
-        )}, not setting return address`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
+            16
+          )}, not setting return address`
+        );
+      }
     } else if (vector.name === "Exit") {
-      console.log(
-        `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
-          16
-        )} (exit trap), not setting return address`
-      );
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
+            16
+          )} (exit trap), not setting return address`
+        );
+      }
     } else {
       this.emulator.setRegister(16, returnAddr);
       this.emulator.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC

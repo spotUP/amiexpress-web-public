@@ -147,13 +147,13 @@ export class FileHandle {
     }
 
     try {
-      console.log(`[FileHandle] read ${length} bytes from ${this.sysPath}`);
       const buffer = Buffer.alloc(length);
       const bytesRead = fs.readSync(this.fd, buffer, 0, length, this.position);
       this.position += bytesRead;
       return buffer.slice(0, bytesRead);
     } catch (error) {
-      console.error(`[FileHandle] Read error:`, error);
+      // Only log errors, not every read operation
+      console.error(`[FileHandle] Read error on ${this.sysPath}:`, error);
       return Buffer.alloc(0);
     }
   }

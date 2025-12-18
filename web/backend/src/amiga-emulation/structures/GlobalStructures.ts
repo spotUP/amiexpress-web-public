@@ -94,14 +94,17 @@ export class CommandsStructure {
       this.writeString(emulator, addr + 0x2BD + (i * 54), `BBS:Conf0${i + 1}`, 54);
     }
 
-    // +0x4D9: bbsName[41]
-    this.writeString(emulator, addr + 0x4D9, process.env.BBS_NAME || 'AmiExpress Web BBS', 41);
+    // +0x4D9: bbsName[41] - Use disk-based config from session (set by door.handler.ts from bbsConfig.info)
+    const bbsName = session?.bbsName || process.env.BBS_NAME || 'AmiExpress Web BBS';
+    this.writeString(emulator, addr + 0x4D9, bbsName, 41);
 
     // +0x502: bbsLoc[41]
-    this.writeString(emulator, addr + 0x502, process.env.BBS_LOCATION || 'https://amiexpress.com', 41);
+    const bbsLoc = session?.bbsLocation || process.env.BBS_LOCATION || 'https://amiexpress.com';
+    this.writeString(emulator, addr + 0x502, bbsLoc, 41);
 
-    // +0x52B: sysopName[41]
-    this.writeString(emulator, addr + 0x52B, process.env.SYSOP_NAME || 'SysOp', 41);
+    // +0x52B: sysopName[41] - Use disk-based config from session (set by door.handler.ts from bbsConfig.info)
+    const sysopName = session?.sysopName || process.env.SYSOP_NAME || 'SysOp';
+    this.writeString(emulator, addr + 0x52B, sysopName, 41);
 
     // +0x554: pSAcLvl[6] - predefined security levels
     const pSAcLvl = [10, 20, 50, 100, 150, 200];

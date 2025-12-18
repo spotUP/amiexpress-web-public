@@ -13,7 +13,7 @@ import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
-import { BBSSessionData, XIMMessage, XIMState } from './types';
+import { ArrowKeyCodes, BBSSessionData, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -399,12 +399,58 @@ export class XIMIOHandler {
   }
 
   /**
+   * Convert an escape sequence to arrow key code.
+   * Per express.e lines 7514-7528, arrow keys are ALWAYS converted to internal codes:
+   *   ESC[A -> UPARROW (4)
+   *   ESC[B -> DOWNARROW (5)
+   *   ESC[C -> RIGHTARROW (3)
+   *   ESC[D -> LEFTARROW (2)
+   *
+   * The rawArrow flag only affects whether BBS line editor consumes them (wasControl),
+   * but for JH_HK (door hotkey), we always pass the codes to the door.
+   *
+   * @returns Single character code to return to door
+   */
+  private processHotkeyToken(token: string): string {
+    // Single character - return as-is
+    if (token.length === 1) {
+      return token;
+    }
+
+    // Check for arrow key escape sequences - ALWAYS convert to codes
+    // This matches express.e behavior where ch:=UPARROW etc regardless of rawArrow
+    const arrowMap: { [key: string]: number } = {
+      '\x1b[A': ArrowKeyCodes.UPARROW,    // 4
+      '\x1b[B': ArrowKeyCodes.DOWNARROW,  // 5
+      '\x1b[C': ArrowKeyCodes.RIGHTARROW, // 3
+      '\x1b[D': ArrowKeyCodes.LEFTARROW,  // 2
+    };
+
+    if (arrowMap[token] !== undefined) {
+      const arrowCode = arrowMap[token];
+      console.log(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode}`);
+      return String.fromCharCode(arrowCode);
+    }
+
+    // For other escape sequences, return just first char
+    // (shouldn't happen in normal operation, but be safe)
+    if (token.length > 1) {
+      console.log(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0)}`);
+    }
+    return token[0];
+  }
+
+  /**
    * Handle JH_HK (Hotkey)
    * From E sources (express.e:3436-3447)
    *
    * IMPORTANT: When no input is available, we must PAUSE the emulator
    * to prevent the door from busy-looping on GetMsg. The emulator will
    * resume when input arrives via queueInput() -> completeHotkey().
+   *
+   * The door receives a SINGLE character code in msg.string[0]:
+   * - rawArrow=FALSE: Arrow keys converted to codes (2=LEFT, 3=RIGHT, 4=UP, 5=DOWN)
+   * - rawArrow=TRUE: Raw bytes (27 for ESC, then '[', then 'A'/'B'/'C'/'D' on subsequent calls)
    */
   handleHotkey(msg: XIMMessage): void {
     const prompt = this.getMessageString(msg);
@@ -412,25 +458,26 @@ export class XIMIOHandler {
     console.log('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
-    if (prompt.length > 0) {
-      console.log(`[XIMIOHandler] JH_HK: Prompt: "${prompt}"`);
-      this.socket.emit('ansi-output', prompt);
-    }
-
     if (this.state.carrierDropped) {
       this.reply(msg, -1, '');
       return;
     }
 
+    // Express.e (line 3438): aePuts(msg.string) - display prompt before reading input
+    if (prompt.length > 0) {
+      console.log(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
+      this.socket.emit('output', prompt);
+    }
+
     if (this.inputQueue.length > 0) {
       const token = this.inputQueue.shift()!;
+      const keyData = this.processHotkeyToken(token);
+
       this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-      if (token.length > 1) {
-        console.log(`[XIMIOHandler] JH_HK: Got escape sequence: ${JSON.stringify(token)}`);
-      } else {
-        console.log(`[XIMIOHandler] JH_HK: Got hotkey '${token}' (0x${token.charCodeAt(0).toString(16)})`);
-      }
-      this.reply(msg, 1, token);
+      const keyCode = keyData.charCodeAt(0);
+      const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
+      console.log(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
+      this.reply(msg, 1, keyData);
       return;
     }
 
@@ -452,14 +499,18 @@ export class XIMIOHandler {
     }
 
     const msg = this.hotkeyMessage;
-    // Pass the full token (could be single char or escape sequence like \x1b[A)
-    const keyData = char.length > 0 ? char : '';
+    const keyData = this.processHotkeyToken(char);
 
-    if (keyData.length > 1) {
-      console.log(`[XIMIOHandler] JH_HK: Completing with escape sequence: ${JSON.stringify(keyData)}`);
-    } else {
-      console.log(`[XIMIOHandler] JH_HK: Completing with key '${keyData}' (0x${keyData.charCodeAt(0).toString(16)})`);
-    }
+    const keyCode = keyData.charCodeAt(0);
+    const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
+
+    console.log('========================================');
+    console.log(`[XIMIOHandler] JH_HK COMPLETE:`);
+    console.log(`  Input char: ${JSON.stringify(char)} (charCode=${char.charCodeAt(0)})`);
+    console.log(`  Processed keyData: ${JSON.stringify(keyData)} (charCode=${keyCode})`);
+    console.log(`  Key name: ${keyName}`);
+    console.log(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
+    console.log('========================================');
 
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
     this.reply(msg, this.state.carrierDropped ? -1 : 1, keyData);

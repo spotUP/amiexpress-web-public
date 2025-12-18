@@ -23,6 +23,7 @@ import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { ximDebugLogger } from './xim/debug-logger';
+import { getDoorLogger, DoorLogger } from './DoorLogger';
 
 export { XIMCommand } from './xim/types';
 
@@ -45,6 +46,7 @@ export class XIMProtocol {
   private bbsInfoHandler: XIMBBSInfoHandler;
   private systemCommandsHandler: XIMSystemCommandsHandler;
   private messageLogger: ((msg: XIMMessage, commandName?: string) => void) | null = null;
+  private doorLogger: DoorLogger | null = null;
 
   constructor(
     emulator: MoiraEmulator,
@@ -101,6 +103,10 @@ export class XIMProtocol {
     const defaultLineLength = userLineLength && userLineLength > 0 ? userLineLength : 22;
     const wrapWidth = this.bbsSession?.lineWrap ?? 80;
 
+    // Generate unique debug ID to track state object identity
+    const stateDebugId = `state_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`);
+
     this.state = {
       registered: false,
       shuttingDown: false,
@@ -109,14 +115,17 @@ export class XIMProtocol {
       lineWrap: wrapWidth,
       pauseLines: this.bbsSession?.pauseLines ?? defaultLineLength,
       language: this.bbsSession?.language || 'txt',
-      confAccess:
-        this.bbsSession?.confAccess || this.bbsSession?.user?.confAccess || '',
+      // confAccess is read from disk files (user.data) by door.handler.ts
+      // Do NOT fall back to bbsSession.user.confAccess - that's SQLite data
+      confAccess: this.bbsSession?.confAccess || '',
       carrierDropped: false,
+      rawArrow: false,  // Default: convert arrow escape sequences to internal codes
       returnCommand: this.bbsSession?.returnCommand,
       prvCommand: undefined,
       chainCommand: undefined,
       logonType: this.bbsSession?.logonType,
-    };
+      _debugId: stateDebugId,  // Debug: track state object identity
+    } as XIMState;
 
     // Initialize specialized handlers
     this.messageParser = new XIMMessageParser(emulator);
@@ -151,6 +160,11 @@ export class XIMProtocol {
       this.bbsSession,
       this.state
     );
+
+    // Initialize door logger for XIM command logging
+    const doorName = this.doorCommand || bbsSession?.doorName || bbsSession?.doorId || 'unknown';
+    const nodeId = bbsSession?.nodeId || 1;
+    this.doorLogger = getDoorLogger(doorName, nodeId);
 
     console.log('[XIMProtocol] Initialized');
     console.log(`  Door Port: 0x${doorPort.toString(16)}`);
@@ -242,8 +256,13 @@ export class XIMProtocol {
     });
 
     console.log(
-      `[XIMProtocol] Handling command: ${humanName} (enum SV_NEWMSG=${XIMCommand.SV_NEWMSG}, RAWARROW=${XIMCommand.RAWARROW})`
+      `[XIMProtocol] <<< XIM Command: ${msg.command} (${humanName}) data=${msg.data} string="${msg.string || ''}"`
     );
+
+    // Log to door log file for debugging
+    if (this.doorLogger) {
+      this.doorLogger.xim('RX', `${msg.command} (${humanName})`, `data=${msg.data} str="${msg.string || ''}"`);
+    }
 
     // Normalize nodeId to the active session node when the door leaves it unset or 0xFFFFFFFF.
     if (
@@ -481,9 +500,8 @@ export class XIMProtocol {
       XIMCommand.GETKEY,
       XIMCommand.DISPLAY_FILE,
       XIMCommand.CHECK_TO_DISPLAY,
-      XIMCommand.PG_SM,
-      XIMCommand.PG_UD,
-      XIMCommand.PG_US,
+      // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
+      // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
       console.log(
@@ -575,17 +593,8 @@ export class XIMProtocol {
         this.ioHandler.handleGetKey(msg);
         break;
 
-      case XIMCommand.PG_SM:
-        this.ioHandler.handleScreenMessage(msg);
-        break;
-
-      case XIMCommand.PG_UD:
-        this.ioHandler.handleUserData(msg, this.bbsSession);
-        break;
-
-      case XIMCommand.PG_US:
-        this.ioHandler.handleUserString(msg, this.bbsSession);
-        break;
+      // Note: PG_SM, PG_UD, PG_US case handlers removed - they don't exist in axcommon.e
+      // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
     }
   }
 
@@ -652,7 +661,8 @@ export class XIMProtocol {
       XIMCommand.BB_PCONFLOCAL,
       XIMCommand.BB_MAINLINE,
       XIMCommand.BB_CALLERSLOG,
-      XIMCommand.BB_NUMCONFS,
+      // Note: BB_NUMCONFS was removed - it doesn't exist in axcommon.e
+      // Command 614 is ONLY CONF_ACCESS
       XIMCommand.BB_UDLOG,
       XIMCommand.BB_TASKPRI,
       XIMCommand.BB_CHATFLAG,
@@ -784,9 +794,8 @@ export class XIMProtocol {
         this.bbsInfoHandler.handleGetTask(msg);
         break;
 
-      case XIMCommand.BB_NUMCONFS:
-        this.bbsInfoHandler.handleBBSInfo(msg);
-        break;
+      // Note: BB_NUMCONFS case removed - command 614 is CONF_ACCESS only
+      // CONF_ACCESS is handled separately below
 
       // Node/modem info commands
       case XIMCommand.NODE_BAUD:
@@ -1020,6 +1029,8 @@ export class XIMProtocol {
    * Get a snapshot of XIM state for host usage after door exit
    */
   getStateSnapshot(): XIMState {
+    const debugId = (this.state as any)._debugId || 'UNKNOWN';
+    console.log(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCommand="${this.state.returnCommand || 'NONE'}", chainCommand="${this.state.chainCommand || 'NONE'}"`);
     return { ...this.state };
   }
 

@@ -256,7 +256,23 @@ export class IconLibrary {
             const valuePtr = tooltypeStrPtr + equalsPos + 1;
             const value = tooltypeStr.substring(equalsPos + 1);
             console.log(`[icon.library]   Found "${searchTypeName}" -> value "${value}" at 0x${valuePtr.toString(16)}`);
+
+            // Debug: Verify memory at valuePtr matches expected value
+            const memVerify: string[] = [];
+            for (let i = 0; i < Math.min(value.length + 1, 16); i++) {
+              const byte = this.emulator.readMemory(valuePtr + i);
+              memVerify.push(byte.toString(16).padStart(2, '0'));
+            }
+            console.log(`[icon.library]   Memory at 0x${valuePtr.toString(16)}: [${memVerify.join(' ')}] = "${this.readString(valuePtr, 16)}"`);
+
             this.emulator.setRegister(CPURegister.D0, valuePtr);
+
+            // Debug: Verify D0 was set correctly
+            const d0After = this.emulator.getRegister(CPURegister.D0);
+            console.log(`[icon.library]   D0 set to 0x${d0After.toString(16)} (expected 0x${valuePtr.toString(16)})`);
+            if (d0After !== valuePtr) {
+              console.error(`[icon.library]   ERROR: D0 mismatch! Got 0x${d0After.toString(16)}, expected 0x${valuePtr.toString(16)}`);
+            }
           } else {
             // No '=' means boolean tooltype, return pointer to empty string (null terminator)
             console.log(`[icon.library]   Found "${searchTypeName}" (boolean) at 0x${(tooltypeStrPtr + tooltypeStr.length).toString(16)}`);
@@ -657,11 +673,26 @@ export class IconLibrary {
 
       const tooltypes: string[] = [];
 
-      // Look for lines that contain '=' (tooltype format)
+      // Look for lines that look like tooltypes:
+      // - Lines containing '=' (TOOLTYPE=value format)
+      // - Lines that are all uppercase with underscores (boolean tooltypes like RELATIVE_CONFERENCES)
+      // Skip comments and paths
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.includes('=') && !trimmed.startsWith('#') && !trimmed.startsWith('/')) {
-          console.log(`[icon.library]     Found tooltype: "${trimmed}"`);
+        if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.length === 0) {
+          continue;
+        }
+
+        // Match tooltype formats:
+        // 1. NAME=VALUE (standard tooltype)
+        // 2. BOOLEAN_TOOLTYPE (all uppercase, may contain underscores)
+        const isStandardTooltype = trimmed.includes('=');
+        const isBooleanTooltype = !trimmed.includes('=') &&
+                                   /^[A-Z][A-Z0-9_]*$/.test(trimmed) &&
+                                   trimmed.length >= 4;
+
+        if (isStandardTooltype || isBooleanTooltype) {
+          console.log(`[icon.library]     Found tooltype: "${trimmed}"${isBooleanTooltype ? ' (boolean)' : ''}`);
           tooltypes.push(trimmed);
         }
       }
