@@ -1,6 +1,6 @@
 BBSCMD=GLC
 TYPE=TS
-LOCATION=doors/glc-viewer
+LOCATION=Doors/glc-viewer
 DESCRIPTION=Global Last Callers - displays callers from scenewall.bbs.io
 ACCESS=0
 MULTINODE=YES

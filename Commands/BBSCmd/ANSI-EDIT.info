@@ -1,6 +1,6 @@
 BBSCMD=ANSI-EDIT
 TYPE=TS
-LOCATION=doors/ansi-editor
+LOCATION=Doors/ansi-editor
 DESCRIPTION=ANSI Screen Editor Door for AmiExpress-Web
 ACCESS=0
 MULTINODE=YES

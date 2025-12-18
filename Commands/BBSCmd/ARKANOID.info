@@ -1,6 +1,6 @@
 BBSCMD=ARKANOID
 TYPE=TS
-LOCATION=doors/arkanoid
+LOCATION=Doors/arkanoid
 DESCRIPTION=Classic Arkanoid/Breakout game with ANSI graphics
 ACCESS=0
 MULTINODE=YES

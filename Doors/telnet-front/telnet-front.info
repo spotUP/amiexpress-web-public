@@ -1,5 +1,5 @@
 NAME=Telnet Frontend
-LOCATION=doors/telnet-front
+LOCATION=Doors/telnet-front
 TYPE=TS
 DESCRIPTION=Who's Online display at connection
 MULTINODE=YES
