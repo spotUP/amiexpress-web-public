@@ -735,6 +735,7 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
 
 /**
  * Handle confirmation - create account or go back
+ * express.e:30109 - After doNewUser(), calls doNewUserQuestions() for questionnaire
  */
 export async function handleConfirmInput(socket: Socket, session: any, input: string) {
   const response = input.trim().toUpperCase();
@@ -748,11 +749,11 @@ export async function handleConfirmInput(socket: Socket, session: any, input: st
     return;
   }
 
-  // Proceed to real name / email / sex,age prompts per reference-board sequence
+  // express.e flow: after confirmation, go directly to questionnaire
+  // The script file (e.g., Node1/script57600) contains realname/sexage/tricky prompts
+  // We don't duplicate those prompts in code
   socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'What is your real name: ');
-  session.subState = LoggedOnSubState.NEW_USER_REALNAME;
-  session.inputBuffer = '';
+  await continueRegistrationFlow(socket, session);
 }
 
 export async function handleRealnameInput(socket: Socket, session: any, input: string) {
@@ -837,6 +838,10 @@ export async function handleQuestionnaireAnswer(socket: Socket, session: any, in
   questionnaire.transcript.push(`${promptStep.content} ${response}`);
   questionnaire.awaitingPromptIndex = undefined;
   session.inputBuffer = '';
+
+  // express.e:30376 - lineInput echoes Enter key as linebreak
+  // We need to add the linebreak after user's response before showing next step
+  socket.emit('ansi-output', '\r\n');
 
   await advanceQuestionnaire(socket, session);
 }

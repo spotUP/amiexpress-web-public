@@ -918,9 +918,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       username.current = '';
     });
 
-    socket.on('retry-login', () => {
+    socket.on('retry-login', (data?: { prefillUsername?: string }) => {
       loginState.current = 'username';
-      username.current = '';
+      // Prefill username if provided (e.g., when user presses R to retry after "user not found")
+      username.current = data?.prefillUsername || '';
       password.current = '';
     });
 

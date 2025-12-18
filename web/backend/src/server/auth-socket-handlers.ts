@@ -596,9 +596,10 @@ export function registerAuthHandlers(socket: Socket) {
         }
 
         // Retry login - send back to login screen with username prompt
+        // express.e prefills the previous username for convenience
         console.log('User chose to retry login');
-        socket.emit('ansi-output', '\r\nUsername: ');
-        socket.emit('retry-login');
+        socket.emit('ansi-output', `\r\nUsername: ${safeUsername}`);
+        socket.emit('retry-login', { prefillUsername: safeUsername });
       }
     } catch (error) {
       console.error('New user response error:', error);
