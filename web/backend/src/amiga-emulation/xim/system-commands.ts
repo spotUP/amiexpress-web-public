@@ -249,9 +249,15 @@ export class XIMSystemCommandsHandler {
   /**
    * Handle RAWARROW (Toggle Raw Arrow Keys)
    * From E sources (express.e:3814-3815)
+   *
+   * When rawArrow=FALSE (default): ESC[A/B/C/D are converted to UPARROW(4)/DOWNARROW(5)/RIGHTARROW(3)/LEFTARROW(2)
+   * When rawArrow=TRUE: Raw escape sequence bytes are passed through (27, '[', 'A', etc.)
    */
   handleRawArrow(msg: XIMMessage): void {
-    console.log('[XIMSystem] RAWARROW: Toggle raw arrow mode (no-op in web)');
+    // Toggle rawArrow state
+    this.state.rawArrow = !this.state.rawArrow;
+
+    console.log(`[XIMSystem] RAWARROW: Toggle raw arrow mode -> ${this.state.rawArrow ? 'ON (raw)' : 'OFF (convert)'}`);
 
     // Ack
     this.reply(msg, 1);
@@ -264,10 +270,13 @@ export class XIMSystemCommandsHandler {
   handleReturnCommand(msg: XIMMessage): void {
     const command = this.getMessageString(msg);
 
-    console.log(`[XIMSystem] RETURNCOMMAND: "${command}"`);
+    console.log(`[XIMSystem] RETURNCOMMAND: "${command}" -> state.returnCommand set`);
 
     this.bbsSession.returnCommand = command;
     this.state.returnCommand = command;
+
+    // Verify it was set
+    console.log(`[XIMSystem] RETURNCOMMAND verify: state.returnCommand="${this.state.returnCommand}"`);
 
     this.reply(msg, 1);
   }
@@ -487,11 +496,21 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] JH_FLAGFILE - Flag file for download');
     console.log(`  File: "${fileName}"`);
 
-    // Persist flagged file on the session for host pickup (simplified queue)
+    // Persist flagged file on the session for host pickup
+    // Store as object with filename and confNum for download handler compatibility
     if (!Array.isArray((this.bbsSession as any).flaggedFiles)) {
       (this.bbsSession as any).flaggedFiles = [];
     }
-    (this.bbsSession as any).flaggedFiles.push(fileName);
+
+    // Get current conference from session
+    const confNum = (this.bbsSession as any).currentConf || 1;
+
+    (this.bbsSession as any).flaggedFiles.push({
+      filename: fileName,
+      confNum: confNum
+    });
+
+    console.log(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: ${(this.bbsSession as any).flaggedFiles.length}`);
 
     this.reply(msg, 1);
   }
@@ -501,9 +520,11 @@ export class XIMSystemCommandsHandler {
    */
   handleShowFlags(msg: XIMMessage): void {
     const flagged = (this.bbsSession as any)?.flaggedFiles || [];
-    const output = flagged.join('\r\n');
+    // Extract filenames from objects (handle both old string format and new object format)
+    const filenames = flagged.map((f: any) => typeof f === 'string' ? f : (f.filename || f.fileName || f.name || ''));
+    const output = filenames.filter((n: string) => n).join('\r\n');
     this.messageParser.writeMessageString(msg.msgAddr, output);
-    this.reply(msg, 1);
+    this.reply(msg, flagged.length);
   }
 
   /**
