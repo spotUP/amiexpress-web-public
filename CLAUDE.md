@@ -109,6 +109,69 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**NEO-BLESSED TAGS MUST BE ENABLED - ALWAYS USE HELPERS**
+
+**CRITICAL**: Neo-Blessed elements DON'T parse color tags by default. If you see literal `{gray-fg}` or `{red-fg}` in the UI, you forgot `tags: true`.
+
+1. **THE PROBLEM**:
+   ```typescript
+   // WRONG - tags show as literal text
+   const box = blessed.box({
+     content: '{red-fg}Error{/red-fg}'
+     // Missing: tags: true
+   });
+   // Result: User sees "{red-fg}Error{/red-fg}" literally
+   ```
+
+2. **THE SOLUTION - Use SDK helpers**:
+   ```typescript
+   import { createBox, createList, colorize } from '../../utils/blessed-helpers';
+
+   // RIGHT - tags are parsed
+   const box = createBox({
+     content: '{red-fg}Error{/red-fg}'
+     // tags: true is automatic
+   });
+
+   // OR use the colorize helper
+   const box = createBox({
+     content: colorize('Error', 'red')
+   });
+   ```
+
+3. **AVAILABLE HELPERS** (in `sdk/utils/blessed-helpers.ts`):
+   - `createBox()` - Box with tags enabled
+   - `createList()` - List with tags enabled
+   - `createText()` - Text with tags enabled
+   - `createTextarea()` - Textarea with tags enabled
+   - `createLog()` - Log with tags enabled
+   - `createTable()` - Table with tags enabled
+   - `createButton()` - Button with tags enabled
+   - `colorize(text, color)` - Wrap text in color tags
+
+4. **MANDATORY RULE**:
+   - **NEVER call `blessed.box()` directly** - use `createBox()`
+   - **NEVER call `blessed.list()` directly** - use `createList()`
+   - **ALWAYS import from** `'../../utils/blessed-helpers'`
+   - If you must use `blessed.*` directly, add `tags: true`
+
+5. **How to identify the issue**:
+   - UI shows `{gray-fg}text{/gray-fg}` literally
+   - UI shows `{red-fg}` instead of red text
+   - Colors don't work in lists/boxes
+
+6. **Quick fix**:
+   ```typescript
+   // Find: blessed.box({ ... })
+   // Replace: blessed.box({ tags: true, ... })
+
+   // Better: Use createBox() from blessed-helpers
+   ```
+
+**Violation = Users see ugly literal tags instead of colors, door looks broken**
+
+---
+
 **68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
 
 When debugging 68K door issues (doors not working, showing errors, hanging, etc.):

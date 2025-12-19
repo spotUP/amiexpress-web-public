@@ -312,6 +312,7 @@ export async function createApp(session: DoorSession) {
       border: { fg: 'cyan' },
       selected: { fg: 'white', bg: 'blue' },
     } as any,
+    tags: true,  // CRITICAL: Enable tag parsing for colored channel names
     mouse: true,
     keys: true,
     vi: true,
