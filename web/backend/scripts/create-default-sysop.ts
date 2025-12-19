@@ -8,7 +8,7 @@
  */
 
 import Database from 'better-sqlite3';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as path from 'path';
 
 const DB_PATH = process.env.DATABASE_DIR
