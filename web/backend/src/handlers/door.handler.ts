@@ -1242,10 +1242,24 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    // Dynamically import the door module with cache busting for development
-    // Use timestamp query parameter to force fresh load every time
-    const cacheBuster = `?t=${Date.now()}`;
-    const doorModule = await import(`${resolvedDoorPath}${cacheBuster}`);
+    // Clear module cache to ensure we get fresh code (critical for development)
+    // Query parameters don't work with Node.js import(), so we need to clear the cache directly
+    if (require.cache[resolvedDoorPath]) {
+      delete require.cache[resolvedDoorPath];
+      console.log(`[executeTypeScriptDoor] Cleared module cache for: ${resolvedDoorPath}`);
+    }
+
+    // Also clear any related modules in the door's directory (dependencies)
+    const doorDir = path.dirname(resolvedDoorPath);
+    Object.keys(require.cache).forEach(key => {
+      if (key.startsWith(doorDir)) {
+        delete require.cache[key];
+        console.log(`[executeTypeScriptDoor] Cleared related module: ${key}`);
+      }
+    });
+
+    // Dynamically import the door module (cache already cleared above)
+    const doorModule = await import(`${resolvedDoorPath}`);
 
     // Check if this is a hybrid door using SDK's ServerDoor class
     // These doors call door.start() when imported and don't export runDoor()
