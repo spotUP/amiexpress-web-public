@@ -53,6 +53,7 @@ interface DoorSession {
 }
 
 export async function createApp(session: DoorSession) {
+  console.log('[LiveChat DEBUG] createApp called - LiveChat 3.0 with updated UI');
   const { bbs, user, socket } = session;
   const username = user?.username || 'Guest';
   const userId = parseInt(user?.id, 10) || 0;
@@ -519,8 +520,11 @@ export async function createApp(session: DoorSession) {
   function setFocusBorder(panel: any, focused: boolean) {
     const defaultColor = panelDefaultBorders.get(panel) || 'white';
     const newColor = focused ? 'white' : defaultColor;
-    if (panel.style?.border) {
-      panel.style.border.fg = newColor;
+    // Update border color in options.style.border (where renderer reads it)
+    if (panel.options?.style?.border) {
+      panel.options.style.border.fg = newColor;
+    } else if (panel.options?.style) {
+      panel.options.style.border = { fg: newColor };
     }
     screen.render();
   }
@@ -2016,6 +2020,7 @@ Features 25+ widget types including:
 
   // Room joined
   socket.on('room:joined', (data: any) => {
+    console.log('[LiveChat DEBUG] room:joined received:', JSON.stringify(data));
     // Use setChannel to properly clear messages and typing when switching
     setChannel(state, data.roomId || data.roomName);
 
@@ -2033,7 +2038,9 @@ Features 25+ widget types including:
       }
     }
 
+    console.log('[LiveChat DEBUG] Setting chatLog label to:', data.roomName);
     chatLog.setLabel(` ${data.roomName} `);
+    console.log('[LiveChat DEBUG] chatLog label is now:', chatLog.options.label);
     updateChannelList();
     updateUserTable();
     updateStatusBar();

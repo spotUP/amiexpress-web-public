@@ -96,8 +96,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   });
 
   socket.on('room:join', async (data: { roomId?: string; roomName?: string; password?: string }) => {
+    console.log('[CHAT DEBUG] room:join received:', data);
     const session = getSessionBySocketId(socket.id);
-    if (!session) return;
+    if (!session) {
+      console.log('[CHAT DEBUG] No session found for socket:', socket.id);
+      return;
+    }
+    console.log('[CHAT DEBUG] Session found - userId:', session.userId, 'username:', session.username, 'currentRoomId:', session.currentRoomId);
 
     const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
     await handleRoomJoin(socket, session, data);
@@ -112,8 +117,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   });
 
   socket.on('room:message', async (data: { message: string }) => {
+    console.log('[CHAT DEBUG] room:message received:', data);
     const session = getSessionBySocketId(socket.id);
-    if (!session) return;
+    if (!session) {
+      console.log('[CHAT DEBUG] No session for room:message');
+      return;
+    }
+    console.log('[CHAT DEBUG] Message from:', session.username, 'in room:', session.currentRoomId);
 
     const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
     await handleRoomMessage(socket, session, data);
