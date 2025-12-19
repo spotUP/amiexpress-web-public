@@ -114,7 +114,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
       console.log('[CHAT DEBUG] No session found for socket:', socket.id);
       return;
     }
-    console.log('[CHAT DEBUG] Session found - userId:', session.userId, 'username:', session.username, 'currentRoomId:', session.currentRoomId);
+    console.log('[CHAT DEBUG] Session found - userId:', session.user?.id, 'username:', session.user?.username, 'currentRoomId:', session.currentRoomId);
 
     const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
     await handleRoomJoin(socket, session, data);
@@ -135,7 +135,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
       console.log('[CHAT DEBUG] No session for room:message');
       return;
     }
-    console.log('[CHAT DEBUG] Message from:', session.username, 'in room:', session.currentRoomId);
+    console.log('[CHAT DEBUG] Message from:', session.user?.username, 'in room:', session.currentRoomId);
 
     const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
     await handleRoomMessage(socket, session, data);
@@ -176,7 +176,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     socket.to(socketRoom).emit('chat:keystroke', {
       channelId: session.currentRoomId,
       userId: data.userId,
-      username: session.username,
+      username: session.user?.username,
       char: data.char
     });
   });
@@ -190,7 +190,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     socket.to(socketRoom).emit('chat:keystroke-submit', {
       channelId: session.currentRoomId,
       userId: data.userId,
-      username: session.username
+      username: session.user?.username
     });
   });
 
@@ -203,7 +203,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     socket.to(socketRoom).emit('chat:keystroke-clear', {
       channelId: session.currentRoomId,
       userId: data.userId,
-      username: session.username
+      username: session.user?.username
     });
   });
 }
