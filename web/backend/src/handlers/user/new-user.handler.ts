@@ -1088,6 +1088,20 @@ async function createAccount(socket: Socket, session: any) {
     const quietNode = defaults?.quietNode || false;
     const autoRejoin = defaults?.autoRejoin !== false ? 1 : 0;
 
+    // Check if this is the first user (should become sysop)
+    const firstUserIsSysop = (global as any).firstUserIsSysop === true;
+    let assignedSecLevel = data.autoValidated ? autoValidationSecLevel : defaultSecLevel;
+
+    if (firstUserIsSysop) {
+      assignedSecLevel = 255; // Auto-promote first user to sysop
+      socket.emit('ansi-output', '\r\n\x1b[33;1m*** FIRST USER DETECTED ***\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[33;1mYou have been automatically assigned System Operator status (Level 255)\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[33;1mWelcome, Sysop!\x1b[0m\r\n\r\n');
+      console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
+      // Clear the flag so subsequent users get normal security level
+      (global as any).firstUserIsSysop = false;
+    }
+
     // Create user in database
     const now = new Date();
     const newUserId = await db.createUser({
@@ -1097,7 +1111,7 @@ async function createAccount(socket: Socket, session: any) {
       location: data.location,
       phone: data.phone,
       email: data.email,
-      secLevel: data.autoValidated ? autoValidationSecLevel : defaultSecLevel,
+      secLevel: assignedSecLevel,
       linesPerScreen: data.linesPerScreen || defaultLines,
       computer: data.computerType,
       ansi: ansiFlag,

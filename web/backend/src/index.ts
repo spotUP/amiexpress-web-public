@@ -1118,24 +1118,20 @@ io.on('connection', async (socket) => {
       console.warn('[CONFIG] Unable to load system config for ports, using defaults/env:', err);
     }
 
-    // Create/reset default sysop user
+    // Check for sysop-level user on fresh install
     try {
-      console.log('[SETUP] Creating default sysop user...');
-      const { execSync } = await import('child_process');
-      const path = await import('path');
-      const backendDir = path.join(__dirname, '..');
-      console.log(`[SETUP] Running from: ${backendDir}`);
-      const result = execSync('npx tsx scripts/create-default-sysop.ts', {
-        cwd: backendDir,
-        encoding: 'utf-8',
-        env: { ...process.env, DATABASE_DIR: process.env.DATABASE_DIR || '/app/data/db' }
-      });
-      console.log(result);
+      const sysopUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE seclevel >= 200').get() as { count: number };
+      if (sysopUsers.count === 0) {
+        console.log('[SETUP] No sysop-level users found - FIRST new user will automatically become sysop (level 255)');
+        // Set global flag that the new user handler will check
+        (global as any).firstUserIsSysop = true;
+      } else {
+        console.log(`[SETUP] Found ${sysopUsers.count} sysop-level user(s)`);
+        (global as any).firstUserIsSysop = false;
+      }
     } catch (err: any) {
-      console.warn('[SETUP] Failed to create sysop user:', err.message || err);
-      if (err.stdout) console.warn('[SETUP] stdout:', err.stdout);
-      if (err.stderr) console.warn('[SETUP] stderr:', err.stderr);
-      console.warn('[SETUP] Continuing with server startup...');
+      console.warn('[SETUP] Failed to check for sysop users:', err.message || err);
+      (global as any).firstUserIsSysop = false;
     }
 
     // Start HTTP/Socket.IO server
