@@ -79,16 +79,29 @@ function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: 
 /**
  * Broadcast a chat message to all room members
  */
-function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number) {
+function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string) {
+  console.log('📡 [BROADCAST] Starting broadcast:', {
+    roomId,
+    senderUsername,
+    messageLength: message.length,
+    excludeSocketId,
+    senderId,
+    ioAvailable: !!io
+  });
+
   const socketRoom = 'room:' + roomId;
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const output = AnsiUtil.line('[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message);
 
+  console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
+
   // Emit raw ANSI output for simple terminal clients
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
+    console.log('📡 [BROADCAST] Sent ansi-output (excluding:', excludeSocketId + ')');
   } else {
     io.to(socketRoom).emit('ansi-output', output);
+    console.log('📡 [BROADCAST] Sent ansi-output to all in room');
   }
 
   // Also emit structured chat:message event for advanced clients (LiveChat door)
@@ -96,7 +109,7 @@ function broadcastRoomMessage(roomId: string, senderUsername: string, message: s
   const structuredMessage = {
     id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     channelId: roomId,
-    userId: String(senderId || 0),
+    userId: String(senderId || '0'),
     username: senderUsername,
     content: message,
     type: 'message',
@@ -105,9 +118,13 @@ function broadcastRoomMessage(roomId: string, senderUsername: string, message: s
 
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('chat:message', structuredMessage);
+    console.log('📡 [BROADCAST] Sent chat:message (excluding:', excludeSocketId + ')');
   } else {
     io.to(socketRoom).emit('chat:message', structuredMessage);
+    console.log('📡 [BROADCAST] Sent chat:message to all in room');
   }
+
+  console.log('📡 [BROADCAST] Broadcast complete');
 }
 
 /**

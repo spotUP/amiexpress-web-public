@@ -1243,23 +1243,29 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
     // Clear module cache to ensure we get fresh code (critical for development)
-    // Query parameters don't work with Node.js import(), so we need to clear the cache directly
+    // For CommonJS modules (require.cache)
     if (require.cache[resolvedDoorPath]) {
       delete require.cache[resolvedDoorPath];
-      console.log(`[executeTypeScriptDoor] Cleared module cache for: ${resolvedDoorPath}`);
+      console.log(`[executeTypeScriptDoor] Cleared CommonJS cache for: ${resolvedDoorPath}`);
     }
 
-    // Also clear any related modules in the door's directory (dependencies)
+    // Also clear any related CommonJS modules in the door's directory (dependencies)
     const doorDir = path.dirname(resolvedDoorPath);
     Object.keys(require.cache).forEach(key => {
       if (key.startsWith(doorDir)) {
         delete require.cache[key];
-        console.log(`[executeTypeScriptDoor] Cleared related module: ${key}`);
+        console.log(`[executeTypeScriptDoor] Cleared related CommonJS module: ${key}`);
       }
     });
 
-    // Dynamically import the door module (cache already cleared above)
-    const doorModule = await import(`${resolvedDoorPath}`);
+    // For ESM modules (dynamic import), use query parameter to bust cache
+    // This forces Node.js to treat it as a different module
+    const cacheBuster = `?_=${Date.now()}`;
+    const importPath = `file://${resolvedDoorPath}${cacheBuster}`;
+    console.log(`[executeTypeScriptDoor] Importing with cache buster: ${importPath}`);
+
+    // Dynamically import the door module with cache busting
+    const doorModule = await import(importPath);
 
     // Check if this is a hybrid door using SDK's ServerDoor class
     // These doors call door.start() when imported and don't export runDoor()
