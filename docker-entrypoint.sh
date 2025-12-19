@@ -57,6 +57,13 @@ fi
 echo "[Entrypoint] Current BBS data:"
 ls -la "$BBS_DATA_DIR" 2>/dev/null | head -20 || echo "  (empty)"
 
+# Create/reset default sysop user
+echo "[Entrypoint] Setting up default sysop user..."
+cd /app/web/backend
+export DATABASE_DIR="$DATABASE_DIR"
+export DATABASE_FILE="${DATABASE_FILE:-amiexpress.db}"
+npx tsx scripts/create-default-sysop.ts || echo "[Entrypoint] WARNING: Failed to create sysop user"
+
 # Execute the main command (typically: npx tsx src/index.ts)
 echo "[Entrypoint] Starting BBS server..."
 exec "$@"
