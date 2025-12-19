@@ -14,13 +14,16 @@ import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
  * Register chat socket event handlers
  */
 export function registerChatHandlers(socket: Socket, chatState: any) {
-  const session = getSessionBySocketId(socket.id);
-  if (!session) return;
+  console.log('[CHAT DEBUG] registerChatHandlers called for socket:', socket.id);
+  // NOTE: Don't return early if no session - handlers check session themselves
+  // The session may not exist when handlers are registered but will exist when called
 
   // ===== LEGACY CHAT HANDLERS (Sysop pager) =====
 
   // Handle special chat commands (legacy sysop chat)
   socket.on('chat-message', (message: string) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
     if ((session as any).inChat) {
       sendChatMessage(socket, session, message);
     }
@@ -28,6 +31,8 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
 
   // Handle sysop accepting chat request (legacy)
   socket.on('accept-chat', (sessionId: string) => {
+    const session = getSessionBySocketId(socket.id);
+    if (!session) return;
     // Sysop accepting chat request
     const chatSession = chatState.activeSessions.find((s: any) => s.id === sessionId);
     if (chatSession && session.user?.secLevel === 255) { // Sysop level
