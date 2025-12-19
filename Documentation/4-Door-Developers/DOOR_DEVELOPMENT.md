@@ -2,6 +2,38 @@
 
 AmiExpress-Web supports multiple types of doors. Choose the guide that matches your needs:
 
+## ⚠️ CRITICAL: SDK Doors MUST Be Built
+
+**IF YOU'RE DEVELOPING SDK DOORS (in `sdk/doors/`), READ THIS FIRST:**
+
+SDK doors are TypeScript projects that compile to JavaScript. **You MUST build them before changes are visible:**
+
+```bash
+# ALWAYS build after making changes
+cd sdk/doors/{doorname}
+npm run build
+```
+
+**Why this matters:**
+- Source code: `sdk/doors/{doorname}/src/` ← You edit here
+- Built output: `sdk/doors/{doorname}/dist/` ← BBS loads from here
+- **If you don't build, you'll see old code**
+
+**Quick fix if door looks wrong:**
+```bash
+cd sdk/doors/livechat  # or your door name
+npm run build
+```
+
+**Automatic building:**
+- `./dev/scripts/start-servers.sh` now auto-builds all SDK doors
+- First start takes ~30-60 seconds (builds all doors)
+- Use watch mode for development: `npm run build:watch`
+
+**See CLAUDE.md for complete details** - This is documented there to prevent future issues.
+
+---
+
 ## TypeScript Doors (Recommended)
 
 **[TYPESCRIPT_DOOR_GUIDE.md](TYPESCRIPT_DOOR_GUIDE.md)** - Complete guide for modern TypeScript doors

@@ -44,6 +44,71 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**SDK DOORS MUST BE BUILT - NEVER LOAD STALE CODE**
+
+**CRITICAL**: SDK doors in `sdk/doors/` are TypeScript projects that MUST be built before changes are visible.
+
+1. **How SDK doors work**:
+   - Source code: `sdk/doors/{doorname}/src/`
+   - Built output: `sdk/doors/{doorname}/dist/`
+   - Door handler loads: `dist/index.js` (NOT source files)
+   - Cache busting works on the built file, NOT the source
+
+2. **THE PROBLEM**:
+   - You edit source files in `src/app.ts`
+   - Door handler clears cache and reloads `dist/index.js`
+   - But `dist/index.js` is STALE (old build)
+   - Result: You see old code, cache busting appears broken
+
+3. **THE SOLUTION - ALWAYS BUILD**:
+   ```bash
+   cd sdk/doors/{doorname}
+   npm run build
+   ```
+
+4. **MANDATORY WORKFLOW**:
+   - **BEFORE testing ANY SDK door changes**: `npm run build`
+   - **AFTER editing source files**: `npm run build`
+   - **If door looks wrong**: Check if you built it
+   - **If "cache not working"**: You forgot to build
+
+5. **Which doors need building**:
+   - Any door in `sdk/doors/` with a `package.json`
+   - LiveChat: `sdk/doors/livechat/`
+   - 2048 Game: `sdk/doors/2048-game/`
+   - All example doors in `sdk/doors/`
+
+6. **How to identify SDK doors**:
+   ```bash
+   # Has package.json and src/ directory
+   ls sdk/doors/*/package.json
+   ls sdk/doors/*/src/
+   ```
+
+7. **start-servers.sh AUTO-BUILDS**:
+   - The startup script now builds all SDK doors automatically
+   - First start may take 30-60 seconds (building all doors)
+   - Subsequent starts are faster (only rebuilds if source changed)
+
+8. **Development workflow**:
+   ```bash
+   # Option 1: Manual build after changes
+   cd sdk/doors/livechat
+   npm run build
+   # Then test in BBS
+
+   # Option 2: Watch mode (auto-rebuild on save)
+   cd sdk/doors/livechat
+   npm run build:watch
+   # Leave running, edit files, changes auto-build
+   ```
+
+**Violation = You will see stale code and waste hours debugging "broken" cache busting**
+
+**See also**: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md` for complete SDK door workflow
+
+---
+
 **68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
 
 When debugging 68K door issues (doors not working, showing errors, hanging, etc.):

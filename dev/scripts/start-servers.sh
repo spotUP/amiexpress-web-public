@@ -239,6 +239,38 @@ else
   exit 1
 fi
 
+# Build all SDK doors (CRITICAL - prevents stale code issues)
+printf "%b\n" "${CYAN}→ SDK Doors: Building all example/installed doors...${RESET}"
+DOOR_COUNT=0
+DOOR_ERRORS=0
+
+for door_dir in "$REPO_ROOT/sdk/doors"/*/ ; do
+  if [ -f "$door_dir/package.json" ]; then
+    door_name=$(basename "$door_dir")
+    # Only rebuild if source exists (some doors might be JS-only)
+    if [ -d "$door_dir/src" ]; then
+      printf "%b" "   ${WHITE}→ Building $door_name...${RESET}"
+      (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1)
+      if [ $? -eq 0 ]; then
+        printf "%b\n" " ${GREEN}[OK]${RESET}"
+        ((DOOR_COUNT++))
+      else
+        printf "%b\n" " ${YELLOW}[SKIP]${RESET}"
+        ((DOOR_ERRORS++))
+      fi
+    fi
+  fi
+done
+
+if [ $DOOR_COUNT -gt 0 ]; then
+  printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT SDK door(s)${RESET}"
+  if [ $DOOR_ERRORS -gt 0 ]; then
+    printf "%b\n" "   ${YELLOW}[WARNING] $DOOR_ERRORS door(s) skipped (build errors)${RESET}"
+  fi
+else
+  printf "%b\n" "   ${WHITE}[INFO] No SDK doors found to build${RESET}"
+fi
+
 # Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
 check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
 
