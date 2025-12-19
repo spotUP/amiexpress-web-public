@@ -18,6 +18,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   // NOTE: Don't return early if no session - handlers check session themselves
   // The session may not exist when handlers are registered but will exist when called
 
+  // Debug: Log ALL events on this socket
+  socket.onAny((eventName, ...args) => {
+    if (eventName.startsWith('room:') || eventName.startsWith('chat:')) {
+      console.log('[CHAT DEBUG] Socket received event:', eventName, JSON.stringify(args));
+    }
+  });
+
   // ===== LEGACY CHAT HANDLERS (Sysop pager) =====
 
   // Handle special chat commands (legacy sysop chat)
