@@ -1142,11 +1142,23 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         users = await database.getUsers({});
       } else {
         console.log(`[API] Loaded ${users.length} users from disk files`);
+
+        // CRITICAL: Deduplicate users by username (keep most recent by calls)
+        // Disk files can have duplicate records from multiple logins/updates
+        const userMap = new Map<string, any>();
+        for (const user of users) {
+          const existing = userMap.get(user.username);
+          if (!existing || user.calls > existing.calls) {
+            userMap.set(user.username, user);
+          }
+        }
+        users = Array.from(userMap.values());
+        console.log(`[API] Deduplicated to ${users.length} unique users`);
       }
 
       // Remove password hashes from response
       const sanitizedUsers = users.map((u: any) => {
-        const { passwordHash, ...userWithoutPassword } = u;
+        const { passwordHash, passwordhash, ...userWithoutPassword } = u;
         return userWithoutPassword;
       });
       sendResponse(res, sanitizedUsers);
