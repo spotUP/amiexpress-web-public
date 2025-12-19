@@ -685,6 +685,177 @@ export class BBSApi {
     const result = await db.query(sql, params);
     return result.rows;
   }
+
+  // ========================================
+  // CHAT ROOM FUNCTIONS (for LiveChat door)
+  // ========================================
+
+  /**
+   * Join a chat room
+   * Calls the handler directly instead of socket emit
+   * Note: setGroupChatDependencies is called at server startup in index.ts
+   */
+  async joinRoom(roomName: string, password?: string): Promise<{ success: boolean; roomId?: string; roomName?: string; memberCount?: number; members?: any[]; error?: string }> {
+    try {
+      const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
+
+      // Create a response collector
+      let response: any = null;
+      const originalEmit = this.socket.emit.bind(this.socket);
+
+      // Intercept the room:joined event
+      this.socket.emit = ((event: string, ...args: any[]) => {
+        if (event === 'room:joined') {
+          response = args[0];
+        }
+        return originalEmit(event, ...args);
+      }) as any;
+
+      // Call handler directly
+      await handleRoomJoin(this.socket, this.session, { roomName, password });
+
+      // Restore original emit
+      this.socket.emit = originalEmit;
+
+      if (response) {
+        return {
+          success: true,
+          roomId: response.roomId,
+          roomName: response.roomName,
+          memberCount: response.memberCount,
+          members: response.members
+        };
+      }
+
+      return { success: false, error: 'Failed to join room' };
+    } catch (error) {
+      console.error('[BBSApi] Error joining room:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Leave the current chat room
+   */
+  async leaveRoom(): Promise<boolean> {
+    try {
+      const { handleRoomLeave } = require('../handlers/chat/group-chat.handler');
+      await handleRoomLeave(this.socket, this.session);
+      return true;
+    } catch (error) {
+      console.error('[BBSApi] Error leaving room:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send a message to the current chat room
+   */
+  async sendRoomMessage(message: string): Promise<boolean> {
+    try {
+      const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
+      await handleRoomMessage(this.socket, this.session, { message });
+      return true;
+    } catch (error) {
+      console.error('[BBSApi] Error sending room message:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create a new chat room
+   */
+  async createRoom(roomName: string, options?: { topic?: string; isPublic?: boolean; password?: string; maxUsers?: number }): Promise<{ success: boolean; roomId?: string; error?: string }> {
+    try {
+      const { handleRoomCreate } = require('../handlers/chat/group-chat.handler');
+
+      let response: any = null;
+      const originalEmit = this.socket.emit.bind(this.socket);
+
+      this.socket.emit = ((event: string, ...args: any[]) => {
+        if (event === 'room:created') {
+          response = args[0];
+        }
+        return originalEmit(event, ...args);
+      }) as any;
+
+      await handleRoomCreate(this.socket, this.session, {
+        roomName,
+        topic: options?.topic,
+        isPublic: options?.isPublic,
+        password: options?.password,
+        maxUsers: options?.maxUsers
+      });
+
+      this.socket.emit = originalEmit;
+
+      if (response) {
+        return { success: true, roomId: response.roomId };
+      }
+
+      return { success: false, error: 'Failed to create room' };
+    } catch (error) {
+      console.error('[BBSApi] Error creating room:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * List available chat rooms
+   */
+  async listRooms(showPrivate?: boolean): Promise<any[]> {
+    try {
+      const { db } = require('../database');
+      const rooms = await db.listChatRooms(!showPrivate);
+      return rooms || [];
+    } catch (error) {
+      console.error('[BBSApi] Error listing rooms:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get current room ID from session
+   */
+  getCurrentRoomId(): string | undefined {
+    return this.session.currentRoomId;
+  }
+
+  /**
+   * Get current room name from session
+   */
+  getCurrentRoomName(): string | undefined {
+    return this.session.currentRoomName;
+  }
+
+  /**
+   * Register handler for incoming chat messages
+   * Note: This listens for messages FROM OTHER USERS in the room
+   */
+  onRoomMessage(callback: (msg: { userId: string; username: string; content: string; timestamp: Date }) => void): void {
+    this.socket.on('chat:message', (data: any) => {
+      callback({
+        userId: data.userId,
+        username: data.username,
+        content: data.content,
+        timestamp: new Date(data.createdAt)
+      });
+    });
+  }
+
+  /**
+   * Register handler for user join events
+   */
+  onUserJoined(callback: (data: { userId: number; username: string }) => void): void {
+    this.socket.on('room:user-joined', callback);
+  }
+
+  /**
+   * Register handler for user leave events
+   */
+  onUserLeft(callback: (data: { userId: number; username: string }) => void): void {
+    this.socket.on('room:user-left', callback);
+  }
 }
 
 /**

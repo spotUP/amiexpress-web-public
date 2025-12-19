@@ -72,10 +72,8 @@ Users/*.db
 Users/*.dat
 
 # Node files (generated)
+# Note: Node1-3 are needed for new user questionnaire scripts
 Node0
-Node1
-Node2
-Node3
 Node4
 Node5
 

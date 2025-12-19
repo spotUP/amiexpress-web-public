@@ -42,6 +42,121 @@ function disableShortcuts(session: BBSSession) {
   }
 }
 
+/**
+ * Create a socket wrapper for door execution that intercepts room: and chat: events
+ * This allows TypeScript doors to use socket.emit('room:join', ...) etc. and have
+ * those events handled by the server-side handlers directly, rather than being
+ * sent to the client (which doesn't re-emit them back).
+ */
+function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any): any {
+  const originalEmit = socket.emit.bind(socket);
+
+  // Create a proxy that intercepts emit calls
+  const wrappedSocket = Object.create(socket);
+
+  wrappedSocket.emit = (event: string, ...args: any[]) => {
+    // Intercept room: and chat: events that need to be handled server-side
+    if (event === 'room:join') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting room:join:', data);
+
+      // Call the handler directly through BBSApi
+      bbsApi.joinRoom(data.roomName || data.room, data.password).then((result: any) => {
+        if (result.success) {
+          // Emit room:joined event back to the door (so it gets the callback)
+          originalEmit('room:joined', {
+            roomId: result.roomId,
+            roomName: result.roomName || data.roomName || data.room,
+            memberCount: result.memberCount,
+            members: result.members
+          });
+        } else {
+          console.log('[DoorSocket] room:join failed:', result.error);
+          originalEmit('room:error', { error: result.error });
+        }
+      }).catch((err: Error) => {
+        console.error('[DoorSocket] room:join error:', err);
+        originalEmit('room:error', { error: err.message || 'Failed to join room' });
+      });
+      return wrappedSocket;
+    }
+
+    if (event === 'room:leave') {
+      console.log('[DoorSocket] Intercepting room:leave');
+      bbsApi.leaveRoom().then(() => {
+        originalEmit('room:left', { roomName: session.currentRoomName });
+      }).catch((err: Error) => {
+        console.error('[DoorSocket] room:leave error:', err);
+        originalEmit('room:error', { error: err.message || 'Failed to leave room' });
+      });
+      return wrappedSocket;
+    }
+
+    if (event === 'room:message') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting room:message:', data);
+      bbsApi.sendRoomMessage(data.message).catch((err: Error) => {
+        console.error('[DoorSocket] room:message error:', err);
+        originalEmit('room:error', { error: err.message || 'Failed to send message' });
+      });
+      return wrappedSocket;
+    }
+
+    if (event === 'room:create') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting room:create:', data);
+      bbsApi.createRoom(data.roomName, {
+        topic: data.topic,
+        isPublic: data.isPublic,
+        password: data.password,
+        maxUsers: data.maxUsers
+      }).then((result: any) => {
+        if (result.success) {
+          originalEmit('room:created', {
+            roomId: result.roomId,
+            roomName: data.roomName,
+            topic: data.topic,
+            isPublic: data.isPublic
+          });
+        } else {
+          originalEmit('room:error', { error: result.error });
+        }
+      }).catch((err: Error) => {
+        console.error('[DoorSocket] room:create error:', err);
+        originalEmit('room:error', { error: err.message || 'Failed to create room' });
+      });
+      return wrappedSocket;
+    }
+
+    if (event === 'room:list') {
+      console.log('[DoorSocket] Intercepting room:list');
+      bbsApi.listRooms().then((rooms: any[]) => {
+        originalEmit('room:list', { rooms });
+      }).catch((err: Error) => {
+        console.error('[DoorSocket] room:list error:', err);
+        originalEmit('room:error', { error: err.message || 'Failed to list rooms' });
+      });
+      return wrappedSocket;
+    }
+
+    // Pass through all other events to the real socket
+    return originalEmit(event, ...args);
+  };
+
+  // Forward all other socket properties and methods
+  wrappedSocket.server = socket.server;
+  wrappedSocket.id = socket.id;
+  wrappedSocket.on = socket.on.bind(socket);
+  wrappedSocket.once = socket.once?.bind(socket);
+  wrappedSocket.removeListener = socket.removeListener?.bind(socket);
+  wrappedSocket.removeAllListeners = socket.removeAllListeners?.bind(socket);
+  wrappedSocket.to = socket.to?.bind(socket);
+  wrappedSocket.join = socket.join?.bind(socket);
+  wrappedSocket.leave = socket.leave?.bind(socket);
+
+  return wrappedSocket;
+}
+
 function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode: number; command?: string }) {
   switch (acp.code) {
     case -1: // ACP_CONTROLCOMMAND
@@ -1232,6 +1347,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     const { createBBSApi } = require('../doors/BBSApi');
     const bbsApi = createBBSApi(socket, session);
 
+    // Create a socket wrapper that intercepts room: and chat: events
+    // This allows doors to use socket.emit('room:join', ...) which will call handlers directly
+    const wrappedSocket = createDoorSocketWrapper(socket, session, bbsApi);
+
     // Execute door based on pattern
     if (isSDKDoor) {
       // SDK v2.0 pattern: Door instance with execute() method
@@ -1239,7 +1358,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       const doorInstance = doorModule.default;
 
       await doorInstance.execute({
-        socket,
+        socket: wrappedSocket,
         bbsSession: session,
         user: session.user!,
         bbs: bbsApi,
@@ -1252,7 +1371,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       console.log(`[executeTypeScriptDoor] Calling door's runDoor() function...`);
 
       const doorSessionObj = {
-        socket,
+        socket: wrappedSocket,
         user: session.user,
         bbsSession: session,  // Pass reference to BBS session for input routing
         bbs: bbsApi,          // BBS API with all functions

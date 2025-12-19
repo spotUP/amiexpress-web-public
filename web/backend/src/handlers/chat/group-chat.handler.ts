@@ -56,6 +56,13 @@ function sanitizeMessage(message: string): string {
 }
 
 /**
+ * Send room error to client (shows as dialog in LiveChat UI)
+ */
+function sendRoomError(socket: Socket, message: string): void {
+  socket.emit('room:error', { error: message });
+}
+
+/**
  * Broadcast a system message to all room members
  */
 function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string) {
@@ -117,31 +124,31 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
   maxUsers?: number;
 }) {
   try {
-    console.log('📦 Room create request:', session.userId, data.roomName);
+    console.log('📦 Room create request:', session.user?.id, data.roomName);
 
     // Validate user is logged in
-    if (!session.userId || !session.username) {
-      return ErrorHandler.sendError(socket, 'You must be logged in to create a room');
+    if (!session.user?.id || !session.user?.username) {
+      return sendRoomError(socket, 'You must be logged in to create a room');
     }
 
     // Validate room name
     if (!data.roomName || data.roomName.trim().length === 0) {
-      return ErrorHandler.invalidInput(socket, 'room name');
+      return sendRoomError(socket, 'Invalid room name');
     }
 
     const roomName = sanitizeRoomName(data.roomName);
     if (roomName.length < 3) {
-      return ErrorHandler.sendError(socket, 'Room name must be at least 3 characters');
+      return sendRoomError(socket, 'Room name must be at least 3 characters');
     }
 
     if (roomName.length > 50) {
-      return ErrorHandler.sendError(socket, 'Room name must be 50 characters or less');
+      return sendRoomError(socket, 'Room name must be 50 characters or less');
     }
 
     // Check if room name already exists
     const existing = await db.getChatRoomByName(roomName);
     if (existing) {
-      return ErrorHandler.sendError(socket, 'A room with that name already exists');
+      return sendRoomError(socket, 'A room with that name already exists');
     }
 
     // Create room
@@ -153,8 +160,8 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
       roomId,
       roomName,
       topic: data.topic || '',
-      createdBy: session.userId,
-      createdByUsername: session.username,
+      createdBy: session.user?.id,
+      createdByUsername: session.user?.username,
       isPublic,
       maxUsers,
       isPersistent: true,
@@ -178,7 +185,7 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
 
   } catch (error) {
     console.error('❌ Error creating room:', error);
-    ErrorHandler.sendError(socket, 'Failed to create room. Please try again.');
+    sendRoomError(socket, 'Failed to create room. Please try again.');
   }
 }
 
@@ -194,11 +201,11 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
   password?: string;
 }) {
   try {
-    console.log('🚪 Room join request:', session.userId, data.roomId || data.roomName);
+    console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roomName);
 
     // Validate user is logged in
-    if (!session.userId || !session.username) {
-      return ErrorHandler.sendError(socket, 'You must be logged in to join a room');
+    if (!session.user?.id || !session.user?.username) {
+      return sendRoomError(socket, 'You must be logged in to join a room');
     }
 
     // Find room by ID or name
@@ -208,39 +215,39 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     } else if (data.roomName) {
       room = await db.getChatRoomByName(data.roomName);
     } else {
-      return ErrorHandler.invalidInput(socket, 'room ID or room name');
+      return sendRoomError(socket, 'Invalid room ID or room name');
     }
 
     if (!room) {
-      return ErrorHandler.notFound(socket, 'room');
+      return sendRoomError(socket, 'Room not found');
     }
 
     // Check if user is already in a room
     if (session.currentRoomId) {
-      return ErrorHandler.sendError(socket, 'You must leave your current room first (use /LEAVE)');
+      return sendRoomError(socket, 'You must leave your current room first (use /LEAVE)');
     }
 
     // Check if room requires password
     if (room.password && room.password.length > 0) {
       if (!data.password || data.password !== room.password) {
-        return ErrorHandler.sendError(socket, 'Incorrect room password');
+        return sendRoomError(socket, 'Incorrect room password');
       }
     }
 
     // Check if room is full
     const memberCount = await db.getRoomMemberCount(room.room_id);
     if (memberCount >= room.max_users) {
-      return ErrorHandler.sendError(socket, 'Room is full (max ' + room.max_users + ' users)');
+      return sendRoomError(socket, 'Room is full (max ' + room.max_users + ' users)');
     }
 
     // Check if user is already in this room (shouldn't happen, but check anyway)
-    const alreadyIn = await db.isUserInRoom(room.room_id, session.userId);
+    const alreadyIn = await db.isUserInRoom(room.room_id, session.user?.id);
     if (alreadyIn) {
-      return ErrorHandler.sendError(socket, 'You are already in this room');
+      return sendRoomError(socket, 'You are already in this room');
     }
 
     // Join room in database
-    await db.joinChatRoom(room.room_id, session.userId, session.username, socket.id, false);
+    await db.joinChatRoom(room.room_id, session.user?.id, session.user?.username, socket.id, false);
 
     // Join Socket.io room
     socket.join('room:' + room.room_id);
@@ -252,7 +259,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     session.previousSubState = session.subState;
     session.subState = LoggedOnSubState.CHAT_ROOM;
 
-    console.log('✅ User joined room:', session.username, room.room_name);
+    console.log('✅ User joined room:', session.user?.username, room.room_name);
 
     // Send room info to user
     socket.emit('ansi-output', AnsiUtil.clearScreen());
@@ -290,7 +297,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     }
 
     // Broadcast join to other room members
-    broadcastRoomSystem(room.room_id, session.username + ' joined the room', socket.id);
+    broadcastRoomSystem(room.room_id, session.user?.username + ' joined the room', socket.id);
 
     // Emit room joined event
     socket.emit('room:joined', {
@@ -301,7 +308,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
 
   } catch (error) {
     console.error('❌ Error joining room:', error);
-    ErrorHandler.sendError(socket, 'Failed to join room. Please try again.');
+    sendRoomError(socket, 'Failed to join room. Please try again.');
   }
 }
 
@@ -312,19 +319,19 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
  */
 export async function handleRoomLeave(socket: Socket, session: BBSSession) {
   try {
-    console.log('🚪 Room leave request:', session.userId, session.currentRoomName);
+    console.log('🚪 Room leave request:', session.user?.id, session.currentRoomName);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
-      return ErrorHandler.sendError(socket, 'You are not in a room');
+      return sendRoomError(socket, 'You are not in a room');
     }
 
     const roomId = session.currentRoomId;
     const roomName = session.currentRoomName || 'the room';
-    const username = session.username || 'User';
+    const username = session.user?.username || 'User';
 
     // Leave room in database
-    await db.leaveChatRoom(roomId, session.userId);
+    await db.leaveChatRoom(roomId, session.user?.id);
 
     // Leave Socket.io room
     socket.leave('room:' + roomId);
@@ -356,7 +363,7 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
 
   } catch (error) {
     console.error('❌ Error leaving room:', error);
-    ErrorHandler.sendError(socket, 'Failed to leave room. Please try again.');
+    sendRoomError(socket, 'Failed to leave room. Please try again.');
   }
 }
 
@@ -370,7 +377,7 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
   try {
     // Validate user is in a room
     if (!session.currentRoomId) {
-      return ErrorHandler.sendError(socket, 'You are not in a room');
+      return sendRoomError(socket, 'You are not in a room');
     }
 
     // Validate message
@@ -381,32 +388,32 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
     const message = sanitizeMessage(data.message.trim());
 
     if (message.length > 500) {
-      return ErrorHandler.sendError(socket, 'Message too long (max 500 characters)');
+      return sendRoomError(socket, 'Message too long (max 500 characters)');
     }
 
     // Check if user is muted
-    const isMuted = await db.isUserMuted(session.currentRoomId, session.userId);
+    const isMuted = await db.isUserMuted(session.currentRoomId, session.user?.id);
     if (isMuted) {
-      return ErrorHandler.sendError(socket, 'You are muted in this room');
+      return sendRoomError(socket, 'You are muted in this room');
     }
 
     // Save message to database
     await db.saveChatRoomMessage({
       roomId: session.currentRoomId,
-      senderId: session.userId,
-      senderUsername: session.username,
+      senderId: session.user?.id,
+      senderUsername: session.user?.username,
       message,
       messageType: 'message'
     });
 
     // Broadcast message to all room members (pass senderId for structured events)
-    broadcastRoomMessage(session.currentRoomId!, session.username!, message, undefined, parseInt(session.userId || '0', 10));
+    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, undefined, parseInt(session.user?.id || '0', 10));
 
-    console.log('💬 Room message:', session.username, '→', session.currentRoomName, message.substring(0, 50));
+    console.log('💬 Room message:', session.user?.username, '→', session.currentRoomName, message.substring(0, 50));
 
   } catch (error) {
     console.error('❌ Error sending room message:', error);
-    ErrorHandler.sendError(socket, 'Failed to send message. Please try again.');
+    sendRoomError(socket, 'Failed to send message. Please try again.');
   }
 }
 
@@ -418,7 +425,7 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
  */
 export async function handleRoomList(socket: Socket, session: BBSSession, data?: { showPrivate?: boolean }) {
   try {
-    console.log('📋 Room list request:', session.userId);
+    console.log('📋 Room list request:', session.user?.id);
 
     const onlyPublic = !data?.showPrivate;
     const rooms = await db.listChatRooms(onlyPublic);
@@ -452,7 +459,7 @@ export async function handleRoomList(socket: Socket, session: BBSSession, data?:
 
   } catch (error) {
     console.error('❌ Error listing rooms:', error);
-    ErrorHandler.sendError(socket, 'Failed to list rooms. Please try again.');
+    sendRoomError(socket, 'Failed to list rooms. Please try again.');
   }
 }
 
@@ -464,20 +471,20 @@ export async function handleRoomList(socket: Socket, session: BBSSession, data?:
  */
 export async function handleRoomKick(socket: Socket, session: BBSSession, data: { targetUsername: string }) {
   try {
-    console.log('👢 Room kick request:', session.userId, data.targetUsername);
+    console.log('👢 Room kick request:', session.user?.id, data.targetUsername);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
-      return ErrorHandler.sendError(socket, 'You are not in a room');
+      return sendRoomError(socket, 'You are not in a room');
     }
 
     // Check if user is moderator or room creator
-    const isModerator = await db.isUserModerator(session.currentRoomId, session.userId);
+    const isModerator = await db.isUserModerator(session.currentRoomId, session.user?.id);
     const room = await db.getChatRoom(session.currentRoomId);
-    const isCreator = room && room.created_by === session.userId;
+    const isCreator = room && room.created_by === session.user?.id;
 
     if (!isModerator && !isCreator) {
-      return ErrorHandler.permissionDenied(socket, 'kick users');
+      return sendRoomError(socket, 'You do not have permission to kick users');
     }
 
     // Find target user
@@ -485,17 +492,17 @@ export async function handleRoomKick(socket: Socket, session: BBSSession, data: 
     const target = members.find((m: any) => m.username.toLowerCase() === data.targetUsername.toLowerCase());
 
     if (!target) {
-      return ErrorHandler.notFound(socket, 'user "' + data.targetUsername + '" in this room');
+      return sendRoomError(socket, 'User "' + data.targetUsername + '" not found in this room');
     }
 
     // Can't kick yourself
-    if (target.user_id === session.userId) {
-      return ErrorHandler.sendError(socket, 'You cannot kick yourself. Use /LEAVE instead.');
+    if (target.user_id === session.user?.id) {
+      return sendRoomError(socket, 'You cannot kick yourself. Use /LEAVE instead.');
     }
 
     // Can't kick room creator
     if (target.user_id === room.created_by) {
-      return ErrorHandler.sendError(socket, 'You cannot kick the room creator');
+      return sendRoomError(socket, 'You cannot kick the room creator');
     }
 
     // Remove from room
@@ -529,22 +536,22 @@ export async function handleRoomKick(socket: Socket, session: BBSSession, data: 
         targetSess.previousSubState = undefined;
 
         // Notify kicked user
-        targetSocket.emit('ansi-output', AnsiUtil.errorLine('You have been kicked from the room by ' + session.username));
+        targetSocket.emit('ansi-output', AnsiUtil.errorLine('You have been kicked from the room by ' + session.user?.username));
         targetSocket.emit('room:kicked', {
           roomName: session.currentRoomName,
-          kickedBy: session.username
+          kickedBy: session.user?.username
         });
       }
     }
 
     // Broadcast kick to room
-    broadcastRoomSystem(session.currentRoomId, target.username + ' was kicked by ' + session.username);
+    broadcastRoomSystem(session.currentRoomId, target.username + ' was kicked by ' + session.user?.username);
 
-    console.log('✅ User kicked:', target.username, 'by', session.username);
+    console.log('✅ User kicked:', target.username, 'by', session.user?.username);
 
   } catch (error) {
     console.error('❌ Error kicking user:', error);
-    ErrorHandler.sendError(socket, 'Failed to kick user. Please try again.');
+    sendRoomError(socket, 'Failed to kick user. Please try again.');
   }
 }
 
@@ -556,20 +563,20 @@ export async function handleRoomKick(socket: Socket, session: BBSSession, data: 
  */
 export async function handleRoomMute(socket: Socket, session: BBSSession, data: { targetUsername: string; mute: boolean }) {
   try {
-    console.log('🔇 Room mute request:', session.userId, data.targetUsername, data.mute);
+    console.log('🔇 Room mute request:', session.user?.id, data.targetUsername, data.mute);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
-      return ErrorHandler.sendError(socket, 'You are not in a room');
+      return sendRoomError(socket, 'You are not in a room');
     }
 
     // Check if user is moderator or room creator
-    const isModerator = await db.isUserModerator(session.currentRoomId, session.userId);
+    const isModerator = await db.isUserModerator(session.currentRoomId, session.user?.id);
     const room = await db.getChatRoom(session.currentRoomId);
-    const isCreator = room && room.created_by === session.userId;
+    const isCreator = room && room.created_by === session.user?.id;
 
     if (!isModerator && !isCreator) {
-      return ErrorHandler.permissionDenied(socket, 'mute users');
+      return sendRoomError(socket, 'You do not have permission to mute users');
     }
 
     // Find target user
@@ -577,17 +584,17 @@ export async function handleRoomMute(socket: Socket, session: BBSSession, data: 
     const target = members.find((m: any) => m.username.toLowerCase() === data.targetUsername.toLowerCase());
 
     if (!target) {
-      return ErrorHandler.notFound(socket, 'user "' + data.targetUsername + '" in this room');
+      return sendRoomError(socket, 'User "' + data.targetUsername + '" not found in this room');
     }
 
     // Can't mute yourself
-    if (target.user_id === session.userId) {
-      return ErrorHandler.sendError(socket, 'You cannot mute yourself');
+    if (target.user_id === session.user?.id) {
+      return sendRoomError(socket, 'You cannot mute yourself');
     }
 
     // Can't mute room creator
     if (target.user_id === room.created_by) {
-      return ErrorHandler.sendError(socket, 'You cannot mute the room creator');
+      return sendRoomError(socket, 'You cannot mute the room creator');
     }
 
     // Update mute status
@@ -596,7 +603,7 @@ export async function handleRoomMute(socket: Socket, session: BBSSession, data: 
     const action = data.mute ? 'muted' : 'unmuted';
 
     // Broadcast mute to room
-    broadcastRoomSystem(session.currentRoomId, target.username + ' was ' + action + ' by ' + session.username);
+    broadcastRoomSystem(session.currentRoomId, target.username + ' was ' + action + ' by ' + session.user?.username);
 
     // Notify target user
     const targetSession = Array.from(sessions.entries()).find(
@@ -609,17 +616,17 @@ export async function handleRoomMute(socket: Socket, session: BBSSession, data: 
 
       if (targetSocket) {
         const msg = data.mute
-          ? 'You have been muted by ' + session.username
-          : 'You have been unmuted by ' + session.username;
+          ? 'You have been muted by ' + session.user?.username
+          : 'You have been unmuted by ' + session.user?.username;
         targetSocket.emit('ansi-output', AnsiUtil.warningLine(msg));
       }
     }
 
-    console.log('✅ User ' + action + ':', target.username, 'by', session.username);
+    console.log('✅ User ' + action + ':', target.username, 'by', session.user?.username);
 
   } catch (error) {
     console.error('❌ Error muting user:', error);
-    ErrorHandler.sendError(socket, 'Failed to mute user. Please try again.');
+    sendRoomError(socket, 'Failed to mute user. Please try again.');
   }
 }
 
@@ -633,13 +640,13 @@ export async function handleRoomDisconnect(socket: Socket, session: BBSSession) 
       return; // Not in a room, nothing to do
     }
 
-    console.log('🚪 Room disconnect cleanup:', session.username, session.currentRoomName);
+    console.log('🚪 Room disconnect cleanup:', session.user?.username, session.currentRoomName);
 
     const roomId = session.currentRoomId;
-    const username = session.username || 'User';
+    const username = session.user?.username || 'User';
 
     // Leave room in database
-    await db.leaveChatRoom(roomId, session.userId);
+    await db.leaveChatRoom(roomId, session.user?.id);
 
     // Broadcast disconnect to room
     broadcastRoomSystem(roomId, username + ' disconnected');

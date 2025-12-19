@@ -60,6 +60,13 @@ export function setRoomCommandsDependencies(deps: {
 }
 
 /**
+ * Send room error to client (shows as dialog in LiveChat UI)
+ */
+function sendRoomError(socket: Socket, message: string): void {
+  socket.emit('room:error', { error: message });
+}
+
+/**
  * Main ROOM command handler
  *
  * Routes to appropriate subcommand or shows menu
@@ -118,7 +125,7 @@ export async function handleRoomCommand(socket: Socket, session: BBSSession, par
 
   } catch (error) {
     console.error('Error in ROOM command:', error);
-    ErrorHandler.sendError(socket, 'Error processing ROOM command. Please try again.');
+    sendRoomError(socket, 'Error processing ROOM command. Please try again.');
   }
 }
 
@@ -346,7 +353,7 @@ async function whoInRoom(socket: Socket, session: BBSSession) {
 
   } catch (error) {
     console.error('Error in WHO command:', error);
-    ErrorHandler.sendError(socket, 'Error listing room members');
+    sendRoomError(socket, 'Error listing room members');
   }
 }
 
@@ -425,12 +432,12 @@ async function setRoomTopic(socket: Socket, session: BBSSession, topic: string) 
     }
 
     // Check if user is moderator or room creator
-    const isModerator = await db.isUserModerator(session.currentRoomId, session.userId);
+    const isModerator = await db.isUserModerator(session.currentRoomId, session.user?.id);
     const room = await db.getChatRoom(session.currentRoomId);
-    const isCreator = room && room.created_by === session.userId;
+    const isCreator = room && room.created_by === session.user?.id;
 
     if (!isModerator && !isCreator) {
-      return ErrorHandler.permissionDenied(socket, 'set room topic');
+      return sendRoomError(socket, 'You do not have permission to set room topic');
     }
 
     // Update topic in database
@@ -438,13 +445,13 @@ async function setRoomTopic(socket: Socket, session: BBSSession, topic: string) 
 
     // Broadcast topic change to room
     const socketRoom = 'room:' + session.currentRoomId;
-    const msg = AnsiUtil.line(AnsiUtil.warning('*** Topic changed by ' + session.username + ': ' + topic.trim() + ' ***'));
+    const msg = AnsiUtil.line(AnsiUtil.warning('*** Topic changed by ' + session.user?.username + ': ' + topic.trim() + ' ***'));
     io.to(socketRoom).emit('ansi-output', msg);
 
     console.log('✅ Room topic updated:', session.currentRoomName, topic.trim());
 
   } catch (error) {
     console.error('Error setting room topic:', error);
-    ErrorHandler.sendError(socket, 'Error setting room topic');
+    sendRoomError(socket, 'Error setting room topic');
   }
 }

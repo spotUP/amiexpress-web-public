@@ -349,10 +349,24 @@ export async function createApp(session: DoorSession) {
     }));
 
     // Build simple list items (no # prefix, no tree structure)
+    // Active channel = white, unread = green, inactive = grey
     channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name }));
     const items = channelsToShow.map(ch => {
       const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
-      return ch.name + unread;
+      const isActive = ch.name === state.currentChannel;
+      const hasUnread = ch.unreadCount && ch.unreadCount > 0;
+
+      let color: string;
+      if (isActive) {
+        color = '{white-fg}';
+      } else if (hasUnread) {
+        color = '{green-fg}';
+      } else {
+        color = '{gray-fg}';
+      }
+
+      const endColor = '{/}';
+      return color + ch.name + unread + endColor;
     });
 
     channelList.setItems(items);
@@ -366,15 +380,39 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  // Handle channel selection
+  // Track last selected channel to detect changes
+  let lastSelectedChannelIndex = -1;
+
+  // Auto-join channel when selection changes (navigation)
+  function joinSelectedChannel() {
+    const index = (channelList as any).selected || 0;
+    if (index !== lastSelectedChannelIndex && index >= 0 && index < channelItems.length) {
+      lastSelectedChannelIndex = index;
+      const channel = channelItems[index];
+      if (channel && channel.name !== state.currentChannel) {
+        if (state.currentChannel) socket.emit('room:leave');
+        socket.emit('room:join', { roomName: channel.name });
+      }
+    }
+  }
+
+  // Handle channel selection with Enter (also focus input after)
   channelList.on('select', (_item: any, index: number) => {
     const channel = channelItems[index];
     if (channel) {
-      if (state.currentChannel) socket.emit('room:leave');
-      socket.emit('room:join', { roomName: channel.name });
-      // Return focus to input after selecting
+      if (state.currentChannel !== channel.name) {
+        if (state.currentChannel) socket.emit('room:leave');
+        socket.emit('room:join', { roomName: channel.name });
+      }
+      // Return focus to input after pressing Enter
       inputBox.focus();
     }
+  });
+
+  // Auto-join on navigation keys (up/down/home/end/pageup/pagedown)
+  channelList.key(['up', 'down', 'home', 'end', 'pageup', 'pagedown'], () => {
+    // Defer to next tick so the selection has updated
+    setTimeout(joinSelectedChannel, 0);
   });
 
   // Escape from channel list returns to input
@@ -383,9 +421,11 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Direct click handler for channelList - ensures focus on click
+  // Direct click handler for channelList - ensures focus on click and joins
   channelList.on('click', () => {
     channelList.focus();
+    // Defer join to next tick so selection is updated
+    setTimeout(joinSelectedChannel, 0);
     screen.render();
   });
 
@@ -1802,13 +1842,15 @@ Features 25+ widget types including:
     screen.render();
   });
 
-  // Channel list scroll - 2 lines per wheel tick
+  // Channel list scroll - 2 lines per wheel tick, auto-join on scroll
   channelList.on('wheelup', () => {
     channelList.up(2);
+    setTimeout(joinSelectedChannel, 0);
     screen.render();
   });
   channelList.on('wheeldown', () => {
     channelList.down(2);
+    setTimeout(joinSelectedChannel, 0);
     screen.render();
   });
 
@@ -2117,6 +2159,16 @@ Features 25+ widget types including:
     );
     state.currentChannel = '';
     updateStatusBar();
+    audio.onError();
+  });
+
+  // Room error (show in dialog instead of inline)
+  socket.on('room:error', (data: any) => {
+    const errorMessage = typeof data === 'string' ? data : (data.error || data.message || 'An error occurred');
+    messageDialog.display(
+      `{red-fg}Error{/red-fg}\n\n${errorMessage}`,
+      () => { inputBox.focus(); screen.render(); }
+    );
     audio.onError();
   });
 
