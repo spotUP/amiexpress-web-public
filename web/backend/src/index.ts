@@ -1122,14 +1122,19 @@ io.on('connection', async (socket) => {
     try {
       console.log('[SETUP] Creating default sysop user...');
       const { execSync } = await import('child_process');
+      const path = await import('path');
+      const backendDir = path.join(__dirname, '..');
+      console.log(`[SETUP] Running from: ${backendDir}`);
       const result = execSync('npx tsx scripts/create-default-sysop.ts', {
-        cwd: __dirname,
+        cwd: backendDir,
         encoding: 'utf-8',
-        stdio: 'pipe'
+        env: { ...process.env, DATABASE_DIR: process.env.DATABASE_DIR || '/app/data/db' }
       });
       console.log(result);
     } catch (err: any) {
       console.warn('[SETUP] Failed to create sysop user:', err.message || err);
+      if (err.stdout) console.warn('[SETUP] stdout:', err.stdout);
+      if (err.stderr) console.warn('[SETUP] stderr:', err.stderr);
       console.warn('[SETUP] Continuing with server startup...');
     }
 
