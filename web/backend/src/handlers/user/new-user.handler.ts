@@ -13,7 +13,7 @@
  */
 
 import { Socket } from 'socket.io';
-import * as fs from 'fs';
+import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { displayScreen, doPause } from '../screen.handler';
@@ -933,13 +933,15 @@ function findQuestionnaireScript(session: any): string | null {
 
   for (const baud of candidates) {
     const candidatePath = path.join(nodeDir, `script${baud}`);
-    if (fs.existsSync(candidatePath)) {
-      return candidatePath;
+    // Use amigafs for case-insensitive file access
+    if (amigafs.existsSync(candidatePath)) {
+      // Resolve to actual path with correct casing
+      return amigafs.resolvePath(candidatePath) || candidatePath;
     }
   }
 
   try {
-    const entries = fs.readdirSync(nodeDir);
+    const entries = amigafs.readdirSync(nodeDir);
     const match = entries.find(name => name.toLowerCase().startsWith('script'));
     if (match) {
       return path.join(nodeDir, match);
@@ -953,7 +955,7 @@ function findQuestionnaireScript(session: any): string | null {
 
 function loadScriptSteps(scriptPath: string): ScriptStep[] {
   try {
-    const raw = fs.readFileSync(scriptPath, 'utf8');
+    const raw = amigafs.readFileSync(scriptPath, 'utf8') as string;
     const lines = raw.split(/\r?\n/);
     const steps: ScriptStep[] = [];
 
@@ -983,8 +985,8 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
   if (!questionnaire) return;
 
   const nodeDir = getNodeDirectory(session);
-  if (!fs.existsSync(nodeDir)) {
-    fs.mkdirSync(nodeDir, { recursive: true });
+  if (!amigafs.existsSync(nodeDir)) {
+    amigafs.mkdirSync(nodeDir, { recursive: true });
   }
 
   const now = new Date();
@@ -1004,13 +1006,13 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
   const content = header.join('\r\n');
 
   try {
-    fs.writeFileSync(questionnaire.tempAnswerPath, `${content}\r\n`, 'utf8');
+    amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\r\n`, 'utf8');
   } catch (error) {
     console.warn('[NEW USER] Failed to write TempAns file:', error);
   }
 
   try {
-    fs.appendFileSync(questionnaire.finalAnswerPath, `${content}\r\n`, 'utf8');
+    amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\r\n`, 'utf8');
   } catch (error) {
     console.warn('[NEW USER] Failed to append Answers file:', error);
   }
@@ -1020,8 +1022,8 @@ function getNodeDirectory(session: any): string {
   const baseDir = config.getConfig().dataDir;
   const nodeIndex = Math.max(0, (session.nodeId || 1) - 1);
   const preferred = path.join(baseDir, `Node${nodeIndex}`);
-  if (fs.existsSync(preferred)) {
-    return preferred;
+  if (amigafs.existsSync(preferred)) {
+    return amigafs.resolvePath(preferred) || preferred;
   }
   return path.join(baseDir, 'Node0');
 }

@@ -149,6 +149,9 @@ COPY Conf10 /app/default-data/Conf10
 COPY Conf11 /app/default-data/Conf11
 COPY Conf12 /app/default-data/Conf12
 COPY Conf13 /app/default-data/Conf13
+COPY Node1 /app/default-data/Node1
+COPY Node2 /app/default-data/Node2
+COPY Node3 /app/default-data/Node3
 
 # Copy Doors directly to /app/Doors (code expects them at project root, not data dir)
 # Note: amigafs module handles case-insensitive path resolution for AmigaOS compatibility
