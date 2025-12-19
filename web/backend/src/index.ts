@@ -1118,6 +1118,21 @@ io.on('connection', async (socket) => {
       console.warn('[CONFIG] Unable to load system config for ports, using defaults/env:', err);
     }
 
+    // Create/reset default sysop user
+    try {
+      console.log('[SETUP] Creating default sysop user...');
+      const { execSync } = await import('child_process');
+      const result = execSync('npx tsx scripts/create-default-sysop.ts', {
+        cwd: __dirname,
+        encoding: 'utf-8',
+        stdio: 'pipe'
+      });
+      console.log(result);
+    } catch (err: any) {
+      console.warn('[SETUP] Failed to create sysop user:', err.message || err);
+      console.warn('[SETUP] Continuing with server startup...');
+    }
+
     // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
       console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
