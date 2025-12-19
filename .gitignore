@@ -39,11 +39,12 @@ pids
 *.seed
 *.pid.lock
 
-# BBS runtime-generated files
-*.db
-user.data
-user.keys
-user.misc
+# BBS runtime-generated files - KEEP AS TEMPLATE DATA
+# (Commented out to include all BBS data files in git for deployment)
+# *.db
+# user.data
+# user.keys
+# user.misc
 
 # Coverage directory used by tools like istanbul
 coverage/
@@ -125,11 +126,14 @@ Docs/NDK3.2R4/ReleaseNotes/
 *.sln
 *.sw?
 
-# Database files
-*.db
-*.DB
-*.sqlite
-*.sqlite3
+# Database files - ALLOW BBS database files for template data
+# (Only exclude web/backend databases, not BBS data)
+web/backend/data/*.db
+web/backend/data/*.sqlite
+web/backend/data/*.sqlite3
+data/*.db
+data/*.sqlite
+data/*.sqlite3
 
 # OS generated files
 Thumbs.db
@@ -167,21 +171,29 @@ backend/data/bbs/BBS/Node*/Screens/*
 !backend/data/bbs/BBS/Node*/Screens/*.TXT
 .vercel
 
-# BBS data directories
+# BBS data directories - external examples only
 reference-boardBBS/
 Example_BBS/
 
-# BBS runtime data files (root level)
-Node*/
-node*.user
-node*.userkeys
-user.data
-user.keys
-user.misc
-DOOR.SYS
-DORINFO*.DEF
-Conf*/Files/*.dir
-CallersLog
+# BBS runtime data files - INCLUDE AS TEMPLATE DATA
+# (Commented out to include Node directories and BBS files)
+# Node*/
+# node*.user
+# node*.userkeys
+# user.data
+# user.keys
+# user.misc
+# DOOR.SYS
+# DORINFO*.DEF
+# Conf*/Files/*.dir
+# CallersLog
+
+# Large backup files (>50MB, excluded to avoid GitHub limit)
+Node*/CLogBackup
+Node*/DLogBackup
+Node*/Answers
+
+# Temporary door output files (still exclude)
 **/who/node*.txt
 doors/who/node*.txt
 Doors/who/node*.txt
@@ -241,5 +253,6 @@ vbcc.tar.gz
 a.out
 -o
 
-# Runtime bulletin updates
-Bulletins/bull*.txt
+# Runtime bulletin updates - INCLUDE AS TEMPLATE DATA
+# (Commented out to include bulletins in git)
+# Bulletins/bull*.txt
