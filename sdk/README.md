@@ -186,7 +186,7 @@ door.start();
 sdk/
   core/           - Door API, types
   client/         - ClientDoor, browser runtime
-  engines/        - Audio, Graphics, Input, Physics, AI
+  engines/        - Audio, Cards, Graphics, Input, Physics, AI, Poker
   components/     - Menu, HUD, Save, Inventory, Quest
   tools/          - CLI (create-door, pack, validate)
   examples/       - Working example doors
@@ -197,11 +197,13 @@ sdk/
 ## Available Engines
 
 - **AudioEngine** - Web Audio sounds and music (Tone.js)
+- **CardEngine** - ASCII/ANSI playing cards, hands, and UNO (defaults to ASCII + ANSI)
 - **GraphicsEngine** - Sprites, particles, parallax scrolling
 - **InputEngine** - Key binding and input mapping
 - **PhysicsEngine** - Collision detection, movement
 - **AIEngine** - Pathfinding, behaviors
 - **NetworkEngine** - Multiplayer support
+- **PokerEngine** - Texas Hold'em game state engine (pokertools)
 
 ## Available Components
 

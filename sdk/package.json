@@ -88,6 +88,9 @@
   "dependencies": {
     "socket.io": "^4.7.0",
     "@types/blessed": "^0.1.25",
+    "@pokertools/engine": "1.0.1",
+    "@pokertools/evaluator": "1.0.1",
+    "@pokertools/types": "1.0.1",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "blessed-contrib": "^4.11.0",
