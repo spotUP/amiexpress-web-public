@@ -316,12 +316,23 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     // Broadcast join to other room members
     broadcastRoomSystem(room.room_id, session.user?.username + ' joined the room', socket.id);
 
-    // Emit room joined event
-    socket.emit('room:joined', {
+    // CRITICAL: Broadcast room:user-joined event to all room members for SDK doors
+    const socketRoom = 'room:' + room.room_id;
+    io.to(socketRoom).emit('room:user-joined', {
+      userId: session.user?.id,
+      username: session.user?.username
+    });
+    console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', socketRoom);
+
+    // Emit room joined event to this user (include members list for LiveChat)
+    const roomJoinedData = {
       roomId: room.room_id,
       roomName: room.room_name,
-      memberCount: members.length
-    });
+      memberCount: members.length,
+      members: members  // CRITICAL: LiveChat needs this to populate onlineUsers
+    };
+    console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
+    socket.emit('room:joined', roomJoinedData);
 
   } catch (error) {
     console.error('❌ Error joining room:', error);
@@ -355,6 +366,14 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
 
     // Broadcast leave to other room members (before clearing session)
     broadcastRoomSystem(roomId, username + ' left the room');
+
+    // CRITICAL: Broadcast room:user-left event to all room members for SDK doors
+    const socketRoom = 'room:' + roomId;
+    io.to(socketRoom).emit('room:user-left', {
+      userId: session.user?.id,
+      username: username
+    });
+    console.log('📢 Broadcast room:user-left:', username, 'to room:', socketRoom);
 
     // Restore previous state
     if (session.previousState && session.previousSubState) {
@@ -447,6 +466,11 @@ export async function handleRoomList(socket: Socket, session: BBSSession, data?:
     const onlyPublic = !data?.showPrivate;
     const rooms = await db.listChatRooms(onlyPublic);
 
+    // CRITICAL: Emit structured room:list event for SDK doors like LiveChat
+    socket.emit('room:list', { rooms });
+    console.log('📋 Sent room:list event with', rooms.length, 'rooms');
+
+    // Also send ANSI output for terminal display
     socket.emit('ansi-output', AnsiUtil.headerBox('Available Chat Rooms'));
     socket.emit('ansi-output', AnsiUtil.line(''));
 

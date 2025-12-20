@@ -427,17 +427,20 @@ const io = new Server(server, {
     origin: config.get('corsOrigins'),
     methods: ["GET", "POST"]
   },
-  // Optimize for multiple connections on Render free tier
-  pingTimeout: 60000, // Wait 60s for pong response before considering connection dead
+  // ROBUST CONNECTION SETTINGS - Tolerate temporary network issues
+  pingTimeout: 120000, // Wait 2 minutes for pong before considering connection dead (increased from 60s)
   pingInterval: 25000, // Send ping every 25s to keep connection alive
-  maxHttpBufferSize: 1e6, // 1MB max message size (reduced from 1MB default)
-  // Development: Disable connection state recovery to prevent stale sessions
-  connectionStateRecovery: process.env.NODE_ENV === 'production' ? {} : undefined,
+  maxHttpBufferSize: 1e6, // 1MB max message size
+  // Connection state recovery - helps maintain sessions across brief disconnects
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes - keep session state during brief disconnects
+    skipMiddlewares: true, // Skip auth middleware on recovery (session already authenticated)
+  },
   transports: ['websocket', 'polling'], // Prefer websocket, fallback to polling
   allowEIO3: true, // Support older Socket.io clients
   perMessageDeflate: false, // Disable compression to reduce CPU usage
   httpCompression: false, // Disable HTTP compression to reduce CPU usage
-  connectTimeout: 45000, // 45s connection timeout
+  connectTimeout: 60000, // 60s connection timeout (increased from 45s)
 });
 
 // Socket.IO authentication middleware for operator chat

@@ -155,6 +155,35 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   // This function only registers event handlers - it should NOT create or initialize sessions
   // The duplicate session creation here was causing subState to be undefined, breaking input handling
 
+  // Get active users (for Who's Online displays like telnet-front)
+  socket.on('get-active-users', () => {
+    const activeUsers: any[] = [];
+
+    sessions.forEach((session, socketId) => {
+      if (session.user && session.nodeId !== undefined) {
+        activeUsers.push({
+          nodeNumber: session.nodeId,
+          username: session.user.username || 'Unknown',
+          location: session.user.location || '',
+          ipAddress: session.user.ip || 'PRIVATE',
+          status: 'active'
+        });
+      }
+    });
+
+    console.log(`[get-active-users] Returning ${activeUsers.length} active users`);
+    socket.emit('active-users', { users: activeUsers });
+  });
+
+  // Monitor connection health
+  socket.on('error', (error: Error) => {
+    console.error(`[SOCKET ERROR] Socket ${socket.id} error:`, error.message);
+  });
+
+  socket.on('connect_error', (error: Error) => {
+    console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.message);
+  });
+
   // Register all event handlers
   registerCommandHandler(socket);
   registerDisconnectHandler(socket);
@@ -652,8 +681,25 @@ function registerCommandHandler(socket: Socket) {
  * Register disconnect handler
  */
 function registerDisconnectHandler(socket: Socket) {
-  socket.on('disconnect', async () => {
-    console.log('Client disconnected');
+  socket.on('disconnect', async (reason) => {
+    console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${socket.id}`);
+
+    // GRACE PERIOD: Wait 3 seconds for potential reconnection before cleanup
+    // This prevents kicking users out during brief network hiccups
+    const reconnectGracePeriod = 3000; // 3 seconds
+    const sessionBeforeDelay = getSession(socket.id);
+
+    if (sessionBeforeDelay) {
+      console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
+      await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
+
+      // Check if socket reconnected during grace period
+      const sessionAfterDelay = getSession(socket.id);
+      if (sessionAfterDelay && sessionAfterDelay.socketId) {
+        console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup`);
+        return; // User reconnected, skip cleanup
+      }
+    }
 
     // End session log tracking
     sessionLogManager.endSession(socket.id);

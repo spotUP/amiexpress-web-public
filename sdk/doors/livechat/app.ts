@@ -1,5 +1,5 @@
 /**
- * LiveChat v3.0 - Desktop-Level Multi-User Chat
+ * LiveChat v3.2 - Desktop-Level Multi-User Chat
  *
  * Full-featured chat with advanced neo-blessed UI:
  * - Menu bar with keyboard shortcuts
@@ -99,7 +99,7 @@ export async function createApp(session: DoorSession) {
   const screen = blessed.screen({
     smartCSR: true,
     fullUnicode: true,
-    title: 'LiveChat v3.0',
+    title: 'LiveChat v3.2',
     output: (data: string) => bbs.write(data),
   });
 
@@ -719,7 +719,7 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: '100%',
     height: '100%',
-    label: ' LiveChat v3.0 Help ',
+    label: ' LiveChat v3.2 Help ',
     border: { type: 'line' },
     shadow: false,
     hidden: true,
@@ -902,7 +902,7 @@ export async function createApp(session: DoorSession) {
 
 {bold}{green-fg}--- ABOUT ---{/green-fg}{/bold}
 
-LiveChat v3.0 is built with neo-blessed,
+LiveChat v3.2 is built with neo-blessed,
 a full-featured terminal UI library.
 
 Features 25+ widget types including:
@@ -2636,7 +2636,7 @@ Features 25+ widget types including:
 
     screen.destroy();
     bbs.write('\x1b[2J\x1b[H');
-    bbs.writeLine('\x1b[33mThanks for using LiveChat v3.0! Goodbye.\x1b[0m');
+    bbs.writeLine('\x1b[33mThanks for using LiveChat v3.2! Goodbye.\x1b[0m');
     state.running = false;
   }
 
@@ -2659,7 +2659,7 @@ Features 25+ widget types including:
       inputBox.focus();
 
       // Welcome messages
-      addSystemMessage('Welcome to LiveChat v3.0!');
+      addSystemMessage('Welcome to LiveChat v3.2!');
       addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
       addChatMessage('  {white-fg}F1{/}=Help  {white-fg}F2{/}=Sidebar  {white-fg}F3{/}=Switch Tab', false);
       addChatMessage('  {white-fg}F5{/}=Art Channel  {white-fg}F6{/}=Files  {white-fg}Tab{/}=Focus Cycle', false);

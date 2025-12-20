@@ -71,16 +71,70 @@ function centre(text: string, width: number): string {
 }
 
 /**
- * Get mock node information
- * In production, this would read from database or session manager
+ * Get active nodes from BBS session manager
  */
-function getNodes(currentNodeNumber: number): NodeInfo[] {
+async function getNodes(socket: SocketIOSocket, currentNodeNumber: number, currentUserIp: string): Promise<NodeInfo[]> {
+  return new Promise((resolve) => {
+    const maxNodes = parseInt(process.env.MAX_NODES || '8');
+
+    // Request active users from backend
+    socket.emit('get-active-users');
+
+    // Wait for response
+    const timeout = setTimeout(() => {
+      console.log('[telnet-front] Timeout waiting for active-users, using defaults');
+      resolve(getDefaultNodes(currentNodeNumber, maxNodes));
+    }, 1000);
+
+    socket.once('active-users', (data: { users: NodeInfo[] }) => {
+      clearTimeout(timeout);
+      console.log(`[telnet-front] Received ${data.users.length} active users from backend`);
+
+      const nodes: NodeInfo[] = [];
+      const activeUsers = data.users || [];
+
+      // Fill all node slots
+      for (let i = 0; i < maxNodes; i++) {
+        // Find an active user for this node number
+        const activeUser = activeUsers.find(u => u.nodeNumber === i);
+
+        if (i === currentNodeNumber) {
+          // Current connecting node
+          nodes.push({
+            nodeNumber: i,
+            username: 'Connecting',
+            location: '',
+            ipAddress: currentUserIp,
+            status: 'connecting'
+          });
+        } else if (activeUser) {
+          // Real active user
+          nodes.push(activeUser);
+        } else {
+          // Inactive/awaiting node
+          nodes.push({
+            nodeNumber: i,
+            username: 'Awaiting Call',
+            location: '',
+            ipAddress: '',
+            status: 'awaiting'
+          });
+        }
+      }
+
+      resolve(nodes);
+    });
+  });
+}
+
+/**
+ * Fallback for when active-users request times out
+ */
+function getDefaultNodes(currentNodeNumber: number, maxNodes: number): NodeInfo[] {
   const nodes: NodeInfo[] = [];
-  const maxNodes = parseInt(process.env.MAX_NODES || '8');
 
   for (let i = 0; i < maxNodes; i++) {
     if (i === currentNodeNumber) {
-      // Current connecting node
       nodes.push({
         nodeNumber: i,
         username: 'Connecting',
@@ -88,17 +142,7 @@ function getNodes(currentNodeNumber: number): NodeInfo[] {
         ipAddress: '',
         status: 'connecting'
       });
-    } else if (i === 0 || i === 1) {
-      // Mock some active users
-      nodes.push({
-        nodeNumber: i,
-        username: i === 0 ? 'SYSOP' : 'Guest User',
-        location: i === 0 ? 'LOCAL CONSOLE' : 'NEW YORK',
-        ipAddress: 'PRIVATE',
-        status: 'active'
-      });
     } else {
-      // Inactive nodes
       nodes.push({
         nodeNumber: i,
         username: 'Awaiting Call',
@@ -115,7 +159,7 @@ function getNodes(currentNodeNumber: number): NodeInfo[] {
 /**
  * Display telnet frontend
  */
-function displayFrontend(socket: SocketIOSocket, user: any): void {
+async function displayFrontend(socket: SocketIOSocket, user: any): Promise<void> {
   // Get connection info from user object or socket handshake
   let hostname = user?.hostname;
   let userIp = user?.ip;
@@ -154,8 +198,8 @@ function displayFrontend(socket: SocketIOSocket, user: any): void {
   socket.emit('ansi-output', '     \x1b[35m|\x1b[34mNode\x1b[35m| \x1b[34mHandle/Username \x1b[35m| \x1b[34mLocation/Group        \x1b[35m| \x1b[34mUser Ip Address   \x1b[35m|\r\n');
   socket.emit('ansi-output', '     \x1b[35m|----+-----------------+-----------------------+-------------------|\r\n');
 
-  // Get all nodes
-  const nodes = getNodes(nodeNumber);
+  // Get all nodes (now with real user data from backend)
+  const nodes = await getNodes(socket, nodeNumber, userIp);
   const activeCount = nodes.filter(n => n.status === 'active' || n.status === 'connecting').length;
   let displayedCount = 0;
 
@@ -230,7 +274,7 @@ export async function runDoor(doorSession: any): Promise<void> {
   console.log('[TELNET-FRONT] Starting display');
 
   // Display the frontend
-  displayFrontend(socket, user);
+  await displayFrontend(socket, user);
 
   console.log('[TELNET-FRONT] Display complete');
 
