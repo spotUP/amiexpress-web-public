@@ -493,6 +493,9 @@ const tokenizeAnsi = (line: string): { tokens: string[]; width: number } => {
     }
     const code = match[0];
     if (code === "\x1b[0m") {
+      if (width > 0) {
+        tokens[width - 1] = `${tokens[width - 1]}${code}`;
+      }
       active = "";
     } else {
       active += code;

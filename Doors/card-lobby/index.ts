@@ -84,6 +84,102 @@ const PokerAction = ActionType ?? {
   NEXT_BLIND_LEVEL: 'NEXT_BLIND_LEVEL',
 } as const;
 
+const ANSI_TAGS: Record<string, string> = {
+  '0': '{/}',
+  '30': '{black-fg}',
+  '31': '{red-fg}',
+  '32': '{green-fg}',
+  '33': '{yellow-fg}',
+  '34': '{blue-fg}',
+  '35': '{magenta-fg}',
+  '36': '{cyan-fg}',
+  '37': '{white-fg}',
+  '40': '{black-bg}',
+  '41': '{red-bg}',
+  '42': '{green-bg}',
+  '43': '{yellow-bg}',
+  '44': '{blue-bg}',
+  '45': '{magenta-bg}',
+  '46': '{cyan-bg}',
+  '47': '{white-bg}',
+};
+
+const ansiToBlessedTags = (value: string): string =>
+  value.replace(/\x1b\[([0-9;]+)m/g, (_match, codes) => {
+    const parts = String(codes).split(';');
+    return parts.map((code) => ANSI_TAGS[code] ?? '').join('');
+  });
+
+const stripBlessedTags = (value: string): string => value.replace(/\{[^}]*\}/g, '');
+const stripAnsiCodes = (value: string): string => value.replace(/\x1b\[[0-9;]*m/g, '');
+const visibleWidth = (value: string): number => stripAnsiCodes(stripBlessedTags(value)).length;
+const sliceVisible = (value: string, width: number): string => {
+  if (width <= 0) return '';
+  let visible = 0;
+  let i = 0;
+  let out = '';
+
+  while (i < value.length && visible < width) {
+    const ch = value[i];
+    if (ch === '\x1b' && value[i + 1] === '[') {
+      let end = i + 2;
+      while (end < value.length && !/[mK]/.test(value[end])) {
+        end += 1;
+      }
+      if (end < value.length) {
+        out += value.slice(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+    }
+    if (ch === '{') {
+      const close = value.indexOf('}', i);
+      if (close !== -1) {
+        out += value.slice(i, close + 1);
+        i = close + 1;
+        continue;
+      }
+    }
+    out += ch;
+    i += 1;
+    visible += 1;
+  }
+
+  return out;
+};
+const appendReset = (value: string): string => {
+  let out = value;
+  if (/\{[^}]*\}/.test(value) && !/\{\/\}$/.test(value)) {
+    out += '{/}';
+  }
+  if (/\x1b\[[0-9;]*m/.test(value) && !/\x1b\[0m$/.test(value)) {
+    out += '\x1b[0m';
+  }
+  return out;
+};
+const padColumn = (value: string, width: number): string => {
+  const length = visibleWidth(value);
+  if (length >= width) {
+    return appendReset(sliceVisible(value, width));
+  }
+  return `${appendReset(value)}${' '.repeat(width - length)}`;
+};
+
+const mergeColumns = (left: string[], right: string[], leftWidth: number, rightWidth: number, gap: number): string[] => {
+  const rows = Math.max(left.length, right.length);
+  const spacer = ' '.repeat(gap);
+  const merged: string[] = [];
+  for (let i = 0; i < rows; i += 1) {
+    const leftLine = left[i] ?? '';
+    const rightLine = right[i] ?? '';
+    merged.push(`${padColumn(leftLine, leftWidth)}${spacer}${padColumn(rightLine, rightWidth)}`);
+  }
+  return merged;
+};
+
+const renderCardLines = (cards: ReturnType<typeof pokerCardsToCards>, options: { layout?: string; size?: string }) =>
+  cardEngine.renderHandLines(cards, options as any).map(ansiToBlessedTags);
+
 const UI_THEME = {
   topBar: { fg: 'gray', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
   statusBar: { fg: 'white', bg: 'blue' },
@@ -502,6 +598,8 @@ class CardLobbyApp {
   private tableActions!: Listbar;
   private tableContent!: ScrollableText;
   private overlayShade!: Box;
+  private viewMode: 'lobby' | 'table' = 'lobby';
+  private layout: { width: number; topOffset: number; mainHeight: number; leftWidth: number; rightWidth: number } | null = null;
 
   private lobby: LobbyState | null = null;
   private profiles: Record<string, PlayerProfile> = {};
@@ -648,13 +746,22 @@ class CardLobbyApp {
     const manualRefresh = this.manualRefresh.bind(this);
 
     const height = (this.screen.height as number) || 24;
+    const width = (this.screen.width as number) || 80;
     const topOffset = 1;
     const statusHeight = 1;
     const logHeight = 4;
     const mainHeight = height - topOffset - statusHeight - logHeight;
 
-    const leftWidth = 48;
-    const rightWidth = 80 - leftWidth;
+    const minLobbyWidth = 22;
+    const minTableWidth = 40;
+    let leftWidth = Math.floor(width * 0.35);
+    leftWidth = Math.max(minLobbyWidth, leftWidth);
+    leftWidth = Math.min(leftWidth, width - minTableWidth);
+    if (leftWidth < 10) {
+      leftWidth = Math.max(10, width - minTableWidth);
+    }
+    const rightWidth = Math.max(minTableWidth, width - leftWidth);
+    this.layout = { width, topOffset, mainHeight, leftWidth, rightWidth };
 
     this.lobbyWindow = blessed.box({
       parent: this.desktop,
@@ -772,6 +879,8 @@ class CardLobbyApp {
         style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
       } as any,
     });
+
+    this.applyViewMode(this.viewMode);
   }
 
   private buildOverlay(): void {
@@ -1012,6 +1121,7 @@ class CardLobbyApp {
   }
 
   private updateAllPanels(): void {
+    this.syncViewMode();
     this.updateLobbyPanel();
     this.updateTablePanel();
     this.updateStatusBar();
@@ -1083,90 +1193,108 @@ class CardLobbyApp {
     }
 
     const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
-    const lines: string[] = [];
-    lines.push(`{${UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName} (${table.stakesLabel})`);
-    lines.push(`Status: ${table.status}  Buy-in: ${table.buyIn}  Entry Fee: ${table.entryFee}`);
-    lines.push(`Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
+    const contentWidth = Math.max(40, (this.tableContent as any).iwidth ?? 78);
+    const gap = 2;
+    const minLeftWidth = 24;
+    const minRightWidth = 20;
+
+    const leftLines: string[] = [];
+    const rightLines: string[] = [];
+
+    rightLines.push(`{${UI_THEME.accent}-fg}Table #${table.id}{/} - ${table.gameName}`);
+    rightLines.push(`Stakes: ${table.stakesLabel}  Buy-in: ${table.buyIn}`);
+    rightLines.push(`Status: ${table.status}  Players: ${table.players.filter((p) => p.role === 'player').length}/${table.maxPlayers}`);
     if (table.isPrivate && table.inviteCode) {
-      lines.push(`Private Invite: ${table.inviteCode}`);
+      rightLines.push(`Invite: ${table.inviteCode}`);
     }
     if (isObserver) {
-      lines.push('Mode: Observer');
+      rightLines.push('Mode: Observer');
     }
 
-    lines.push('');
-    lines.push('Seat Player        Stack');
-    lines.push('---- ------------ -----');
-    const seated = table.players
-      .filter((player) => player.role === 'player')
-      .sort((a, b) => a.seat - b.seat);
+    const showCards = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
 
-    seated.forEach((player) => {
-      const tag = isBotPlayer(player) ? '*' : ' ';
-      const line = `${pad(String(player.seat + 1), 4)} ${pad(player.username + tag, 12)} ${pad(String(player.stack), 5)}`;
-      lines.push(line);
-    });
-
-    if (table.observers.length > 0) {
-      lines.push('');
-      lines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
-    }
-
-    lines.push('');
-    lines.push('Last Hand:');
-
-    if (table.lastHand) {
-      const boardCards = pokerCardsToCards(table.lastHand.board);
-      if (boardCards.length > 0) {
-        const boardLines = cardEngine.renderHandLines(boardCards, { layout: 'flat-condensed', size: 'mini' });
-        lines.push(...boardLines);
-      } else {
-        lines.push('Board not dealt yet.');
-      }
-
-      const hand = table.lastHand.hands[this.currentProfile.userId] ?? [];
-      if (hand.length > 0) {
-        lines.push('');
-        lines.push('Your hand:');
-        const handLines = cardEngine.renderHandLines(pokerCardsToCards(hand), { layout: 'flat-condensed', size: 'mini' });
-        lines.push(...handLines);
-      }
-
-      lines.push('');
-      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
-      lines.push(`Pot: ${table.lastHand.pot}  Winners: ${winners || 'TBD'}`);
-    } else {
-      lines.push('No hands played yet.');
-    }
-
-    if (this.activeHand && this.activeHand.tableId === table.id) {
-      lines.push('');
-      lines.push('{yellow-fg}Current Hand:{/}');
+    if (showCards && this.activeHand && this.activeHand.tableId === table.id) {
+      leftLines.push('{yellow-fg}Board{/}');
       const boardCards = pokerCardsToCards(this.activeHand.engine.state.board);
       if (boardCards.length > 0) {
-        const boardLines = cardEngine.renderHandLines(boardCards, { layout: 'flat-condensed', size: 'mini' });
-        lines.push(...boardLines);
+        leftLines.push(...renderCardLines(boardCards, { layout: 'flat-condensed', size: 'mini' }));
       } else {
-        lines.push('Board not dealt yet.');
+        leftLines.push('Board not dealt yet.');
       }
-
+      leftLines.push('');
+      leftLines.push('{yellow-fg}Your hand{/}');
       const player = this.activeHand.engine.state.players.find((seat) => seat?.id === this.currentProfile?.userId);
       if (player?.hand?.length) {
-        lines.push('');
-        lines.push('Your hand:');
-        const handLines = cardEngine.renderHandLines(pokerCardsToCards(player.hand), { layout: 'flat-condensed', size: 'mini' });
-        lines.push(...handLines);
+        leftLines.push(...renderCardLines(pokerCardsToCards(player.hand), { layout: 'flat-condensed', size: 'mini' }));
+      } else {
+        leftLines.push('Waiting for cards...');
       }
 
       const actionSeat = this.activeHand.engine.state.actionTo ?? this.activeHand.playerSeat;
       const currentBet = getCurrentBet(this.activeHand.engine);
       const playerBet = getPlayerBet(this.activeHand.engine, actionSeat);
       const toCall = Math.max(0, currentBet - playerBet);
-      lines.push('');
-      lines.push(toCall > 0 ? `Your action: Call ${toCall}, Bet/Raise, or Fold.` : 'Your action: Check, Bet, or Fold.');
+      rightLines.push('');
+      rightLines.push(toCall > 0 ? `Action: Call ${toCall}, Bet/Raise, or Fold.` : 'Action: Check, Bet, or Fold.');
+    } else if (showCards && table.lastHand) {
+      leftLines.push('{yellow-fg}Last hand{/}');
+      const boardCards = pokerCardsToCards(table.lastHand.board);
+      if (boardCards.length > 0) {
+        leftLines.push(...renderCardLines(boardCards, { layout: 'flat-condensed', size: 'mini' }));
+      } else {
+        leftLines.push('Board not dealt yet.');
+      }
+      leftLines.push('');
+      const hand = table.lastHand.hands[this.currentProfile.userId] ?? [];
+      leftLines.push('{yellow-fg}Your hand{/}');
+      if (hand.length > 0) {
+        leftLines.push(...renderCardLines(pokerCardsToCards(hand), { layout: 'flat-condensed', size: 'mini' }));
+      } else {
+        leftLines.push('No hand on record.');
+      }
+      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
+      rightLines.push(`Pot: ${table.lastHand.pot}`);
+      rightLines.push(`Winners: ${winners || 'TBD'}`);
     }
 
+    if (!showCards && table.lastHand) {
+      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
+      rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
+      rightLines.push(`Last winners: ${winners || 'TBD'}`);
+    }
+
+    rightLines.push('');
+    rightLines.push('Seats:');
+    const seated = table.players
+      .filter((player) => player.role === 'player')
+      .sort((a, b) => a.seat - b.seat);
+    seated.forEach((player) => {
+      const tag = isBotPlayer(player) ? '*' : ' ';
+      const name = `${player.username}${tag}`.slice(0, 10);
+      rightLines.push(`${pad(String(player.seat + 1), 2)} ${pad(name, 10)} ${pad(String(player.stack), 5)}`);
+    });
+
+    if (table.observers.length > 0) {
+      rightLines.push('');
+      rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
+    }
+
+    let lines: string[] = [];
+    if (leftLines.length === 0) {
+      lines = rightLines;
+    } else {
+      const maxLeftWidth = Math.max(minLeftWidth, ...leftLines.map(visibleWidth));
+      const canUseColumns = maxLeftWidth + gap + minRightWidth <= contentWidth;
+      if (canUseColumns) {
+        const leftWidth = Math.min(maxLeftWidth, contentWidth - minRightWidth - gap);
+        const rightWidth = Math.max(minRightWidth, contentWidth - leftWidth - gap);
+        lines = mergeColumns(leftLines, rightLines, leftWidth, rightWidth, gap);
+      } else {
+        lines = [...leftLines, '', ...rightLines];
+      }
+    }
     this.tableContent.setContent(lines.join('\n'));
+    this.tableContent.resetScroll();
     this.updateTableActions();
     this.screen.render();
   }
@@ -1207,23 +1335,22 @@ class CardLobbyApp {
   }
 
   private focusLobby(): void {
+    this.applyViewMode('lobby');
     this.lobbyList.focus();
     this.screen.render();
   }
 
   private focusTable(): void {
+    const wantsTable = Boolean(this.currentProfile?.currentTableId);
+    this.applyViewMode(wantsTable ? 'table' : 'lobby');
     this.tableContent.focus();
     this.screen.render();
   }
 
   private cycleFocus(direction: 1 | -1): void {
-    const focusOrder: Array<any> = [
-      this.topBar,
-      this.lobbyList,
-      this.lobbyActions,
-      this.tableContent,
-      this.tableActions,
-    ];
+    const focusOrder: Array<any> = this.viewMode === 'table'
+      ? [this.topBar, this.tableContent, this.tableActions]
+      : [this.topBar, this.lobbyList, this.lobbyActions, this.tableContent, this.tableActions];
     const current = this.screen.focused;
     const currentIndex = focusOrder.findIndex((item) => item === current);
     const nextIndex = currentIndex === -1
@@ -1234,6 +1361,34 @@ class CardLobbyApp {
       next.focus();
       this.screen.render();
     }
+  }
+
+  private syncViewMode(): void {
+    const wantsTable = Boolean(this.currentProfile?.currentTableId);
+    this.applyViewMode(wantsTable ? 'table' : 'lobby');
+  }
+
+  private applyViewMode(mode: 'lobby' | 'table'): void {
+    if (!this.layout) return;
+    if (this.viewMode === mode) return;
+    this.viewMode = mode;
+
+    const { width, leftWidth, rightWidth } = this.layout;
+
+    if (mode === 'table') {
+      this.lobbyWindow.hide();
+      this.tableWindow.show();
+      this.tableWindow.options.left = 0;
+      this.tableWindow.options.width = width;
+    } else {
+      this.lobbyWindow.show();
+      this.lobbyWindow.options.width = leftWidth;
+      this.tableWindow.show();
+      this.tableWindow.options.left = leftWidth;
+      this.tableWindow.options.width = rightWidth;
+    }
+
+    this.screen.render();
   }
 
   private toggleFilters(): void {
