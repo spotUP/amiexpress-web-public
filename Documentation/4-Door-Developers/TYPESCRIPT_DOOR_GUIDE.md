@@ -2,6 +2,10 @@
 
 Complete guide for creating TypeScript doors for AmiExpress-Web BBS.
 
+## Modern Door UX (Required)
+
+Always aim for modern, desktop-like doors using neo-blessed windows, panels, and mouse support. Avoid 90's text menus unless explicitly requested.
+
 ## Door Types
 
 AmiExpress-Web supports **three types of doors**:

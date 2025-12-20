@@ -172,6 +172,18 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**MODERN DOOR UX - ALWAYS USE NEO-BLESSED DESKTOP-STYLE UI**
+
+When asked to create or redesign doors, default to modern, desktop-like interfaces with neo-blessed:
+- Windowed layouts, panels, and menu bars
+- Mouse support and focus management
+- Avoid 90's text-menu layouts unless explicitly requested
+- Reserve footer space for buttons (min 3 rows) to avoid clipped controls
+
+**Violation = Door UX is outdated and not aligned with project goals**
+
+---
+
 **68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
 
 When debugging 68K door issues (doors not working, showing errors, hanging, etc.):

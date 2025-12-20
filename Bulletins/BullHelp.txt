@@ -1,0 +1,7 @@
+CARD LOBBY BULLETINS
+---------------------
+
+#20   Card Lobby Weekly Leaders
+     Top 10 chip winners from the lobby.
+
+Use the Card Lobby bulletin window to read bulletin numbers.

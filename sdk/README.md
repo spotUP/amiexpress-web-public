@@ -2,6 +2,10 @@
 
 The official SDK for creating doors (games, utilities, apps) for AmiExpress BBS.
 
+Modern Door UX (Required)
+
+Always aim for modern, desktop-like doors using neo-blessed windows, panels, and mouse support. Avoid 90's text menus unless explicitly requested.
+
 ## Quick Links
 
 - **[Game Development Guide](./docs/GAME_DEVELOPMENT_GUIDE.md)** - Complete reference for game development
