@@ -78,9 +78,54 @@ export { AudioEngine } from './engines/audio/audio-engine';
 export { NetworkEngine } from './engines/network/network-engine';
 export { AIEngine } from './engines/ai/ai-engine';
 export { InputEngine } from './engines/input/input-engine';
+export { CardEngine } from './engines/cards/card-engine';
+export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';
 export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialogOptions, ConfirmDialogOptions, ListSelectionOptions, StatusBarOptions } from './engines/ui';
+export type {
+  BackStyle,
+  Card,
+  CardEngineOptions,
+  CardFace,
+  CardSize,
+  CardStyle,
+  ColorMode,
+  HandLayout,
+  HandRenderOptions,
+  RenderOptions,
+  StackCard,
+  StackRenderOptions,
+  UnoCard,
+  UnoColor,
+  UnoRenderOptions,
+  UnoStackCard,
+  UnoValue,
+} from './engines/cards/card-engine';
+export type {
+  Action,
+  ExportOptions,
+  GameState,
+  HandHistory,
+  Player,
+  PublicState,
+  Snapshot,
+  TableConfig,
+} from './engines/poker/poker-engine';
+export {
+  ActionType,
+  auditChipConservation,
+  calculateTotalChips,
+  createPublicView,
+  createSnapshot,
+  exportHandHistory,
+  exportMultipleHands,
+  getHandHistory,
+  normalizePokerCardString,
+  pokerCardToCard,
+  pokerCardsToCards,
+  restoreFromSnapshot,
+} from './engines/poker/poker-engine';
 
 // UI Library - Blessed (full neo-blessed port without Node.js dependencies)
 export * as blessed from './engines/ui/blessed/index';

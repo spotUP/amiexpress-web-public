@@ -303,6 +303,64 @@ door.onStart(async (ctx) => {
 });
 ```
 
+### Card Engine (Playing Cards + UNO)
+
+```typescript
+import { CardEngine } from '@amiexpress/bbs-door-sdk';
+
+door.onStart(async (ctx) => {
+  const cards = new CardEngine(); // defaults to ASCII + ANSI colors
+
+  const deck = cards.buildStandardDeck();
+  const hand = cards.shuffleCards(deck, 'seed-1').slice(0, 5);
+
+  const handArt = cards.renderHand(hand, { layout: 'flat-condensed' });
+  await ctx.output.write(handArt + '\r\n');
+
+  const unoArt = cards.renderUnoHand(
+    [
+      { color: 'R', value: '5' },
+      { color: 'G', value: 'draw2' }
+    ],
+    { layout: 'flat-condensed' }
+  );
+  await ctx.output.write(unoArt + '\r\n');
+});
+```
+
+### Poker Engine (Texas Hold'em)
+
+```typescript
+import { PokerEngine, ActionType } from '@amiexpress/bbs-door-sdk';
+
+door.onStart(async (ctx) => {
+  const poker = new PokerEngine({ smallBlind: 10, bigBlind: 20 });
+
+  poker.sit(0, 'p1', 'Alice', 1000);
+  poker.sit(1, 'p2', 'Bob', 1000);
+  poker.sit(2, 'p3', 'Cara', 1000);
+
+  poker.deal();
+
+  await ctx.output.writeLine('Board:');
+  for (const line of poker.renderBoardLines({ layout: 'flat' })) {
+    await ctx.output.writeLine(line);
+  }
+
+  await ctx.output.writeLine('');
+  await ctx.output.writeLine('Alice hand:');
+  for (const line of poker.renderPlayerHandLines('p1', { layout: 'flat' })) {
+    await ctx.output.writeLine(line);
+  }
+
+  // Example action
+  poker.act({ type: ActionType.CALL, playerId: 'p1' });
+});
+```
+
+Notes:
+- PokerEngine uses two-character card codes (`As`, `Td`, `7h`). The SDK helpers normalize `T` to `10` for CardEngine rendering.
+
 ### Physics Engine
 
 ```typescript
