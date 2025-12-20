@@ -66,12 +66,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const socketRef = useRef<Socket | null>(null);
 
   // Login state tracking
-  const loginState = useRef<'waiting' | 'username' | 'password' | 'new-user-prompt' | 'registering' | 'loggedin' | 'checking-username'>('waiting');
+  const loginState = useRef<
+    'waiting' |
+    'username' |
+    'password' |
+    'new-user-prompt' |
+    'registering' |
+    'loggedin' |
+    'checking-username' |
+    'logging-in'
+  >('waiting');
   const username = useRef<string>('');
   const password = useRef<string>('');
   const newUserPromptUsername = useRef<string>('');
   const passwordMode = useRef<boolean>(false);
   const doorActive = useRef<boolean>(false);
+  const reconnectPending = useRef<boolean>(false);
   const doorReadyMap = useRef<Record<string, boolean>>({});
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
@@ -128,7 +138,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     if (token) {
       console.log('[AutoLogin] Reusing shared auth token');
       socket.emit('login', { token });
-      loginState.current = 'checking-username';
+      loginState.current = 'logging-in';
       return true;
     }
     return false;
@@ -447,9 +457,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
       keyState.current = {};
+      if (reconnectPending.current) {
+        reconnectPending.current = false;
+        attemptTokenLogin();
+      }
       if (loginState.current === 'password' && newUserPromptUsername.current && password.current) {
         socket.emit('login', { username: newUserPromptUsername.current, password: password.current });
-        loginState.current = 'loggedin';
+        loginState.current = 'logging-in';
       }
       onConnect?.();
       term.focus();
@@ -685,6 +699,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('🔌 BBS Terminal: Disconnected:', reason);
       if (reason === 'io client disconnect') {
         localStorage.removeItem('bbs_auth_token');
+        reconnectPending.current = false;
+      } else {
+        reconnectPending.current = true;
+        loginState.current = 'waiting';
+        username.current = '';
+        password.current = '';
       }
       onDisconnect?.(reason);
     });
@@ -845,7 +865,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         const decodedPassword = atob(savedPassword);
         console.log(`🔐 Auto-login enabled, sending credentials for ${decodedUsername}`);
         socket.emit('login', { username: decodedUsername, password: decodedPassword });
-        loginState.current = 'loggedin';
+        loginState.current = 'logging-in';
         return true;
       }
       return false;
@@ -856,7 +876,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (
         loginState.current === 'username' ||
         loginState.current === 'password' ||
-        loginState.current === 'checking-username'
+        loginState.current === 'checking-username' ||
+        loginState.current === 'logging-in'
       ) {
         return;
       }
@@ -870,6 +891,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('login-success', (data: any) => {
       console.log('Login successful:', data);
+      loginState.current = 'loggedin';
       if (data && data.token) {
         localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
         localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
@@ -881,7 +903,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           })
         );
       }
-      loginState.current = 'loggedin';
 
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
       if (autoLoginEnabled && newUserPromptUsername.current) {
@@ -1050,12 +1071,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       // Handle login input locally
-      if (loginState.current === 'checking-username') {
+      if (loginState.current === 'checking-username' || loginState.current === 'logging-in') {
         return;
       }
 
       if (loginState.current === 'username') {
-        if (key === '\r') {
+        if (key === '\r' || key === '\n') {
           console.log('🔐 Username entered:', username.current);
           socket.emit('check-username', { username: username.current });
           loginState.current = 'checking-username';
@@ -1073,10 +1094,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       if (loginState.current === 'password') {
-        if (key === '\r') {
+        if (key === '\r' || key === '\n') {
           console.log('🔐 Password entered, sending login');
           socket.emit('login', { username: username.current, password: password.current });
-          loginState.current = 'loggedin';
+          loginState.current = 'logging-in';
           term.write('\r\n');
         } else if (key === '\x7f' || key === '\b') {
           if (password.current.length > 0) {
@@ -1097,7 +1118,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           socket.emit('new-user-response', { response, username: promptUser });
         };
 
-        if (key === '\r') {
+        if (key === '\r' || key === '\n') {
           term.write('\r\n');
           sendResponse('');
           // Delay state change so onData (which fires after onKey) still sees
@@ -1142,7 +1163,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'username' ||
         loginState.current === 'password' ||
         loginState.current === 'new-user-prompt' ||
-        loginState.current === 'checking-username'
+        loginState.current === 'checking-username' ||
+        loginState.current === 'logging-in'
         // Note: 'registering' removed - server handles registration input including pause prompts
       ) {
         return;
