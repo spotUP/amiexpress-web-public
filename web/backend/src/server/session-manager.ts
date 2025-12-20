@@ -18,6 +18,7 @@ export const sessions = new Map<string, BBSSession>();  // Node ID → Session (
 export const userSessions = new Map<string, BBSSession>();  // User ID → Session (post-login lookup)
 export const socketToNodeId = new Map<string, number>();  // Socket ID → Node ID (CRITICAL for door events)
 export const socketToUser = new Map<string, string>();  // Socket ID → User ID (for user lookups)
+export const pendingDisconnects = new Map<string, { socketId: string; nodeId: number; startedAt: number; timer: ReturnType<typeof setTimeout> }>();
 
 // Connection rate limiting - track recent connections
 const recentConnections: Map<string, number[]> = new Map();
@@ -198,6 +199,22 @@ export function setSession(socketId: string, session: BBSSession): void {
   if (userId) {
     userSessions.set(String(userId), session);
   }
+}
+
+export function trackPendingDisconnect(userId: string, socketId: string, nodeId: number, timer: ReturnType<typeof setTimeout>): void {
+  const existing = pendingDisconnects.get(userId);
+  if (existing) {
+    clearTimeout(existing.timer);
+  }
+  pendingDisconnects.set(userId, { socketId, nodeId, startedAt: Date.now(), timer });
+}
+
+export function clearPendingDisconnect(userId: string): { socketId: string; nodeId: number; startedAt: number } | null {
+  const pending = pendingDisconnects.get(userId);
+  if (!pending) return null;
+  clearTimeout(pending.timer);
+  pendingDisconnects.delete(userId);
+  return { socketId: pending.socketId, nodeId: pending.nodeId, startedAt: pending.startedAt };
 }
 
 /**

@@ -104,6 +104,7 @@ export class DoorLifecycleManager {
   private pcProbeRanges: Array<{ start: number; end: number; hits: number }> =
     [];
   private pcProbeMaxHits: number = 1;
+  private spinLoopSleepMs: number = 1;
 
   constructor(
     emulator: MoiraEmulator,
@@ -165,6 +166,7 @@ export class DoorLifecycleManager {
     this.pcProbeRanges = this.parsePcProbeRanges(
       process.env.DOOR_PC_PROBE_RANGES || ""
     );
+    this.spinLoopSleepMs = Number(process.env.AEDOOR_SPIN_SLEEP_MS ?? 1);
     const watchOffsetsEnv = process.env.DOOR_WATCH_VALUES_OFFSETS || "";
     this.watchValueOffsets = watchOffsetsEnv
       .split(",")
@@ -1662,9 +1664,15 @@ export class DoorLifecycleManager {
       if (this.executionState.iterationCount % 10 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
+      if (this.executionState.iterationCount % 200 === 0 && this.spinLoopSleepMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.spinLoopSleepMs));
+      }
     } else {
       if (this.executionState.iterationCount % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
+      }
+      if (this.executionState.stuckInLoop && this.executionState.iterationCount % 1000 === 0 && this.spinLoopSleepMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.spinLoopSleepMs));
       }
     }
   }
@@ -1673,7 +1681,8 @@ export class DoorLifecycleManager {
     // SAmiLog3 busy loop lives around 0x5c90-0x5d10; count it as progress so the guard
     // doesn't kill a door that is still actively spinning.
     // For batch doors, don't record PC progress to allow guard to trigger.
-    if (!this.lifecycleConfig.disableInputWaitExtension && pc >= 0x5c90 && pc <= 0x5d10) {
+    this.executionState.stuckInLoop = pc >= 0x5c90 && pc <= 0x5d10;
+    if (!this.lifecycleConfig.disableInputWaitExtension && this.executionState.stuckInLoop) {
       this.executionState.lastProgressIteration = this.executionState.iterationCount;
       this.executionState.lastProgressTime = Date.now();
     }

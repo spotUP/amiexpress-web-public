@@ -5,7 +5,6 @@
 
 import { Server, Socket } from "socket.io";
 import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
-import { KickstartRom } from "./KickstartRom.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import * as path from "path";
@@ -444,15 +443,6 @@ export class AmigaDoorSession {
 
     console.log(
       "[AmigaDoorSession] 🔄 Initializing libraries via LibraryManager..."
-    );
-
-    // Load Kickstart ROM
-    console.log("[AmigaDoorSession] Loading Kickstart ROM at 0xF80000...");
-    const kickstart = new KickstartRom();
-    const romData = kickstart.getRomData();
-    this.emulator.loadROM(romData);
-    console.log(
-      `[AmigaDoorSession] Kickstart ROM loaded (${romData.length} bytes)`
     );
 
     // Initialize libraries through LibraryManager

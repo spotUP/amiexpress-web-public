@@ -875,6 +875,9 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // LOGIN FLOW (telnet/SSH): line-buffered username/password when in LOGON state
   // Frontend socket clients use prompt-login events; telnet/SSH need server-side buffering.
   if (session.state === BBSState.LOGON) {
+    if (session.connectionType === 'web') {
+      return;
+    }
     // Ensure tempData exists
     session.tempData = session.tempData || {};
     const phase = session.tempData.loginPhase || 'username';

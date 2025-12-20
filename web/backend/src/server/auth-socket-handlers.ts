@@ -13,7 +13,17 @@ import { callersLogManager } from '../services/CallersLogManager';
 import { initializeSecurity, setEnvStat } from '../utils/security.util';
 import { EnvStat } from '../constants/env-codes';
 import { AnsiUtil } from '../utils/ansi.util';
-import { getSessionBySocketId, sessions, userSessions, socketToUser } from './session-manager';
+import {
+  getSessionBySocketId,
+  sessions,
+  userSessions,
+  socketToUser,
+  socketToNodeId,
+  pendingDisconnects,
+  clearPendingDisconnect,
+  setSession,
+  deleteSession
+} from './session-manager';
 import { callersLog } from './database-helpers';
 import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
@@ -27,7 +37,7 @@ import { sessionLogManager } from '../services/SessionLogManager';
  * Register authentication socket event handlers
  */
 export function registerAuthHandlers(socket: Socket) {
-  const session = getSessionBySocketId(socket.id);
+  let session = getSessionBySocketId(socket.id);
   if (!session) return;
 
   const installAnsiFilter = (sock: Socket, sess: any) => {
@@ -297,6 +307,56 @@ export function registerAuthHandlers(socket: Socket) {
       await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
 
       // Set session user data
+      if (data.token) {
+        const userId = String(user.id);
+        const pending = pendingDisconnects.get(userId);
+        const existingSession = userSessions.get(userId);
+
+        if (pending && existingSession && existingSession !== session) {
+          console.log(`[AUTH] Rebinding socket ${socket.id} to existing session for user ${userId}`);
+          clearPendingDisconnect(userId);
+
+          socketToUser.delete(pending.socketId);
+          socketToNodeId.delete(pending.socketId);
+
+          // Drop the pre-login session created for this socket.
+          deleteSession(socket.id);
+
+          session = existingSession;
+          session.socket = socket;
+          session.socketId = socket.id;
+          session.lastActivity = Date.now();
+
+          setSession(socket.id, session);
+          socketToUser.set(socket.id, userId);
+          sessionLogManager.updateSession(socket.id, userId, user.username, session.nodeId);
+
+          if (session.bbsApi?.setSocket) {
+            session.bbsApi.setSocket(socket);
+          }
+
+          if (session.gameModeEnabled) {
+            socket.emit('game-mode', true);
+          }
+
+          if (session.inDoorManager && session.doorReconnectHandler) {
+            session.doorReconnectHandler();
+          }
+
+          socket.emit('ansi-output', '\r\n\x1b[32mReconnected.\x1b[0m\r\n');
+
+          if (!session.inDoorManager) {
+            session.menuPause = true;
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            const { displayMainMenu } = require('../handlers/command-handler/menu');
+            await displayMainMenu(socket, session);
+          }
+
+          triggerSamiLogRefresh();
+          return;
+        }
+      }
+
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       session.user = user;
@@ -444,7 +504,7 @@ export function registerAuthHandlers(socket: Socket) {
         session.tempData.quickLogon = false;
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        const { displayMainMenu } = require('./command-handler/menu');
+        const { displayMainMenu } = require('../handlers/command-handler/menu');
         await displayMainMenu(socket, session);
         return;
       }
@@ -456,7 +516,7 @@ export function registerAuthHandlers(socket: Socket) {
         console.log('[AUTH] Token-based reconnection - skipping LOGON/bulletin flow');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
-        const { displayMainMenu } = require('./command-handler/menu');
+        const { displayMainMenu } = require('../handlers/command-handler/menu');
         await displayMainMenu(socket, session);
         triggerSamiLogRefresh();
         return;

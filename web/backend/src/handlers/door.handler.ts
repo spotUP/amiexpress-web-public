@@ -1366,6 +1366,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     // Create BBS API instance for door
     const { createBBSApi } = require('../doors/BBSApi');
     const bbsApi = createBBSApi(socket, session);
+    session.bbsApi = bbsApi;
 
     // Create a socket wrapper that intercepts room: and chat: events
     // This allows doors to use socket.emit('room:join', ...) which will call handlers directly
@@ -1410,6 +1411,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     // Clear door active flag and input handler
     delete session.inDoorManager;
     delete session.doorInputHandler;
+    delete session.bbsApi;
     console.log(`[executeTypeScriptDoor] Cleared inDoorManager and doorInputHandler`);
 
     // Reset menu input mode (express.e returns to MENU with shortcuts off)
@@ -1439,9 +1441,8 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       DebugSeverity.CRITICAL
     );
 
-    // Clear door active flag and input handler on error
-    delete session.inDoorManager;
-    delete session.doorInputHandler;
+    // Pause on error so the user can read the message
+    session.inDoorManager = true;
     session.cmdShortcuts = false;
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
@@ -1449,7 +1450,19 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+
+    try {
+      const { createBBSApi } = require('../doors/BBSApi');
+      const bbsApi = createBBSApi(socket, session);
+      await bbsApi.getKey();
+    } catch (err) {
+      console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err);
+    }
+
+    delete session.inDoorManager;
+    delete session.doorInputHandler;
     session.menuPause = false;
+
     // Only display menu if user is logged in
     if (session.state === BBSState.LOGGEDON && session.user) {
       await displayMainMenu(socket, session);
