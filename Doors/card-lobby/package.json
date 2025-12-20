@@ -1,0 +1,31 @@
+{
+  "name": "card-lobby",
+  "version": "1.0.0",
+  "description": "SDK v2 multiplayer card lobby with poker engine support",
+  "main": "index.ts",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "game",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": false,
+  "scripts": {
+    "preview": "cd ../.. && npm run preview doors/card-lobby"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "cards",
+    "poker",
+    "lobby",
+    "sdk-v2",
+    "runDoor"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}
