@@ -1203,9 +1203,16 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
             doorPath = path.join(doorPath, serverEntry);
             console.log(`[executeTypeScriptDoor] Hybrid door detected, using server entry: ${serverEntry}`);
           } else if (packageJson.main) {
-            // Use main entry from package.json
-            doorPath = path.join(doorPath, packageJson.main);
-            console.log(`[executeTypeScriptDoor] Using main entry from package.json: ${packageJson.main}`);
+            // Use main entry from package.json when it exists, otherwise fall back to index.ts.
+            const mainEntry = path.join(doorPath, packageJson.main);
+            const mainEntryPath = path.join(projectRoot, mainEntry);
+            if (amigafs.existsSync(mainEntryPath)) {
+              doorPath = mainEntry;
+              console.log(`[executeTypeScriptDoor] Using main entry from package.json: ${packageJson.main}`);
+            } else {
+              doorPath = path.join(doorPath, 'index.ts');
+              console.warn(`[executeTypeScriptDoor] Main entry not found (${packageJson.main}); using index.ts`);
+            }
           } else {
             // Default to index.ts
             doorPath = path.join(doorPath, 'index.ts');
