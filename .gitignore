@@ -187,6 +187,13 @@ Example_BBS/
 # DORINFO*.DEF
 # Conf*/Files/*.dir
 # CallersLog
+Node*/CallersLog
+Node*/CALLERSLOG
+Node*/DOOR.SYS
+Node*/door.sys
+Node*/DORINFO*.DEF
+Node*/DORINFO*.def
+Node*/TempAns
 
 # Large backup files (>50MB, excluded to avoid GitHub limit)
 Node*/CLogBackup
