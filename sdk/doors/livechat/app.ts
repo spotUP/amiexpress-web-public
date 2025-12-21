@@ -11,8 +11,8 @@
  * - Settings panel with checkboxes
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib, { log as createLog } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import blessed from '../../engines/ui/blessed';
+import contrib, { log as createLog } from '../../engines/ui/blessed/contrib';
 
 // Core state and services
 import { createInitialState, addMessage, setChannel, AppState } from './core/state';
@@ -42,7 +42,7 @@ import { PRESENCE_INDICATORS } from './types';
 import type { PresenceStatus, BBSEvent, Message } from './types';
 
 // Import widget types
-import type { Log } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import type { Log } from '../../engines/ui/blessed/contrib';
 
 interface DoorSession {
   socket: any;

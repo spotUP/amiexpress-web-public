@@ -1,4 +1,4 @@
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Screen } from '../../../engines/ui/blessed';
 
 /** Layout configuration */
 export interface LayoutConfig {

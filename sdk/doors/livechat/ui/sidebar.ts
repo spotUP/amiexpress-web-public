@@ -1,4 +1,4 @@
-import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Box } from '../../../engines/ui/blessed';
 import type { ChannelMember, Channel } from '../types';
 import { color, bold } from '../utils/ansi';
 
