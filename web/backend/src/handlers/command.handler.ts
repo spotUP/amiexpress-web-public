@@ -591,10 +591,10 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // an empty string (internal advanceDisplayFlow tick).
   if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
-    // Actually display the menu when transitioning from DISPLAY_MENU
+    // Display the menu once before allowing command input; do not swallow keystroke.
     session.menuPause = false;
     await displayMainMenu(socket, session);
-    return;
+    // Continue processing this keystroke so it reaches READ_COMMAND.
   }
 
   const trimmedScreenCommand = (data || '').trim();
@@ -2095,7 +2095,7 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
 
   // Handle view file input (V command continuation)
   if (session.subState === LoggedOnSubState.VIEW_FILE_INPUT) {
-    const { ViewFileHandler } = require('./view-file.handler');
+    const { ViewFileHandler } = require('./content/view-file.handler');
     await ViewFileHandler.handleFilenameInput(socket, session, data.trim());
     return;
   }
@@ -3604,12 +3604,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
-      const { ViewFileHandler } = require('./view-file.handler');
+      const { ViewFileHandler } = require('./content/view-file.handler');
       await ViewFileHandler.handleViewFileCommand(socket, session, params);
       return;
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
-      const { ViewFileHandler: ViewFileHandler2 } = require('./view-file.handler');
+      const { ViewFileHandler: ViewFileHandler2 } = require('./content/view-file.handler');
       await ViewFileHandler2.handleViewFileCommand(socket, session, params);
       return;
 

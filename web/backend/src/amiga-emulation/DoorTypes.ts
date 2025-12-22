@@ -50,8 +50,8 @@ export class DoorConstants {
   static readonly MESSAGE_FILLER3_OFFSET = 0x104;
   static readonly MESSAGE_REPLY_PORT_OFFSET = 14;
   static readonly MESSAGE_LENGTH_OFFSET = 18;
-  // AEDoor.library messages are ~0x100 bytes; match that for mn_Length.
-  static readonly MESSAGE_TOTAL_LENGTH = 0x100;
+  // SIZEOF jhMessage = 0x108 (20-byte mn + 200-byte string + 11 LONG fields, includes strptr/filler3).
+  static readonly MESSAGE_TOTAL_LENGTH = 0x108;
   static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   static readonly DIF_STRING_PTR_OFFSET = 0x20;
   static readonly NODE_STATUS_SIZE = 0x100;
