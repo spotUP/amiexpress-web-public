@@ -7,11 +7,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@amiexpress/bbs-door-sdk/client': path.resolve(__dirname, '../../sdk/client/index.ts'),
-      '@amiexpress/bbs-door-sdk/common': path.resolve(__dirname, '../../sdk/common/index.ts'),
-      '@amiexpress/bbs-door-sdk/core': path.resolve(__dirname, '../../sdk/core/index.ts'),
-      '@amiexpress/bbs-door-sdk/engines': path.resolve(__dirname, '../../sdk/engines/index.ts'),
-      '@amiexpress/bbs-door-sdk/components': path.resolve(__dirname, '../../sdk/components/index.ts'),
+      '@amiexpress/bbs-door-sdk/client': path.resolve(__dirname, '../../sdk/dist/client/index.js'),
+      '@amiexpress/bbs-door-sdk/common': path.resolve(__dirname, '../../sdk/dist/common/index.js'),
+      '@amiexpress/bbs-door-sdk/core': path.resolve(__dirname, '../../sdk/dist/core/index.js'),
+      '@amiexpress/bbs-door-sdk/engines': path.resolve(__dirname, '../../sdk/dist/engines/index.js'),
+      '@amiexpress/bbs-door-sdk/components': path.resolve(__dirname, '../../sdk/dist/components/index.js'),
     },
     extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
   },
@@ -34,11 +34,30 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['zmodem.js/dist/zmodem', '@amiexpress/bbs-door-sdk/client']
+    include: [
+      'zmodem.js/dist/zmodem',
+      '@amiexpress/bbs-door-sdk/client',
+      'react-router-dom',
+      'react-router',
+      '@xterm/xterm',
+      '@xterm/addon-canvas',
+      'socket.io-client'
+    ]
   },
   build: {
     commonjsOptions: {
-      include: [/zmodem\.js/, /@amiexpress\/bbs-door-sdk/]
+      include: [
+        /zmodem\.js/,
+        /@amiexpress\/bbs-door-sdk/,
+        /@amiexpress\/terminal/,
+        /react/,
+        /react-dom/,
+        /react-router/,
+        /@xterm/,
+        /socket\.io-client/,
+        /node_modules/
+      ],
+      transformMixedEsModules: true
     },
     // Use esbuild for faster minification
     minify: 'esbuild',
