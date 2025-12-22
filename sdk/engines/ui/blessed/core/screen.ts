@@ -1252,15 +1252,38 @@ export class Screen extends Element {
    * Set focused element (called by Element.focus())
    */
   setFocused(element: Element | null): void {
+    // Blur previous focused element
     if (this._focused && this._focused !== element) {
       this._focused.focused = false;
       this._focused.emit('blur');
+
+      // Restore original border color on blur (if element has border and stored color)
+      const prevEl = this._focused as any;
+      if (prevEl.border && prevEl._originalBorderColor) {
+        prevEl.style = prevEl.style || {};
+        prevEl.style.border = { ...(prevEl.style.border || {}), fg: prevEl._originalBorderColor };
+      }
     }
+
+    // Focus new element
     this._focused = element;
     if (element) {
       element.focused = true;
       element.emit('focus');
+
+      // Automatically set white borders on focused elements with borders
+      const el = element as any;
+      if (el.border && el.style?.border?.fg) {
+        // Store original border color if not already stored
+        if (!el._originalBorderColor) {
+          el._originalBorderColor = el.style.border.fg;
+        }
+        // Set white border for focused element
+        el.style = el.style || {};
+        el.style.border = { ...(el.style.border || {}), fg: 'white' };
+      }
     }
+
     // Re-render to update focus border styling
     this.render();
   }
