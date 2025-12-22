@@ -1,5 +1,5 @@
 /**
- * Neo-Blessed Showcase v2.0
+ * Neo-Blessed Showcase v2.0.BUILD_TIMESTAMP
  *
  * COMPREHENSIVE interactive demo of ALL neo-blessed widgets and features.
  * Use this to test and validate neo-blessed functionality.
@@ -18,6 +18,9 @@
  * 11. Contrib Data: Tree, Table, Log, Map, Picture, Markdown
  * 12. Contrib Layouts: Grid, Carousel
  */
+
+// Build timestamp for version verification
+const BUILD_VERSION = 'v2.0.' + new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
@@ -56,7 +59,7 @@ export async function createApp(session: DoorSession) {
   const screen = blessed.screen({
     smartCSR: true,
     fullUnicode: true,
-    title: 'Neo-Blessed Showcase v2.0',
+    title: `Neo-Blessed Showcase ${BUILD_VERSION}`,
     output: (data: string) => bbs.write(data),
   });
 
@@ -77,7 +80,7 @@ export async function createApp(session: DoorSession) {
     height: 1,
     tags: true,
     style: { fg: 'white', bg: 'blue' },
-    content: ' Neo-Blessed Showcase v2.0 - ALL Widgets | Q:Quit Tab:Nav Enter:Select ',
+    content: ` Neo-Blessed Showcase ${BUILD_VERSION} | Q:Quit Tab:Nav Enter:Select `,
   });
 
   const menuBox = blessed.box({
