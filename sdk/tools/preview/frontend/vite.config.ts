@@ -7,11 +7,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@amiexpress/bbs-door-sdk/client': path.resolve(__dirname, '../../../client/index.ts'),
-      '@amiexpress/bbs-door-sdk/common': path.resolve(__dirname, '../../../common/index.ts'),
-      '@amiexpress/bbs-door-sdk/core': path.resolve(__dirname, '../../../core/index.ts'),
-      '@amiexpress/bbs-door-sdk/engines': path.resolve(__dirname, '../../../engines/index.ts'),
-      '@amiexpress/bbs-door-sdk/components': path.resolve(__dirname, '../../../components/index.ts'),
+      '@amiexpress/bbs-door-sdk/client': path.resolve(__dirname, '../../../dist/client/index.js'),
+      '@amiexpress/bbs-door-sdk/common': path.resolve(__dirname, '../../../dist/common/index.js'),
+      '@amiexpress/bbs-door-sdk/core': path.resolve(__dirname, '../../../dist/core/index.js'),
+      '@amiexpress/bbs-door-sdk/engines': path.resolve(__dirname, '../../../dist/engines/index.js'),
+      '@amiexpress/bbs-door-sdk/components': path.resolve(__dirname, '../../../dist/components/index.js'),
     },
     extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
   },
@@ -26,7 +26,14 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
-    include: ['zmodem.js/dist/zmodem', '@amiexpress/bbs-door-sdk/client']
+    include: [
+      'zmodem.js/dist/zmodem',
+      '@amiexpress/bbs-door-sdk/client',
+      'ansi-to-html',
+      '@xterm/xterm',
+      '@xterm/addon-fit',
+      '@xterm/addon-canvas'
+    ]
   },
   build: {
     outDir: 'dist',
@@ -34,7 +41,14 @@ export default defineConfig({
     assetsDir: 'assets',
     chunkSizeWarningLimit: 2048,
     commonjsOptions: {
-      include: [/zmodem\.js/, /@amiexpress\/bbs-door-sdk/]
+      include: [
+        /zmodem\.js/,
+        /@amiexpress\/bbs-door-sdk/,
+        /ansi-to-html/,
+        /@xterm/,
+        /node_modules/
+      ],
+      transformMixedEsModules: true
     },
     rollupOptions: {
       onwarn(warning, warn) {
