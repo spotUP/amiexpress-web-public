@@ -37,6 +37,8 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
   session.lastScreenHadPause = false;
 
   const shouldDisplayMenu = forceMenuDisplay || (((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus);
+  session.skipNextDisplayFlowMenu = true;
+  session.manualMenuTargetState = LoggedOnSubState.READ_COMMAND;
 
   // Default to line input unless a MENU.keys is loaded below
   session.cmdShortcuts = false;
@@ -89,6 +91,7 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
   // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
   // After prompt, choose input mode based on MENU.keys
   session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
+  session.manualMenuTargetState = session.subState;
 }
 
 /**

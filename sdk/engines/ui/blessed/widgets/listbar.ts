@@ -4,12 +4,18 @@
 
 import { Box } from './box';
 import { Button } from './button';
-import type { ElementOptions } from '../core/types';
+import type { Colors, ElementOptions } from '../core/types';
 
 export interface ListbarOptions extends ElementOptions {
+  style?: ElementOptions['style'] & {
+    item?: Colors;
+    selected?: Colors;
+  };
   items?: Record<string, ListbarItem>;
   commands?: Record<string, ListbarItem | { callback?: () => void }>;
   autoCommandKeys?: boolean;
+  itemPadding?: number;
+  itemGap?: number;
 }
 
 export interface ListbarItem {
@@ -22,19 +28,47 @@ export class Listbar extends Box {
   private items: Map<string, { button: Button; item: ListbarItem }> = new Map();
   private selectedIndex: number = 0;
   private itemKeys: string[] = [];
+  private inactiveStyle: Colors;
+  private activeStyle: Colors;
+
+  private itemPadding: number;
+  private itemGap: number;
 
   constructor(options: ListbarOptions = {}) {
+    const style = options.style || {};
+    const itemStyle = style.item || {};
+    const selectedStyle = style.selected || {};
+    const baseFg = itemStyle.fg ?? style.fg ?? 'gray';
+    const baseBg = itemStyle.bg ?? style.bg ?? 'blue';
+
+    const inactiveStyle: Colors = {
+      fg: baseFg,
+      bg: baseBg,
+      ...itemStyle,
+    };
+
+    const activeStyle: Colors = {
+      fg: selectedStyle.fg ?? 'white',
+      bg: selectedStyle.bg ?? 'blue',
+      ...selectedStyle,
+    };
+
     super({
       ...options,
       height: options.height || 1,
       clickable: true,
       focusable: true,
       style: {
-        fg: 'white',
-        bg: 'blue',
-        ...(options.style || {}),
+        fg: baseFg,
+        bg: baseBg,
+        ...style,
       },
     });
+
+    this.inactiveStyle = inactiveStyle;
+    this.activeStyle = activeStyle;
+    this.itemPadding = Math.max(0, options.itemPadding ?? 1);
+    this.itemGap = Math.max(0, options.itemGap ?? 2);
 
     this.enableMouse();
     this.enableKeys();
@@ -80,25 +114,24 @@ export class Listbar extends Box {
 
     for (const [key, item] of Object.entries(items)) {
       const text = item.text || key;
-      const buttonText = ` ${text} `;
+      const pad = this.itemPadding;
+      const buttonText = pad > 0 ? `${' '.repeat(pad)}${text}${' '.repeat(pad)}` : text;
 
       const button = new Button({
         parent: this,
         top: 0,
         left: offset,
-        width: buttonText.length + 2,
+        width: buttonText.length,
         height: 1,
         content: buttonText,
         padding: 0,
         align: 'center',
         border: undefined, // No border for tab buttons
         style: {
-          fg: this.options.style?.fg || 'white',
-          bg: this.options.style?.bg || 'blue',
-          focus: {
-            fg: 'black',
-            bg: 'white',
-          },
+          fg: this.inactiveStyle.fg,
+          bg: this.inactiveStyle.bg,
+          focus: this.activeStyle,
+          hover: this.activeStyle,
         },
       });
 
@@ -122,7 +155,7 @@ export class Listbar extends Box {
       }
 
       this.items.set(key, { button, item });
-      offset += buttonText.length + 3;
+      offset += buttonText.length + this.itemGap;
     }
 
     // Focus first item
@@ -154,6 +187,7 @@ export class Listbar extends Box {
     const item = this.items.get(key);
 
     if (item) {
+      this.applySelectionStyles();
       item.button.focus();
       this.emit('select', key, item.item);
     }
@@ -230,5 +264,14 @@ export class Listbar extends Box {
    */
   getItemKeys(): string[] {
     return [...this.itemKeys];
+  }
+
+  private applySelectionStyles(): void {
+    this.itemKeys.forEach((key, index) => {
+      const entry = this.items.get(key);
+      if (!entry) return;
+      const style = index === this.selectedIndex ? this.activeStyle : this.inactiveStyle;
+      entry.button.setStyle(style);
+    });
   }
 }

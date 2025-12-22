@@ -86,6 +86,8 @@ export interface ElementOptions {
   clickable?: boolean;
   keyable?: boolean;
   input?: boolean;
+  dockBorders?: boolean;
+  ignoreDockContrast?: boolean;
 
   // Scrolling
   scrollable?: boolean;
@@ -179,6 +181,7 @@ export interface ListOptions extends ElementOptions {
   interactive?: boolean;
   keys?: boolean;
   vi?: boolean;
+  wrapItems?: boolean;
   style?: ElementOptions['style'] & {
     selected?: Colors;
     item?: Colors;

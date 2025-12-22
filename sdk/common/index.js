@@ -20,3 +20,5 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./types"), exports);
 __exportStar(require("./protocol"), exports);
+var protocol_1 = require("./protocol");
+Object.defineProperty(exports, "MessageType", { enumerable: true, get: function () { return protocol_1.MessageType; } });

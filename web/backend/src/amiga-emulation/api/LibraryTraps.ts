@@ -2079,6 +2079,68 @@ const EXEC_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -78, // LVO -78 (InitStruct)
+    name: "InitStruct",
+    handler: (emu, lib: ExecLibrary) => {
+      const initTable = emu.getRegister(9); // A1
+      const memory = emu.getRegister(10); // A2
+      const size = emu.getRegister(0); // D0
+      lib.initStructForTrap(initTable, memory, size);
+      return 0;
+    },
+  },
+  {
+    offset: -84, // LVO -84 (MakeLibrary)
+    name: "MakeLibrary",
+    handler: (emu, lib: ExecLibrary) => {
+      const vectors = emu.getRegister(8); // A0
+      const initStruct = emu.getRegister(9); // A1
+      const initFunc = emu.getRegister(10); // A2
+      const dataSize = emu.getRegister(0); // D0
+      const segList = emu.getRegister(1); // D1
+      return lib.makeLibrary(vectors, initStruct, initFunc, dataSize, segList);
+    },
+  },
+  {
+    offset: -90, // LVO -90 (MakeFunctions)
+    name: "MakeFunctions",
+    handler: (emu, lib: ExecLibrary) => {
+      const target = emu.getRegister(8); // A0
+      const functionArray = emu.getRegister(9); // A1
+      const funcDispBase = emu.getRegister(10); // A2
+      return lib.makeFunctions(target, functionArray, funcDispBase);
+    },
+  },
+  {
+    offset: -96, // LVO -96 (FindResident)
+    name: "FindResident",
+    handler: (emu, lib: ExecLibrary) => {
+      const nameAddr = emu.getRegister(9); // A1
+      const name = nameAddr ? emu.readString(nameAddr, 128) : "";
+      return name ? lib.findResidentByName(name) : 0;
+    },
+  },
+  {
+    offset: -102, // LVO -102 (InitResident)
+    name: "InitResident",
+    handler: (emu, lib: ExecLibrary) => {
+      const residentAddr = emu.getRegister(9); // A1
+      const segList = emu.getRegister(1); // D1
+      return lib.initResidentTrap(residentAddr, segList);
+    },
+  },
+  {
+    offset: -108, // LVO -108 (Alert)
+    name: "Alert",
+    handler: (emu, lib: ExecLibrary) => {
+      const code = emu.getRegister(0); // D0
+      console.warn(
+        `[ExecLibrary] Alert() called (code=0x${code.toString(16)})`
+      );
+      return lib.handleRomInitAlert();
+    },
+  },
+  {
     offset: -132, // LVO -132 (0xFF7C)
     name: "Forbid",
     handler: (emu, lib: ExecLibrary) => {
@@ -3670,8 +3732,35 @@ export class LibraryTraps {
 
     // Set PC to return address
     // EXCEPTIONS: Supervisor() and Exit() set PC themselves, so check if it was changed
+    const forcedReturn =
+      library === this.execLibrary ? this.execLibrary.consumeForcedReturn() : false;
+    const execJump =
+      library === this.execLibrary ? this.execLibrary.consumeTrapJump() : null;
     const currentPC = this.emulator.getRegister(16);
-    if (vector.name === "Supervisor") {
+    if (forcedReturn) {
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] ExecLibrary forced return to 0x${currentPC.toString(16)}`
+        );
+      }
+      return true;
+    }
+    if (execJump) {
+      const execJumpPc = execJump.pc;
+      const spNow = this.emulator.getRegister(15);
+      this.execLibrary.setTrapReturnContext(returnAddr, spNow, execJump.name);
+      this.emulator.writeMemory32(spNow - 4, returnAddr);
+      this.emulator.setRegister(15, spNow - 4);
+      this.emulator.setRegister(16, execJumpPc);
+      this.emulator.refillPrefetch();
+      if (DEBUG_LIBRARY_TRAPS) {
+        console.log(
+          `[LibraryTraps] ExecLibrary jump to 0x${execJumpPc.toString(
+            16
+          )} with return 0x${returnAddr.toString(16)}`
+        );
+      }
+    } else if (vector.name === "Supervisor") {
       // Supervisor already set PC to the supervisor function, don't overwrite it
       if (DEBUG_LIBRARY_TRAPS) {
         console.log(

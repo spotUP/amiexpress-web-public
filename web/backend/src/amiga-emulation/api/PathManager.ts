@@ -78,8 +78,13 @@ export class PathManager {
     // Standard AmigaDOS assigns
     this.assigns.set('sys:', this.normalizeAssignPath(path.join(this.baseDir, 'System/')));
     this.assigns.set('c:', this.normalizeAssignPath(path.join(this.baseDir, 'System/C/')));
+    this.assigns.set('l:', this.normalizeAssignPath(path.join(this.baseDir, 'System/L/')));
     this.assigns.set('libs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Libs/')));
     this.assigns.set('devs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Devs/')));
+    this.assigns.set('fonts:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Fonts/')));
+    this.assigns.set('locale:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Locale/')));
+    this.assigns.set('prefs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Prefs/')));
+    this.assigns.set('classes:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Classes/')));
 
     // RAM disk and temp
     this.assigns.set('ram:', this.normalizeAssignPath('/tmp/ram/'));

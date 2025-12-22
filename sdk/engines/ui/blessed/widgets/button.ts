@@ -7,6 +7,18 @@ import type { ButtonOptions, KeyEvent } from '../core/types';
 
 export class Button extends Element {
   constructor(options: ButtonOptions = {}) {
+    const baseStyle = options.style ?? {};
+    const focusStyle = {
+      fg: 'white',
+      bg: 'blue',
+      ...(baseStyle.focus ?? {}),
+    };
+    const hoverStyle = {
+      fg: 'white',
+      bg: 'blue',
+      ...(baseStyle.hover ?? {}),
+    };
+
     super({
       focusable: true,
       clickable: true,
@@ -16,6 +28,13 @@ export class Button extends Element {
       valign: 'middle',
       padding: { left: 1, right: 1, top: 0, bottom: 0 },
       ...options,
+      style: {
+        fg: baseStyle.fg ?? 'white',
+        bg: baseStyle.bg ?? 'black',
+        ...baseStyle,
+        focus: focusStyle,
+        hover: hoverStyle,
+      },
     });
 
     // Key handlers

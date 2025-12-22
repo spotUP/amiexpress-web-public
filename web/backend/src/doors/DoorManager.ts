@@ -942,7 +942,10 @@ export class DoorManager {
     this.socket.emit('ansi-output', '\r\n');
     this.socket.emit('ansi-output', 'Upload a door archive (ZIP, LHA, LZH, or LZX format)\r\n\r\n');
     this.socket.emit('ansi-output', 'The archive should contain:\r\n');
-    this.socket.emit('ansi-output', '  - Door executable (.ts, .js, or Amiga binary)\r\n');
+    this.socket.emit('ansi-output', '  - Commands/BBSCmd/<DOOR>.info (required)\r\n');
+    this.socket.emit('ansi-output', '  - Doors/<door>/... (required)\r\n');
+    this.socket.emit('ansi-output', '  - TypeScript doors must include package.json\r\n');
+    this.socket.emit('ansi-output', '  - Hybrid doors must include dist/client.bundle.js\r\n');
     this.socket.emit('ansi-output', '  - FILE_ID.DIZ (optional, but recommended)\r\n');
     this.socket.emit('ansi-output', '  - README.TXT or similar documentation (optional)\r\n\r\n');
 
@@ -1042,13 +1045,19 @@ export class DoorManager {
       let suggestion = '';
       let canInstall = false;
 
-      if (analysis.isStandardDoorStructure) {
+      if (analysis.isTypeScriptDoor) {
+        doorType = 'TypeScript Door';
+        if (analysis.typeScriptIssues && analysis.typeScriptIssues.length > 0) {
+          suggestion = 'TypeScript door archive is missing required files:\r\n' +
+            analysis.typeScriptIssues.map(issue => `\x1b[31m- ${issue}\x1b[0m`).join('\r\n');
+          canInstall = false;
+        } else {
+          suggestion = 'This appears to be a TypeScript door.\r\nReady to install to Commands/BBSCmd/ + Doors/.\r\n\x1b[36mDependencies will be installed via npm\x1b[0m';
+          canInstall = true;
+        }
+      } else if (analysis.isStandardDoorStructure) {
         doorType = 'Standard AmiExpress Door';
         suggestion = 'Ready to install to BBS structure!\r\n\x1b[36mCommands will be copied to Commands/BBSCmd/\x1b[0m\r\n\x1b[36mExecutables will be copied to Doors/\x1b[0m\r\n* Will run via 68000 CPU emulation!';
-        canInstall = true;
-      } else if (analysis.isTypeScriptDoor) {
-        doorType = 'TypeScript Door';
-        suggestion = 'This appears to be a TypeScript/JavaScript door.\r\nReady to install and run.';
         canInstall = true;
       } else if (analysis.isAREXXDoor) {
         doorType = 'AREXX Script Door';

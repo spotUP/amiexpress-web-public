@@ -32,9 +32,10 @@ export async function deployDoor(
 
   console.log(chalk.bold('Manual deployment:'));
   console.log(chalk.gray('  1. Pack your door:'), chalk.cyan('npm run pack'));
-  console.log(chalk.gray('  2. Upload ZIP to BBS server'));
-  console.log(chalk.gray('  3. Extract in doors directory'));
-  console.log(chalk.gray('  4. Add to door menu'));
+  console.log(chalk.gray('  2. Upload archive to BBS server'));
+  console.log(chalk.gray('  3. Extract at BBS root (Commands/BBSCmd + Doors/)'));
+  console.log(chalk.gray('  4. Restart BBS or reload doors'));
+  console.log(chalk.gray('  5. Add to door menu if needed'));
   console.log('');
 
   // Collect deployment config for future use

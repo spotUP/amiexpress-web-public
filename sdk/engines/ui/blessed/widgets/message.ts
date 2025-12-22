@@ -17,7 +17,7 @@ export class Message extends Box {
 
   constructor(options: MessageOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
-    const height = typeof options.height === 'number' ? options.height : 9;
+    const height = typeof options.height === 'number' ? options.height : 12;
 
     super({
       ...options,
@@ -41,12 +41,13 @@ export class Message extends Box {
     // Message text - centered
     // Use 'transparent' for bg to inherit from parent dialog
     const dialogBg = options.style?.bg || 'black';
+    const messageHeight = Math.max(3, height - 7);
     this.messageText = new Box({
       parent: this,
       top: 0,
       left: 0,
       width: '100%',
-      height: 3,
+      height: messageHeight,
       content: options.text || '',
       tags: true,
       align: 'center',

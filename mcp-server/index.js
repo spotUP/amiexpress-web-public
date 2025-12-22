@@ -729,37 +729,84 @@ class AmiExpressDocsServer {
 
   async handleSearchNDK(args) {
     const { query, library = null } = args;
+    const autodocsDir = path.join(
+      PROJECT_ROOT,
+      'Documentation',
+      '7-Reference Sources',
+      'NDK3.2R4',
+      'Autodocs'
+    );
 
-    // NDK Autodocs are not currently available in the repository
-    // Users should refer to external AmigaOS documentation or amitools reference
+    let files = [];
+    try {
+      files = await fs.readdir(autodocsDir);
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `NDK Autodocs directory not found: ${error.message}\nExpected: ${autodocsDir}`
+        }],
+        isError: true
+      };
+    }
+
+    const escaped = String(query || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escaped, 'i');
+    const results = [];
+
+    const candidates = files.filter((file) => file.toLowerCase().endsWith('.doc'));
+    const filtered = library
+      ? candidates.filter((file) => {
+          const lower = file.toLowerCase();
+          const lib = String(library).toLowerCase();
+          return lower.startsWith(`${lib}.`) || lower.includes(`${lib}_`) || lower.includes(`${lib}-`);
+        })
+      : candidates;
+
+    for (const file of filtered) {
+      const filePath = path.join(autodocsDir, file);
+      try {
+        const content = await fs.readFile(filePath, 'utf-8');
+        const lines = content.split('\n');
+        const matches = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (!searchRegex.test(line)) continue;
+          const start = Math.max(0, i - 2);
+          const end = Math.min(lines.length, i + 3);
+          const context = lines.slice(start, end).map((text, idx) => ({
+            line: start + idx + 1,
+            text: text.trimEnd()
+          }));
+          matches.push({
+            line: i + 1,
+            text: line.trimEnd(),
+            context
+          });
+          if (matches.length >= 10) break;
+        }
+
+        if (matches.length > 0) {
+          results.push({
+            document: file,
+            path: filePath,
+            matches
+          });
+        }
+      } catch (error) {
+        // Skip files that can't be read
+      }
+    }
+
     return {
       content: [{
         type: 'text',
-        text: `NDK Autodocs are not available in this repository.
-
-For AmigaOS library function documentation, please use:
-1. amitools reference at Documentation/7-Reference Sources/amitools/
-2. External AmigaOS NDK documentation
-3. Online resources: amigadev.elowar.com or wiki.amigaos.net
-
-Query: "${query}"${library ? ` (library: ${library})` : ''}
-
-Common dos.library offsets:
-  -30: Open
-  -36: Close
-  -42: Read
-  -48: Write
-  -60: Seek
-  -96: DupLock
-  -102: Examine
-  -108: ExNext
-  -114: Info
-  -120: CreateDir
-  -126: CurrentDir
-  -132: IoErr
-  -138: CreateProc
-  -150: Lock
-  -156: UnLock`
+        text: JSON.stringify({
+          query,
+          library,
+          results
+        }, null, 2)
       }]
     };
   }

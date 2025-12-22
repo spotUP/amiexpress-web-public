@@ -104,6 +104,8 @@ export class DoorLifecycleManager {
   private pcProbeRanges: Array<{ start: number; end: number; hits: number }> =
     [];
   private pcProbeMaxHits: number = 1;
+  private spinLoopSleepMs: number = 1;
+  private lastRomJumpLogIteration: number = -1000000;
 
   constructor(
     emulator: MoiraEmulator,
@@ -165,6 +167,7 @@ export class DoorLifecycleManager {
     this.pcProbeRanges = this.parsePcProbeRanges(
       process.env.DOOR_PC_PROBE_RANGES || ""
     );
+    this.spinLoopSleepMs = Number(process.env.AEDOOR_SPIN_SLEEP_MS ?? 1);
     const watchOffsetsEnv = process.env.DOOR_WATCH_VALUES_OFFSETS || "";
     this.watchValueOffsets = watchOffsetsEnv
       .split(",")
@@ -297,10 +300,8 @@ export class DoorLifecycleManager {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
         this.logInitialState();
       }
-      // Ensure startup message is sent for XIM doors before looping
-      if (!this.executionState.startupMessageSent && this.config.doorType === "XIM") {
-        await this.sendStartupMessage();
-      }
+      // Send the INIT/STAT startup messages so doors see the expected AEDoor handshake.
+      await this.sendStartupMessage();
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {
@@ -524,6 +525,11 @@ export class DoorLifecycleManager {
 
     const execLib = this.libraryManager.execLibrary;
     if (!execLib) {
+      return false;
+    }
+
+    if (this.libraryTraps?.isTrapAddress(pc)) {
+      // Allow transitions through AEDoor/Exec trap stubs used for GetMsg/PutMsg
       return false;
     }
 
@@ -1344,18 +1350,28 @@ export class DoorLifecycleManager {
       });
       this.executionState.gapJumpLogged = true; // Only log once
     } else if (pc >= 0xf80000) {
-      // This is ROM space - check if it's a bad jump
-      console.error(`\n*** JUMP TO ROM DETECTED ***`);
-      console.error(`  Current PC: 0x${pc.toString(16)}`);
-      console.error(`  PC History (last ${this.pcHistory.length} instructions):`);
-      this.pcHistory.forEach((p, i) => {
-        console.error(`    [${i}] 0x${p.toString(16)}`);
-      });
-      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+      // This is ROM space - log sparingly to avoid flooding when ROM init runs
+      const iteration = this.executionState.iterationCount;
+      if (iteration - this.lastRomJumpLogIteration >= 10000) {
+        this.lastRomJumpLogIteration = iteration;
+        console.error(`\n*** JUMP TO ROM DETECTED ***`);
+        console.error(`  Current PC: 0x${pc.toString(16)}`);
+        console.error(`  PC History (last ${this.pcHistory.length} instructions):`);
+        this.pcHistory.forEach((p, i) => {
+          console.error(`    [${i}] 0x${p.toString(16)}`);
+        });
+        console.error(`  Iteration: ${iteration}`);
+      }
     }
 
     // CRITICAL: Track SP before instruction to detect corruption
     const spBefore = this.emulator.getRegister(15);
+
+    // ROM routines expect A6 to hold ExecBase; protect against it being cleared.
+    const execBase = this.libraryManager.execLibrary?.getExecBaseAddress() ?? 0;
+    if (pc >= 0xf80000 && execBase && this.emulator.getRegister(14) === 0) {
+      this.emulator.setRegister(14, execBase);
+    }
 
     // CRITICAL FIX: Check for ILLEGAL instruction (0x4AFC) BEFORE executing
     // This is how we intercept library calls - doors use JSR -offset(A6)
@@ -1662,9 +1678,15 @@ export class DoorLifecycleManager {
       if (this.executionState.iterationCount % 10 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
+      if (this.executionState.iterationCount % 200 === 0 && this.spinLoopSleepMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.spinLoopSleepMs));
+      }
     } else {
       if (this.executionState.iterationCount % 1000 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
+      }
+      if (this.executionState.stuckInLoop && this.executionState.iterationCount % 1000 === 0 && this.spinLoopSleepMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.spinLoopSleepMs));
       }
     }
   }
@@ -1673,7 +1695,8 @@ export class DoorLifecycleManager {
     // SAmiLog3 busy loop lives around 0x5c90-0x5d10; count it as progress so the guard
     // doesn't kill a door that is still actively spinning.
     // For batch doors, don't record PC progress to allow guard to trigger.
-    if (!this.lifecycleConfig.disableInputWaitExtension && pc >= 0x5c90 && pc <= 0x5d10) {
+    this.executionState.stuckInLoop = pc >= 0x5c90 && pc <= 0x5d10;
+    if (!this.lifecycleConfig.disableInputWaitExtension && this.executionState.stuckInLoop) {
       this.executionState.lastProgressIteration = this.executionState.iterationCount;
       this.executionState.lastProgressTime = Date.now();
     }

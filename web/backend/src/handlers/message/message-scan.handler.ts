@@ -373,7 +373,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
 
     if (shouldScanFiles) {
       try {
-        const { runSysCommand } = require('./command-execution.handler');
+        const { runSysCommand } = require('../command-execution.handler');
         const currentConfBackup = session.currentConf;
         session.currentConf = conference.id;
         // "N" with params "S U" (express.e: runSysCommand('N','S U'))

@@ -248,6 +248,8 @@ export interface UploadSessionContext {
 export interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
+  skipNextDisplayFlowMenu?: boolean;
+  manualMenuTargetState?: LoggedOnSubState;
   user?: any; // Will be User from database (expert stored as "X"/"N")
   currentConf: number;
   conferenceId: number; // XIM doors read this property for current conference
@@ -289,6 +291,10 @@ export interface BBSSession {
   inDoorManager?: boolean; // Whether user is currently in door manager
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
   doorKeyStateHandler?: ((data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => void) | null; // Door key state handler for simultaneous key input
+  doorReconnectHandler?: (() => void) | null; // Door reconnect handler to force redraw after socket reconnect
+  socket?: any; // Active socket instance (used for reconnect-safe output)
+  socketId?: string; // Active socket id for this session
+  bbsApi?: any; // Active BBS API instance for doors (used to rebind socket on reconnect)
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)
   currentDoorType?: string; // Type of currently running door (XIM, AMI, TS, etc.)
@@ -347,7 +353,6 @@ export interface BBSSession {
   pagingInterval?: NodeJS.Timeout; // Interval for paging notifications
   inChat?: boolean; // Whether user is currently in chat
   chatSession?: any; // Active chat session object
-  socketId?: string; // Socket.IO socket ID for this session
   lastTypingTime?: number; // Last time user was typing (for typing indicator)
   partnerTypingBuffer?: string; // Buffer for partner's typing indicator
   typingBlinkTimer?: NodeJS.Timeout; // Timer for typing indicator blinking
@@ -1123,13 +1128,14 @@ io.on('connection', async (socket) => {
 
     // Check for sysop-level user on fresh install
     try {
-      const sysopUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE seclevel >= 200').get() as { count: number };
-      if (sysopUsers.count === 0) {
+      const sysopUsers = await db.query('SELECT COUNT(*) as count FROM users WHERE seclevel >= 200');
+      const sysopCount = Number(sysopUsers.rows?.[0]?.count ?? 0);
+      if (sysopCount === 0) {
         console.log('[SETUP] No sysop-level users found - FIRST new user will automatically become sysop (level 255)');
         // Set global flag that the new user handler will check
         (global as any).firstUserIsSysop = true;
       } else {
-        console.log(`[SETUP] Found ${sysopUsers.count} sysop-level user(s)`);
+        console.log(`[SETUP] Found ${sysopCount} sysop-level user(s)`);
         (global as any).firstUserIsSysop = false;
       }
     } catch (err: any) {

@@ -421,51 +421,33 @@ Planned features:
 
 ## Example Door Package
 
-Here's how to create a door package:
+TypeScript door archives are **self-contained** and include only the minimal files.
+The SDK is not bundled; the BBS already has it installed.
+
+```
+Commands/BBSCmd/MYDOOR.info
+Doors/mydoor/
+  package.json
+  package-lock.json
+  dist/
+    client.bundle.js     # hybrid only
+  assets/                # optional
+  data/                  # optional
+FILE_ID.DIZ              # optional
+README.TXT               # optional
+```
+
+You can generate this structure with the SDK packer:
 
 ```bash
-# 1. Create directory
-mkdir mydoor
-cd mydoor
+# From your door repo root (must include Commands/BBSCmd/<DOOR>.info)
+npm run pack
 
-# 2. Create FILE_ID.DIZ
-cat > FILE_ID.DIZ << 'EOF'
-My Awesome Door v1.0
-By John Doe
-
-A fun text adventure game
-for AmiExpress-Web BBS.
-
-Features:
-- Multiple rooms
-- Inventory system
-- Save/Load game
-EOF
-
-# 3. Create README
-cat > README.TXT << 'EOF'
-My Awesome Door
-===============
-
-Installation:
-Just install via Door Manager!
-
-Usage:
-Navigate with N/S/E/W commands
-Use INVENTORY to see items
-Use SAVE to save your game
-
-Enjoy!
-EOF
-
-# 4. Copy your door executable
-cp ../mydoor.ts .
-
-# 5. Create ZIP
-zip -r mydoor.zip *
-
-# 6. Upload to BBS via Door Manager
+# Upload the resulting archive via Door Manager
 ```
+
+The Door Manager enforces this structure for TypeScript doors and will reject archives
+missing `Commands/BBSCmd/*.info` or required runtime files.
 
 ---
 

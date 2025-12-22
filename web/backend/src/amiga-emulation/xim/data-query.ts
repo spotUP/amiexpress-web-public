@@ -79,11 +79,15 @@ export class XIMDataQueryHandler {
             }
 
             this.messageParser.writeString(stringAddr, fileCount, 31);
+            const verify = this.messageParser.readString(stringAddr, 31);
+            console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
             console.log(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
           } else {
             // Normal context: return username
             const username = user?.username || 'Guest';
             this.messageParser.writeString(stringAddr, username, 31);
+            const verify = this.messageParser.readString(stringAddr, 31);
+            console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
             console.log(`  [READ] DT_NAME: "${username}"`);
           }
         } else {
@@ -165,12 +169,22 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_SLOTNUMBER:
         if (isRead) {
-          const slotNum = user?.id || 1;
+          const sessionSlot = Number((this.bbsSession as any)?.userSlotNumber);
+          const userSlot = Number((user as any)?.slotNumber);
+          const slotNum =
+            Number.isFinite(sessionSlot) && sessionSlot > 0
+              ? sessionSlot
+              : Number.isFinite(userSlot) && userSlot > 0
+                ? userSlot
+                : 0;
           this.messageParser.writeString(stringAddr, slotNum.toString(), 200);
           console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
         } else {
           const newSlot = parseInt(this.messageParser.readString(stringAddr, 200));
-          if (user) user.id = newSlot;
+          if (Number.isFinite(newSlot)) {
+            if (user) (user as any).slotNumber = newSlot;
+            (this.bbsSession as any).userSlotNumber = newSlot;
+          }
           console.log(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
         }
         break;
@@ -259,6 +273,8 @@ export class XIMDataQueryHandler {
                           (user as any)?.pageLength ||
                           24;
           this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
+          const verify = this.messageParser.readString(stringAddr, 200);
+          console.log(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
           console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
         } else {
           const newLen = parseInt(this.messageParser.readString(stringAddr, 200));
@@ -571,20 +587,23 @@ export class XIMDataQueryHandler {
 
       case XIMCommand.DT_CONFACCESS:
         if (isRead) {
-          // confAccess comes from disk (user.data) via state, set by door.handler.ts
-          // Do NOT fall back to user?.confAccess - that's SQLite data
-          // express.e uses 25 chars for conference access string
-          // If confAccess is short, pad with underscores (no access) - don't assume full access
-          let confAccess = this.state.confAccess || '';
-          if (confAccess.length < 25) {
-            confAccess = confAccess.padEnd(25, '_');
+          // express.e:3777-3778 uses 10-char conference access string from disk
+          let confAccess =
+            (this.bbsSession as any)?.confAccess ||
+            this.state.confAccess ||
+            '';
+          if (confAccess.length < 10) {
+            confAccess = confAccess.padEnd(10, '_');
+          } else if (confAccess.length > 10) {
+            confAccess = confAccess.slice(0, 10);
           }
-          this.messageParser.writeString(stringAddr, confAccess, 25);
+          this.messageParser.writeString(stringAddr, confAccess, 10);
           console.log(`  [READ] DT_CONFACCESS: "${confAccess}" (from disk)`);
         } else {
           // Write operation - update state (will need to sync to disk separately)
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
+          (this.bbsSession as any).confAccess = newAccess;
           console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
         }
         break;
@@ -749,6 +768,12 @@ export class XIMDataQueryHandler {
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    // Always reset string pointers to the embedded buffer so doors
+    // don't read stale pointers from prior messages.
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
     this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
   }

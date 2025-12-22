@@ -86,20 +86,64 @@ export class LibraryManager {
     return resolved;
   }
 
-  private resolveRomPath(): string {
+  private resolveRomSource(): { kind: "kickstart"; path: string } | { kind: "aros"; romPath: string; extPath: string } {
+    const romPref = (process.env.AEDOOR_ROM || "").toLowerCase();
+    const preferKickstart = romPref === "kickstart" || romPref === "";
     const romName = process.env.AEDOOR_ROM_FILE || DEFAULT_ROM;
-    const candidates = [
+    const kickCandidates = [
       path.join(this.bbsRoot, "data", "amiga-roms", romName),
       path.join(process.cwd(), "data", "amiga-roms", romName),
       path.resolve(__dirname, "..", "..", "data", "amiga-roms", romName),
+      path.resolve(__dirname, "..", "..", "..", "data", "amiga-roms", romName),
+      path.resolve(__dirname, "..", "..", "..", "..", "data", "amiga-roms", romName),
     ];
-    for (const candidate of candidates) {
+
+    for (const candidate of kickCandidates) {
       if (amigafs.existsSync(candidate)) {
-        return candidate;
+        if (preferKickstart) {
+          return { kind: "kickstart", path: candidate };
+        }
       }
     }
+
+    const arosDirs = [
+      path.join(this.bbsRoot, "data", "amiga-roms"),
+      path.join(process.cwd(), "data", "amiga-roms"),
+      path.resolve(__dirname, "..", "..", "data", "amiga-roms"),
+      path.resolve(__dirname, "..", "..", "..", "data", "amiga-roms"),
+      path.resolve(__dirname, "..", "..", "..", "..", "data", "amiga-roms"),
+    ];
+
+    for (const dir of arosDirs) {
+      const romPath = path.join(dir, "aros-rom.bin");
+      const extPath = path.join(dir, "aros-ext.bin");
+      if (amigafs.existsSync(romPath) && amigafs.existsSync(extPath)) {
+        if (!preferKickstart) {
+          return { kind: "aros", romPath, extPath };
+        }
+      }
+    }
+
+    if (preferKickstart) {
+      for (const dir of arosDirs) {
+        const romPath = path.join(dir, "aros-rom.bin");
+        const extPath = path.join(dir, "aros-ext.bin");
+        if (amigafs.existsSync(romPath) && amigafs.existsSync(extPath)) {
+          return { kind: "aros", romPath, extPath };
+        }
+      }
+    } else {
+      for (const candidate of kickCandidates) {
+        if (amigafs.existsSync(candidate)) {
+          return { kind: "kickstart", path: candidate };
+        }
+      }
+    }
+
     throw new Error(
-      `Kickstart ROM not found. Tried: ${candidates.join(", ")}`
+      `ROM not found. Tried Kickstart: ${kickCandidates.join(", ")}; AROS: ${arosDirs
+        .map((dir) => `${dir}/aros-rom.bin + ${dir}/aros-ext.bin`)
+        .join(", ")}`
     );
   }
 
@@ -109,14 +153,31 @@ export class LibraryManager {
    */
   private ensureRomLibrariesExtracted(romPath: string, projectRoot: string): void {
     try {
-      const needed = ["dos.library", "utility.library", "console.device"];
       const libsDir = path.join(projectRoot, "Libs");
-
-      // If everything already exists, skip work
-      const missing = needed.filter((n) => !amigafs.existsSync(path.join(libsDir, n)));
-      if (missing.length === 0) {
-        return;
-      }
+      const systemDir = path.join(projectRoot, "System");
+      const systemLibsDir = path.join(systemDir, "Libs");
+      const devsDir = path.join(projectRoot, "Devs");
+      const systemDevsDir = path.join(systemDir, "Devs");
+      const resourcesDir = path.join(projectRoot, "Resources");
+      const systemResourcesDir = path.join(systemDir, "Resources");
+      const datatypesDir = path.join(projectRoot, "Classes", "Datatypes");
+      const systemDatatypesDir = path.join(systemDir, "Classes", "Datatypes");
+      const lDir = path.join(projectRoot, "L");
+      const systemLDir = path.join(systemDir, "L");
+      const fontsDir = path.join(projectRoot, "Fonts");
+      const systemFontsDir = path.join(systemDir, "Fonts");
+      const localeDir = path.join(projectRoot, "Locale");
+      const systemLocaleDir = path.join(systemDir, "Locale");
+      const catalogsDir = path.join(localeDir, "Catalogs");
+      const systemCatalogsDir = path.join(systemLocaleDir, "Catalogs");
+      const prefsDir = path.join(projectRoot, "Prefs");
+      const systemPrefsDir = path.join(systemDir, "Prefs");
+      const keymapsDir = path.join(devsDir, "Keymaps");
+      const systemKeymapsDir = path.join(systemDevsDir, "Keymaps");
+      const monitorsDir = path.join(devsDir, "Monitors");
+      const systemMonitorsDir = path.join(systemDevsDir, "Monitors");
+      const romDir = path.join(projectRoot, "ROM");
+      const systemRomDir = path.join(systemDir, "ROM");
 
       // romtool must be present to split modules
       const which = spawnSync("which", ["romtool"], { encoding: "utf-8" });
@@ -126,26 +187,101 @@ export class LibraryManager {
       }
 
       const outDir = path.join(projectRoot, "tmp", "rom-extract");
+      const stampPath = path.join(outDir, ".stamp");
       fs.mkdirSync(outDir, { recursive: true });
 
-      const split = spawnSync("romtool", ["split", romPath, "-o", outDir, "--no-version-dir"], {
-        encoding: "utf-8",
-      });
-      if (split.status !== 0) {
-        console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
-        return;
+      const romStat = fs.statSync(romPath);
+      const stamp = `${romPath}|${romStat.size}|${romStat.mtimeMs}`;
+      const existingStamp = amigafs.existsSync(stampPath) ? fs.readFileSync(stampPath, "utf-8").trim() : "";
+      if (existingStamp !== stamp) {
+        const split = spawnSync("romtool", ["split", romPath, "-o", outDir, "--no-version-dir"], {
+          encoding: "utf-8",
+        });
+        if (split.status !== 0) {
+          console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
+          return;
+        }
+        fs.writeFileSync(stampPath, stamp);
       }
 
       const entries = amigafs.readdirSync(outDir);
-      for (const need of missing) {
-        const base = need.replace(".library", "").replace(".device", "");
-        const candidate = entries.find((e) => e.toLowerCase().startsWith(base.toLowerCase()));
-        if (!candidate) continue;
-        const src = path.join(outDir, candidate);
-        const dest = path.join(libsDir, need);
-        fs.copyFileSync(src, dest);
-        console.log(`[LibraryManager] Extracted ${need} from ROM → ${dest}`);
-      }
+      const copyTo = (src: string, targets: string[]): void => {
+        for (const target of targets) {
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          if (amigafs.existsSync(target)) continue;
+          fs.copyFileSync(src, target);
+          console.log(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${target}`);
+        }
+      };
+
+      const libTargets = [libsDir, systemLibsDir];
+      const devTargets = [devsDir, systemDevsDir];
+      const resTargets = [resourcesDir, systemResourcesDir];
+      const dtTargets = [datatypesDir, systemDatatypesDir];
+      const lTargets = [lDir, systemLDir];
+      const fontTargets = [fontsDir, systemFontsDir];
+      const localeTargets = [localeDir, systemLocaleDir];
+      const catalogTargets = [catalogsDir, systemCatalogsDir];
+      const prefsTargets = [prefsDir, systemPrefsDir];
+      const keymapTargets = [keymapsDir, systemKeymapsDir];
+      const monitorTargets = [monitorsDir, systemMonitorsDir];
+      const romTargets = [romDir, systemRomDir];
+
+      entries.forEach((entry) => {
+        const src = path.join(outDir, entry);
+        if (!amigafs.existsSync(src) || fs.statSync(src).isDirectory()) {
+          return;
+        }
+
+        const lower = entry.toLowerCase();
+        if (lower.endsWith(".library")) {
+          copyTo(src, libTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".device")) {
+          copyTo(src, devTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".resource")) {
+          copyTo(src, resTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".datatype")) {
+          copyTo(src, dtTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".handler") || lower.endsWith(".filesystem")) {
+          copyTo(src, lTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".keymap")) {
+          copyTo(src, keymapTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".monitor")) {
+          copyTo(src, monitorTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".font")) {
+          copyTo(src, fontTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".prefs")) {
+          copyTo(src, prefsTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".catalog")) {
+          copyTo(src, catalogTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+        if (lower.endsWith(".locale") || lower.endsWith(".language")) {
+          copyTo(src, localeTargets.map((dir) => path.join(dir, entry)));
+          return;
+        }
+
+        // Fallback: keep everything else under ROM/ for completeness.
+        copyTo(src, romTargets.map((dir) => path.join(dir, entry)));
+      });
     } catch (err) {
       console.warn("[LibraryManager] Failed to extract ROM libraries", err);
     }
@@ -154,15 +290,37 @@ export class LibraryManager {
   private async initializeExec(): Promise<void> {
     const projectRoot = this.resolveBbsRoot();
     console.log(`[LibraryManager] BBS root resolved to ${projectRoot}`);
-    console.log("[LibraryManager] Loading Kickstart ROM...");
+    console.log("[LibraryManager] Loading ROM...");
 
-    const romPath = this.resolveRomPath();
-    const romData = fs.readFileSync(romPath);
-    this.emulator.loadROM(new Uint8Array(romData));
+    const romSource = this.resolveRomSource();
+    let romPath: string | null = null;
 
-    console.log(
-      "[LibraryManager] Kickstart ROM loaded - provides ROM routines"
-    );
+    const usingKickstart = romSource.kind === "kickstart";
+    if (usingKickstart) {
+      romPath = romSource.path;
+      const romData = fs.readFileSync(romPath);
+      this.emulator.loadROM(new Uint8Array(romData));
+      console.log("[LibraryManager] Kickstart ROM loaded - provides ROM routines");
+    } else {
+      console.warn("[LibraryManager] Kickstart ROM not found; using AROS ROM fallback.");
+      const arosRom = fs.readFileSync(romSource.romPath);
+      const arosExt = fs.readFileSync(romSource.extPath);
+      const combined = Buffer.concat([arosRom, arosExt]);
+      this.emulator.loadROM(new Uint8Array(combined));
+      console.log("[LibraryManager] AROS ROM loaded - provides ROM routines");
+
+      // Best-effort: allow romtool to try extracting libraries from AROS ROM.
+      const combinedPath = path.join(projectRoot, "tmp", "aros-combined.rom");
+      try {
+        fs.mkdirSync(path.dirname(combinedPath), { recursive: true });
+        if (!amigafs.existsSync(combinedPath)) {
+          fs.writeFileSync(combinedPath, combined);
+        }
+        romPath = combinedPath;
+      } catch (err) {
+        console.warn("[LibraryManager] Failed to persist combined AROS ROM for extraction", err);
+      }
+    }
 
     console.log("[LibraryManager] Creating ExecBase structure...");
 
@@ -176,14 +334,20 @@ export class LibraryManager {
     // If a supported Kickstart is present, extract key libraries to disk once so
     // doors can load real binaries instead of stubs. This is generic and runs
     // only when files are missing.
-    this.ensureRomLibrariesExtracted(romPath, projectRoot);
+    if (romPath) {
+      this.ensureRomLibrariesExtracted(romPath, projectRoot);
+    }
 
     const libraryLoader = new LibraryLoader(this.emulator);
-    // Prefer real Amiga libraries when present on disk (repo / BBS root paths)
-    libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
-    libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
+    // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
+    // addSearchPath() unshifts, so add in reverse priority order.
     libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
+    libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
+    libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
+    console.log(
+      `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
+    );
 
     // Pre-register any libraries present on disk so getLibraryBase() can
     // resolve them before OpenLibrary is invoked.
@@ -415,7 +579,7 @@ export class LibraryManager {
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
     console.log("[LibraryManager] Pre-opening utility.library and installing vectors...");
-    this.execLibrary.openLibraryHybrid("utility.library", 37);
+    this.execLibrary.openLibraryHybrid("utility.library", 37, false);
     this.libraryTraps.installUtilityVectors();
 
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
@@ -491,7 +655,7 @@ export class LibraryManager {
     );
 
     // Ensure real dos.library is resident and vectors installed up front (generic)
-    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37);
+    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, true);
     if (dosHybrid.success) {
       this.libraryTraps!.installDOSVectors();
       console.log(
@@ -504,7 +668,7 @@ export class LibraryManager {
     }
 
     // Pre-open AEDoor.library so vectors are installed even before doors call OpenLibrary.
-    const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2);
+    const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2, false);
     if (aedHybrid.success) {
       this.libraryTraps!.installAEDoorVectors();
       console.log(
@@ -612,6 +776,17 @@ export class LibraryManager {
         const stat = amigafs.statSync(entryPath);
         if (!stat.isFile()) continue;
         if (!name.toLowerCase().endsWith(".library")) continue;
+        const lower = name.toLowerCase();
+        if (
+          lower === "exec.library" ||
+          lower === "dos.library" ||
+          lower === "utility.library" ||
+          lower === "graphics.library" ||
+          lower === "intuition.library" ||
+          lower === "icon.library"
+        ) {
+          continue;
+        }
         this.execLibrary.registerLibraryPlaceholder(name);
       }
     } catch (err) {

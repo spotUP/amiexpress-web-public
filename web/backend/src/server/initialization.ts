@@ -123,6 +123,47 @@ import { getMailStatFile, loadMsgPointers, validatePointers, updateReadPointer }
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { searchFileDescriptions } from './database-helpers';
 
+const AROS_ROM_FILES = ['aros-rom.bin', 'aros-ext.bin'];
+
+function ensureArosRomsAvailable(): void {
+  try {
+    const bbsRoot = process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get('dataDir');
+    const targetDir = path.resolve(bbsRoot, 'data', 'amiga-roms');
+    const sourceCandidates = [
+      path.resolve(__dirname, '../data/amiga-roms'),
+      path.resolve(__dirname, '../../data/amiga-roms'),
+      path.resolve(bbsRoot, 'web/backend/data/amiga-roms'),
+      path.resolve(process.cwd(), 'web/backend/data/amiga-roms')
+    ];
+
+    let sourceDir: string | null = null;
+    for (const candidate of sourceCandidates) {
+      const hasAll = AROS_ROM_FILES.every((file) => fs.existsSync(path.join(candidate, file)));
+      if (hasAll) {
+        sourceDir = candidate;
+        break;
+      }
+    }
+
+    if (!sourceDir) {
+      console.warn('[AROS] AROS ROMs not found in web/backend/data; skipping copy');
+      return;
+    }
+
+    fs.mkdirSync(targetDir, { recursive: true });
+    for (const file of AROS_ROM_FILES) {
+      const src = path.join(sourceDir, file);
+      const dest = path.join(targetDir, file);
+      if (!fs.existsSync(dest)) {
+        fs.copyFileSync(src, dest);
+        console.log(`[AROS] Copied ${file} to ${dest}`);
+      }
+    }
+  } catch (error) {
+    console.warn('[AROS] Failed to copy AROS ROMs:', error);
+  }
+}
+
 /**
  * Data Initialization and Dependency Injection
  *
@@ -219,6 +260,8 @@ async function initializeDefaultWebhook() {
  */
 export async function initializeData() {
   try {
+    ensureArosRomsAvailable();
+
     // Initialize database schema first
     await db.init();
     console.log('Database schema initialized');

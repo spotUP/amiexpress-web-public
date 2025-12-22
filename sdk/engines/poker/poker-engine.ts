@@ -6,7 +6,6 @@
 
 import {
   PokerEngine as CorePokerEngine,
-  ActionType,
   type Action,
   type ExportOptions,
   type GameState,
@@ -23,7 +22,25 @@ import {
 } from '../cards/card-engine';
 
 export type { Action, ExportOptions, GameState, HandHistory, Player, PublicState, TableConfig };
-export { ActionType };
+export const ActionType = {
+  SIT: 'SIT',
+  STAND: 'STAND',
+  ADD_CHIPS: 'ADD_CHIPS',
+  RESERVE_SEAT: 'RESERVE_SEAT',
+  DEAL: 'DEAL',
+  FOLD: 'FOLD',
+  CHECK: 'CHECK',
+  CALL: 'CALL',
+  BET: 'BET',
+  RAISE: 'RAISE',
+  SHOW: 'SHOW',
+  MUCK: 'MUCK',
+  TIMEOUT: 'TIMEOUT',
+  TIME_BANK: 'TIME_BANK',
+  UNCALLED_BET_RETURNED: 'UNCALLED_BET_RETURNED',
+  NEXT_BLIND_LEVEL: 'NEXT_BLIND_LEVEL',
+} as const;
+export type ActionType = (typeof ActionType)[keyof typeof ActionType];
 export {
   auditChipConservation,
   calculateTotalChips,

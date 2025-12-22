@@ -44,7 +44,9 @@ export class ConfigRepository extends BaseRepository<any> {
     `);
 
     const row = stmt.get() as any;
-    if (!row) return null;
+    if (!row) {
+      return this.createSystemConfig({});
+    }
 
     return this.mapSystemConfigRow(row);
   }
@@ -168,8 +170,10 @@ export class ConfigRepository extends BaseRepository<any> {
       config.vapid_private_key || '',
       config.vapid_contact_email || ''
     );
-
-    return this.getSystemConfig()!;
+    const row = this.prepare(`
+      SELECT * FROM system_config WHERE id = 1
+    `).get() as any;
+    return this.mapSystemConfigRow(row);
   }
 
   /**

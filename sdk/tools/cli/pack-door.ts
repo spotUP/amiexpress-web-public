@@ -13,6 +13,7 @@ import { ReleasePacker } from '../packer';
 interface PackOptions {
   output: string;
   version?: string;
+  format?: 'zip' | 'lha';
 }
 
 /**
@@ -24,7 +25,8 @@ export async function packDoor(
 ): Promise<void> {
   const opts: PackOptions = {
     output: options?.output || './releases',
-    version: options?.version
+    version: options?.version,
+    format: options?.format
   };
 
   // Determine door path
@@ -55,7 +57,8 @@ export async function packDoor(
       description: pkg.description || 'A BBS door',
       category: pkg.category || 'Game',
       sourceDir: absolutePath,
-      outputDir: opts.output
+      outputDir: opts.output,
+      format: opts.format
     });
 
     // Pack

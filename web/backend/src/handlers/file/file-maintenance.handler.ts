@@ -891,7 +891,7 @@ export class FileMaintenanceHandler {
     session: BBSSession,
     file: any
   ): Promise<void> {
-    const { ViewFileHandler } = require('./view-file.handler');
+    const { ViewFileHandler } = require('../content/view-file.handler');
     await ViewFileHandler.handleViewFileCommand(socket, session, file.filename);
   }
 

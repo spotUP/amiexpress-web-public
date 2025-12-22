@@ -2,6 +2,10 @@
 
 Complete guide for creating TypeScript doors for AmiExpress-Web BBS.
 
+## Modern Door UX (Required)
+
+Always aim for modern, desktop-like doors using neo-blessed windows, panels, and mouse support. Avoid 90's text menus unless explicitly requested.
+
 ## Door Types
 
 AmiExpress-Web supports **three types of doors**:
@@ -156,7 +160,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 }
 ```
 
-### 5. Create .info File
+### 5. Create .info File (Required)
 
 Create `Commands/BBSCmd/MYDOOR.info`:
 
@@ -168,6 +172,19 @@ DESCRIPTION=My awesome BBS door
 ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
+```
+
+**Important:** TypeScript doors are discovered at BBS startup by scanning `.info` files.
+Doors without a `.info` file will not be registered or available.
+
+**Packaging:** The SDK packer expects a `.info` file in `Commands/BBSCmd/` and builds a minimal archive
+containing `Commands/BBSCmd/` and `Doors/<door>/` only (no SDK bundled).
+
+Use the packer:
+
+```bash
+# From your door repo root (must include Commands/BBSCmd/<DOOR>.info)
+npm run pack
 ```
 
 ### 6. Test Your Door
@@ -708,6 +725,8 @@ export default { runDoor };
 2. Verify `LOCATION` matches door directory name
 3. Restart BBS server to reload commands
 4. Check `package.json` has `runtime: "server"` and `doorPattern: "runDoor"`
+
+**Reminder:** `.info` files are mandatory for TypeScript doors. The BBS will not auto-register doors from `package.json` alone.
 
 ### Input Not Working
 

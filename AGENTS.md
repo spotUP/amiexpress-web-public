@@ -66,6 +66,10 @@ When a user asks to create a door or game, **ALWAYS read all SDK documentation F
 - [ ] Understand input format (raw strings for server doors, KeyEvent for hybrid)
 - [ ] Know the required package.json fields
 - [ ] Know how to create the .info file for command registration
+- [ ] Prefer modern, desktop-style neo-blessed UIs (windows/panels/mouse), not 90's text menus
+- [ ] Reserve footer space for buttons (min 3 rows) to avoid clipped controls
+- [ ] Keep button hover/active states blue (default UX standard for doors)
+- [ ] Ensure full keyboard navigation (tab/shift-tab focus, arrow keys, action hotkeys)
 
 **Never:**
 - Create a door without reading SDK docs

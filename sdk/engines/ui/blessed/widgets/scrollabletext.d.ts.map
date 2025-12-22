@@ -1,0 +1,1 @@
+{"version":3,"file":"scrollabletext.d.ts","sourceRoot":"","sources":["scrollabletext.ts"],"names":[],"mappings":"AAAA;;GAEG;AAEH,OAAO,EAAE,IAAI,EAAE,MAAM,QAAQ,CAAC;AAC9B,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,eAAe,CAAC;AAEpD,qBAAa,cAAe,SAAQ,IAAI;gBAC1B,OAAO,GAAE,cAAmB;IA6BxC;;OAEG;IACH,gBAAgB,IAAI,MAAM;IAI1B;;OAEG;IACH,gBAAgB,CAAC,OAAO,EAAE,MAAM,GAAG,IAAI;CAGxC"}

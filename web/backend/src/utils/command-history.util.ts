@@ -117,20 +117,30 @@ export async function loadHistory(session: BBSSession, userId: number | string):
 
     const row = result.rows[0];
 
-    // Restore session state from database
-    session.historyIndex = row.history_num || 0;
-    session.historyCycle = row.history_cycle || 0;
-
     // Parse commands JSON array
     try {
       const commands = JSON.parse(row.commands || '[]');
       if (Array.isArray(commands)) {
-        session.commandHistory = commands;
-        console.log(`[CommandHistory] Loaded ${commands.length} commands for user ${userIdStr}`);
+        session.commandHistory = commands.slice(-MAX_HISTORY_SIZE);
+
+        const length = session.commandHistory.length;
+        if (length === 0) {
+          session.historyIndex = 0;
+          session.historyCycle = 0;
+        } else {
+          const rawIndex = typeof row.history_num === 'number' ? row.history_num : length - 1;
+          const rawCycle = typeof row.history_cycle === 'number' ? row.history_cycle : length - 1;
+          session.historyIndex = Math.max(0, Math.min(length - 1, rawIndex));
+          session.historyCycle = Math.max(0, Math.min(length - 1, rawCycle));
+        }
+
+        console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${userIdStr}`);
       }
     } catch {
       // Invalid JSON - reset history
       session.commandHistory = [];
+      session.historyIndex = 0;
+      session.historyCycle = 0;
       console.log(`[CommandHistory] Invalid JSON for user ${userIdStr}, resetting history`);
     }
   } catch (error) {
@@ -154,7 +164,17 @@ export async function saveHistory(session: BBSSession, userId: number | string):
     }
 
     const userIdStr = String(userId);
-    const commandsJson = JSON.stringify(session.commandHistory);
+    const trimmed = session.commandHistory.slice(-MAX_HISTORY_SIZE);
+    session.commandHistory = trimmed;
+    if (session.commandHistory.length === 0) {
+      session.historyIndex = 0;
+      session.historyCycle = 0;
+    } else {
+      const maxIndex = session.commandHistory.length - 1;
+      session.historyIndex = Math.max(0, Math.min(maxIndex, session.historyIndex));
+      session.historyCycle = Math.max(0, Math.min(maxIndex, session.historyCycle));
+    }
+    const commandsJson = JSON.stringify(trimmed);
     const now = Math.floor(Date.now() / 1000);
 
     // Upsert command history (insert or replace)

@@ -17,7 +17,12 @@ class XIMDebugLogger {
   constructor() {
     this.enabled = process.env.XIM_DEBUG === '1' || process.env.XIM_DEBUG === 'true';
     this.sessionStart = new Date();
-    this.logPath = path.join(process.cwd(), 'logs', 'xim-debug.log');
+    const projectRoot = path.resolve(__dirname, '../../../../..');
+    const logsDir = path.join(projectRoot, 'logs');
+    if (!amigafs.existsSync(logsDir)) {
+      amigafs.mkdirSync(logsDir, { recursive: true });
+    }
+    this.logPath = path.join(logsDir, 'xim-debug.log');
 
     if (this.enabled) {
       // Clear log file at start

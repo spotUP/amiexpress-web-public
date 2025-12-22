@@ -59,10 +59,11 @@ program
 // pack command
 program
   .command('pack')
-  .description('Create BBS-ready release archive (ZIP with FILE_ID.DIZ)')
+  .description('Create BBS-ready release archive (zip for TypeScript, lha for native)')
   .argument('[door-name]', 'Door name or path')
   .option('-o, --output <dir>', 'Output directory', './releases')
   .option('-v, --version <version>', 'Override version number')
+  .option('-f, --format <format>', 'Archive format (zip|lha)', 'zip')
   .action(async (doorName, options) => {
     console.log(chalk.cyan.bold('\n[SDK] AmiExpress SDK - Pack Door\n'));
     try {

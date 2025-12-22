@@ -35,7 +35,7 @@ import { EventEmitter } from 'events';
 import { Position } from '../../core/types';
 
 // Re-export Position for convenience
-export { Position };
+export type { Position };
 
 /**
  * Terrain types

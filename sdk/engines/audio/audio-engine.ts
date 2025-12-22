@@ -190,6 +190,19 @@ export class AudioEngine {
       },
     });
 
+    // Card flap sound
+    const flapSynth = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.02 },
+    }).connect(this.sfxGain);
+
+    this.soundLibrary.set('card-flap', {
+      synth: flapSynth,
+      pattern: () => {
+        flapSynth.triggerAttackRelease(0.12);
+      },
+    });
+
     // Power-up sound
     this.soundLibrary.set('powerup', {
       synth: new Tone.Synth({

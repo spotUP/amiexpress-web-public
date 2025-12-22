@@ -45,6 +45,8 @@ interface ClientDoorSession {
   rpcHandlers: Map<string, (params: any) => Promise<any>>;
 }
 
+import { LoggedOnSubState } from '../constants/bbs-states';
+
 /**
  * Client Door Bridge
  * Handles WebSocket protocol for client doors
@@ -489,6 +491,7 @@ export class ClientDoorBridge {
 
     // Clear BBS session flag and reset menu input mode
     delete session.bbsSession.inDoorManager;
+    delete session.bbsSession.doorInputHandler;
     // Disable mouse events when door exits
     session.bbsSession.mouseEventsEnabled = false;
     // Disable game mode (raw key events)
@@ -499,7 +502,7 @@ export class ClientDoorBridge {
     (session.bbsSession as any).cmdShortcuts = false;
 
     // Return to menu with pause
-    session.bbsSession.subState = (session.bbsSession as any).LoggedOnSubState?.DISPLAY_MENU;
+    session.bbsSession.subState = LoggedOnSubState.DISPLAY_MENU;
     session.bbsSession.menuPause = true;
 
     console.log(`[ClientDoorBridge] Session ${sessionId} ended`);

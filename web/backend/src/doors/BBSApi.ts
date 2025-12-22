@@ -66,10 +66,30 @@ export class BBSApi {
   private socket: Socket;
   private session: BBSSession;
   private inputCallback?: (input: string) => void;
+  private boundSocketHandlers: Array<{ event: string; handler: (...args: any[]) => void }> = [];
 
   constructor(socket: Socket, session: BBSSession) {
     this.socket = socket;
     this.session = session;
+  }
+
+  setSocket(socket: Socket): void {
+    if (this.socket === socket) return;
+
+    for (const { event, handler } of this.boundSocketHandlers) {
+      this.socket.off(event, handler);
+    }
+
+    this.socket = socket;
+
+    for (const { event, handler } of this.boundSocketHandlers) {
+      this.socket.on(event, handler);
+    }
+  }
+
+  private bindSocketEvent(event: string, handler: (...args: any[]) => void): void {
+    this.boundSocketHandlers.push({ event, handler });
+    this.socket.on(event, handler);
   }
 
   // ========================================
@@ -833,7 +853,7 @@ export class BBSApi {
    * Note: This listens for messages FROM OTHER USERS in the room
    */
   onRoomMessage(callback: (msg: { userId: string; username: string; content: string; timestamp: Date }) => void): void {
-    this.socket.on('chat:message', (data: any) => {
+    this.bindSocketEvent('chat:message', (data: any) => {
       callback({
         userId: data.userId,
         username: data.username,
@@ -847,14 +867,14 @@ export class BBSApi {
    * Register handler for user join events
    */
   onUserJoined(callback: (data: { userId: number; username: string }) => void): void {
-    this.socket.on('room:user-joined', callback);
+    this.bindSocketEvent('room:user-joined', callback);
   }
 
   /**
    * Register handler for user leave events
    */
   onUserLeft(callback: (data: { userId: number; username: string }) => void): void {
-    this.socket.on('room:user-left', callback);
+    this.bindSocketEvent('room:user-left', callback);
   }
 }
 

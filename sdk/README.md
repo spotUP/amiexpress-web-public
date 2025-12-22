@@ -2,6 +2,10 @@
 
 The official SDK for creating doors (games, utilities, apps) for AmiExpress BBS.
 
+Modern Door UX (Required)
+
+Always aim for modern, desktop-like doors using neo-blessed windows, panels, and mouse support. Avoid 90's text menus unless explicitly requested.
+
 ## Quick Links
 
 - **[Game Development Guide](./docs/GAME_DEVELOPMENT_GUIDE.md)** - Complete reference for game development
@@ -109,6 +113,31 @@ door.onClose(async (ctx: DoorContext) => {
 
 // Export for BBS to load
 export default door;
+```
+
+**Important:** TypeScript doors are registered by scanning `.info` files in `Commands/BBSCmd/` at BBS startup. Doors without a `.info` file will not be available.
+
+## Release Packaging (Required)
+
+Use the SDK packer to create self-contained, minimal archives (no SDK bundled):
+
+```bash
+# From your door repo root (must include Commands/BBSCmd/<DOOR>.info)
+npm run pack
+```
+
+Release archives include only:
+
+```
+Commands/BBSCmd/<DOOR>.info
+Doors/<door>/
+  package.json
+  package-lock.json
+  dist/
+  assets/ (optional)
+  data/ (optional)
+  config.json (optional)
+  *.ts/*.js runtime files
 ```
 
 **Key Concepts:**

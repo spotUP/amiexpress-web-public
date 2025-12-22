@@ -172,6 +172,18 @@ Apologizing after violating rules is NOT acceptable - PREVENT violations.
 
 ---
 
+**MODERN DOOR UX - ALWAYS USE NEO-BLESSED DESKTOP-STYLE UI**
+
+When asked to create or redesign doors, default to modern, desktop-like interfaces with neo-blessed:
+- Windowed layouts, panels, and menu bars
+- Mouse support and focus management
+- Avoid 90's text-menu layouts unless explicitly requested
+- Reserve footer space for buttons (min 3 rows) to avoid clipped controls
+
+**Violation = Door UX is outdated and not aligned with project goals**
+
+---
+
 **68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
 
 When debugging 68K door issues (doors not working, showing errors, hanging, etc.):
@@ -200,6 +212,7 @@ When debugging 68K door issues (doors not working, showing errors, hanging, etc.
 4. **CRITICAL**: Use Read tool on logs, search with Grep, analyze patterns
 5. **NEVER** jump to implementing new logging without checking existing logs first
 6. **ALWAYS** grep for error patterns: `ERROR`, `fail`, `not found`, `nil`, `0x0`
+7. **DO NOT** ask the user to check logs; always check logs yourself and report findings.
 
 **Debug Tools Available**:
 - `XIM_DEBUG=1` environment variable (enables logs/xim-debug.log)
@@ -247,10 +260,16 @@ When debugging 68K door issues (doors not working, showing errors, hanging, etc.
 
 ---
 
+## LOG CHECKING - AGENT RESPONSIBILITY
+
+- Do not ask the user to check logs.
+- Always check logs yourself using available tools and report findings.
+
+---
+
 **NEVER USE BACKGROUND PROCESSES - THIS IS NON-NEGOTIABLE**
 
 1. **NEVER use `run_in_background: true`** in Bash tool calls
-2. **NEVER run `./dev/scripts/start-servers.sh` in background**
 3. **NEVER use `&` in bash commands for servers**
 4. **NEVER create multiple server restarts in one session**
 5. **ALWAYS ask user to start server script** - Never start/restart servers yourself

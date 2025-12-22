@@ -4,11 +4,17 @@
 
 Neo-Blessed is a browser-compatible port of the blessed terminal UI library. It provides rich TUI widgets for creating interactive BBS door applications.
 
+Modern Door Expectation
+
+Always aim for modern, desktop-like doors with windows, panels, and mouse support. We are building next-level doors, not 90's text menus.
+
 ## Getting Started
 
 ### Door Entry Point (REQUIRED)
 
 TypeScript doors **MUST** export a `runDoor()` function. This is the entry point the BBS calls when launching your door.
+
+TypeScript doors **MUST** also include a `.info` file in `Commands/BBSCmd/`. The BBS registers doors at startup by scanning BBSCMD entries.
 
 **index.ts** (entry point):
 ```typescript
@@ -125,6 +131,140 @@ Default heights:
 - `Question`: 9 lines
 - `Message`: 9 lines
 - `Prompt`: 12 lines
+
+### 1b. Prompt Width (80 Columns)
+
+BBS terminals are 80 columns wide. If a prompt or instruction line will exceed 80 characters, split it into two clean lines instead of letting it wrap mid-word.
+
+```typescript
+await ctx.output.writeLine('Enter a short description for your table.');
+const description = await ctx.input.getLine('Description (max 60 chars): ', 60);
+```
+
+### 1c. Button Placement (Avoid Clipping)
+
+Buttons use borders and padding, so they need real vertical space. To avoid clipped or partially visible buttons:
+
+- Reserve a footer row for buttons (minimum height 3).
+- Place buttons with `bottom: 0` inside the modal.
+- Reduce content height to leave room for footer + borders.
+- Avoid placing buttons at `top: 0` in small windows.
+- Test at 80x24 and 80x25 to confirm visibility.
+- Buttons default to a blue hover/active background for consistency. Keep that as the
+  standard unless there is a strong design reason to override it.
+
+Example layout math:
+
+```typescript
+const modal = blessed.box({ width: 70, height: 18, border: { type: 'ascii' } });
+const footerHeight = 3;
+const content = blessed.scrollabletext({
+  parent: modal,
+  top: 1,
+  left: 1,
+  right: 1,
+  bottom: footerHeight + 1, // 1 for border line above footer
+});
+const backButton = blessed.button({
+  parent: modal,
+  bottom: 0,
+  right: 2,
+  width: 10,
+  height: 3,
+  content: '[Back]',
+});
+```
+
+### 1d. Amiga ASCII Borders (Required)
+
+All SDK UI panels and windows must use the Amiga ASCII border style. This is the
+standard for BBS UI and should be used for any `border: { type: 'ascii' }` box.
+
+Visual rules:
+- Corners: top `.` bottom `` ` `` and `'`
+- Horizontal: `-`
+- Vertical: `|`
+- Labels are rendered as `[ LABEL ]` and start after two dashes: `.--[ LABEL ]--`
+
+Example:
+
+```text
+.--[ FLOP ]--------------------------------.
+|                                          |
+`------------------------------------------'
+```
+
+The SDK renderer (`sdk/engines/ui/blessed/core/screen.ts`) now enforces this framing
+implicitly, so you do not need to hand-edit the corner characters or insert the
+dash paddings yourself. Simply request `border: { type: 'ascii', labelStyle: { fg: 'yellow' } }`
+and provide a label; the `. --[ LABEL ]` styling is applied automatically, complete
+with the yellow headline text that defines the Neo-Blessed panel identity. Follow
+this pattern for every new panel or window so the lobby stays faithful to the
+classic Amiga Guru aesthetics.
+
+### 1e. Keyboard Navigation (Required)
+
+Doors must be fully keyboard navigable in addition to mouse support. Provide a
+predictable focus order and hotkeys for primary actions.
+
+- Add `tab` / `shift+tab` to cycle focus through panels, lists, and button rows.
+- Ensure lists/listbars have `keys: true` and use left/right or up/down to move.
+- Provide single-key shortcuts for actions (e.g., `c` for Create, `j` for Join).
+- Never rely on mouse-only interactions.
+
+### 1f. Modal Backgrounds and Overlays (Required)
+
+Modal windows must be fully opaque and must dim the background so users cannot
+see or click through. This is required for both web and telnet clients.
+
+Rules:
+- Always show a full-screen `blessed.overlay` behind any modal dialog.
+- Use a solid background on the modal itself: set `style.bg` and `ch: ' '`.
+- Do not use `style.bg: 'transparent'` for modal containers.
+- Hide the overlay when the modal closes.
+
+Example:
+
+```typescript
+// Full-screen dim overlay (supports web opacity)
+const modalOverlay = blessed.overlay({
+  parent: screen,
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  opacity: 0.6,
+  hidden: true,
+  style: { bg: 'black' },
+});
+
+const modal = blessed.box({
+  parent: screen,
+  top: 'center',
+  left: 'center',
+  width: 50,
+  height: 10,
+  label: ' Settings ',
+  border: { type: 'line' },
+  hidden: true,
+  ch: ' ', // solid fill
+  style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+});
+
+function showModal() {
+  modalOverlay.show();
+  modal.show();
+  modal.setFront();
+  modal.focus();
+  screen.render();
+}
+
+function hideModal() {
+  modal.hide();
+  modalOverlay.hide();
+  screen.render();
+}
+```
 
 ### 2. Focus Border Effects
 
@@ -256,17 +396,31 @@ const list = blessed.list({
     fg: 'white',
     selected: { fg: 'black', bg: 'cyan' },
   } as any,
+  wrapItems: true, // Wrap long items to the next row (default)
   items: ['Item 1', 'Item 2'],
 });
 
 // Commands object for listbar
 blessed.listbar({
+  style: {
+    bg: 'blue',
+    item: { fg: 'gray' },    // Inactive tabs (default)
+    selected: { fg: 'white' } // Active tab (default)
+  } as any,
   commands: {
     'File': { callback: () => {} },
     'Edit': { callback: () => {} },
   } as any,
 });
 ```
+
+Listbars default to gray inactive items and white active items on a blue
+background. Hover/active states should stay blue for consistency. Override with
+`style.item` and `style.selected` only when you need a different look.
+
+List items wrap by default. Use `wrapItems: false` on List widgets that render
+columns or fixed-width layouts (or use `ListTable` for true tables). For
+dynamic lists, toggle at runtime with `list.setWrapItems(true/false)`.
 
 ### 8. Socket.IO Room-Based Chat
 

@@ -13,7 +13,20 @@ import { config } from '../config';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { BBSSession } from '../index';
-import { sessions, getSession, setSession, deleteSession, createSession, getNextAvailableNodeId, checkConnectionLimit } from './session-manager';
+import {
+  sessions,
+  getSession,
+  setSession,
+  deleteSession,
+  createSession,
+  getNextAvailableNodeId,
+  checkConnectionLimit,
+  socketToUser,
+  socketToNodeId,
+  userSessions,
+  pendingDisconnects,
+  trackPendingDisconnect
+} from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
 import { nodeManager, arexxEngine } from '../services/node-manager.service';
 import { nodeFileManager } from '../services/NodeFileManager';
@@ -31,6 +44,8 @@ import { sessionLogManager } from '../services/SessionLogManager';
 import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
 import * as fs from 'fs';
 import * as path from 'path';
+
+const DISCONNECT_GRACE_MS = 15000;
 
 /**
  * Enable game mode for a session
@@ -140,6 +155,12 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
 
   // Start tracking session output for admin log viewer
   sessionLogManager.startSession(socket.id);
+
+  const session = getSession(socket.id);
+  if (session) {
+    session.socket = socket;
+    session.socketId = socket.id;
+  }
 
   // Wrap socket.emit to capture all terminal output
   const originalEmit = socket.emit.bind(socket);
@@ -333,6 +354,16 @@ function registerCommandHandler(socket: Socket) {
     }
   });
 
+  // Handle mouse wheel scrolling
+  socket.on('mouse-wheel', (data: { x: number; y: number; deltaY: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-wheel', ...data }));
+    }
+  });
+
   // Handle simultaneous key state updates (for games/doors that need multiple keys pressed at once)
   socket.on('keys:state', (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
     const session = getSession(socket.id);
@@ -511,10 +542,14 @@ function registerCommandHandler(socket: Socket) {
     console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
     // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
-    if (data.startsWith('\x1b[') && data.length >= 2) {
-      handleCommand(socket, session, data);
+    let input = data;
+    if (input.startsWith('\x1bO') && input.length >= 3) {
+      input = `\x1b[${input.slice(2)}`;
+    }
+    if (input.startsWith('\x1b[') && input.length >= 2) {
+      handleCommand(socket, session, input);
     } else {
-      for (const char of data) {
+      for (const char of input) {
         handleCommand(socket, session, char);
       }
     }
@@ -705,7 +740,10 @@ function registerDisconnectHandler(socket: Socket) {
     sessionLogManager.endSession(socket.id);
 
     const session = getSession(socket.id);
-    if (!session) return;
+    if (!session) {
+      deleteSession(socket.id);
+      return;
+    }
 
     // Handle internode chat cleanup if user was in chat
     if (session.subState === LoggedOnSubState.CHAT) {
@@ -719,125 +757,168 @@ function registerDisconnectHandler(socket: Socket) {
       await handleRoomDisconnect(socket, session);
     }
 
-    // Log user logout if they were logged in (express.e:9493 callersLog)
-    if (session.user) {
-      await callersLog(session.user.id, session.user.username, 'Logged off');
-
-      // Run logoff batches (mirror logon batch runner)
-      try {
-        await runLogoffBatches(session.nodeId || 0);
-      } catch (err) {
-        console.error('[LOGOFF] Logoff batch runner failed:', err);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'Socket Connection',
-          `Failed to run logoff batches`,
-          {
-            error: err instanceof Error ? err.message : String(err),
-            nodeId: session.nodeId,
-            username: session.user.username
-          },
-          DebugSeverity.WARNING
-        );
-      }
-
-      // Save command history to disk (express.e:25067, 7951, 28612, 28631)
-      try {
-        const { saveHistory } = require('../utils/command-history.util');
-        await saveHistory(session, session.user.id);
-        console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
-      } catch (error) {
-        console.error('[CommandHistory] Error saving command history:', error);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'Socket Connection',
-          `Failed to save command history on logoff`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-            userId: session.user.id,
-            username: session.user.username,
-            historyLength: session.commandHistory?.length || 0
-          },
-          DebugSeverity.WARNING
-        );
-        // Don't fail logout on history save error
-      }
-
-      // CRITICAL: Delete node{n}.user files on logoff
-      // express.e deletes these when user logs off so WHO doesn't show logged-off users
-      const nodeId = session.nodeId || 0;
-      try {
-        // Write to CallersLog before cleanup
-        callersLogManager.logLogoff(nodeId, session.user.username);
-
-        nodeFileManager.deleteNodeFiles(nodeId);
-        console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
-      } catch (error) {
-        console.error(`[LOGOFF] Error deleting node files:`, error);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'Socket Connection',
-          `Failed to delete node files on logoff`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-            nodeId,
-            username: session.user.username
-          },
-          DebugSeverity.WARNING
-        );
-      }
-
-      try {
-        await runSamiLogUpdate(session);
-      } catch (error) {
-        console.error('[LOGOFF] SAmiLog update failed:', error);
-        SysopDebugUtil.debug(
-          socket,
-          session,
-          'Socket Connection',
-          `Failed to update SAmiLog on logoff`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-            username: session.user?.username,
-            nodeId: session.nodeId
-          },
-          DebugSeverity.WARNING
-        );
-      }
-    }
-
-    // Release node back to available pool
-    await nodeManager.releaseSession(socket.id);
-
-    // Clean up session storage
-    // Import socketToUser and userSessions from session-manager
-    const { socketToUser, userSessions } = require('./session-manager');
-
-    // If user was logged in, remove socket-to-user mapping
-    const userId = socketToUser.get(socket.id);
+    const userId = session.user?.id ? String(session.user.id) : '';
     if (userId) {
+      const hasOtherSockets = Array.from(socketToUser.entries()).some(([id, uid]) => uid === userId && id !== socket.id);
+
       console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
       socketToUser.delete(socket.id);
+      socketToNodeId.delete(socket.id);
 
-      // Check if user has any other sockets connected
-      const userHasOtherSockets = Array.from(socketToUser.values()).includes(userId);
-      if (!userHasOtherSockets && session?.user) {
-        // This was the last socket for this user - clean up user session
-        console.log(`[DISCONNECT] Last socket for user ${userId} - removing user session`);
-        userSessions.delete(userId);
-      } else if (userHasOtherSockets) {
+      // Release the socket-bound node session (safe to do immediately)
+      await nodeManager.releaseSession(socket.id);
+
+      if (hasOtherSockets) {
         console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
+        return;
       }
-    } else {
-      // Pre-login socket - just remove from socket-based storage
-      deleteSession(socket.id);
+
+      const nodeId = session.nodeId || 0;
+      const timer = setTimeout(() => {
+        void finalizeDisconnectCleanup(socket, session, socket.id);
+      }, DISCONNECT_GRACE_MS);
+      trackPendingDisconnect(userId, socket.id, nodeId, timer);
+
+      console.log(`[DISCONNECT] Scheduled logoff for user ${userId} in ${DISCONNECT_GRACE_MS}ms`);
+      return;
     }
 
-    triggerSamiLogRefresh();
+    await finalizeDisconnectCleanup(socket, session, socket.id);
   });
+}
+
+async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, socketId: string): Promise<void> {
+  const userId = session.user?.id ? String(session.user.id) : '';
+
+  if (userId) {
+    const stillConnected = Array.from(socketToUser.values()).includes(userId);
+    if (stillConnected) {
+      console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket detected`);
+      pendingDisconnects.delete(userId);
+      return;
+    }
+  }
+
+  if (userId) {
+    pendingDisconnects.delete(userId);
+  }
+
+  // Log user logout if they were logged in (express.e:9493 callersLog)
+  if (session.user) {
+    await callersLog(session.user.id, session.user.username, 'Logged off');
+
+    // Run logoff batches (mirror logon batch runner)
+    try {
+      await runLogoffBatches(session.nodeId || 0);
+    } catch (err) {
+      console.error('[LOGOFF] Logoff batch runner failed:', err);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to run logoff batches`,
+        {
+          error: err instanceof Error ? err.message : String(err),
+          nodeId: session.nodeId,
+          username: session.user.username
+        },
+        DebugSeverity.WARNING
+      );
+    }
+
+    // Save command history to disk (express.e:25067, 7951, 28612, 28631)
+    try {
+      const { saveHistory } = require('../utils/command-history.util');
+      await saveHistory(session, session.user.id);
+      console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
+    } catch (error) {
+      console.error('[CommandHistory] Error saving command history:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to save command history on logoff`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          userId: session.user.id,
+          username: session.user.username,
+          historyLength: session.commandHistory?.length || 0
+        },
+        DebugSeverity.WARNING
+      );
+      // Don't fail logout on history save error
+    }
+
+    // CRITICAL: Delete node{n}.user files on logoff
+    // express.e deletes these when user logs off so WHO doesn't show logged-off users
+    const nodeId = session.nodeId || 0;
+    try {
+      // Write to CallersLog before cleanup
+      callersLogManager.logLogoff(nodeId, session.user.username);
+
+      nodeFileManager.deleteNodeFiles(nodeId);
+      console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
+    } catch (error) {
+      console.error(`[LOGOFF] Error deleting node files:`, error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to delete node files on logoff`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          nodeId,
+          username: session.user.username
+        },
+        DebugSeverity.WARNING
+      );
+    }
+
+    try {
+      await runSamiLogUpdate(session);
+    } catch (error) {
+      console.error('[LOGOFF] SAmiLog update failed:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to update SAmiLog on logoff`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          username: session.user?.username,
+          nodeId: session.nodeId
+        },
+        DebugSeverity.WARNING
+      );
+    }
+  }
+
+  // Release node back to available pool
+  await nodeManager.releaseSession(socketId);
+
+  // Clean up session storage
+  if (userId) {
+    for (const [id, uid] of socketToUser.entries()) {
+      if (uid === userId) {
+        socketToUser.delete(id);
+      }
+    }
+    if (session.nodeId) {
+      for (const [id, nodeId] of socketToNodeId.entries()) {
+        if (nodeId === session.nodeId) {
+          socketToNodeId.delete(id);
+        }
+      }
+    }
+    userSessions.delete(userId);
+    if (session.nodeId) {
+      sessions.delete(session.nodeId.toString());
+    }
+  } else {
+    deleteSession(socketId);
+  }
+
+  triggerSamiLogRefresh();
 }
 
 function resolveTransferPath(session: any, amigaPath: string): string | null {

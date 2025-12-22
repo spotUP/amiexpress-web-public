@@ -1,0 +1,7 @@
+BBSCMD=CARDHANDDEMO
+TYPE=TS
+LOCATION=doors/card-hand-demo
+DESCRIPTION=CardEngine demo - render a poker hand (R redraw, Q quit)
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

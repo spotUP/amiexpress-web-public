@@ -98,7 +98,7 @@ async function installDoorToBBS(doorId) {
     const infoContent = [
       `BBSCMD=${bbsCommand}`,
       `TYPE=${doorType}`,
-      `LOCATION=doors/${doorId}`,
+      `LOCATION=Doors/${doorId}`,
       description ? `DESCRIPTION=${description}` : '',
       `ACCESS=${access}`,
       `MULTINODE=YES`,
@@ -817,7 +817,14 @@ app.get('/api/doors/:doorId/files', async (req, res) => {
       return res.status(404).json({ error: 'Door not found' });
     }
 
-    // Build file tree recursively
+    const pkgPath = path.join(doorPath, 'package.json');
+    if (!fs.existsSync(pkgPath)) {
+      return res.status(404).json({ error: 'package.json not found' });
+    }
+
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const doorDir = pkg.doorDir || doorId;
+
     const buildFileTree = (dirPath, relativePath = '') => {
       const files = [];
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -826,9 +833,22 @@ app.get('/api/doors/:doorId/files', async (req, res) => {
         const fullPath = path.join(dirPath, entry.name);
         const entryRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
-        // Skip excluded directories
         if (entry.isDirectory()) {
-          if (['node_modules', '.git', 'dist', 'downloads'].includes(entry.name)) {
+          if (['node_modules', '.git'].includes(entry.name)) {
+            continue;
+          }
+
+          if (entry.name === 'dist' || entry.name === 'assets' || entry.name === 'data') {
+            const children = buildFileTree(fullPath, entryRelativePath);
+            if (children.length > 0) {
+              files.push({
+                id: `folder-${entryRelativePath}`,
+                name: entry.name,
+                type: 'folder',
+                path: entryRelativePath,
+                children,
+              });
+            }
             continue;
           }
 
@@ -839,47 +859,85 @@ app.get('/api/doors/:doorId/files', async (req, res) => {
               name: entry.name,
               type: 'folder',
               path: entryRelativePath,
-              children: children,
+              children,
             });
           }
-        } else {
-          // Check if file should be included based on options
-          let shouldInclude = false;
+          continue;
+        }
 
-          // Always include package.json and tsconfig.json
-          if (entry.name === 'package.json' || entry.name === 'tsconfig.json') {
-            shouldInclude = true;
-          }
-          // Source files
-          else if (includeSource === 'true' && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
-            shouldInclude = true;
-          }
-          // Assets
-          else if (includeAssets === 'true' && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
-            shouldInclude = true;
-          }
-          // Docs
-          else if (includeDocs === 'true' && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
-            shouldInclude = true;
-          }
+        let shouldInclude = false;
+        if (entry.name === 'package.json' || entry.name === 'package-lock.json') {
+          shouldInclude = true;
+        } else if (includeSource === 'true' && /\.(ts|js|d\.ts|map)$/i.test(entry.name)) {
+          shouldInclude = true;
+        } else if (includeAssets === 'true' && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
+          shouldInclude = true;
+        } else if (includeDocs === 'true' && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+          shouldInclude = true;
+        } else if (entry.name === 'config.json') {
+          shouldInclude = true;
+        }
 
-          if (shouldInclude) {
-            const stats = fs.statSync(fullPath);
-            files.push({
-              id: `file-${entryRelativePath}`,
-              name: entry.name,
-              type: 'file',
-              path: entryRelativePath,
-              size: stats.size,
-            });
-          }
+        if (shouldInclude) {
+          const stats = fs.statSync(fullPath);
+          files.push({
+            id: `file-${entryRelativePath}`,
+            name: entry.name,
+            type: 'file',
+            path: entryRelativePath,
+            size: stats.size,
+          });
         }
       }
 
       return files;
     };
 
-    const fileTree = buildFileTree(doorPath);
+    const doorTree = buildFileTree(doorPath);
+    const fileTree = [
+      {
+        id: `folder-Commands`,
+        name: 'Commands',
+        type: 'folder',
+        path: 'Commands',
+        children: [
+          {
+            id: `folder-Commands/BBSCmd`,
+            name: 'BBSCmd',
+            type: 'folder',
+            path: 'Commands/BBSCmd',
+            children: [
+              {
+                id: `file-Commands/BBSCmd/${path.basename(infoPath)}`,
+                name: path.basename(infoPath),
+                type: 'file',
+                path: `Commands/BBSCmd/${path.basename(infoPath)}`,
+                size: fs.statSync(infoPath).size,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: `folder-Doors`,
+        name: 'Doors',
+        type: 'folder',
+        path: 'Doors',
+        children: [
+          {
+            id: `folder-Doors/${doorDir}`,
+            name: doorDir,
+            type: 'folder',
+            path: `Doors/${doorDir}`,
+            children: doorTree.map((node) => ({
+              ...node,
+              path: `Doors/${doorDir}/${node.path}`,
+              id: `door-${node.id}`,
+            })),
+          },
+        ],
+      },
+    ];
 
     res.json({
       doorId,
@@ -899,7 +957,12 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
 
     // Parse options from formData
     const options = req.body.options ? JSON.parse(req.body.options) : req.body;
-    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true, doormanCompatible = true } = options;
+    const { format = 'zip', includeSource = true, includeAssets = true, includeDocs = true } = options;
+    if (format !== 'zip') {
+      return res.status(400).json({
+        error: 'Only zip is supported for TypeScript door releases. Use LHA for native Amiga doors.'
+      });
+    }
 
     // Get uploaded files from multer
     const extraFiles = req.files || [];
@@ -927,36 +990,163 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
       const AdmZip = require('adm-zip');
       const zip = new AdmZip();
 
-      // Helper to add files recursively
+      const findInfoFile = (startDir, command) => {
+        const candidates = [
+          path.join(startDir, 'Commands', 'BBSCmd'),
+          path.join(startDir, '..', 'Commands', 'BBSCmd'),
+          path.join(startDir, '..', '..', 'Commands', 'BBSCmd'),
+        ];
+
+        for (const candidate of candidates) {
+          if (!fs.existsSync(candidate)) continue;
+          const direct = path.join(candidate, `${command}.info`);
+          if (fs.existsSync(direct)) {
+            return direct;
+          }
+          const infoFiles = fs.readdirSync(candidate).filter((file) => file.toLowerCase().endsWith('.info'));
+          if (infoFiles.length > 0) {
+            return path.join(candidate, infoFiles[0]);
+          }
+        }
+
+        return null;
+      };
+
+      const buildInfoContent = (params) => {
+        const name = params.pkg?.doorMetadata?.name || params.pkg?.displayName || params.pkg?.name || params.doorDir;
+        const description = params.pkg?.description || params.pkg?.doorMetadata?.description || '';
+        const access = params.pkg?.accessLevel ?? params.pkg?.doorMetadata?.minSecLevel ?? 0;
+        const doorType = params.pkg?.doorType || 'TS';
+        const lines = [
+          `BBSCMD=${params.command}`,
+          `TYPE=${doorType}`,
+          `LOCATION=Doors/${params.doorDir}`,
+          name ? `NAME=${name}` : '',
+          description ? `DESCRIPTION=${description}` : '',
+          `ACCESS=${access}`,
+          'MULTINODE=YES',
+          'PRIORITY=SAME',
+          '',
+        ];
+        return lines.filter(Boolean).join('\n');
+      };
+
+      const normalizePackageJsonForRelease = (input) => {
+        const normalized = { ...input };
+        const dependencies = { ...(input.dependencies || {}) };
+        dependencies['@amiexpress/bbs-door-sdk'] = 'file:../../sdk';
+        normalized.dependencies = dependencies;
+        return normalized;
+      };
+
+      const normalizePackageLockForRelease = (input) => {
+        if (!input || typeof input !== 'object') return input;
+        const sdkSpec = 'file:../../sdk';
+        if (input.packages && input.packages['']) {
+          input.packages[''].dependencies = {
+            ...(input.packages[''].dependencies || {}),
+            '@amiexpress/bbs-door-sdk': sdkSpec,
+          };
+        }
+        if (input.dependencies && input.dependencies['@amiexpress/bbs-door-sdk']) {
+          input.dependencies['@amiexpress/bbs-door-sdk'] = {
+            ...input.dependencies['@amiexpress/bbs-door-sdk'],
+            version: sdkSpec,
+            resolved: sdkSpec,
+            link: true,
+          };
+        }
+        if (input.packages && input.packages['node_modules/@amiexpress/bbs-door-sdk']) {
+          input.packages['node_modules/@amiexpress/bbs-door-sdk'] = {
+            ...input.packages['node_modules/@amiexpress/bbs-door-sdk'],
+            version: sdkSpec,
+            resolved: sdkSpec,
+            link: true,
+          };
+        }
+        return input;
+      };
+
+      const commandName = (pkg.bbsCommand || pkg.doorMetadata?.command || doorId)
+        .toString()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+      const doorDir = pkg.doorDir || doorId;
+
+      const infoPath = findInfoFile(doorPath, commandName);
+      if (infoPath) {
+        zip.addLocalFile(infoPath, 'Commands/BBSCmd', `${commandName}.info`);
+      } else {
+        const infoContent = buildInfoContent({ command: commandName, doorDir, pkg });
+        zip.addFile(`Commands/BBSCmd/${commandName}.info`, Buffer.from(infoContent, 'utf-8'));
+      }
+
       const addDirectory = (dirPath, zipPath = '') => {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true });
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
           const zipFilePath = zipPath ? path.join(zipPath, entry.name) : entry.name;
 
-          // Skip excluded directories
           if (entry.isDirectory()) {
-            if (['node_modules', '.git', 'dist', 'downloads'].includes(entry.name)) {
+            if (['node_modules', '.git'].includes(entry.name)) {
               continue;
             }
-            addDirectory(fullPath, zipFilePath);
-          } else {
-            // Add file based on options
-            if (entry.name === 'package.json' || entry.name === 'tsconfig.json') {
-              zip.addLocalFile(fullPath, zipPath);
-            } else if (includeSource && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
-              zip.addLocalFile(fullPath, zipPath);
-            } else if (includeAssets && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
-              zip.addLocalFile(fullPath, zipPath);
-            } else if (includeDocs && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
-              zip.addLocalFile(fullPath, zipPath);
+
+            if (['dist', 'assets', 'data'].includes(entry.name)) {
+              addDirectory(fullPath, zipFilePath);
+              continue;
             }
+
+            addDirectory(fullPath, zipFilePath);
+            continue;
+          }
+
+          if (entry.name === 'package.json' || entry.name === 'package-lock.json') {
+            continue;
+          }
+
+          if (entry.name === 'config.json') {
+            zip.addLocalFile(fullPath, zipPath);
+            continue;
+          }
+
+          if (includeSource && /\.(ts|js|d\.ts|map)$/i.test(entry.name)) {
+            zip.addLocalFile(fullPath, zipPath);
+            continue;
+          }
+
+          if (includeAssets && (fullPath.includes('/assets/') || fullPath.includes('/data/'))) {
+            zip.addLocalFile(fullPath, zipPath);
+            continue;
+          }
+
+          if (includeDocs && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+            zip.addLocalFile(fullPath, zipPath);
           }
         }
       };
 
-      // Add door files based on options
-      addDirectory(doorPath);
+      addDirectory(doorPath, path.join('Doors', doorDir));
+
+      const normalizedPackageJson = normalizePackageJsonForRelease(pkg);
+      zip.addFile(
+        `Doors/${doorDir}/package.json`,
+        Buffer.from(JSON.stringify(normalizedPackageJson, null, 2), 'utf-8')
+      );
+
+      const lockPath = path.join(doorPath, 'package-lock.json');
+      if (fs.existsSync(lockPath)) {
+        try {
+          const lockJson = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          const normalizedLock = normalizePackageLockForRelease(lockJson);
+          zip.addFile(
+            `Doors/${doorDir}/package-lock.json`,
+            Buffer.from(JSON.stringify(normalizedLock, null, 2), 'utf-8')
+          );
+        } catch {
+          // Skip malformed lock files
+        }
+      }
 
       // Add extra uploaded files to root of archive
       if (extraFiles.length > 0) {
@@ -1014,22 +1204,6 @@ app.post('/api/doors/:doorId/release', upload.array('extraFiles'), async (req, r
 
       zip.addFile('FILE_ID.DIZ', Buffer.from(generateFileDiz(), 'utf-8'));
 
-      // Create .info metadata file (Doorman compatible)
-      if (doormanCompatible) {
-        const bbsCommand = pkg.bbsCommand || doorId.toUpperCase();
-        const infoContent = `NAME=${pkg.name || doorId}
-VERSION=${version}
-COMMAND=${bbsCommand}
-DESCRIPTION=${pkg.description || 'BBS Door Game'}
-AUTHOR=${pkg.author || 'Unknown'}
-CATEGORY=${pkg.category || 'Game'}
-CREATED=${new Date().toISOString()}
-REQUIRES_NODE=true
-MIN_NODE_VERSION=18.0.0
-`;
-        zip.addFile(`${doorId}.info`, Buffer.from(infoContent, 'utf-8'));
-      }
-
       // Create README.TXT
       if (includeDocs) {
         const readmeContent = `${pkg.name || doorId} v${version}
@@ -1039,10 +1213,10 @@ ${pkg.description || 'BBS Door Game'}
 
 INSTALLATION
 ------------
-1. Extract all files to your BBS doors directory
-2. Install Node.js 18+ if not already installed
-3. Run: npm install
-4. Configure in your BBS menu system
+1. Extract the archive to your BBS root directory
+2. Confirm the .info file is under Commands/BBSCmd/
+3. Restart the BBS (or reload doors)
+4. Configure menus as needed
 
 REQUIREMENTS
 ------------

@@ -118,6 +118,9 @@ npm run build
 - `dist/index.js` - Compiled output
 - `/Commands/BBSCmd/ttt.info` - BBS command registration
 
+**Release packaging:** Run `npm run pack` from the door repo root to create a minimal archive
+with `Commands/BBSCmd/` and `Doors/<door>/` only (no SDK bundled).
+
 ## What Works
 
 ✅ Door class with lifecycle hooks

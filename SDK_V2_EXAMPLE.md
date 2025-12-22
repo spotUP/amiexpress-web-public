@@ -1,5 +1,9 @@
 # SDK v2.0 - Usage Examples
 
+Modern Door UX
+
+Prefer modern, desktop-style interfaces with neo-blessed windows, mouse support, and panels. This SDK is about next-level doors, not 90's text menus.
+
 ## Simple Door Example
 
 ```typescript
@@ -191,6 +195,17 @@ door.onInput(async (ctx, key) => {
 
 export = door;
 ```
+
+## Prompt Width (80 Columns)
+
+BBS terminals are 80 columns wide. If a prompt or instruction line will exceed 80 characters, split it into two clean lines instead of letting it wrap unexpectedly.
+
+```typescript
+await ctx.output.writeLine('Enter a short description for your game setup.');
+const description = await ctx.input.getLine('Description (max 60 chars): ', 60);
+```
+
+Keep prompts short and consistent to avoid broken layouts on classic terminals.
 
 ## Advanced: Using BBS API
 
