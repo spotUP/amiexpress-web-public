@@ -13,6 +13,7 @@ const RIP_HEIGHT = 350;
 
 const SHARED_AUTH_TOKEN_KEY = 'authToken';
 const BBS_AUTH_TOKEN_KEY = 'bbs_auth_token';
+const SESSION_STATE_KEY = 'bbs_session_state';
 
 interface BBSTerminalProps {
   /** BBS backend URL (defaults to auto-detect based on environment) */
@@ -171,6 +172,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       localStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
       localStorage.getItem(BBS_AUTH_TOKEN_KEY)
     );
+  }, []);
+
+  const saveSessionState = useCallback((sessionData: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const sessionState = {
+        userId: sessionData.userId || sessionData.user?.id || sessionData.user?.userId,
+        username: sessionData.username || sessionData.user?.username,
+        nodeId: sessionData.nodeId,
+        socketId: sessionData.socketId,
+        currentConf: sessionData.currentConf,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(sessionState));
+      console.log('[Session Persistence] Session state saved:', sessionState);
+    } catch (error) {
+      console.error('[Session Persistence] Failed to save session state:', error);
+    }
+  }, []);
+
+  const getStoredSessionState = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem(SESSION_STATE_KEY);
+      if (!stored) return null;
+      const sessionState = JSON.parse(stored);
+      // Only use session if it's less than 2 minutes old (connection state recovery window)
+      if (Date.now() - sessionState.savedAt > 120000) {
+        localStorage.removeItem(SESSION_STATE_KEY);
+        return null;
+      }
+      return sessionState;
+    } catch (error) {
+      console.error('[Session Persistence] Failed to load session state:', error);
+      return null;
+    }
+  }, []);
+
+  const clearSessionState = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(SESSION_STATE_KEY);
+    console.log('[Session Persistence] Session state cleared');
   }, []);
 
   const attemptTokenLogin = useCallback(() => {
@@ -558,9 +601,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       upgrade: true,
       rememberUpgrade: true,
       reconnection: true,
-      reconnectionAttempts: isDevelopment ? 3 : 15,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: isDevelopment ? 5000 : 15000,
+      // Aggressive reconnection to maintain session within 2-minute window
+      reconnectionAttempts: isDevelopment ? 5 : 30,
+      reconnectionDelay: 1000, // Start with 1 second
+      reconnectionDelayMax: isDevelopment ? 3000 : 10000, // Max 10 seconds in prod
+      // Random factor to prevent thundering herd on server restart
+      randomizationFactor: 0.5,
     });
     socketRef.current = socket;
 
@@ -571,10 +617,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
       keyState.current = {};
-      if (reconnectPending.current) {
+
+      // Try session restoration first (if we have a saved session)
+      const savedSession = getStoredSessionState();
+      if (savedSession && reconnectPending.current) {
+        console.log('[Session Persistence] Attempting session restoration for user:', savedSession.username);
+        socket.emit('restore-session', savedSession);
+        loginState.current = 'logging-in';
+      } else if (reconnectPending.current) {
         reconnectPending.current = false;
         attemptTokenLogin();
       }
+
       if (loginState.current === 'password' && newUserPromptUsername.current && password.current) {
         socket.emit('login', { username: newUserPromptUsername.current, password: password.current });
         loginState.current = 'logging-in';
@@ -781,15 +835,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('disconnect', (reason: string) => {
-      console.log('[Terminal] Disconnected:', reason);
+      console.log('[DISCONNECT] Client disconnected, reason:', reason);
+
+      // Log disconnect event for debugging
+      console.log('[DISCONNECT] Disconnect details:', {
+        reason,
+        socketId: socket.id,
+        loginState: loginState.current,
+        timestamp: new Date().toISOString(),
+      });
+
       if (reason === 'io client disconnect') {
+        // User intentionally disconnected - clear everything
+        console.log('[DISCONNECT] User-initiated disconnect - clearing session state');
         localStorage.removeItem('bbs_auth_token');
+        clearSessionState();
         reconnectPending.current = false;
       } else {
+        // Network issue or transport close - preserve session state for restoration
+        console.log('[DISCONNECT] Network disconnect - preserving session state for reconnection');
         reconnectPending.current = true;
         loginState.current = 'waiting';
         username.current = '';
         password.current = '';
+        // DO NOT clear session state - it will be used on reconnect
       }
       onDisconnect?.(reason);
     });
@@ -1017,6 +1086,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('login-success', (data: any) => {
       console.log('Login successful:', data);
       loginState.current = 'loggedin';
+      reconnectPending.current = false;
+
       if (data && data.token) {
         localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
         localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
@@ -1028,6 +1099,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           })
         );
       }
+
+      // Save session state for reconnection persistence
+      saveSessionState({
+        userId: data.userId || data.user?.id || data.user?.userId,
+        username: data.username || data.user?.username,
+        nodeId: data.nodeId,
+        socketId: socket.id,
+        currentConf: data.currentConf,
+      });
 
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
       if (autoLoginEnabled && newUserPromptUsername.current) {
@@ -1042,9 +1122,38 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.focus();
     });
 
+    socket.on('session-restored', (data: any) => {
+      console.log('[Session Persistence] Session restored successfully:', data);
+      loginState.current = 'loggedin';
+      reconnectPending.current = false;
+
+      // Update session state with new socket ID
+      saveSessionState({
+        userId: data.userId || data.user?.id || data.user?.userId,
+        username: data.username || data.user?.username,
+        nodeId: data.nodeId,
+        socketId: socket.id,
+        currentConf: data.currentConf,
+      });
+
+      term.write('\r\n\x1b[32m[Session Restored] Welcome back!\x1b[0m\r\n');
+      term.focus();
+    });
+
+    socket.on('session-restore-failed', (reason: string) => {
+      console.log('[Session Persistence] Session restoration failed:', reason);
+      clearSessionState();
+      reconnectPending.current = false;
+      // Fall back to token login
+      if (!attemptTokenLogin()) {
+        loginState.current = 'waiting';
+      }
+    });
+
     socket.on('login-failed', (reason: string) => {
       console.log('Login failed:', reason);
       localStorage.removeItem('bbs_auth_token');
+      clearSessionState();
       const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
       if (autoLoginEnabled) {
         localStorage.removeItem('bbs_saved_username');

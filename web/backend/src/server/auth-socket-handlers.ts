@@ -73,6 +73,75 @@ export function registerAuthHandlers(socket: Socket) {
     return 5;
   };
 
+  // Handle session restoration after reconnect
+  socket.on('restore-session', async (sessionData: { userId?: string; username?: string; nodeId?: number; savedAt?: number }) => {
+    try {
+      console.log('[Session Restore] Attempting to restore session for user:', sessionData.username);
+
+      if (!sessionData.userId || !sessionData.username) {
+        console.log('[Session Restore] Missing required session data');
+        socket.emit('session-restore-failed', 'Invalid session data');
+        return;
+      }
+
+      // Check if session is too old (should match frontend check)
+      if (sessionData.savedAt && Date.now() - sessionData.savedAt > 120000) {
+        console.log('[Session Restore] Session expired (> 2 minutes old)');
+        socket.emit('session-restore-failed', 'Session expired');
+        return;
+      }
+
+      // Get user from database
+      const user = await db.getUserById(sessionData.userId);
+      if (!user) {
+        console.log('[Session Restore] User not found:', sessionData.userId);
+        socket.emit('session-restore-failed', 'User not found');
+        return;
+      }
+
+      // Check if there's an existing session for this user
+      const existingSession = userSessions.get(String(user.id));
+      if (existingSession) {
+        console.log('[Session Restore] Found existing session for user, rebinding to new socket');
+
+        // Update socket mappings
+        socketToUser.set(socket.id, String(user.id));
+        socketToNodeId.set(socket.id, existingSession.nodeId);
+
+        // Update session with new socket ID
+        existingSession.socketId = socket.id;
+        setSession(socket.id, existingSession);
+
+        // Clear any pending disconnect timer
+        clearPendingDisconnect(String(user.id));
+
+        // Notify client of successful restoration
+        socket.emit('session-restored', {
+          user: {
+            id: user.id,
+            username: user.username,
+            realname: user.realname,
+            secLevel: user.secLevel,
+            expert: user.expert,
+            ansi: user.ansi
+          },
+          userId: user.id,
+          username: user.username,
+          nodeId: existingSession.nodeId,
+          currentConf: existingSession.currentConf,
+        });
+
+        console.log('[Session Restore] Session restored successfully for user:', user.username);
+      } else {
+        console.log('[Session Restore] No existing session found, falling back to normal login');
+        socket.emit('session-restore-failed', 'No session found');
+      }
+    } catch (error) {
+      console.error('[Session Restore] Error restoring session:', error);
+      socket.emit('session-restore-failed', 'Internal error');
+    }
+  });
+
   // Handle login with JWT token or username/password
   socket.on('login', async (data: { token?: string; username?: string; password?: string }) => {
     try {

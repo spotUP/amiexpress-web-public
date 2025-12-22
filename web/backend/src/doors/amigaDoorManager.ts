@@ -444,7 +444,8 @@ export class AmigaDoorManager {
       // Check for package.json
       if (amigafs.existsSync(packageJsonPath)) {
         try {
-          const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8'));
+          const fileContent = amigafs.readFileSync(packageJsonPath, 'utf8');
+          const packageJson = JSON.parse(typeof fileContent === 'string' ? fileContent : fileContent.toString());
 
           // Look for main entry point
           const mainFile = packageJson.main || 'index.ts';
@@ -1137,7 +1138,7 @@ export class AmigaDoorManager {
 
         // Find corresponding door in Doors/ directory
         const doorDirFromLocation = getDoorDirFromLocation(metadata?.location);
-        let doorName: string | undefined = doorDirFromLocation;
+        let doorName: string | undefined = doorDirFromLocation ?? undefined;
         let doorSourceDir: string | undefined = doorName ? resolveDoorSourceDir(doorName) : undefined;
 
         if (!doorSourceDir) {
