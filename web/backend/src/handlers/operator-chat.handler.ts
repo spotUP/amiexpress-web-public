@@ -567,7 +567,11 @@ async function acceptPage(
   // Update page status
   repository.updatePageStatus(pageId, PageStatus.ACCEPTED, sysopId, sysopHandle);
 
-  // Create chat session
+  // Load existing chat messages from database (messages sent before sysop accepted)
+  const existingMessages = repository.getChatMessages(pageId);
+  console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages for page ${pageId}`);
+
+  // Create chat session with existing message history
   const chatSession: ChatSession = {
     pageId,
     userId: page.userId,
@@ -578,11 +582,24 @@ async function acceptPage(
     sysopSessionId,
     startedAt: new Date(),
     lastActivity: new Date(),
-    messages: [],
+    messages: existingMessages, // Include existing messages
     isTyping: { user: false, sysop: false }
   };
 
   activeChatSessions.set(pageId, chatSession);
+
+  // Send existing message history to sysop frontend
+  if (existingMessages.length > 0) {
+    const messagesWithTimestamps = existingMessages.map(msg => ({
+      ...msg,
+      timestamp: msg.timestamp.getTime() // Convert Date to number for frontend
+    }));
+    io.to(sysopSessionId).emit('operator:message-history', {
+      pageId,
+      messages: messagesWithTimestamps
+    });
+    console.log(`[Operator Chat] Sent ${existingMessages.length} message(s) to sysop ${sysopHandle}`);
+  }
 
   // Notify user that sysop accepted with split-screen setup (like livechat)
   // Set up fixed chat layout: scroll region 1-21, typing preview at 22, separator at 23, input at 24

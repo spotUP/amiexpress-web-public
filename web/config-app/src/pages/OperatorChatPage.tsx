@@ -140,6 +140,11 @@ export function OperatorChatPage() {
       setMessages(prev => [...prev, message]);
     });
 
+    socketInstance.on('operator:message-history', (data: { pageId: string; messages: ChatMessage[] }) => {
+      console.log('[Operator Chat] Message history received:', data.messages.length, 'messages');
+      setMessages(data.messages);
+    });
+
     socketInstance.on('operator:typing-status', ({ pageId, senderType, isTyping: typing }: { pageId: string; senderType: string; isTyping: boolean }) => {
       if (activeChat?.id === pageId && senderType === 'user') {
         setIsTyping(typing);
