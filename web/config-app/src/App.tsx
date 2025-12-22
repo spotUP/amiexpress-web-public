@@ -46,13 +46,15 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return (isAuthenticated || bypassAuth) ? <>{children}</> : <Navigate to="/login" />;
+  return (isAuthenticated || bypassAuth) ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
 function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<Navigate to="/admin/login" replace />} />
+      <Route path="/login" element={<Navigate to="/admin/login" replace />} />
+      <Route path="/admin/login" element={<LoginPage />} />
 
       <Route
         path="/admin/*"

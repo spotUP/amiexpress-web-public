@@ -57,10 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fetched);
       persistUser(fetched);
     } catch (error: any) {
-      // Only log out on explicit auth errors (401/403)
+      // Only log out on explicit auth errors (401/403/404)
       // Keep user logged in on network errors (they may be temporary)
       const isAuthError = error.message?.includes('401') ||
                           error.message?.includes('403') ||
+                          error.message?.includes('404') ||
+                          error.message?.includes('User not found') ||
                           error.message?.includes('Access token') ||
                           error.message?.includes('Invalid') ||
                           error.message?.includes('expired');

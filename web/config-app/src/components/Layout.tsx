@@ -28,7 +28,7 @@ export function Layout() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/admin/login');
   };
 
   const ADMIN_BASE = '/admin';

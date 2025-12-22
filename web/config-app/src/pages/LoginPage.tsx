@@ -19,7 +19,7 @@ export function LoginPage() {
 
     try {
       await login(username, password);
-      navigate('/system');
+      navigate('/admin/system');
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
