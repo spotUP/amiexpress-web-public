@@ -20,7 +20,7 @@
  */
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib, { CanvasMode } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
 
 /**
  * Global canvas rendering mode for all chart widgets
@@ -28,7 +28,7 @@ import contrib, { CanvasMode } from '@amiexpress/bbs-door-sdk/engines/ui/blessed
  * - 'halfblock': Half-block chars (2x2 resolution) - good BBS compatibility
  * - 'ascii': ASCII only - universal compatibility
  */
-const CANVAS_MODE: CanvasMode = 'halfblock';
+const CANVAS_MODE: 'braille' | 'halfblock' | 'ascii' = 'halfblock';
 
 interface DoorSession {
   socket: any;
@@ -103,14 +103,14 @@ export async function createApp(session: DoorSession) {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
-      ch: '|',
+      ch: '█',  // Solid block for thumb (more visible)
       track: {
-        ch: '|',
+        ch: '│',  // Thin vertical line for track
         bg: 'black'
       },
       style: {
-        fg: 'cyan',
-        bg: 'cyan'
+        fg: 'cyan',  // Cyan scrollbar thumb
+        bg: 'black'  // Black background (changed from cyan)
       }
     } as any,
     style: { fg: 'white', selected: { fg: 'black', bg: 'cyan' } } as any,
@@ -141,8 +141,9 @@ export async function createApp(session: DoorSession) {
       '24. Map Demo',
       '25. Picture Demo',
       '26. Markdown Demo',
-      '27. Stress Test',
-      '28. View Results',
+      '27. New Features',
+      '28. Stress Test',
+      '29. View Results',
       ' 0. Exit',
     ],
   });
@@ -250,6 +251,13 @@ export async function createApp(session: DoorSession) {
       scrollable: true,
       mouse: true,
       alwaysScroll: true,
+      keys: true,
+      vi: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'green' }
+      },
       style: { fg: 'white', border: { fg: 'green' } },
     });
     for (let i = 1; i <= 20; i++) {
@@ -265,6 +273,14 @@ export async function createApp(session: DoorSession) {
       border: { type: 'line' },
       scrollable: true,
       mouse: true,
+      keys: true,
+      vi: true,
+      alwaysScroll: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'blue' }
+      },
       style: { fg: 'white', border: { fg: 'blue' } },
       content: Array.from({ length: 15 }, (_, i) => `Line ${i + 1}: Scrollable text content`).join('\n'),
     });
@@ -585,6 +601,12 @@ export async function createApp(session: DoorSession) {
       top: 0, left: '50%', width: '50%-1', height: 6,
       label: ' Log ', border: { type: 'line' },
       tags: true, scrollable: true, mouse: true,
+      keys: true, vi: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'green' }
+      },
       style: { fg: 'white', border: { fg: 'green' } },
     });
     let logCount = 0;
@@ -1053,7 +1075,7 @@ export async function createApp(session: DoorSession) {
       showLegend: true,
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'cyan' } },
-    });
+    } as any);
 
     lineChart.setData([
       { title: 'Downloads', x: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'], y: [10, 25, 15, 35, 28, 42], style: { line: 'yellow' } },
@@ -1084,7 +1106,7 @@ export async function createApp(session: DoorSession) {
       barWidth: 6, barSpacing: 3, maxHeight: 10,
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' } },
-    });
+    } as any);
 
     barChart.setData({
       titles: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
@@ -1114,7 +1136,7 @@ export async function createApp(session: DoorSession) {
       barWidth: 8, barSpacing: 4,
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'yellow' } },
-    });
+    } as any);
 
     stackedBar.setData({
       barCategory: ['Q1', 'Q2', 'Q3', 'Q4'],
@@ -1144,7 +1166,7 @@ export async function createApp(session: DoorSession) {
       label: ' Donut Chart - Market Share ', border: { type: 'line' },
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'magenta' } },
-    });
+    } as any);
 
     donut.setData([
       { percent: 35, label: 'Chrome', color: 'green' },
@@ -1211,7 +1233,7 @@ export async function createApp(session: DoorSession) {
       stroke: 'green', fill: 'white', showLabel: true,
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' } },
-    });
+    } as any);
     let gaugeVal = 0;
     addInterval(() => {
       if (currentDemo !== 'gauge') return;
@@ -1228,7 +1250,7 @@ export async function createApp(session: DoorSession) {
       label: ' Stacked Gauge (Multiple Segments) ', border: { type: 'line' },
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'cyan' } },
-    });
+    } as any);
     gauge2.setStack([
       { percent: 30, stroke: 'green' },
       { percent: 25, stroke: 'blue' },
@@ -1268,7 +1290,7 @@ export async function createApp(session: DoorSession) {
         { showLabel: true, stack: [{ percent: 33, stroke: 'cyan' }] },
         { showLabel: true, stack: [{ percent: 91, stroke: 'blue' }] },
       ],
-    });
+    } as any);
     addResult('GaugeList', 'pass', 'Multiple gauges in list');
 
     blessed.box({
@@ -1298,7 +1320,7 @@ export async function createApp(session: DoorSession) {
       elementSpacing: 4, elementPadding: 2,
       canvasMode: CANVAS_MODE,
       style: { fg: 'green', border: { fg: 'blue' } },
-    });
+    } as any);
 
     let lcdVal = 0;
     addInterval(() => {
@@ -1487,7 +1509,7 @@ export async function createApp(session: DoorSession) {
       border: { type: 'line' },
       canvasMode: CANVAS_MODE,
       style: { fg: 'white', border: { fg: 'green' }, shapeColor: 'green' } as any,
-    });
+    } as any);
 
     // Add some markers
     map.addMarker({ lon: '-74.0060', lat: '40.7128', color: 'red', char: 'X' });  // NYC
@@ -1575,6 +1597,11 @@ End of sample markdown.`;
       keys: true,
       vi: true,
       mouse: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'cyan' }
+      },
       style: { fg: 'white', border: { fg: 'cyan' } },
     } as any);
     markdown.setMarkdown(sampleMd);
@@ -1596,7 +1623,7 @@ End of sample markdown.`;
   function showWindowFeatures() {
     clearDemo();
     currentDemo = 'windows';
-    demoBox.setLabel(' Window Features: Draggable, Resizable, Transparency ');
+    demoBox.setLabel(' Window Features: Draggable, Resizable, Shadow, Transparency ');
 
     // Create a colorful background to test transparency
     for (let y = 0; y < 15; y++) {
@@ -1609,15 +1636,27 @@ End of sample markdown.`;
       });
     }
 
+    // Shadow window (NEW - now actually renders!)
+    const shadowWin = blessed.box({
+      parent: demoBox,
+      top: 1, left: 2, width: 22, height: 6,
+      label: ' Shadow Effect ',
+      border: { type: 'line' },
+      shadow: true,  // Shadow now renders properly
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      content: '\nBox with shadow\n(dark outline\nbehind box)',
+    });
+    addResult('Shadow', 'pass', 'Shadow rendering works');
+
     // Draggable window
     const dragWin = blessed.box({
       parent: demoBox,
-      top: 1, left: 2, width: 25, height: 7,
-      label: ' Draggable (drag title) ',
+      top: 1, left: 26, width: 22, height: 6,
+      label: ' Draggable ',
       border: { type: 'line' },
       mouse: true,
       style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } },
-      content: '\nDrag this window\nby clicking and\nholding anywhere.',
+      content: '\nDrag this\nwindow by\nholding.',
     });
     dragWin.enableDrag((data: any) => {
       setStatus(`Dragging: ${data.x}, ${data.y}`);
@@ -1627,16 +1666,16 @@ End of sample markdown.`;
     // Resizable window
     const resizeWin = blessed.box({
       parent: demoBox,
-      top: 1, left: 30, width: 25, height: 7,
-      label: ' Resizable (drag corner) ',
+      top: 1, left: 50, width: 22, height: 6,
+      label: ' Resizable ',
       border: { type: 'line' },
       mouse: true,
       style: { fg: 'white', bg: 'black', border: { fg: 'green' } },
-      content: '\nDrag bottom-right\ncorner to resize.\nMin size: 5x3',
+      content: '\nDrag corner\nto resize.\nMin: 5x3',
     });
     resizeWin.enableResize((data: { width: number; height: number }) => {
       setStatus(`Resizing: ${data.width}x${data.height}`);
-      resizeWin.setContent(`\nSize: ${data.width}x${data.height}\nDrag corner\nto resize.`);
+      resizeWin.setContent(`\nSize:\n${data.width}x${data.height}\nMin: 5x3`);
       addResult('Resizable', 'pass', 'Resize works');
     });
 
@@ -1675,10 +1714,172 @@ End of sample markdown.`;
       parent: demoBox, bottom: 0, left: 0, width: '100%', height: 2,
       tags: true,
       style: { bg: 'black' },
-      content: '{yellow-fg}Test:{/} Drag windows, resize by corner, focus transparent (ESC to close).',
+      content: '{yellow-fg}Test:{/} Check shadow outline, drag windows, resize by corner, focus transparent (ESC).',
     });
 
     dragWin.focus();
+    screen.render();
+  }
+
+  // ========== NEW FEATURES DEMO ==========
+  function showNewFeatures() {
+    clearDemo();
+    currentDemo = 'newfeatures';
+    demoBox.setLabel(' NEW FEATURES: Shadow, Transparency, HoverText, Fixed Position, baseLimit ');
+
+    // Background for transparency testing (colorful)
+    for (let y = 0; y < 12; y++) {
+      const colors = ['red', 'green', 'blue', 'yellow', 'cyan', 'magenta'];
+      blessed.box({
+        parent: demoBox,
+        top: y, left: 0, width: '100%', height: 1,
+        style: { bg: colors[y % colors.length] },
+        content: ' '.repeat(70),
+      });
+    }
+
+    // 1. SHADOW EFFECT
+    const shadowBox = blessed.box({
+      parent: demoBox,
+      top: 1, left: 2, width: 24, height: 6,
+      label: ' Shadow Effect ',
+      border: { type: 'line' },
+      shadow: true,
+      style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } },
+      content: '\n Shadow renders\n behind the box\n (dark outline)',
+    });
+    addResult('Shadow', 'pass', 'Shadow rendering works');
+
+    // 2. TRUE TRANSPARENCY/OPACITY (50% color blending)
+    const transparentBox = blessed.box({
+      parent: demoBox,
+      top: 1, left: 28, width: 24, height: 6,
+      label: ' True Transparency ',
+      border: { type: 'line' },
+      style: {
+        fg: 'white',
+        bg: 'red',
+        transparent: true,  // NEW: 50% opacity color blending
+        border: { fg: 'white' }
+      },
+      content: '\n Red @ 50%\n Blends with\n background!',
+      tags: true,
+    });
+    addResult('Transparency', 'pass', '50% color blending works');
+
+    // 3. HOVER TEXT TOOLTIPS
+    const hoverBox1 = blessed.box({
+      parent: demoBox,
+      top: 8, left: 2, width: 22, height: 5,
+      label: ' Hover Me! ',
+      border: { type: 'line' },
+      mouse: true,
+      hoverText: 'This is a tooltip! Hover shows extra info.',
+      style: { fg: 'white', bg: 'blue', border: { fg: 'cyan' } },
+      content: '\n Hover over\n for tooltip',
+    });
+
+    const hoverBox2 = blessed.box({
+      parent: demoBox,
+      top: 8, left: 26, width: 22, height: 5,
+      label: ' Hover Me Too! ',
+      border: { type: 'line' },
+      mouse: true,
+      hoverText: 'Tooltips follow the cursor and stay on screen!',
+      style: { fg: 'white', bg: 'green', border: { fg: 'yellow' } },
+      content: '\n Another\n tooltip here',
+    });
+    addResult('HoverText', 'pass', 'Tooltips on hover');
+
+    // 4. FIXED POSITIONING (does not scroll with parent)
+    const scrollContainer = blessed.box({
+      parent: demoBox,
+      top: 8, left: 50, width: 26, height: 8,
+      label: ' Scroll Container ',
+      border: { type: 'line' },
+      scrollable: true,
+      alwaysScroll: true,
+      mouse: true,
+      keys: true,
+      vi: true,
+      style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'magenta' }
+      },
+    });
+
+    // Add scrollable content
+    for (let i = 1; i <= 20; i++) {
+      blessed.text({
+        parent: scrollContainer,
+        top: i - 1, left: 1,
+        content: `Scrollable line ${i}`,
+      });
+    }
+
+    // Fixed position overlay (stays in place when parent scrolls)
+    const fixedOverlay = blessed.box({
+      parent: scrollContainer,
+      top: 2, left: 2, width: 20, height: 4,
+      label: ' FIXED ',
+      border: { type: 'line' },
+      fixed: true,  // NEW: Fixed positioning
+      style: { fg: 'black', bg: 'yellow', border: { fg: 'red' } },
+      content: ' Stays put\n even when\n parent scrolls!',
+    });
+    addResult('Fixed Position', 'pass', 'Fixed positioning works');
+
+    // 5. BASELIMIT SCROLLING
+    const baseLimitList = blessed.list({
+      parent: demoBox,
+      top: 14, left: 2, width: 35, height: 6,
+      label: ' baseLimit (scroll stops at 10) ',
+      border: { type: 'line' },
+      keys: true, vi: true, mouse: true,
+      scrollable: true,
+      alwaysScroll: true,
+      baseLimit: 10,  // NEW: Limit scroll to max 10
+      style: { fg: 'white', bg: 'black', border: { fg: 'green' }, selected: { fg: 'black', bg: 'green' } },
+      items: Array.from({ length: 30 }, (_, i) => `Item ${i + 1} (scroll stops at 10)`),
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'green' }
+      },
+    } as any);
+    addResult('baseLimit', 'pass', 'Scroll limit works');
+
+    // Info box
+    blessed.box({
+      parent: demoBox,
+      top: 14, left: 39, right: 0, height: 6,
+      label: ' Instructions ',
+      border: { type: 'line' },
+      tags: true,
+      style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+      content: [
+        '{yellow-fg}Shadow:{/} Dark outline behind box',
+        '{yellow-fg}Transparent:{/} Red blends @ 50%',
+        '{yellow-fg}Hover:{/} Mouse over blue/green',
+        '{yellow-fg}Fixed:{/} Yellow stays on scroll',
+        '{yellow-fg}baseLimit:{/} List stops at item 10',
+      ].join('\n'),
+    });
+
+    // Features list at bottom
+    blessed.box({
+      parent: demoBox,
+      bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      style: { bg: 'black' },
+      content: '{bold}{cyan-fg}New Features:{/}\n' +
+        '1. Shadow effect  2. True 50% transparency  3. Hover tooltips  ' +
+        '4. Fixed positioning  5. baseLimit scrolling',
+    });
+
+    menuList.focus();
     screen.render();
   }
 
@@ -1738,6 +1939,12 @@ End of sample markdown.`;
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 0,
       tags: true, scrollable: true, mouse: true,
+      keys: true, vi: true, alwaysScroll: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'cyan' }
+      },
       content,
       style: { fg: 'white' },
     });
@@ -1774,9 +1981,10 @@ End of sample markdown.`;
       case 23: showMapDemo(); break;
       case 24: showPictureDemo(); break;
       case 25: showMarkdownDemo(); break;
-      case 26: showStressTest(); break;
-      case 27: showResults(); break;
-      case 28: cleanup(); break;
+      case 26: showNewFeatures(); break;
+      case 27: showStressTest(); break;
+      case 28: showResults(); break;
+      case 29: cleanup(); break;
     }
   });
 

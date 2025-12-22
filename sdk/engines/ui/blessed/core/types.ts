@@ -16,6 +16,7 @@ export interface Colors {
   blink?: Color | boolean;
   inverse?: Color | boolean;
   invisible?: Color | boolean;
+  transparent?: boolean;  // Enable 50% opacity color blending
 }
 
 export interface Border {
@@ -57,6 +58,7 @@ export interface ElementOptions {
   bottom?: TPosition;
   width?: TPosition;
   height?: TPosition;
+  fixed?: boolean;  // Fixed positioning (relative to screen, not parent)
 
   // Alignment helpers
   align?: 'left' | 'center' | 'right';
@@ -85,6 +87,8 @@ export interface ElementOptions {
   focusable?: boolean;
   clickable?: boolean;
   keyable?: boolean;
+  keys?: boolean | string[];  // Enable key bindings (true/false or custom key array)
+  vi?: boolean;  // Enable vi-style navigation (j/k for up/down)
   input?: boolean;
   dockBorders?: boolean;
   ignoreDockContrast?: boolean;
@@ -103,6 +107,7 @@ export interface ElementOptions {
 
   // Mouse
   mouse?: boolean;
+  hoverText?: string;  // Tooltip text shown on hover
 
   // Label
   label?: string;
