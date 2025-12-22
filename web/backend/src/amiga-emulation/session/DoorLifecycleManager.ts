@@ -300,8 +300,8 @@ export class DoorLifecycleManager {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
         this.logInitialState();
       }
-      // Note: Do not send unsolicited startup messages to XIM doors.
-      // AEDoor.library initiates JH_INIT/JH_STAT; the BBS only replies.
+      // Send the INIT/STAT startup messages so doors see the expected AEDoor handshake.
+      await this.sendStartupMessage();
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {

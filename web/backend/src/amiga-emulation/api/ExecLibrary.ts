@@ -622,6 +622,24 @@ export class ExecLibrary {
   ): { success: boolean; address: number; isNative: boolean } {
     console.log(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
 
+    // Try ROM resident modules (e.g. Kickstart/AROS residents) first so InitResident runs
+    if (this.useNativeLibraries) {
+      const romLibrary = this.openLibraryFromRomResident(
+        name,
+        minVersion,
+        allowTrapJump
+      );
+      if (romLibrary) {
+        return { success: true, address: romLibrary, isNative: true };
+      }
+      if (this.hasPendingTrapJump()) {
+        console.log(
+          `[ExecLibrary] Awaiting InitResident trap for ${name} (non-AUTOINIT resident)`
+        );
+        return { success: true, address: 0, isNative: true };
+      }
+    }
+
     // Try real native library first if enabled
     if (this.useNativeLibraries && this.libraryLoader) {
       const realLibrary = this.libraryLoader.loadLibrary(name, minVersion);
@@ -681,19 +699,6 @@ export class ExecLibrary {
       } else {
         console.log(`[ExecLibrary] ⚠️ Real library not found, using stub`);
       }
-    }
-
-    // Try ROM resident modules (e.g. AROS ROM libraries) before falling back to stubs
-    const romLibrary = this.openLibraryFromRomResident(
-      name,
-      minVersion,
-      allowTrapJump
-    );
-    if (romLibrary) {
-      return { success: true, address: romLibrary, isNative: true };
-    }
-    if (this.hasPendingTrapJump()) {
-      return { success: true, address: 0, isNative: true };
     }
 
     // Fall back to stub library

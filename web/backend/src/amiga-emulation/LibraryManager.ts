@@ -655,7 +655,7 @@ export class LibraryManager {
     );
 
     // Ensure real dos.library is resident and vectors installed up front (generic)
-    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, false);
+    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, true);
     if (dosHybrid.success) {
       this.libraryTraps!.installDOSVectors();
       console.log(
