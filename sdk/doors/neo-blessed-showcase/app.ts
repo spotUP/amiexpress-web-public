@@ -162,6 +162,32 @@ export async function createApp(session: DoorSession) {
     style: { fg: 'white', border: { fg: 'green' } },
   });
 
+  // Focus handlers to change border colors (active panel = white borders)
+  menuList.on('focus', () => {
+    (menuBox as any).style.border = { fg: 'white' };
+    (demoBox as any).style.border = { fg: 'green' };
+    screen.render();
+  });
+
+  menuList.on('blur', () => {
+    (menuBox as any).style.border = { fg: 'cyan' };
+    screen.render();
+  });
+
+  screen.on('element focus', (el: any) => {
+    // If any element in demoBox gets focus, make demoBox borders white
+    let parent = el.parent;
+    while (parent) {
+      if (parent === demoBox) {
+        (demoBox as any).style.border = { fg: 'white' };
+        (menuBox as any).style.border = { fg: 'cyan' };
+        screen.render();
+        return;
+      }
+      parent = parent.parent;
+    }
+  });
+
   const statusBar = blessed.box({
     parent: screen,
     bottom: 0,
