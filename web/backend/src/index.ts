@@ -248,8 +248,8 @@ export interface UploadSessionContext {
 export interface BBSSession {
   state: BBSState;
   subState?: LoggedOnSubState;
-  skipNextDisplayFlowMenuState?: LoggedOnSubState;
-  manualMenuDisplayTimestamp?: number;
+  skipNextDisplayFlowMenu?: boolean;
+  manualMenuTargetState?: LoggedOnSubState;
   user?: any; // Will be User from database (expert stored as "X"/"N")
   currentConf: number;
   conferenceId: number; // XIM doors read this property for current conference
