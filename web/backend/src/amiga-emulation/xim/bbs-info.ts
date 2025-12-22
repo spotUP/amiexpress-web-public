@@ -13,6 +13,7 @@ import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
+import { DoorConstants } from '../DoorTypes';
 import { callersLogManager } from '../../services/CallersLogManager';
 import { startSysopPage } from '../../handlers/chat/chat.handler';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
@@ -259,6 +260,13 @@ export class XIMBBSInfoHandler {
 
     if (isRead && value) {
       this.messageParser.writeMessageString(msg.msgAddr, value);
+      if (msg.command === XIMCommand.BB_CONFNUM) {
+        const verify = this.messageParser.readString(
+          msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+          DoorConstants.MESSAGE_STRING_CAPACITY
+        );
+        console.log(`[XIMBBSInfo] BB_CONFNUM verify buffer: "${verify}"`);
+      }
     } else if (!isRead && msg.string) {
       // Accept updated values (write mode)
       switch (msg.command) {
@@ -427,11 +435,25 @@ export class XIMBBSInfoHandler {
   handleMainLine(msg: XIMMessage): void {
     console.log('[XIMBBSInfo] BB_MAINLINE - Get main command line');
 
-    // express.e:3794-3800: Returns BBS version string for door compatibility checks
-    // Real AmiExpress returns version like "v5.3", "v5.6", etc.
-    // Doors check this to verify they're running on compatible BBS version
-    const mainLine = 'v5.3';
+    // express.e:3794-3800: returns command + params from menu prompt.
+    const command =
+      (this.bbsSession as any)?.doorCommand ||
+      (this.bbsSession as any)?.currentCommand ||
+      (this.bbsSession as any)?.command ||
+      '';
+    const params =
+      (this.bbsSession as any)?.doorParams ||
+      (this.bbsSession as any)?.commandParams ||
+      (this.bbsSession as any)?.params ||
+      '';
+    const trimmedParams = typeof params === 'string' ? params.trim() : '';
+    const mainLine = trimmedParams ? `${command} ${trimmedParams}` : `${command}`;
     this.messageParser.writeMessageString(msg.msgAddr, mainLine);
+    const verify = this.messageParser.readString(
+      msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+      DoorConstants.MESSAGE_STRING_CAPACITY
+    );
+    console.log(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
     console.log(`  Command line: "${mainLine}"`);
 
     this.reply(msg, 1);
@@ -740,6 +762,12 @@ export class XIMBBSInfoHandler {
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    // Always reset string pointers to the embedded buffer so doors
+    // don't read stale pointers from prior messages.
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
     this.messageParser.writeData(msg.msgAddr, data);
     this.execLibrary.replyMsg(msg.msgAddr);
   }

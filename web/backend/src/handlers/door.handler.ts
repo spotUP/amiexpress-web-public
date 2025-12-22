@@ -49,7 +49,64 @@ function disableShortcuts(session: BBSSession) {
  * sent to the client (which doesn't re-emit them back).
  */
 function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any): any {
-  const originalEmit = socket.emit.bind(socket);
+  const rawEmit = socket.emit.bind(socket);
+  const localHandlers = new Map<string, Set<(...args: any[]) => void>>();
+
+  const addLocalHandler = (event: string, handler: (...args: any[]) => void) => {
+    if (!localHandlers.has(event)) {
+      localHandlers.set(event, new Set());
+    }
+    localHandlers.get(event)!.add(handler);
+  };
+
+  const removeLocalHandler = (event: string, handler?: (...args: any[]) => void) => {
+    if (!localHandlers.has(event)) return;
+    if (!handler) {
+      localHandlers.delete(event);
+      return;
+    }
+    const handlers = localHandlers.get(event);
+    if (!handlers) return;
+    handlers.delete(handler);
+    if (handlers.size === 0) {
+      localHandlers.delete(event);
+    }
+  };
+
+  const dispatchLocal = (event: string, ...args: any[]) => {
+    const handlers = localHandlers.get(event);
+    if (!handlers || handlers.size === 0) return;
+    for (const handler of handlers) {
+      try {
+        handler(...args);
+      } catch (err) {
+        console.error('[DoorSocket] Local handler error for', event, err);
+      }
+    }
+  };
+
+  let cleanupOutgoing: (() => void) | undefined;
+
+  if (typeof socket.onAnyOutgoing === 'function') {
+    const outgoingHandler = (event: string, ...args: any[]) => {
+      dispatchLocal(event, ...args);
+    };
+    socket.onAnyOutgoing(outgoingHandler);
+    cleanupOutgoing = () => {
+      if (typeof socket.offAnyOutgoing === 'function') {
+        socket.offAnyOutgoing(outgoingHandler);
+      }
+    };
+  } else {
+    socket.emit = ((event: string, ...args: any[]) => {
+      const result = rawEmit(event, ...args);
+      dispatchLocal(event, ...args);
+      return result;
+    }) as any;
+    cleanupOutgoing = () => {
+      socket.emit = rawEmit;
+    };
+  }
 
   // Create a proxy that intercepts emit calls
   const wrappedSocket = Object.create(socket);
@@ -62,21 +119,11 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
 
       // Call the handler directly through BBSApi
       bbsApi.joinRoom(data.roomName || data.room, data.password).then((result: any) => {
-        if (result.success) {
-          // Emit room:joined event back to the door (so it gets the callback)
-          originalEmit('room:joined', {
-            roomId: result.roomId,
-            roomName: result.roomName || data.roomName || data.room,
-            memberCount: result.memberCount,
-            members: result.members
-          });
-        } else {
+        if (!result.success) {
           console.log('[DoorSocket] room:join failed:', result.error);
-          originalEmit('room:error', { error: result.error });
         }
       }).catch((err: Error) => {
         console.error('[DoorSocket] room:join error:', err);
-        originalEmit('room:error', { error: err.message || 'Failed to join room' });
       });
       return wrappedSocket;
     }
@@ -84,10 +131,9 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
     if (event === 'room:leave') {
       console.log('[DoorSocket] Intercepting room:leave');
       bbsApi.leaveRoom().then(() => {
-        originalEmit('room:left', { roomName: session.currentRoomName });
       }).catch((err: Error) => {
         console.error('[DoorSocket] room:leave error:', err);
-        originalEmit('room:error', { error: err.message || 'Failed to leave room' });
+        socket.emit('room:error', { error: err.message || 'Failed to leave room' });
       });
       return wrappedSocket;
     }
@@ -97,7 +143,6 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
       console.log('[DoorSocket] Intercepting room:message:', data);
       bbsApi.sendRoomMessage(data.message).catch((err: Error) => {
         console.error('[DoorSocket] room:message error:', err);
-        originalEmit('room:error', { error: err.message || 'Failed to send message' });
       });
       return wrappedSocket;
     }
@@ -111,19 +156,11 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
         password: data.password,
         maxUsers: data.maxUsers
       }).then((result: any) => {
-        if (result.success) {
-          originalEmit('room:created', {
-            roomId: result.roomId,
-            roomName: data.roomName,
-            topic: data.topic,
-            isPublic: data.isPublic
-          });
-        } else {
-          originalEmit('room:error', { error: result.error });
+        if (!result.success) {
+          console.log('[DoorSocket] room:create failed:', result.error);
         }
       }).catch((err: Error) => {
         console.error('[DoorSocket] room:create error:', err);
-        originalEmit('room:error', { error: err.message || 'Failed to create room' });
       });
       return wrappedSocket;
     }
@@ -131,28 +168,60 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
     if (event === 'room:list') {
       console.log('[DoorSocket] Intercepting room:list');
       bbsApi.listRooms().then((rooms: any[]) => {
-        originalEmit('room:list', { rooms });
+        socket.emit('room:list', { rooms });
       }).catch((err: Error) => {
         console.error('[DoorSocket] room:list error:', err);
-        originalEmit('room:error', { error: err.message || 'Failed to list rooms' });
+        socket.emit('room:error', { error: err.message || 'Failed to list rooms' });
       });
       return wrappedSocket;
     }
 
     // Pass through all other events to the real socket
-    return originalEmit(event, ...args);
+    return socket.emit(event, ...args);
   };
 
   // Forward all other socket properties and methods
   wrappedSocket.server = socket.server;
   wrappedSocket.id = socket.id;
-  wrappedSocket.on = socket.on.bind(socket);
-  wrappedSocket.once = socket.once?.bind(socket);
-  wrappedSocket.removeListener = socket.removeListener?.bind(socket);
-  wrappedSocket.removeAllListeners = socket.removeAllListeners?.bind(socket);
+  wrappedSocket.on = (event: string, handler: (...args: any[]) => void) => {
+    addLocalHandler(event, handler);
+    return socket.on(event, handler);
+  };
+  wrappedSocket.once = (event: string, handler: (...args: any[]) => void) => {
+    const wrappedHandler = (...args: any[]) => {
+      removeLocalHandler(event, wrappedHandler);
+      handler(...args);
+    };
+    addLocalHandler(event, wrappedHandler);
+    if (socket.once) {
+      return socket.once(event, wrappedHandler);
+    }
+    return socket.on(event, wrappedHandler);
+  };
+  wrappedSocket.removeListener = (event: string, handler: (...args: any[]) => void) => {
+    removeLocalHandler(event, handler);
+    return socket.removeListener?.(event, handler);
+  };
+  wrappedSocket.off = (event: string, handler: (...args: any[]) => void) => {
+    removeLocalHandler(event, handler);
+    return socket.off?.(event, handler);
+  };
+  wrappedSocket.removeAllListeners = (event?: string) => {
+    if (event) {
+      removeLocalHandler(event);
+    } else {
+      localHandlers.clear();
+    }
+    return socket.removeAllListeners?.(event as any);
+  };
   wrappedSocket.to = socket.to?.bind(socket);
   wrappedSocket.join = socket.join?.bind(socket);
   wrappedSocket.leave = socket.leave?.bind(socket);
+
+  wrappedSocket._doorCleanup = () => {
+    localHandlers.clear();
+    cleanupOutgoing?.();
+  };
 
   return wrappedSocket;
 }
@@ -422,15 +491,18 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     // Read confAccess and user stats from disk files for 68K door compatibility
     // 68K doors expect disk-based data, not SQLite database
     let confAccess = '';
-    let userSlotNumber = -1;
+    let userSlotNumber = -1; // 1-based slot number for AmiExpress doors
     let diskUserStats: ReturnType<typeof userDatabaseManager.readUserStatsFromDisk> = null;
     const username = session.user?.username;
     if (username) {
-      userSlotNumber = userDatabaseManager.findUserSlotByName(username);
-      if (userSlotNumber >= 0) {
-        confAccess = userDatabaseManager.readConfAccessFromDisk(userSlotNumber);
-        diskUserStats = userDatabaseManager.readUserStatsFromDisk(userSlotNumber);
-        console.log(`[launchAmigaDoor] Read from disk: slot=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`);
+      const slotIndex = userDatabaseManager.findUserSlotByName(username);
+      if (slotIndex >= 0) {
+        confAccess = userDatabaseManager.readConfAccessFromDisk(slotIndex);
+        diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
+        userSlotNumber = slotIndex + 1;
+        console.log(
+          `[launchAmigaDoor] Read from disk: slotIndex=${slotIndex} slotNumber=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`
+        );
       } else {
         // Fallback to session data if user not found in disk files
         confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
@@ -1170,6 +1242,7 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
 async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession, hybridSessionId?: string | null): Promise<void> {
   console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
   console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
+  let wrappedSocket: any;
 
   try {
     // Build absolute path to door - handle both directory and file paths
@@ -1249,27 +1322,31 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    // Clear module cache to ensure we get fresh code (critical for development)
-    // For CommonJS modules (require.cache)
-    if (require.cache[resolvedDoorPath]) {
-      delete require.cache[resolvedDoorPath];
-      console.log(`[executeTypeScriptDoor] Cleared CommonJS cache for: ${resolvedDoorPath}`);
+    const hotReload = process.env.DOOR_HOT_RELOAD === '1';
+
+    if (hotReload) {
+      // Clear module cache to ensure we get fresh code (critical for development)
+      // For CommonJS modules (require.cache)
+      if (require.cache[resolvedDoorPath]) {
+        delete require.cache[resolvedDoorPath];
+        console.log(`[executeTypeScriptDoor] Cleared CommonJS cache for: ${resolvedDoorPath}`);
+      }
+
+      // Also clear any related CommonJS modules in the door's directory (dependencies)
+      const doorDir = path.dirname(resolvedDoorPath);
+      Object.keys(require.cache).forEach(key => {
+        if (key.startsWith(doorDir)) {
+          delete require.cache[key];
+          console.log(`[executeTypeScriptDoor] Cleared related CommonJS module: ${key}`);
+        }
+      });
     }
 
-    // Also clear any related CommonJS modules in the door's directory (dependencies)
-    const doorDir = path.dirname(resolvedDoorPath);
-    Object.keys(require.cache).forEach(key => {
-      if (key.startsWith(doorDir)) {
-        delete require.cache[key];
-        console.log(`[executeTypeScriptDoor] Cleared related CommonJS module: ${key}`);
-      }
-    });
-
-    // For ESM modules (dynamic import), use query parameter to bust cache
-    // This forces Node.js to treat it as a different module
-    const cacheBuster = `?_=${Date.now()}`;
-    const importPath = `file://${resolvedDoorPath}${cacheBuster}`;
-    console.log(`[executeTypeScriptDoor] Importing with cache buster: ${importPath}`);
+    // For ESM modules (dynamic import), use query parameter to bust cache when hot reload is enabled.
+    const importPath = hotReload
+      ? `file://${resolvedDoorPath}?_=${Date.now()}`
+      : `file://${resolvedDoorPath}`;
+    console.log(`[executeTypeScriptDoor] Importing ${hotReload ? 'with cache buster' : 'from cache'}: ${importPath}`);
 
     // Dynamically import the door module with cache busting
     const doorModule = await import(importPath);
@@ -1377,7 +1454,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     // Create a socket wrapper that intercepts room: and chat: events
     // This allows doors to use socket.emit('room:join', ...) which will call handlers directly
-    const wrappedSocket = createDoorSocketWrapper(socket, session, bbsApi);
+    wrappedSocket = createDoorSocketWrapper(socket, session, bbsApi);
 
     // Execute door based on pattern
     if (isSDKDoor) {
@@ -1406,6 +1483,23 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
         params: door.parameters || []  // Pass command-line parameters from .info PARAMS
       };
 
+      if (packageJson?.runtime === 'hybrid' && hybridSessionId) {
+        const rpcHandlers = doorModule.rpcHandlers || doorModule.default?.rpcHandlers;
+        if (rpcHandlers && typeof rpcHandlers === 'object') {
+          const { getClientDoorBridge } = require('../doors/client-door-bridge');
+          const bridge = getClientDoorBridge();
+
+          for (const [method, handler] of Object.entries(rpcHandlers)) {
+            if (typeof handler === 'function') {
+              bridge.registerRPCHandler(hybridSessionId, method, async (params: any) => {
+                return (handler as Function)(params, doorSessionObj);
+              });
+              console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
+            }
+          }
+        }
+      }
+
       await doorModule.runDoor(doorSessionObj);
       console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
     }
@@ -1419,6 +1513,9 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     delete session.inDoorManager;
     delete session.doorInputHandler;
     delete session.bbsApi;
+    if (wrappedSocket?._doorCleanup) {
+      wrappedSocket._doorCleanup();
+    }
     console.log(`[executeTypeScriptDoor] Cleared inDoorManager and doorInputHandler`);
 
     // Reset menu input mode (express.e returns to MENU with shortcuts off)
@@ -1439,6 +1536,9 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
   } catch (error) {
     console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+    if (wrappedSocket?._doorCleanup) {
+      wrappedSocket._doorCleanup();
+    }
     SysopDebugUtil.debugDoorError(
       socket,
       session,
@@ -1913,6 +2013,53 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     (session as any).bbsRoot = bbsRoot;
     (session as any).dataDir = bbsRoot;
     console.log(`[executeAmigaDoor] Set session.bbsRoot="${bbsRoot}" for XIMProtocol`);
+
+    // Ensure disk-based user data is available for 68K doors (confAccess + slot + stats)
+    if (session.user?.username) {
+      let confAccess = (session as any).confAccess || '';
+      let userSlotNumber = Number.isFinite((session as any).userSlotNumber)
+        ? (session as any).userSlotNumber
+        : -1;
+      let slotIndex = userSlotNumber > 0 ? userSlotNumber - 1 : -1;
+      let diskUserStats = (session as any).diskUserStats ?? null;
+
+      if (slotIndex >= 0) {
+        if (!confAccess) {
+          confAccess = userDatabaseManager.readConfAccessFromDisk(slotIndex);
+        }
+        if (!diskUserStats) {
+          diskUserStats = userDatabaseManager.readUserStatsFromDisk(slotIndex);
+        }
+      }
+
+      if (slotIndex < 0 || !confAccess || !diskUserStats) {
+        const foundIndex = userDatabaseManager.findUserSlotByName(session.user.username);
+        if (foundIndex >= 0) {
+          if (!confAccess) {
+            confAccess = userDatabaseManager.readConfAccessFromDisk(foundIndex);
+          }
+          if (!diskUserStats) {
+            diskUserStats = userDatabaseManager.readUserStatsFromDisk(foundIndex);
+          }
+          slotIndex = foundIndex;
+          userSlotNumber = foundIndex + 1;
+          console.log(
+            `[executeAmigaDoor] Read from disk: slotIndex=${foundIndex} slotNumber=${userSlotNumber} confAccess="${confAccess}" stats=${JSON.stringify(diskUserStats)}`
+          );
+        } else if (!confAccess) {
+          confAccess = session.user?.confAccess || session.user?.conferenceAccess || '';
+          console.log(`[executeAmigaDoor] User not found in disk, fallback confAccess="${confAccess}"`);
+        }
+      }
+
+      (session as any).confAccess = confAccess;
+      if (userSlotNumber > 0) {
+        (session as any).userSlotNumber = userSlotNumber;
+      }
+      if (diskUserStats) {
+        (session as any).diskUserStats = diskUserStats;
+      }
+    }
 
     // Interactive doors use higher LOOP_LIMIT - they legitimately wait for user input
     // Batch doors (run via batch-scheduler) use lower LOOP_LIMIT (10M default)

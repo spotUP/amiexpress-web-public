@@ -264,6 +264,28 @@ export class XIMProtocol {
       this.doorLogger.xim('RX', `${msg.command} (${humanName})`, `data=${msg.data} str="${msg.string || ''}"`);
     }
 
+    // AEDoor.library startup handshake:
+    // - JH_INIT (cmd 0) with string "INIT"
+    // - JH_STAT (cmd 1) with data pointing at node status and string "NODE ... STATUS READY"
+    // These must be replied to without JH_LI/JH_REGISTER handling.
+    const initString = (msg.string || '').trim().toUpperCase();
+    const isAedoorInit =
+      msg.command === XIMCommand.JH_LI &&
+      msg.data === 0 &&
+      initString === 'INIT';
+    const isAedoorStat =
+      msg.command === XIMCommand.JH_REGISTER &&
+      msg.data !== undefined &&
+      msg.data > 0x100 &&
+      initString.startsWith('NODE ') &&
+      initString.includes('STATUS');
+    if (isAedoorInit || isAedoorStat) {
+      const label = isAedoorInit ? 'JH_INIT' : 'JH_STAT';
+      console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (replying as-is)`);
+      this.execLibrary.replyMsg(msg.msgAddr);
+      return;
+    }
+
     // Normalize nodeId to the active session node when the door leaves it unset or 0xFFFFFFFF.
     if (
       msg.nodeId === undefined ||

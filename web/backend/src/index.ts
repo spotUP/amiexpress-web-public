@@ -351,7 +351,6 @@ export interface BBSSession {
   pagingInterval?: NodeJS.Timeout; // Interval for paging notifications
   inChat?: boolean; // Whether user is currently in chat
   chatSession?: any; // Active chat session object
-  socketId?: string; // Socket.IO socket ID for this session
   lastTypingTime?: number; // Last time user was typing (for typing indicator)
   partnerTypingBuffer?: string; // Buffer for partner's typing indicator
   typingBlinkTimer?: NodeJS.Timeout; // Timer for typing indicator blinking

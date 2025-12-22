@@ -217,10 +217,10 @@ export class DoorMessageHandler {
     );
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
 
-    // Real AEDoor disasm sends two PutMsg calls with d0=1 then d0=2
-    const initMsgAddr = this.allocateAedoorStyleMessage(1, 0, "INIT");
+    // Real AEDoor disasm sends two PutMsg calls with d0=0 (INIT) then d0=1 (STAT)
+    const initMsgAddr = this.allocateAedoorStyleMessage(0, 0, "INIT");
     const statMsgAddr = this.allocateAedoorStyleMessage(
-      2,
+      1,
       this.doorInfoAddr + DoorConstants.MESSAGE_NODE_OFFSET,
       statusText
     );
@@ -279,7 +279,6 @@ export class DoorMessageHandler {
     data: number,
     messageText: string
   ): number | null {
-    // Mirror AEDoor.library: message buffer lives inside DoorInfo at +0x46
     if (!this.doorInfoAddr) {
       console.error("[DoorMessageHandler] Cannot create message without DoorInfo");
       console.error("[DoorMessageHandler] Failed to create reply port");
@@ -291,8 +290,17 @@ export class DoorMessageHandler {
       this.doorReplyPortAddr = this.execLibrary.createMsgPort();
     }
 
-    const msgAddr = this.doorInfoAddr + DoorConstants.DOOR_INFO_MESSAGE_OFFSET;
     const msgSize = DoorConstants.MESSAGE_TOTAL_LENGTH;
+    // AEDoor.library reuses DoorInfo+0x46, but we allocate per message so INIT/STAT
+    // are distinct in the queue (prevents overwrite before the door reads them).
+    const msgAddr = this.execLibrary.allocMem(
+      msgSize,
+      DoorConstants.MEMF_PUBLIC_CLEAR
+    );
+    if (!msgAddr) {
+      console.error("[DoorMessageHandler] Failed to allocate AEDoor message buffer");
+      return null;
+    }
     const replyPortAddr =
       this.doorReplyPortAddr ||
       this.emulator.readMemory32(this.doorInfoAddr + 0x4) ||

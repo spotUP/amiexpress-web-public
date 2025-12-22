@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback, useState } from 'react';
+import * as SDKClient from '@amiexpress/bbs-door-sdk/client';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
-import Zmodem from 'zmodem.js/src/zmodem_browser';
+import { getZmodem } from '../utils/zmodem';
 
 // RIP Graphics types (inline to avoid package dependency)
 const RIP_WIDTH = 640;
@@ -89,18 +90,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   const mouseButtonDown = useRef<boolean>(false);  // Track mouse button state for drag events
   const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
+  const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const guruPhaseRef = useRef<number>(0);
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
   });
   const zmodemSentry = useRef<any | null>(null);
+  const zmodemRef = useRef<any | null>(null);
+  const audioEngineRef = useRef<SDKClient.AudioEngine | null>(null);
+  const audioReadyRef = useRef<boolean>(false);
+  const sfxBufferRef = useRef<string>('');
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
 
   // Web transparency overlays (CSS-based, for web connections only)
   const [overlays, setOverlays] = useState<Map<string, { opacity: number; show: boolean }>>(new Map());
+  const overlayBufferRef = useRef<string>('');
   const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
   const zmodemSession = useRef<any | null>(null);
@@ -118,6 +126,44 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       transferTimeout.current = null;
     }
   };
+
+  const requireZmodem = useCallback(() => {
+    if (zmodemRef.current) return zmodemRef.current;
+    const loaded = getZmodem();
+    if (!loaded) {
+      console.warn('[ZMODEM] Zmodem library not available');
+      return null;
+    }
+    zmodemRef.current = loaded;
+    return loaded;
+  }, []);
+
+  const ensureAudioEngine = useCallback(async (): Promise<SDKClient.AudioEngine | null> => {
+    if (!audioEngineRef.current) {
+      audioEngineRef.current = new SDKClient.AudioEngine({
+        masterVolume: 0.7,
+        musicVolume: 0.4,
+        sfxVolume: 0.8,
+      });
+    }
+
+    if (!audioReadyRef.current) {
+      try {
+        await audioEngineRef.current.init();
+        audioReadyRef.current = true;
+      } catch {
+        return null;
+      }
+    }
+
+    return audioEngineRef.current;
+  }, []);
+
+  const playSfx = useCallback(async (soundId: string, params?: Record<string, unknown>) => {
+    const engine = await ensureAudioEngine();
+    if (!engine) return;
+    engine.playSound(soundId, params as any);
+  }, [ensureAudioEngine]);
 
   const getStoredSharedToken = useCallback(() => {
     if (typeof window === 'undefined') return null;
@@ -174,6 +220,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const sendPendingFiles = (session?: any) => {
     const active = session || zmodemSession.current;
     if (!active) return;
+    const Zmodem = requireZmodem();
+    if (!Zmodem) return;
     if (!pendingUploadFiles.current.length) {
       terminalInstance.current?.writeln?.('\r\nSelect a file to upload...\r\n');
       if (fileInputRef.current) {
@@ -203,6 +251,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   };
 
   const handleZmodemDetection = (detection: any) => {
+    const Zmodem = requireZmodem();
+    if (!Zmodem) return;
     if (transferTimeout.current) {
       clearTimeout(transferTimeout.current);
       transferTimeout.current = null;
@@ -243,6 +293,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const beginZmodem = (direction: 'upload' | 'download', paths?: string[]) => {
     const socket = socketRef.current;
     if (!socket) return;
+    const Zmodem = requireZmodem();
+    if (!Zmodem) return;
 
     transferState.current = { direction, paths: paths || [] };
     const sender = (octets: any) => {
@@ -394,6 +446,67 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     gameMode.current = false;
     keyState.current = {};
 
+    const stopGuruAnimation = () => {
+      if (guruTimerRef.current) {
+        clearInterval(guruTimerRef.current);
+        guruTimerRef.current = null;
+      }
+    };
+
+    const renderGuruMeditation = (phase: number) => {
+      if (!showConnectionError) return;
+
+      const borderColor = phase % 2 === 0 ? '\x1b[31m' : '\x1b[91m';
+      const textColor = borderColor;
+      const reset = '\x1b[0m';
+      const interiorWidth = 78;
+
+      const centerLine = (text: string) => {
+        const leftPadding = Math.max(0, Math.floor((interiorWidth - text.length) / 2));
+        const rightPadding = Math.max(0, interiorWidth - text.length - leftPadding);
+        return `${borderColor}║${' '.repeat(leftPadding)}${textColor}${text}${borderColor}${' '.repeat(rightPadding)}║${reset}`;
+      };
+
+      term.clear();
+      term.writeln(`${borderColor}╔${'═'.repeat(interiorWidth)}╗${reset}`);
+      term.writeln(`${borderColor}║${' '.repeat(interiorWidth)}║${reset}`);
+      term.writeln(centerLine('Software Failure.'));
+      term.writeln(centerLine('BBS Backend Connection Failed'));
+      term.writeln(centerLine('Guru Meditation'));
+      term.writeln(`${borderColor}║${' '.repeat(interiorWidth)}║${reset}`);
+      term.writeln(`${borderColor}╚${'═'.repeat(interiorWidth)}╝${reset}`);
+      term.writeln('');
+      term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
+      term.writeln('');
+      term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
+      term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
+      term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
+      term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
+      term.writeln('');
+      term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
+      term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
+      term.writeln('');
+    };
+
+    const startGuruAnimation = () => {
+      if (!showConnectionError) return;
+      if (guruTimerRef.current) {
+        renderGuruMeditation(guruPhaseRef.current);
+        return;
+      }
+
+      guruPhaseRef.current = 0;
+      renderGuruMeditation(guruPhaseRef.current);
+      guruTimerRef.current = setInterval(() => {
+        guruPhaseRef.current = (guruPhaseRef.current + 1) % 2;
+        renderGuruMeditation(guruPhaseRef.current);
+      }, 650);
+    };
+
     // Game mode keyboard handlers - bypass OS key repeat delay
     const handleGameKeyDown = (ev: KeyboardEvent) => {
       // Handle transfer cancel
@@ -454,6 +567,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Socket event handlers
     socket.on('connect', () => {
       console.log('[Terminal] Connected to BBS backend');
+      stopGuruAnimation();
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
       keyState.current = {};
@@ -470,37 +584,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('connect_error', (error: any) => {
-      console.error('❌ BBS Terminal: Connection error:', error.message);
-
-      if (showConnectionError) {
-        term.clear();
-        term.writeln('\r\n\x1b[36m╔══════════════════════════════════════════════════════════════════════════════╗\x1b[0m');
-        term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
-        const bannerMessage = 'BBS Backend Connection Failed';
-        const interiorWidth = 78;
-        const leftPadding = Math.max(0, Math.floor((interiorWidth - bannerMessage.length) / 2));
-        const rightPadding = Math.max(0, interiorWidth - bannerMessage.length - leftPadding);
-        term.writeln(
-          `\x1b[36m║${' '.repeat(leftPadding)}\x1b[31m${bannerMessage}\x1b[36m${' '.repeat(rightPadding)}║\x1b[0m`
-        );
-        term.writeln('\x1b[36m║                                                                              ║\x1b[0m');
-        term.writeln('\x1b[36m╚══════════════════════════════════════════════════════════════════════════════╝\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
-        term.writeln('');
-        term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
-        term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
-        term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
-        term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
-        term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
-        term.writeln('');
-      }
+      console.error('[Terminal] Connection error:', error.message);
+      startGuruAnimation();
 
       onConnectionError?.(error);
     });
@@ -696,7 +781,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('disconnect', (reason: string) => {
-      console.log('🔌 BBS Terminal: Disconnected:', reason);
+      console.log('[Terminal] Disconnected:', reason);
       if (reason === 'io client disconnect') {
         localStorage.removeItem('bbs_auth_token');
         reconnectPending.current = false;
@@ -747,17 +832,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      const overlayPrefix = '\x1b]9999;overlay;';
+      let overlayPayload = overlayBufferRef.current + data;
+      overlayBufferRef.current = '';
+
       // Debug: Check if data contains OSC 9999 sequence
-      if (data.includes('9999') || data.includes('overlay')) {
-        console.log('[Overlay] Raw data contains potential overlay command, length:', data.length);
-        console.log('[Overlay] Raw data hex:', Array.from(data.slice(0, 100)).map(c => c.charCodeAt(0).toString(16)).join(' '));
+      if (overlayPayload.includes('9999') || overlayPayload.includes('overlay')) {
+        console.log('[Overlay] Raw data contains potential overlay command, length:', overlayPayload.length);
+        console.log('[Overlay] Raw data hex:', Array.from(overlayPayload.slice(0, 100)).map(c => c.charCodeAt(0).toString(16)).join(' '));
       }
 
       // Check for web transparency overlay OSC sequences
       // Format: ESC ] 9999 ; overlay ; <json> BEL
-      const overlayRegex = /\x1b\]9999;overlay;({[^}]+})\x07/g;
+      const overlayRegex = /\x1b\]9999;overlay;({[^}]*})\x07/g;
       let overlayMatch;
-      while ((overlayMatch = overlayRegex.exec(data)) !== null) {
+      while ((overlayMatch = overlayRegex.exec(overlayPayload)) !== null) {
         try {
           const overlayData = JSON.parse(overlayMatch[1]);
           console.log('[Overlay] Parsed overlay command:', overlayData);
@@ -775,8 +864,44 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           console.error('[Overlay] Failed to parse overlay data:', e, 'Match:', overlayMatch[1]);
         }
       }
+
       // Strip overlay sequences from output (they shouldn't display as text)
-      data = data.replace(overlayRegex, '');
+      overlayPayload = overlayPayload.replace(overlayRegex, '');
+
+      // Preserve any incomplete overlay sequence for the next chunk
+      const incompleteIndex = overlayPayload.lastIndexOf(overlayPrefix);
+      if (incompleteIndex !== -1 && overlayPayload.indexOf('\x07', incompleteIndex) === -1) {
+        overlayBufferRef.current = overlayPayload.slice(incompleteIndex);
+        overlayPayload = overlayPayload.slice(0, incompleteIndex);
+      }
+
+      data = overlayPayload;
+
+      const sfxPrefix = '\x1b]9999;sfx;';
+      let sfxPayload = sfxBufferRef.current + data;
+      sfxBufferRef.current = '';
+
+      const sfxRegex = /\x1b\]9999;sfx;({[^}]*})\x07/g;
+      let sfxMatch;
+      while ((sfxMatch = sfxRegex.exec(sfxPayload)) !== null) {
+        try {
+          const sfxData = JSON.parse(sfxMatch[1]);
+          if (sfxData?.id) {
+            void playSfx(String(sfxData.id), sfxData.params as Record<string, unknown> | undefined);
+          }
+        } catch (e) {
+          console.error('[SFX] Failed to parse sfx payload:', e);
+        }
+      }
+
+      sfxPayload = sfxPayload.replace(sfxRegex, '');
+      const sfxIncompleteIndex = sfxPayload.lastIndexOf(sfxPrefix);
+      if (sfxIncompleteIndex !== -1 && sfxPayload.indexOf('\x07', sfxIncompleteIndex) === -1) {
+        sfxBufferRef.current = sfxPayload.slice(sfxIncompleteIndex);
+        sfxPayload = sfxPayload.slice(0, sfxIncompleteIndex);
+      }
+
+      data = sfxPayload;
 
       // Check for RIP mode escape codes (express.e:25679-25683)
       // [1! = Enter RIP pixel/graphics mode
@@ -1194,6 +1319,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         clearTimeout(transferTimeout.current);
         transferTimeout.current = null;
       }
+      stopGuruAnimation();
     };
   }, [fontSize, backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
@@ -1207,10 +1333,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Focus terminal when clicked
   const handleClick = () => {
     terminalInstance.current?.focus();
+    void ensureAudioEngine();
   };
 
   // Calculate terminal cell coordinates from mouse event
-  const getTerminalCoords = (event: React.MouseEvent): { x: number; y: number } | null => {
+  const getTerminalCoordsFromPoint = (clientX: number, clientY: number): { x: number; y: number } | null => {
     const term = terminalInstance.current;
     if (!term || !terminalRef.current) return null;
 
@@ -1223,8 +1350,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const cellHeight = rect.height / term.rows;
 
     // Calculate cell position (0-indexed)
-    const x = Math.floor((event.clientX - rect.left) / cellWidth);
-    const y = Math.floor((event.clientY - rect.top) / cellHeight);
+    const x = Math.floor((clientX - rect.left) / cellWidth);
+    const y = Math.floor((clientY - rect.top) / cellHeight);
 
     // Clamp to valid range
     return {
@@ -1232,6 +1359,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       y: Math.max(0, Math.min(term.rows - 1, y))
     };
   };
+
+  const getTerminalCoords = (event: React.MouseEvent): { x: number; y: number } | null =>
+    getTerminalCoordsFromPoint(event.clientX, event.clientY);
 
   // Mouse event handlers for game mode / doors
   const handleMouseDown = (event: React.MouseEvent) => {
@@ -1313,6 +1443,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   };
 
+  const handleWheel = (event: React.WheelEvent) => {
+    if (!doorActive.current && !gameMode.current) return;
+
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    const coords = getTerminalCoordsFromPoint(event.clientX, event.clientY);
+    if (!coords) return;
+
+    event.preventDefault();
+    socket.emit('mouse-wheel', {
+      x: coords.x,
+      y: coords.y,
+      deltaY: event.deltaY,
+      shift: event.shiftKey,
+      ctrl: event.ctrlKey,
+      alt: event.altKey
+    });
+  };
+
   // Handle RIP canvas click to send commands back to BBS
   const handleRipCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = ripCanvasRef.current;
@@ -1345,6 +1495,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         onMouseUp={handleMouseUp}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { mouseButtonDown.current = false; }}
+        onWheel={handleWheel}
         tabIndex={0}
         style={{
           overflow: 'hidden',
@@ -1369,7 +1520,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
               backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
               pointerEvents: 'none', // Allow clicks through to terminal
               zIndex: 100, // High enough to be above terminal
-              outline: '2px solid red', // Debug: shows overlay bounds
             }}
           />
         );

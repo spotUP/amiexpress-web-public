@@ -295,7 +295,8 @@ export class LibraryManager {
     const romSource = this.resolveRomSource();
     let romPath: string | null = null;
 
-    if (romSource.kind === "kickstart") {
+    const usingKickstart = romSource.kind === "kickstart";
+    if (usingKickstart) {
       romPath = romSource.path;
       const romData = fs.readFileSync(romPath);
       this.emulator.loadROM(new Uint8Array(romData));
@@ -338,11 +339,15 @@ export class LibraryManager {
     }
 
     const libraryLoader = new LibraryLoader(this.emulator);
-    // Prefer real Amiga libraries when present on disk (repo / BBS root paths)
-    libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
-    libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
+    // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
+    // addSearchPath() unshifts, so add in reverse priority order.
     libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
+    libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
+    libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
+    console.log(
+      `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
+    );
 
     // Pre-register any libraries present on disk so getLibraryBase() can
     // resolve them before OpenLibrary is invoked.
@@ -574,7 +579,7 @@ export class LibraryManager {
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
     console.log("[LibraryManager] Pre-opening utility.library and installing vectors...");
-    this.execLibrary.openLibraryHybrid("utility.library", 37);
+    this.execLibrary.openLibraryHybrid("utility.library", 37, false);
     this.libraryTraps.installUtilityVectors();
 
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
@@ -650,7 +655,7 @@ export class LibraryManager {
     );
 
     // Ensure real dos.library is resident and vectors installed up front (generic)
-    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37);
+    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, false);
     if (dosHybrid.success) {
       this.libraryTraps!.installDOSVectors();
       console.log(
@@ -663,7 +668,7 @@ export class LibraryManager {
     }
 
     // Pre-open AEDoor.library so vectors are installed even before doors call OpenLibrary.
-    const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2);
+    const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2, false);
     if (aedHybrid.success) {
       this.libraryTraps!.installAEDoorVectors();
       console.log(
@@ -771,6 +776,17 @@ export class LibraryManager {
         const stat = amigafs.statSync(entryPath);
         if (!stat.isFile()) continue;
         if (!name.toLowerCase().endsWith(".library")) continue;
+        const lower = name.toLowerCase();
+        if (
+          lower === "exec.library" ||
+          lower === "dos.library" ||
+          lower === "utility.library" ||
+          lower === "graphics.library" ||
+          lower === "intuition.library" ||
+          lower === "icon.library"
+        ) {
+          continue;
+        }
         this.execLibrary.registerLibraryPlaceholder(name);
       }
     } catch (err) {

@@ -138,19 +138,18 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
                   : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
               }`}
             >
-              .zip (Modern)
+              .zip (TypeScript)
             </button>
             <button
-              onClick={() => setOptions({ ...options, format: 'lha' })}
-              className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                options.format === 'lha'
-                  ? 'bg-blue-600 border-blue-600 text-white'
-                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
-              }`}
+              disabled
+              className="flex-1 px-3 py-2 rounded border border-gray-700 text-gray-500 cursor-not-allowed"
             >
-              .lha (Amiga)
+              .lha (Native Amiga)
             </button>
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            TypeScript releases are ZIP. Native Amiga doors should use LHA.
+          </p>
         </div>
 
         {/* Include options */}
@@ -159,16 +158,15 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
             Include in Archive
           </label>
 
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer opacity-70">
             <input
               type="checkbox"
               checked={options.includeSource}
-              onChange={(e) =>
-                setOptions({ ...options, includeSource: e.target.checked })
-              }
+              onChange={() => undefined}
+              disabled
               className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
             />
-            <span className="text-sm text-gray-300">Source code (.ts/.js files)</span>
+            <span className="text-sm text-gray-300">Runtime source files (required)</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer">
@@ -255,17 +253,16 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
             <input
               type="checkbox"
               checked={options.doormanCompatible}
-              onChange={(e) =>
-                setOptions({ ...options, doormanCompatible: e.target.checked })
-              }
+              onChange={() => undefined}
+              disabled
               className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
             />
             <span className="text-sm text-gray-300">
-              Doorman compatible (include .info metadata)
+              BBS .info included (required)
             </span>
           </label>
           <p className="text-xs text-gray-500 mt-1 ml-6">
-            Makes the archive installable via the BBS doorman utility
+            Release archives always include `Commands/BBSCmd/*.info`
           </p>
         </div>
 
@@ -307,7 +304,7 @@ export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
             <strong>Filename:</strong> {doorName}_v{'{version}'}.{options.format}
           </p>
           <p>
-            The archive will include package.json, built JavaScript, and selected files.
+            The archive includes Commands/BBSCmd and Doors/&lt;door&gt; with required runtime files.
           </p>
         </div>
       </div>

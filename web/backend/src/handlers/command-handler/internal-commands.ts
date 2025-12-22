@@ -214,12 +214,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return;
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
-      const { ViewFileHandler } = require('../view-file.handler');
+      const { ViewFileHandler } = require('../content/view-file.handler');
       await ViewFileHandler.handleViewFileCommand(socket, session, params);
       return;
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
-      const { ViewFileHandler: ViewFileHandler2 } = require('../view-file.handler');
+      const { ViewFileHandler: ViewFileHandler2 } = require('../content/view-file.handler');
       await ViewFileHandler2.handleViewFileCommand(socket, session, params);
       return;
 

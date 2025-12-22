@@ -10,14 +10,13 @@ import {
   KeyEvent,
   AnsiColor,
   AnsiBgColor,
-  MessageType,
-  ProtocolHelper,
   WebSocketMessage,
   OutputMessage,
   InputMessage,
   RPCRequestMessage,
   RPCResponseMessage,
 } from '../common';
+import { MessageType, ProtocolHelper } from '../common/protocol';
 
 export class ClientDoor extends EventEmitter {
   /** Door configuration */
@@ -615,8 +614,8 @@ export class ClientDoor extends EventEmitter {
 /**
  * Export types
  */
-export { BBSUser, DoorConfig, KeyEvent, AnsiBgColor } from '../common';
-export { AnsiColor } from '../core/types';
+export type { BBSUser, DoorConfig, KeyEvent, AnsiBgColor } from '../common';
+export type { AnsiColor } from '../core/types';
 
 /**
  * Export ANSI string utilities
@@ -662,7 +661,7 @@ export { TacticalCombatEngine } from '../engines/tactical/tactical-combat-engine
 export { MenuSystem } from '../components/menus/menu-system';
 export { HUDBuilder } from '../components/hud/hud-builder';
 export { LevelManager } from '../components/level/level-manager';
-export { SaveManager } from '../components/save/save-manager';
+// SaveManager uses Node.js filesystem APIs; keep it server-only.
 export { InventorySystem } from '../components/inventory/inventory-system';
 export { DialogueSystem } from '../components/dialogue/dialogue-system';
 export { QuestSystem } from '../components/quest/quest-system';

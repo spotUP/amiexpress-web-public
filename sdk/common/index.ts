@@ -5,3 +5,4 @@
 
 export * from './types';
 export * from './protocol';
+export { MessageType } from './protocol';

@@ -37,8 +37,9 @@ import { sessionLogManager } from '../services/SessionLogManager';
  * Register authentication socket event handlers
  */
 export function registerAuthHandlers(socket: Socket) {
-  let session = getSessionBySocketId(socket.id);
-  if (!session) return;
+  const initialSession = getSessionBySocketId(socket.id);
+  if (!initialSession) return;
+  let session: BBSSession = initialSession;
 
   const installAnsiFilter = (sock: Socket, sess: any) => {
     if ((sock as any)._ansiFilterInstalled) return;

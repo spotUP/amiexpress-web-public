@@ -13,7 +13,9 @@ import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
 import type { Database } from '../database';
+import * as fs from 'fs';
 import * as path from 'path';
+import { config } from '../config';
 
 // Standard API response format
 interface ApiResponse<T = any> {
@@ -460,6 +462,52 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       }
 
       sendResponse(res, { deleted: true }, 'Door deleted');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/doors/install-archive
+   * Install a door archive from Doors/archives
+   */
+  router.post('/doors/install-archive', async (req: any, res: Response) => {
+    try {
+      const { filename, path: archivePath } = req.body || {};
+      const dataDir = config.get('dataDir');
+      const archivesDir = path.join(dataDir, 'Doors', 'archives');
+      const resolvedPath = archivePath
+        ? archivePath
+        : filename
+          ? path.join(archivesDir, filename)
+          : null;
+
+      if (!resolvedPath) {
+        return handleError(res, new Error('Missing archive filename or path'));
+      }
+
+      const normalizedResolved = path.resolve(resolvedPath);
+      const normalizedArchives = path.resolve(archivesDir);
+      if (!normalizedResolved.startsWith(normalizedArchives)) {
+        return handleError(res, new Error('Archive path must be under Doors/archives'));
+      }
+
+      if (!fs.existsSync(normalizedResolved)) {
+        return handleError(res, new Error(`Archive not found: ${normalizedResolved}`));
+      }
+
+      const { getAmigaDoorManager } = await import('../doors/amigaDoorManager');
+      const amigaDoorMgr = getAmigaDoorManager();
+      const result = await amigaDoorMgr.installDoor(normalizedResolved);
+
+      if (!result.success) {
+        return handleError(res, new Error(result.message));
+      }
+
+      const { reloadDoors } = await import('../handlers/door.handler');
+      await reloadDoors();
+
+      sendResponse(res, result, 'Door archive installed');
     } catch (error) {
       handleError(res, error);
     }

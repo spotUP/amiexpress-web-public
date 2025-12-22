@@ -457,6 +457,11 @@ export class Screen extends Element {
     // Render all children recursively
     this._renderElement(this);
 
+    // Dock borders if enabled
+    if (this.options.dockBorders) {
+      this._dockBorders();
+    }
+
     // Diff and draw
     this._diff();
 
@@ -568,13 +573,20 @@ export class Screen extends Element {
    * Parse ANSI SGR parameters and update attribute
    */
   private _parseAnsiToAttr(params: string, currentAttr: number, baseAttr: number): number {
-    const codes = params.split(';').map(n => parseInt(n, 10) || 0);
+    const rawCodes = params.length ? params.split(';') : ['0'];
+    const codes = rawCodes.map((value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    });
     let { flags, fg, bg } = this.unpackAttr(currentAttr);
+    const base = this.unpackAttr(baseAttr);
 
-    for (const code of codes) {
+    for (let i = 0; i < codes.length; i++) {
+      const code = codes[i];
       if (code === 0) {
-        // Reset - return to base attribute
-        return baseAttr;
+        flags = base.flags;
+        fg = base.fg;
+        bg = base.bg;
       } else if (code === 1) {
         flags |= 1; // bold
       } else if (code === 4) {
@@ -585,14 +597,34 @@ export class Screen extends Element {
         flags |= 8; // inverse
       } else if (code === 8) {
         flags |= 16; // invisible
+      } else if (code === 22) {
+        flags &= ~1; // normal intensity
+      } else if (code === 24) {
+        flags &= ~2; // underline off
+      } else if (code === 25) {
+        flags &= ~4; // blink off
+      } else if (code === 27) {
+        flags &= ~8; // inverse off
+      } else if (code === 28) {
+        flags &= ~16; // visible
       } else if (code >= 30 && code <= 37) {
         fg = code - 30; // foreground color 0-7
+      } else if (code >= 90 && code <= 97) {
+        fg = code - 90 + 8; // bright foreground
+      } else if (code === 39) {
+        fg = base.fg;
       } else if (code >= 40 && code <= 47) {
         bg = code - 40; // background color 0-7
-      } else if (code === 39) {
-        fg = 0x1ff; // default fg
+      } else if (code >= 100 && code <= 107) {
+        bg = code - 100 + 8; // bright background
       } else if (code === 49) {
-        bg = 0x1ff; // default bg
+        bg = base.bg;
+      } else if (code === 38 && codes[i + 1] === 5 && typeof codes[i + 2] === 'number') {
+        fg = Math.max(0, Math.min(255, codes[i + 2]));
+        i += 2;
+      } else if (code === 48 && codes[i + 1] === 5 && typeof codes[i + 2] === 'number') {
+        bg = Math.max(0, Math.min(255, codes[i + 2]));
+        i += 2;
       }
     }
 
@@ -607,15 +639,24 @@ export class Screen extends Element {
 
     if (borderType === 'none') return;
 
-    // Border characters
-    const chars =
-      borderType === 'line'
-        ? { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' }
-        : { tl: ' ', tr: ' ', bl: ' ', br: ' ', h: ' ', v: ' ' };
+    const borderChars: Record<string, { tl: string; tr: string; bl: string; br: string; h: string; v: string }> = {
+      line: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+      heavy: { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
+      double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+      round: { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
+      ascii: { tl: '.', tr: '.', bl: '`', br: '\'', h: '-', v: '|' },
+      bg: { tl: ' ', tr: ' ', bl: ' ', br: ' ', h: ' ', v: ' ' },
+    };
+
+    const chars = borderChars[borderType] ?? borderChars.line;
 
     // Get border style attribute
     const style = (element.options.style as any)?.border || element.options.style || {};
     const attr = this.styleToAttr(style);
+    const labelStyle = typeof border === 'object' && (border as any).labelStyle
+      ? (border as any).labelStyle
+      : style;
+    const labelAttr = this.styleToAttr(labelStyle);
 
     // Top border
     if (pos.yi >= 0 && pos.yi < this.height) {
@@ -658,13 +699,94 @@ export class Screen extends Element {
 
     // Label
     if (element.options.label) {
-      const label = ` ${element.options.label} `;
-      let x = pos.xi + 2;
-
-      for (let i = 0; i < label.length && x < pos.xl - 1; i++, x++) {
-        this.buffer[pos.yi][x] = [attr, label[i]];
+      const rawLabel = String(element.options.label).trim();
+      if (borderType === 'ascii') {
+        this._renderAsciiLabel(pos, rawLabel, labelAttr, attr);
+      } else {
+        const labelText = ` ${rawLabel} `;
+        let x = pos.xi + 2;
+        for (let i = 0; i < labelText.length && x < pos.xl - 1; i += 1, x += 1) {
+          if (x >= 0 && x < this.width) {
+            this.buffer[pos.yi][x] = [labelAttr, labelText[i]];
+          }
+        }
       }
     }
+  }
+
+  private _dockBorders(): void {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const ch = this.buffer[y][x][1];
+        if (!ANGLES[ch]) continue;
+        this.buffer[y][x][1] = this._getAngle(this.buffer, x, y, ch);
+      }
+    }
+  }
+
+  private _renderAsciiLabel(pos: any, label: string, labelAttr: number, borderAttr: number): void {
+    if (!label) return;
+    const text = `[ ${label} ]`;
+    const maxWidth = Math.max(0, pos.xl - pos.xi - 2);
+    const truncated = text.length > maxWidth ? text.slice(0, maxWidth) : text;
+    const minStart = pos.xi + 3;
+    const maxStart = Math.max(pos.xi + 1, pos.xl - truncated.length - 1);
+    const start = minStart <= maxStart ? minStart : maxStart;
+
+    for (let i = 0; i < truncated.length && start + i < pos.xl - 1; i += 1) {
+      const x = start + i;
+      if (x >= 0 && x < this.width) {
+        this.buffer[pos.yi][x] = [labelAttr, truncated[i]];
+      }
+    }
+
+    for (let x = pos.xi + 1; x < start && x < this.width; x += 1) {
+      if (x >= 0) {
+        this.buffer[pos.yi][x] = [borderAttr, '-'];
+      }
+    }
+
+    const end = start + truncated.length;
+    for (let x = end; x < pos.xl - 1 && x < this.width; x += 1) {
+      if (x >= 0) {
+        this.buffer[pos.yi][x] = [borderAttr, '-'];
+      }
+    }
+  }
+
+  private _getAngle(lines: [number, string][][], x: number, y: number, fallback: string): string {
+    let angle = 0;
+    const attr = lines[y][x][0];
+
+    if (lines[y][x - 1] && L_ANGLES[lines[y][x - 1][1]]) {
+      if (!this.options.ignoreDockContrast && lines[y][x - 1][0] !== attr) {
+        return fallback;
+      }
+      angle |= 1 << 3;
+    }
+
+    if (lines[y - 1] && U_ANGLES[lines[y - 1][x][1]]) {
+      if (!this.options.ignoreDockContrast && lines[y - 1][x][0] !== attr) {
+        return fallback;
+      }
+      angle |= 1 << 2;
+    }
+
+    if (lines[y][x + 1] && R_ANGLES[lines[y][x + 1][1]]) {
+      if (!this.options.ignoreDockContrast && lines[y][x + 1][0] !== attr) {
+        return fallback;
+      }
+      angle |= 1 << 1;
+    }
+
+    if (lines[y + 1] && D_ANGLES[lines[y + 1][x][1]]) {
+      if (!this.options.ignoreDockContrast && lines[y + 1][x][0] !== attr) {
+        return fallback;
+      }
+      angle |= 1 << 0;
+    }
+
+    return ANGLE_TABLE[angle] || fallback;
   }
 
   private _diff(): void {
@@ -1308,3 +1430,76 @@ export class Screen extends Element {
     this.program._handleData(data);
   }
 }
+
+const ANGLES: Record<string, boolean> = {
+  '┘': true,
+  '┐': true,
+  '┌': true,
+  '└': true,
+  '┼': true,
+  '├': true,
+  '┤': true,
+  '┴': true,
+  '┬': true,
+  '│': true,
+  '─': true,
+};
+
+const L_ANGLES: Record<string, boolean> = {
+  '┌': true,
+  '└': true,
+  '┼': true,
+  '├': true,
+  '┴': true,
+  '┬': true,
+  '─': true,
+};
+
+const U_ANGLES: Record<string, boolean> = {
+  '┐': true,
+  '┌': true,
+  '┼': true,
+  '├': true,
+  '┤': true,
+  '┬': true,
+  '│': true,
+};
+
+const R_ANGLES: Record<string, boolean> = {
+  '┘': true,
+  '┐': true,
+  '┼': true,
+  '┤': true,
+  '┴': true,
+  '┬': true,
+  '─': true,
+};
+
+const D_ANGLES: Record<string, boolean> = {
+  '┘': true,
+  '└': true,
+  '┼': true,
+  '├': true,
+  '┤': true,
+  '┴': true,
+  '│': true,
+};
+
+const ANGLE_TABLE: Record<number, string> = {
+  0: '',
+  1: '│',
+  2: '─',
+  3: '┌',
+  4: '│',
+  5: '│',
+  6: '└',
+  7: '├',
+  8: '─',
+  9: '┐',
+  10: '─',
+  11: '┬',
+  12: '┘',
+  13: '┤',
+  14: '┴',
+  15: '┼',
+};

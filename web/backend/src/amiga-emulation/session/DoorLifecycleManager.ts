@@ -105,6 +105,7 @@ export class DoorLifecycleManager {
     [];
   private pcProbeMaxHits: number = 1;
   private spinLoopSleepMs: number = 1;
+  private lastRomJumpLogIteration: number = -1000000;
 
   constructor(
     emulator: MoiraEmulator,
@@ -299,10 +300,8 @@ export class DoorLifecycleManager {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
         this.logInitialState();
       }
-      // Ensure startup message is sent for XIM doors before looping
-      if (!this.executionState.startupMessageSent && this.config.doorType === "XIM") {
-        await this.sendStartupMessage();
-      }
+      // Note: Do not send unsolicited startup messages to XIM doors.
+      // AEDoor.library initiates JH_INIT/JH_STAT; the BBS only replies.
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {
@@ -1346,18 +1345,28 @@ export class DoorLifecycleManager {
       });
       this.executionState.gapJumpLogged = true; // Only log once
     } else if (pc >= 0xf80000) {
-      // This is ROM space - check if it's a bad jump
-      console.error(`\n*** JUMP TO ROM DETECTED ***`);
-      console.error(`  Current PC: 0x${pc.toString(16)}`);
-      console.error(`  PC History (last ${this.pcHistory.length} instructions):`);
-      this.pcHistory.forEach((p, i) => {
-        console.error(`    [${i}] 0x${p.toString(16)}`);
-      });
-      console.error(`  Iteration: ${this.executionState.iterationCount}`);
+      // This is ROM space - log sparingly to avoid flooding when ROM init runs
+      const iteration = this.executionState.iterationCount;
+      if (iteration - this.lastRomJumpLogIteration >= 10000) {
+        this.lastRomJumpLogIteration = iteration;
+        console.error(`\n*** JUMP TO ROM DETECTED ***`);
+        console.error(`  Current PC: 0x${pc.toString(16)}`);
+        console.error(`  PC History (last ${this.pcHistory.length} instructions):`);
+        this.pcHistory.forEach((p, i) => {
+          console.error(`    [${i}] 0x${p.toString(16)}`);
+        });
+        console.error(`  Iteration: ${iteration}`);
+      }
     }
 
     // CRITICAL: Track SP before instruction to detect corruption
     const spBefore = this.emulator.getRegister(15);
+
+    // ROM routines expect A6 to hold ExecBase; protect against it being cleared.
+    const execBase = this.libraryManager.execLibrary?.getExecBaseAddress() ?? 0;
+    if (pc >= 0xf80000 && execBase && this.emulator.getRegister(14) === 0) {
+      this.emulator.setRegister(14, execBase);
+    }
 
     // CRITICAL FIX: Check for ILLEGAL instruction (0x4AFC) BEFORE executing
     // This is how we intercept library calls - doors use JSR -offset(A6)

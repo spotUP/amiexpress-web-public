@@ -116,6 +116,18 @@ export class ExecLibrary {
   // Standard signal bit definitions (from exec/tasks.h)
   private static readonly SIGBREAKB_CTRL_C = 12; // Bit number for CTRL-C
   private static readonly SIGBREAKF_CTRL_C = 1 << 12; // Signal mask (0x1000)
+  private static readonly ROM_START = 0xf80000;
+  private static readonly ROM_END = 0xffffff;
+  private static readonly RTC_MATCHWORD = 0x4afc;
+  private static readonly RTF_AUTOINIT = 1 << 7;
+  private static readonly NT_LIBRARY = 9;
+  private romResidentCache?: Map<string, number>;
+  private pendingTrapJumpPc: number | null = null;
+  private pendingTrapJumpName: string | null = null;
+  private pendingTrapReturnAddr: number | null = null;
+  private pendingTrapSavedSp: number | null = null;
+  private pendingOpenLibraryName: string | null = null;
+  private pendingForcedReturn: boolean = false;
 
   // Door message callback - called when door sends message to AEDoorPort
   private doorMessageCallback:
@@ -605,7 +617,8 @@ export class ExecLibrary {
    */
   openLibraryHybrid(
     name: string,
-    minVersion: number
+    minVersion: number,
+    allowTrapJump: boolean = false
   ): { success: boolean; address: number; isNative: boolean } {
     console.log(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
 
@@ -670,6 +683,19 @@ export class ExecLibrary {
       }
     }
 
+    // Try ROM resident modules (e.g. AROS ROM libraries) before falling back to stubs
+    const romLibrary = this.openLibraryFromRomResident(
+      name,
+      minVersion,
+      allowTrapJump
+    );
+    if (romLibrary) {
+      return { success: true, address: romLibrary, isNative: true };
+    }
+    if (this.hasPendingTrapJump()) {
+      return { success: true, address: 0, isNative: true };
+    }
+
     // Fall back to stub library
     const stubAddr = this.openLibraryStub(name, minVersion);
     if (stubAddr !== 0) {
@@ -684,6 +710,57 @@ export class ExecLibrary {
    * Open stub library (original implementation)
    */
   private openLibraryStub(name: string, version: number): number {
+    const lower = name.toLowerCase();
+    const fixed = this.getFixedStubLibrarySpec(lower);
+    if (fixed) {
+      const existing = this.libraries.get(name) || this.libraries.get(lower);
+      if (existing) {
+        existing.address = fixed.address;
+        existing.openCount++;
+        if (version > existing.version) {
+          existing.version = version;
+          existing.revision = fixed.revision;
+        }
+        this.writeLibraryToMemory(existing);
+        if (fixed.stubJumpTableEntries) {
+          this.fillStubJumpTable(existing.address, fixed.stubJumpTableEntries);
+        }
+        console.log(
+          `[ExecLibrary]   Reusing registered ${name} at 0x${existing.address.toString(
+            16
+          )}, count=${existing.openCount}`
+        );
+        return existing.address;
+      }
+
+      const lib: LibraryNode = {
+        address: fixed.address,
+        name,
+        version: Math.max(version, fixed.version),
+        revision: fixed.revision,
+        openCount: 1,
+        negSize: 30,
+        posSize: 34,
+      };
+      this.libraries.set(name, lib);
+      if (lower !== name) {
+        this.libraries.set(lower, lib);
+      }
+      this.writeLibraryToMemory(lib);
+      if (fixed.stubJumpTableEntries) {
+        this.fillStubJumpTable(lib.address, fixed.stubJumpTableEntries);
+      }
+      console.log(
+        `[ExecLibrary]   Opened STUB ${name} at 0x${fixed.address.toString(
+          16
+        )}, v${lib.version}.${lib.revision}`
+      );
+      if (this.onLibraryOpened) {
+        this.onLibraryOpened(name, lib.address);
+      }
+      return lib.address;
+    }
+
     const existing =
       this.libraries.get(name) || this.libraries.get(name.toLowerCase());
     if (existing) {
@@ -706,51 +783,11 @@ export class ExecLibrary {
     let libVersion = 0;
     let libRevision = 0;
 
-    switch (name.toLowerCase()) {
-      case "exec.library":
-        libAddr = this.EXEC_BASE_ADDR;
-        libVersion = 37;
-        libRevision = 175;
-        break;
-
-      case "dos.library":
-        libAddr = this.DOS_LIB_ADDR;
-        libVersion = 37;
-        libRevision = 0;
-        break;
-
+    switch (lower) {
       case "aedoor.library":
         libAddr = this.AEDOOR_LIB_ADDR;
         libVersion = 2; // V-AWAIT door requires version 2+
         libRevision = 0;
-        break;
-
-      case "icon.library":
-        libAddr = this.ICON_LIB_ADDR;
-        libVersion = 36;
-        libRevision = 0;
-        break;
-
-      case "intuition.library":
-        libAddr = this.INTUITION_LIB_ADDR;
-        libVersion = 36;
-        libRevision = 0;
-        this.fillStubJumpTable(libAddr, 64);
-        break;
-
-      case "graphics.library":
-        libAddr = this.GRAPHICS_LIB_ADDR;
-        libVersion = 36;
-        libRevision = 0;
-        // Minimal graphics.library stub: fill jump table with RTS
-        this.fillStubJumpTable(libAddr, 64);
-        break;
-
-      case "utility.library":
-        libAddr = this.UTILITY_LIB_ADDR;
-        libVersion = 37;
-        libRevision = 0;
-        this.fillStubJumpTable(libAddr, 64);
         break;
 
       default:
@@ -786,7 +823,6 @@ export class ExecLibrary {
     };
 
     this.libraries.set(name, lib);
-    const lower = name.toLowerCase();
     if (lower !== name) {
       this.libraries.set(lower, lib);
     }
@@ -806,6 +842,528 @@ export class ExecLibrary {
     }
 
     return libAddr;
+  }
+
+  private getFixedStubLibrarySpec(
+    name: string
+  ): { address: number; version: number; revision: number; stubJumpTableEntries?: number } | null {
+    switch (name) {
+      case "exec.library":
+        return { address: this.EXEC_BASE_ADDR, version: 37, revision: 175 };
+      case "dos.library":
+        return { address: this.DOS_LIB_ADDR, version: 37, revision: 0 };
+      case "icon.library":
+        return { address: this.ICON_LIB_ADDR, version: 36, revision: 0 };
+      case "intuition.library":
+        return {
+          address: this.INTUITION_LIB_ADDR,
+          version: 36,
+          revision: 0,
+          stubJumpTableEntries: 64,
+        };
+      case "graphics.library":
+        return {
+          address: this.GRAPHICS_LIB_ADDR,
+          version: 36,
+          revision: 0,
+          stubJumpTableEntries: 64,
+        };
+      case "utility.library":
+        return {
+          address: this.UTILITY_LIB_ADDR,
+          version: 37,
+          revision: 0,
+          stubJumpTableEntries: 64,
+        };
+      default:
+        return null;
+    }
+  }
+
+  private openLibraryFromRomResident(
+    name: string,
+    minVersion: number,
+    allowTrapJump: boolean
+  ): number | null {
+    const residentAddr = this.findRomResidentByName(name);
+    if (!residentAddr) {
+      return null;
+    }
+    const version = this.emulator.readMemory(residentAddr + 11);
+    if (version < minVersion) {
+      console.log(
+        `[ExecLibrary]   ROM resident ${name} v${version} < required ${minVersion}`
+      );
+      return null;
+    }
+    const libBase = this.initResident(residentAddr, 0, allowTrapJump);
+    if (!libBase) {
+      return null;
+    }
+    console.log(
+      `[ExecLibrary]   Opened ROM resident ${name} at 0x${libBase.toString(16)}`
+    );
+    return libBase;
+  }
+
+  private findRomResidentByName(name: string): number | null {
+    if (!this.emulator) return null;
+    if (!this.romResidentCache) {
+      this.romResidentCache = this.scanRomResidents();
+    }
+    const addr = this.romResidentCache.get(name.toLowerCase());
+    return addr ?? null;
+  }
+
+  private scanRomResidents(): Map<string, number> {
+    const map = new Map<string, number>();
+    const start = ExecLibrary.ROM_START;
+    const end = ExecLibrary.ROM_END;
+    for (let addr = start; addr + 24 <= end; addr += 2) {
+      if (this.emulator.readMemory16(addr) !== ExecLibrary.RTC_MATCHWORD) {
+        continue;
+      }
+      const matchTag = this.emulator.readMemory32(addr + 2);
+      if (matchTag !== addr) {
+        continue;
+      }
+      const namePtr = this.emulator.readMemory32(addr + 14);
+      if (namePtr) {
+        const name = this.emulator.readString(namePtr, 128);
+        if (name) {
+          map.set(name.toLowerCase(), addr);
+        }
+      }
+      const endSkip = this.emulator.readMemory32(addr + 6);
+      if (endSkip > addr && endSkip <= end) {
+        addr = (endSkip & ~1) - 2;
+      }
+    }
+    console.log(
+      `[ExecLibrary] ROM resident scan complete: ${map.size} modules`
+    );
+    return map;
+  }
+
+  private initResident(
+    residentAddr: number,
+    segList: number,
+    allowTrapJump: boolean = false
+  ): number {
+    if (!residentAddr) return 0;
+    const matchWord = this.emulator.readMemory16(residentAddr);
+    if (matchWord !== ExecLibrary.RTC_MATCHWORD) {
+      return 0;
+    }
+    const matchTag = this.emulator.readMemory32(residentAddr + 2);
+    if (matchTag !== residentAddr) {
+      return 0;
+    }
+    const flags = this.emulator.readMemory(residentAddr + 10);
+    const version = this.emulator.readMemory(residentAddr + 11);
+    const type = this.emulator.readMemory(residentAddr + 12);
+    const namePtr = this.emulator.readMemory32(residentAddr + 14);
+    const initPtr = this.emulator.readMemory32(residentAddr + 22);
+    const name = namePtr ? this.emulator.readString(namePtr, 128) : "<resident>";
+
+    let hasAutoInit = (flags & ExecLibrary.RTF_AUTOINIT) !== 0;
+    if (!hasAutoInit && initPtr) {
+      if (this.isAutoInitStruct(initPtr)) {
+        hasAutoInit = true;
+        console.warn(
+          `[ExecLibrary] Resident ${name} missing AUTOINIT flag; treating rt_Init as AutoInit`
+        );
+      }
+    }
+    if (!hasAutoInit) {
+      if (initPtr) {
+        const posSize = this.emulator.readMemory32(initPtr);
+        const functionsAddr = this.emulator.readMemory32(initPtr + 4);
+        const initStructAddr = this.emulator.readMemory32(initPtr + 8);
+        const initFuncAddr = this.emulator.readMemory32(initPtr + 12);
+        console.warn(
+          `[ExecLibrary]   rt_Init details for ${name}: posSize=0x${posSize.toString(
+            16
+          )} funcs=0x${functionsAddr.toString(16)} initStruct=0x${initStructAddr.toString(
+            16
+          )} initFunc=0x${initFuncAddr.toString(16)}`
+        );
+      }
+      if (allowTrapJump && initPtr) {
+        this.requestTrapJump(initPtr, segList, name);
+        return 0;
+      }
+      console.warn(
+        `[ExecLibrary] Resident ${name} has no AUTOINIT; skipping InitResident`
+      );
+      return 0;
+    }
+
+    if (type !== ExecLibrary.NT_LIBRARY) {
+      console.warn(
+        `[ExecLibrary] Resident ${name} type=${type} not supported in InitResident`
+      );
+      return 0;
+    }
+
+    const posSize = this.emulator.readMemory32(initPtr);
+    const functionsAddr = this.emulator.readMemory32(initPtr + 4);
+    const initStructAddr = this.emulator.readMemory32(initPtr + 8);
+    const initFuncAddr = this.emulator.readMemory32(initPtr + 12);
+
+    const libBase = this.makeLibraryFromAutoInit(
+      functionsAddr,
+      initStructAddr,
+      initFuncAddr,
+      posSize,
+      segList,
+      name,
+      version
+    );
+    return libBase;
+  }
+
+  private makeLibraryFromAutoInit(
+    functionsAddr: number,
+    initStructAddr: number,
+    initFuncAddr: number,
+    posSize: number,
+    segList: number,
+    name: string,
+    version: number
+  ): number {
+    const { count, relative } = this.countFunctionEntries(functionsAddr);
+    if (count === 0) {
+      console.warn(`[ExecLibrary] No functions found for ${name}`);
+      return 0;
+    }
+    const negSize = count * 6;
+    const totalSize = posSize + negSize;
+    const allocBase = this.allocMem(totalSize, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (!allocBase) {
+      return 0;
+    }
+    const libBase = allocBase + negSize;
+    this.buildJumpTable(libBase, functionsAddr, relative, count);
+    if (initStructAddr) {
+      this.initStruct(initStructAddr, libBase, posSize);
+    }
+    if (initFuncAddr) {
+      console.log(
+        `[ExecLibrary] NOTE: Init function for ${name} at 0x${initFuncAddr.toString(
+          16
+        )} not executed`
+      );
+    }
+
+    const lib: LibraryNode = {
+      address: libBase,
+      name,
+      version,
+      revision: 0,
+      openCount: 1,
+      negSize,
+      posSize,
+    };
+    this.libraries.set(name, lib);
+    const lower = name.toLowerCase();
+    if (lower !== name) {
+      this.libraries.set(lower, lib);
+    }
+    this.writeLibraryToMemory(lib);
+    return libBase;
+  }
+
+  private isAutoInitStruct(initPtr: number): boolean {
+    if (!initPtr) return false;
+    const posSize = this.emulator.readMemory32(initPtr);
+    const functionsAddr = this.emulator.readMemory32(initPtr + 4);
+    const initStructAddr = this.emulator.readMemory32(initPtr + 8);
+    const initFuncAddr = this.emulator.readMemory32(initPtr + 12);
+
+    if (posSize < 34 || posSize > 0x10000) return false;
+    if (!this.isRomAddress(functionsAddr)) return false;
+    if (initStructAddr !== 0 && !this.isRomAddress(initStructAddr)) return false;
+    if (initFuncAddr !== 0 && !this.isRomAddress(initFuncAddr)) return false;
+
+    const { count } = this.countFunctionEntries(functionsAddr);
+    if (count === 0 || count > 4096) return false;
+    return true;
+  }
+
+  private isRomAddress(addr: number): boolean {
+    return addr >= ExecLibrary.ROM_START && addr <= ExecLibrary.ROM_END;
+  }
+
+  private requestTrapJump(targetPc: number, segList: number, name: string): void {
+    this.pendingTrapJumpPc = targetPc;
+    this.pendingTrapJumpName = name;
+    this.emulator.setRegister(0, 0);
+    this.emulator.setRegister(8, segList); // A0
+    this.emulator.setRegister(14, this.execBase.address); // A6
+    console.log(
+      `[ExecLibrary] Scheduled InitResident jump to 0x${targetPc.toString(
+        16
+      )} for ${name}`
+    );
+  }
+
+  consumeTrapJump(): { pc: number; name: string } | null {
+    const pc = this.pendingTrapJumpPc;
+    const name = this.pendingTrapJumpName;
+    this.pendingTrapJumpPc = null;
+    this.pendingTrapJumpName = null;
+    if (pc === null || !name) {
+      return null;
+    }
+    return { pc, name };
+  }
+
+  hasPendingTrapJump(): boolean {
+    return this.pendingTrapJumpPc !== null;
+  }
+
+  setTrapReturnContext(returnAddr: number, spBeforePush: number, name: string): void {
+    this.pendingTrapReturnAddr = returnAddr;
+    this.pendingTrapSavedSp = spBeforePush;
+    this.pendingOpenLibraryName = name;
+  }
+
+  consumeForcedReturn(): boolean {
+    const forced = this.pendingForcedReturn;
+    this.pendingForcedReturn = false;
+    return forced;
+  }
+
+  handleRomInitAlert(): number {
+    if (
+      this.pendingTrapReturnAddr === null ||
+      this.pendingTrapSavedSp === null ||
+      !this.pendingOpenLibraryName
+    ) {
+      return 0;
+    }
+    const stubAddr = this.openLibraryStub(this.pendingOpenLibraryName, 0);
+    this.emulator.setRegister(0, stubAddr);
+    this.emulator.setRegister(15, this.pendingTrapSavedSp);
+    this.emulator.setRegister(16, this.pendingTrapReturnAddr);
+    this.emulator.refillPrefetch();
+    this.pendingForcedReturn = true;
+    console.warn(
+      `[ExecLibrary] ROM init alert: falling back to stub ${this.pendingOpenLibraryName} at 0x${stubAddr.toString(
+        16
+      )}`
+    );
+    this.pendingTrapReturnAddr = null;
+    this.pendingTrapSavedSp = null;
+    this.pendingOpenLibraryName = null;
+    this.pendingTrapJumpPc = null;
+    this.pendingTrapJumpName = null;
+    return stubAddr;
+  }
+
+  findResidentByName(name: string): number {
+    const addr = this.findRomResidentByName(name);
+    return addr ?? 0;
+  }
+
+  initResidentTrap(residentAddr: number, segList: number): number {
+    return this.initResident(residentAddr, segList, true);
+  }
+
+  private countFunctionEntries(
+    functionsAddr: number
+  ): { count: number; relative: boolean } {
+    if (!functionsAddr) return { count: 0, relative: false };
+    const firstWord = this.emulator.readMemory16(functionsAddr);
+    const relative = firstWord === 0xffff;
+    let count = 0;
+    if (relative) {
+      let ptr = functionsAddr + 2;
+      while (true) {
+        const word = this.emulator.readMemory16(ptr);
+        if (word === 0xffff) break;
+        count += 1;
+        ptr += 2;
+      }
+    } else {
+      let ptr = functionsAddr;
+      while (true) {
+        const func = this.emulator.readMemory32(ptr);
+        if (func === 0xffffffff) break;
+        count += 1;
+        ptr += 4;
+      }
+    }
+    return { count, relative };
+  }
+
+  private buildJumpTable(
+    baseAddr: number,
+    functionsAddr: number,
+    relative: boolean,
+    count: number,
+    relativeBase?: number
+  ): void {
+    const base = relativeBase ?? functionsAddr;
+    let ptr = functionsAddr + (relative ? 2 : 0);
+    for (let i = 0; i < count; i++) {
+      let funcAddr = 0;
+      if (relative) {
+        const disp = this.emulator.readMemory16(ptr);
+        const signed = disp & 0x8000 ? disp - 0x10000 : disp;
+        funcAddr = (base + signed) >>> 0;
+        ptr += 2;
+      } else {
+        funcAddr = this.emulator.readMemory32(ptr);
+        ptr += 4;
+      }
+      const entryAddr = baseAddr - (i + 1) * 6;
+      this.emulator.writeMemory16(entryAddr, 0x4ef9);
+      this.emulator.writeMemory32(entryAddr + 2, funcAddr);
+    }
+  }
+
+  private initStruct(initTableAddr: number, memAddr: number, size: number): void {
+    if (size > 0) {
+      for (let i = 0; i < size; i++) {
+        this.emulator.writeMemory(memAddr + i, 0);
+      }
+    }
+    let tablePtr = initTableAddr;
+    let destOffset = 0;
+    const readAlignedWord = (): number => {
+      if (tablePtr & 1) tablePtr += 1;
+      const value = this.emulator.readMemory16(tablePtr);
+      tablePtr += 2;
+      return value;
+    };
+    const readByte = (): number => {
+      const value = this.emulator.readMemory(tablePtr);
+      tablePtr += 1;
+      return value;
+    };
+    while (true) {
+      if (tablePtr & 1) tablePtr += 1;
+      const cmd = this.emulator.readMemory(tablePtr);
+      tablePtr += 1;
+      if (cmd === 0) break;
+      const dd = (cmd >> 6) & 0x3;
+      const ss = (cmd >> 4) & 0x3;
+      const count = (cmd & 0x0f) + 1;
+      const repeat = dd === 1;
+      if (dd === 2) {
+        destOffset = readByte();
+      } else if (dd === 3) {
+        if (tablePtr & 1) tablePtr += 1;
+        const b1 = readByte();
+        const b2 = readByte();
+        const b3 = readByte();
+        destOffset = (b1 << 16) | (b2 << 8) | b3;
+      }
+
+      const writeValue = (sizeBytes: number, value: number) => {
+        const destAddr = memAddr + destOffset;
+        if (sizeBytes === 4) {
+          this.emulator.writeMemory32(destAddr, value >>> 0);
+        } else if (sizeBytes === 2) {
+          this.emulator.writeMemory16(destAddr, value & 0xffff);
+        } else {
+          this.emulator.writeMemory(destAddr, value & 0xff);
+        }
+        destOffset += sizeBytes;
+      };
+
+      const readValue = (): { value: number; sizeBytes: number } => {
+        if (ss === 0) {
+          const high = readAlignedWord();
+          const low = readAlignedWord();
+          return { value: ((high << 16) | low) >>> 0, sizeBytes: 4 };
+        }
+        if (ss === 1) {
+          return { value: readAlignedWord(), sizeBytes: 2 };
+        }
+        if (ss === 2) {
+          return { value: readByte(), sizeBytes: 1 };
+        }
+        return { value: 0, sizeBytes: 1 };
+      };
+
+      let first = readValue();
+      if (repeat) {
+        for (let i = 0; i < count; i++) {
+          writeValue(first.sizeBytes, first.value);
+        }
+      } else {
+        writeValue(first.sizeBytes, first.value);
+        for (let i = 1; i < count; i++) {
+          const next = readValue();
+          writeValue(next.sizeBytes, next.value);
+        }
+      }
+    }
+  }
+
+  initStructForTrap(initTableAddr: number, memAddr: number, size: number): void {
+    this.initStruct(initTableAddr, memAddr, size);
+  }
+
+  makeLibrary(
+    vectorsAddr: number,
+    initStructAddr: number,
+    initFuncAddr: number,
+    dataSize: number,
+    segList: number
+  ): number {
+    if (!vectorsAddr) {
+      console.warn("[ExecLibrary] MakeLibrary called with null vectors");
+      return 0;
+    }
+    const { count, relative } = this.countFunctionEntries(vectorsAddr);
+    if (count === 0) {
+      console.warn("[ExecLibrary] MakeLibrary found no vectors");
+      return 0;
+    }
+    const negSize = count * 6;
+    const totalSize = dataSize + negSize;
+    const allocBase = this.allocMem(totalSize, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (!allocBase) {
+      return 0;
+    }
+    const libBase = allocBase + negSize;
+    this.buildJumpTable(libBase, vectorsAddr, relative, count);
+    if (initStructAddr) {
+      this.initStruct(initStructAddr, libBase, dataSize);
+    }
+    if (initFuncAddr) {
+      console.warn(
+        `[ExecLibrary] MakeLibrary init func 0x${initFuncAddr.toString(
+          16
+        )} not executed`
+      );
+    }
+    // Minimal library node setup so callers can use lib base immediately.
+    this.emulator.writeMemory16(libBase + 16, negSize);
+    this.emulator.writeMemory16(libBase + 18, dataSize);
+    return libBase;
+  }
+
+  makeFunctions(
+    targetAddr: number,
+    functionArrayAddr: number,
+    funcDispBase: number
+  ): number {
+    if (!targetAddr || !functionArrayAddr) {
+      return 0;
+    }
+    const { count, relative } = this.countFunctionEntries(functionArrayAddr);
+    if (count === 0) {
+      return 0;
+    }
+    const negSize = count * 6;
+    const base = funcDispBase || functionArrayAddr;
+    this.buildJumpTable(targetAddr, functionArrayAddr, relative, count, base);
+    return negSize;
   }
 
   /**
@@ -892,6 +1450,24 @@ export class ExecLibrary {
         const newPri = this.emulator.getRegister(0); // D0
         const priResult = this.setTaskPri(taskAddr, newPri);
         this.emulator.setRegister(0, priResult);
+        return true;
+
+      case -96: // _LVOFindResident
+        console.log(`[ExecLibrary]   FindResident trap called`);
+        const resNameAddr = this.emulator.getRegister(9); // A1
+        const resName = resNameAddr
+          ? this.emulator.readString(resNameAddr, 128)
+          : "";
+        const resAddr = resName ? this.findRomResidentByName(resName) : null;
+        this.emulator.setRegister(0, resAddr ?? 0);
+        return true;
+
+      case -102: // _LVOInitResident
+        console.log(`[ExecLibrary]   InitResident trap called`);
+        const residentAddr = this.emulator.getRegister(9); // A1
+        const segList = this.emulator.getRegister(1); // D1
+        const libBase = this.initResidentTrap(residentAddr, segList);
+        this.emulator.setRegister(0, libBase);
         return true;
 
       // *** SEMAPHORE FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
@@ -1146,7 +1722,7 @@ export class ExecLibrary {
     );
 
     // Use hybrid approach
-    const result = this.openLibraryHybrid(name, version);
+    const result = this.openLibraryHybrid(name, version, true);
 
     if (result.success) {
       console.log(

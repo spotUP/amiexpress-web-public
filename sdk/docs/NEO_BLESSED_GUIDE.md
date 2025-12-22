@@ -14,6 +14,8 @@ Always aim for modern, desktop-like doors with windows, panels, and mouse suppor
 
 TypeScript doors **MUST** export a `runDoor()` function. This is the entry point the BBS calls when launching your door.
 
+TypeScript doors **MUST** also include a `.info` file in `Commands/BBSCmd/`. The BBS registers doors at startup by scanning BBSCMD entries.
+
 **index.ts** (entry point):
 ```typescript
 import { createApp } from './app.js';
@@ -173,7 +175,34 @@ const backButton = blessed.button({
 });
 ```
 
-### 1d. Keyboard Navigation (Required)
+### 1d. Amiga ASCII Borders (Required)
+
+All SDK UI panels and windows must use the Amiga ASCII border style. This is the
+standard for BBS UI and should be used for any `border: { type: 'ascii' }` box.
+
+Visual rules:
+- Corners: top `.` bottom `` ` `` and `'`
+- Horizontal: `-`
+- Vertical: `|`
+- Labels are rendered as `[ LABEL ]` and start after two dashes: `.--[ LABEL ]--`
+
+Example:
+
+```text
+.--[ FLOP ]--------------------------------.
+|                                          |
+`------------------------------------------'
+```
+
+The SDK renderer (`sdk/engines/ui/blessed/core/screen.ts`) now enforces this framing
+implicitly, so you do not need to hand-edit the corner characters or insert the
+dash paddings yourself. Simply request `border: { type: 'ascii', labelStyle: { fg: 'yellow' } }`
+and provide a label; the `. --[ LABEL ]` styling is applied automatically, complete
+with the yellow headline text that defines the Neo-Blessed panel identity. Follow
+this pattern for every new panel or window so the lobby stays faithful to the
+classic Amiga Guru aesthetics.
+
+### 1e. Keyboard Navigation (Required)
 
 Doors must be fully keyboard navigable in addition to mouse support. Provide a
 predictable focus order and hotkeys for primary actions.
@@ -182,6 +211,60 @@ predictable focus order and hotkeys for primary actions.
 - Ensure lists/listbars have `keys: true` and use left/right or up/down to move.
 - Provide single-key shortcuts for actions (e.g., `c` for Create, `j` for Join).
 - Never rely on mouse-only interactions.
+
+### 1f. Modal Backgrounds and Overlays (Required)
+
+Modal windows must be fully opaque and must dim the background so users cannot
+see or click through. This is required for both web and telnet clients.
+
+Rules:
+- Always show a full-screen `blessed.overlay` behind any modal dialog.
+- Use a solid background on the modal itself: set `style.bg` and `ch: ' '`.
+- Do not use `style.bg: 'transparent'` for modal containers.
+- Hide the overlay when the modal closes.
+
+Example:
+
+```typescript
+// Full-screen dim overlay (supports web opacity)
+const modalOverlay = blessed.overlay({
+  parent: screen,
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  opacity: 0.6,
+  hidden: true,
+  style: { bg: 'black' },
+});
+
+const modal = blessed.box({
+  parent: screen,
+  top: 'center',
+  left: 'center',
+  width: 50,
+  height: 10,
+  label: ' Settings ',
+  border: { type: 'line' },
+  hidden: true,
+  ch: ' ', // solid fill
+  style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+});
+
+function showModal() {
+  modalOverlay.show();
+  modal.show();
+  modal.setFront();
+  modal.focus();
+  screen.render();
+}
+
+function hideModal() {
+  modal.hide();
+  modalOverlay.hide();
+  screen.render();
+}
+```
 
 ### 2. Focus Border Effects
 

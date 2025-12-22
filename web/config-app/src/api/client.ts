@@ -78,6 +78,29 @@ class ApiClient {
     throw lastError || new Error('Request failed after retries');
   }
 
+  private async uploadForm<T>(url: string, formData: FormData): Promise<T> {
+    const headers: Record<string, string> = {};
+
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        error: response.statusText,
+      }));
+      throw new Error(error.error || error.message || response.statusText);
+    }
+
+    return response.json();
+  }
+
   // Authentication
   async login(username: string, password: string) {
     const response = await this.request<{ accessToken: string; refreshToken: string; user: any }>(`${AUTH_BASE}/login`, {
@@ -216,6 +239,19 @@ class ApiClient {
   async deleteDoor(id: number) {
     return this.request<ApiResponse>(`${API_BASE}/config/doors/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async uploadDoorArchive(file: File) {
+    const formData = new FormData();
+    formData.append('door', file);
+    return this.uploadForm<ApiResponse>(`${API_BASE}/upload/door`, formData);
+  }
+
+  async installDoorArchive(archive: { filename?: string; path?: string }) {
+    return this.request<ApiResponse>(`${API_BASE}/config/doors/install-archive`, {
+      method: 'POST',
+      body: JSON.stringify(archive),
     });
   }
 

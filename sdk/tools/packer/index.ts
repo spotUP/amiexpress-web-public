@@ -24,7 +24,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
@@ -51,7 +51,7 @@ export class ReleasePacker {
    * Create release archive
    */
   public async pack(): Promise<string> {
-    const format = this.config.format || 'lha'; // Default to LHA for BBS compatibility
+    const format = this.config.format || 'zip'; // Default to ZIP for TypeScript doors
     const outputFile = path.join(
       this.config.outputDir,
       `${this.config.name}-v${this.config.version}.${format}`
@@ -214,31 +214,247 @@ export class ReleasePacker {
    */
   private copySourceFiles(outputDir: string): void {
     const sourceDir = this.config.sourceDir;
+    const packagePath = path.join(sourceDir, 'package.json');
+    const packageJson = fs.existsSync(packagePath)
+      ? JSON.parse(fs.readFileSync(packagePath, 'utf8'))
+      : null;
 
-    // Copy main file
-    if (fs.existsSync(path.join(sourceDir, 'index.js'))) {
-      fs.copyFileSync(
-        path.join(sourceDir, 'index.js'),
-        path.join(outputDir, `${this.config.name}.js`)
-      );
+    const infoPath = this.resolveInfoPath(sourceDir, packageJson);
+    const infoData = infoPath ? this.parseInfoTooltypes(infoPath) : {};
+    const location = infoData.LOCATION || infoData.PATH;
+
+    const doorDir = this.extractDoorDir(location) || path.basename(sourceDir);
+    if (!doorDir) {
+      throw new Error('Unable to determine door directory');
     }
 
-    // Copy assets directory
-    const assetsDir = path.join(sourceDir, 'assets');
-    if (fs.existsSync(assetsDir)) {
-      const targetAssetsDir = path.join(outputDir, 'assets');
-      if (!fs.existsSync(targetAssetsDir)) {
-        fs.mkdirSync(targetAssetsDir, { recursive: true });
+    const commandFromInfo = infoPath ? path.basename(infoPath, '.info') : '';
+    const commandFromPkg = packageJson?.bbsCommand || packageJson?.doorMetadata?.command || doorDir;
+    const commandName = (commandFromInfo || commandFromPkg || '')
+      .toString()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+
+    if (!commandName) {
+      throw new Error('Unable to determine BBS command name for .info');
+    }
+
+    const doorsRoot = path.join(outputDir, 'Doors', doorDir);
+    const commandsRoot = path.join(outputDir, 'Commands', 'BBSCmd');
+    fs.mkdirSync(doorsRoot, { recursive: true });
+    fs.mkdirSync(commandsRoot, { recursive: true });
+
+    // Copy .info file to Commands/BBSCmd
+    if (infoPath) {
+      fs.copyFileSync(infoPath, path.join(commandsRoot, `${commandName}.info`));
+    } else {
+      const infoContent = this.buildInfoContent({
+        command: commandName,
+        doorDir,
+        packageJson,
+      });
+      fs.writeFileSync(path.join(commandsRoot, `${commandName}.info`), infoContent);
+    }
+
+    // Resolve door source directory (supports running from Doors/<door> or repo root)
+    const candidateDoorDirs = [
+      path.join(sourceDir, 'Doors', doorDir),
+      path.join(sourceDir, '..', 'Doors', doorDir),
+      sourceDir,
+    ];
+    const doorSourceDir = candidateDoorDirs.find((candidate) => {
+      return fs.existsSync(candidate) && fs.statSync(candidate).isDirectory();
+    });
+
+    if (!doorSourceDir) {
+      throw new Error(`Door directory not found for ${doorDir}`);
+    }
+
+    const allowList = ['dist', 'assets', 'data', 'config.json'];
+
+    for (const entry of allowList) {
+      const srcPath = path.join(doorSourceDir, entry);
+      if (!fs.existsSync(srcPath)) continue;
+      const destPath = path.join(doorsRoot, entry);
+      if (fs.statSync(srcPath).isDirectory()) {
+        fs.mkdirSync(destPath, { recursive: true });
+        this.copyDirectoryRecursive(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
       }
-      this.copyDirectoryRecursive(assetsDir, targetAssetsDir);
     }
 
-    // Copy config file if exists
-    if (fs.existsSync(path.join(sourceDir, 'config.json'))) {
-      fs.copyFileSync(
-        path.join(sourceDir, 'config.json'),
-        path.join(outputDir, 'config.json')
+    if (packageJson) {
+      const normalizedPackageJson = this.normalizePackageJsonForRelease(packageJson);
+      fs.writeFileSync(
+        path.join(doorsRoot, 'package.json'),
+        JSON.stringify(normalizedPackageJson, null, 2)
       );
+    }
+
+    const lockPath = path.join(doorSourceDir, 'package-lock.json');
+    if (fs.existsSync(lockPath)) {
+      try {
+        const lockJson = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+        const normalizedLock = this.normalizePackageLockForRelease(lockJson);
+        fs.writeFileSync(
+          path.join(doorsRoot, 'package-lock.json'),
+          JSON.stringify(normalizedLock, null, 2)
+        );
+      } catch {
+        // Skip malformed lock files
+      }
+    }
+
+    this.copyScriptFiles(doorSourceDir, doorsRoot);
+  }
+
+  private resolveInfoPath(sourceDir: string, packageJson?: any): string | null {
+    const command = (packageJson?.bbsCommand || packageJson?.doorMetadata?.command || '')
+      .toString()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const candidates = [
+      path.join(sourceDir, 'Commands', 'BBSCmd'),
+      path.join(sourceDir, '..', 'Commands', 'BBSCmd'),
+    ];
+
+    for (const candidate of candidates) {
+      if (!fs.existsSync(candidate)) continue;
+      if (command) {
+        const direct = path.join(candidate, `${command}.info`);
+        if (fs.existsSync(direct)) {
+          return direct;
+        }
+      }
+      const files = fs.readdirSync(candidate).filter((file) => file.toLowerCase().endsWith('.info'));
+      if (files.length > 0) {
+        return path.join(candidate, files[0]);
+      }
+    }
+    return null;
+  }
+
+  private parseInfoTooltypes(infoPath: string): Record<string, string> {
+    const tooltypes: Record<string, string> = {};
+
+    const output = execSync(`strings "${infoPath}"`, { encoding: 'utf8' });
+    output.split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) return;
+      const idx = trimmed.indexOf('=');
+      if (idx <= 0) return;
+      const key = trimmed.slice(0, idx).trim().toUpperCase();
+      const value = trimmed.slice(idx + 1).trim();
+      tooltypes[key] = value;
+    });
+
+    return tooltypes;
+  }
+
+  private buildInfoContent(params: {
+    command: string;
+    doorDir: string;
+    packageJson?: any;
+  }): string {
+    const pkg = params.packageJson || {};
+    const doorType = pkg.doorType || 'TS';
+    const access = pkg.accessLevel ?? pkg.doorMetadata?.minSecLevel ?? 0;
+    const name = pkg.doorMetadata?.name || pkg.displayName || pkg.name || params.doorDir;
+    const description = pkg.description || pkg.doorMetadata?.description || '';
+
+    const lines = [
+      `BBSCMD=${params.command}`,
+      `TYPE=${doorType}`,
+      `LOCATION=Doors/${params.doorDir}`,
+      name ? `NAME=${name}` : '',
+      description ? `DESCRIPTION=${description}` : '',
+      `ACCESS=${access}`,
+      'MULTINODE=YES',
+      'PRIORITY=SAME',
+      '',
+    ];
+
+    return lines.filter(Boolean).join('\n');
+  }
+
+  private normalizePackageJsonForRelease(packageJson: any): any {
+    const normalized = { ...packageJson };
+    const dependencies = { ...(packageJson.dependencies || {}) };
+    dependencies['@amiexpress/bbs-door-sdk'] = 'file:../../sdk';
+    normalized.dependencies = dependencies;
+    return normalized;
+  }
+
+  private normalizePackageLockForRelease(lockJson: any): any {
+    if (!lockJson || typeof lockJson !== 'object') {
+      return lockJson;
+    }
+
+    const sdkSpec = 'file:../../sdk';
+
+    if (lockJson.packages && lockJson.packages['']) {
+      lockJson.packages[''].dependencies = {
+        ...(lockJson.packages[''].dependencies || {}),
+        '@amiexpress/bbs-door-sdk': sdkSpec,
+      };
+    }
+
+    if (lockJson.dependencies && lockJson.dependencies['@amiexpress/bbs-door-sdk']) {
+      lockJson.dependencies['@amiexpress/bbs-door-sdk'] = {
+        ...lockJson.dependencies['@amiexpress/bbs-door-sdk'],
+        version: sdkSpec,
+        resolved: sdkSpec,
+        link: true,
+      };
+    }
+
+    if (lockJson.packages && lockJson.packages['node_modules/@amiexpress/bbs-door-sdk']) {
+      lockJson.packages['node_modules/@amiexpress/bbs-door-sdk'] = {
+        ...lockJson.packages['node_modules/@amiexpress/bbs-door-sdk'],
+        version: sdkSpec,
+        resolved: sdkSpec,
+        link: true,
+      };
+    }
+
+    return lockJson;
+  }
+
+  private extractDoorDir(location?: string): string | null {
+    if (!location) return null;
+    let value = location.trim();
+    if (!value) return null;
+    value = value.replace(/^doors:/i, 'Doors/');
+    value = value.replace(/^doors[\\/]/i, 'Doors/');
+    const parts = value.split(/[\\/]/);
+    if (parts.length < 2) return null;
+    if (parts[0].toLowerCase() !== 'doors') return null;
+    return parts[1];
+  }
+
+  private copyScriptFiles(sourceDir: string, outputDir: string): void {
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) {
+        continue;
+      }
+
+      const srcPath = path.join(sourceDir, entry.name);
+      const destPath = path.join(outputDir, entry.name);
+
+      if (entry.isDirectory()) {
+        this.copyScriptFiles(srcPath, destPath);
+        continue;
+      }
+
+      if (!/\.(ts|js|d\.ts|map)$/i.test(entry.name)) {
+        continue;
+      }
+
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(srcPath, destPath);
     }
   }
 
@@ -330,9 +546,9 @@ ${this.formatDescriptionForNfo(this.config.description)}
 ║                         INSTALLATION                                       ║
 ╠════════════════════════════════════════════════════════════════════════════╣
 ║                                                                            ║
-║  1. Extract all files to your BBS doors directory                         ║
-║  2. Run: node ${this.padRight(this.config.name + '.js', 54)}║
-║  3. Connect via telnet/SSH and enjoy!                                     ║
+║  1. Extract the archive to your BBS root                                  ║
+║  2. Verify Commands/BBSCmd contains the .info entry                       ║
+║  3. Restart the BBS (or reload doors)                                     ║
 ║                                                                            ║
 ╠════════════════════════════════════════════════════════════════════════════╣
 ║  Made with AmiExpress BBS Door SDK                                        ║
@@ -358,12 +574,10 @@ ${this.config.description}
 INSTALLATION
 ------------
 
-1. Extract all files to your BBS doors directory
-2. Install Node.js 18+ if not already installed
-3. Run: npm install (in the door directory)
-4. Start the door: node ${this.config.name}.js
-5. Connect via telnet/SSH to your BBS
-6. Access the door from the main menu
+1. Extract the archive to your BBS root directory
+2. Confirm the .info file is under Commands/BBSCmd/
+3. Restart the BBS (or reload doors)
+4. Access the door from the main menu
 
 REQUIREMENTS
 ------------

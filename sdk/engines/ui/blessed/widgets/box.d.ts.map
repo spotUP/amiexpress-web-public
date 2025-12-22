@@ -1,0 +1,1 @@
+{"version":3,"file":"box.d.ts","sourceRoot":"","sources":["box.ts"],"names":[],"mappings":"AAAA;;GAEG;AAEH,OAAO,EAAE,OAAO,EAAE,MAAM,iBAAiB,CAAC;AAC1C,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,eAAe,CAAC;AAEpD,qBAAa,GAAI,SAAQ,OAAO;gBAClB,OAAO,GAAE,cAAmB;CAGzC"}

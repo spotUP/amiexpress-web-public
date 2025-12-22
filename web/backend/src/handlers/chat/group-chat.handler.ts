@@ -241,7 +241,31 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
 
     // Check if user is already in a room
     if (session.currentRoomId) {
-      return sendRoomError(socket, 'You must leave your current room first (use /LEAVE)');
+      if (session.currentRoomId === room.room_id) {
+        const members = await db.getRoomMembers(room.room_id);
+        socket.join('room:' + room.room_id);
+        socket.emit('room:joined', {
+          roomId: room.room_id,
+          roomName: room.room_name,
+          memberCount: members.length,
+          members: members.map((m: any) => ({
+            user_id: m.user_id,
+            username: m.username,
+            is_moderator: m.is_moderator,
+            is_muted: m.is_muted
+          }))
+        });
+        return;
+      }
+      const stillMember = await db.isUserInRoom(session.currentRoomId, session.user?.id);
+      if (!stillMember) {
+        session.currentRoomId = undefined;
+        session.currentRoomName = undefined;
+        session.previousState = undefined;
+        session.previousSubState = undefined;
+      } else {
+        return sendRoomError(socket, 'You must leave your current room first (use /LEAVE)');
+      }
     }
 
     // Check if room requires password
@@ -257,10 +281,10 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
       return sendRoomError(socket, 'Room is full (max ' + room.max_users + ' users)');
     }
 
-    // Check if user is already in this room (shouldn't happen, but check anyway)
+    // Check if user is already in this room (stale sessions can leave entries behind)
     const alreadyIn = await db.isUserInRoom(room.room_id, session.user?.id);
     if (alreadyIn) {
-      return sendRoomError(socket, 'You are already in this room');
+      console.log('ℹ️ User already in room, rejoining:', session.user?.username, room.room_name);
     }
 
     // Join room in database
@@ -315,12 +339,22 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
 
     // Broadcast join to other room members
     broadcastRoomSystem(room.room_id, session.user?.username + ' joined the room', socket.id);
+    io.to('room:' + room.room_id).except(socket.id).emit('room:user-joined', {
+      userId: session.user?.id,
+      username: session.user?.username
+    });
 
     // Emit room joined event
     socket.emit('room:joined', {
       roomId: room.room_id,
       roomName: room.room_name,
-      memberCount: members.length
+      memberCount: members.length,
+      members: members.map((m: any) => ({
+        user_id: m.user_id,
+        username: m.username,
+        is_moderator: m.is_moderator,
+        is_muted: m.is_muted
+      }))
     });
 
   } catch (error) {
@@ -355,6 +389,10 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
 
     // Broadcast leave to other room members (before clearing session)
     broadcastRoomSystem(roomId, username + ' left the room');
+    io.to('room:' + roomId).emit('room:user-left', {
+      userId: session.user?.id,
+      username: session.user?.username
+    });
 
     // Restore previous state
     if (session.previousState && session.previousSubState) {
@@ -667,6 +705,10 @@ export async function handleRoomDisconnect(socket: Socket, session: BBSSession) 
 
     // Broadcast disconnect to room
     broadcastRoomSystem(roomId, username + ' disconnected');
+    io.to('room:' + roomId).emit('room:user-left', {
+      userId: session.user?.id,
+      username: session.user?.username
+    });
 
   } catch (error) {
     console.error('❌ Error in room disconnect:', error);

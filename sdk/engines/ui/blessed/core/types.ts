@@ -86,6 +86,8 @@ export interface ElementOptions {
   clickable?: boolean;
   keyable?: boolean;
   input?: boolean;
+  dockBorders?: boolean;
+  ignoreDockContrast?: boolean;
 
   // Scrolling
   scrollable?: boolean;

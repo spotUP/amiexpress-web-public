@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { spawnSync } from 'child_process';
 import { getAmigaAssignPaths } from '../utils/bbs-paths.util';
 import { loadCommands } from '../handlers/command-execution.handler';
 import { config } from '../config';
@@ -84,6 +85,7 @@ export interface DoorArchive {
   libraries: string[];       // Amiga library files (.library)
   sourceFiles: string[];     // Source code files (.s, .asm, .c, .e, .rexx)
   isTypeScriptDoor?: boolean; // True if this is a TypeScript door package
+  typeScriptIssues?: string[]; // Validation issues for TS door packages
   isAREXXDoor?: boolean;     // True if this is an AREXX script door
   hasSourceCode?: boolean;   // True if contains source code
   packageJson?: any;         // Parsed package.json for TypeScript doors
@@ -155,11 +157,9 @@ export class AmigaDoorManager {
    * Uses case-insensitive matching to find correct directory names
    */
   private initializeAssigns(): AmigaDOSAssigns {
-    const { resolvePath } = require('../utils/amigafs');
-
     // Helper to find directory with case-insensitive matching
     const findDir = (name: string): string => {
-      const resolved = resolvePath(this.bbsRoot, [name]);
+      const resolved = amigafs.resolvePath(path.join(this.bbsRoot, name));
       return resolved || path.join(this.bbsRoot, name);
     };
 
@@ -190,12 +190,15 @@ export class AmigaDoorManager {
       const assignLower = assign.toLowerCase();
       if (amigaPathLower.startsWith(assignLower)) {
         const relativePath = amigaPath.substring(assign.length);
-        return path.join(physicalPath, relativePath);
+        const joined = path.join(physicalPath, relativePath);
+        const resolved = amigafs.resolvePath(joined);
+        return resolved || joined;
       }
     }
 
     // No assign found, treat as relative to BBS root
-    return path.join(this.bbsRoot, amigaPath);
+    const fallback = path.join(this.bbsRoot, amigaPath);
+    return amigafs.resolvePath(fallback) || fallback;
   }
 
   /**
@@ -321,12 +324,12 @@ export class AmigaDoorManager {
     console.log(`[scanInstalledDoors] BBS Root: ${this.bbsRoot}`);
     console.log(`[scanInstalledDoors] Commands Path: ${commandsPath}`);
 
-    if (!fs.existsSync(commandsPath)) {
+    if (!amigafs.existsSync(commandsPath)) {
       console.log(`[scanInstalledDoors] Commands directory does not exist: ${commandsPath}`);
       return doors;
     }
 
-    const files = fs.readdirSync(commandsPath);
+    const files = amigafs.readdirSync(commandsPath);
     const infoFiles = files.filter(f => {
       if (!f.toLowerCase().endsWith('.info')) return false;
       // Filter out files like "BESTCONF.INFO" - command names shouldn't contain dots
@@ -358,7 +361,7 @@ export class AmigaDoorManager {
         console.log(`[scanInstalledDoors]   Access Level: ${metadata.access}`);
         console.log(`[scanInstalledDoors]   Door Name: ${metadata.doorName}`);
 
-        const executableExists = fs.existsSync(metadata.resolvedPath);
+        const executableExists = amigafs.existsSync(metadata.resolvedPath);
         console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
 
@@ -366,7 +369,7 @@ export class AmigaDoorManager {
         let fileSize = 0;
         if (executableExists) {
           try {
-            const stats = fs.statSync(metadata.resolvedPath);
+            const stats = amigafs.statSync(metadata.resolvedPath);
             fileSize = stats.size;
           } catch (err) {
             console.log(`[scanInstalledDoors] Could not get file size: ${err}`);
@@ -420,31 +423,37 @@ export class AmigaDoorManager {
     const doors: any[] = [];
     const doorsPath = path.join(this.bbsRoot, 'Doors');
 
-    if (!fs.existsSync(doorsPath)) {
+    if (!amigafs.existsSync(doorsPath)) {
       return doors;
     }
 
-    const entries = fs.readdirSync(doorsPath, { withFileTypes: true });
+    const entries = amigafs.readdirSync(doorsPath);
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      const doorPath = path.join(doorsPath, entry);
+      let stats: fs.Stats;
+      try {
+        stats = amigafs.statSync(doorPath);
+      } catch {
+        continue;
+      }
+      if (!stats.isDirectory()) continue;
 
-      const doorPath = path.join(doorsPath, entry.name);
       const packageJsonPath = path.join(doorPath, 'package.json');
 
       // Check for package.json
-      if (fs.existsSync(packageJsonPath)) {
+      if (amigafs.existsSync(packageJsonPath)) {
         try {
-          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+          const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8'));
 
           // Look for main entry point
           const mainFile = packageJson.main || 'index.ts';
           const mainPath = path.join(doorPath, mainFile);
-          const exists = fs.existsSync(mainPath);
+          const exists = amigafs.existsSync(mainPath);
 
           doors.push({
-            name: packageJson.name || entry.name,
-            displayName: packageJson.displayName || packageJson.name || entry.name,
+            name: packageJson.name || entry,
+            displayName: packageJson.displayName || packageJson.name || entry,
             description: packageJson.description || '',
             version: packageJson.version || '1.0.0',
             author: packageJson.author || '',
@@ -455,17 +464,17 @@ export class AmigaDoorManager {
             accessLevel: packageJson.accessLevel || 0,
           });
 
-          console.log(`Loaded TypeScript door: ${packageJson.name || entry.name} (${exists ? 'INSTALLED' : 'MISSING'})`);
+          console.log(`Loaded TypeScript door: ${packageJson.name || entry} (${exists ? 'INSTALLED' : 'MISSING'})`);
         } catch (error) {
-          console.error(`Error reading package.json for ${entry.name}:`, error);
+          console.error(`Error reading package.json for ${entry}:`, error);
         }
       } else {
         // Check for loose .ts/.js files
-        const tsFiles = fs.readdirSync(doorPath).filter(f => f.endsWith('.ts') || f.endsWith('.js'));
+        const tsFiles = amigafs.readdirSync(doorPath).filter(f => f.endsWith('.ts') || f.endsWith('.js'));
         if (tsFiles.length > 0) {
           doors.push({
-            name: entry.name,
-            displayName: entry.name,
+            name: entry,
+            displayName: entry,
             description: 'TypeScript door (no package.json)',
             version: '1.0.0',
             main: tsFiles[0],
@@ -475,7 +484,7 @@ export class AmigaDoorManager {
             accessLevel: 0,
           });
 
-          console.log(`Loaded TypeScript door (no package.json): ${entry.name}`);
+          console.log(`Loaded TypeScript door (no package.json): ${entry}`);
         }
       }
     }
@@ -557,6 +566,7 @@ export class AmigaDoorManager {
 
       let files: string[] = [];
       let packageJson: any = null;
+      let doorPackageJsonPath: string | undefined;
 
       if (isZip) {
         const AdmZip = require('adm-zip');
@@ -571,6 +581,23 @@ export class AmigaDoorManager {
             packageJson = JSON.parse(content);
           } catch (e) {
             console.error('Error parsing package.json:', e);
+          }
+        }
+
+        if (!packageJson) {
+          doorPackageJsonPath = files.find(f =>
+            /(^|[/\\])Doors[/\\][^/\\]+[/\\]package\.json$/i.test(f)
+          );
+          if (doorPackageJsonPath) {
+            const doorPackageEntry = zip.getEntry(doorPackageJsonPath);
+            if (doorPackageEntry) {
+              try {
+                const content = doorPackageEntry.getData().toString('utf8');
+                packageJson = JSON.parse(content);
+              } catch (e) {
+                console.error('Error parsing door package.json:', e);
+              }
+            }
           }
         }
       } else if (isLha) {
@@ -682,7 +709,10 @@ export class AmigaDoorManager {
       });
 
       // Detect door type
-      const hasPackageJson = packageJson !== null;
+      const hasDoorPackageJson = files.some(f =>
+        /(^|[/\\])Doors[/\\][^/\\]+[/\\]package\.json$/i.test(f)
+      );
+      const hasPackageJson = packageJson !== null || hasDoorPackageJson;
       const hasRootTypeScript = files.some(f => {
         const name = f.toLowerCase();
         const isTypeScript = name.endsWith('.ts') || name.endsWith('.js');
@@ -694,6 +724,22 @@ export class AmigaDoorManager {
       const isTypeScriptDoor = (hasPackageJson || hasRootTypeScript) && !hasBBSStructure;
       const isAREXXDoor = files.some(f => f.toLowerCase().endsWith('.rexx') || f.toLowerCase().endsWith('.rx'));
       const hasSourceCode = sourceFiles.length > 0;
+
+      const typeScriptIssues: string[] = [];
+      if (isTypeScriptDoor) {
+        if (!isStandardDoorStructure) {
+          typeScriptIssues.push('Missing Commands/BBSCmd and Doors/ structure');
+        }
+
+        const hasCommandInfo = files.some(f => f.match(/Commands[/\\]BBSCmd[/\\][^/\\]+\.info$/i));
+        if (!hasCommandInfo) {
+          typeScriptIssues.push('Missing Commands/BBSCmd/*.info');
+        }
+
+        if (!hasDoorPackageJson) {
+          typeScriptIssues.push('Missing Doors/<door>/package.json');
+        }
+      }
 
       // Parse metadata files (file_id.diz, readme, .guide)
       let fileidDiz: string | undefined;
@@ -744,6 +790,7 @@ export class AmigaDoorManager {
         bbsCommands,
         doorsDirectory,
         commandsDirectory,
+        typeScriptIssues: typeScriptIssues.length > 0 ? typeScriptIssues : undefined,
         metadata: {
           fileidDiz,
           readme,
@@ -770,12 +817,12 @@ export class AmigaDoorManager {
       console.log(`Installing TypeScript door: ${doorName}`);
 
       // Remove existing installation if present
-      if (fs.existsSync(doorInstallPath)) {
-        fs.rmSync(doorInstallPath, { recursive: true, force: true });
+      if (amigafs.existsSync(doorInstallPath)) {
+        amigafs.rmSync(doorInstallPath, { recursive: true, force: true });
       }
 
       // Create door directory
-      fs.mkdirSync(doorInstallPath, { recursive: true });
+      amigafs.mkdirSync(doorInstallPath, { recursive: true });
 
       // Extract archive
       if (analysis.format === 'ZIP') {
@@ -804,9 +851,9 @@ export class AmigaDoorManager {
           const destPath = path.join(doorInstallPath, file);
           if (fs.statSync(srcPath).isDirectory()) {
             // Copy directory recursively
-            this.copyRecursive(srcPath, destPath);
+            this.copyRecursive(srcPath, destPath, { skipNames: new Set(['node_modules', '.git']) });
           } else {
-            fs.copyFileSync(srcPath, destPath);
+            amigafs.copyFileSync(srcPath, destPath);
           }
         }
 
@@ -818,7 +865,7 @@ export class AmigaDoorManager {
 
       // Verify package.json exists
       const packageJsonPath = path.join(doorInstallPath, 'package.json');
-      if (!fs.existsSync(packageJsonPath)) {
+      if (!amigafs.existsSync(packageJsonPath)) {
         // Create a minimal package.json if it doesn't exist
         const minimalPackage = {
           name: doorName,
@@ -827,7 +874,7 @@ export class AmigaDoorManager {
           main: 'index.ts',
           type: 'door'
         };
-        fs.writeFileSync(packageJsonPath, JSON.stringify(minimalPackage, null, 2));
+        amigafs.writeFileSync(packageJsonPath, JSON.stringify(minimalPackage, null, 2));
       }
 
       console.log(`TypeScript door installed: ${doorName} → doors/${doorName}/`);
@@ -858,9 +905,11 @@ export class AmigaDoorManager {
         return { success: false, message: 'Failed to analyze archive' };
       }
 
-      // Handle TypeScript doors differently
-      if (analysis.isTypeScriptDoor) {
-        return await this.installTypeScriptDoor(archivePath, analysis);
+      if (analysis.isTypeScriptDoor && !analysis.isStandardDoorStructure) {
+        const issueMessage = analysis.typeScriptIssues?.length
+          ? `TypeScript door validation failed:\n- ${analysis.typeScriptIssues.join('\n- ')}`
+          : 'TypeScript doors must include Commands/BBSCmd and Doors/ structure';
+        return { success: false, message: issueMessage };
       }
 
       // Extract to temporary directory first
@@ -964,14 +1013,103 @@ export class AmigaDoorManager {
         return { success: false, message: 'No .info files found in archive' };
       }
 
+      const normalizedFiles = extractedFiles.map(f => path.relative(tempDir, f).split(path.sep).join('/'));
+      const normalizedSet = new Set(normalizedFiles.map(f => f.toLowerCase()));
+
+      const getDoorDirFromLocation = (location?: string): string | null => {
+        if (!location) return null;
+        let value = location.trim();
+        if (!value) return null;
+        value = value.replace(/^doors:/i, 'Doors/');
+        value = value.replace(/^doors[\\/]/i, 'Doors/');
+        const parts = value.split(/[\\/]/);
+        if (parts.length < 2) return null;
+        if (parts[0].toLowerCase() !== 'doors') return null;
+        return parts[1];
+      };
+
+      const isTypeScriptInfo = (metadata: Partial<DoorInfo> | null): boolean => {
+        const typeValue = metadata?.type?.toString().toUpperCase();
+        return typeValue === 'TS';
+      };
+
+      const resolveDoorSourceDir = (doorName: string): string | undefined => {
+        const doorPathMatch = extractedFiles.find(f =>
+          new RegExp(`[/\\\\]Doors[/\\\\]${doorName}([/\\\\]|$)`, 'i').test(f)
+        );
+        if (!doorPathMatch) return undefined;
+
+        const rel = path.relative(tempDir, doorPathMatch);
+        const parts = rel.split(path.sep);
+        const doorsIndex = parts.findIndex(part => part.toLowerCase() === 'doors');
+        if (doorsIndex === -1) return undefined;
+
+        const prefixParts = parts.slice(0, doorsIndex);
+        return path.join(tempDir, ...prefixParts, 'Doors', doorName);
+      };
+
+      const tsIssues: string[] = [];
+      for (const infoFile of infoFiles) {
+        const metadata = this.parseInfoFile(infoFile);
+        if (!isTypeScriptInfo(metadata)) continue;
+
+        const doorDir = getDoorDirFromLocation(metadata?.location);
+        if (!doorDir) {
+          tsIssues.push(`${path.basename(infoFile)} missing or invalid LOCATION (expected Doors/<door>)`);
+          continue;
+        }
+
+        const packageJsonRel = `Doors/${doorDir}/package.json`;
+        if (!normalizedSet.has(packageJsonRel.toLowerCase())) {
+          tsIssues.push(`Missing ${packageJsonRel}`);
+          continue;
+        }
+
+        const packageJsonPath = path.join(tempDir, packageJsonRel);
+        let packageJson: any = null;
+        try {
+          packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        } catch (error) {
+          tsIssues.push(`Invalid package.json for Doors/${doorDir}`);
+          continue;
+        }
+
+        const runtime = typeof packageJson.runtime === 'string' ? packageJson.runtime : 'server';
+        const serverEntry = packageJson.server?.entry || packageJson.main || 'index.ts';
+        const serverEntryValue = String(serverEntry);
+        const serverEntryNormalized = serverEntryValue.startsWith('./')
+          ? serverEntryValue.slice(2)
+          : serverEntryValue;
+        const serverEntryRel = `Doors/${doorDir}/${serverEntryNormalized}`;
+        if (!normalizedSet.has(serverEntryRel.toLowerCase())) {
+          tsIssues.push(`Missing server entry ${serverEntryRel}`);
+        }
+
+        if (runtime === 'hybrid') {
+          const clientBundleRel = `Doors/${doorDir}/dist/client.bundle.js`;
+          if (!normalizedSet.has(clientBundleRel.toLowerCase())) {
+            tsIssues.push(`Missing client bundle ${clientBundleRel}`);
+          }
+        }
+      }
+
+      if (tsIssues.length > 0) {
+        this.cleanup(tempDir);
+        return { success: false, message: `TypeScript door validation failed:\n- ${tsIssues.join('\n- ')}` };
+      }
+
       console.log(`Found ${infoFiles.length} .info files in extracted archive`);
 
       // Process each .info file
       let installedCount = 0;
       let firstDoor: DoorInfo | undefined;
+      const installedTsDoors = new Set<string>();
+      const dependencyWarnings: string[] = [];
+      const copySkipNames = new Set(['node_modules', '.git']);
 
       for (const infoFile of infoFiles) {
         const relativePath = path.relative(tempDir, infoFile);
+        const metadata = this.parseInfoFile(infoFile);
 
         // Detect archive structure patterns:
         // 1. Commands/BBSCmd/ (standard door structure)
@@ -993,41 +1131,23 @@ export class AmigaDoorManager {
         const commandName = path.basename(infoFileName, '.info');
 
         // Copy .info file
-        fs.mkdirSync(infoDestDir, { recursive: true });
-        fs.copyFileSync(infoFile, infoDestPath);
+        amigafs.mkdirSync(infoDestDir, { recursive: true });
+        amigafs.copyFileSync(infoFile, infoDestPath);
         console.log(`Installed command: ${commandName} (${infoFileName} → Commands/BBSCmd/)`);
 
         // Find corresponding door in Doors/ directory
-        // Look for Doors/[DoorName]/ where DoorName matches or contains the command
-        const doorsPattern = 'Doors';
-        const doorsDirMatch = extractedFiles.find(f => {
-          const rel = path.relative(tempDir, f);
-          return rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
-        });
+        const doorDirFromLocation = getDoorDirFromLocation(metadata?.location);
+        let doorName: string | undefined = doorDirFromLocation;
+        let doorSourceDir: string | undefined = doorName ? resolveDoorSourceDir(doorName) : undefined;
 
-        let doorName: string | undefined;
-        let doorSourceDir: string | undefined;
-
-        if (doorsDirMatch) {
-          // Extract door name from path: "Doors/Example/..." → "Example"
-            const rel = path.relative(tempDir, doorsDirMatch);
-            const match = rel.match(new RegExp(`${doorsPattern}[/\\\\]([^/\\\\]+)[/\\\\]`, 'i'));
+        if (!doorSourceDir) {
+          const fallbackMatch = extractedFiles.find(f => f.match(/[/\\]Doors[/\\][^/\\]+[/\\]/i));
+          if (fallbackMatch) {
+            const rel = path.relative(tempDir, fallbackMatch);
+            const match = rel.match(/Doors[/\\]([^/\\]+)/i);
             if (match) {
               doorName = match[1];
-              const doorPathPrefix = path.join(tempDir, 'Doors');
-
-              // Handle archive root prefix (e.g., "otl-ab10/Doors/")
-              const archiveRootDoors = extractedFiles.find(f => f.match(/Doors[/\\]/));
-              if (archiveRootDoors) {
-                const parts = path.relative(tempDir, archiveRootDoors).split(path.sep);
-                if (parts.length > 2 && parts[0] !== 'Doors') {
-                  // Has archive root prefix
-                  doorSourceDir = path.join(tempDir, parts[0], 'Doors', doorName);
-                } else {
-                  doorSourceDir = path.join(doorPathPrefix, doorName);
-              }
-            } else {
-              doorSourceDir = path.join(doorPathPrefix, doorName);
+              doorSourceDir = resolveDoorSourceDir(doorName);
             }
           }
         }
@@ -1039,19 +1159,24 @@ export class AmigaDoorManager {
 
         // Copy door files
         const doorDestDir = path.join(this.assigns['Doors:'], doorName);
-        fs.mkdirSync(doorDestDir, { recursive: true });
+        amigafs.mkdirSync(doorDestDir, { recursive: true });
         console.log(`Installing door: ${doorName} → Doors/${doorName}/`);
 
         // Copy all door files
         if (fs.existsSync(doorSourceDir)) {
-          const doorFiles = fs.readdirSync(doorSourceDir);
-          for (const file of doorFiles) {
-            const srcPath = path.join(doorSourceDir, file);
-            if (fs.statSync(srcPath).isFile()) {
-              const destPath = path.join(doorDestDir, file);
-              fs.copyFileSync(srcPath, destPath);
-              console.log(`  Copied: ${file}`);
+          console.log(`  Copying door files from ${doorSourceDir}`);
+          this.copyRecursive(doorSourceDir, doorDestDir, { skipNames: copySkipNames });
+        }
+
+        // Install dependencies for TypeScript doors
+        if (isTypeScriptInfo(metadata)) {
+          const packageJsonPath = path.join(doorDestDir, 'package.json');
+          if (amigafs.existsSync(packageJsonPath) && !installedTsDoors.has(doorDestDir)) {
+            const installResult = this.installDoorDependencies(doorDestDir);
+            if (!installResult.success) {
+              dependencyWarnings.push(`${doorName}: ${installResult.message || 'npm install failed'}`);
             }
+            installedTsDoors.add(doorDestDir);
           }
         }
 
@@ -1059,13 +1184,13 @@ export class AmigaDoorManager {
         const libraryFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.library'));
         if (libraryFiles.length > 0) {
           const libsDir = this.assigns['Libs:'];
-          fs.mkdirSync(libsDir, { recursive: true });
+          amigafs.mkdirSync(libsDir, { recursive: true });
 
           console.log(`Installing ${libraryFiles.length} Amiga library file(s):`);
           for (const libraryFile of libraryFiles) {
             const libraryName = path.basename(libraryFile);
             const destPath = path.join(libsDir, libraryName);
-            fs.copyFileSync(libraryFile, destPath);
+            amigafs.copyFileSync(libraryFile, destPath);
             console.log(`  → Libs/${libraryName}`);
           }
         }
@@ -1073,7 +1198,7 @@ export class AmigaDoorManager {
         // Re-parse installed door
         const installedDoor = this.parseInfoFile(infoDestPath);
         if (installedDoor) {
-          const executableExists = fs.existsSync(installedDoor.resolvedPath || '');
+          const executableExists = amigafs.existsSync(installedDoor.resolvedPath || '');
           const door: DoorInfo = {
             command: installedDoor.command || path.basename(infoFile, '.info'),
             location: installedDoor.location || '',
@@ -1106,9 +1231,14 @@ export class AmigaDoorManager {
       loadCommands(this.bbsRoot, 1, 0); // Conference 1, Node 0
       console.log('[installDoor] Command cache reloaded - door(s) now available');
 
+      const baseMessage = `Installed ${installedCount} door command(s)`;
+      const message = dependencyWarnings.length > 0
+        ? `${baseMessage}\nDependency install issues:\n- ${dependencyWarnings.join('\n- ')}`
+        : baseMessage;
+
       return {
         success: true,
-        message: `Installed ${installedCount} door command(s)`,
+        message,
         door: firstDoor,
       };
 
@@ -1143,19 +1273,60 @@ export class AmigaDoorManager {
   /**
    * Copy directory recursively
    */
-  private copyRecursive(src: string, dest: string): void {
-    fs.mkdirSync(dest, { recursive: true });
+  private copyRecursive(
+    src: string,
+    dest: string,
+    options?: { skipNames?: Set<string> }
+  ): void {
+    const skipNames = options?.skipNames ?? new Set<string>();
+    amigafs.mkdirSync(dest, { recursive: true });
     const entries = fs.readdirSync(src, { withFileTypes: true });
 
     for (const entry of entries) {
+      if (skipNames.has(entry.name)) {
+        continue;
+      }
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
 
       if (entry.isDirectory()) {
-        this.copyRecursive(srcPath, destPath);
+        this.copyRecursive(srcPath, destPath, options);
       } else {
-        fs.copyFileSync(srcPath, destPath);
+        amigafs.copyFileSync(srcPath, destPath);
       }
+    }
+  }
+
+  private installDoorDependencies(doorDir: string): { success: boolean; message?: string } {
+    try {
+      const packageJsonPath = path.join(doorDir, 'package.json');
+      if (!amigafs.existsSync(packageJsonPath)) {
+        return { success: true };
+      }
+
+      const nodeModulesPath = path.join(doorDir, 'node_modules');
+      if (amigafs.existsSync(nodeModulesPath)) {
+        return { success: true, message: 'Dependencies already present' };
+      }
+
+      const result = spawnSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
+        cwd: doorDir,
+        encoding: 'utf8',
+        timeout: 120000,
+      });
+
+      if (result.error) {
+        return { success: false, message: result.error.message };
+      }
+
+      if (result.status !== 0) {
+        const output = (result.stderr || result.stdout || '').toString().trim();
+        return { success: false, message: output || `npm install exited with code ${result.status}` };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: (error as Error).message };
     }
   }
 
@@ -1183,7 +1354,7 @@ export class AmigaDoorManager {
       const infoPath = path.join(commandsPath, `${command}.info`);
 
       // Check if .info file exists
-      if (!fs.existsSync(infoPath)) {
+      if (!amigafs.existsSync(infoPath)) {
         return {
           success: false,
           message: `Door command '${command}' not found`
@@ -1203,12 +1374,12 @@ export class AmigaDoorManager {
       const doorPath = path.join(this.assigns['Doors:'], doorName);
 
       // Delete .info file
-      fs.unlinkSync(infoPath);
+      amigafs.unlinkSync(infoPath);
       console.log(`Deleted command file: ${infoPath}`);
 
       // Delete door directory if it exists
-      if (fs.existsSync(doorPath)) {
-        fs.rmSync(doorPath, { recursive: true, force: true });
+      if (amigafs.existsSync(doorPath)) {
+        amigafs.rmSync(doorPath, { recursive: true, force: true });
         console.log(`Deleted door files: ${doorPath}`);
       }
 
@@ -1235,7 +1406,7 @@ export class AmigaDoorManager {
       const doorPath = path.join(this.bbsRoot, 'Doors', doorName);
 
       // Check if door exists
-      if (!fs.existsSync(doorPath)) {
+      if (!amigafs.existsSync(doorPath)) {
         return {
           success: false,
           message: `TypeScript door '${doorName}' not found`
@@ -1243,7 +1414,7 @@ export class AmigaDoorManager {
       }
 
       // Verify it's a directory
-      const stats = fs.statSync(doorPath);
+      const stats = amigafs.statSync(doorPath);
       if (!stats.isDirectory()) {
         return {
           success: false,
@@ -1252,7 +1423,7 @@ export class AmigaDoorManager {
       }
 
       // Delete door directory
-      fs.rmSync(doorPath, { recursive: true, force: true });
+      amigafs.rmSync(doorPath, { recursive: true, force: true });
       console.log(`Deleted TypeScript door: ${doorPath}`);
 
       return {
@@ -1284,13 +1455,13 @@ export class AmigaDoorManager {
     const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
     const infoPath = path.join(commandsPath, `${identifier}.info`);
 
-    if (fs.existsSync(infoPath)) {
+    if (amigafs.existsSync(infoPath)) {
       return this.deleteAmigaDoor(identifier);
     }
 
     // Try TypeScript door
     const tsPath = path.join(this.bbsRoot, 'Doors', identifier);
-    if (fs.existsSync(tsPath)) {
+    if (amigafs.existsSync(tsPath)) {
       return this.deleteTypeScriptDoor(identifier);
     }
 

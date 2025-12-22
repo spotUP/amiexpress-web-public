@@ -50,10 +50,12 @@ export class LibraryLoader {
    * Add a directory to library search path
    */
   addSearchPath(searchPath: string): void {
-    if (!this.librarySearchPaths.includes(searchPath)) {
-      this.librarySearchPaths.unshift(searchPath);
-      console.log(`[LibraryLoader] Added search path: ${searchPath}`);
+    const existingIndex = this.librarySearchPaths.indexOf(searchPath);
+    if (existingIndex !== -1) {
+      this.librarySearchPaths.splice(existingIndex, 1);
     }
+    this.librarySearchPaths.unshift(searchPath);
+    console.log(`[LibraryLoader] Added search path: ${searchPath}`);
   }
 
   /**

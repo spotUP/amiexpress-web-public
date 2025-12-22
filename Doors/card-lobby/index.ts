@@ -7,7 +7,6 @@
 import blessed, {
   Screen,
   Box,
-  Text,
   List,
   Button,
   Log,
@@ -15,6 +14,7 @@ import blessed, {
   Prompt,
   Question,
   ScrollableText,
+  type MouseEvent,
 } from '../../sdk/engines/ui/blessed';
 import {
   CardEngine,
@@ -23,6 +23,8 @@ import {
   pokerCardsToCards,
   Storage,
 } from '../../sdk';
+import type { Snapshot } from '../../sdk';
+import type { Colors } from '../../sdk/engines/ui/blessed/core/types';
 
 interface DoorSession {
   socket: any;
@@ -50,6 +52,7 @@ const ACTIVITY_REWARD = 5;
 const WIN_REWARD = 10;
 const WEEKLY_BULLETIN_NUMBER = 20;
 const REFRESH_INTERVAL_MS = 5000;
+const MAX_ACTIVITY_EVENTS = 200;
 
 const BOT_NAMES = [
   'Atlas',
@@ -177,8 +180,10 @@ const mergeColumns = (left: string[], right: string[], leftWidth: number, rightW
   return merged;
 };
 
-const renderCardLines = (cards: ReturnType<typeof pokerCardsToCards>, options: { layout?: string; size?: string }) =>
-  cardEngine.renderHandLines(cards, options as any).map(ansiToBlessedTags);
+const renderCardLines = (
+  cards: ReturnType<typeof pokerCardsToCards>,
+  options: { layout?: string; size?: string; face?: 'front' | 'back'; backStyle?: string },
+) => cardEngine.renderHandLines(cards, options as any).map(ansiToBlessedTags);
 
 const UI_THEME = {
   topBar: { fg: 'gray', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
@@ -191,6 +196,49 @@ const UI_THEME = {
   ok: 'green',
   error: 'red',
 };
+
+type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
+type ButtonStyleSet = {
+  base: Colors;
+  hover: Colors;
+  focus: Colors;
+  active: Colors;
+};
+
+const ACTION_BUTTON_STYLES: Record<ActionButtonKey, ButtonStyleSet> = {
+  fold: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+  check: {
+    base: { fg: 'black', bg: UI_THEME.ok },
+    hover: { fg: 'black', bg: 'light-green' },
+    focus: { fg: 'black', bg: 'green' },
+    active: { fg: 'black', bg: 'lime' },
+  },
+  call: {
+    base: { fg: 'black', bg: 'gray' },
+    hover: { fg: 'black', bg: 'white' },
+    focus: { fg: 'black', bg: 'white' },
+    active: { fg: 'black', bg: 'light-white' },
+  },
+  raise: {
+    base: { fg: 'white', bg: 'blue' },
+    hover: { fg: 'white', bg: 'light-blue' },
+    focus: { fg: 'white', bg: 'cyan' },
+    active: { fg: 'white', bg: 'blue' },
+  },
+  quit: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+};
+
+const ACTION_BUTTON_ORDER: ActionButtonKey[] = ['fold', 'check', 'call', 'raise', 'quit'];
 
 const GAME_CATALOG: GameDefinition[] = [
   {
@@ -330,6 +378,13 @@ interface LastHandSummary {
   playedAt: number;
 }
 
+interface TableHandState {
+  snapshot: Snapshot;
+  beforeStacks: Record<string, number>;
+  startedAt: number;
+  updatedAt: number;
+}
+
 interface LobbyTable {
   id: number;
   gameId: string;
@@ -351,6 +406,7 @@ interface LobbyTable {
   players: TablePlayer[];
   observers: TableObserver[];
   lastHand?: LastHandSummary;
+  hand?: TableHandState;
 }
 
 interface LobbyEvent {
@@ -406,18 +462,6 @@ type PlayerRole = 'player' | 'observer';
 type TableStatus = 'open' | 'in-progress';
 type LeaderboardMode = 'daily' | 'weekly' | 'all';
 
-type PendingAction = 'bet' | 'raise' | null;
-
-interface ActiveHand {
-  tableId: number;
-  engine: PokerEngine;
-  playerId: string;
-  playerSeat: number;
-  pendingAction: PendingAction;
-  minAmount: number;
-  maxAmount: number;
-  beforeStacks: Map<string, number>;
-}
 
 const initLobbyState = (): LobbyState => ({
   tables: [],
@@ -491,6 +535,10 @@ const getGameById = (id: string): GameDefinition | undefined => {
 
 const isBotPlayer = (player: TablePlayer): boolean => {
   return Boolean(player.isBot || player.userId.startsWith('cpu:'));
+};
+
+const isBotId = (playerId?: string | null): boolean => {
+  return Boolean(playerId && playerId.startsWith('cpu:'));
 };
 
 const buildBotId = (tableId: number, seat: number): string => {
@@ -589,17 +637,46 @@ class CardLobbyApp {
   private screen!: Screen;
   private desktop!: Box;
   private topBar!: Listbar;
+  private topInfoBar!: Box;
   private statusBar!: Box;
   private logWindow!: Log;
   private lobbyWindow!: Box;
   private tableWindow!: Box;
   private lobbyList!: List;
   private lobbyActions!: Listbar;
-  private tableActions!: Listbar;
+  private tableActions!: Box;
   private tableContent!: ScrollableText;
+  private flopPanel!: Box;
+  private flopContent!: Box;
+  private playersPanel!: Box;
+  private playersContent!: ScrollableText;
+  private handPanel!: Box;
+  private handContent!: Box;
+  private activityPanel!: Box;
+  private activityContent!: Log;
+  private actionButtons!: {
+    fold: Button;
+    check: Button;
+    call: Button;
+    raise: Button;
+    quit: Button;
+  };
   private overlayShade!: Box;
   private viewMode: 'lobby' | 'table' = 'lobby';
-  private layout: { width: number; topOffset: number; mainHeight: number; leftWidth: number; rightWidth: number } | null = null;
+  private layout: {
+    width: number;
+    height: number;
+    topOffset: number;
+    statusHeight: number;
+    logHeight: number;
+    mainHeight: number;
+    tableHeight: number;
+    leftWidth: number;
+    rightWidth: number;
+  } | null = null;
+  private autoDealInProgress = false;
+  private dealAnimationInProgress = false;
+  private lastAnimatedHandStartedAt: number | null = null;
 
   private lobby: LobbyState | null = null;
   private profiles: Record<string, PlayerProfile> = {};
@@ -607,7 +684,6 @@ class CardLobbyApp {
   private lobbyFilters: LobbyFilters = { gameId: null, openSeatsOnly: false };
   private leaderboardMode: LeaderboardMode = 'weekly';
   private notices: string[] = [];
-  private activeHand: ActiveHand | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
   private tableListMap: number[] = [];
   private selectedTableId: number | null = null;
@@ -648,7 +724,44 @@ class CardLobbyApp {
     });
 
     if (this.session.bbsSession) {
+      this.session.bbsSession.mouseEventsEnabled = true;
       this.session.bbsSession.doorInputHandler = (data: string) => {
+        if (typeof data === 'string' && data.trim().startsWith('{')) {
+          try {
+            const payload = JSON.parse(data);
+            if (payload?.type?.startsWith('mouse-')) {
+              const buttonMap: Record<number, MouseEvent['button']> = {
+                0: 'left',
+                1: 'middle',
+                2: 'right',
+              };
+              const event: MouseEvent = {
+                x: Number(payload.x) || 0,
+                y: Number(payload.y) || 0,
+                action: 'mousemove',
+                button: buttonMap[payload.button] ?? 'left',
+                shift: Boolean(payload.shift),
+                ctrl: Boolean(payload.ctrl),
+                meta: Boolean(payload.alt),
+              };
+
+              if (payload.type === 'mouse-click') {
+                event.action = 'mousedown';
+              } else if (payload.type === 'mouse-up') {
+                event.action = 'mouseup';
+              } else if (payload.type === 'mouse-wheel') {
+                event.action = payload.deltaY < 0 ? 'wheelup' : 'wheeldown';
+              } else if (payload.type === 'mouse-drag' || payload.type === 'mouse-hover') {
+                event.action = 'mousemove';
+              }
+
+              this.screen.program.emit('mouse', event);
+              return;
+            }
+          } catch {
+            // Fall through to normal input handling.
+          }
+        }
         this.screen._handleData(data);
       };
       this.session.bbsSession.doorReconnectHandler = () => {
@@ -677,6 +790,36 @@ class CardLobbyApp {
     this.screen.key(['S-tab'], () => {
       if (this.modalActive) return;
       this.cycleFocus(-1);
+    });
+
+    this.screen.key(['f'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.triggerFold();
+    });
+
+    this.screen.key(['x'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.triggerCheck();
+    });
+
+    this.screen.key(['c'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.triggerCall();
+    });
+
+    this.screen.key(['r'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.triggerRaise();
+    });
+
+    this.screen.key(['l'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.runAction(() => this.leaveCurrentTable());
+    });
+
+    this.screen.key(['d'], () => {
+      if (this.modalActive || this.viewMode !== 'table') return;
+      this.runAction(() => this.dealHand());
     });
 
     this.desktop = blessed.box({
@@ -713,6 +856,7 @@ class CardLobbyApp {
       left: 0,
       width: '100%',
       height: 1,
+      hidden: true,
       style: UI_THEME.topBar,
       commands: {
         Lobby: { callback: () => runAction(focusLobby) },
@@ -723,6 +867,18 @@ class CardLobbyApp {
         Bulls: { callback: () => runAction(showBulletinsWindow) },
         Quit: { callback: () => runAction(exitDoor) },
       },
+    });
+
+    this.topInfoBar = blessed.box({
+      parent: this.desktop,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: 1,
+      tags: true,
+      hidden: false,
+      style: { fg: 'white', bg: 'blue' },
+      content: ' Card Lobby ',
     });
   }
 
@@ -741,8 +897,6 @@ class CardLobbyApp {
 
   private buildWindows(): void {
     const runAction = this.runAction.bind(this);
-    const dealHand = this.dealHand.bind(this);
-    const leaveCurrentTable = this.leaveCurrentTable.bind(this);
     const manualRefresh = this.manualRefresh.bind(this);
 
     const height = (this.screen.height as number) || 24;
@@ -750,7 +904,8 @@ class CardLobbyApp {
     const topOffset = 1;
     const statusHeight = 1;
     const logHeight = 4;
-    const mainHeight = height - topOffset - statusHeight - logHeight;
+    const tableHeight = height - topOffset - statusHeight;
+    const mainHeight = tableHeight - logHeight;
 
     const minLobbyWidth = 22;
     const minTableWidth = 40;
@@ -761,7 +916,17 @@ class CardLobbyApp {
       leftWidth = Math.max(10, width - minTableWidth);
     }
     const rightWidth = Math.max(minTableWidth, width - leftWidth);
-    this.layout = { width, topOffset, mainHeight, leftWidth, rightWidth };
+    this.layout = {
+      width,
+      height,
+      topOffset,
+      statusHeight,
+      logHeight,
+      mainHeight,
+      tableHeight,
+      leftWidth,
+      rightWidth,
+    };
 
     this.lobbyWindow = blessed.box({
       parent: this.desktop,
@@ -780,9 +945,8 @@ class CardLobbyApp {
       left: leftWidth,
       width: rightWidth,
       height: mainHeight,
-      label: ' Table ',
-      border: { type: 'ascii' },
-      style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
+      border: 'none',
+      style: { bg: UI_THEME.windowBg },
     });
 
     this.lobbyList = blessed.list({
@@ -820,6 +984,8 @@ class CardLobbyApp {
       left: 1,
       right: 1,
       height: 1,
+      itemPadding: 0,
+      itemGap: 1,
       style: { fg: 'white', bg: 'black' },
       items: {
         Create: { callback: () => runAction(this.createTableFlow.bind(this)), keys: ['c'] },
@@ -835,7 +1001,7 @@ class CardLobbyApp {
       top: 1,
       left: 1,
       right: 1,
-      bottom: 2,
+      bottom: 1,
       tags: true,
       scrollable: true,
       alwaysScroll: true,
@@ -847,27 +1013,87 @@ class CardLobbyApp {
       content: 'Select a table to view details.',
     });
 
-    this.tableActions = blessed.listbar({
+    this.tableActions = blessed.box({
       parent: this.tableWindow,
-      bottom: 0,
+      top: 0,
       left: 1,
       right: 1,
       height: 1,
       style: { fg: 'white', bg: 'black' },
-      commands: {
-        Deal: { callback: () => runAction(dealHand) },
-        Leave: { callback: () => runAction(leaveCurrentTable) },
-        Refresh: { callback: () => runAction(manualRefresh) },
-      },
+      hidden: true,
     });
 
+    this.actionButtons = {
+      fold: blessed.button({
+        parent: this.tableActions,
+        mouse: true,
+        keys: true,
+        shrink: false,
+        height: 1,
+        top: 0,
+        left: 0,
+        border: 'none',
+        padding: { left: 1, right: 1, top: 0, bottom: 0 },
+        content: 'FOLD',
+      }),
+      check: blessed.button({
+        parent: this.tableActions,
+        mouse: true,
+        keys: true,
+        shrink: false,
+        height: 1,
+        top: 0,
+        left: 0,
+        border: 'none',
+        padding: { left: 1, right: 1, top: 0, bottom: 0 },
+        content: 'CHECK',
+      }),
+      call: blessed.button({
+        parent: this.tableActions,
+        mouse: true,
+        keys: true,
+        shrink: false,
+        height: 1,
+        top: 0,
+        left: 0,
+        border: 'none',
+        padding: { left: 1, right: 1, top: 0, bottom: 0 },
+        content: 'CALL',
+      }),
+      raise: blessed.button({
+        parent: this.tableActions,
+        mouse: true,
+        keys: true,
+        shrink: false,
+        height: 1,
+        top: 0,
+        left: 0,
+        border: 'none',
+        padding: { left: 1, right: 1, top: 0, bottom: 0 },
+        content: 'RAISE',
+      }),
+      quit: blessed.button({
+        parent: this.tableActions,
+        mouse: true,
+        keys: true,
+        shrink: false,
+        height: 1,
+        top: 0,
+        left: 0,
+        border: 'none',
+        padding: { left: 1, right: 1, top: 0, bottom: 0 },
+        content: 'QUIT',
+      }),
+    };
+
+    this.registerActionButtonEvents();
     this.logWindow = blessed.log({
       parent: this.desktop,
       bottom: statusHeight,
       left: 0,
       width: '100%',
       height: logHeight,
-      border: { type: 'ascii' },
+      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
       label: ' Activity ',
       tags: true,
       scrollable: true,
@@ -880,7 +1106,407 @@ class CardLobbyApp {
       } as any,
     });
 
+    this.buildTablePanels();
     this.applyViewMode(this.viewMode);
+  }
+
+  private buildTablePanels(): void {
+    const panelStyle = { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg };
+    const contentStyle = { fg: 'white', bg: 'black' };
+    const scrollbarStyle = { fg: UI_THEME.accent, bg: UI_THEME.accent };
+
+    this.flopPanel = blessed.box({
+      parent: this.tableWindow,
+      top: 1,
+      left: 1,
+      width: 10,
+      height: 6,
+      label: ' FLOP ',
+      tags: true,
+      hidden: true,
+      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+      style: panelStyle,
+    });
+
+    this.flopContent = blessed.box({
+      parent: this.flopPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      bottom: 1,
+      tags: true,
+      style: contentStyle,
+      content: '',
+    });
+
+    this.playersPanel = blessed.box({
+      parent: this.tableWindow,
+      top: 1,
+      left: 1,
+      width: 10,
+      height: 6,
+      label: ' PLAYERS ',
+      tags: true,
+      hidden: true,
+      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+      style: panelStyle,
+    });
+
+    this.playersContent = blessed.scrollabletext({
+      parent: this.playersPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      bottom: 1,
+      tags: true,
+      scrollable: true,
+      alwaysScroll: true,
+      keys: true,
+      mouse: true,
+      style: contentStyle,
+      scrollbar: {
+        ch: '|',
+        track: { ch: '|', bg: 'black' },
+        style: scrollbarStyle,
+      } as any,
+      content: '',
+    });
+
+    this.handPanel = blessed.box({
+      parent: this.tableWindow,
+      top: 1,
+      left: 1,
+      width: 10,
+      height: 6,
+      label: ' YOUR HAND ',
+      tags: true,
+      hidden: true,
+      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+      style: panelStyle,
+    });
+
+    this.handContent = blessed.box({
+      parent: this.handPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      bottom: 1,
+      tags: true,
+      style: contentStyle,
+      content: '',
+    });
+
+    this.activityPanel = blessed.box({
+      parent: this.tableWindow,
+      top: 1,
+      left: 1,
+      width: 10,
+      height: 6,
+      label: ' ACTIVITY ',
+      tags: true,
+      hidden: true,
+      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
+      style: panelStyle,
+    });
+
+    this.activityContent = blessed.log({
+      parent: this.activityPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      bottom: 1,
+      tags: true,
+      scrollable: true,
+      alwaysScroll: true,
+      keys: true,
+      mouse: true,
+      wrap: true,
+      scrollOnInput: false,
+      scrollback: 200,
+      style: contentStyle,
+      scrollbar: {
+        ch: '|',
+        track: { ch: '|', bg: 'black' },
+        style: scrollbarStyle,
+      } as any,
+      content: '',
+    });
+
+    this.actionButtons.fold.on('press', () => this.triggerFold());
+    this.actionButtons.check.on('press', () => this.triggerCheck());
+    this.actionButtons.call.on('press', () => this.triggerCall());
+    this.actionButtons.raise.on('press', () => this.triggerRaise());
+    this.actionButtons.quit.on('press', () => this.triggerQuit());
+
+    this.layoutTablePanels();
+  }
+
+  private layoutTablePanels(): void {
+    if (!this.layout) return;
+    const tableWidth = Number(this.tableWindow.width) || this.layout.width;
+    const tableHeight = Number(this.tableWindow.height) || this.layout.mainHeight;
+    const innerWidth = Math.max(20, tableWidth - 2);
+    const innerHeight = Math.max(6, tableHeight - 2);
+    const colGap = innerWidth >= 70 ? 2 : 1;
+    const minLeftWidth = 26;
+    const minRightWidth = 18;
+    let leftWidth = Math.floor((innerWidth - colGap) * 0.58);
+    leftWidth = Math.max(minLeftWidth, leftWidth);
+    leftWidth = Math.min(leftWidth, innerWidth - colGap - minRightWidth);
+    let rightWidth = innerWidth - leftWidth - colGap;
+    if (rightWidth < minRightWidth) {
+      rightWidth = Math.max(12, innerWidth - colGap - minLeftWidth);
+      leftWidth = Math.max(10, innerWidth - colGap - rightWidth);
+    }
+    const actionHeight = 1;
+    const rowGap = 1;
+    const usableHeight = Math.max(4, innerHeight - actionHeight - rowGap);
+    const minFullPanelHeight = 9;
+    let topHeight = Math.floor(usableHeight / 2) + (usableHeight % 2);
+    let bottomHeight = Math.max(4, usableHeight - topHeight);
+    if (usableHeight >= minFullPanelHeight) {
+      if (usableHeight >= minFullPanelHeight * 2) {
+        topHeight = Math.max(topHeight, minFullPanelHeight);
+        bottomHeight = Math.max(bottomHeight, minFullPanelHeight);
+        if (topHeight + bottomHeight > usableHeight) {
+          bottomHeight = Math.max(4, usableHeight - topHeight);
+        }
+      } else {
+        topHeight = minFullPanelHeight;
+        bottomHeight = Math.max(4, usableHeight - topHeight);
+      }
+    }
+
+    const top = 1;
+    const left = 1;
+    const rightStart = left + leftWidth + colGap;
+    const bottomTop = top + topHeight + rowGap;
+    const actionTop = top + innerHeight - actionHeight;
+
+    this.flopPanel.options.top = top;
+    this.flopPanel.options.left = left;
+    this.flopPanel.options.width = leftWidth;
+    this.flopPanel.options.height = topHeight;
+
+    this.playersPanel.options.top = top;
+    this.playersPanel.options.left = rightStart;
+    this.playersPanel.options.width = rightWidth;
+    this.playersPanel.options.height = topHeight;
+
+    this.handPanel.options.top = bottomTop;
+    this.handPanel.options.left = left;
+    this.handPanel.options.width = leftWidth;
+    this.handPanel.options.height = bottomHeight;
+
+    this.activityPanel.options.top = bottomTop;
+    this.activityPanel.options.left = rightStart;
+    this.activityPanel.options.width = rightWidth;
+    this.activityPanel.options.height = bottomHeight;
+
+    this.tableActions.options.top = actionTop;
+    this.tableActions.options.left = left;
+    this.tableActions.options.width = innerWidth;
+    this.tableActions.options.height = actionHeight;
+
+    this.layoutActionButtons();
+  }
+
+  private layoutActionButtons(): void {
+    const rawWidth = Number(this.tableActions.width);
+    const width = Number.isFinite(rawWidth) ? rawWidth : Number(this.tableActions.options.width) || 0;
+    const buttonHeight = 1;
+    const buttonTop = 0;
+    const gap = width >= 58 ? 2 : 1;
+    const order: Array<ActionButtonKey> = ACTION_BUTTON_ORDER;
+    const available = Math.max(0, width - gap * Math.max(0, order.length - 1));
+    const buttonWidth = Math.max(6, Math.floor(available / order.length));
+    const totalButtonsWidth = buttonWidth * order.length + gap * Math.max(0, order.length - 1);
+    let left = Math.max(0, Math.floor((width - totalButtonsWidth) / 2));
+
+    order.forEach((key) => {
+      const button = this.actionButtons[key];
+      button.options.top = buttonTop;
+      button.options.height = buttonHeight;
+      button.options.left = left;
+      button.options.width = buttonWidth;
+      button.setContent(this.formatButtonLabel(button.getContent(), buttonWidth));
+      left += buttonWidth + gap;
+    });
+  }
+
+  private applyActionButtonPalette(key: ActionButtonKey): void {
+    const palette = ACTION_BUTTON_STYLES[key];
+    const button = this.actionButtons[key];
+    button.setStyle({
+      ...palette.base,
+      hover: palette.hover,
+      focus: palette.focus,
+    });
+  }
+
+  private registerActionButtonEvents(): void {
+    ACTION_BUTTON_ORDER.forEach((key) => {
+      const palette = ACTION_BUTTON_STYLES[key];
+      const button = this.actionButtons[key];
+      button.on('mousedown', () => {
+        button.setStyle({
+          ...palette.active,
+          hover: palette.hover,
+          focus: palette.focus,
+        });
+      });
+      button.on('mouseup', () => {
+        button.setStyle({
+          ...palette.base,
+          hover: palette.hover,
+          focus: palette.focus,
+        });
+      });
+      button.on('mouseleave', () => {
+        button.setStyle({
+          ...palette.base,
+          hover: palette.hover,
+          focus: palette.focus,
+        });
+      });
+    });
+  }
+
+  private formatButtonLabel(label: string, width: number): string {
+    const clean = stripBlessedTags(String(label)).trim();
+    const text = ` ${clean} `;
+    if (text.length >= width) return text.slice(0, width);
+    const padLeft = Math.floor((width - text.length) / 2);
+    const padRight = width - text.length - padLeft;
+    return `${' '.repeat(padLeft)}${text}${' '.repeat(padRight)}`;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private emitSfx(id: string, params?: Record<string, unknown>): void {
+    if (!this.screen?.program) return;
+    const payload = JSON.stringify({ id, params });
+    this.screen.program.write(`\x1b]9999;sfx;${payload}\x07`);
+  }
+
+  private renderBoardAndHand(
+    boardCards: ReturnType<typeof pokerCardsToCards>,
+    playerHand: ReturnType<typeof pokerCardsToCards>,
+    flopCardSize: string,
+    handCardSize: string,
+    hasLiveHand: boolean,
+  ): void {
+    if (boardCards.length > 0) {
+      this.flopContent.setContent(
+        renderCardLines(boardCards, { layout: 'flat-condensed', size: flopCardSize }).join('\n'),
+      );
+    } else {
+      this.flopContent.setContent('Board not dealt yet.');
+    }
+
+    if (playerHand.length > 0) {
+      this.handContent.setContent(
+        renderCardLines(playerHand, { layout: 'flat-condensed', size: handCardSize }).join('\n'),
+      );
+    } else {
+      this.handContent.setContent(hasLiveHand ? 'Waiting for cards...' : 'No hand on record.');
+    }
+  }
+
+  private async runDealAnimation(
+    boardCards: ReturnType<typeof pokerCardsToCards>,
+    playerHand: ReturnType<typeof pokerCardsToCards>,
+    flopCardSize: string,
+    handCardSize: string,
+  ): Promise<void> {
+    if (!this.screen || this.dealAnimationInProgress) return;
+    this.dealAnimationInProgress = true;
+
+    const drawDelay = 180;
+    const flipDelay = 220;
+    const phasePause = 350;
+
+    const renderMixedHand = (
+      cards: ReturnType<typeof pokerCardsToCards>,
+      flipped: number,
+      size: string,
+    ): void => {
+      if (cards.length === 0) return;
+      const framed = cards.map((card, index) => ({
+        ...card,
+        face: index < flipped ? 'front' as const : 'back' as const,
+      }));
+      this.flopContent.setContent(
+        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
+      );
+    };
+
+    const renderMixedPlayerHand = (
+      cards: ReturnType<typeof pokerCardsToCards>,
+      flipped: number,
+      size: string,
+    ): void => {
+      if (cards.length === 0) return;
+      const framed = cards.map((card, index) => ({
+        ...card,
+        face: index < flipped ? 'front' as const : 'back' as const,
+      }));
+      this.handContent.setContent(
+        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
+      );
+    };
+
+    try {
+      if (boardCards.length > 0) {
+        for (let i = 1; i <= boardCards.length; i += 1) {
+          const partial = boardCards.slice(0, i);
+          this.flopContent.setContent(
+            renderCardLines(partial, { layout: 'flat-condensed', size: flopCardSize, face: 'back' }).join('\n'),
+          );
+          this.emitSfx('card-flap');
+          this.screen.render();
+          await this.sleep(drawDelay);
+        }
+
+        await this.sleep(phasePause);
+
+        for (let i = 1; i <= boardCards.length; i += 1) {
+          renderMixedHand(boardCards, i, flopCardSize);
+          this.emitSfx('card-flap');
+          this.screen.render();
+          await this.sleep(flipDelay);
+        }
+
+        await this.sleep(phasePause);
+      }
+
+      if (playerHand.length > 0) {
+        for (let i = 1; i <= playerHand.length; i += 1) {
+          const partial = playerHand.slice(0, i);
+          this.handContent.setContent(
+            renderCardLines(partial, { layout: 'flat-condensed', size: handCardSize, face: 'back' }).join('\n'),
+          );
+          this.emitSfx('card-flap');
+          this.screen.render();
+          await this.sleep(drawDelay);
+        }
+
+        await this.sleep(phasePause);
+
+        for (let i = 1; i <= playerHand.length; i += 1) {
+          renderMixedPlayerHand(playerHand, i, handCardSize);
+          this.emitSfx('card-flap');
+          this.screen.render();
+          await this.sleep(flipDelay);
+        }
+      }
+    } finally {
+      this.dealAnimationInProgress = false;
+    }
   }
 
   private buildOverlay(): void {
@@ -918,6 +1544,7 @@ class CardLobbyApp {
     if (this.currentProfile?.currentTableId) {
       await this.leaveCurrentTable();
     }
+    this.screen.disableMouse();
     this.screen.destroy();
   }
 
@@ -953,10 +1580,20 @@ class CardLobbyApp {
       this.updateTableStatus(table);
     });
 
-    if (this.currentProfile.currentTableId && !this.findTableById(this.currentProfile.currentTableId)) {
-      this.currentProfile.currentTableId = undefined;
-      this.currentProfile.status = 'lobby';
-      changed = true;
+    if (this.currentProfile.currentTableId) {
+      const table = this.findTableById(this.currentProfile.currentTableId);
+      const userId = this.currentProfile.userId;
+      const stillSeated = table
+        ? table.players.some((player) => player.userId === userId)
+        : false;
+      const stillObserving = table
+        ? table.observers.some((observer) => observer.userId === userId)
+        : false;
+      if (!table || (!stillSeated && !stillObserving)) {
+        this.currentProfile.currentTableId = undefined;
+        this.currentProfile.status = 'lobby';
+        changed = true;
+      }
     }
 
     this.maybeResetBuckets();
@@ -981,6 +1618,37 @@ class CardLobbyApp {
 
   private findTableById(tableId: number): LobbyTable | undefined {
     return this.lobby?.tables.find((table) => table.id === tableId);
+  }
+
+  private loadTableHand(table: LobbyTable): { engine: PokerEngine; beforeStacks: Record<string, number> } | null {
+    if (!table.hand) return null;
+    try {
+      const engine = PokerEngine.restore(table.hand.snapshot) as PokerEngine;
+      return { engine, beforeStacks: table.hand.beforeStacks ?? {} };
+    } catch (error) {
+      console.error('[CardLobby] Failed to restore hand snapshot:', error);
+      return null;
+    }
+  }
+
+  private saveTableHand(
+    table: LobbyTable,
+    engine: PokerEngine,
+    beforeStacks: Record<string, number>,
+    startedAt?: number,
+  ): void {
+    table.hand = {
+      snapshot: engine.snapshot as Snapshot,
+      beforeStacks,
+      startedAt: startedAt ?? table.hand?.startedAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    table.updatedAt = Date.now();
+  }
+
+  private clearTableHand(table: LobbyTable): void {
+    table.hand = undefined;
+    table.updatedAt = Date.now();
   }
 
   private getHumanPlayers(table: LobbyTable): TablePlayer[] {
@@ -1042,6 +1710,10 @@ class CardLobbyApp {
   }
 
   private updateTableStatus(table: LobbyTable): void {
+    if (table.hand) {
+      table.status = 'in-progress';
+      return;
+    }
     const seated = table.players.filter((player) => player.role === 'player').length;
     if (table.autoStart && seated >= table.minPlayers) {
       table.status = 'in-progress';
@@ -1088,10 +1760,11 @@ class CardLobbyApp {
   private pushEvent(message: string): void {
     if (!this.lobby) return;
     this.lobby.events.unshift({ message, createdAt: Date.now() });
-    if (this.lobby.events.length > 6) {
-      this.lobby.events = this.lobby.events.slice(0, 6);
+    if (this.lobby.events.length > MAX_ACTIVITY_EVENTS) {
+      this.lobby.events = this.lobby.events.slice(0, MAX_ACTIVITY_EVENTS);
     }
     this.logWindow.log(message);
+    this.updateActivityPanel();
   }
 
   private emitLiveChat(message: string): void {
@@ -1120,12 +1793,142 @@ class CardLobbyApp {
     this.screen.render();
   }
 
+  private updateTopInfoBar(): void {
+    if (!this.currentProfile || !this.lobby) return;
+    const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
+    if (!tableId) {
+      this.topInfoBar.setContent(' Card Lobby ');
+      return;
+    }
+
+    const table = this.findTableById(tableId);
+    if (!table) {
+      this.topInfoBar.setContent(' Card Lobby ');
+      return;
+    }
+
+    let pot = 0;
+    const handState = this.loadTableHand(table);
+    if (handState) {
+      pot = handState.engine.state.pots.reduce((sum, potItem) => sum + potItem.amount, 0);
+    }
+
+    let turnLabel = '';
+    if (handState) {
+      const actionSeat = handState.engine.state.actionTo;
+      if (actionSeat !== null && actionSeat !== undefined) {
+        const actor = handState.engine.state.players[actionSeat];
+        if (actor?.name) {
+          turnLabel = actor.id === this.currentProfile.userId ? 'Your turn' : `Turn: ${actor.name}`;
+        }
+      }
+    }
+
+    const infoSegments = [
+      `{cyan-fg}${table.gameName}{/}`,
+      `{yellow-fg}Pot: ${pot}{/}`,
+      `{cyan-fg}Stakes: ${table.stakesLabel}{/}`,
+      `{green-fg}Buy-in: ${table.buyIn}{/}`,
+    ];
+    if (turnLabel) {
+      infoSegments.push(`{white-fg}${turnLabel}{/}`);
+    }
+    const width = Number(this.topInfoBar.width) || 80;
+    const line = ` ${infoSegments.join('   ')} `;
+    this.topInfoBar.setContent(padColumn(line, width));
+  }
+
+  private updateActivityPanel(tableOverride?: LobbyTable | null, engineOverride?: PokerEngine | null): void {
+    if (!this.lobby) return;
+
+    let table: LobbyTable | null = tableOverride ?? null;
+    if (!table && this.currentProfile?.currentTableId) {
+      table = this.findTableById(this.currentProfile.currentTableId) ?? null;
+    }
+
+    const hintLines: string[] = [];
+    if (this.viewMode === 'table' && table && this.currentProfile) {
+      const engine = engineOverride ?? this.loadTableHand(table)?.engine ?? null;
+      if (!engine) {
+        const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
+        if (seatedPlayers.length < table.minPlayers) {
+          hintLines.push('{yellow-fg}Waiting for players to join...{/}');
+        } else {
+          hintLines.push('{yellow-fg}Ready to deal. Press D or use Deal to start.{/}');
+        }
+      } else {
+        const actionSeat = engine.state.actionTo;
+        if (actionSeat === null || actionSeat === undefined) {
+          hintLines.push('{yellow-fg}Dealing in progress...{/}');
+        } else {
+          const actor = engine.state.players[actionSeat];
+          if (actor?.id === this.currentProfile.userId) {
+            hintLines.push('{yellow-fg}Your turn. Choose an action below.{/}');
+          } else if (actor?.name) {
+            hintLines.push(`{yellow-fg}Waiting for ${actor.name} to act...{/}`);
+          }
+        }
+      }
+
+      hintLines.push('{gray-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}');
+    }
+
+    const eventLines = this.lobby.events.length > 0
+      ? [...this.lobby.events].reverse().map((event) => event.message)
+      : ['No activity yet.'];
+    const lines = hintLines.length > 0 ? [...hintLines, '', ...eventLines] : eventLines;
+
+    const previousScroll = this.activityContent.getScroll();
+    const previousHeight = this.activityContent.getScrollHeight();
+    const isAtBottom = previousHeight === 0 || previousScroll >= Math.max(0, previousHeight - 1);
+    this.activityContent.setContent(lines.join('\n'));
+    const newHeight = this.activityContent.getScrollHeight();
+    if (isAtBottom) {
+      this.activityContent.setScroll(newHeight);
+    } else {
+      this.activityContent.setScroll(Math.min(previousScroll, newHeight));
+    }
+  }
+
   private updateAllPanels(): void {
-    this.syncViewMode();
+    if (this.viewMode === 'table' && !this.currentProfile?.currentTableId) {
+      this.applyViewMode('lobby');
+    } else if (this.viewMode === 'table') {
+      this.syncViewMode();
+    } else {
+      this.applyViewMode('lobby');
+    }
     this.updateLobbyPanel();
     this.updateTablePanel();
     this.updateStatusBar();
+    this.updateTopInfoBar();
+    this.updateActivityPanel();
     this.screen.render();
+    void this.maybeAutoDealCurrentTable();
+  }
+
+  private async maybeAutoDealCurrentTable(): Promise<void> {
+    if (!this.currentProfile || !this.lobby) return;
+    if (!this.currentProfile.currentTableId) return;
+    const table = this.findTableById(this.currentProfile.currentTableId);
+    if (!table) return;
+    await this.maybeAutoDeal(table);
+  }
+
+  private async maybeAutoDeal(table: LobbyTable): Promise<void> {
+    if (this.autoDealInProgress || this.modalActive || !this.currentProfile) return;
+    if (table.gameId !== 'holdem') return;
+    if (this.isObserverForTable(table, this.currentProfile.userId)) return;
+    const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
+    if (seatedPlayers.length < table.minPlayers) return;
+    if (table.hand) return;
+
+    this.autoDealInProgress = true;
+    try {
+      await this.startHoldemHand(table);
+    } finally {
+      this.autoDealInProgress = false;
+    }
   }
 
   private updateLobbyPanel(): void {
@@ -1180,19 +1983,113 @@ class CardLobbyApp {
     if (!this.lobby || !this.currentProfile) return;
     const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
     if (!tableId) {
-      this.tableContent.setContent('Select a table to view details.');
+      this.flopPanel.hide();
+      this.playersPanel.hide();
+      this.handPanel.hide();
+      this.activityPanel.hide();
+      this.tableActions.hide();
+      this.tableContent.show();
+      this.tableContent.setContent([
+        'Select a table to view details.',
+        '',
+        '{yellow-fg}Quick start{/}:',
+        'Use the lobby list to highlight a table.',
+        'Press {cyan-fg}J{/} to join, {cyan-fg}O{/} to observe, or {cyan-fg}C{/} to create a table.',
+      ].join('\n'));
       this.updateTableActions();
       return;
     }
 
     const table = this.findTableById(tableId);
     if (!table) {
-      this.tableContent.setContent('Table not found.');
+      this.flopPanel.hide();
+      this.playersPanel.hide();
+      this.handPanel.hide();
+      this.activityPanel.hide();
+      this.tableActions.hide();
+      this.tableContent.show();
+      this.tableContent.setContent('Table not found. Press {cyan-fg}R{/} to refresh the lobby.');
       this.updateTableActions();
       return;
     }
 
     const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
+    const showGameView = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
+
+    if (showGameView) {
+      this.tableContent.hide();
+      this.flopPanel.show();
+      this.playersPanel.show();
+      this.handPanel.show();
+      this.activityPanel.show();
+      this.tableActions.show();
+      this.layoutTablePanels();
+
+      const flopInnerHeight = Math.max(0, Number(this.flopPanel.height) - 2);
+      const handInnerHeight = Math.max(0, Number(this.handPanel.height) - 2);
+      const flopCardSize = flopInnerHeight >= 7 ? 'full' : 'mini';
+      const handCardSize = handInnerHeight >= 7 ? 'full' : 'mini';
+
+      const handState = this.loadTableHand(table);
+      const boardCards = handState
+        ? pokerCardsToCards(handState.engine.state.board)
+        : pokerCardsToCards(table.lastHand?.board ?? []);
+
+      const playerSeat = handState?.engine.state.players.find((seat) => seat?.id === this.currentProfile?.userId);
+      const playerHand = pokerCardsToCards(
+        playerSeat?.hand ?? table.lastHand?.hands[this.currentProfile.userId] ?? [],
+      );
+
+      const handStartedAt = table.hand?.startedAt ?? null;
+      const shouldAnimate = Boolean(
+        handState &&
+        handStartedAt &&
+        handStartedAt !== this.lastAnimatedHandStartedAt &&
+        !this.dealAnimationInProgress,
+      );
+
+      if (shouldAnimate) {
+        this.lastAnimatedHandStartedAt = handStartedAt;
+        void this.runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize);
+      } else if (!this.dealAnimationInProgress) {
+        this.renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, Boolean(handState));
+      }
+
+      const seated = table.players
+        .filter((player) => player.role === 'player')
+        .sort((a, b) => a.seat - b.seat);
+      const playersWidth = Math.max(20, Number(this.playersPanel.width) - 2);
+      const seatWidth = 2;
+      const stackWidth = Math.min(8, Math.max(5, Math.floor(playersWidth * 0.35)));
+      const nameWidth = Math.max(8, playersWidth - seatWidth - stackWidth - 2);
+      const playersLines = seated.map((player) => {
+        const tag = isBotPlayer(player) ? '*' : ' ';
+        const name = `${player.username}${tag}`.slice(0, nameWidth);
+        const nameValue = padColumn(`{cyan-fg}${name}{/}`, nameWidth);
+        const stackValue = padColumn(`{yellow-fg}${player.stack}{/}`, stackWidth);
+        return `${pad(String(player.seat + 1), seatWidth)} ${nameValue} ${stackValue}`;
+      });
+
+      if (playersLines.length === 0) {
+        playersLines.push('No players seated.');
+      }
+      this.playersContent.setContent(playersLines.join('\n'));
+      this.playersContent.resetScroll();
+
+      this.updateTableActions();
+      this.updateActivityPanel(table, handState?.engine ?? null);
+      this.updateTopInfoBar();
+      this.screen.render();
+      return;
+    }
+
+    this.flopPanel.hide();
+    this.playersPanel.hide();
+    this.handPanel.hide();
+    this.activityPanel.hide();
+    this.tableActions.hide();
+    this.tableContent.show();
+
     const contentWidth = Math.max(40, (this.tableContent as any).iwidth ?? 78);
     const gap = 2;
     const minLeftWidth = 24;
@@ -1211,54 +2108,9 @@ class CardLobbyApp {
       rightLines.push('Mode: Observer');
     }
 
-    const showCards = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
-
-    if (showCards && this.activeHand && this.activeHand.tableId === table.id) {
-      leftLines.push('{yellow-fg}Board{/}');
-      const boardCards = pokerCardsToCards(this.activeHand.engine.state.board);
-      if (boardCards.length > 0) {
-        leftLines.push(...renderCardLines(boardCards, { layout: 'flat-condensed', size: 'mini' }));
-      } else {
-        leftLines.push('Board not dealt yet.');
-      }
-      leftLines.push('');
-      leftLines.push('{yellow-fg}Your hand{/}');
-      const player = this.activeHand.engine.state.players.find((seat) => seat?.id === this.currentProfile?.userId);
-      if (player?.hand?.length) {
-        leftLines.push(...renderCardLines(pokerCardsToCards(player.hand), { layout: 'flat-condensed', size: 'mini' }));
-      } else {
-        leftLines.push('Waiting for cards...');
-      }
-
-      const actionSeat = this.activeHand.engine.state.actionTo ?? this.activeHand.playerSeat;
-      const currentBet = getCurrentBet(this.activeHand.engine);
-      const playerBet = getPlayerBet(this.activeHand.engine, actionSeat);
-      const toCall = Math.max(0, currentBet - playerBet);
+    if (table.lastHand) {
+      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
       rightLines.push('');
-      rightLines.push(toCall > 0 ? `Action: Call ${toCall}, Bet/Raise, or Fold.` : 'Action: Check, Bet, or Fold.');
-    } else if (showCards && table.lastHand) {
-      leftLines.push('{yellow-fg}Last hand{/}');
-      const boardCards = pokerCardsToCards(table.lastHand.board);
-      if (boardCards.length > 0) {
-        leftLines.push(...renderCardLines(boardCards, { layout: 'flat-condensed', size: 'mini' }));
-      } else {
-        leftLines.push('Board not dealt yet.');
-      }
-      leftLines.push('');
-      const hand = table.lastHand.hands[this.currentProfile.userId] ?? [];
-      leftLines.push('{yellow-fg}Your hand{/}');
-      if (hand.length > 0) {
-        leftLines.push(...renderCardLines(pokerCardsToCards(hand), { layout: 'flat-condensed', size: 'mini' }));
-      } else {
-        leftLines.push('No hand on record.');
-      }
-      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
-      rightLines.push(`Pot: ${table.lastHand.pot}`);
-      rightLines.push(`Winners: ${winners || 'TBD'}`);
-    }
-
-    if (!showCards && table.lastHand) {
-      const winners = table.lastHand.winners.map((winner) => `${winner.username} (${winner.amount})`).join(', ');
       rightLines.push(`Last hand pot: ${table.lastHand.pot}`);
       rightLines.push(`Last winners: ${winners || 'TBD'}`);
     }
@@ -1278,6 +2130,11 @@ class CardLobbyApp {
       rightLines.push('');
       rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
     }
+
+    rightLines.push('');
+    rightLines.push('{yellow-fg}Actions{/}: J Join  O Observe');
+    rightLines.push('{yellow-fg}More{/}: C Create  R Refresh  F Filter');
+    rightLines.push('{gray-fg}Auto-deal starts when enough players are seated.{/}');
 
     let lines: string[] = [];
     if (leftLines.length === 0) {
@@ -1299,39 +2156,105 @@ class CardLobbyApp {
     this.screen.render();
   }
 
-  private updateTableActions(): void {
-    if (!this.currentProfile || !this.lobby) return;
-
-    const runAction = this.runAction.bind(this);
-    const manualRefresh = this.manualRefresh.bind(this);
-    const leaveCurrentTable = this.leaveCurrentTable.bind(this);
-    const dealHand = this.dealHand.bind(this);
-    const handleCall = this.handlePlayerAction.bind(this, 'call');
-    const handleBet = this.handlePlayerAction.bind(this, 'bet');
-    const handleFold = this.handlePlayerAction.bind(this, 'fold');
+  private getActionContext(): { table: LobbyTable | null; isObserver: boolean; canAct: boolean; toCall: number } {
+    if (!this.currentProfile || !this.lobby) {
+      return { table: null, isObserver: false, canAct: false, toCall: 0 };
+    }
 
     const table = this.currentProfile.currentTableId ? this.findTableById(this.currentProfile.currentTableId) : null;
-    const isObserver = table ? this.isObserverForTable(table, this.currentProfile.userId) : false;
-    const items: Record<string, { callback?: () => void; keys?: string[] }> = {
-      Refresh: { callback: () => runAction(manualRefresh), keys: ['r'] },
-    };
+    if (!table) {
+      return { table: null, isObserver: false, canAct: false, toCall: 0 };
+    }
 
-    if (table) {
-      if (isObserver) {
-        items.Leave = { callback: () => runAction(leaveCurrentTable), keys: ['l'] };
-      } else {
-        items.Deal = { callback: () => runAction(dealHand), keys: ['d'] };
-        items.Leave = { callback: () => runAction(leaveCurrentTable), keys: ['l'] };
+    const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
+    let toCall = 0;
+    const handState = this.loadTableHand(table);
+    let canAct = false;
+    if (handState) {
+      const actionSeat = handState.engine.state.actionTo;
+      if (actionSeat !== null && actionSeat !== undefined) {
+        const actor = handState.engine.state.players[actionSeat];
+        if (actor?.id === this.currentProfile.userId) {
+          const currentBet = getCurrentBet(handState.engine);
+          const playerBet = getPlayerBet(handState.engine, actionSeat);
+          toCall = Math.max(0, currentBet - playerBet);
+          canAct = !isObserver;
+        }
       }
     }
 
-    if (this.activeHand && table && this.activeHand.tableId === table.id) {
-      items.Call = { callback: () => runAction(handleCall), keys: ['c'] };
-      items.Bet = { callback: () => runAction(handleBet), keys: ['b'] };
-      items.Fold = { callback: () => runAction(handleFold), keys: ['f'] };
+    return { table, isObserver, canAct, toCall };
+  }
+
+  private triggerFold(): void {
+    if (this.modalActive) return;
+    const { canAct } = this.getActionContext();
+    if (!canAct) return;
+    this.runAction(() => this.handlePlayerAction('fold'));
+  }
+
+  private triggerCheck(): void {
+    if (this.modalActive) return;
+    if (this.currentProfile?.currentTableId && this.lobby) {
+      const table = this.findTableById(this.currentProfile.currentTableId);
+      const handState = table ? this.loadTableHand(table) : null;
+      if (!handState) {
+        this.runAction(() => this.dealHand());
+        return;
+      }
+    }
+    const { canAct, toCall } = this.getActionContext();
+    if (!canAct) return;
+    if (toCall > 0) {
+      this.pushNotice(`Cannot check. Call ${toCall} or fold.`);
+      return;
+    }
+    this.runAction(() => this.handlePlayerAction('call'));
+  }
+
+  private triggerCall(): void {
+    if (this.modalActive) return;
+    const { canAct } = this.getActionContext();
+    if (!canAct) return;
+    this.runAction(() => this.handlePlayerAction('call'));
+  }
+
+  private triggerRaise(): void {
+    if (this.modalActive) return;
+    const { canAct } = this.getActionContext();
+    if (!canAct) return;
+    this.runAction(() => this.handlePlayerAction('bet'));
+  }
+
+  private triggerQuit(): void {
+    if (this.modalActive) return;
+    this.exitDoor();
+  }
+
+  private updateTableActions(): void {
+    if (!this.currentProfile || !this.lobby) return;
+    if (this.viewMode !== 'table' || !this.currentProfile.currentTableId) {
+      this.tableActions.hide();
+      return;
     }
 
-    this.tableActions.setItems(items);
+    this.tableActions.show();
+
+    this.actionButtons.fold.setContent('FOLD');
+    const table = this.findTableById(this.currentProfile.currentTableId);
+    const handState = table ? this.loadTableHand(table) : null;
+    this.actionButtons.check.setContent(handState ? 'CHECK' : 'DEAL');
+    this.actionButtons.call.setContent('CALL');
+    this.actionButtons.raise.setContent('RAISE');
+    this.actionButtons.quit.setContent('QUIT');
+
+    this.applyActionButtonPalette('fold');
+    this.applyActionButtonPalette('check');
+    this.applyActionButtonPalette('call');
+    this.applyActionButtonPalette('raise');
+    this.applyActionButtonPalette('quit');
+
+    this.layoutActionButtons();
   }
 
   private focusLobby(): void {
@@ -1343,14 +2266,26 @@ class CardLobbyApp {
   private focusTable(): void {
     const wantsTable = Boolean(this.currentProfile?.currentTableId);
     this.applyViewMode(wantsTable ? 'table' : 'lobby');
-    this.tableContent.focus();
+    if (this.viewMode === 'table') {
+      this.playersContent.focus();
+    } else {
+      this.tableContent.focus();
+    }
     this.screen.render();
   }
 
   private cycleFocus(direction: 1 | -1): void {
     const focusOrder: Array<any> = this.viewMode === 'table'
-      ? [this.topBar, this.tableContent, this.tableActions]
-      : [this.topBar, this.lobbyList, this.lobbyActions, this.tableContent, this.tableActions];
+      ? [
+        this.playersContent,
+        this.activityContent,
+        this.actionButtons.fold,
+        this.actionButtons.check,
+        this.actionButtons.call,
+        this.actionButtons.raise,
+        this.actionButtons.quit,
+      ]
+      : [this.lobbyList, this.lobbyActions, this.tableContent];
     const current = this.screen.focused;
     const currentIndex = focusOrder.findIndex((item) => item === current);
     const nextIndex = currentIndex === -1
@@ -1373,21 +2308,30 @@ class CardLobbyApp {
     if (this.viewMode === mode) return;
     this.viewMode = mode;
 
-    const { width, leftWidth, rightWidth } = this.layout;
+    const { width, leftWidth, rightWidth, mainHeight, tableHeight } = this.layout;
 
     if (mode === 'table') {
       this.lobbyWindow.hide();
       this.tableWindow.show();
       this.tableWindow.options.left = 0;
       this.tableWindow.options.width = width;
+      this.tableWindow.options.height = tableHeight;
+      this.logWindow.hide();
+      this.topBar.hide();
+      this.topInfoBar.show();
     } else {
       this.lobbyWindow.show();
       this.lobbyWindow.options.width = leftWidth;
       this.tableWindow.show();
       this.tableWindow.options.left = leftWidth;
       this.tableWindow.options.width = rightWidth;
+      this.tableWindow.options.height = mainHeight;
+      this.logWindow.show();
+      this.topBar.hide();
+      this.topInfoBar.show();
     }
 
+    this.layoutTablePanels();
     this.screen.render();
   }
 
@@ -1530,6 +2474,7 @@ class CardLobbyApp {
 
     await this.persistState();
     this.selectedTableId = table.id;
+    this.applyViewMode('table');
     this.updateAllPanels();
   }
 
@@ -1570,6 +2515,7 @@ class CardLobbyApp {
     if (existingSeat) {
       this.currentProfile.currentTableId = table.id;
       this.currentProfile.status = 'table';
+      this.applyViewMode('table');
       this.updateAllPanels();
       return;
     }
@@ -1612,6 +2558,7 @@ class CardLobbyApp {
     this.pushEvent(`${this.currentProfile.username} joined table #${table.id}`);
 
     await this.persistState();
+    this.applyViewMode('table');
     this.updateAllPanels();
   }
 
@@ -1635,6 +2582,7 @@ class CardLobbyApp {
     if (seated) {
       this.currentProfile.currentTableId = table.id;
       this.currentProfile.status = 'table';
+      this.applyViewMode('table');
       this.updateAllPanels();
       return;
     }
@@ -1654,6 +2602,7 @@ class CardLobbyApp {
     this.pushEvent(`${this.currentProfile.username} is observing table #${table.id}`);
 
     await this.persistState();
+    this.applyViewMode('table');
     this.updateAllPanels();
   }
 
@@ -1680,16 +2629,17 @@ class CardLobbyApp {
     if (!table) {
       this.currentProfile.currentTableId = undefined;
       this.currentProfile.status = 'lobby';
+      this.applyViewMode('lobby');
       await this.persistState();
       this.updateAllPanels();
       return;
     }
 
-    if (this.activeHand && this.activeHand.tableId === tableId) {
-      this.activeHand = null;
-    }
-
     const playerIndex = table.players.findIndex((player) => player.userId === this.currentProfile?.userId && player.role === 'player');
+    if (playerIndex >= 0 && table.hand) {
+      this.pushNotice('Hand in progress. Wait for it to finish before leaving.');
+      return;
+    }
     if (playerIndex >= 0) {
       const player = table.players[playerIndex];
       const net = player.stack - player.buyIn;
@@ -1721,6 +2671,7 @@ class CardLobbyApp {
     }
 
     await this.persistState();
+    this.applyViewMode('lobby');
     this.updateAllPanels();
   }
 
@@ -1747,6 +2698,11 @@ class CardLobbyApp {
 
     if (table.gameId !== 'holdem') {
       this.pushNotice('Only Hold\'em is playable right now.');
+      return;
+    }
+
+    if (table.hand) {
+      this.pushNotice('Hand already in progress.');
       return;
     }
 
@@ -1797,7 +2753,11 @@ class CardLobbyApp {
     profile.stats.biggestPot = Math.max(profile.stats.biggestPot, pot);
   }
 
-  private async finalizeHoldemHand(table: LobbyTable, engine: PokerEngine, beforeStacks: Map<string, number>): Promise<void> {
+  private async finalizeHoldemHand(
+    table: LobbyTable,
+    engine: PokerEngine,
+    beforeStacks: Record<string, number>,
+  ): Promise<void> {
     if (!this.lobby || !this.currentProfile) return;
 
     const pot = engine.state.pots.reduce((sum, potItem) => sum + potItem.amount, 0);
@@ -1833,15 +2793,15 @@ class CardLobbyApp {
     });
 
     table.lastHand = lastHand;
-    table.status = 'in-progress';
-    table.updatedAt = Date.now();
+    this.clearTableHand(table);
+    this.updateTableStatus(table);
 
     table.players.forEach((player) => {
       if (player.role !== 'player' || isBotPlayer(player)) return;
       const profile = this.profiles[player.userId];
       if (!profile) return;
-      if (!beforeStacks.has(player.userId)) return;
-      const before = beforeStacks.get(player.userId) ?? player.stack;
+      if (beforeStacks[player.userId] === undefined) return;
+      const before = beforeStacks[player.userId] ?? player.stack;
       const delta = player.stack - before;
       this.updateStatsAfterHand(profile, delta, pot);
       profile.wallet.chips += ACTIVITY_REWARD;
@@ -1854,7 +2814,7 @@ class CardLobbyApp {
     });
 
     const currentDelta = (table.players.find((p) => p.userId === this.currentProfile?.userId)?.stack ?? 0) -
-      (beforeStacks.get(this.currentProfile.userId) ?? 0);
+      (beforeStacks[this.currentProfile.userId] ?? 0);
     if (currentDelta > 0) {
       this.pushNotice(`You won ${currentDelta} ${CHIP_NAME}.`);
       this.emitLiveChat(`BIG WIN: ${this.currentProfile.username} won ${currentDelta} in ${table.gameName} (#${table.id})`);
@@ -1877,7 +2837,7 @@ class CardLobbyApp {
         return;
       }
 
-      if (this.activeHand && this.activeHand.tableId === freshTable.id) {
+      if (freshTable.hand) {
         this.pushNotice('Hand already in progress.');
         return;
       }
@@ -1909,88 +2869,83 @@ class CardLobbyApp {
         return;
       }
 
-      const beforeStacks = new Map<string, number>();
+      const beforeStacks: Record<string, number> = {};
       seatedPlayers.forEach((player) => {
         if (!isBotPlayer(player)) {
-          beforeStacks.set(player.userId, player.stack);
+          beforeStacks[player.userId] = player.stack;
         }
       });
-
-      const userSeat = seatedPlayers.find((player) => player.userId === this.currentProfile?.userId)?.seat ?? 0;
-
-      this.activeHand = {
-        tableId: freshTable.id,
-        engine,
-        playerId: this.currentProfile.userId,
-        playerSeat: userSeat,
-        pendingAction: null,
-        minAmount: 0,
-        maxAmount: 0,
-        beforeStacks,
-      };
-
-      await this.advanceHoldemHand();
+      this.saveTableHand(freshTable, engine, beforeStacks, Date.now());
+      this.updateTableStatus(freshTable);
+      this.pushEvent(`Hand started at table #${freshTable.id} (${freshTable.gameName} ${freshTable.stakesLabel}).`);
+      await this.persistState();
+      await this.advanceHoldemHand(freshTable, engine, beforeStacks);
     } catch (error) {
       console.error('[CardLobby] Holdem hand setup failed:', error);
-      this.activeHand = null;
+      if (this.lobby) {
+        const freshTable = this.findTableById(table.id);
+        if (freshTable) {
+          this.clearTableHand(freshTable);
+          this.updateTableStatus(freshTable);
+          await this.persistState();
+        }
+      }
       this.pushNotice('Hand failed to start.');
     }
   }
 
-  private async advanceHoldemHand(): Promise<void> {
-    if (!this.lobby || !this.currentProfile || !this.activeHand) return;
+  private async advanceHoldemHand(
+    table: LobbyTable,
+    engineOverride?: PokerEngine,
+    beforeStacksOverride?: Record<string, number>,
+  ): Promise<void> {
+    if (!this.lobby || !this.currentProfile) return;
 
     try {
-      const table = this.findTableById(this.activeHand.tableId);
-      if (!table) {
-        this.activeHand = null;
-        return;
-      }
+      const handState = engineOverride
+        ? { engine: engineOverride, beforeStacks: beforeStacksOverride ?? table.hand?.beforeStacks ?? {} }
+        : this.loadTableHand(table);
+      if (!handState) return;
 
       let safety = 0;
-      while (this.activeHand && !this.activeHand.engine.state.winners && safety < 400) {
-        const state = this.activeHand.engine.state;
+      while (!handState.engine.state.winners && safety < 400) {
+        const state = handState.engine.state;
         const actionSeat = state.actionTo;
         if (actionSeat === null || actionSeat === undefined) break;
         const actor = state.players[actionSeat];
         if (!actor) break;
 
-        if (actor.id === this.activeHand.playerId) {
-          this.activeHand.pendingAction = null;
-          this.activeHand.minAmount = 0;
-          this.activeHand.maxAmount = 0;
+        if (!isBotId(actor.id)) {
+          this.saveTableHand(table, handState.engine, handState.beforeStacks);
+          await this.persistState();
           this.updateTablePanel();
           return;
         }
 
-        await this.performBotAction(table, actionSeat, actor.id);
+        await this.performBotAction(handState.engine, actionSeat, actor.id);
+        this.saveTableHand(table, handState.engine, handState.beforeStacks);
+        await this.persistState();
         safety += 1;
       }
 
-      if (!this.activeHand) return;
-
-      if (!this.activeHand.engine.state.winners) {
-        this.pushNotice('Hand stalled. Try again.');
-        this.activeHand = null;
+      if (!handState.engine.state.winners) {
+        this.saveTableHand(table, handState.engine, handState.beforeStacks);
+        await this.persistState();
         this.updateTablePanel();
         return;
       }
 
-      const { engine, beforeStacks } = this.activeHand;
-      this.activeHand = null;
-      await this.finalizeHoldemHand(table, engine, beforeStacks);
+      await this.finalizeHoldemHand(table, handState.engine, handState.beforeStacks);
       this.updateTablePanel();
+      void this.maybeAutoDeal(table);
     } catch (error) {
       console.error('[CardLobby] Holdem hand error:', error);
-      this.activeHand = null;
       this.pushNotice('Hand error. Returning to lobby.');
       this.updateTablePanel();
     }
   }
 
-  private async performBotAction(table: LobbyTable, seat: number, playerId: string): Promise<void> {
-    if (!this.activeHand) return;
-    const engine = this.activeHand.engine;
+  private async performBotAction(engine: PokerEngine, seat: number, playerId: string): Promise<void> {
     const actorSeat = engine.state.players[seat];
     if (!actorSeat) return;
 
@@ -2060,11 +3015,34 @@ class CardLobbyApp {
   }
 
   private async handlePlayerAction(action: 'call' | 'bet' | 'fold'): Promise<void> {
-    if (!this.activeHand || !this.currentProfile) return;
-    const engine = this.activeHand.engine;
-    const actionSeat = engine.state.actionTo ?? this.activeHand.playerSeat;
+    if (!this.currentProfile || !this.lobby) return;
+    const tableId = this.currentProfile.currentTableId;
+    if (!tableId) return;
+
+    await this.reloadState();
+    const table = this.findTableById(tableId);
+    if (!table || !table.hand) {
+      this.pushNotice('No active hand to act on.');
+      return;
+    }
+
+    const handState = this.loadTableHand(table);
+    if (!handState) {
+      this.pushNotice('Failed to load hand state.');
+      return;
+    }
+
+    const engine = handState.engine;
+    const actionSeat = engine.state.actionTo;
+    if (actionSeat === null || actionSeat === undefined) {
+      this.pushNotice('Waiting for the next action.');
+      return;
+    }
     const actor = engine.state.players[actionSeat];
-    if (!actor) return;
+    if (!actor || actor.id !== this.currentProfile.userId) {
+      this.pushNotice('Waiting for the next player to act.');
+      return;
+    }
 
     const currentBet = getCurrentBet(engine);
     const playerBet = getPlayerBet(engine, actionSeat);
@@ -2077,7 +3055,9 @@ class CardLobbyApp {
         this.pushNotice('Action rejected.');
         return;
       }
-      await this.advanceHoldemHand();
+      this.saveTableHand(table, engine, handState.beforeStacks);
+      await this.persistState();
+      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
       return;
     }
 
@@ -2088,7 +3068,9 @@ class CardLobbyApp {
         this.pushNotice('Action rejected.');
         return;
       }
-      await this.advanceHoldemHand();
+      this.saveTableHand(table, engine, handState.beforeStacks);
+      await this.persistState();
+      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
       return;
     }
 
@@ -2129,7 +3111,9 @@ class CardLobbyApp {
         return;
       }
 
-      await this.advanceHoldemHand();
+      this.saveTableHand(table, engine, handState.beforeStacks);
+      await this.persistState();
+      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
     }
   }
 
@@ -2477,7 +3461,7 @@ class CardLobbyApp {
   private startRefreshTimer(): void {
     if (this.refreshTimer) return;
     this.refreshTimer = setInterval(() => {
-      if (this.modalActive || this.activeHand) return;
+      if (this.modalActive) return;
       this.reloadState()
         .then(() => this.updateAllPanels())
         .catch(() => undefined);

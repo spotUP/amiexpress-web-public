@@ -14,6 +14,8 @@ export interface ListbarOptions extends ElementOptions {
   items?: Record<string, ListbarItem>;
   commands?: Record<string, ListbarItem | { callback?: () => void }>;
   autoCommandKeys?: boolean;
+  itemPadding?: number;
+  itemGap?: number;
 }
 
 export interface ListbarItem {
@@ -28,6 +30,9 @@ export class Listbar extends Box {
   private itemKeys: string[] = [];
   private inactiveStyle: Colors;
   private activeStyle: Colors;
+
+  private itemPadding: number;
+  private itemGap: number;
 
   constructor(options: ListbarOptions = {}) {
     const style = options.style || {};
@@ -62,6 +67,8 @@ export class Listbar extends Box {
 
     this.inactiveStyle = inactiveStyle;
     this.activeStyle = activeStyle;
+    this.itemPadding = Math.max(0, options.itemPadding ?? 1);
+    this.itemGap = Math.max(0, options.itemGap ?? 2);
 
     this.enableMouse();
     this.enableKeys();
@@ -107,13 +114,14 @@ export class Listbar extends Box {
 
     for (const [key, item] of Object.entries(items)) {
       const text = item.text || key;
-      const buttonText = ` ${text} `;
+      const pad = this.itemPadding;
+      const buttonText = pad > 0 ? `${' '.repeat(pad)}${text}${' '.repeat(pad)}` : text;
 
       const button = new Button({
         parent: this,
         top: 0,
         left: offset,
-        width: buttonText.length + 2,
+        width: buttonText.length,
         height: 1,
         content: buttonText,
         padding: 0,
@@ -147,7 +155,7 @@ export class Listbar extends Box {
       }
 
       this.items.set(key, { button, item });
-      offset += buttonText.length + 3;
+      offset += buttonText.length + this.itemGap;
     }
 
     // Focus first item

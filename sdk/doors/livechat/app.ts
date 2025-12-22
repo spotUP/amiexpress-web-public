@@ -63,6 +63,12 @@ export async function createApp(session: DoorSession) {
   // Initialize state
   const state = createInitialState();
   const registry = createCommandRegistry();
+  const initialRoomId = session.bbsSession?.currentRoomId as string | undefined;
+  const initialRoomName = session.bbsSession?.currentRoomName as string | undefined;
+  let currentRoomLabel = initialRoomName || '';
+  if (initialRoomId) {
+    state.currentChannel = initialRoomId;
+  }
 
   // Services
   const socketEmitter = new SocketEmitter(socket);
@@ -336,6 +342,14 @@ export async function createApp(session: DoorSession) {
   // Track channel data for selection handling
   let channelItems: Array<{ id: string; name: string }> = [];
 
+  function isCurrentChannel(targetId?: string, targetName?: string): boolean {
+    if (!state.currentChannel) return false;
+    if (targetId && state.currentChannel === targetId) return true;
+    if (targetName && state.currentChannel === targetName) return true;
+    if (targetName && currentRoomLabel && currentRoomLabel === targetName) return true;
+    return false;
+  }
+
   // Initialize channel list data
   function updateChannelList() {
     // Use state channels if available, otherwise show defaults
@@ -354,7 +368,7 @@ export async function createApp(session: DoorSession) {
     channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name }));
     const items = channelsToShow.map(ch => {
       const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
-      const isActive = ch.name === state.currentChannel;
+      const isActive = isCurrentChannel(ch.id, ch.name);
       const hasUnread = ch.unreadCount && ch.unreadCount > 0;
 
       let color: string;
@@ -390,18 +404,18 @@ export async function createApp(session: DoorSession) {
     if (index !== lastSelectedChannelIndex && index >= 0 && index < channelItems.length) {
       lastSelectedChannelIndex = index;
       const channel = channelItems[index];
-      if (channel && channel.name !== state.currentChannel) {
-        if (state.currentChannel) socket.emit('room:leave');
-        socket.emit('room:join', { roomName: channel.name });
-      }
+    if (channel && !isCurrentChannel(channel.id, channel.name)) {
+      if (state.currentChannel) socket.emit('room:leave');
+      socket.emit('room:join', { roomName: channel.name });
     }
+  }
   }
 
   // Handle channel selection with Enter (also focus input after)
   channelList.on('select', (_item: any, index: number) => {
     const channel = channelItems[index];
     if (channel) {
-      if (state.currentChannel !== channel.name) {
+      if (!isCurrentChannel(channel.id, channel.name)) {
         if (state.currentChannel) socket.emit('room:leave');
         socket.emit('room:join', { roomName: channel.name });
       }
@@ -540,14 +554,33 @@ export async function createApp(session: DoorSession) {
     tags: true,
   });
 
+  function getChannelDisplayName(channelId?: string): string {
+    if (!channelId) return '';
+    if (channelId === state.currentChannel && currentRoomLabel) {
+      return currentRoomLabel;
+    }
+    if (initialRoomId && channelId === initialRoomId && initialRoomName) {
+      return initialRoomName;
+    }
+    const match = state.channels.find(ch => ch.id === channelId || ch.name === channelId);
+    if (match) return match.name;
+    return channelId;
+  }
+
+  function updateChatHeader() {
+    const label = getChannelDisplayName(state.currentChannel) || 'Lobby';
+    chatLog.setLabel(` ${label} `);
+  }
+
   function updateStatusBar() {
-    const ch = state.currentChannel || 'none';
+    const ch = getChannelDisplayName(state.currentChannel) || 'none';
     const status = state.prefs.muteAllEvents ? 'MUTED' : 'LIVE';
     const presence = presenceService.get(userId);
     const myStatus = presence?.status || 'online';
     statusBar.setContent(
       ` @${username} | Node ${nodeId} | #${ch} | ${PRESENCE_INDICATORS[myStatus]} ${myStatus.toUpperCase()} | [${status}] | F1:Help `
     );
+    updateChatHeader();
   }
 
   // ========== FOCUS BORDERS ==========
@@ -650,6 +683,7 @@ export async function createApp(session: DoorSession) {
     border: { type: 'line' },
     shadow: true,
     hidden: true,
+    ch: ' ',
     style: {
       fg: 'white',
       bg: 'black',
@@ -696,16 +730,12 @@ export async function createApp(session: DoorSession) {
       addSystemMessage(`Joining private room #${pendingPrivateRoom}...`);
     }
     passwordInput.clearValue();
-    passwordOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(passwordOverlay);
   });
 
   passwordOverlay.key(['escape'], () => {
     passwordInput.clearValue();
-    passwordOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(passwordOverlay);
   });
 
   passwordInput.on('submit', () => {
@@ -979,17 +1009,24 @@ Features 25+ widget types including:
   });
 
   // ========== SETTINGS OVERLAY ==========
+  const settingsOverlayWidth = Math.min(72, Math.max(46, screen.width - 6));
+  const settingsOverlayHeight = Math.min(22, Math.max(18, screen.height - 4));
+  const settingsContentLeft = 2;
+  const settingsRowGap = 2;
+  let settingsRow = 2;
+
   const settingsOverlay = blessed.box({
     parent: screen,
     top: 'center',
     left: 'center',
-    width: '70%',
-    height: '70%',
+    width: settingsOverlayWidth,
+    height: settingsOverlayHeight,
     label: ' Settings ',
     border: { type: 'line' },
     shadow: true,
     hidden: true,
     mouse: true,
+    ch: ' ',
     style: {
       fg: 'white',
       bg: 'black',
@@ -1000,8 +1037,8 @@ Features 25+ widget types including:
   // Settings checkboxes
   const settingMuteEvents = blessed.checkbox({
     parent: settingsOverlay,
-    top: 2,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     text: 'Mute BBS Events',
     checked: state.prefs.muteAllEvents,
     mouse: true,
@@ -1009,11 +1046,12 @@ Features 25+ widget types including:
       fg: 'white',
     },
   });
+  settingsRow += settingsRowGap;
 
   const settingMuteSounds = blessed.checkbox({
     parent: settingsOverlay,
-    top: 4,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     text: 'Mute Sounds',
     checked: false,
     mouse: true,
@@ -1021,11 +1059,12 @@ Features 25+ widget types including:
       fg: 'white',
     },
   });
+  settingsRow += settingsRowGap;
 
   const settingShowTyping = blessed.checkbox({
     parent: settingsOverlay,
-    top: 6,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     text: 'Show Typing Indicators',
     checked: true,
     mouse: true,
@@ -1033,11 +1072,12 @@ Features 25+ widget types including:
       fg: 'white',
     },
   });
+  settingsRow += settingsRowGap;
 
   const settingTimestamps = blessed.checkbox({
     parent: settingsOverlay,
-    top: 8,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     text: 'Show Timestamps',
     checked: true,
     mouse: true,
@@ -1045,36 +1085,41 @@ Features 25+ widget types including:
       fg: 'white',
     },
   });
+  settingsRow += 2;
 
   // Line separator in settings
   const settingsSeparator = blessed.line({
     parent: settingsOverlay,
-    top: 10,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     width: '100%-6',
     orientation: 'horizontal',
     type: 'line',
     style: { fg: 'gray' },
   });
+  settingsRow += 1;
 
   // Presence status label
   const statusLabel = blessed.box({
     parent: settingsOverlay,
-    top: 11,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     width: 20,
     height: 1,
     content: 'My Status:',
     style: { fg: 'cyan' },
   });
+  settingsRow += 2;
+
+  const statusRadioHeight = Math.min(6, Math.max(4, settingsOverlayHeight - settingsRow - 4));
 
   // RadioSet for presence status selection
   const statusRadioSet = blessed.radioset({
     parent: settingsOverlay,
-    top: 13,
-    left: 2,
+    top: settingsRow,
+    left: settingsContentLeft,
     width: '100%-6',
-    height: 5,
+    height: statusRadioHeight,
     mouse: true,
     items: [
       { text: 'Online', value: 'online' },
@@ -1114,15 +1159,11 @@ Features 25+ widget types including:
   closeSettingsBtn.on('press', () => {
     // Apply settings
     state.prefs.muteAllEvents = settingMuteEvents.isChecked();
-    settingsOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(settingsOverlay);
   });
 
   settingsOverlay.key(['escape'], () => {
-    settingsOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(settingsOverlay);
   });
 
   // ========== USER PROFILE OVERLAY ==========
@@ -1137,6 +1178,7 @@ Features 25+ widget types including:
     shadow: true,
     hidden: true,
     mouse: true,
+    ch: ' ',
     style: {
       fg: 'white',
       bg: 'black',
@@ -1227,7 +1269,7 @@ Features 25+ widget types including:
     }
 
     if (!foundUser) {
-      messageDialog.display(`User ${targetUser} not found.`, () => {
+      showMessageDialog(`User ${targetUser} not found.`, () => {
         inputBox.focus();
         screen.render();
       });
@@ -1241,31 +1283,27 @@ Features 25+ widget types including:
     profileNameBox.setContent(`{bold}Name:{/bold} {${color}-fg}${targetUser}{/${color}-fg}`);
     profileNodeBox.setContent(`{bold}Node:{/bold} ${foundUser.nodeId || 'Unknown'}`);
     profileStatusBox.setContent(`{bold}Status:{/bold} ${statusIcon}`);
-    profileChannelBox.setContent(`{bold}In Channel:{/bold} ${state.currentChannel || 'Lobby'}`);
+    profileChannelBox.setContent(`{bold}In Channel:{/bold} ${getChannelDisplayName(state.currentChannel) || 'Lobby'}`);
 
     profileOverlay.setLabel(` ${targetUser}'s Profile `);
-    profileOverlay.show();
+    showModal(profileOverlay);
     profileSendDMBtn.focus();
     screen.render();
   }
 
   profileSendDMBtn.on('press', () => {
-    profileOverlay.hide();
+    hideModal(profileOverlay);
     if (profileTargetUser && profileTargetUser !== username) {
       showDMPrompt(profileTargetUser);
     }
   });
 
   profileCloseBtn.on('press', () => {
-    profileOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(profileOverlay);
   });
 
   profileOverlay.key(['escape'], () => {
-    profileOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(profileOverlay);
   });
 
   // ========== SEMI-TRANSPARENT MODAL OVERLAY ==========
@@ -1469,11 +1507,16 @@ Features 25+ widget types including:
 
     // Return to previous channel if it was set and is not a drawing channel
     if (previousChannel && !isDrawingChannel(previousChannel)) {
-      // Join the previous channel
-      socket.emit('room:join', { roomName: previousChannel });
+      const previousName = getChannelDisplayName(previousChannel);
+      socket.emit('room:leave');
+      if (previousName) {
+        socket.emit('room:join', { roomName: previousName });
+      }
       state.currentChannel = previousChannel;
+      currentRoomLabel = previousName || previousChannel;
       updateChannelList();
-      addSystemMessage(`Returned to #${previousChannel}`);
+      updateStatusBar();
+      addSystemMessage(`Returned to #${previousName || previousChannel}`);
     }
     previousChannel = null;
 
@@ -1492,6 +1535,7 @@ Features 25+ widget types including:
     shadow: true,
     hidden: true,
     mouse: true,
+    ch: ' ',
     style: {
       fg: 'white',
       bg: 'black',
@@ -1559,24 +1603,18 @@ Features 25+ widget types including:
         username,
       });
       addChatMessage(`{green-fg}[File shared: ${selectedFile}]{/green-fg}`);
-      fileSharingOverlay.hide();
-      inputBox.focus();
-      screen.render();
+      hideModal(fileSharingOverlay);
     } else {
       addSystemMessage('Select a file first');
     }
   });
 
   fileCloseBtn.on('press', () => {
-    fileSharingOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(fileSharingOverlay);
   });
 
   fileSharingOverlay.key(['escape'], () => {
-    fileSharingOverlay.hide();
-    inputBox.focus();
-    screen.render();
+    hideModal(fileSharingOverlay);
   });
 
   // Handle file refresh request
@@ -1600,7 +1638,7 @@ Features 25+ widget types including:
 
   function showFileSharing() {
     socket.emit('file:list', { path: '/uploads' });
-    fileSharingOverlay.show();
+    showModal(fileSharingOverlay);
     fileManager.focus();
     screen.render();
   }
@@ -1896,6 +1934,41 @@ Features 25+ widget types including:
   }
 
   // ========== DIALOG FUNCTIONS ==========
+  function showMessageDialog(text: string, callback?: () => void) {
+    modalOverlay.show();
+    messageDialog.once('hide', () => {
+      modalOverlay.hide();
+      inputBox.focus();
+      screen.render();
+    });
+    messageDialog.display(text, () => {
+      if (callback) callback();
+    });
+  }
+
+  function showPromptDialog(text: string, value: string, callback: (err: Error | null, value?: string) => void) {
+    modalOverlay.show();
+    promptDialog.once('hide', () => {
+      modalOverlay.hide();
+      inputBox.focus();
+      screen.render();
+    });
+    promptDialog.showInput(text, value, (err, inputValue) => {
+      callback(err, inputValue);
+    });
+  }
+
+  function showConfirmDialog(text: string, callback: (answer: boolean) => void) {
+    modalOverlay.show();
+    questionDialog.once('hide', () => {
+      modalOverlay.hide();
+      inputBox.focus();
+      screen.render();
+    });
+    questionDialog.ask(text, (answer: boolean) => {
+      callback(answer);
+    });
+  }
 
   function showHelpDialog() {
     // Show the comprehensive help overlay
@@ -1906,9 +1979,7 @@ Features 25+ widget types including:
   }
 
   function showSettingsOverlay() {
-    settingsOverlay.show();
-    settingsOverlay.focus();
-    screen.render();
+    showModal(settingsOverlay);
   }
 
   function showNewMessagePrompt() {
@@ -1917,9 +1988,15 @@ Features 25+ widget types including:
   }
 
   function showRoomMenu() {
-    promptDialog.showInput('Enter room name to join:', '', (err, value) => {
+    showPromptDialog('Enter room name to join:', '', (err, value) => {
       if (!err && value) {
         const roomName = value.replace(/^#/, '');
+        if (isCurrentChannel(undefined, roomName)) {
+          addSystemMessage(`Already in #${roomName}`);
+          inputBox.focus();
+          screen.render();
+          return;
+        }
         if (state.currentChannel) socket.emit('room:leave');
         socket.emit('room:join', { roomName });
         addSystemMessage(`Joining #${roomName}...`);
@@ -1933,14 +2010,14 @@ Features 25+ widget types including:
     const users = Array.from(onlineUsers.values())
       .map(u => `${PRESENCE_INDICATORS[u.status]} ${u.username}`)
       .join('\n');
-    messageDialog.display(
+    showMessageDialog(
       '{bold}Users Online{/bold}\n\n' + users,
       () => { inputBox.focus(); }
     );
   }
 
   function showDMPrompt(targetUser: string) {
-    promptDialog.showInput(`Message to @${targetUser}:`, '', (err, value) => {
+    showPromptDialog(`Message to @${targetUser}:`, '', (err, value) => {
       if (!err && value) {
         socket.emit('chat:dm', { to: targetUser, message: value });
         addChatMessage(`{magenta-fg}[DM to ${targetUser}]: ${value}{/magenta-fg}`);
@@ -1960,9 +2037,7 @@ Features 25+ widget types including:
 
   // Confirmation dialog (using Question widget)
   function showConfirm(text: string, callback: (confirmed: boolean) => void) {
-    questionDialog.ask(text, (answer: boolean) => {
-      inputBox.focus();
-      screen.render();
+    showConfirmDialog(text, (answer: boolean) => {
       callback(answer);
     });
   }
@@ -1988,7 +2063,7 @@ Features 25+ widget types including:
 
   // Drawing channel menu - create or join a drawing channel
   function showDrawMenu() {
-    promptDialog.showInput('Create/join drawing channel (name without art: prefix):', 'whiteboard', (err, value) => {
+    showPromptDialog('Create/join drawing channel (name without art: prefix):', 'whiteboard', (err, value) => {
       if (!err && value && value.trim()) {
         // Normalize channel name - remove art: prefix if user typed it
         let channelName = value.trim().replace(/^art:/i, '');
@@ -2001,6 +2076,7 @@ Features 25+ widget types including:
         // Join the drawing channel room
         socket.emit('room:join', { room: fullName });
         state.currentChannel = fullName;
+        currentRoomLabel = fullName;
         updateStatusBar();
 
         // Enter drawing mode for this channel
@@ -2015,7 +2091,7 @@ Features 25+ widget types including:
   function joinPrivateRoom(roomName: string) {
     pendingPrivateRoom = roomName;
     passwordOverlay.setLabel(` Password for #${roomName} `);
-    passwordOverlay.show();
+    showModal(passwordOverlay);
     passwordInput.focus();
     screen.render();
   }
@@ -2039,6 +2115,7 @@ Features 25+ widget types including:
         unreadCount: 0,
       }));
       updateChannelList();
+      updateStatusBar();
       addSystemMessage(`Found ${rooms.length} room${rooms.length === 1 ? '' : 's'}`);
 
       // Auto-join default room if not already in one
@@ -2066,6 +2143,7 @@ Features 25+ widget types including:
     console.log('[LiveChat DEBUG] room:joined received:', JSON.stringify(data));
     // Use setChannel to properly clear messages and typing when switching
     setChannel(state, data.roomId || data.roomName);
+    currentRoomLabel = data.roomName || currentRoomLabel;
 
     if (data.members && Array.isArray(data.members)) {
       onlineUsers.clear();
@@ -2081,9 +2159,6 @@ Features 25+ widget types including:
       }
     }
 
-    console.log('[LiveChat DEBUG] Setting chatLog label to:', data.roomName);
-    chatLog.setLabel(` ${data.roomName} `);
-    console.log('[LiveChat DEBUG] chatLog label is now:', chatLog.options.label);
     updateChannelList();
     updateUserTable();
     updateStatusBar();
@@ -2095,7 +2170,7 @@ Features 25+ widget types including:
   // Room left
   socket.on('room:left', (data: any) => {
     setChannel(state, '');
-    chatLog.setLabel(' Chat ');
+    currentRoomLabel = '';
     updateChannelList();
     updateStatusBar();
     addSystemMessage(`Left ${data.roomName}`);
@@ -2154,11 +2229,12 @@ Features 25+ widget types including:
 
   // Kicked from room
   socket.on('room:kicked', (data: any) => {
-    messageDialog.display(
+    showMessageDialog(
       `{red-fg}You were kicked from ${data.roomName}{/red-fg}\n\nReason: ${data.reason || 'No reason given'}\nBy: ${data.kickedBy}`,
       () => { inputBox.focus(); }
     );
     state.currentChannel = '';
+    currentRoomLabel = '';
     updateStatusBar();
     audio.onError();
   });
@@ -2166,7 +2242,7 @@ Features 25+ widget types including:
   // Room error (show in dialog instead of inline)
   socket.on('room:error', (data: any) => {
     const errorMessage = typeof data === 'string' ? data : (data.error || data.message || 'An error occurred');
-    messageDialog.display(
+    showMessageDialog(
       `{red-fg}Error{/red-fg}\n\n${errorMessage}`,
       () => { inputBox.focus(); screen.render(); }
     );
@@ -2407,6 +2483,7 @@ Features 25+ widget types including:
           drawingChannels.add(fullName);
           socket.emit('room:join', { room: fullName });
           state.currentChannel = fullName;
+          currentRoomLabel = fullName;
           updateStatusBar();
           enterDrawingMode(fullName);
           addSystemMessage(`Joined drawing channel #${fullName}`);

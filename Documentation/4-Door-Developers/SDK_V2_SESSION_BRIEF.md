@@ -41,6 +41,29 @@ Quick, high-signal notes to ramp into SDK v2.0 work without re-reading all docs.
 
 - TypeScript door layout: `doors/<name>/index.ts`, `package.json`, `tsconfig.json`, build to `dist/index.js`.
 - Command registration: `.info` file in `Commands/BBSCmd/` with `TYPE=TS` and `LOCATION` pointing to the built door.
+
+**Important:** `.info` files are mandatory for TypeScript doors; the BBS only registers doors by scanning BBSCMD at startup.
+
+### Release Packaging
+
+```bash
+# From your door repo root (must include Commands/BBSCmd/<DOOR>.info)
+npm run pack
+```
+
+The release archive is minimal and SDK-free:
+
+```
+Commands/BBSCmd/<DOOR>.info
+Doors/<door>/
+  package.json
+  package-lock.json
+  dist/
+  assets/ (optional)
+  data/ (optional)
+  config.json (optional)
+  *.ts/*.js runtime files
+```
 - 68K doors use `TYPE=XIM` and point `LOCATION` to the compiled binary.
 
 ## Engines (TypeScript)

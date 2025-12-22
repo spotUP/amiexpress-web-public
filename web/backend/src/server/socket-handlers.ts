@@ -325,6 +325,16 @@ function registerCommandHandler(socket: Socket) {
     }
   });
 
+  // Handle mouse wheel scrolling
+  socket.on('mouse-wheel', (data: { x: number; y: number; deltaY: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
+      session.doorInputHandler(JSON.stringify({ type: 'mouse-wheel', ...data }));
+    }
+  });
+
   // Handle simultaneous key state updates (for games/doors that need multiple keys pressed at once)
   socket.on('keys:state', (data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => {
     const session = getSession(socket.id);
@@ -503,10 +513,14 @@ function registerCommandHandler(socket: Socket) {
     console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
     // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
-    if (data.startsWith('\x1b[') && data.length >= 2) {
-      handleCommand(socket, session, data);
+    let input = data;
+    if (input.startsWith('\x1bO') && input.length >= 3) {
+      input = `\x1b[${input.slice(2)}`;
+    }
+    if (input.startsWith('\x1b[') && input.length >= 2) {
+      handleCommand(socket, session, input);
     } else {
-      for (const char of data) {
+      for (const char of input) {
         handleCommand(socket, session, char);
       }
     }

@@ -37,6 +37,7 @@ export type Suit = SuitSymbol | SuitAscii;
 export interface Card {
   rank: Rank;
   suit: Suit;
+  face?: CardFace;
 }
 
 export type CardStyle = "unicode" | "ascii";
@@ -910,7 +911,7 @@ const renderUnoFaceLines = (card: UnoCard, style: CardStyle, size: CardSize): st
 export function renderCardLines(card: Card, options?: RenderOptions): string[] {
   const style = options?.style ?? DEFAULT_STYLE;
   const size = options?.size ?? DEFAULT_SIZE;
-  const face = options?.face ?? DEFAULT_FACE;
+  const face = card.face ?? options?.face ?? DEFAULT_FACE;
   const backStyle = options?.backStyle ?? DEFAULT_BACK_STYLE;
   const color = options?.color ?? DEFAULT_COLOR;
   const customBackLines = options?.customBackLines;

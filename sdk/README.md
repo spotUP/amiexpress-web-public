@@ -115,6 +115,31 @@ door.onClose(async (ctx: DoorContext) => {
 export default door;
 ```
 
+**Important:** TypeScript doors are registered by scanning `.info` files in `Commands/BBSCmd/` at BBS startup. Doors without a `.info` file will not be available.
+
+## Release Packaging (Required)
+
+Use the SDK packer to create self-contained, minimal archives (no SDK bundled):
+
+```bash
+# From your door repo root (must include Commands/BBSCmd/<DOOR>.info)
+npm run pack
+```
+
+Release archives include only:
+
+```
+Commands/BBSCmd/<DOOR>.info
+Doors/<door>/
+  package.json
+  package-lock.json
+  dist/
+  assets/ (optional)
+  data/ (optional)
+  config.json (optional)
+  *.ts/*.js runtime files
+```
+
 **Key Concepts:**
 - **`ctx.close()`** - Immediately exits the door and returns to BBS
 - **`onClose`** - Runs cleanup before exit (always called)

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -30,6 +30,8 @@ export function DoorsPage() {
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
   const [sortColumn, setSortColumn] = useState<keyof Door>('door_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isUploading, setIsUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<DoorFormData>({
     door_name: '',
     door_command: '',
@@ -147,6 +149,37 @@ export function DoorsPage() {
     }
   };
 
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const uploadResult = await apiClient.uploadDoorArchive(file);
+      const archivePath = uploadResult.data?.path;
+      const filename = uploadResult.data?.filename || uploadResult.data?.originalname;
+
+      const installResult = await apiClient.installDoorArchive({
+        path: archivePath,
+        filename,
+      });
+
+      showSuccess(installResult.message || 'Door archive installed successfully');
+      queryClient.invalidateQueries({ queryKey: ['doors'] });
+    } catch (error) {
+      showError(`Door upload failed: ${(error as Error).message}`);
+    } finally {
+      setIsUploading(false);
+      if (uploadInputRef.current) {
+        uploadInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleEditInfo = async (door: Door) => {
     try {
       // Load the door's .info file from Commands/BBSCmd/{command}.info
@@ -240,10 +273,27 @@ export function DoorsPage() {
           <h1 className="text-3xl font-bold text-bbs-accent mb-2">Doors Configuration</h1>
           <p className="text-bbs-muted">Manage BBS doors and external programs</p>
         </div>
-        <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
-          <Plus size={20} />
-          <span>Add Door</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".zip,.lha,.lzh,.lzx"
+            className="hidden"
+            onChange={handleUploadChange}
+          />
+          <button
+            onClick={handleUploadClick}
+            className="btn-secondary flex items-center space-x-2"
+            disabled={isUploading}
+          >
+            <Upload size={20} />
+            <span>{isUploading ? 'Uploading...' : 'Upload Door'}</span>
+          </button>
+          <button onClick={handleAdd} className="btn-primary flex items-center space-x-2">
+            <Plus size={20} />
+            <span>Add Door</span>
+          </button>
+        </div>
       </div>
 
       <div className="card overflow-x-auto">

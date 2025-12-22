@@ -1468,10 +1468,10 @@ export class Element extends EventEmitter {
         vertical: ' ',
       },
       ascii: {
-        topLeft: '+',
-        topRight: '+',
-        bottomLeft: '+',
-        bottomRight: '+',
+        topLeft: '.',
+        topRight: '.',
+        bottomLeft: '`',
+        bottomRight: '\'',
         horizontal: '-',
         vertical: '|',
       },
@@ -1615,7 +1615,8 @@ export class Element extends EventEmitter {
     const pos = this._getCoords();
     if (!pos) return;
 
-    const scrollbarStyle = (this.options.scrollbar as any)?.style || this.options.style;
+    const scrollbarOptions = this.options.scrollbar as any;
+    const scrollbarStyle = scrollbarOptions?.style || this.options.style;
     const attr = this.sattr(scrollbarStyle);
 
     const border = this.hasBorder() ? 1 : 0;
@@ -1629,8 +1630,12 @@ export class Element extends EventEmitter {
     const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
     const scrollbarY = Math.floor((this.childBase / contentHeight) * viewHeight);
 
-    const trackChar = (this.options.scrollbar as any)?.track || '│';
-    const thumbChar = (this.options.scrollbar as any)?.thumb || '█';
+    const trackChar = typeof scrollbarOptions?.track === 'string'
+      ? scrollbarOptions.track
+      : scrollbarOptions?.track?.ch || '│';
+    const thumbChar = typeof scrollbarOptions?.thumb === 'string'
+      ? scrollbarOptions.thumb
+      : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || '█';
 
     // Render scrollbar track
     for (let y = pos.yi + border; y < pos.yl - border; y++) {

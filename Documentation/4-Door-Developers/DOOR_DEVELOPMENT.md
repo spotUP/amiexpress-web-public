@@ -45,6 +45,11 @@ TypeScript doors are the recommended approach for new development:
 - Easy debugging and hot-reload
 - Access to npm packages
 
+**Required:** TypeScript doors must include a `.info` file in `Commands/BBSCmd/`. The BBS registers doors at startup by scanning BBSCMD entries.
+
+**Release packaging:** Use `npm run pack` from your door repo root. The packer creates a minimal archive with
+`Commands/BBSCmd/` + `Doors/<door>/` (no SDK bundled).
+
 ## 68K Amiga Doors (Legacy)
 
 **[68K_DOOR_DEVELOPMENT.md](68K_DOOR_DEVELOPMENT.md)** - Guide for legacy Amiga binary doors

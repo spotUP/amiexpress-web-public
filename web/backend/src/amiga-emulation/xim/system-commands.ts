@@ -55,34 +55,20 @@ export class XIMSystemCommandsHandler {
   handleRegister(msg: XIMMessage): void {
     console.log('[XIMSystem] Door registering with BBS');
 
-    // Seed msg->String with DoorReplyPort<n> like the Amiga reference log
-    const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
     const regNodeId =
       (this.bbsSession?.nodeId as number) ||
       (this.bbsSession as any)?.nodeNumber ||
       1;
-    const seedString = `DoorReplyPort${regNodeId}`;
-    this.messageParser.writeMessageString(msg.msgAddr, seedString);
-    this.messageParser.writeStringPointer(msg.msgAddr, strPtr);
-    this.messageParser.writeFiller1(msg.msgAddr, strPtr);
-    this.messageParser.writeFiller2(msg.msgAddr, strPtr);
-    // express.e: msg.command := userLineLen (screen height)
     const rawLineLen =
       this.bbsSession?.user?.lineLength ??
       this.bbsSession?.pauseLines ??
-      this.bbsSession?.lineWrap;
+      (this.bbsSession as any)?.lineWrap ??
+      (this.state as any)?.pauseLines;
     const lineLen =
       typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
-    const dataOut =
-      typeof msg.data === 'number' && !Number.isNaN(msg.data)
-        ? msg.data
-        : undefined;
-    const nodeId = regNodeId;
-    if (dataOut !== undefined) {
-      this.messageParser.writeData(msg.msgAddr, dataOut);
-    }
-    this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? nodeId);
+    this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? regNodeId);
     this.messageParser.writeLineNumber(msg.msgAddr, 0);
     // Ensure length is sane; otherwise echo the message back untouched.
     const parsed = this.messageParser.parseMessage(msg.msgAddr);
@@ -96,7 +82,7 @@ export class XIMSystemCommandsHandler {
       )} str="${parsedFinal.string}"`
     );
     console.log(
-      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${nodeId} data=${parsedFinal.data} lineLen=${lineLen}`
+      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${regNodeId} cmd(lineLen)=${lineLen} data=${parsedFinal.data}`
     );
 
     this.state.registered = true;
