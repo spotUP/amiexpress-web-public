@@ -632,11 +632,14 @@ export class ExecLibrary {
       if (romLibrary) {
         return { success: true, address: romLibrary, isNative: true };
       }
+      // NOTE: If hasPendingTrapJump(), the trap is scheduled but we continue to try
+      // disk/stub libraries. The trap will execute later. We do NOT return address 0
+      // here because that breaks doors expecting a valid library base immediately.
       if (this.hasPendingTrapJump()) {
         console.log(
-          `[ExecLibrary] Awaiting InitResident trap for ${name} (non-AUTOINIT resident)`
+          `[ExecLibrary] InitResident trap scheduled for ${name}, continuing with disk/stub loading`
         );
-        return { success: true, address: 0, isNative: true };
+        // Fall through to try disk libraries or stubs
       }
     }
 
