@@ -89,6 +89,9 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
   // Like AmiExpress: Check cmdShortcuts to determine input mode (express.e:28598-28603)
   // After prompt, choose input mode based on MENU.keys
   session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
+
+  session.skipNextDisplayFlowMenuState = session.subState;
+  session.manualMenuDisplayTimestamp = Date.now();
 }
 
 /**

@@ -258,6 +258,7 @@ const displayFlowLog = (...args: any[]) => {
     console.log('[DISPLAY FLOW]', ...args);
   }
 };
+const MENU_DISPLAY_FLOW_SKIP_WINDOW_MS = 1000;
 
 function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
@@ -521,6 +522,23 @@ async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<voi
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
+        if (typeof session.skipNextDisplayFlowMenuState !== 'undefined') {
+          const menuDisplayedRecently =
+            typeof session.manualMenuDisplayTimestamp === 'number' &&
+            Date.now() - session.manualMenuDisplayTimestamp < MENU_DISPLAY_FLOW_SKIP_WINDOW_MS;
+          if (menuDisplayedRecently) {
+            displayFlowLog(
+              'skipping duplicate MENU display after manual render',
+              `dest=${session.skipNextDisplayFlowMenuState}`
+            );
+            session.subState = session.skipNextDisplayFlowMenuState;
+            session.skipNextDisplayFlowMenuState = undefined;
+            session.manualMenuDisplayTimestamp = undefined;
+            return;
+          }
+          session.skipNextDisplayFlowMenuState = undefined;
+          session.manualMenuDisplayTimestamp = undefined;
+        }
         const relConfNumber = session.relConfNum || 1;
         const forceMenus = getConferenceToolFlags(relConfNumber).forceMenus;
         const shouldDisplayMenu = ((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus;
