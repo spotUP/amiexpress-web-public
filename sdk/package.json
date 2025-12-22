@@ -23,15 +23,21 @@
     },
     "./client": {
       "types": "./dist/client/index.d.ts",
-      "default": "./dist/client/index.js"
+      "import": "./dist-esm/client/index.js",
+      "require": "./dist/client/index.js",
+      "default": "./dist-esm/client/index.js"
     },
     "./common": {
       "types": "./dist/common/index.d.ts",
-      "default": "./dist/common/index.js"
+      "import": "./dist-esm/common/index.js",
+      "require": "./dist/common/index.js",
+      "default": "./dist-esm/common/index.js"
     },
     "./core": {
       "types": "./dist/core/index.d.ts",
-      "default": "./dist/core/index.js"
+      "import": "./dist-esm/core/index.js",
+      "require": "./dist/core/index.js",
+      "default": "./dist-esm/core/index.js"
     },
     "./core/types": {
       "types": "./dist/core/types.d.ts",
@@ -55,7 +61,9 @@
     }
   },
   "scripts": {
-    "build": "tsc && npm run copy-assets",
+    "build": "npm run build:cjs && npm run build:esm && npm run copy-assets",
+    "build:cjs": "tsc",
+    "build:esm": "tsc -p tsconfig.client.json",
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true && cp engines/ui/neo-blessed.d.ts dist/engines/ui/ 2>/dev/null || true",
     "dev": "tsc --watch",
     "start": "bash -c 'if ! lsof -ti:3001 > /dev/null 2>&1; then echo \"Starting BBS servers...\"; cd .. && ./dev/scripts/start-servers.sh > /dev/null 2>&1 & sleep 5; fi && cd tools/preview && lsof -ti:8080 | xargs kill -9 2>/dev/null || true && sleep 1 && node server.js'",

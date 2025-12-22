@@ -6,13 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      '@amiexpress/bbs-door-sdk/client': path.resolve(__dirname, '../../sdk/dist/client/index.js'),
-      '@amiexpress/bbs-door-sdk/common': path.resolve(__dirname, '../../sdk/dist/common/index.js'),
-      '@amiexpress/bbs-door-sdk/core': path.resolve(__dirname, '../../sdk/dist/core/index.js'),
-      '@amiexpress/bbs-door-sdk/engines': path.resolve(__dirname, '../../sdk/dist/engines/index.js'),
-      '@amiexpress/bbs-door-sdk/components': path.resolve(__dirname, '../../sdk/dist/components/index.js'),
-    },
+    // No aliases - let Vite resolve SDK through node_modules for proper CJS->ESM transformation
     extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
   },
   server: {
@@ -37,12 +31,16 @@ export default defineConfig({
     include: [
       'zmodem.js/dist/zmodem',
       '@amiexpress/bbs-door-sdk/client',
+      '@amiexpress/bbs-door-sdk/common',
+      '@amiexpress/bbs-door-sdk/core',
       'react-router-dom',
       'react-router',
       '@xterm/xterm',
       '@xterm/addon-canvas',
       'socket.io-client'
-    ]
+    ],
+    // Force SDK to be pre-bundled even though it's a linked package
+    force: true
   },
   build: {
     commonjsOptions: {

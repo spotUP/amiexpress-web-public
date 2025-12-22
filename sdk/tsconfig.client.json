@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "outDir": "./dist-esm",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "client/**/*",
+    "common/**/*",
+    "core/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-esm",
+    "**/*.spec.ts",
+    "**/__tests__"
+  ]
+}
