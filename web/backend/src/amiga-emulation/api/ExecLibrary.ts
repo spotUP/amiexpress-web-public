@@ -893,8 +893,10 @@ export class ExecLibrary {
     minVersion: number,
     allowTrapJump: boolean
   ): number | null {
+    console.log(`[ExecLibrary] Looking for ROM resident: ${name}`);
     const residentAddr = this.findRomResidentByName(name);
     if (!residentAddr) {
+      console.log(`[ExecLibrary]   ROM resident ${name} not found in ROM`);
       return null;
     }
     const version = this.emulator.readMemory(residentAddr + 11);
@@ -924,6 +926,7 @@ export class ExecLibrary {
   }
 
   private scanRomResidents(): Map<string, number> {
+    console.log(`[ExecLibrary] Scanning ROM for resident modules (0x${ExecLibrary.ROM_START.toString(16)} - 0x${ExecLibrary.ROM_END.toString(16)})...`);
     const map = new Map<string, number>();
     const start = ExecLibrary.ROM_START;
     const end = ExecLibrary.ROM_END;
@@ -939,6 +942,7 @@ export class ExecLibrary {
       if (namePtr) {
         const name = this.emulator.readString(namePtr, 128);
         if (name) {
+          console.log(`[ExecLibrary]   Found ROM resident: ${name} at 0x${addr.toString(16)}`);
           map.set(name.toLowerCase(), addr);
         }
       }
@@ -948,8 +952,11 @@ export class ExecLibrary {
       }
     }
     console.log(
-      `[ExecLibrary] ROM resident scan complete: ${map.size} modules`
+      `[ExecLibrary] ROM resident scan complete: ${map.size} modules found`
     );
+    if (map.size > 0) {
+      console.log(`[ExecLibrary] ROM modules: ${Array.from(map.keys()).join(', ')}`);
+    }
     return map;
   }
 

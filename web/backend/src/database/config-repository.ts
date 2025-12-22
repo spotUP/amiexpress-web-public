@@ -96,7 +96,8 @@ export class ConfigRepository extends BaseRepository<any> {
         ?, ?,
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?,
+        ?, ?, ?, ?, ?, ?
       )
     `);
 
@@ -117,9 +118,9 @@ export class ConfigRepository extends BaseRepository<any> {
       config.default_time_limit ?? -1,
       config.max_session_time ?? -1,
       config.idle_timeout || 10,
-      config.new_user_sec_level ?? 30,
-      config.new_user_time_limit ?? -1,
-      config.new_user_chat_limit ?? -1,
+      config.new_user_sec_level ?? 10,
+      config.new_user_time_limit ?? 60,
+      config.new_user_chat_limit ?? 30,
       config.new_user_lines_per_screen || 23,
       config.new_user_expert ? 1 : 0,
       config.new_user_ansi !== false ? 1 : 0,
