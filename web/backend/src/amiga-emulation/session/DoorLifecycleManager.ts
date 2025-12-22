@@ -528,6 +528,11 @@ export class DoorLifecycleManager {
       return false;
     }
 
+    if (this.libraryTraps?.isTrapAddress(pc)) {
+      // Allow transitions through AEDoor/Exec trap stubs used for GetMsg/PutMsg
+      return false;
+    }
+
     // Compute code bounds once from the seglist header so we can spot runaway PCs
     if (this.codeLowerBound === 0 || this.codeUpperBound === 0) {
       try {
