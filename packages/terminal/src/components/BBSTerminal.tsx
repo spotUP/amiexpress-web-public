@@ -617,7 +617,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
 
         const key = ev.key;
-        console.log(`[GameKeyDown] key=${key}, already pressed=${!!keyState.current[key]}, gameMode=${gameMode.current}`);
         // Only send if key wasn't already pressed (prevents duplicate downs)
         if (!keyState.current[key]) {
           keyState.current[key] = true;
@@ -1254,10 +1253,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Game mode: bypass OS key repeat for real-time game controls
     socket.on('game-mode', (enabled: boolean) => {
-      console.log(`[GameMode] RECEIVED: ${enabled ? 'ENABLED' : 'DISABLED'} - raw keydown/keyup events`);
-      console.log(`[GameMode] Before: gameMode.current = ${gameMode.current}`);
       gameMode.current = enabled;
-      console.log(`[GameMode] After: gameMode.current = ${gameMode.current}`);
       // Clear key states and repeat timers when switching modes
       keyState.current = {};
       // Stop all key repeat timers
@@ -1631,22 +1627,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   };
 
   const handleWheel = (event: React.WheelEvent) => {
-    console.log(`[Wheel] event received, doorActive=${doorActive.current}, gameMode=${gameMode.current}`);
     if (!doorActive.current && !gameMode.current) return;
 
     const socket = socketRef.current;
-    if (!socket?.connected) {
-      console.log('[Wheel] socket not connected');
-      return;
-    }
+    if (!socket?.connected) return;
 
     const coords = getTerminalCoordsFromPoint(event.clientX, event.clientY);
-    if (!coords) {
-      console.log('[Wheel] no coords');
-      return;
-    }
+    if (!coords) return;
 
-    console.log(`[Wheel] emitting mouse-wheel: x=${coords.x}, y=${coords.y}, deltaY=${event.deltaY}`);
     event.preventDefault();
     socket.emit('mouse-wheel', {
       x: coords.x,
