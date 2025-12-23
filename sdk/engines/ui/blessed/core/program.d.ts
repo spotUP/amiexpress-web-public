@@ -280,4 +280,3 @@ export declare class Program extends EventEmitter {
      */
     destroy(): void;
 }
-//# sourceMappingURL=program.d.ts.map

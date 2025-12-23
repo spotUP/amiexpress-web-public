@@ -1,9 +1,12 @@
+"use strict";
 /**
  * Image - Browser-compatible image display widget
  * Note: Uses data URLs or external image sources
  */
-import { Box } from './box';
-export class Image extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Image = void 0;
+const box_1 = require("./box");
+class Image extends box_1.Box {
     constructor(options = {}) {
         const { src, file, type, scale, autoPlay, ...boxOptions } = options;
         super({
@@ -122,3 +125,4 @@ export class Image extends Box {
         };
     }
 }
+exports.Image = Image;

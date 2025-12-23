@@ -290,4 +290,3 @@ export declare class Screen extends Element {
      */
     _handleData(data: string): void;
 }
-//# sourceMappingURL=screen.d.ts.map

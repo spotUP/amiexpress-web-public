@@ -10,6 +10,7 @@ export interface Colors {
     blink?: Color | boolean;
     inverse?: Color | boolean;
     invisible?: Color | boolean;
+    transparent?: boolean;
 }
 export interface Border {
     type?: 'line' | 'bg' | 'none' | 'heavy' | 'double' | 'round' | 'ascii';
@@ -41,6 +42,7 @@ export interface ElementOptions {
     bottom?: TPosition;
     width?: TPosition;
     height?: TPosition;
+    fixed?: boolean;
     align?: 'left' | 'center' | 'right';
     valign?: 'top' | 'middle' | 'bottom';
     style?: Colors & {
@@ -60,6 +62,8 @@ export interface ElementOptions {
     focusable?: boolean;
     clickable?: boolean;
     keyable?: boolean;
+    keys?: boolean | string[];
+    vi?: boolean;
     input?: boolean;
     dockBorders?: boolean;
     ignoreDockContrast?: boolean;
@@ -74,6 +78,7 @@ export interface ElementOptions {
     };
     baseLimit?: number;
     mouse?: boolean;
+    hoverText?: string;
     label?: string;
     parent?: Element;
     screen?: Screen;
@@ -256,4 +261,3 @@ export interface Screen extends Element {
     hideCursor(): void;
     destroy(): void;
 }
-//# sourceMappingURL=types.d.ts.map

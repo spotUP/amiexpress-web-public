@@ -1,18 +1,28 @@
+"use strict";
 /**
  * ANSI color and style utilities
  */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.screen = exports.cursor = exports.attrs = exports.colorNames = exports.TRANSPARENT = void 0;
+exports.parseColor = parseColor;
+exports.fg = fg;
+exports.bg = bg;
+exports.buildStyle = buildStyle;
+exports.parseTags = parseTags;
+exports.stripAnsi = stripAnsi;
+exports.textWidth = textWidth;
 const ESC = '\x1b';
 const CSI = `${ESC}[`;
 // ============================================================================
 // Color Name to Code Mapping
 // ============================================================================
 // Special value for transparent (no background)
-export const TRANSPARENT = -1;
-export const colorNames = {
+exports.TRANSPARENT = -1;
+exports.colorNames = {
     // Special
-    transparent: TRANSPARENT,
-    none: TRANSPARENT,
-    default: TRANSPARENT,
+    transparent: exports.TRANSPARENT,
+    none: exports.TRANSPARENT,
+    default: exports.TRANSPARENT,
     // Standard colors (0-7)
     black: 0,
     red: 1,
@@ -46,7 +56,7 @@ export const colorNames = {
 // ============================================================================
 // Color Parsing
 // ============================================================================
-export function parseColor(color) {
+function parseColor(color) {
     if (color === undefined || color === null) {
         return -1;
     }
@@ -54,8 +64,8 @@ export function parseColor(color) {
         return color;
     }
     // Named color
-    if (colorNames.hasOwnProperty(color)) {
-        return colorNames[color];
+    if (exports.colorNames.hasOwnProperty(color)) {
+        return exports.colorNames[color];
     }
     // Hex color (#RGB or #RRGGBB)
     if (color[0] === '#') {
@@ -101,7 +111,7 @@ function rgbToColor(r, g, b) {
 // ============================================================================
 // ANSI Escape Sequence Generation
 // ============================================================================
-export function fg(color) {
+function fg(color) {
     const code = parseColor(color);
     if (code === -1)
         return '';
@@ -118,7 +128,7 @@ export function fg(color) {
         return `${CSI}38;5;${code}m`;
     }
 }
-export function bg(color) {
+function bg(color) {
     const code = parseColor(color);
     if (code === -1)
         return '';
@@ -138,7 +148,7 @@ export function bg(color) {
 // ============================================================================
 // Attributes
 // ============================================================================
-export const attrs = {
+exports.attrs = {
     reset: `${CSI}0m`,
     bold: `${CSI}1m`,
     dim: `${CSI}2m`,
@@ -160,7 +170,7 @@ export const attrs = {
 // ============================================================================
 // Cursor Control
 // ============================================================================
-export const cursor = {
+exports.cursor = {
     hide: `${CSI}?25l`,
     show: `${CSI}?25h`,
     save: `${ESC}7`,
@@ -178,7 +188,7 @@ export const cursor = {
 // ============================================================================
 // Screen Control
 // ============================================================================
-export const screen = {
+exports.screen = {
     clear: `${CSI}2J`,
     clearToBottom: `${CSI}0J`,
     clearToTop: `${CSI}1J`,
@@ -192,7 +202,7 @@ export const screen = {
     setScrollRegion: (top, bottom) => `${CSI}${top + 1};${bottom + 1}r`,
     resetScrollRegion: `${CSI}r`,
 };
-export function buildStyle(flags) {
+function buildStyle(flags) {
     let result = '';
     if (flags.fg !== undefined) {
         result += fg(flags.fg);
@@ -201,19 +211,19 @@ export function buildStyle(flags) {
         result += bg(flags.bg);
     }
     if (flags.bold)
-        result += attrs.bold;
+        result += exports.attrs.bold;
     if (flags.dim)
-        result += attrs.dim;
+        result += exports.attrs.dim;
     if (flags.italic)
-        result += attrs.italic;
+        result += exports.attrs.italic;
     if (flags.underline)
-        result += attrs.underline;
+        result += exports.attrs.underline;
     if (flags.blink)
-        result += attrs.blink;
+        result += exports.attrs.blink;
     if (flags.inverse)
-        result += attrs.inverse;
+        result += exports.attrs.inverse;
     if (flags.invisible)
-        result += attrs.invisible;
+        result += exports.attrs.invisible;
     return result;
 }
 // ============================================================================
@@ -221,11 +231,11 @@ export function buildStyle(flags) {
 // ============================================================================
 // Match tags like {bold}, {cyan-fg}, {/bold}, {/cyan-fg}, and {/} (reset shorthand)
 const tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
-export function parseTags(text) {
+function parseTags(text) {
     return text.replace(tagRegex, (match, close, name, value) => {
         if (close) {
             // Closing tag or {/} shorthand - reset attributes
-            return attrs.reset;
+            return exports.attrs.reset;
         }
         // Empty tag with no close (like {}) - return as-is
         if (!name) {
@@ -234,15 +244,15 @@ export function parseTags(text) {
         // Opening tag
         switch (name) {
             case 'bold':
-                return attrs.bold;
+                return exports.attrs.bold;
             case 'underline':
-                return attrs.underline;
+                return exports.attrs.underline;
             case 'blink':
-                return attrs.blink;
+                return exports.attrs.blink;
             case 'inverse':
-                return attrs.inverse;
+                return exports.attrs.inverse;
             case 'invisible':
-                return attrs.invisible;
+                return exports.attrs.invisible;
             // Basic colors (no suffix)
             case 'black':
             case 'red':
@@ -309,12 +319,12 @@ export function parseTags(text) {
 // Strip ANSI Codes
 // ============================================================================
 const ansiRegex = /\x1b\[[0-9;]*m/g;
-export function stripAnsi(text) {
+function stripAnsi(text) {
     return text.replace(ansiRegex, '');
 }
 // ============================================================================
 // String Width (accounting for ANSI codes)
 // ============================================================================
-export function textWidth(text) {
+function textWidth(text) {
     return stripAnsi(text).length;
 }

@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Loading - Loading indicator / spinner widget
  */
-import { Box } from './box';
-export class Loading extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Loading = void 0;
+const box_1 = require("./box");
+class Loading extends box_1.Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -22,7 +25,7 @@ export class Loading extends Box {
         this.spinner = options.spinner || ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
         this.interval = options.interval || 80;
         // Loading message
-        this.messageText = new Box({
+        this.messageText = new box_1.Box({
             parent: this,
             top: 0,
             left: 0,
@@ -33,7 +36,7 @@ export class Loading extends Box {
             align: 'center',
         });
         // Spinner
-        this.spinnerText = new Box({
+        this.spinnerText = new box_1.Box({
             parent: this,
             top: 1,
             left: 'center',
@@ -117,3 +120,4 @@ export class Loading extends Box {
         super.destroy();
     }
 }
+exports.Loading = Loading;

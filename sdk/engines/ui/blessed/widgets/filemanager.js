@@ -1,9 +1,12 @@
+"use strict";
 /**
  * FileManager - Directory browser widget
  * Note: This is a simplified browser-compatible version
  */
-import { List } from './list';
-export class FileManager extends List {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FileManager = void 0;
+const list_1 = require("./list");
+class FileManager extends list_1.List {
     constructor(options = {}) {
         super({
             ...options,
@@ -195,3 +198,4 @@ export class FileManager extends List {
         this.select(0);
     }
 }
+exports.FileManager = FileManager;

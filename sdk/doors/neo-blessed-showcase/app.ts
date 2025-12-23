@@ -19,8 +19,11 @@
  * 12. Contrib Layouts: Grid, Carousel
  */
 
-// Build timestamp for version verification
-const BUILD_VERSION = 'v2.0.' + new Date().toISOString().replace(/[:\-T]/g, '').slice(0, 14);
+// Build timestamp for version verification (v2.DDD where DDD = day of year)
+const now = new Date();
+const startOfYear = new Date(now.getFullYear(), 0, 0);
+const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86400000);
+const BUILD_VERSION = `v2.${dayOfYear}`;
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
@@ -51,6 +54,11 @@ export async function createApp(session: DoorSession) {
   const { bbs, user } = session;
   const username = user?.username || 'Guest';
 
+  // Enable game mode for smooth keyboard input (bypasses OS key repeat delay)
+  if (bbs?.enableGameMode) {
+    bbs.enableGameMode();
+  }
+
   const testResults: TestResult[] = [];
   let currentDemo: string | null = null;
   const intervals: NodeJS.Timeout[] = [];
@@ -69,7 +77,11 @@ export async function createApp(session: DoorSession) {
     };
   }
 
+  // Enable mouse events on both screen (ANSI sequences) and BBS API (Socket.IO events)
   screen.enableMouse();
+  if (bbs?.enableMouseEvents) {
+    bbs.enableMouseEvents();
+  }
 
   // ========== MAIN LAYOUT ==========
   const headerBar = blessed.box({
@@ -1757,7 +1769,7 @@ End of sample markdown.`;
     });
     addResult('Shadow', 'pass', 'Shadow rendering works');
 
-    // 2. TRUE TRANSPARENCY/OPACITY (50% color blending)
+    // 2. TRUE TRANSPARENCY (transparent background, shows content behind)
     const transparentBox = blessed.box({
       parent: demoBox,
       top: 1, left: 28, width: 24, height: 6,
@@ -1765,14 +1777,13 @@ End of sample markdown.`;
       border: { type: 'line' },
       style: {
         fg: 'white',
-        bg: 'red',
-        transparent: true,  // NEW: 50% opacity color blending
+        bg: 'transparent',  // Transparent bg - shows underlying content
         border: { fg: 'white' }
       },
-      content: '\n Red @ 50%\n Blends with\n background!',
+      content: '\n Transparent BG\n Shows content\n behind this box!',
       tags: true,
     });
-    addResult('Transparency', 'pass', '50% color blending works');
+    addResult('Transparency', 'pass', 'Transparent background');
 
     // 3. HOVER TEXT TOOLTIPS
     const hoverBox1 = blessed.box({
@@ -1868,7 +1879,7 @@ End of sample markdown.`;
       style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
       content: [
         '{yellow-fg}Shadow:{/} Dark outline behind box',
-        '{yellow-fg}Transparent:{/} Red blends @ 50%',
+        '{yellow-fg}Transparent:{/} BG shows through',
         '{yellow-fg}Hover:{/} Mouse over blue/green',
         '{yellow-fg}Fixed:{/} Yellow stays on scroll',
         '{yellow-fg}baseLimit:{/} List stops at item 10',
@@ -1882,7 +1893,7 @@ End of sample markdown.`;
       tags: true,
       style: { bg: 'black' },
       content: '{bold}{cyan-fg}New Features:{/}\n' +
-        '1. Shadow effect  2. True 50% transparency  3. Hover tooltips  ' +
+        '1. Shadow effect  2. True transparency  3. Hover tooltips  ' +
         '4. Fixed positioning  5. baseLimit scrolling',
     });
 

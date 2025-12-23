@@ -1,9 +1,12 @@
+"use strict";
 /**
  * Message - Simple message dialog box
  */
-import { Box } from './box';
-import { Button } from './button';
-export class Message extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Message = void 0;
+const box_1 = require("./box");
+const button_1 = require("./button");
+class Message extends box_1.Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
         const height = typeof options.height === 'number' ? options.height : 12;
@@ -29,7 +32,7 @@ export class Message extends Box {
         // Use 'transparent' for bg to inherit from parent dialog
         const dialogBg = options.style?.bg || 'black';
         const messageHeight = Math.max(3, height - 7);
-        this.messageText = new Box({
+        this.messageText = new box_1.Box({
             parent: this,
             top: 0,
             left: 0,
@@ -45,7 +48,7 @@ export class Message extends Box {
             },
         });
         // OK button
-        this.okButton = new Button({
+        this.okButton = new button_1.Button({
             parent: this,
             bottom: 0,
             left: 'center',
@@ -109,3 +112,4 @@ export class Message extends Box {
         return this.messageText.getContent();
     }
 }
+exports.Message = Message;

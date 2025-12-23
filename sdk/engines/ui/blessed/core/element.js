@@ -1,9 +1,12 @@
+"use strict";
 /**
  * Base Element class - foundation for all widgets
  */
-import { EventEmitter } from './events';
-import { parseTags, stripAnsi, textWidth } from './colors';
-export class Element extends EventEmitter {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Element = void 0;
+const events_1 = require("./events");
+const colors_1 = require("./colors");
+class Element extends events_1.EventEmitter {
     constructor(options = {}) {
         super();
         this.parent = null;
@@ -439,7 +442,7 @@ export class Element extends EventEmitter {
             // Keep _contentDirty = true so getVisibleLines re-parses when dimensions are known
             let parsed = content;
             if (this.options.tags) {
-                parsed = parseTags(content);
+                parsed = (0, colors_1.parseTags)(content);
             }
             this._lines = parsed.split(/\r?\n/);
             // Note: _contentDirty stays true so content gets re-parsed with wrapping during render
@@ -453,7 +456,7 @@ export class Element extends EventEmitter {
         this.setContent(text);
     }
     getText() {
-        return stripAnsi(this.content);
+        return (0, colors_1.stripAnsi)(this.content);
     }
     insertLine(i, line) {
         if (this.destroyed)
@@ -557,7 +560,7 @@ export class Element extends EventEmitter {
      * Get text width without ANSI codes
      */
     _textWidth(text) {
-        return stripAnsi(text).length;
+        return (0, colors_1.stripAnsi)(text).length;
     }
     /**
      * Align text within width
@@ -585,7 +588,7 @@ export class Element extends EventEmitter {
         // Parse tags if enabled
         let parsed = text;
         if (this.options.tags) {
-            parsed = parseTags(text);
+            parsed = (0, colors_1.parseTags)(text);
         }
         // Get available width
         const width = this.iwidth;
@@ -1358,7 +1361,7 @@ export class Element extends EventEmitter {
         const attr = this.sattr(labelStyle);
         // Calculate label position
         const labelText = ` ${label} `;
-        const labelWidth = textWidth(labelText);
+        const labelWidth = (0, colors_1.textWidth)(labelText);
         let labelX = pos.xi + 2; // Default left
         if (border?.labelPosition === 'center') {
             labelX = pos.xi + Math.floor((pos.xl - pos.xi - labelWidth) / 2);
@@ -1777,7 +1780,7 @@ export class Element extends EventEmitter {
      * Get visual width of text (excluding ANSI codes)
      */
     strWidth(text) {
-        return textWidth(text);
+        return (0, colors_1.textWidth)(text);
     }
     /**
      * Shrink box to fit content
@@ -1802,7 +1805,7 @@ export class Element extends EventEmitter {
      * Get content without ANSI codes
      */
     getPlainContent() {
-        return stripAnsi(this.content);
+        return (0, colors_1.stripAnsi)(this.content);
     }
     /**
      * Measure text dimensions
@@ -1861,7 +1864,7 @@ export class Element extends EventEmitter {
      */
     textWidth(text) {
         // Strip ANSI codes first
-        const plain = stripAnsi(text);
+        const plain = (0, colors_1.stripAnsi)(text);
         let width = 0;
         for (const ch of plain) {
             width += this.charWidth(ch);
@@ -1872,7 +1875,7 @@ export class Element extends EventEmitter {
      * Truncate text to fit width (considering multi-width chars)
      */
     truncateText(text, maxWidth, ellipsis = '...') {
-        const plain = stripAnsi(text);
+        const plain = (0, colors_1.stripAnsi)(text);
         let width = 0;
         let result = '';
         for (const ch of plain) {
@@ -1924,7 +1927,7 @@ export class Element extends EventEmitter {
             return { line: -1, col: -1 };
         }
         const line = lines[relY];
-        const plain = stripAnsi(line);
+        const plain = (0, colors_1.stripAnsi)(line);
         let col = 0;
         let width = 0;
         for (let i = 0; i < plain.length; i++) {
@@ -1957,3 +1960,4 @@ export class Element extends EventEmitter {
         this.destroy();
     }
 }
+exports.Element = Element;

@@ -1,10 +1,13 @@
+"use strict";
 /**
  * Prompt - Text input dialog box
  */
-import { Box } from './box';
-import { Textbox } from './textbox';
-import { Button } from './button';
-export class Prompt extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Prompt = void 0;
+const box_1 = require("./box");
+const textbox_1 = require("./textbox");
+const button_1 = require("./button");
+class Prompt extends box_1.Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
         const height = typeof options.height === 'number' ? options.height : 12;
@@ -29,7 +32,7 @@ export class Prompt extends Box {
         // Prompt text - at top
         // Use 'transparent' for bg to inherit from parent dialog
         const dialogBg = options.style?.bg || 'black';
-        this.messageText = new Box({
+        this.messageText = new box_1.Box({
             parent: this,
             top: 0,
             left: 0,
@@ -44,7 +47,7 @@ export class Prompt extends Box {
         });
         // Input field - use right: 0 to respect parent boundaries
         // Input field keeps solid background for readability
-        this.inputField = new Textbox({
+        this.inputField = new textbox_1.Textbox({
             parent: this,
             top: 2,
             left: 0,
@@ -61,7 +64,7 @@ export class Prompt extends Box {
             },
         });
         // Button container
-        this.buttonBox = new Box({
+        this.buttonBox = new box_1.Box({
             parent: this,
             bottom: 0,
             left: 'center',
@@ -72,7 +75,7 @@ export class Prompt extends Box {
             },
         });
         // OK button
-        this.okButton = new Button({
+        this.okButton = new button_1.Button({
             parent: this.buttonBox,
             top: 0,
             left: 0,
@@ -92,7 +95,7 @@ export class Prompt extends Box {
             },
         });
         // Cancel button
-        this.cancelButton = new Button({
+        this.cancelButton = new button_1.Button({
             parent: this.buttonBox,
             top: 0,
             left: 14,
@@ -198,3 +201,4 @@ export class Prompt extends Box {
         return this.inputField.getValue();
     }
 }
+exports.Prompt = Prompt;

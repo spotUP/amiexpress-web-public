@@ -48,4 +48,3 @@ export declare class FileBox extends Box {
      */
     focus(): void;
 }
-//# sourceMappingURL=filebox.d.ts.map

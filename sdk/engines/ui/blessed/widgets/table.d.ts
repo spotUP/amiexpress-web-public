@@ -17,4 +17,3 @@ export declare class Table extends Element {
     setHeaders(headers: string[]): void;
     getRows(): string[][];
 }
-//# sourceMappingURL=table.d.ts.map

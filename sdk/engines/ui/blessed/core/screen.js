@@ -1,10 +1,13 @@
+"use strict";
 /**
  * Screen class - Root container and rendering manager
  */
-import { Element } from './element';
-import { Program } from './program';
-import { cursor, screen as screenAnsi, attrs } from './colors';
-export class Screen extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Screen = void 0;
+const element_1 = require("./element");
+const program_1 = require("./program");
+const colors_1 = require("./colors");
+class Screen extends element_1.Element {
     constructor(options = {}) {
         // BBS Terminal Constraints:
         // - Width: Always 80 columns (classic BBS standard)
@@ -53,7 +56,7 @@ export class Screen extends Element {
             }
         });
         // Create Program instance
-        this.program = new Program({
+        this.program = new program_1.Program({
             output: this.output,
             terminal: options.terminal || 'ansi',
             buffer: true,
@@ -70,7 +73,7 @@ export class Screen extends Element {
         }
         // Hide cursor by default
         if (this.cursorHidden) {
-            this.write(cursor.hide);
+            this.write(colors_1.cursor.hide);
         }
         // Setup event routing from program to screen/elements
         this.setupKeyRouting();
@@ -720,7 +723,7 @@ export class Screen extends Element {
                 if (attr !== lastAttrCell || ch !== lastCh) {
                     // Position cursor if needed
                     if (x !== lastX + 1 || y !== lastY) {
-                        output += cursor.pos(x, y);
+                        output += colors_1.cursor.pos(x, y);
                     }
                     // Change attributes if needed
                     if (attr !== lastAttr) {
@@ -1063,13 +1066,13 @@ export class Screen extends Element {
     showCursor() {
         if (this.cursorHidden) {
             this.cursorHidden = false;
-            this.write(cursor.show);
+            this.write(colors_1.cursor.show);
         }
     }
     hideCursor() {
         if (!this.cursorHidden) {
             this.cursorHidden = true;
-            this.write(cursor.hide);
+            this.write(colors_1.cursor.hide);
         }
     }
     // ============================================================================
@@ -1106,14 +1109,33 @@ export class Screen extends Element {
      * Set focused element (called by Element.focus())
      */
     setFocused(element) {
+        // Blur previous focused element
         if (this._focused && this._focused !== element) {
             this._focused.focused = false;
             this._focused.emit('blur');
+            // Restore original border color on blur (if element has border and stored color)
+            const prevEl = this._focused;
+            if (prevEl.border && prevEl._originalBorderColor) {
+                prevEl.style = prevEl.style || {};
+                prevEl.style.border = { ...(prevEl.style.border || {}), fg: prevEl._originalBorderColor };
+            }
         }
+        // Focus new element
         this._focused = element;
         if (element) {
             element.focused = true;
             element.emit('focus');
+            // Automatically set white borders on focused elements with borders
+            const el = element;
+            if (el.border && el.style?.border?.fg) {
+                // Store original border color if not already stored
+                if (!el._originalBorderColor) {
+                    el._originalBorderColor = el.style.border.fg;
+                }
+                // Set white border for focused element
+                el.style = el.style || {};
+                el.style.border = { ...(el.style.border || {}), fg: 'white' };
+            }
         }
         // Re-render to update focus border styling
         this.render();
@@ -1241,10 +1263,10 @@ export class Screen extends Element {
     destroy() {
         if (this.destroyed)
             return;
-        this.write(cursor.show);
-        this.write(screenAnsi.clear);
-        this.write(cursor.pos(0, 0));
-        this.write(attrs.reset);
+        this.write(colors_1.cursor.show);
+        this.write(colors_1.screen.clear);
+        this.write(colors_1.cursor.pos(0, 0));
+        this.write(colors_1.attrs.reset);
         this.flush();
         // Destroy program
         this.program.destroy();
@@ -1257,6 +1279,7 @@ export class Screen extends Element {
         this.program._handleData(data);
     }
 }
+exports.Screen = Screen;
 const ANGLES = {
     '┘': true,
     '┐': true,

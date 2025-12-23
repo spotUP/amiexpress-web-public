@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Viewport - Scrollable viewport for content larger than container
  */
-import { Box } from './box';
-export class Viewport extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Viewport = void 0;
+const box_1 = require("./box");
+class Viewport extends box_1.Box {
     constructor(options = {}) {
         const { alwaysScroll, baseLimit, scrollbarBg, scrollbarFg, ...boxOptions } = options;
         super({
@@ -134,3 +137,4 @@ export class Viewport extends Box {
         this.scrollTo(0);
     }
 }
+exports.Viewport = Viewport;

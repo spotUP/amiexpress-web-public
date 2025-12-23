@@ -29,4 +29,3 @@ export declare class Line extends Box {
      */
     setType(type: 'line' | 'heavy' | 'double' | 'ascii'): void;
 }
-//# sourceMappingURL=line.d.ts.map

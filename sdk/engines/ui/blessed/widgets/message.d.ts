@@ -24,4 +24,3 @@ export declare class Message extends Box {
      */
     getText(): string;
 }
-//# sourceMappingURL=message.d.ts.map

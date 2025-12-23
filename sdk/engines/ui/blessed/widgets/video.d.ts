@@ -106,4 +106,3 @@ export declare class Video extends Box {
      */
     isLooping(): boolean;
 }
-//# sourceMappingURL=video.d.ts.map

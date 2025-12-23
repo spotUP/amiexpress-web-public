@@ -1,8 +1,11 @@
+"use strict";
 /**
  * IFrame - Embedded frame widget for nested screens
  */
-import { Box } from './box';
-export class IFrame extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.IFrame = void 0;
+const box_1 = require("./box");
+class IFrame extends box_1.Box {
     constructor(options = {}) {
         const { detached, ...boxOptions } = options;
         super({
@@ -140,3 +143,4 @@ export class IFrame extends Box {
         return this.frameChildren.length;
     }
 }
+exports.IFrame = IFrame;

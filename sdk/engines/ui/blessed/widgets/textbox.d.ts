@@ -66,4 +66,3 @@ export declare class Textarea extends Element {
     clearValue(): void;
     readInput(): void;
 }
-//# sourceMappingURL=textbox.d.ts.map

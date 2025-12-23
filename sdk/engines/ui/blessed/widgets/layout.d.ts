@@ -48,4 +48,3 @@ export declare class Layout extends Box {
      */
     reflow(): void;
 }
-//# sourceMappingURL=layout.d.ts.map

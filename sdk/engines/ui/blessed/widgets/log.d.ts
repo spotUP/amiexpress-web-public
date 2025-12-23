@@ -11,4 +11,3 @@ export declare class Log extends Element {
     add(text: string): void;
     clear(): void;
 }
-//# sourceMappingURL=log.d.ts.map

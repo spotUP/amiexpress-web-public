@@ -62,4 +62,3 @@ export declare class ANSIImage extends Box {
      */
     setFrame(frame: number): void;
 }
-//# sourceMappingURL=ansiimage.d.ts.map

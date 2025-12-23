@@ -70,4 +70,3 @@ export declare class Canvas extends Box {
         height: number;
     };
 }
-//# sourceMappingURL=canvas.d.ts.map

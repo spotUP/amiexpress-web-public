@@ -1,9 +1,12 @@
+"use strict";
 /**
  * RadioSet - Container for managing a group of radio buttons
  */
-import { Box } from './box';
-import { RadioButton } from './radiobutton';
-export class RadioSet extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RadioSet = void 0;
+const box_1 = require("./box");
+const radiobutton_1 = require("./radiobutton");
+class RadioSet extends box_1.Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -19,7 +22,7 @@ export class RadioSet extends Box {
             const radioOptions = typeof item === 'string'
                 ? { text: item, value: item }
                 : item;
-            const radio = new RadioButton({
+            const radio = new radiobutton_1.RadioButton({
                 ...radioOptions,
                 parent: this,
                 top: vertical ? index * spacing : 0,
@@ -116,7 +119,7 @@ export class RadioSet extends Box {
             ? { text: options, value: options }
             : options;
         const index = this.radioButtons.length;
-        const radio = new RadioButton({
+        const radio = new radiobutton_1.RadioButton({
             ...radioOptions,
             parent: this,
             top: index,
@@ -145,3 +148,4 @@ export class RadioSet extends Box {
         }
     }
 }
+exports.RadioSet = RadioSet;

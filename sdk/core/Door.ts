@@ -83,6 +83,12 @@ export class Door {
 
     const { socket, bbsSession, user, params = [], bbs } = rawSession;
 
+    // Enable game mode for smooth keyboard input (bypasses OS key repeat delay)
+    // This tells the frontend to send raw keydown/keyup events
+    if (bbs?.enableGameMode) {
+      bbs.enableGameMode();
+    }
+
     // Create context
     const context = this.createContext(socket, bbsSession, user, params, bbs);
 

@@ -307,4 +307,3 @@ declare const _default: {
     video: typeof video;
 };
 export default _default;
-//# sourceMappingURL=index.d.ts.map

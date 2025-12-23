@@ -36,4 +36,3 @@ export declare class Prompt extends Box {
      */
     getValue(): string;
 }
-//# sourceMappingURL=prompt.d.ts.map

@@ -68,4 +68,3 @@ export declare function buildStyle(flags: StyleFlags): string;
 export declare function parseTags(text: string): string;
 export declare function stripAnsi(text: string): string;
 export declare function textWidth(text: string): number;
-//# sourceMappingURL=colors.d.ts.map

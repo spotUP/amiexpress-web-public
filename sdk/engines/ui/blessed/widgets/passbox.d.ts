@@ -18,4 +18,3 @@ export declare class PassBox extends Textbox {
      */
     getMask(): string;
 }
-//# sourceMappingURL=passbox.d.ts.map

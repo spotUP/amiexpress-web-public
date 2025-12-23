@@ -1,8 +1,11 @@
+"use strict";
 /**
  * ProgressBar widget - Visual progress indicator
  */
-import { Element } from '../core/element';
-export class ProgressBar extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ProgressBar = void 0;
+const element_1 = require("../core/element");
+class ProgressBar extends element_1.Element {
     constructor(options = {}) {
         super({
             border: 'line',
@@ -64,3 +67,4 @@ export class ProgressBar extends Element {
         this.setProgress(0);
     }
 }
+exports.ProgressBar = ProgressBar;

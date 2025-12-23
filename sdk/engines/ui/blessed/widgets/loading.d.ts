@@ -49,4 +49,3 @@ export declare class Loading extends Box {
      */
     destroy(): void;
 }
-//# sourceMappingURL=loading.d.ts.map

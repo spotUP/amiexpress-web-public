@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Text widget - Simple text display (no border by default)
  */
-import { Element } from '../core/element';
-export class Text extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Text = void 0;
+const element_1 = require("../core/element");
+class Text extends element_1.Element {
     constructor(options = {}) {
         super({
             ...options,
@@ -10,3 +13,4 @@ export class Text extends Element {
         });
     }
 }
+exports.Text = Text;

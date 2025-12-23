@@ -1,11 +1,14 @@
+"use strict";
 /**
  * Overlay - Semi-transparent overlay widget
  *
  * For web connections: Uses actual CSS transparency via socket events
  * For telnet/SSH: Falls back to solid dark background
  */
-import { Box } from './box';
-export class Overlay extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Overlay = void 0;
+const box_1 = require("./box");
+class Overlay extends box_1.Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -134,3 +137,4 @@ export class Overlay extends Box {
         }, stepDuration);
     }
 }
+exports.Overlay = Overlay;

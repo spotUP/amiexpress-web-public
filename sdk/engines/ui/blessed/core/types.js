@@ -1,4 +1,5 @@
+"use strict";
 /**
  * Type definitions for Blessed UI engine
  */
-export {};
+Object.defineProperty(exports, "__esModule", { value: true });

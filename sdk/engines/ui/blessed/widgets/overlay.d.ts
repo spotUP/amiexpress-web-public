@@ -38,4 +38,3 @@ export declare class Overlay extends Box {
      */
     fadeOut(duration?: number, callback?: () => void): void;
 }
-//# sourceMappingURL=overlay.d.ts.map

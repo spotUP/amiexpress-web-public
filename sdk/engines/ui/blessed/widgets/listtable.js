@@ -1,8 +1,11 @@
+"use strict";
 /**
  * ListTable - Enhanced table with list-like selection behavior
  */
-import { Box } from './box';
-export class ListTable extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ListTable = void 0;
+const box_1 = require("./box");
+class ListTable extends box_1.Box {
     constructor(options = {}) {
         // Destructure ListTable-specific properties
         const { rows, headers, columnWidths, align, interactive, noCellBorders, ...boxOptions } = options;
@@ -215,3 +218,4 @@ export class ListTable extends Box {
         return this.rows[this.selectedRow];
     }
 }
+exports.ListTable = ListTable;

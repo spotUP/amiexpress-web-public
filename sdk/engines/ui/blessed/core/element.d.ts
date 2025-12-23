@@ -439,4 +439,3 @@ export declare class Element extends EventEmitter {
     destroy(): void;
     free(): void;
 }
-//# sourceMappingURL=element.d.ts.map

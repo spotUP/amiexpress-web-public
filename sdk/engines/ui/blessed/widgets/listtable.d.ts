@@ -66,4 +66,3 @@ export declare class ListTable extends Box {
      */
     getSelectedRow(): string[] | undefined;
 }
-//# sourceMappingURL=listtable.d.ts.map

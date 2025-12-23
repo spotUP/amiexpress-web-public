@@ -318,6 +318,24 @@ export class BBSApi {
   }
 
   /**
+   * Enable mouse events for the door
+   * When enabled, mouse clicks, movement, and wheel events are sent to the door
+   * Required for neo-blessed and other UI frameworks that use mouse input
+   */
+  enableMouseEvents(): void {
+    this.session.mouseEventsEnabled = true;
+    console.log('[BBSApi] Mouse events enabled');
+  }
+
+  /**
+   * Disable mouse events
+   */
+  disableMouseEvents(): void {
+    this.session.mouseEventsEnabled = false;
+    console.log('[BBSApi] Mouse events disabled');
+  }
+
+  /**
    * Check if a key is currently pressed (game mode only)
    * @param key Key to check (e.g., 'ArrowLeft', 'a', 'space')
    */

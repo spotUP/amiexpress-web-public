@@ -71,4 +71,3 @@ export declare class FileManager extends List {
      */
     reset(cwd?: string): void;
 }
-//# sourceMappingURL=filemanager.d.ts.map

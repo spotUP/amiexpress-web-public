@@ -48,4 +48,3 @@ export declare class Checkbox extends Box {
      */
     setValue(value: boolean): void;
 }
-//# sourceMappingURL=checkbox.d.ts.map

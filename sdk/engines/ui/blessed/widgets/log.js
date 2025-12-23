@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Log widget - Scrolling log viewer
  */
-import { Element } from '../core/element';
-export class Log extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Log = void 0;
+const element_1 = require("../core/element");
+class Log extends element_1.Element {
     constructor(options = {}) {
         super({
             scrollable: true,
@@ -52,3 +55,4 @@ export class Log extends Element {
         this.setContent('');
     }
 }
+exports.Log = Log;

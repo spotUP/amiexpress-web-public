@@ -1,9 +1,12 @@
+"use strict";
 /**
  * List widget - Scrollable list with selection
  */
-import { Element } from '../core/element';
-import { parseTags, textWidth } from '../core/colors';
-export class List extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.List = void 0;
+const element_1 = require("../core/element");
+const colors_1 = require("../core/colors");
+class List extends element_1.Element {
     constructor(options = {}) {
         super({
             scrollable: true,
@@ -106,7 +109,7 @@ export class List extends Element {
         const wrapWidth = Math.max(1, this.getItemWrapWidth() - markerWidth);
         this.items.forEach((item, index) => {
             const marker = index === this.selected ? '> ' : '  ';
-            const parsed = this.options.tags ? parseTags(item) : item;
+            const parsed = this.options.tags ? (0, colors_1.parseTags)(item) : item;
             const wrapped = this.wrapAnsiText(parsed, wrapWidth);
             const start = lines.length;
             if (wrapped.length === 0) {
@@ -247,7 +250,7 @@ export class List extends Element {
             return lines;
         const textLines = text.split(/\r?\n/);
         for (const line of textLines) {
-            if (textWidth(line) <= width) {
+            if ((0, colors_1.textWidth)(line) <= width) {
                 lines.push(line);
                 continue;
             }
@@ -290,3 +293,4 @@ export class List extends Element {
         return lines;
     }
 }
+exports.List = List;

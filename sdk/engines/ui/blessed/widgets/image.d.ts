@@ -66,4 +66,3 @@ export declare class Image extends Box {
         height: number;
     };
 }
-//# sourceMappingURL=image.d.ts.map

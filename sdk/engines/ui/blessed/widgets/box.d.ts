@@ -6,4 +6,3 @@ import type { ElementOptions } from '../core/types';
 export declare class Box extends Element {
     constructor(options?: ElementOptions);
 }
-//# sourceMappingURL=box.d.ts.map

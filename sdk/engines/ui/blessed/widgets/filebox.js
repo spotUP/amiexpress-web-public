@@ -1,9 +1,12 @@
+"use strict";
 /**
  * FileBox - File/directory selection dialog
  */
-import { List } from './list';
-import { Box } from './box';
-export class FileBox extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FileBox = void 0;
+const list_1 = require("./list");
+const box_1 = require("./box");
+class FileBox extends box_1.Box {
     constructor(options = {}) {
         const { cwd, directory, allowMultiple, ...boxOptions } = options;
         super({
@@ -16,7 +19,7 @@ export class FileBox extends Box {
         this.directory = directory || false;
         this.allowMultiple = allowMultiple || false;
         // Create internal list
-        this.list = new List({
+        this.list = new list_1.List({
             parent: this,
             top: 0,
             left: 0,
@@ -138,3 +141,4 @@ export class FileBox extends Box {
         this.list.focus();
     }
 }
+exports.FileBox = FileBox;

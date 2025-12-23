@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Video - Video playback widget (browser-compatible placeholder)
  */
-import { Box } from './box';
-export class Video extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Video = void 0;
+const box_1 = require("./box");
+class Video extends box_1.Box {
     constructor(options = {}) {
         const { src, file, autoPlay, loop, controls, muted, ...boxOptions } = options;
         super({
@@ -225,3 +228,4 @@ export class Video extends Box {
         return this.loop;
     }
 }
+exports.Video = Video;

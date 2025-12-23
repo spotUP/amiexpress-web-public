@@ -9,4 +9,3 @@ export declare class Button extends Element {
     private _onClick;
     press(): void;
 }
-//# sourceMappingURL=button.d.ts.map

@@ -1,7 +1,10 @@
+"use strict";
 /**
  * Event emitter implementation for blessed elements
  */
-export class EventEmitter {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.EventEmitter = void 0;
+class EventEmitter {
     constructor() {
         this.events = new Map();
     }
@@ -63,3 +66,4 @@ export class EventEmitter {
         return Array.from(this.events.keys());
     }
 }
+exports.EventEmitter = EventEmitter;

@@ -1,8 +1,11 @@
+"use strict";
 /**
  * Textbox widget - Single-line text input with horizontal scrolling
  */
-import { Element } from '../core/element';
-export class Textbox extends Element {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Textarea = exports.Input = exports.Textbox = void 0;
+const element_1 = require("../core/element");
+class Textbox extends element_1.Element {
     constructor(options = {}) {
         super({
             focusable: true,
@@ -199,13 +202,15 @@ export class Textbox extends Element {
         this.emit('readInput');
     }
 }
+exports.Textbox = Textbox;
 // Alias
-export class Input extends Textbox {
+class Input extends Textbox {
 }
+exports.Input = Input;
 /**
  * Textarea - Multi-line text input with vertical scrolling
  */
-export class Textarea extends Element {
+class Textarea extends element_1.Element {
     constructor(options = {}) {
         super({
             focusable: true,
@@ -457,3 +462,4 @@ export class Textarea extends Element {
         this.emit('readInput');
     }
 }
+exports.Textarea = Textarea;

@@ -859,6 +859,26 @@ export class Program extends EventEmitter {
   _handleData(data: string): void {
     if (this._paused) return;
 
+    // Check for JSON mouse events from web frontend (Socket.IO)
+    if (data.startsWith('{') && data.includes('"type"')) {
+      try {
+        const json = JSON.parse(data);
+        if (json.type && this._mouseEnabled) {
+          const mouseEvent = this.parseJsonMouseEvent(json);
+          if (mouseEvent) {
+            this._lastMouseEvent = mouseEvent;
+            for (const handler of this.mouseHandlers) {
+              handler(mouseEvent);
+            }
+            this.emit('mouse', mouseEvent);
+            return;
+          }
+        }
+      } catch {
+        // Not valid JSON, continue with normal parsing
+      }
+    }
+
     // Check for mouse events (SGR: \x1b[< or X10: \x1b[M)
     if (this._mouseEnabled && (data.includes('\x1b[<') || data.includes('\x1b[M'))) {
       const mouseEvent = this.parseMouseEvent(data);
@@ -891,6 +911,45 @@ export class Program extends EventEmitter {
 
     // Emit raw data event
     this.emit('data', data);
+  }
+
+  /**
+   * Parse JSON mouse event from web frontend
+   */
+  private parseJsonMouseEvent(json: any): MouseEvent | null {
+    const x = json.x ?? 0;
+    const y = json.y ?? 0;
+    const shift = json.shift ?? false;
+    const ctrl = json.ctrl ?? false;
+    const meta = json.alt ?? false;
+
+    let action: 'mousedown' | 'mouseup' | 'mousemove' | 'wheeldown' | 'wheelup';
+    let button: 'left' | 'middle' | 'right' | undefined;
+
+    switch (json.type) {
+      case 'mouse-down':
+        action = 'mousedown';
+        button = json.button === 0 ? 'left' : json.button === 1 ? 'middle' : json.button === 2 ? 'right' : 'left';
+        break;
+      case 'mouse-up':
+        action = 'mouseup';
+        button = json.button === 0 ? 'left' : json.button === 1 ? 'middle' : json.button === 2 ? 'right' : 'left';
+        break;
+      case 'mouse-move':
+      case 'mouse-drag':
+      case 'mouse-hover':
+        action = 'mousemove';
+        button = json.button === 0 ? 'left' : json.button === 1 ? 'middle' : json.button === 2 ? 'right' : undefined;
+        break;
+      case 'mouse-wheel':
+        action = json.deltaY < 0 ? 'wheelup' : 'wheeldown';
+        button = undefined;
+        break;
+      default:
+        return null;
+    }
+
+    return { x, y, action, button, shift, ctrl, meta };
   }
 
   // ============================================================================

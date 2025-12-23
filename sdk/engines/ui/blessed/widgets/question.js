@@ -1,9 +1,12 @@
+"use strict";
 /**
  * Question - Yes/No dialog box
  */
-import { Box } from './box';
-import { Button } from './button';
-export class Question extends Box {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Question = void 0;
+const box_1 = require("./box");
+const button_1 = require("./button");
+class Question extends box_1.Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
         const height = typeof options.height === 'number' ? options.height : 9;
@@ -28,7 +31,7 @@ export class Question extends Box {
         // Question text - centered at top
         // Use 'transparent' for bg to inherit from parent dialog
         const dialogBg = options.style?.bg || 'black';
-        this.messageText = new Box({
+        this.messageText = new box_1.Box({
             parent: this,
             top: 0,
             left: 0,
@@ -44,7 +47,7 @@ export class Question extends Box {
             },
         });
         // Button container for centering both buttons
-        this.buttonBox = new Box({
+        this.buttonBox = new box_1.Box({
             parent: this,
             bottom: 0,
             left: 'center',
@@ -55,7 +58,7 @@ export class Question extends Box {
             },
         });
         // Yes button
-        this.yesButton = new Button({
+        this.yesButton = new button_1.Button({
             parent: this.buttonBox,
             top: 0,
             left: 0,
@@ -75,7 +78,7 @@ export class Question extends Box {
             },
         });
         // No button
-        this.noButton = new Button({
+        this.noButton = new button_1.Button({
             parent: this.buttonBox,
             top: 0,
             left: 12,
@@ -166,3 +169,4 @@ export class Question extends Box {
         return this.messageText.getContent();
     }
 }
+exports.Question = Question;

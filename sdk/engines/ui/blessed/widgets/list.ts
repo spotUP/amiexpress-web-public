@@ -9,6 +9,7 @@ import type { ListOptions, KeyEvent } from '../core/types';
 export class List extends Element {
   items: string[] = [];
   selected: number = 0;
+  private previousSelected: number = -1;
   private interactive: boolean = true;
   private wrapItemsEnabled: boolean = false;
   private lineToItem: number[] = [];
@@ -16,6 +17,18 @@ export class List extends Element {
   private itemLineCount: number[] = [];
 
   constructor(options: ListOptions = {}) {
+    // Build scrollbar config: merge user options with defaults
+    let scrollbarConfig: any = undefined;
+    if ((options.scrollbar as any) !== false) {
+      const userScrollbar = typeof options.scrollbar === 'object' ? options.scrollbar : {};
+      scrollbarConfig = {
+        ch: userScrollbar.ch || '█',
+        track: userScrollbar.track || { ch: '│' },
+        style: userScrollbar.style || options.style,
+        ...userScrollbar,  // Spread user options to preserve any extra properties
+      };
+    }
+
     super({
       scrollable: true,
       focusable: true,
@@ -24,14 +37,7 @@ export class List extends Element {
       mouse: true,
       wrap: false, // List items should not wrap
       ...options,
-      // Add scrollbar by default (unless explicitly disabled)
-      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
-        ch: '█',
-        track: {
-          ch: '│',
-        },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
-      } : undefined,
+      scrollbar: scrollbarConfig,
     });
 
     this.items = options.items || [];
@@ -63,7 +69,7 @@ export class List extends Element {
     if (options.mouse !== false) {
       this.on('click', this._onClick.bind(this));
 
-      // Mouse wheel handlers - move selection up/down
+      // Mouse wheel handlers - move selection (view auto-scrolls to follow)
       this.on('wheelup', () => {
         this.up();
         this.screen?.render();
@@ -102,51 +108,66 @@ export class List extends Element {
   }
 
   private _updateContent(): void {
-    if (!this.wrapItemsEnabled) {
-      const lines = this.items.map((item, i) => {
-        const marker = i === this.selected ? '> ' : '  ';
-        return marker + item;
-      });
+    const lines = (this as any)._lines as string[] | undefined;
 
-      this.setContent(lines.join('\n'));
-      this.lineToItem = [];
-      this.itemLineStart = [];
-      this.itemLineCount = [];
+    // Fast path: if we already have lines and just need to update selection markers
+    if (lines && lines.length === this.items.length &&
+        this.previousSelected >= 0 && this.previousSelected < this.items.length &&
+        !this.wrapItemsEnabled) {
+      // Just update the two changed lines (old and new selection)
+      const oldIdx = this.previousSelected;
+      const newIdx = this.selected;
+
+      if (oldIdx !== newIdx) {
+        lines[oldIdx] = '  ' + this.items[oldIdx];
+        lines[newIdx] = '> ' + this.items[newIdx];
+      }
       return;
     }
 
-    const lines: string[] = [];
+    // Full rebuild needed
+    const newLines: string[] = [];
     this.lineToItem = [];
     this.itemLineStart = [];
     this.itemLineCount = [];
 
-    const markerWidth = 2;
-    const wrapWidth = Math.max(1, this.getItemWrapWidth() - markerWidth);
-
     this.items.forEach((item, index) => {
       const marker = index === this.selected ? '> ' : '  ';
-      const parsed = this.options.tags ? parseTags(item) : item;
-      const wrapped = this.wrapAnsiText(parsed, wrapWidth);
-      const start = lines.length;
+      const start = newLines.length;
 
-      if (wrapped.length === 0) {
-        lines.push(marker);
-        this.lineToItem.push(index);
-      } else {
-        lines.push(marker + wrapped[0]);
-        this.lineToItem.push(index);
-        for (let i = 1; i < wrapped.length; i += 1) {
-          lines.push('  ' + wrapped[i]);
+      if (this.wrapItemsEnabled) {
+        // Wrap long items to multiple lines
+        const parsed = this.options.tags ? parseTags(item) : item;
+        const wrapWidth = Math.max(1, this.getItemWrapWidth() - 2); // -2 for marker
+        const wrapped = this.wrapAnsiText(parsed, wrapWidth);
+
+        if (wrapped.length === 0) {
+          newLines.push(marker);
           this.lineToItem.push(index);
+        } else {
+          newLines.push(marker + wrapped[0]);
+          this.lineToItem.push(index);
+          for (let i = 1; i < wrapped.length; i++) {
+            newLines.push('  ' + wrapped[i]);
+            this.lineToItem.push(index);
+          }
         }
+      } else {
+        // Simple case: one line per item
+        newLines.push(marker + item);
+        this.lineToItem.push(index);
       }
 
-      const count = lines.length - start;
+      const count = newLines.length - start;
       this.itemLineStart[index] = start;
       this.itemLineCount[index] = count || 1;
     });
 
-    this.setContent(lines.join('\n'));
+    // CRITICAL: Directly set _lines to ensure consistency with itemLineStart/itemLineCount
+    // Don't use setContent() as parseContent() might re-wrap and change line count
+    (this as any)._lines = newLines;
+    this.content = newLines.join('\n');
+    (this as any)._contentDirty = false;
   }
 
   private _onKeypress(ch: any, key: KeyEvent): void {
@@ -188,34 +209,50 @@ export class List extends Element {
   }
 
   select(index: number): void {
+    this.previousSelected = this.selected;
     this.selected = Math.max(0, Math.min(index, this.items.length - 1));
     this._updateContent();
 
     // Scroll to keep selected item visible
-    const pos = this._getCoords();
-    if (pos) {
-      const padding = this.options.padding || 0;
-      const border = this.options.border ? 1 : 0;
-      const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
-      const height = pos.yl - pos.yi - border * 2 - padTop;
+    // Get visible height - try multiple approaches for robustness
+    let visibleHeight = this.iheight;
 
-      const scroll = this.getScroll();
-      if (this.wrapItemsEnabled) {
-        const start = this.itemLineStart[this.selected] ?? this.selected;
-        const count = this.itemLineCount[this.selected] ?? 1;
-        const end = start + count - 1;
+    // Fallback to direct position calculation
+    if (visibleHeight <= 0) {
+      const pos = this._getCoords();
+      if (pos) {
+        const border = this.options.border ? 2 : 0;
+        const padding = this.options.padding || 0;
+        const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
+        const padBottom = typeof padding === 'number' ? padding : (padding as any).bottom || 0;
+        visibleHeight = pos.yl - pos.yi - border - padTop - padBottom;
+      }
+    }
 
-        if (start < scroll) {
-          this.setScroll(start);
-        } else if (end >= scroll + height) {
-          this.setScroll(end - height + 1);
-        }
-      } else {
-        if (this.selected < scroll) {
-          this.setScroll(this.selected);
-        } else if (this.selected >= scroll + height) {
-          this.setScroll(this.selected - height + 1);
-        }
+    // Final fallback
+    if (visibleHeight <= 0) {
+      visibleHeight = 10; // Reasonable default
+    }
+
+    // Get total content lines
+    const totalLines = (this as any)._lines?.length || this.items.length;
+
+    // Only scroll if content exceeds visible area
+    if (totalLines > visibleHeight && this.items.length > 0) {
+      const currentScroll = this.getScroll();
+
+      // Get line position for selected item
+      const lineStart = this.itemLineStart[this.selected] ?? this.selected;
+      const lineCount = this.itemLineCount[this.selected] ?? 1;
+      const lineEnd = lineStart + lineCount - 1;
+
+      // Scroll up if selection is above visible area
+      if (lineStart < currentScroll) {
+        this.setScroll(lineStart);
+      }
+      // Scroll down if selection is below visible area
+      else if (lineEnd >= currentScroll + visibleHeight) {
+        this.setScroll(lineEnd - visibleHeight + 1);
       }
     }
 
@@ -269,15 +306,29 @@ export class List extends Element {
     const innerWidth = this.iwidth;
     if (innerWidth > 0) return innerWidth;
 
+    // Try to calculate from position if element is laid out
+    const pos = this._getCoords();
+    if (pos) {
+      const border = this.options.border ? 2 : 0;
+      const padding = this.options.padding || 0;
+      const padLeft = typeof padding === 'number' ? padding : (padding as any).left || 0;
+      const padRight = typeof padding === 'number' ? padding : (padding as any).right || 0;
+      const scrollbar = this.hasScrollbar() ? 1 : 0;
+      const width = pos.xl - pos.xi - border - padLeft - padRight - scrollbar;
+      if (width > 0) return width;
+    }
+
     if (typeof this.options.width === 'number') {
       const padding = this.options.padding || 0;
       const padLeft = typeof padding === 'number' ? padding : (padding as any).left || 0;
       const padRight = typeof padding === 'number' ? padding : (padding as any).right || 0;
       const border = this.options.border ? 2 : 0;
-      return Math.max(1, this.options.width - border - padLeft - padRight);
+      const scrollbar = this.hasScrollbar() ? 1 : 0;
+      return Math.max(1, this.options.width - border - padLeft - padRight - scrollbar);
     }
 
-    return 1;
+    // Return a reasonable default instead of 1 (which would break wrapping)
+    return 80;
   }
 
   private wrapAnsiText(text: string, width: number): string[] {

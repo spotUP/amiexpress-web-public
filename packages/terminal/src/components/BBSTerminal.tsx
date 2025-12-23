@@ -88,6 +88,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
+  const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   const mouseButtonDown = useRef<boolean>(false);  // Track mouse button state for drag events
   const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
@@ -418,34 +419,49 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     term.open(terminalRef.current);
     terminalInstance.current = term;
 
+    // Add native wheel event listener directly to xterm element (React onWheel doesn't capture xterm's wheel events)
+    const xtermElement = terminalRef.current.querySelector('.xterm-screen') || terminalRef.current;
+    const nativeWheelHandler = (ev: WheelEvent) => {
+      if (!doorActive.current && !gameMode.current) return;
+      if (!socketRef.current?.connected) return;
+
+      // Get terminal coords
+      const rect = terminalRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const cellWidth = rect.width / 80;
+      const cellHeight = rect.height / 24;
+      const x = Math.floor((ev.clientX - rect.left) / cellWidth);
+      const y = Math.floor((ev.clientY - rect.top) / cellHeight);
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      socketRef.current.emit('mouse-wheel', {
+        x, y,
+        deltaY: ev.deltaY,
+        shift: ev.shiftKey,
+        ctrl: ev.ctrlKey,
+        alt: ev.altKey
+      });
+    };
+    xtermElement.addEventListener('wheel', nativeWheelHandler as EventListener, { passive: false });
+    // Store for cleanup
+    (terminalRef.current as any)._wheelHandler = nativeWheelHandler;
+    (terminalRef.current as any)._wheelElement = xtermElement;
+
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
 
     // Custom key event handler - intercepts keys before xterm processes them
     // This is critical for game mode because xterm normally intercepts all keys
+    // NOTE: We only BLOCK xterm here - actual key handling is done by window event listeners
+    // (handleGameKeyDown/handleGameKeyUp) which also handle key repeat
     term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-      // In game mode, emit key-down/key-up events and prevent xterm from processing
+      // In game mode, block xterm from processing keys - window handlers will emit events
       if (gameMode.current && socketRef.current?.connected) {
-        if (ev.type === 'keydown') {
-          // Ignore browser key repeat - we handle our own
-          if (ev.repeat) {
-            return false; // Prevent xterm from processing
-          }
-          const key = ev.key;
-          if (!keyState.current[key]) {
-            keyState.current[key] = true;
-            socketRef.current.emit('key-down', { key, code: ev.code });
-          }
-          return false; // Prevent xterm from processing (we handle it)
-        } else if (ev.type === 'keyup') {
-          const key = ev.key;
-          if (keyState.current[key]) {
-            delete keyState.current[key];
-            socketRef.current.emit('key-up', { key, code: ev.code });
-          }
-          return false; // Prevent xterm from processing
-        }
+        // Block xterm from processing any keys in game mode
+        return false;
       }
       // Not in game mode - let xterm handle normally
       return true;
@@ -488,6 +504,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Reset game mode state at initialization to prevent stuck state from previous sessions
     gameMode.current = false;
     keyState.current = {};
+    // Clear any lingering key repeat timers
+    Object.keys(keyRepeatTimers.current).forEach(key => {
+      clearTimeout(keyRepeatTimers.current[key]);
+    });
+    keyRepeatTimers.current = {};
 
     const stopGuruAnimation = () => {
       if (guruTimerRef.current) {
@@ -550,7 +571,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }, 650);
     };
 
-    // Game mode keyboard handlers - bypass OS key repeat delay
+    // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
+    const KEY_REPEAT_DELAY = 0;    // No initial delay - start repeating immediately
+    const KEY_REPEAT_RATE = 33;    // Interval between repeats (ms) - 30 keys/sec
+
+    const startKeyRepeat = (key: string, code: string) => {
+      // Clear any existing timer for this key
+      if (keyRepeatTimers.current[key]) {
+        clearTimeout(keyRepeatTimers.current[key]);
+      }
+
+      const repeatKey = () => {
+        const canRepeat = keyState.current[key] && gameMode.current && socketRef.current?.connected;
+        if (canRepeat) {
+          socketRef.current!.emit('key-down', { key, code, repeat: true });
+          keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+        }
+      };
+
+      // Start repeat immediately (no delay)
+      keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+    };
+
+    const stopKeyRepeat = (key: string) => {
+      if (keyRepeatTimers.current[key]) {
+        clearTimeout(keyRepeatTimers.current[key]);
+        delete keyRepeatTimers.current[key];
+      }
+    };
+
     const handleGameKeyDown = (ev: KeyboardEvent) => {
       // Handle transfer cancel
       if (transferState.current.direction && ev.key === 'Escape') {
@@ -559,7 +608,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
-      // Game mode: send raw keydown events (no key repeat!)
+      // Game mode: send raw keydown events with custom key repeat
       if (gameMode.current && socketRef.current?.connected) {
         // Ignore browser key repeat - we handle our own repeat logic
         if (ev.repeat) {
@@ -568,21 +617,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
 
         const key = ev.key;
+        console.log(`[GameKeyDown] key=${key}, already pressed=${!!keyState.current[key]}, gameMode=${gameMode.current}`);
         // Only send if key wasn't already pressed (prevents duplicate downs)
         if (!keyState.current[key]) {
           keyState.current[key] = true;
           socketRef.current.emit('key-down', { key, code: ev.code });
+          // Start custom key repeat for this key
+          startKeyRepeat(key, ev.code);
         }
         ev.preventDefault();
       }
     };
 
     const handleGameKeyUp = (ev: KeyboardEvent) => {
-      // Game mode: send raw keyup events
+      // Game mode: send raw keyup events and stop repeat
       if (gameMode.current && socketRef.current?.connected) {
         const key = ev.key;
         if (keyState.current[key]) {
           delete keyState.current[key];
+          stopKeyRepeat(key);
           socketRef.current.emit('key-up', { key, code: ev.code });
         }
         ev.preventDefault();
@@ -617,6 +670,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
       keyState.current = {};
+      // Clear key repeat timers
+      Object.keys(keyRepeatTimers.current).forEach(key => {
+        clearTimeout(keyRepeatTimers.current[key]);
+      });
+      keyRepeatTimers.current = {};
 
       // Try session restoration first (if we have a saved session)
       const savedSession = getStoredSessionState();
@@ -1196,10 +1254,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Game mode: bypass OS key repeat for real-time game controls
     socket.on('game-mode', (enabled: boolean) => {
-      console.log(`[GameMode] ${enabled ? 'ENABLED' : 'DISABLED'} - raw keydown/keyup events`);
+      console.log(`[GameMode] RECEIVED: ${enabled ? 'ENABLED' : 'DISABLED'} - raw keydown/keyup events`);
+      console.log(`[GameMode] Before: gameMode.current = ${gameMode.current}`);
       gameMode.current = enabled;
-      // Clear key states when switching modes
+      console.log(`[GameMode] After: gameMode.current = ${gameMode.current}`);
+      // Clear key states and repeat timers when switching modes
       keyState.current = {};
+      // Stop all key repeat timers
+      Object.keys(keyRepeatTimers.current).forEach(key => {
+        clearTimeout(keyRepeatTimers.current[key]);
+      });
+      keyRepeatTimers.current = {};
     });
 
     socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
@@ -1422,8 +1487,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       transferState.current = { direction: null, paths: [] };
       gameMode.current = false;
       keyState.current = {};
+      // Clear all key repeat timers
+      Object.keys(keyRepeatTimers.current).forEach(key => {
+        clearTimeout(keyRepeatTimers.current[key]);
+      });
+      keyRepeatTimers.current = {};
       window.removeEventListener('keydown', handleGameKeyDown);
       window.removeEventListener('keyup', handleGameKeyUp);
+      // Clean up wheel handler
+      if (terminalRef.current) {
+        const handler = (terminalRef.current as any)._wheelHandler;
+        const element = (terminalRef.current as any)._wheelElement;
+        if (handler && element) {
+          element.removeEventListener('wheel', handler);
+        }
+      }
       if (transferTimeout.current) {
         clearTimeout(transferTimeout.current);
         transferTimeout.current = null;
@@ -1553,14 +1631,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   };
 
   const handleWheel = (event: React.WheelEvent) => {
+    console.log(`[Wheel] event received, doorActive=${doorActive.current}, gameMode=${gameMode.current}`);
     if (!doorActive.current && !gameMode.current) return;
 
     const socket = socketRef.current;
-    if (!socket?.connected) return;
+    if (!socket?.connected) {
+      console.log('[Wheel] socket not connected');
+      return;
+    }
 
     const coords = getTerminalCoordsFromPoint(event.clientX, event.clientY);
-    if (!coords) return;
+    if (!coords) {
+      console.log('[Wheel] no coords');
+      return;
+    }
 
+    console.log(`[Wheel] emitting mouse-wheel: x=${coords.x}, y=${coords.y}, deltaY=${event.deltaY}`);
     event.preventDefault();
     socket.emit('mouse-wheel', {
       x: coords.x,

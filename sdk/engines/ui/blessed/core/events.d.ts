@@ -13,4 +13,3 @@ export declare class EventEmitter {
     listenerCount(event: string): number;
     eventNames(): string[];
 }
-//# sourceMappingURL=events.d.ts.map

@@ -1,18 +1,21 @@
+"use strict";
 /**
  * Program - Terminal control and I/O layer
  *
  * Browser-adapted version of blessed Program class.
  * Handles all terminal control sequences, input parsing, and output buffering.
  */
-import { EventEmitter } from './events';
-import { cursor, attrs, fg, bg } from './colors';
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Program = void 0;
+const events_1 = require("./events");
+const colors_1 = require("./colors");
 /**
  * Program class - Low-level terminal control
  *
  * Provides methods for cursor control, colors, attributes, and input handling.
  * This is the foundation that Screen builds upon.
  */
-export class Program extends EventEmitter {
+class Program extends events_1.EventEmitter {
     constructor(options = {}) {
         super();
         // Dimensions
@@ -120,7 +123,7 @@ export class Program extends EventEmitter {
         if (!this._cursorHidden)
             return;
         this._cursorHidden = false;
-        this.write(cursor.show);
+        this.write(colors_1.cursor.show);
     }
     /**
      * Hide cursor
@@ -129,7 +132,7 @@ export class Program extends EventEmitter {
         if (this._cursorHidden)
             return;
         this._cursorHidden = true;
-        this.write(cursor.hide);
+        this.write(colors_1.cursor.hide);
     }
     /**
      * Set cursor position (0-indexed)
@@ -137,7 +140,7 @@ export class Program extends EventEmitter {
     cup(row, col) {
         this.y = row;
         this.x = col;
-        this.write(cursor.pos(col, row));
+        this.write(colors_1.cursor.pos(col, row));
     }
     /**
      * Move cursor to position (alias for cup)
@@ -158,7 +161,7 @@ export class Program extends EventEmitter {
     cuu(n = 1) {
         this.y = Math.max(0, this.y - n);
         if (n === 1) {
-            this.write(cursor.up());
+            this.write(colors_1.cursor.up());
         }
         else {
             this.write(`\x1b[${n}A`);
@@ -170,7 +173,7 @@ export class Program extends EventEmitter {
     cud(n = 1) {
         this.y = Math.min(this.rows - 1, this.y + n);
         if (n === 1) {
-            this.write(cursor.down());
+            this.write(colors_1.cursor.down());
         }
         else {
             this.write(`\x1b[${n}B`);
@@ -335,49 +338,49 @@ export class Program extends EventEmitter {
      */
     fg(color) {
         this._attr.fg = color;
-        this.write(fg(color));
+        this.write((0, colors_1.fg)(color));
     }
     /**
      * Set background color
      */
     bg(color) {
         this._attr.bg = color;
-        this.write(bg(color));
+        this.write((0, colors_1.bg)(color));
     }
     /**
      * Set bold
      */
     bold() {
         this._attr.bold = true;
-        this.write(attrs.bold);
+        this.write(colors_1.attrs.bold);
     }
     /**
      * Set underline
      */
     ul(enable = true) {
         this._attr.underline = enable;
-        this.write(enable ? attrs.underline : '\x1b[24m');
+        this.write(enable ? colors_1.attrs.underline : '\x1b[24m');
     }
     /**
      * Set blink
      */
     blink(enable = true) {
         this._attr.blink = enable;
-        this.write(enable ? attrs.blink : '\x1b[25m');
+        this.write(enable ? colors_1.attrs.blink : '\x1b[25m');
     }
     /**
      * Set inverse
      */
     inverse(enable = true) {
         this._attr.inverse = enable;
-        this.write(enable ? attrs.inverse : '\x1b[27m');
+        this.write(enable ? colors_1.attrs.inverse : '\x1b[27m');
     }
     /**
      * Set invisible
      */
     invisible(enable = true) {
         this._attr.invisible = enable;
-        this.write(enable ? attrs.invisible : '\x1b[28m');
+        this.write(enable ? colors_1.attrs.invisible : '\x1b[28m');
     }
     /**
      * Reset all attributes
@@ -392,7 +395,7 @@ export class Program extends EventEmitter {
             fg: -1,
             bg: -1,
         };
-        this.write(attrs.reset);
+        this.write(colors_1.attrs.reset);
     }
     /**
      * Normal (no bold, no dim)
@@ -871,3 +874,4 @@ export class Program extends EventEmitter {
         this.emit('destroy');
     }
 }
+exports.Program = Program;

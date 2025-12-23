@@ -14,4 +14,3 @@ export declare class ScrollableText extends Text {
      */
     setScrollPercent(percent: number): void;
 }
-//# sourceMappingURL=scrollabletext.d.ts.map

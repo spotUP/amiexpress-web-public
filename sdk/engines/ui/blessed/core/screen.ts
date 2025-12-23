@@ -488,6 +488,11 @@ export class Screen extends Element {
       this._renderBorder(element, pos);
     }
 
+    // Render scrollbar if element has one
+    if ((element as any).hasScrollbar?.() && (element as any).renderScrollbar) {
+      (element as any).renderScrollbar();
+    }
+
     // Render children
     for (const child of element.children) {
       this._renderElement(child);
@@ -495,7 +500,8 @@ export class Screen extends Element {
   }
 
   private _renderContent(element: Element, pos: any): void {
-    const lines = element.getLines();
+    // Use getVisibleLines() to respect scroll position (childBase)
+    const lines = (element as any).getVisibleLines ? (element as any).getVisibleLines() : element.getLines();
     const padding = element.options.padding || 0;
     const hasBorder = element.options.border && (element.options.border as any)?.type !== 'none';
     const border = hasBorder ? 1 : 0;
@@ -1252,16 +1258,39 @@ export class Screen extends Element {
    * Set focused element (called by Element.focus())
    */
   setFocused(element: Element | null): void {
+    // Helper to find the element with a visible border (may be parent)
+    const findBorderElement = (el: any): any => {
+      if (!el) return null;
+      // Check if element has a border with fg color
+      if (el.options?.border && el.options?.style?.border?.fg) {
+        return el;
+      }
+      // Also check el.style.border directly (some widgets set it there)
+      if (el.options?.border && el.style?.border?.fg) {
+        return el;
+      }
+      // Walk up to parent
+      if (el.parent && el.parent !== this) {
+        return findBorderElement(el.parent);
+      }
+      return null;
+    };
+
     // Blur previous focused element
     if (this._focused && this._focused !== element) {
       this._focused.focused = false;
       this._focused.emit('blur');
 
-      // Restore original border color on blur (if element has border and stored color)
-      const prevEl = this._focused as any;
-      if (prevEl.border && prevEl._originalBorderColor) {
-        prevEl.style = prevEl.style || {};
-        prevEl.style.border = { ...(prevEl.style.border || {}), fg: prevEl._originalBorderColor };
+      // Restore original border color on blur
+      const prevBorderEl = findBorderElement(this._focused);
+      if (prevBorderEl && prevBorderEl._originalBorderColor) {
+        // Update both options.style.border and style.border for consistency
+        if (prevBorderEl.options?.style?.border) {
+          prevBorderEl.options.style.border.fg = prevBorderEl._originalBorderColor;
+        }
+        if (prevBorderEl.style?.border) {
+          prevBorderEl.style.border.fg = prevBorderEl._originalBorderColor;
+        }
       }
     }
 
@@ -1271,16 +1300,20 @@ export class Screen extends Element {
       element.focused = true;
       element.emit('focus');
 
-      // Automatically set white borders on focused elements with borders
-      const el = element as any;
-      if (el.border && el.style?.border?.fg) {
+      // Automatically set white borders on focused elements
+      const borderEl = findBorderElement(element);
+      if (borderEl) {
         // Store original border color if not already stored
-        if (!el._originalBorderColor) {
-          el._originalBorderColor = el.style.border.fg;
+        if (!borderEl._originalBorderColor) {
+          borderEl._originalBorderColor = borderEl.options?.style?.border?.fg || borderEl.style?.border?.fg;
         }
         // Set white border for focused element
-        el.style = el.style || {};
-        el.style.border = { ...(el.style.border || {}), fg: 'white' };
+        if (borderEl.options?.style?.border) {
+          borderEl.options.style.border.fg = 'white';
+        }
+        if (borderEl.style?.border) {
+          borderEl.style.border.fg = 'white';
+        }
       }
     }
 
