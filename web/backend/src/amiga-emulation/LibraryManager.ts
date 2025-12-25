@@ -29,6 +29,7 @@ import { LibraryLoader } from "./loader/LibraryLoader.js";
 import { PathManager } from "./api/PathManager.js";
 import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
 import { DoorLogger } from "./DoorLogger.js";
+import { KickstartRom } from "./KickstartRom.js";
 import { spawnSync } from "child_process";
 
 const DEFAULT_ROM =
@@ -61,12 +62,14 @@ export class LibraryManager {
   private pathManager: PathManager | null = null;
   private bbsRoot: string = "";
   private logger: DoorLogger | null = null;
+  private kickstartRom: KickstartRom | null = null;
 
-  constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig, logger?: DoorLogger) {
+  constructor(emulator: MoiraEmulator, socket: Socket, config: DoorConfig, logger?: DoorLogger, kickstartRom?: KickstartRom | null) {
     this.emulator = emulator;
     this.socket = socket;
     this.config = config;
     this.logger = logger || null;
+    this.kickstartRom = kickstartRom || null;
   }
 
   async initialize(): Promise<void> {
@@ -338,7 +341,7 @@ export class LibraryManager {
       this.ensureRomLibrariesExtracted(romPath, projectRoot);
     }
 
-    const libraryLoader = new LibraryLoader(this.emulator);
+    const libraryLoader = new LibraryLoader(this.emulator, undefined, this.kickstartRom);
     // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
     // addSearchPath() unshifts, so add in reverse priority order.
     libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
@@ -359,31 +362,36 @@ export class LibraryManager {
 
     console.log(`[LibraryManager] Door type: ${doorType}`);
 
-    // Per express.e:4316-4320: XIM doors use AEDoorPort{n}, SIM/SUP/TIM/IIM use DoorControl{n}
+    // CRITICAL FIX: XIM doors check for AEDoorPort{n} first (express.e:4317), then AEServer.{n}
+    // Real AmiExpress BBS creates ports named "AEServer.1", "AEServer.2", etc. as primary
+    // but doors check both naming conventions for compatibility
+    // SIM/SUP/TIM/IIM doors use DoorControl{n} as primary
     const isSIMType = doorType === "SIM" || doorType === "SUP" || doorType === "TIM" || doorType === "IIM";
-    const basePortName = isSIMType ? "DoorControl" : "AEDoorPort";
+    const basePortName = isSIMType ? "DoorControl" : "AEServer";
 
     console.log(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
 
     // Amiga doors call FindPort with 1-based node numbers.
     // Our session nodeId may be 0-based; normalize to 1-based for public port naming.
     const amigaNodeId = nodeId === 0 ? 1 : nodeId;
-    const portName = `${basePortName}${amigaNodeId}`;
+    // CRITICAL: AEServer ports use DOT notation: "AEServer.1", "AEServer.2", etc.
+    const portName = basePortName === "AEServer" ? `${basePortName}.${amigaNodeId}` : `${basePortName}${amigaNodeId}`;
     const portAddr = this.execLibrary.createPublicPort(portName);
     this.execLibrary.setDoorPortAddress(portAddr);
     console.log(
       `[LibraryManager] Created ${portName} at 0x${portAddr.toString(16)}`
     );
 
-    const simplePortAddr = this.execLibrary.createPublicPort(basePortName);
+    const simplePortName = basePortName === "AEServer" ? `${basePortName}.0` : basePortName;
+    const simplePortAddr = this.execLibrary.createPublicPort(simplePortName);
     console.log(
-      `[LibraryManager] Created ${basePortName} (simple) at 0x${simplePortAddr.toString(
+      `[LibraryManager] Created ${simplePortName} (simple) at 0x${simplePortAddr.toString(
         16
       )}`
     );
     // Also register the raw nodeId variant if different, to satisfy any 0-based lookups.
     if (nodeId !== amigaNodeId) {
-      const zeroBasedName = `${basePortName}${nodeId}`;
+      const zeroBasedName = basePortName === "AEServer" ? `${basePortName}.${nodeId}` : `${basePortName}${nodeId}`;
       const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName);
       console.log(
         `[LibraryManager] Created ${zeroBasedName} at 0x${zeroBasedAddr.toString(
@@ -394,7 +402,9 @@ export class LibraryManager {
 
     // CRITICAL FIX: Create BOTH port naming conventions to support all door types
     // Some doors are misdetected, so create alternate port names for compatibility
-    const altBasePortName = isSIMType ? "AEDoorPort" : "DoorControl";
+    // XIM doors (like RTW) check for AEDoorPort{N} first, then fall back to AEServer.{N}
+    // SIM doors check for DoorControl{N} first, then fall back to AEDoorPort{N}
+    const altBasePortName = isSIMType ? "AEServer" : "AEDoorPort";
     console.log(`[LibraryManager] Creating alternate port names (${altBasePortName}) for compatibility...`);
 
     this.execLibrary.createPublicPort(`${altBasePortName}${amigaNodeId}`);
@@ -408,12 +418,17 @@ export class LibraryManager {
     // Doors call FindPort("AEServer.%d") to detect active nodes on the BBS
     // AmiExpress supported up to 255 nodes - create ports for all possible nodes
     // Use lightweight ports to avoid exhausting signal bits (only 32 available)
+    // CRITICAL: Skip the current node's port - it's already been created as the main port above
     const maxAEServerNodes = 255;
-    console.log(`[LibraryManager] Creating lightweight AEServer ports for multinode support (0-254)...`);
+    console.log(`[LibraryManager] Creating lightweight AEServer ports for multinode support (0-254, skipping node ${nodeId})...`);
     for (let i = 0; i < maxAEServerNodes; i++) {
+      // Skip current node - already created as main port
+      if (i === nodeId || i === amigaNodeId) {
+        continue;
+      }
       this.execLibrary.createLightweightPort(`AEServer.${i}`);
     }
-    console.log(`[LibraryManager] AEServer.0-254 lightweight ports created (255 nodes, no signals consumed)`);
+    console.log(`[LibraryManager] AEServer.0-254 lightweight ports created (except node ${nodeId} - already exists as main port)`);
 
     // Create AREXX-format ports (AEDoorRP.XXX) for doors like RTW that use this naming convention
     // RTW and other doors look for "AEDoorRP.000", "AEDoorRP.001" etc. (3-digit zero-padded node IDs)
@@ -428,12 +443,13 @@ export class LibraryManager {
     this.doorPortAddress = portAddr;
     this.aePortAddress = portAddr;
 
-    // Create a dedicated reply port for doors (DoorReplyPort<n>) so XIM doors can
-    // post messages and receive replies on the expected port name.
-    const replyPortName = `DoorReplyPort${amigaNodeId}`;
-    this.doorReplyPortAddr = this.execLibrary.ensurePublicPort(replyPortName);
-    // Also provide a generic alias without the node suffix for legacy lookups.
-    this.execLibrary.ensurePublicPort("DoorReplyPort");
+    // CRITICAL: Do NOT create DoorReplyPort - it doesn't exist in real AmiExpress!
+    // Native AEDoor.library creates its own internal reply ports.
+    // Real AmiExpress only creates:
+    //   - AEServer.N (public, named) - BBS receives FROM doors
+    //   - serverRP (private, unnamed) - BBS receives replies when sending TO doors
+    // See express.e:13095 (serverRP) and express.e:13129 (AEServer)
+    this.doorReplyPortAddr = 0; // Not used
 
     // Initialize PathManager assigns based on BBS root/dataDir and optional overrides from config.assigns
     // Resolve the BBS root reliably from this source path to avoid depending on cwd

@@ -1,5 +1,6 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { HunkLoader } from './HunkLoader';
+import { KickstartRom } from '../KickstartRom';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
@@ -28,15 +29,41 @@ export interface LoadedLibrary {
 export class LibraryLoader {
   private emulator: MoiraEmulator;
   private hunkLoader: HunkLoader;
+  private kickstartRom: KickstartRom | null;
   private librarySearchPaths: string[];
   // Place real libraries safely within 24-bit address space but above door code.
   // Door code lives below ~0x200000; use 0x00200000 and step downward to avoid collisions.
   private nextLibraryBase: number = 0x00200000;
   private loadedLibraries = new Map<string, LoadedLibrary>();
 
-  constructor(emulator: MoiraEmulator, searchPaths?: string[]) {
+  // Libraries that are ROM-resident in Kickstart 3.1
+  private readonly ROM_LIBRARIES = new Set([
+    'exec.library',
+    'dos.library',
+    'intuition.library',
+    'graphics.library',
+    'layers.library',
+    'icon.library',
+    'mathieeedoubbas.library',
+    'mathieeedoubtrans.library',
+    'mathieeesingbas.library',
+    'mathieeesingtrans.library',
+    'mathffp.library',
+    'mathtrans.library',
+    'utility.library',
+    'expansion.library',
+    'gadtools.library',
+    'keymap.library',
+    'console.library',
+    'diskfont.library',
+    'iffparse.library',
+    'commodities.library',
+  ]);
+
+  constructor(emulator: MoiraEmulator, searchPaths?: string[], kickstartRom?: KickstartRom | null) {
     this.emulator = emulator;
     this.hunkLoader = new HunkLoader();
+    this.kickstartRom = kickstartRom || null;
 
     // Default search paths for Amiga libraries
     this.librarySearchPaths = searchPaths || [
@@ -103,7 +130,20 @@ export class LibraryLoader {
         return this.loadedLibraries.get(libraryName)!;
       }
 
-      // Find library file
+      // CRITICAL: Check if library is ROM-resident (like a real Amiga!)
+      if (this.ROM_LIBRARIES.has(libraryName)) {
+        if (this.kickstartRom) {
+          console.log(`[LibraryLoader] ✅ ${libraryName} is ROM-resident (using Kickstart ROM)`);
+          console.log(`[LibraryLoader]   ROM libraries are native code in ROM, not loaded from disk`);
+          // Return null to indicate library should use ROM/trap hybrid approach
+          // The actual library implementation is already in the ROM or uses our traps
+          return null;
+        } else {
+          console.log(`[LibraryLoader] ⚠️  ${libraryName} should be in ROM, but no ROM loaded - will try disk`);
+        }
+      }
+
+      // Find library file on disk (for non-ROM libraries like AEDoor.library)
       const libraryPath = this.findLibraryFile(libraryName);
       if (!libraryPath) {
         return null;

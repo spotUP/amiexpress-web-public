@@ -7,6 +7,7 @@ import { Server, Socket } from "socket.io";
 import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
 import { XIMProtocol } from "./XIMProtocol.js";
+import { KickstartRom } from "./KickstartRom.js";
 import * as path from "path";
 import { appendFileSync } from "fs";
 
@@ -16,6 +17,7 @@ import { DoorLoader } from "./DoorLoader.js";
 import { DoorLifecycleManager } from "./session/DoorLifecycleManager.js";
 import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
 import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
+import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -55,6 +57,9 @@ export class AmigaDoorSession {
     iconLibrary: null as any,
     libraryTraps: null as any,
     ximProtocol: null as XIMProtocol | null,
+
+    // ROM
+    kickstartRom: null as KickstartRom | null,
 
     // Port addresses
     doorPortAddress: 0,
@@ -235,12 +240,23 @@ export class AmigaDoorSession {
       await this.emulator.initialize();
       console.log("[AmigaDoorSession] ✅ Emulator initialized");
 
+      // Load Kickstart ROM (CRITICAL - must load before libraries)
+      console.log("[AmigaDoorSession] Loading Kickstart ROM...");
+      this.sharedState.kickstartRom = new KickstartRom();
+      this.sharedState.kickstartRom.dumpInfo();
+
+      // Map ROM into emulator memory at 0xF80000-0xFFFFFF
+      const romData = this.sharedState.kickstartRom.getRomData();
+      this.emulator.loadROM(romData);
+      console.log("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
+
       // Initialize Library Manager (Phase 2)
       this.libraryManager = new LibraryManager(
         this.emulator,
         this.socket,
         this.config,
-        this.logger
+        this.logger,
+        this.sharedState.kickstartRom
       );
       await this.initializeLibraries();
 
@@ -463,8 +479,8 @@ export class AmigaDoorSession {
     // Set up sysop debug callback for file errors
     if (this.sharedState.dosLibrary) {
       this.sharedState.dosLibrary.setDebugCallback((message: string, level: string) => {
-        // Only emit warnings and errors to sysop terminal
-        if (level === 'warn' || level === 'error') {
+        // Only emit warnings and errors to sysop terminal if sysop debug is enabled
+        if ((level === 'warn' || level === 'error') && SysopDebugUtil.isSysop(this.config.bbsSession)) {
           const color = level === 'error' ? '\x1b[31m' : '\x1b[33m';
           this.socket.emit('ansi-output', `${color}${message}\x1b[0m\r\n`);
         }
