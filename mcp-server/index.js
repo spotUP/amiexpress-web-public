@@ -94,6 +94,16 @@ const SYSOP_DOCS = {
     path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'SYSOP_GUIDE.md'),
     description: 'Sysop guide for getting BBS running (was QUICK_START.md)',
     mimeType: 'text/markdown'
+  },
+  'ci-cd': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'CI_CD.md'),
+    description: 'Continuous integration and deployment configuration',
+    mimeType: 'text/markdown'
+  },
+  'docker': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '2-Sysops', 'DOCKER.md'),
+    description: 'Docker containerization guide',
+    mimeType: 'text/markdown'
   }
 };
 
@@ -163,6 +173,26 @@ const DEVELOPER_DOCS = {
     path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'TELNET_SSH_SERVERS.md'),
     description: 'Telnet and SSH server implementation (296 lines)',
     mimeType: 'text/markdown'
+  },
+  'backend-architecture': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'BACKEND_ARCHITECTURE.md'),
+    description: 'Backend code architecture and organization',
+    mimeType: 'text/markdown'
+  },
+  'clean-architecture': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'CLEAN_ARCHITECTURE.md'),
+    description: 'Clean architecture principles for the project',
+    mimeType: 'text/markdown'
+  },
+  'moira-debugging': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'MOIRA_DEBUGGING.md'),
+    description: 'Debugging 68K emulation with MOIRA',
+    mimeType: 'text/markdown'
+  },
+  'operator-chat': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '3-Developers', 'OPERATOR_CHAT_IMPLEMENTATION.md'),
+    description: 'Operator chat system implementation',
+    mimeType: 'text/markdown'
   }
 };
 
@@ -211,6 +241,95 @@ const DOOR_DOCS = {
   'door-manager': {
     path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'DOOR_MANAGER.md'),
     description: 'Door management system (493 lines)',
+    mimeType: 'text/markdown'
+  },
+  '68k-door-development': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', '68K_DOOR_DEVELOPMENT.md'),
+    description: 'Native 68K Amiga door development guide',
+    mimeType: 'text/markdown'
+  },
+  'c-door-development': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'C_DOOR_DEVELOPMENT.md'),
+    description: 'C language door development guide',
+    mimeType: 'text/markdown'
+  },
+  'python-door-development': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'PYTHON_DOOR_DEVELOPMENT.md'),
+    description: 'Python door development guide',
+    mimeType: 'text/markdown'
+  },
+  'typescript-door-guide': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'TYPESCRIPT_DOOR_GUIDE.md'),
+    description: 'TypeScript/SDK door development guide',
+    mimeType: 'text/markdown'
+  },
+  'game-mode-mouse': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '4-Door-Developers', 'GAME_MODE_AND_MOUSE.md'),
+    description: 'Game mode and mouse support for doors',
+    mimeType: 'text/markdown'
+  },
+};
+
+// SDK documentation (engine quick references)
+const SDK_DOCS = {
+  'sdk-neo-blessed-guide': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'NEO_BLESSED_GUIDE.md'),
+    description: 'Complete Neo-Blessed UI framework guide',
+    mimeType: 'text/markdown'
+  },
+  'sdk-ui-blessed': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'UI_BLESSED_QUICK_REFERENCE.md'),
+    description: 'Neo-Blessed UI widgets quick reference',
+    mimeType: 'text/markdown'
+  },
+  'sdk-network-guide': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'NETWORK_ENGINE_GUIDE.md'),
+    description: 'Network engine full documentation (multiplayer, lobbies, matchmaking)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-network': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'NETWORK_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Network engine quick reference',
+    mimeType: 'text/markdown'
+  },
+  'sdk-ai': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'AI_ENGINE_QUICK_REFERENCE.md'),
+    description: 'AI engine quick reference (behavior trees, FSM, pathfinding)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-audio': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'AUDIO_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Audio engine quick reference (MOD, sound effects)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-cards': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'CARDS_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Card game engine quick reference (deck, hand, poker)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-graphics': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'GRAPHICS_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Graphics engine quick reference (sprites, tiles, animation)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-input': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'INPUT_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Input engine quick reference (keyboard, mouse, gamepad)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-physics': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'PHYSICS_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Physics engine quick reference (collision, gravity)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-poker': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'POKER_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Poker engine quick reference (hand evaluation, betting)',
+    mimeType: 'text/markdown'
+  },
+  'sdk-tactical': {
+    path: path.join(PROJECT_ROOT, 'sdk', 'docs', 'TACTICAL_ENGINE_QUICK_REFERENCE.md'),
+    description: 'Tactical RPG engine quick reference (grid, units, combat)',
     mimeType: 'text/markdown'
   },
 };
@@ -380,6 +499,7 @@ const ALL_DOCS = {
   ...SYSOP_DOCS,
   ...DEVELOPER_DOCS,
   ...DOOR_DOCS,
+  ...SDK_DOCS,
   ...REFERENCE_DOCS,
   ...PROGRESS_DOCS,
   ...REFERENCE_SOURCES

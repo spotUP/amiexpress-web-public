@@ -1,563 +1,451 @@
 /**
- * Network Engine - Multiplayer Support
+ * Network Engine - Comprehensive Multiplayer Framework
  *
- * Provides real-time and turn-based multiplayer functionality for BBS doors.
- * Handles session management, state synchronization, and network messaging.
+ * A complete multiplayer game framework providing everything modern games need:
+ * - Real-time and turn-based multiplayer
+ * - Matchmaking with skill-based ranking
+ * - Pre-game lobbies with team management
+ * - State synchronization with multiple strategies
+ * - Client-side prediction and server reconciliation
+ * - Entity interpolation for smooth movement
+ * - Player presence and activity tracking
+ * - Social features (friends, parties, voice chat)
+ * - Leaderboards, statistics, and achievements
+ * - Game replay recording and playback
+ * - Anti-cheat and security validation
  *
- * Features:
- * - Real-time multiplayer (WebSocket-based)
- * - Turn-based multiplayer (event-driven)
- * - Session/room management
- * - State synchronization
- * - Player discovery
- * - Network message routing
- * - Latency compensation
- *
- * @example Real-time Multiplayer
+ * @example Quick Start
  * ```typescript
- * const network = new NetworkEngine({ mode: 'realtime' });
+ * const network = new NetworkEngine();
+ * await network.connect('ws://game-server.com');
  *
- * network.createRoom('game1', { maxPlayers: 4 });
- * network.onPlayerJoin((player) => {
- *   console.log(`${player.name} joined`);
- * });
+ * // Join matchmaking
+ * await network.matchmaking.joinQueue({ queueType: 'ranked', gameMode: 'deathmatch' });
  *
- * network.broadcast({ type: 'game-state', data: gameState });
+ * // Or create a lobby
+ * const lobby = await network.lobby.create({ name: 'My Game', maxPlayers: 8 });
  * ```
  *
- * @example Turn-based Multiplayer
+ * @example Real-time Game with Prediction
  * ```typescript
- * const network = new NetworkEngine({ mode: 'turn-based' });
- *
- * network.createRoom('chess', { maxPlayers: 2, turnBased: true });
- * network.onTurn((player) => {
- *   console.log(`It's ${player.name}'s turn`);
+ * network.prediction.setSimulationCallback((state, input) => {
+ *   // Apply input to state and return new state
+ *   return simulatePhysics(state, input);
  * });
  *
- * network.endTurn(); // Advance to next player
+ * // Player input - predicted locally, sent to server
+ * network.prediction.predictInput({ action: 'jump', axis: { x: 1, y: 0 } });
+ *
+ * // Server state - reconcile predictions
+ * network.on('game:state', (state, tick) => {
+ *   network.prediction.reconcile(state, tick);
+ * });
  * ```
  */
 
 import { EventEmitter } from 'events';
-import { NetworkMessage } from '../../core/types';
+import type {
+  ConnectionConfig,
+  ConnectionState,
+  Lobby,
+  LobbyConfig,
+  MatchmakingConfig,
+  MatchmakingResult,
+  SyncConfig,
+  PredictionConfig,
+  InterpolationConfig,
+  PresenceConfig,
+  PlayerPresence,
+  Friend,
+  Party,
+  LeaderboardQuery,
+  Leaderboard,
+  PlayerStats,
+  Achievement,
+  ReplayConfig,
+  ReplayMetadata,
+  SecurityConfig,
+  PlayerInput,
+  VoiceChatConfig,
+} from './types';
 
 /**
- * Network configuration
+ * Configuration for the NetworkEngine
  */
-export interface NetworkConfig {
-  /** Multiplayer mode */
-  mode: 'realtime' | 'turn-based' | 'hybrid';
-  /** Server URL (optional, defaults to BBS server) */
-  serverUrl?: string;
-  /** Enable latency compensation */
-  latencyCompensation?: boolean;
-  /** Network tick rate (ms, realtime only) */
-  tickRate?: number;
-  /** Connection timeout (ms) */
-  timeout?: number;
-  /** Enable encryption */
-  encryption?: boolean;
+export interface NetworkEngineConfig {
+  connection?: Partial<ConnectionConfig>;
+  lobby?: Partial<LobbyConfig>;
+  matchmaking?: Partial<MatchmakingConfig>;
+  sync?: Partial<SyncConfig>;
+  prediction?: Partial<PredictionConfig>;
+  interpolation?: Partial<InterpolationConfig>;
+  presence?: Partial<PresenceConfig>;
+  voice?: Partial<VoiceChatConfig>;
+  replay?: Partial<ReplayConfig>;
+  security?: Partial<SecurityConfig>;
 }
 
-/**
- * Room/session configuration
- */
-export interface RoomConfig {
-  /** Room ID */
-  id: string;
-  /** Room name */
-  name: string;
-  /** Maximum players */
-  maxPlayers: number;
-  /** Is room password protected? */
-  password?: string;
-  /** Turn-based mode */
-  turnBased?: boolean;
-  /** Turn time limit (seconds, turn-based only) */
-  turnTimeLimit?: number;
-  /** Allow spectators */
-  allowSpectators?: boolean;
-  /** Custom room data */
-  data?: Record<string, any>;
-}
-
-/**
- * Player information
- */
-export interface NetworkPlayer {
-  /** Player ID */
-  id: number;
-  /** Username */
-  name: string;
-  /** Node number */
-  node: number;
-  /** Connection latency (ms) */
-  latency: number;
-  /** Is ready? */
-  ready: boolean;
-  /** Is spectator? */
-  spectator: boolean;
-  /** Custom player data */
-  data: Record<string, any>;
-}
-
-/**
- * Room state
- */
-export interface Room {
-  /** Room configuration */
-  config: RoomConfig;
-  /** Players in room */
-  players: NetworkPlayer[];
-  /** Current turn (turn-based only) */
-  currentTurn?: number;
-  /** Room state */
-  state: 'waiting' | 'playing' | 'finished';
-  /** Host player ID */
-  hostId: number;
-  /** Creation timestamp */
-  created: Date;
-}
-
-/**
- * Network synchronization state
- */
-export interface SyncState {
-  /** State version/sequence number */
-  version: number;
-  /** State timestamp */
-  timestamp: number;
-  /** State data */
-  data: any;
-  /** State checksum (for validation) */
-  checksum?: string;
-}
+import { ConnectionManager } from './modules/connection';
+import { LobbySystem } from './modules/lobby';
+import { MatchmakingEngine } from './modules/matchmaking';
+import { StateSynchronizer } from './modules/sync';
+import { PredictionEngine } from './modules/prediction';
+import { InterpolationEngine } from './modules/interpolation';
+import { PresenceManager } from './modules/presence';
+import { SocialManager } from './modules/social';
+import { LeaderboardManager } from './modules/leaderboard';
+import { ReplaySystem } from './modules/replay';
+import { SecurityManager } from './modules/security';
 
 /**
  * Network Engine
- * Handles all multiplayer communication and synchronization
+ *
+ * The main entry point for multiplayer functionality. Composes all sub-modules
+ * and provides convenience methods for common operations.
  */
 export class NetworkEngine extends EventEmitter {
-  private config: Required<NetworkConfig>;
-  private rooms: Map<string, Room> = new Map();
-  private currentRoom?: Room;
-  private currentPlayer?: NetworkPlayer;
-  private syncStates: Map<string, SyncState> = new Map();
-  private messageQueue: NetworkMessage[] = [];
-  private connected: boolean = false;
-  private tickInterval?: NodeJS.Timeout;
+  // Sub-modules (public for direct access)
+  readonly connection: ConnectionManager;
+  readonly lobby: LobbySystem;
+  readonly matchmaking: MatchmakingEngine;
+  readonly sync: StateSynchronizer;
+  readonly prediction: PredictionEngine;
+  readonly interpolation: InterpolationEngine;
+  readonly presence: PresenceManager;
+  readonly social: SocialManager;
+  readonly leaderboard: LeaderboardManager;
+  readonly replay: ReplaySystem;
+  readonly security: SecurityManager;
 
-  constructor(config: NetworkConfig) {
+  constructor(config: Partial<NetworkEngineConfig> = {}) {
     super();
 
-    this.config = {
-      mode: config.mode,
-      serverUrl: config.serverUrl || 'ws://localhost:3002',
-      latencyCompensation: config.latencyCompensation ?? true,
-      tickRate: config.tickRate ?? 50, // 20 FPS
-      timeout: config.timeout ?? 5000,
-      encryption: config.encryption ?? false
-    };
+    // Initialize connection manager first (required by other modules)
+    this.connection = new ConnectionManager(config.connection);
+
+    // Initialize all sub-modules with connection reference
+    this.lobby = new LobbySystem(this.connection);
+    this.matchmaking = new MatchmakingEngine(this.connection);
+    this.sync = new StateSynchronizer(this.connection, config.sync);
+    this.prediction = new PredictionEngine(this.connection, config.prediction);
+    this.interpolation = new InterpolationEngine(config.interpolation);
+    this.presence = new PresenceManager(this.connection, config.presence);
+    this.social = new SocialManager(this.connection);
+    this.leaderboard = new LeaderboardManager(this.connection);
+    this.replay = new ReplaySystem(this.connection, config.replay);
+    this.security = new SecurityManager(this.connection, config.security);
+
+    // Wire up cross-module events
+    this.setupCrossModuleEvents();
   }
 
   /**
-   * Initialize network engine
+   * Connect to game server
    */
-  async init(playerId: number, playerName: string): Promise<void> {
-    this.currentPlayer = {
-      id: playerId,
-      name: playerName,
-      node: 1,
-      latency: 0,
-      ready: false,
-      spectator: false,
-      data: {}
-    };
+  async connect(url?: string, options?: Partial<ConnectionConfig>): Promise<void> {
+    const config = url ? { ...options, serverUrl: url } : options;
+    await this.connection.connect(config);
 
-    // Connect to server (in production, use actual WebSocket)
-    this.connected = true;
-
-    // Start network tick for realtime mode
-    if (this.config.mode === 'realtime' || this.config.mode === 'hybrid') {
-      this.startNetworkTick();
-    }
+    // Initialize all modules
+    await Promise.all([
+      this.lobby.init(),
+      this.matchmaking.init(),
+      this.sync.init(),
+      this.prediction.init(),
+      this.interpolation.init(),
+      this.presence.init(),
+      this.social.init(),
+      this.leaderboard.init(),
+      this.replay.init(),
+      this.security.init(),
+    ]);
 
     this.emit('connected');
   }
 
   /**
-   * Create a new room
+   * Disconnect from server
    */
-  createRoom(roomId: string, config: Partial<RoomConfig>): Room {
-    if (!this.currentPlayer) {
-      throw new Error('Player not initialized');
-    }
-
-    const room: Room = {
-      config: {
-        id: roomId,
-        name: config.name || roomId,
-        maxPlayers: config.maxPlayers || 4,
-        password: config.password,
-        turnBased: config.turnBased ?? false,
-        turnTimeLimit: config.turnTimeLimit,
-        allowSpectators: config.allowSpectators ?? true,
-        data: config.data || {}
-      },
-      players: [this.currentPlayer],
-      currentTurn: config.turnBased ? 0 : undefined,
-      state: 'waiting',
-      hostId: this.currentPlayer.id,
-      created: new Date()
-    };
-
-    this.rooms.set(roomId, room);
-    this.currentRoom = room;
-
-    this.emit('room-created', room);
-    return room;
+  disconnect(): void {
+    this.connection.disconnect();
+    this.emit('disconnected');
   }
 
   /**
-   * Join an existing room
+   * Check if connected
    */
-  joinRoom(roomId: string, password?: string): Room {
-    if (!this.currentPlayer) {
-      throw new Error('Player not initialized');
-    }
+  isConnected(): boolean {
+    return this.connection.state.status === 'connected';
+  }
 
-    const room = this.rooms.get(roomId);
-    if (!room) {
-      throw new Error(`Room ${roomId} not found`);
-    }
+  /**
+   * Get connection state
+   */
+  getConnectionState(): ConnectionState {
+    return this.connection.state;
+  }
 
-    if (room.config.password && room.config.password !== password) {
-      throw new Error('Invalid password');
-    }
+  /**
+   * Get connection quality
+   */
+  getConnectionQuality(): ConnectionState['quality'] {
+    return this.connection.state.quality;
+  }
 
-    if (room.players.length >= room.config.maxPlayers) {
-      if (room.config.allowSpectators) {
-        this.currentPlayer.spectator = true;
-      } else {
-        throw new Error('Room is full');
+  /**
+   * Get latency
+   */
+  getLatency(): number {
+    return this.connection.state.latency;
+  }
+
+  // ============================================================
+  // Convenience Methods - Delegating to sub-modules
+  // ============================================================
+
+  // --- Lobby ---
+
+  /**
+   * Create a lobby
+   */
+  async createLobby(config: Partial<LobbyConfig>): Promise<Lobby> {
+    const fullConfig: LobbyConfig = {
+      name: config.name || 'New Lobby',
+      maxPlayers: config.maxPlayers || 8,
+      isPrivate: config.isPrivate || false,
+      password: config.password,
+      teamCount: config.teamCount,
+      teamSize: config.teamSize,
+      settings: config.settings,
+    };
+    return this.lobby.create(fullConfig);
+  }
+
+  /**
+   * Join a lobby
+   */
+  async joinLobby(lobbyId: string, password?: string): Promise<Lobby> {
+    return this.lobby.join(lobbyId, password);
+  }
+
+  /**
+   * Leave current lobby
+   */
+  async leaveLobby(): Promise<void> {
+    return this.lobby.leave();
+  }
+
+  /**
+   * Set ready status
+   */
+  setReady(ready: boolean): void {
+    this.lobby.setReady(ready);
+  }
+
+  // --- Matchmaking ---
+
+  /**
+   * Join matchmaking queue
+   */
+  async joinQueue(config: Partial<MatchmakingConfig>): Promise<void> {
+    const fullConfig: MatchmakingConfig = {
+      queueType: config.queueType || 'casual',
+      gameMode: config.gameMode || 'default',
+      partyId: config.partyId,
+      preferredRegions: config.preferredRegions || [],
+      skillRange: config.skillRange,
+      maxWaitTime: config.maxWaitTime,
+    };
+    return this.matchmaking.joinQueue(fullConfig);
+  }
+
+  /**
+   * Leave matchmaking queue
+   */
+  async leaveQueue(): Promise<void> {
+    return this.matchmaking.leaveQueue();
+  }
+
+  /**
+   * Accept a match
+   */
+  async acceptMatch(): Promise<void> {
+    return this.matchmaking.acceptMatch();
+  }
+
+  // --- Presence ---
+
+  /**
+   * Set online status
+   */
+  setStatus(status: PlayerPresence['status']): void {
+    this.presence.setStatus(status);
+  }
+
+  /**
+   * Set game activity
+   */
+  setGameActivity(game: string, details?: string): void {
+    this.presence.setGameActivity(game, details);
+  }
+
+  // --- Social ---
+
+  /**
+   * Add friend
+   */
+  async addFriend(playerId: number): Promise<void> {
+    return this.social.addFriend(playerId);
+  }
+
+  /**
+   * Create party
+   */
+  async createParty(): Promise<Party> {
+    return this.social.createParty();
+  }
+
+  /**
+   * Invite to game
+   */
+  async inviteToGame(playerId: number, roomId: string): Promise<void> {
+    return this.social.inviteToGame(playerId, roomId);
+  }
+
+  // --- Leaderboard ---
+
+  /**
+   * Get leaderboard
+   */
+  async getLeaderboard(query: LeaderboardQuery): Promise<Leaderboard> {
+    return this.leaderboard.getLeaderboard(query);
+  }
+
+  /**
+   * Get player stats
+   */
+  async getStats(playerId?: number): Promise<PlayerStats> {
+    return this.leaderboard.getStats(playerId);
+  }
+
+  // --- Replay ---
+
+  /**
+   * Start recording
+   */
+  startRecording(): void {
+    this.replay.startRecording();
+  }
+
+  /**
+   * Stop recording
+   */
+  async stopRecording(): Promise<ReplayMetadata | null> {
+    return this.replay.stopRecording();
+  }
+
+  // ============================================================
+  // Private Methods
+  // ============================================================
+
+  /**
+   * Setup cross-module event wiring
+   */
+  private setupCrossModuleEvents(): void {
+    // Connection events bubble up
+    this.connection.on('connected', () => this.emit('connected'));
+    this.connection.on('disconnected', (reason) => this.emit('disconnected', reason));
+    this.connection.on('reconnecting', (attempt) => this.emit('reconnecting', attempt));
+    this.connection.on('quality:changed', (quality) => this.emit('quality:changed', quality));
+
+    // Matchmaking -> Lobby transition
+    this.matchmaking.on('match:ready', (match: MatchmakingResult) => {
+      this.emit('match:ready', match);
+      // Lobby creation/joining is handled by the server after match is found
+    });
+
+    // Lobby -> Game transition
+    this.lobby.on('game:starting', () => {
+      this.emit('game:starting');
+      // Start recording if replay enabled
+      const lobby = this.lobby.current;
+      if (lobby && !this.replay.isRecording) {
+        // Auto-start recording could be enabled here
       }
-    }
+    });
 
-    room.players.push(this.currentPlayer);
-    this.currentRoom = room;
+    // Presence auto-updates
+    this.lobby.on('joined', (lobby: Lobby) => {
+      this.presence.setLobbyActivity(lobby.name);
+    });
 
-    this.emit('player-joined', this.currentPlayer);
-    this.emit('room-joined', room);
+    this.lobby.on('left', () => {
+      this.presence.clearActivity();
+    });
 
-    return room;
-  }
-
-  /**
-   * Leave current room
-   */
-  leaveRoom(): void {
-    if (!this.currentRoom || !this.currentPlayer) return;
-
-    const room = this.currentRoom;
-    room.players = room.players.filter(p => p.id !== this.currentPlayer!.id);
-
-    // Transfer host if needed
-    if (room.hostId === this.currentPlayer.id && room.players.length > 0) {
-      room.hostId = room.players[0].id;
-      this.emit('host-changed', room.players[0]);
-    }
-
-    // Delete room if empty
-    if (room.players.length === 0) {
-      this.rooms.delete(room.config.id);
-      this.emit('room-closed', room);
-    }
-
-    this.emit('player-left', this.currentPlayer);
-    this.currentRoom = undefined;
-  }
-
-  /**
-   * List available rooms
-   */
-  listRooms(): Room[] {
-    return Array.from(this.rooms.values());
-  }
-
-  /**
-   * Get current room
-   */
-  getCurrentRoom(): Room | undefined {
-    return this.currentRoom;
-  }
-
-  /**
-   * Send message to specific player
-   */
-  sendTo(playerId: number, type: string, data: any): void {
-    if (!this.currentPlayer) return;
-
-    const message: NetworkMessage = {
-      type,
-      from: this.currentPlayer.id,
-      to: playerId,
-      data,
-      timestamp: Date.now()
-    };
-
-    this.messageQueue.push(message);
-    this.emit('message-sent', message);
-
-    // In production, send via WebSocket
-    this.deliverMessage(message);
-  }
-
-  /**
-   * Broadcast message to all players in room
-   */
-  broadcast(type: string, data: any, includeSpectators: boolean = false): void {
-    if (!this.currentRoom || !this.currentPlayer) return;
-
-    const message: NetworkMessage = {
-      type,
-      from: this.currentPlayer.id,
-      to: 0, // Broadcast
-      data,
-      timestamp: Date.now()
-    };
-
-    this.emit('message-broadcast', message);
-
-    // Send to all players
-    this.currentRoom.players.forEach(player => {
-      if (player.id !== this.currentPlayer!.id) {
-        if (!includeSpectators && player.spectator) return;
-        this.deliverMessage({ ...message, to: player.id });
+    // Security validation on inputs
+    this.prediction.on('input:local', (input: PlayerInput) => {
+      const validation = this.security.validateInput(0, input);
+      if (!validation.valid) {
+        this.emit('security:warning', validation);
       }
+    });
+
+    // Achievement unlocks
+    this.leaderboard.on('achievement:unlocked', (achievement: Achievement) => {
+      this.emit('achievement:unlocked', achievement);
     });
   }
 
   /**
-   * Synchronize state across all players
-   */
-  syncState(key: string, data: any): void {
-    const state: SyncState = {
-      version: (this.syncStates.get(key)?.version || 0) + 1,
-      timestamp: Date.now(),
-      data,
-      checksum: this.generateChecksum(data)
-    };
-
-    this.syncStates.set(key, state);
-    this.broadcast('sync-state', { key, state });
-  }
-
-  /**
-   * Get synchronized state
-   */
-  getSyncState(key: string): SyncState | undefined {
-    return this.syncStates.get(key);
-  }
-
-  /**
-   * Set player ready status
-   */
-  setReady(ready: boolean): void {
-    if (!this.currentPlayer || !this.currentRoom) return;
-
-    this.currentPlayer.ready = ready;
-    this.broadcast('player-ready', { playerId: this.currentPlayer.id, ready });
-
-    // Check if all players ready
-    const allReady = this.currentRoom.players.every(p => p.spectator || p.ready);
-    if (allReady && this.currentRoom.state === 'waiting') {
-      this.currentRoom.state = 'playing';
-      this.emit('game-start');
-    }
-  }
-
-  /**
-   * Start game (host only)
-   */
-  startGame(): void {
-    if (!this.currentRoom || !this.currentPlayer) return;
-    if (this.currentRoom.hostId !== this.currentPlayer.id) {
-      throw new Error('Only host can start game');
-    }
-
-    this.currentRoom.state = 'playing';
-    this.broadcast('game-start', {});
-    this.emit('game-start');
-
-    if (this.currentRoom.config.turnBased) {
-      this.emit('turn-start', this.currentRoom.players[0]);
-    }
-  }
-
-  /**
-   * End current turn (turn-based only)
-   */
-  endTurn(): void {
-    if (!this.currentRoom || !this.currentPlayer) return;
-    if (!this.currentRoom.config.turnBased) {
-      throw new Error('Not in turn-based mode');
-    }
-
-    const currentTurn = this.currentRoom.currentTurn!;
-    const currentPlayerId = this.currentRoom.players[currentTurn].id;
-
-    if (this.currentPlayer.id !== currentPlayerId) {
-      throw new Error('Not your turn');
-    }
-
-    // Advance to next player
-    this.currentRoom.currentTurn = (currentTurn + 1) % this.currentRoom.players.length;
-    const nextPlayer = this.currentRoom.players[this.currentRoom.currentTurn];
-
-    this.broadcast('turn-end', { playerId: currentPlayerId });
-    this.broadcast('turn-start', { playerId: nextPlayer.id });
-    this.emit('turn-start', nextPlayer);
-  }
-
-  /**
-   * Get current turn player
-   */
-  getCurrentTurnPlayer(): NetworkPlayer | undefined {
-    if (!this.currentRoom || this.currentRoom.currentTurn === undefined) return;
-    return this.currentRoom.players[this.currentRoom.currentTurn];
-  }
-
-  /**
-   * Kick player (host only)
-   */
-  kickPlayer(playerId: number): void {
-    if (!this.currentRoom || !this.currentPlayer) return;
-    if (this.currentRoom.hostId !== this.currentPlayer.id) {
-      throw new Error('Only host can kick players');
-    }
-
-    const player = this.currentRoom.players.find(p => p.id === playerId);
-    if (!player) return;
-
-    this.currentRoom.players = this.currentRoom.players.filter(p => p.id !== playerId);
-    this.sendTo(playerId, 'kicked', {});
-    this.emit('player-kicked', player);
-  }
-
-  /**
-   * Measure latency to player
-   */
-  async measureLatency(playerId: number): Promise<number> {
-    const start = Date.now();
-    // In production, send ping and wait for pong
-    await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
-    return Date.now() - start;
-  }
-
-  /**
-   * Update player latency
-   */
-  private async updateLatencies(): Promise<void> {
-    if (!this.currentRoom || !this.currentPlayer) return;
-
-    for (const player of this.currentRoom.players) {
-      if (player.id !== this.currentPlayer.id) {
-        player.latency = await this.measureLatency(player.id);
-      }
-    }
-  }
-
-  /**
-   * Network tick (realtime mode)
-   */
-  private startNetworkTick(): void {
-    this.tickInterval = setInterval(() => {
-      this.processPendingMessages();
-      this.updateLatencies();
-      this.emit('network-tick');
-    }, this.config.tickRate);
-  }
-
-  /**
-   * Process pending messages
-   */
-  private processPendingMessages(): void {
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift()!;
-      // In production, send via WebSocket
-    }
-  }
-
-  /**
-   * Deliver message to recipient
-   */
-  private deliverMessage(message: NetworkMessage): void {
-    // In production, route through WebSocket server
-    // For now, emit locally for testing
-    setTimeout(() => {
-      this.emit('message-received', message);
-    }, 10 + Math.random() * 20); // Simulate network delay
-  }
-
-  /**
-   * Generate checksum for state validation
-   */
-  private generateChecksum(data: any): string {
-    const str = JSON.stringify(data);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return hash.toString(16);
-  }
-
-  /**
-   * Event: Player joined room
-   */
-  onPlayerJoin(callback: (player: NetworkPlayer) => void): void {
-    this.on('player-joined', callback);
-  }
-
-  /**
-   * Event: Player left room
-   */
-  onPlayerLeave(callback: (player: NetworkPlayer) => void): void {
-    this.on('player-left', callback);
-  }
-
-  /**
-   * Event: Message received
-   */
-  onMessage(callback: (message: NetworkMessage) => void): void {
-    this.on('message-received', callback);
-  }
-
-  /**
-   * Event: Turn started (turn-based)
-   */
-  onTurnStart(callback: (player: NetworkPlayer) => void): void {
-    this.on('turn-start', callback);
-  }
-
-  /**
-   * Event: Game started
-   */
-  onGameStart(callback: () => void): void {
-    this.on('game-start', callback);
-  }
-
-  /**
-   * Cleanup
+   * Dispose of all modules
    */
   dispose(): void {
-    if (this.tickInterval) {
-      clearInterval(this.tickInterval);
-    }
+    // Dispose all modules
+    this.connection.dispose();
+    this.lobby.dispose();
+    this.matchmaking.dispose();
+    this.sync.dispose();
+    this.prediction.dispose();
+    this.interpolation.dispose();
+    this.presence.dispose();
+    this.social.dispose();
+    this.leaderboard.dispose();
+    this.replay.dispose();
+    this.security.dispose();
 
-    this.leaveRoom();
-    this.connected = false;
     this.removeAllListeners();
   }
 }
+
+// Re-export types for convenience
+export type {
+  ConnectionConfig,
+  ConnectionState,
+  Lobby,
+  LobbyConfig,
+  MatchmakingConfig,
+  MatchmakingResult,
+  PlayerSkill,
+  SyncConfig,
+  PredictionConfig,
+  InterpolationConfig,
+  PresenceConfig,
+  PlayerPresence,
+  Friend,
+  Party,
+  LeaderboardQuery,
+  Leaderboard,
+  PlayerStats,
+  Achievement,
+  ReplayConfig,
+  ReplayMetadata,
+  Replay,
+  SecurityConfig,
+  ValidationResult,
+  PlayerInput,
+  Vector3,
+  VoiceChatConfig,
+} from './types';
+
+export default NetworkEngine;
