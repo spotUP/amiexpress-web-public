@@ -306,6 +306,31 @@ export class DosLibrary {
   }
 
   /**
+   * Initialize environment variables for door execution.
+   * Must be called after door config is available.
+   */
+  public initializeEnvironmentVariables(nodeId: number, confId: number = 1, username: string = 'Guest', secLevel: number = 1): void {
+    if (!this.envManager) {
+      console.error('[DosLibrary] EnvironmentManager not initialized');
+      return;
+    }
+
+    // Initialize LocalVars list at 0x120000
+    this.envManager.initializeLocalVarsList(0x120000);
+
+    // Populate standard BBS and AmiExpress variables
+    this.envManager.populateStandardVars(
+      this.rootPath,
+      nodeId,
+      confId,
+      username,
+      secLevel
+    );
+
+    console.log(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
+  }
+
+  /**
    * Append a filesystem debug line to backend.log for 68k door debugging.
    */
   private logDoorFile(message: string): void {

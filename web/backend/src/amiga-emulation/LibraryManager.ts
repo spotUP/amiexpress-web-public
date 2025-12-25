@@ -502,6 +502,13 @@ export class LibraryManager {
     this.dosLibrary.setEnvironment(this.config.env);
     this.dosLibrary.setInheritedHandles(1, 2);
 
+    // Initialize environment variables for XIM doors
+    const doorNodeId = this.config.bbsSession?.nodeNumber || 1;
+    const doorUsername = this.config.bbsSession?.user?.username || 'Guest';
+    const doorSecLevel = this.config.bbsSession?.user?.securityLevel || 1;
+    const doorConfId = this.config.bbsSession?.currentConference || 1;
+    this.dosLibrary.initializeEnvironmentVariables(doorNodeId, doorConfId, doorUsername, doorSecLevel);
+
     console.log(
       `[LibraryManager] Enabling FileManager with base directory: ${projectRoot}`
     );
