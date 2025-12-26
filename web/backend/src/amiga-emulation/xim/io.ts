@@ -43,6 +43,10 @@ export class XIMIOHandler {
   private waitingForPause: boolean = false;
   private pauseReply: { msg: XIMMessage; data: number } | null = null;
 
+  // ANSI sequence buffer for handling split escape sequences across JH_SM calls
+  // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
+  private ansiBuffer: string = '';
+
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
@@ -355,7 +359,10 @@ export class XIMIOHandler {
     // Trust msg.data exactly - doors control their own line endings
     const shouldAddNewline = msg.data !== 0;
 
-    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})`);
+    // DEBUG: Show hex bytes if string contains control characters
+    const hasControlChars = /[\x00-\x1f]/.test(text);
+    const hexBytes = hasControlChars ? ' hex=' + Array.from(text.slice(0, 20)).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ') : '';
+    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})${hexBytes}`);
 
     // Disable autoPause - doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
     // autoPause was interfering with door pagination and causing output to be lost
@@ -927,13 +934,50 @@ export class XIMIOHandler {
     autoPause: boolean = false,
     pendingMsg?: XIMMessage
   ): number {
+    // Prepend any buffered content from previous incomplete ANSI sequence
+    // RTW and other doors may split ESC[34m across multiple JH_SM calls
+    const hadBuffer = this.ansiBuffer.length > 0;
+    let fullText = this.ansiBuffer + text;
+    if (hadBuffer) {
+      console.log(`[emitText] Prepending buffered ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" to text starting with "${text.substring(0, 10).replace(/\x1b/g, 'ESC')}..."`);
+    }
+    this.ansiBuffer = '';
+
     // Convert Amiga CSI (0x9B) to standard ANSI ESC+[ (0x1B 0x5B)
     // Amiga uses a single-byte CSI character for ANSI codes, but modern terminals
     // expect the two-byte ESC+[ sequence. Without this conversion, colors appear
     // as "[36m" instead of actual colored text.
-    let converted = text.replace(/\x9b/g, '\x1b[');
-    let normalized = converted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    if (addNewline) {
+    let converted = fullText.replace(/\x9b/g, '\x1b[');
+
+    // Check for incomplete ANSI escape sequence at end of text
+    // CSI format: ESC [ (params) (letter) where letter terminates the sequence
+    // If we end mid-sequence, buffer it for the next message
+    const incompleteAnsiMatch = converted.match(/\x1b(\[[\d;?]*)?$/);
+    if (incompleteAnsiMatch) {
+      // Store the incomplete sequence and remove from current output
+      this.ansiBuffer = incompleteAnsiMatch[0];
+      converted = converted.slice(0, -this.ansiBuffer.length);
+      console.log(`[emitText] Buffering incomplete ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" (${this.ansiBuffer.length} chars)`);
+      // If nothing left to emit after buffering, return early
+      if (converted.length === 0) {
+        console.log(`[emitText] Nothing left to emit after buffering, returning early`);
+        return 0;
+      }
+    }
+
+    // Normalize CRLF to LF, but DON'T convert standalone CR to LF!
+    // RTW and other doors use \r (carriage return) to move cursor to column 0
+    // for in-place updates. Converting \r to \n would cause double line breaks.
+    let normalized = converted.replace(/\r\n/g, '\n');
+
+    // CRITICAL: Only add newline if text doesn't already end with one
+    // Some doors send data=1 with a string that already contains a trailing \n
+    // Adding another would cause double line breaks (RTW does this)
+    //
+    // NOTE: express.e:3406-3411 does aePuts('\b\n') - backspace+newline.
+    // We skip the backspace as it's typically a no-op when at start of line.
+    const alreadyHasNewline = normalized.endsWith('\n');
+    if (addNewline && !alreadyHasNewline) {
       normalized += '\n';
     }
 
@@ -966,6 +1010,11 @@ export class XIMIOHandler {
         const output = `${segment}${suffix}`;
 
         // Emit output BEFORE checking pause
+        // DEBUG: Log first 50 chars of what we're actually emitting
+        if (output.length > 0 && output.length < 200) {
+          const displayOutput = output.replace(/\x1b/g, 'ESC').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+          console.log(`[emitText] EMIT: "${displayOutput}"`);
+        }
         this.socket.emit('ansi-output', output);
         bytesSent += output.length;
 
