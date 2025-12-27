@@ -25,7 +25,8 @@
     "engines/**/*",
     "components/**/*",
     "tools/**/*",
-    "types/**/*"
+    "types/**/*",
+    "utils/**/*"
   ],
   "exclude": [
     "node_modules",

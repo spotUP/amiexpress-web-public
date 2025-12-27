@@ -5,77 +5,326 @@
  * where {gray-fg} and other tags show as literal text instead of being parsed.
  *
  * ALWAYS use these helpers instead of calling blessed.* directly.
+ *
+ * IMPORTANT - COLOR SYSTEM:
+ * Neo-blessed only supports 16 standard colors. Do NOT use:
+ * - Raw ANSI codes like \x1b[38;5;196m (256-color) - they get stripped
+ * - Raw ANSI codes like \x1b[31m - use blessed tags instead
+ *
+ * USE THESE INSTEAD:
+ * - Blessed tags in content: {red-fg}text{/red-fg}
+ * - Style properties: style: { fg: 'red', bg: 'black' }
+ * - The colorize() helper: colorize('text', 'red')
+ *
+ * SUPPORTED COLORS: black, red, green, yellow, blue, magenta, cyan, white, gray
+ *
+ * BBS COMPATIBILITY - AUTOMATIC ANSI CODE CONVERSION:
+ * All create* functions automatically convert standard ANSI escape codes to blessed tags.
+ * This means blessed elements can display content from bbs.write() and legacy BBS
+ * doors without manual conversion.
+ *
+ * Example:
+ *   const content = '\x1b[31mError\x1b[0m: Something went wrong';
+ *   const box = createBox({ content });  // Auto-converts to: {red-fg}Error{/}: Something went wrong
+ *
+ * When calling setContent() after creation, use sanitizeContent() or ansiToTags():
+ *   box.setContent(sanitizeContent('\x1b[32mSuccess!\x1b[0m'));
  */
 
-import * as blessed from 'neo-blessed';
+import blessed from '../engines/ui/blessed';
+import type {
+  ElementOptions,
+  ListOptions,
+  TextboxOptions,
+  ButtonOptions,
+  TableOptions,
+  LogOptions,
+  ScreenOptions
+} from '../engines/ui/blessed/core/types';
+import type { Screen } from '../engines/ui/blessed/core/screen';
+import type { Box } from '../engines/ui/blessed/widgets/box';
+import type { List } from '../engines/ui/blessed/widgets/list';
+import type { Text } from '../engines/ui/blessed/widgets/text';
+import type { Textarea } from '../engines/ui/blessed/widgets/textbox';
+import type { Button } from '../engines/ui/blessed/widgets/button';
+import type { Table } from '../engines/ui/blessed/widgets/table';
+import type { Log } from '../engines/ui/blessed/widgets/log';
+
+// Track if we've already warned to avoid spam
+const warnedAbout = new Set<string>();
 
 /**
- * Create a blessed box with tags enabled by default
+ * Warn about common neo-blessed color mistakes (only once per issue type)
  */
-export function createBox(options: blessed.Widgets.BoxOptions): blessed.Widgets.BoxElement {
+function warnOnce(key: string, message: string): void {
+  if (!warnedAbout.has(key)) {
+    warnedAbout.add(key);
+    console.warn(`[neo-blessed] ${message}`);
+  }
+}
+
+/**
+ * Check content for unsupported ANSI codes and warn
+ */
+function checkForUnsupportedAnsi(content: string, context: string): void {
+  // Check for 256-color ANSI codes (38;5;N or 48;5;N)
+  if (/\x1b\[(?:38|48);5;\d+m/.test(content)) {
+    warnOnce('256-color',
+      `256-color ANSI codes detected in ${context}. ` +
+      `Neo-blessed only supports 16 colors. Use blessed tags like {red-fg} instead.`
+    );
+  }
+
+  // Check for raw ANSI that won't be converted (remaining after ansiToTags)
+  const afterConversion = ansiToTags(content);
+  if (/\x1b\[/.test(afterConversion)) {
+    warnOnce('unsupported-ansi',
+      `Unsupported ANSI codes in ${context} were not converted. ` +
+      `Use blessed tags like {red-fg}text{/} instead.`
+    );
+  }
+}
+
+/**
+ * Process options to ensure tags work correctly
+ * - Forces tags: true (cannot be overridden)
+ * - Warns if tags: false was attempted
+ * - Converts ANSI codes in content
+ */
+function processElementOptions<T extends ElementOptions>(
+  options: T | undefined,
+  elementType: string
+): T {
+  const processed = { ...options } as T;
+
+  // Warn if someone tried to disable tags
+  if (options && 'tags' in options && (options as any).tags === false) {
+    warnOnce('tags-false',
+      `tags: false is not allowed in ${elementType}. ` +
+      `Tags are required for color support. Ignoring tags: false.`
+    );
+  }
+
+  // Auto-convert ANSI codes in content
+  if (processed.content && typeof processed.content === 'string') {
+    checkForUnsupportedAnsi(processed.content, elementType);
+    processed.content = ansiToTags(processed.content);
+  }
+
+  return processed;
+}
+
+/**
+ * Convert ANSI escape codes to blessed tags
+ *
+ * Enables blessed elements to display content with ANSI codes (from bbs.write(), etc.)
+ * Supports both legacy and modern ANSI formats.
+ *
+ * @example
+ * ansiToTags('\x1b[31mError\x1b[0m')        // Returns: {red-fg}Error{/}
+ * ansiToTags('\x1b[1;36mInfo\x1b[0m')       // Returns: {bold}{cyan-fg}Info{/}
+ * ansiToTags('\x1b[32mOK\x1b[0m')           // Returns: {green-fg}OK{/}
+ *
+ * Supported ANSI codes:
+ * - Colors: 30-37 (fg), 40-47 (bg)
+ * - Styles: 0 (reset), 1 (bold), 4 (underline), 7 (inverse)
+ * - Combined: \x1b[1;31m (bold + red)
+ */
+export function ansiToTags(text: string): string {
+  // ANSI color code mapping
+  const fgColors: Record<number, string> = {
+    30: 'black',
+    31: 'red',
+    32: 'green',
+    33: 'yellow',
+    34: 'blue',
+    35: 'magenta',
+    36: 'cyan',
+    37: 'white',
+    90: 'gray',  // Bright black (gray)
+  };
+
+  const bgColors: Record<number, string> = {
+    40: 'black',
+    41: 'red',
+    42: 'green',
+    43: 'yellow',
+    44: 'blue',
+    45: 'magenta',
+    46: 'cyan',
+    47: 'white',
+  };
+
+  // Replace ANSI codes with blessed tags
+  return text.replace(/\x1b\[([0-9;]+)m/g, (match, codes) => {
+    const parts = codes.split(';').map(Number);
+    let result = '';
+
+    for (const code of parts) {
+      if (code === 0) {
+        // Reset all
+        result += '{/}';
+      } else if (code === 1) {
+        // Bold
+        result += '{bold}';
+      } else if (code === 4) {
+        // Underline
+        result += '{underline}';
+      } else if (code === 7) {
+        // Inverse
+        result += '{inverse}';
+      } else if (code >= 30 && code <= 37 || code === 90) {
+        // Foreground color
+        const color = fgColors[code];
+        if (color) result += `{${color}-fg}`;
+      } else if (code >= 40 && code <= 47) {
+        // Background color
+        const color = bgColors[code];
+        if (color) result += `{${color}-bg}`;
+      }
+    }
+
+    return result;
+  });
+}
+
+/**
+ * Create a blessed screen
+ *
+ * ALWAYS use this instead of blessed.screen() for consistency
+ * Note: Tags are enabled per-element (see createBox, createList, etc.)
+ */
+export function createScreen(options?: ScreenOptions & { output?: (data: string) => void }): Screen {
+  return blessed.screen({
+    smartCSR: true,
+    ...options,
+  });
+}
+
+/**
+ * Create a blessed box with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: If content contains ANSI escape codes (like \x1b[31m),
+ * they are automatically converted to blessed tags for proper rendering.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createBox(options?: ElementOptions): Box {
+  const processedOptions = processElementOptions(options, 'createBox');
+
   return blessed.box({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed list with tags enabled by default
+ * Create a blessed list with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: List items with ANSI codes are automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createList(options: blessed.Widgets.ListOptions<blessed.Widgets.ListElementStyle>): blessed.Widgets.ListElement {
+export function createList(options?: ListOptions): List {
+  const processedOptions = processElementOptions(options, 'createList');
+
+  // Also convert ANSI codes in list items
+  if (processedOptions.items) {
+    processedOptions.items = processedOptions.items.map(item =>
+      typeof item === 'string' ? ansiToTags(item) : item
+    );
+  }
+
   return blessed.list({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed text element with tags enabled by default
+ * Create a blessed text element with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createText(options: blessed.Widgets.TextOptions): blessed.Widgets.TextElement {
+export function createText(options?: ElementOptions): Text {
+  const processedOptions = processElementOptions(options, 'createText');
+
   return blessed.text({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed textarea with tags enabled by default
+ * Create a blessed textarea with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createTextarea(options: blessed.Widgets.TextareaOptions): blessed.Widgets.TextareaElement {
+export function createTextarea(options?: TextboxOptions): Textarea {
+  const processedOptions = processElementOptions(options, 'createTextarea');
+
   return blessed.textarea({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed log with tags enabled by default
+ * Create a blessed log with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createLog(options: blessed.Widgets.BoxOptions): blessed.Widgets.Log {
+export function createLog(options?: LogOptions): Log {
+  const processedOptions = processElementOptions(options, 'createLog');
+
   return blessed.log({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed table with tags enabled by default
+ * Create a blessed table with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createTable(options: blessed.Widgets.TableOptions): blessed.Widgets.TableElement {
+export function createTable(options?: TableOptions): Table {
+  const processedOptions = processElementOptions(options, 'createTable');
+
   return blessed.table({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
 /**
- * Create a blessed button with tags enabled by default
+ * Create a blessed button with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createButton(options: blessed.Widgets.ButtonOptions): blessed.Widgets.ButtonElement {
+export function createButton(options?: ButtonOptions): Button {
+  const processedOptions = processElementOptions(options, 'createButton');
+
   return blessed.button({
-    tags: true,  // CRITICAL: Enable tag parsing
-    ...options,
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
   });
 }
 
@@ -130,3 +379,41 @@ export const Tags = {
 export function colorize(text: string, color: keyof typeof Tags.fg): string {
   return `${Tags.fg[color]}${text}${Tags.reset}`;
 }
+
+/**
+ * Sanitize content for blessed elements - handles both ANSI codes and blessed tags
+ *
+ * Use this when displaying content that might have ANSI codes (from bbs.write(), legacy doors, etc.)
+ * in blessed elements. It converts ANSI codes to blessed tags so they render correctly.
+ *
+ * @example
+ * const content = '\x1b[31mError:\x1b[0m Something went wrong';
+ * createBox({ content: sanitizeContent(content) });
+ * // Displays: {red-fg}Error:{/} Something went wrong
+ */
+export function sanitizeContent(content: string): string {
+  return ansiToTags(content);
+}
+
+/**
+ * CRITICAL: HOW TO CENTER CONTENT IN BLESSED
+ *
+ * ❌ WRONG - {center} tags DO NOT WORK in blessed:
+ *   content: '{center}My Text{/center}'
+ *
+ * ✅ CORRECT - Use align property:
+ *   createBox({
+ *     align: 'center',
+ *     content: 'My Text'
+ *   })
+ *
+ * For multi-line centered content, use valign too:
+ *   createBox({
+ *     align: 'center',
+ *     valign: 'middle',
+ *     content: 'Line 1\nLine 2\nLine 3'
+ *   })
+ *
+ * Supported align values: 'left', 'center', 'right'
+ * Supported valign values: 'top', 'middle', 'bottom'
+ */

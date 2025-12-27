@@ -75,6 +75,16 @@ export { GraphicsEngine } from './engines/graphics/graphics-engine';
 export { BrailleCanvas, BrailleVUMeter, BrailleWaveform, BrailleSpectrum } from './engines/graphics/braille-graphics';
 export { PhysicsEngine } from './engines/physics/physics-engine';
 export { AudioEngine } from './engines/audio/audio-engine';
+export { TrackerEngine, InterpolationFilter, PlaybackState } from './engines/audio/tracker-engine';
+export type {
+  TrackerConfig,
+  TrackerFormat,
+  ModuleMetadata,
+  PlaybackPosition,
+  TrackerError,
+  TrackerEventType,
+  TrackerEvents,
+} from './engines/audio/tracker-engine';
 export { NetworkEngine } from './engines/network/network-engine';
 export { AIEngine } from './engines/ai/ai-engine';
 export { InputEngine } from './engines/input/input-engine';

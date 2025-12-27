@@ -51,6 +51,10 @@
       "types": "./dist/engines/ui/blessed/contrib/index.d.ts",
       "default": "./dist/engines/ui/blessed/contrib/index.js"
     },
+    "./utils/blessed-helpers": {
+      "types": "./dist/utils/blessed-helpers.d.ts",
+      "default": "./dist/utils/blessed-helpers.js"
+    },
     "./tools/runDoorSession": {
       "types": "./dist/tools/runDoorSession.d.ts",
       "default": "./dist/tools/runDoorSession.js"
@@ -58,6 +62,22 @@
     "./engines/tactical/tactical-combat-engine": {
       "types": "./dist/engines/tactical/tactical-combat-engine.d.ts",
       "default": "./dist/engines/tactical/tactical-combat-engine.js"
+    },
+    "./engines/audio/tracker": {
+      "types": "./dist/engines/audio/tracker-engine.d.ts",
+      "default": "./dist/engines/audio/tracker-engine.js"
+    },
+    "./engines/audio/audio-engine": {
+      "types": "./dist/engines/audio/audio-engine.d.ts",
+      "default": "./dist/engines/audio/audio-engine.js"
+    },
+    "./engines/network/network-engine": {
+      "types": "./dist/engines/network/network-engine.d.ts",
+      "default": "./dist/engines/network/network-engine.js"
+    },
+    "./ncurses": {
+      "types": "./dist/engines/ui/ncurses/index.d.ts",
+      "default": "./dist/engines/ui/ncurses/index.js"
     }
   },
   "scripts": {
@@ -104,6 +124,7 @@
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "chalk": "^4.1.2",
+    "chiptune3": "^0.8.3",
     "chokidar": "^3.5.3",
     "commander": "^11.0.0",
     "drawille": "^2.0.2",

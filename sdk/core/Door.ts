@@ -155,6 +155,8 @@ export class Door {
       storage,
       params,
       bbs,
+      socket,
+      bbsSession,
       close: () => {
         this.isRunning = false;
         // Immediately clean up input handler to unblock the input loop

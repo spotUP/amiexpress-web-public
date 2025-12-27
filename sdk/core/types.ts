@@ -667,6 +667,12 @@ export interface DoorContext {
   /** Command parameters */
   params: string[];
 
+  /** Socket.IO socket (for advanced use cases like blessed) */
+  socket?: any;
+
+  /** BBS session (for advanced use cases like blessed) */
+  bbsSession?: any;
+
   /** Close the door and return to BBS */
   close: () => void;
 }
