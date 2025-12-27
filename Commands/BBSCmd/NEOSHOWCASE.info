@@ -1,6 +1,6 @@
 BBSCMD=NEOSHOWCASE
 TYPE=TS
-LOCATION=sdk/doors/neo-blessed-showcase
+LOCATION=Doors/neo-blessed-showcase
 DESCRIPTION=Neo-Blessed Widget Showcase - ALL widgets demo
 ACCESS=0
 MULTINODE=YES

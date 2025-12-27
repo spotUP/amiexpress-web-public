@@ -1,0 +1,7 @@
+BBSCMD=DOORS
+TYPE=TS
+LOCATION=Doors/doors-menu
+DESCRIPTION=Interactive door selection menu
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

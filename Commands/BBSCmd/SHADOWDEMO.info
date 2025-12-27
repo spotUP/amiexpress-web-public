@@ -1,0 +1,7 @@
+BBSCMD=SHADOWDEMO
+TYPE=TS
+LOCATION=Doors/widget-shadow-demo
+DESCRIPTION=Widget Shadow Demo - blessed transparency test
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

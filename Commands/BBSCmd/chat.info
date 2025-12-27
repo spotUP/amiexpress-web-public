@@ -1,6 +1,6 @@
 BBSCMD=CHAT
 TYPE=TS
-LOCATION=sdk/doors/livechat
+LOCATION=Doors/livechat
 DESCRIPTION=Multi-user chat (alias for LIVECHAT)
 ACCESS=10
 MULTINODE=YES
