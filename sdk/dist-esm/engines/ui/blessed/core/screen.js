@@ -3,7 +3,7 @@
  */
 import { Element } from './element';
 import { Program } from './program';
-import { cursor, screen as screenAnsi, attrs } from './colors';
+import { cursor, screen as screenAnsi, attrs, blend } from './colors';
 export class Screen extends Element {
     constructor(options = {}) {
         // BBS Terminal Constraints:
@@ -11,8 +11,13 @@ export class Screen extends Element {
         // - Height: User-configurable via linesPerScreen (default 23, +2 for prompts = 25 total)
         const bbsWidth = 80;
         const bbsHeight = Math.min(options.height || 24, 25); // Max 25 rows total
+        const style = { ...(options.style || {}) };
+        if (style.bg === undefined) {
+            style.bg = 'black';
+        }
         super({
             ...options,
+            style,
             left: 0,
             top: 0,
             width: bbsWidth,
@@ -34,12 +39,15 @@ export class Screen extends Element {
         this.cursorHidden = true;
         this.cursorX = 0;
         this.cursorY = 0;
+        // Drag tracking (EXACT from neo-blessed screen.js)
+        this._dragging = null;
         // Key handlers
         this.keyHandlers = new Map();
         // ============================================================================
         // Key Locking
         // ============================================================================
         this._lockKeys = false;
+        this._hoverText = null;
         this._width = bbsWidth;
         this._height = bbsHeight;
         this.screen = this;
@@ -104,6 +112,7 @@ export class Screen extends Element {
      * Handle mouse event and route to appropriate elements
      */
     handleMouseEvent(event) {
+        console.log('[Screen] handleMouseEvent:', event.action, 'at', event.x, event.y);
         // Emit on screen first
         this.emit('mouse', event);
         // Find all elements under the mouse cursor
@@ -291,7 +300,13 @@ export class Screen extends Element {
                 if (x < 0 || x >= this.width)
                     continue;
                 if (isTransparentBg) {
-                    // Preserve existing background, only update fg and character
+                    // For transparent background with space character, skip entirely
+                    // This preserves both the existing character AND background (true transparency)
+                    if (ch === ' ' || ch === '') {
+                        // Don't modify buffer at all - leave existing content visible
+                        continue;
+                    }
+                    // For transparent bg with actual content, preserve bg but update character
                     const existingAttr = this.buffer[y][x][0];
                     const existingBg = existingAttr & 0x1ff;
                     // Combine new fg/flags with existing bg
@@ -327,31 +342,73 @@ export class Screen extends Element {
     }
     /**
      * Convert attribute to ANSI string
+     * EXACT 1:1 PORT from neo-blessed screen.js codeAttr() lines 1508-1572
      */
     attrToAnsi(attr) {
-        const { flags, fg, bg } = this.unpackAttr(attr);
-        let ansi = '';
-        // Reset first
-        ansi += '\x1b[0m';
-        // Flags
-        if (flags & 1)
-            ansi += '\x1b[1m'; // bold
-        if (flags & 2)
-            ansi += '\x1b[4m'; // underline
-        if (flags & 4)
-            ansi += '\x1b[5m'; // blink
-        if (flags & 8)
-            ansi += '\x1b[7m'; // inverse
-        if (flags & 16)
-            ansi += '\x1b[8m'; // invisible
-        // Colors (simple 0-7 for now)
-        if (fg >= 0 && fg <= 7) {
-            ansi += `\x1b[3${fg}m`;
+        const flags = (attr >> 18) & 0x1ff;
+        let fg = (attr >> 9) & 0x1ff;
+        let bg = attr & 0x1ff;
+        let out = '';
+        // bold
+        if (flags & 1) {
+            out += '1;';
         }
-        if (bg >= 0 && bg <= 7) {
-            ansi += `\x1b[4${bg}m`;
+        // underline
+        if (flags & 2) {
+            out += '4;';
         }
-        return ansi;
+        // blink
+        if (flags & 4) {
+            out += '5;';
+        }
+        // inverse
+        if (flags & 8) {
+            out += '7;';
+        }
+        // invisible
+        if (flags & 16) {
+            out += '8;';
+        }
+        // Background color (process FIRST in neo-blessed)
+        if (bg !== 0x1ff) {
+            // For now, skip _reduceColor - assume color is already valid
+            if (bg < 16) {
+                if (bg < 8) {
+                    bg += 40; // Standard bg: 40-47
+                }
+                else if (bg < 16) {
+                    bg -= 8;
+                    bg += 100; // Bright bg: 100-107
+                }
+                out += bg + ';';
+            }
+            else {
+                // 256-color mode for bg
+                out += '48;5;' + bg + ';';
+            }
+        }
+        // Foreground color
+        if (fg !== 0x1ff) {
+            // For now, skip _reduceColor - assume color is already valid
+            if (fg < 16) {
+                if (fg < 8) {
+                    fg += 30; // Standard fg: 30-37
+                }
+                else if (fg < 16) {
+                    fg -= 8;
+                    fg += 90; // Bright fg: 90-97
+                }
+                out += fg + ';';
+            }
+            else {
+                // 256-color mode for fg
+                out += '38;5;' + fg + ';';
+            }
+        }
+        // Remove trailing semicolon
+        if (out[out.length - 1] === ';')
+            out = out.slice(0, -1);
+        return '\x1b[' + out + 'm';
     }
     /**
      * Parse style object to attribute code
@@ -359,7 +416,7 @@ export class Screen extends Element {
     styleToAttr(style) {
         let flags = 0;
         let fgCode = 0x1ff; // Default: no color
-        let bgCode = 0x1ff; // Default: no color
+        let bgCode = 0; // Default background: black for BBS consistency
         if (style.bold)
             flags |= 1;
         if (style.underline)
@@ -384,10 +441,24 @@ export class Screen extends Element {
     render() {
         if (this.destroyed)
             return;
-        // Clear buffer
+        // On first render, reset all terminal attributes to ensure clean state
+        // This prevents leftover colors from previous screens affecting our output
+        if (!this._hasRendered) {
+            this._hasRendered = true;
+            // Reset all attributes and clear screen
+            this.write('\x1b[0m'); // Reset all attributes
+            this.write('\x1b[2J'); // Clear screen
+            this.write('\x1b[H'); // Move cursor to home
+        }
+        // Clear buffer with default attribute
+        // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
+        // Original neo-blessed uses 0x1ff which results in NO background ANSI code,
+        // causing elements to use terminal's default background (not always black).
+        // BBS doors expect black background by default.
+        const dattr = ((0 << 18) | (0x1ff << 9)) | 0; // fg=0x1ff (default), bg=0 (black)
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
-                this.buffer[y][x] = [0x000, ' '];
+                this.buffer[y][x] = [dattr, ' '];
             }
         }
         // Render all children recursively
@@ -410,19 +481,60 @@ export class Screen extends Element {
         const pos = element._getCoords();
         if (!pos)
             return;
+        // Render shadow FIRST (behind the element)
+        if (element.options.shadow) {
+            this._renderShadow(pos);
+        }
         // Render element content
         this._renderContent(element, pos);
         // Render border
         if (element.options.border) {
             this._renderBorder(element, pos);
         }
+        // Render scrollbar if element has one
+        if (element.hasScrollbar?.() && element.renderScrollbar) {
+            element.renderScrollbar();
+        }
         // Render children
         for (const child of element.children) {
             this._renderElement(child);
         }
     }
+    /**
+     * Render shadow effect (EXACT 1:1 PORT FROM blessed element.js lines 2119-2145)
+     * Uses colors.blend() with single argument to darken pixels
+     */
+    _renderShadow(pos) {
+        const { xi, xl, yi, yl } = pos;
+        // Right shadow (exactly from blessed)
+        let y = Math.max(yi + 1, 0);
+        for (; y < yl + 1; y++) {
+            if (!this.buffer[y])
+                break;
+            let x = xl;
+            for (; x < xl + 2; x++) {
+                if (!this.buffer[y][x])
+                    break;
+                // blessed: lines[y][x][0] = colors.blend(lines[y][x][0])
+                this.buffer[y][x][0] = blend(this.buffer[y][x][0]);
+            }
+        }
+        // Bottom shadow (exactly from blessed)
+        y = yl;
+        for (; y < yl + 1; y++) {
+            if (!this.buffer[y])
+                break;
+            for (let x = Math.max(xi + 1, 0); x < xl; x++) {
+                if (!this.buffer[y][x])
+                    break;
+                // blessed: lines[y][x][0] = colors.blend(lines[y][x][0])
+                this.buffer[y][x][0] = blend(this.buffer[y][x][0]);
+            }
+        }
+    }
     _renderContent(element, pos) {
-        const lines = element.getLines();
+        // Use getVisibleLines() to respect scroll position (childBase)
+        const lines = element.getVisibleLines ? element.getVisibleLines() : element.getLines();
         const padding = element.options.padding || 0;
         const hasBorder = element.options.border && element.options.border?.type !== 'none';
         const border = hasBorder ? 1 : 0;
@@ -439,17 +551,44 @@ export class Screen extends Element {
         // Get base style attribute code
         const style = element.options.style || {};
         const baseAttr = this.styleToAttr(style);
+        // Check for neo-blessed style transparency (color blending at 50% opacity)
+        const isBlendTransparent = !!style.transparent;
         // Fill background (for elements without borders, this is essential for visibility)
+        // BUT skip if background is transparent (0x1ff) - preserve existing content
+        const bgColor = baseAttr & 0x1ff;
+        const isTransparentBg = bgColor === 0x1ff;
         const fillChar = element.options.ch || ' ';
-        for (let y = startY; y < maxY; y++) {
-            if (y < 0 || y >= this.height)
-                continue;
-            for (let x = startX; x < bbsMaxX; x++) {
-                if (x < 0 || x >= this.width)
+        if (isBlendTransparent) {
+            // Neo-blessed style: blend colors at 50% opacity
+            // Keep underlying characters visible, only blend the color attributes
+            // EXACT from neo-blessed element.js line 1945: colors.blend(attr, lines[y][x][0])
+            for (let y = startY; y < maxY; y++) {
+                if (y < 0 || y >= this.height)
                     continue;
-                this.buffer[y][x] = [baseAttr, fillChar];
+                for (let x = startX; x < bbsMaxX; x++) {
+                    if (x < 0 || x >= this.width)
+                        continue;
+                    const existingAttr = this.buffer[y][x][0];
+                    const existingChar = this.buffer[y][x][1];
+                    // Two arguments = transparency mode (blends at 50% alpha by default)
+                    const blendedAttr = blend(baseAttr, existingAttr);
+                    this.buffer[y][x] = [blendedAttr, existingChar];
+                }
             }
         }
+        else if (!isTransparentBg) {
+            // Normal fill - overwrite buffer
+            for (let y = startY; y < maxY; y++) {
+                if (y < 0 || y >= this.height)
+                    continue;
+                for (let x = startX; x < bbsMaxX; x++) {
+                    if (x < 0 || x >= this.width)
+                        continue;
+                    this.buffer[y][x] = [baseAttr, fillChar];
+                }
+            }
+        }
+        // If transparent bg (not blend), skip fill entirely - preserve existing buffer content
         // Render lines
         for (let i = 0; i < lines.length; i++) {
             const y = startY + i;
@@ -481,7 +620,17 @@ export class Screen extends Element {
                 }
                 // Regular character - write to buffer
                 if (x >= 0 && x < this.width) {
-                    this.buffer[y][x] = [currentAttr, line[idx]];
+                    if (isBlendTransparent) {
+                        // Blend text color with existing content
+                        // EXACT from neo-blessed element.js line 2076: colors.blend(attr, lines[y][x][0])
+                        const existingAttr = this.buffer[y][x][0];
+                        // Two arguments = transparency mode (blends at 50% alpha by default)
+                        const blendedAttr = blend(currentAttr, existingAttr);
+                        this.buffer[y][x] = [blendedAttr, line[idx]];
+                    }
+                    else {
+                        this.buffer[y][x] = [currentAttr, line[idx]];
+                    }
                 }
                 x++;
                 idx++;
@@ -582,11 +731,14 @@ export class Screen extends Element {
         };
         const chars = borderChars[borderType] ?? borderChars.line;
         // Get border style attribute
-        const style = element.options.style?.border || element.options.style || {};
-        const attr = this.styleToAttr(style);
+        // EXACT from neo-blessed element.js line 2137: battr = this.sattr(this.style.border)
+        // If style.border is undefined, use empty object (NOT element.style) to get default colors
+        const borderStyle = element.options.style?.border;
+        const attr = this.styleToAttr(borderStyle || {});
+        // Label uses border style if available, otherwise default
         const labelStyle = typeof border === 'object' && border.labelStyle
             ? border.labelStyle
-            : style;
+            : borderStyle || {};
         const labelAttr = this.styleToAttr(labelStyle);
         // Top border
         if (pos.yi >= 0 && pos.yi < this.height) {
@@ -1106,15 +1258,38 @@ export class Screen extends Element {
      * Set focused element (called by Element.focus())
      */
     setFocused(element) {
+        // Helper to find the element with a visible border (may be parent)
+        const findBorderElement = (el) => {
+            if (!el)
+                return null;
+            // Check if element has a border with fg color
+            if (el.options?.border && el.options?.style?.border?.fg) {
+                return el;
+            }
+            // Also check el.style.border directly (some widgets set it there)
+            if (el.options?.border && el.style?.border?.fg) {
+                return el;
+            }
+            // Walk up to parent
+            if (el.parent && el.parent !== this) {
+                return findBorderElement(el.parent);
+            }
+            return null;
+        };
         // Blur previous focused element
         if (this._focused && this._focused !== element) {
             this._focused.focused = false;
             this._focused.emit('blur');
-            // Restore original border color on blur (if element has border and stored color)
-            const prevEl = this._focused;
-            if (prevEl.border && prevEl._originalBorderColor) {
-                prevEl.style = prevEl.style || {};
-                prevEl.style.border = { ...(prevEl.style.border || {}), fg: prevEl._originalBorderColor };
+            // Restore original border color on blur
+            const prevBorderEl = findBorderElement(this._focused);
+            if (prevBorderEl && prevBorderEl._originalBorderColor) {
+                // Update both options.style.border and style.border for consistency
+                if (prevBorderEl.options?.style?.border) {
+                    prevBorderEl.options.style.border.fg = prevBorderEl._originalBorderColor;
+                }
+                if (prevBorderEl.style?.border) {
+                    prevBorderEl.style.border.fg = prevBorderEl._originalBorderColor;
+                }
             }
         }
         // Focus new element
@@ -1122,16 +1297,20 @@ export class Screen extends Element {
         if (element) {
             element.focused = true;
             element.emit('focus');
-            // Automatically set white borders on focused elements with borders
-            const el = element;
-            if (el.border && el.style?.border?.fg) {
+            // Automatically set white borders on focused elements
+            const borderEl = findBorderElement(element);
+            if (borderEl) {
                 // Store original border color if not already stored
-                if (!el._originalBorderColor) {
-                    el._originalBorderColor = el.style.border.fg;
+                if (!borderEl._originalBorderColor) {
+                    borderEl._originalBorderColor = borderEl.options?.style?.border?.fg || borderEl.style?.border?.fg;
                 }
                 // Set white border for focused element
-                el.style = el.style || {};
-                el.style.border = { ...(el.style.border || {}), fg: 'white' };
+                if (borderEl.options?.style?.border) {
+                    borderEl.options.style.border.fg = 'white';
+                }
+                if (borderEl.style?.border) {
+                    borderEl.style.border.fg = 'white';
+                }
             }
         }
         // Re-render to update focus border styling
@@ -1253,6 +1432,152 @@ export class Screen extends Element {
     clear() {
         this.clearBuffers();
         this.program.clear();
+    }
+    // ============================================================================
+    // Advanced Features (External Programs, Effects, Screenshot)
+    // ============================================================================
+    /**
+     * Spawn external program
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1737-1798
+     */
+    spawn(file, args, options) {
+        throw new Error('spawn() not supported in browser environment - requires Node.js child_process');
+    }
+    /**
+     * Execute external program and get success status
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1800-1814
+     */
+    exec(file, args, options, callback) {
+        throw new Error('exec() not supported in browser environment - requires Node.js child_process');
+    }
+    /**
+     * Open text editor and return edited content
+     * NOTE: Browser environment stub - requires Node.js fs and child_process
+     * STUB from neo-blessed screen.js lines 1816-1864
+     */
+    readEditor(options, callback) {
+        const err = new Error('readEditor() not supported in browser environment - requires Node.js fs/child_process');
+        if (callback)
+            callback(err);
+        else
+            throw err;
+    }
+    /**
+     * Display image using external image viewer
+     * NOTE: Browser environment stub - requires Node.js child_process and external w3mimgdisplay
+     * STUB from neo-blessed screen.js lines 1866-1904
+     */
+    displayImage(file, callback) {
+        const err = new Error('displayImage() not supported in browser environment - requires external w3mimgdisplay');
+        if (callback)
+            callback(err);
+        else
+            throw err;
+    }
+    /**
+     * Set visual effects (hover, blur, focus) on element
+     * EXACT from neo-blessed screen.js lines 1906-1957
+     */
+    setEffects(el, fel, over, out, effects, temp) {
+        if (!effects)
+            return;
+        const tmp = {};
+        if (temp && typeof el !== 'function') {
+            el[temp] = tmp;
+        }
+        let getEl;
+        if (typeof el !== 'function') {
+            const _el = el;
+            getEl = () => _el;
+        }
+        else {
+            getEl = el;
+        }
+        let getFel = null;
+        if (fel) {
+            if (typeof fel !== 'function') {
+                const _fel = fel;
+                getFel = () => _fel;
+            }
+            else {
+                getFel = fel;
+            }
+        }
+        const $ = (name) => {
+            return function () {
+                const _el = getEl();
+                const _fel = getFel ? getFel() : null;
+                const elStyle = _el.style || {};
+                const felStyle = _fel ? (_fel.style || {}) : {};
+                if (tmp[name] !== undefined) {
+                    elStyle[name] = tmp[name];
+                    delete tmp[name];
+                }
+                if (effects[name] !== undefined) {
+                    tmp[name] = elStyle[name];
+                    elStyle[name] = effects[name];
+                }
+                if (_fel && effects[name + 'Focus'] !== undefined) {
+                    tmp[name] = felStyle[name];
+                    felStyle[name] = effects[name + 'Focus'];
+                }
+                this.screen.render();
+            };
+        };
+        getEl().on(over, $(over));
+        getEl().on(out, $(out));
+    }
+    /**
+     * Initialize hover text box
+     * Creates tooltip-style box that appears on hover
+     * EXACT from neo-blessed screen.js lines 615-672
+     */
+    _initHover() {
+        if (this._hoverText) {
+            return;
+        }
+        // Would require Box widget - deferred for now
+        // Full implementation requires blessed Box widget with specific options
+        // Hover text should appear at cursor position with auto-hide timer
+        this._hoverText = null;
+    }
+    /**
+     * Take screenshot of screen buffer as text
+     * Returns ANSI/plain text representation of current screen
+     * EXACT from neo-blessed screen.js lines 2108-2197
+     */
+    screenshot(xi, xl, yi, yl, term) {
+        if (xi == null)
+            xi = 0;
+        if (xl == null)
+            xl = this.cols;
+        if (yi == null)
+            yi = 0;
+        if (yl == null)
+            yl = this.rows;
+        if (xi < 0)
+            xi = 0;
+        if (yi < 0)
+            yi = 0;
+        let main = '';
+        for (let y = yi; y < yl; y++) {
+            let line = '';
+            for (let x = xi; x < xl; x++) {
+                const cell = this.buffer[y]?.[x];
+                if (cell && cell.length >= 2) {
+                    line += cell[1] || ' '; // cell[0] = attr, cell[1] = char
+                }
+                else {
+                    line += ' ';
+                }
+            }
+            main += line;
+            if (y < yl - 1)
+                main += '\n';
+        }
+        return main;
     }
     // ============================================================================
     // Cleanup

@@ -1,0 +1,3 @@
+TYPE=AMI
+LOCATION=Doors/DIAGNOSTIC
+DESCRIPTION=Comprehensive 68K door emulation test suite

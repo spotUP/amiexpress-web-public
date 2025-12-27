@@ -167,19 +167,27 @@ export class FileManager extends List {
     }
     /**
      * Pick a file (show dialog and wait for selection)
+     * Overrides List.pick() with FileManager-specific behavior
      */
-    pick(callback) {
+    pick(label, callback) {
+        // Handle overload: pick(callback) or pick(label, callback)
+        if (typeof label === 'function') {
+            callback = label;
+            label = undefined;
+        }
         this.show();
         this.focus();
         const onFile = (file, fullPath) => {
             this.removeListener('file', onFile);
             this.removeListener('cancel', onCancel);
-            callback(null, fullPath);
+            if (callback)
+                callback(undefined, fullPath);
         };
         const onCancel = () => {
             this.removeListener('file', onFile);
             this.removeListener('cancel', onCancel);
-            callback(new Error('cancelled'));
+            if (callback)
+                callback(new Error('cancelled'));
         };
         this.once('file', onFile);
         this.key(['escape'], onCancel);

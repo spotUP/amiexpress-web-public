@@ -4,6 +4,21 @@
 import { EventEmitter } from './events';
 import { parseTags, stripAnsi, textWidth } from './colors';
 export class Element extends EventEmitter {
+    /**
+     * Draggable property with setter that enables/disables dragging
+     * EXACT from neo-blessed element.js: __defineSetter__('draggable', ...)
+     */
+    get draggable() {
+        return !!this._draggable;
+    }
+    set draggable(value) {
+        if (value) {
+            this.enableDrag();
+        }
+        else {
+            this.disableDrag();
+        }
+    }
     constructor(options = {}) {
         super();
         this.parent = null;
@@ -26,7 +41,6 @@ export class Element extends EventEmitter {
         // Mouse/Keyboard
         this.clickable = false;
         this.keyable = false;
-        this.draggable = false;
         this.input = false;
         this._hovered = false;
         // NOTE: We intentionally do NOT default width/height here.
@@ -42,6 +56,20 @@ export class Element extends EventEmitter {
             padding: 0,
             ...options,
         };
+        // Initialize position from options (CRITICAL: position setters update this.position, not this.options)
+        // _getCoords() reads from this.position, so we need to copy initial values here
+        if (this.options.left !== undefined)
+            this.position.left = this.options.left;
+        if (this.options.right !== undefined)
+            this.position.right = this.options.right;
+        if (this.options.top !== undefined)
+            this.position.top = this.options.top;
+        if (this.options.bottom !== undefined)
+            this.position.bottom = this.options.bottom;
+        if (this.options.width !== undefined)
+            this.position.width = this.options.width;
+        if (this.options.height !== undefined)
+            this.position.height = this.options.height;
         // Parse content
         if (this.options.content) {
             this.setContent(this.options.content);
@@ -65,6 +93,11 @@ export class Element extends EventEmitter {
         // Set screen
         if (this.options.screen) {
             this.screen = this.options.screen;
+        }
+        // Set draggable from options AFTER screen is set (EXACT from neo-blessed element.js lines 215-217)
+        // CRITICAL: Must be after parent/screen attachment so enableDrag() can access this.screen
+        if (this.options.draggable) {
+            this.draggable = true;
         }
     }
     // ============================================================================
@@ -136,45 +169,45 @@ export class Element extends EventEmitter {
         // Priority: left+right > left+width > right+width > width > defaults
         let xi;
         let xl;
-        const hasLeft = this.options.left !== undefined;
-        const hasRight = this.options.right !== undefined;
-        const hasWidth = this.options.width !== undefined;
+        const hasLeft = this.position.left !== undefined && this.position.left !== null;
+        const hasRight = this.position.right !== undefined && this.position.right !== null;
+        const hasWidth = this.position.width !== undefined && this.position.width !== null;
         if (hasLeft && hasRight && !hasWidth) {
             // Both left and right specified (no width) - calculate width from them
-            xi = this.calcPos(this.options.left, 0, parentWidth);
-            xl = parentWidth - this.calcPos(this.options.right, 0, parentWidth);
+            xi = this.calcPos(this.position.left, 0, parentWidth);
+            xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
         }
         else if (hasLeft && hasWidth) {
             // Left and width specified
-            const elemWidth = this.calcPos(this.options.width, 0, parentWidth);
+            const elemWidth = this.calcPos(this.position.width, 0, parentWidth);
             // Handle 'center' positioning with width
-            if (this.options.left === 'center') {
+            if (this.position.left === 'center') {
                 xi = Math.floor((parentWidth - elemWidth) / 2);
             }
             else {
-                xi = this.calcPos(this.options.left, 0, parentWidth);
+                xi = this.calcPos(this.position.left, 0, parentWidth);
             }
             xl = xi + elemWidth;
         }
         else if (hasRight && hasWidth) {
             // Right and width specified
-            xl = parentWidth - this.calcPos(this.options.right, 0, parentWidth);
-            xi = xl - this.calcPos(this.options.width, 0, parentWidth);
+            xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
+            xi = xl - this.calcPos(this.position.width, 0, parentWidth);
         }
         else if (hasLeft) {
             // Only left specified - extend to right edge
-            xi = this.calcPos(this.options.left, 0, parentWidth);
+            xi = this.calcPos(this.position.left, 0, parentWidth);
             xl = parentWidth;
         }
         else if (hasRight) {
             // Only right specified - extend from left edge
             xi = 0;
-            xl = parentWidth - this.calcPos(this.options.right, 0, parentWidth);
+            xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
         }
         else if (hasWidth) {
             // Only width specified - start from left edge
             xi = 0;
-            xl = this.calcPos(this.options.width, 0, parentWidth);
+            xl = this.calcPos(this.position.width, 0, parentWidth);
         }
         else {
             // No horizontal position specified - fill parent
@@ -185,45 +218,45 @@ export class Element extends EventEmitter {
         // Priority: top+bottom > top+height > bottom+height > height > defaults
         let yi;
         let yl;
-        const hasTop = this.options.top !== undefined;
-        const hasBottom = this.options.bottom !== undefined;
-        const hasHeight = this.options.height !== undefined;
+        const hasTop = this.position.top !== undefined && this.position.top !== null;
+        const hasBottom = this.position.bottom !== undefined && this.position.bottom !== null;
+        const hasHeight = this.position.height !== undefined && this.position.height !== null;
         if (hasTop && hasBottom && !hasHeight) {
             // Both top and bottom specified (no height) - calculate height from them
-            yi = this.calcPos(this.options.top, 0, parentHeight);
-            yl = parentHeight - this.calcPos(this.options.bottom, 0, parentHeight);
+            yi = this.calcPos(this.position.top, 0, parentHeight);
+            yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
         }
         else if (hasTop && hasHeight) {
             // Top and height specified
-            const elemHeight = this.calcPos(this.options.height, 0, parentHeight);
+            const elemHeight = this.calcPos(this.position.height, 0, parentHeight);
             // Handle 'center' positioning with height
-            if (this.options.top === 'center') {
+            if (this.position.top === 'center') {
                 yi = Math.floor((parentHeight - elemHeight) / 2);
             }
             else {
-                yi = this.calcPos(this.options.top, 0, parentHeight);
+                yi = this.calcPos(this.position.top, 0, parentHeight);
             }
             yl = yi + elemHeight;
         }
         else if (hasBottom && hasHeight) {
             // Bottom and height specified
-            yl = parentHeight - this.calcPos(this.options.bottom, 0, parentHeight);
-            yi = yl - this.calcPos(this.options.height, 0, parentHeight);
+            yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
+            yi = yl - this.calcPos(this.position.height, 0, parentHeight);
         }
         else if (hasTop) {
             // Only top specified - extend to bottom edge
-            yi = this.calcPos(this.options.top, 0, parentHeight);
+            yi = this.calcPos(this.position.top, 0, parentHeight);
             yl = parentHeight;
         }
         else if (hasBottom) {
             // Only bottom specified - extend from top edge
             yi = 0;
-            yl = parentHeight - this.calcPos(this.options.bottom, 0, parentHeight);
+            yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
         }
         else if (hasHeight) {
             // Only height specified - start from top edge
             yi = 0;
-            yl = this.calcPos(this.options.height, 0, parentHeight);
+            yl = this.calcPos(this.position.height, 0, parentHeight);
         }
         else {
             // No vertical position specified - fill parent
@@ -235,8 +268,11 @@ export class Element extends EventEmitter {
         xl += parentContentXi;
         yi += parentContentYi;
         yl += parentContentYi;
-        // Store position
-        this.position = { xi, xl, yi, yl };
+        // Store calculated coordinates (PRESERVE existing user-specified position properties!)
+        this.position.xi = xi;
+        this.position.xl = xl;
+        this.position.yi = yi;
+        this.position.yl = yl;
         return this.position;
     }
     // ============================================================================
@@ -405,12 +441,13 @@ export class Element extends EventEmitter {
         return this.atop + border + padding.top;
     }
     /**
-     * Get inner width (excluding border and padding)
+     * Get inner width (excluding border, padding, and scrollbar)
      */
     get iwidth() {
         const border = this.hasBorder() ? 2 : 0;
         const padding = this.getPadding();
-        return Math.max(0, this.width - border - padding.left - padding.right);
+        const scrollbar = this.hasScrollbar() ? 1 : 0;
+        return Math.max(0, this.width - border - padding.left - padding.right - scrollbar);
     }
     /**
      * Get inner height (excluding border and padding)
@@ -421,11 +458,160 @@ export class Element extends EventEmitter {
         return Math.max(0, this.height - border - padding.top - padding.bottom);
     }
     // ============================================================================
+    // Position Setters (EXACT 1:1 PORT from neo-blessed element.js lines 1312-1398)
+    // ============================================================================
+    /**
+     * Set absolute left position
+     * EXACT from neo-blessed element.js lines 1312-1331
+     */
+    set aleft(val) {
+        let expr;
+        if (typeof val === 'string') {
+            if (val === 'center') {
+                val = (this.screen.width / 2) | 0;
+                val -= (this.width / 2) | 0;
+            }
+            else {
+                expr = val.split(/(?=\+|-)/);
+                val = expr[0];
+                val = +val.slice(0, -1) / 100;
+                val = (this.screen.width * val) | 0;
+                val += +(expr[1] || 0);
+            }
+        }
+        if (!this.parent)
+            return;
+        val = val - this.parent.aleft;
+        if (this.position.left === val)
+            return;
+        this.emit('move');
+        this.clearPos();
+        this.position.left = val;
+    }
+    /**
+     * Set absolute right position
+     * EXACT from neo-blessed element.js lines 1333-1339
+     */
+    set aright(val) {
+        if (!this.parent)
+            return;
+        val -= this.parent.aright;
+        if (this.position.right === val)
+            return;
+        this.emit('move');
+        this.clearPos();
+        this.position.right = val;
+    }
+    /**
+     * Set absolute top position
+     * EXACT from neo-blessed element.js lines 1341-1360
+     */
+    set atop(val) {
+        let expr;
+        if (typeof val === 'string') {
+            if (val === 'center') {
+                val = (this.screen.height / 2) | 0;
+                val -= (this.height / 2) | 0;
+            }
+            else {
+                expr = val.split(/(?=\+|-)/);
+                val = expr[0];
+                val = +val.slice(0, -1) / 100;
+                val = (this.screen.height * val) | 0;
+                val += +(expr[1] || 0);
+            }
+        }
+        if (!this.parent)
+            return;
+        val = val - this.parent.atop;
+        if (this.position.top === val)
+            return;
+        this.emit('move');
+        this.clearPos();
+        this.position.top = val;
+    }
+    /**
+     * Set absolute bottom position
+     * EXACT from neo-blessed element.js lines 1362-1368
+     */
+    set abottom(val) {
+        if (!this.parent)
+            return;
+        val -= this.parent.abottom;
+        if (this.position.bottom === val)
+            return;
+        this.emit('move');
+        this.clearPos();
+        this.position.bottom = val;
+    }
+    /**
+     * Set relative left position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1370-1376
+     */
+    set rleft(val) {
+        if (this.position.left === val)
+            return;
+        if (/^\d+$/.test(val))
+            val = +val;
+        this.emit('move');
+        // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
+        this.position.left = val;
+    }
+    /**
+     * Set relative right position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1378-1383
+     */
+    set rright(val) {
+        if (this.position.right === val)
+            return;
+        this.emit('move');
+        // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
+        this.position.right = val;
+    }
+    /**
+     * Set relative top position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1385-1391
+     */
+    set rtop(val) {
+        if (this.position.top === val)
+            return;
+        if (/^\d+$/.test(val))
+            val = +val;
+        this.emit('move');
+        // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
+        this.position.top = val;
+    }
+    /**
+     * Set relative bottom position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1393-1398
+     */
+    set rbottom(val) {
+        if (this.position.bottom === val)
+            return;
+        this.emit('move');
+        // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
+        this.position.bottom = val;
+    }
+    /**
+     * Clear the element's rendered position on screen
+     * EXACT from neo-blessed element.js lines 901-909
+     */
+    clearPos(get, override) {
+        if (this.detached)
+            return;
+        const lpos = this._getCoords(get);
+        if (!lpos)
+            return;
+        this.screen.clearRegion(lpos.xi, lpos.xl, lpos.yi, lpos.yl, override);
+    }
+    // ============================================================================
     // Content Management
     // ============================================================================
     setContent(content) {
         if (this.destroyed)
             return;
+        // Process {center} tags before storing content
+        content = this.processCenterTags(content);
         this.content = content;
         this._contentDirty = true; // Mark for re-parsing on next render
         // Try to parse now if we have valid dimensions
@@ -446,6 +632,25 @@ export class Element extends EventEmitter {
         }
         this.emit('set content');
     }
+    /**
+     * Process {center} tags and convert to centered text
+     * CUSTOM EXTENSION: Blessed doesn't natively support {center} tags
+     */
+    processCenterTags(content) {
+        const centerRegex = /\{center\}([\s\S]*?)\{\/center\}/g;
+        return content.replace(centerRegex, (match, innerContent) => {
+            const lines = innerContent.split('\n');
+            const width = this.iwidth || this.width || 80;
+            const centeredLines = lines.map((line) => {
+                // Strip tags to calculate actual text length
+                const stripped = line.replace(/\{[^}]+\}/g, '');
+                const textLength = stripped.length;
+                const padding = Math.max(0, Math.floor((width - textLength) / 2));
+                return ' '.repeat(padding) + line;
+            });
+            return centeredLines.join('\n');
+        });
+    }
     getContent() {
         return this.content;
     }
@@ -458,7 +663,12 @@ export class Element extends EventEmitter {
     insertLine(i, line) {
         if (this.destroyed)
             return;
-        this._lines.splice(i, 0, line);
+        // Parse tags if enabled (convert {red-fg} to ANSI codes)
+        let parsedLine = line;
+        if (this.options.tags) {
+            parsedLine = parseTags(line);
+        }
+        this._lines.splice(i, 0, parsedLine);
         this.content = this._lines.join('\n');
         this.emit('insert line', i, line);
     }
@@ -478,7 +688,13 @@ export class Element extends EventEmitter {
     setLine(i, line) {
         if (this.destroyed)
             return;
-        this._lines[i] = line;
+        // Parse tags if enabled (convert {red-fg} to ANSI codes)
+        // This ensures {red-fg}text{/} becomes proper ANSI sequences
+        let parsedLine = line;
+        if (this.options.tags) {
+            parsedLine = parseTags(line);
+        }
+        this._lines[i] = parsedLine;
         this.content = this._lines.join('\n');
         this.emit('set line', i, line);
     }
@@ -665,6 +881,7 @@ export class Element extends EventEmitter {
             bgCode = this._colorToNumber(style.bg);
         }
         // Pack into 27-bit attribute
+        // Format: (flags << 18) | (fg << 9) | bg - must match screen.ts unpackAttr()
         return (flags << 18) | (fgCode << 9) | bgCode;
     }
     /**
@@ -677,6 +894,11 @@ export class Element extends EventEmitter {
         if (typeof color === 'string') {
             // Named colors (basic 8 colors)
             const colorMap = {
+                // Special: transparent means preserve existing background
+                transparent: 0x1ff,
+                none: 0x1ff,
+                default: 0x1ff,
+                // Standard colors
                 black: 0,
                 red: 1,
                 green: 2,
@@ -812,6 +1034,11 @@ export class Element extends EventEmitter {
     }
     _propagateScreen(screen) {
         this.screen = screen;
+        // Emit overlay event for visible elements with opacity when first attached to screen
+        if (this.visible && !this.hidden && this.options.style?.opacity !== undefined) {
+            // Defer to next tick to ensure coordinates are calculated
+            setTimeout(() => this._emitOverlayEvent(true), 0);
+        }
         for (const child of this.children) {
             child._propagateScreen(screen);
         }
@@ -837,9 +1064,45 @@ export class Element extends EventEmitter {
             }
         }
     }
-    // ============================================================================
-    // Visibility
-    // ============================================================================
+    /**
+     * Get unique overlay ID for this element (lazily generated)
+     */
+    _getOverlayId() {
+        if (!this._overlayId) {
+            this._overlayId = `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+        return this._overlayId;
+    }
+    /**
+     * Emit overlay event for web clients to render CSS opacity
+     */
+    _emitOverlayEvent(show) {
+        const opacity = this.options.style?.opacity;
+        if (opacity === undefined || !this.screen)
+            return;
+        // Get element position
+        const coords = this._getCoords();
+        const pos = coords ? {
+            x: coords.xi,
+            y: coords.yi,
+            width: coords.xl - coords.xi,
+            height: coords.yl - coords.yi,
+        } : null;
+        if (!pos)
+            return;
+        // Emit OSC overlay event
+        const data = JSON.stringify({
+            id: this._getOverlayId(),
+            show,
+            opacity,
+            x: pos.x,
+            y: pos.y,
+            width: pos.width,
+            height: pos.height,
+        });
+        const osc = `\x1b]9999;overlay;${data}\x07`;
+        this.screen.program?.write(osc);
+    }
     show() {
         if (this.destroyed)
             return;
@@ -847,6 +1110,8 @@ export class Element extends EventEmitter {
             this.hidden = false;
             this.visible = true;
             this.emit('show');
+            // Emit overlay event for elements with opacity
+            this._emitOverlayEvent(true);
         }
     }
     hide() {
@@ -857,6 +1122,8 @@ export class Element extends EventEmitter {
             this.visible = false;
             this.blur();
             this.emit('hide');
+            // Emit overlay event for elements with opacity
+            this._emitOverlayEvent(false);
         }
     }
     toggle() {
@@ -940,9 +1207,48 @@ export class Element extends EventEmitter {
         this.setScroll(0);
         this.screen?.render();
     }
-    // ============================================================================
-    // Mouse/Keyboard Interactivity
-    // ============================================================================
+    /**
+     * Register event listener on screen and track it for cleanup
+     * EXACT from neo-blessed element.js lines 267-271
+     */
+    onScreenEvent(type, handler) {
+        this._slisteners = this._slisteners || [];
+        this._slisteners.push({ type, handler });
+        this.screen.on(type, handler);
+    }
+    /**
+     * Register one-time event listener on screen and track it
+     * EXACT from neo-blessed element.js lines 273-282
+     */
+    onceScreenEvent(type, handler) {
+        this._slisteners = this._slisteners || [];
+        const entry = { type, handler };
+        this._slisteners.push(entry);
+        this.screen.once(type, (...args) => {
+            const i = this._slisteners.indexOf(entry);
+            if (i !== -1)
+                this._slisteners.splice(i, 1);
+            return handler.apply(this, args);
+        });
+    }
+    /**
+     * Remove event listener from screen
+     * EXACT from neo-blessed element.js lines 284-297
+     */
+    removeScreenEvent(type, handler) {
+        this._slisteners = this._slisteners || [];
+        for (let i = 0; i < this._slisteners.length; i++) {
+            const listener = this._slisteners[i];
+            if (listener.type === type && listener.handler === handler) {
+                this._slisteners.splice(i, 1);
+                if (this._slisteners.length === 0) {
+                    delete this._slisteners;
+                }
+                break;
+            }
+        }
+        this.screen.removeListener(type, handler);
+    }
     /**
      * Enable mouse events for this element
      */
@@ -991,54 +1297,76 @@ export class Element extends EventEmitter {
     }
     /**
      * Enable dragging for this element
+     * EXACT from neo-blessed element.js lines 789-851
      */
-    enableDrag(callback) {
-        this.draggable = true;
-        this.enableMouse();
-        let dragState = null;
-        // Mouse down - start drag
-        this.on('mousedown', (data) => {
-            if (data.button !== 'left')
-                return;
-            dragState = {
-                startX: data.x,
-                startY: data.y,
-                offsetX: data.x - this.aleft,
-                offsetY: data.y - this.atop,
-            };
-            this.emit('drag start', data);
-            if (callback)
-                callback(data);
-        });
-        // Mouse move - continue drag
-        if (this.screen) {
-            this.screen.on('mouse', (data) => {
-                if (!dragState || data.action !== 'mousemove')
-                    return;
-                const newLeft = data.x - dragState.offsetX;
-                const newTop = data.y - dragState.offsetY;
-                this.options.left = newLeft;
-                this.options.top = newTop;
-                this.emit('drag', data);
-                if (this.screen)
-                    this.screen.render();
-            });
+    enableDrag(verify) {
+        const self = this;
+        if (this._draggable)
+            return true;
+        if (typeof verify !== 'function') {
+            verify = function () { return true; };
         }
-        // Mouse up - end drag
-        this.on('mouseup', (data) => {
-            if (!dragState)
+        this.enableMouse();
+        this.on('mousedown', this._dragMD = function (data) {
+            if (self.screen._dragging)
                 return;
-            dragState = null;
-            this.emit('drag end', data);
+            if (!verify(data))
+                return;
+            self.screen._dragging = self;
+            self._drag = {
+                x: data.x - self.aleft,
+                y: data.y - self.atop
+            };
+            self.setFront();
         });
+        this.onScreenEvent('mouse', this._dragM = function (data) {
+            if (self.screen._dragging !== self)
+                return;
+            if (data.action !== 'mousedown' && data.action !== 'mousemove') {
+                delete self.screen._dragging;
+                delete self._drag;
+                return;
+            }
+            if (!self.parent)
+                return;
+            const ox = self._drag.x;
+            const oy = self._drag.y;
+            const px = self.parent.aleft;
+            const py = self.parent.atop;
+            let x = data.x - px - ox;
+            let y = data.y - py - oy;
+            // Handle right/bottom positioning edge cases
+            if (self.position.right != null) {
+                if (self.position.left != null) {
+                    self.width = '100%-' + (self.parent.width - self.width);
+                }
+                self.position.right = null;
+            }
+            if (self.position.bottom != null) {
+                if (self.position.top != null) {
+                    self.height = '100%-' + (self.parent.height - self.height);
+                }
+                self.position.bottom = null;
+            }
+            // Use position setters to update position
+            self.rleft = x;
+            self.rtop = y;
+            self.screen.render();
+        });
+        return this._draggable = true;
     }
     /**
      * Disable dragging
+     * EXACT from neo-blessed element.js lines 853-861
      */
     disableDrag() {
-        this.draggable = false;
-        this.removeAllListeners('mousedown');
-        this.removeAllListeners('mouseup');
+        if (!this._draggable)
+            return false;
+        delete this.screen._dragging;
+        delete this._drag;
+        this.removeListener('mousedown', this._dragMD);
+        this.removeScreenEvent('mouse', this._dragM);
+        return this._draggable = false;
     }
     /**
      * Enable resizing for this element
@@ -1307,10 +1635,24 @@ export class Element extends EventEmitter {
         const chars = this.getBorderChars();
         if (!chars)
             return;
-        // Determine border style - use focus style if element is focused
-        let borderStyle = typeof this.options.border === 'object'
-            ? this.options.border.style || this.options.style
-            : this.options.style;
+        // Determine border style - check multiple locations for border color
+        // Priority: options.style.border > options.border.style > options.style
+        // CRITICAL FIX: Start with empty style for borders, don't inherit element's bg
+        // Borders should only have fg (color of border lines), not bg (color behind lines)
+        // The original code inherited element's bg which caused colored backgrounds on borders
+        let borderStyle = {};
+        // Apply element's foreground color (for text in border labels)
+        if (this.options.style?.fg) {
+            borderStyle.fg = this.options.style.fg;
+        }
+        // Check if border has its own style (from options.border.style)
+        if (typeof this.options.border === 'object' && this.options.border.style) {
+            borderStyle = { ...borderStyle, ...this.options.border.style };
+        }
+        // Check if there's a specific border color in options.style.border
+        if (this.options.style?.border) {
+            borderStyle = { ...borderStyle, ...this.options.style.border };
+        }
         // If focused, use focus border style (white border)
         if (this.focused) {
             const focusStyle = this.options.style?.focus;
@@ -1318,7 +1660,7 @@ export class Element extends EventEmitter {
                 borderStyle = { ...borderStyle, ...focusStyle.border };
             }
             else {
-                // Default: white border when focused
+                // Default: white foreground for border when focused
                 borderStyle = { ...borderStyle, fg: 'white' };
             }
         }
@@ -1392,31 +1734,44 @@ export class Element extends EventEmitter {
         if (!pos)
             return;
         const scrollbarOptions = this.options.scrollbar;
-        const scrollbarStyle = scrollbarOptions?.style || this.options.style;
+        // Get scrollbar style - use scrollbar.style, fall back to element style
+        const scrollbarStyle = scrollbarOptions?.style || { fg: 'white', bg: 'black' };
         const attr = this.sattr(scrollbarStyle);
         const border = this.hasBorder() ? 1 : 0;
+        // Scrollbar is at the rightmost column of the element
+        // Note: For elements without border, this is pos.xl - 1
+        // For elements with border, this is inside the border at pos.xl - border - 1
         const scrollbarX = pos.xl - border - 1;
+        // Ensure scrollbar X is within bounds
+        if (scrollbarX < pos.xi || scrollbarX >= pos.xl)
+            return;
         const contentHeight = this._lines.length;
         const viewHeight = this.iheight;
-        if (contentHeight <= viewHeight)
-            return; // No scrollbar needed
-        const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
-        const scrollbarY = Math.floor((this.childBase / contentHeight) * viewHeight);
+        // If content fits in view, still render track but no thumb scroll needed
+        if (contentHeight <= 0 || viewHeight <= 0)
+            return;
         const trackChar = typeof scrollbarOptions?.track === 'string'
             ? scrollbarOptions.track
             : scrollbarOptions?.track?.ch || '│';
         const thumbChar = typeof scrollbarOptions?.thumb === 'string'
             ? scrollbarOptions.thumb
             : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || '█';
-        // Render scrollbar track
+        // Always render scrollbar track
         for (let y = pos.yi + border; y < pos.yl - border; y++) {
             this.screen.fillRegion(attr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
         }
-        // Render scrollbar thumb
-        for (let i = 0; i < scrollbarHeight; i++) {
-            const y = pos.yi + border + scrollbarY + i;
-            if (y < pos.yl - border) {
-                this.screen.fillRegion(attr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
+        // Only render thumb if content overflows
+        if (contentHeight > viewHeight) {
+            const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
+            const maxScroll = contentHeight - viewHeight;
+            const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
+            const scrollbarY = Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
+            // Render scrollbar thumb
+            for (let i = 0; i < scrollbarHeight; i++) {
+                const y = pos.yi + border + scrollbarY + i;
+                if (y >= pos.yi + border && y < pos.yl - border) {
+                    this.screen.fillRegion(attr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
+                }
             }
         }
     }
@@ -1641,16 +1996,16 @@ export class Element extends EventEmitter {
      */
     getDescendants() {
         const descendants = [];
-        this.collectDescendants(descendants);
+        this._collectDescendantsHelper(descendants);
         return descendants;
     }
     /**
-     * Collect all descendants recursively
+     * Collect all descendants recursively (helper)
      */
-    collectDescendants(out) {
+    _collectDescendantsHelper(out) {
         for (const child of this.children) {
             out.push(child);
-            child.collectDescendants(out);
+            child._collectDescendantsHelper(out);
         }
     }
     /**
@@ -1700,6 +2055,109 @@ export class Element extends EventEmitter {
             current = current.parent;
         }
         return ancestors;
+    }
+    /**
+     * Iterate over descendants with callback
+     * EXACT from neo-blessed node.js lines 185-191
+     */
+    forDescendants(iter, includeSelf) {
+        if (includeSelf)
+            iter(this);
+        const emit = (el) => {
+            iter(el);
+            el.children.forEach(emit);
+        };
+        this.children.forEach(emit);
+    }
+    /**
+     * Iterate over ancestors with callback
+     * EXACT from neo-blessed node.js lines 193-199
+     */
+    forAncestors(iter, includeSelf) {
+        let el = this;
+        if (includeSelf)
+            iter(this);
+        while ((el = el.parent)) {
+            iter(el);
+        }
+    }
+    /**
+     * Collect descendants into array (alias for getDescendants for neo-blessed compat)
+     * EXACT from neo-blessed node.js lines 201-207
+     */
+    collectDescendants(includeSelf) {
+        const out = [];
+        this.forDescendants((el) => {
+            out.push(el);
+        }, includeSelf);
+        return out;
+    }
+    /**
+     * Collect ancestors into array (alias for getAncestors for neo-blessed compat)
+     * EXACT from neo-blessed node.js lines 209-215
+     */
+    collectAncestors(includeSelf) {
+        const out = [];
+        this.forAncestors((el) => {
+            out.push(el);
+        }, includeSelf);
+        return out;
+    }
+    /**
+     * Emit event to all descendants
+     * EXACT from neo-blessed node.js lines 217-229
+     */
+    emitDescendants(...args) {
+        let iter;
+        // Check if last argument is a function
+        if (typeof args[args.length - 1] === 'function') {
+            iter = args.pop();
+        }
+        this.forDescendants((el) => {
+            if (iter)
+                iter(el);
+            // TypeScript needs explicit spread for emit
+            if (args.length > 0) {
+                el.emit(...args);
+            }
+        }, true);
+    }
+    /**
+     * Emit event to all ancestors
+     * EXACT from neo-blessed node.js lines 231-243
+     */
+    emitAncestors(...args) {
+        let iter;
+        // Check if last argument is a function
+        if (typeof args[args.length - 1] === 'function') {
+            iter = args.pop();
+        }
+        this.forAncestors((el) => {
+            if (iter)
+                iter(el);
+            // TypeScript needs explicit spread for emit
+            if (args.length > 0) {
+                el.emit(...args);
+            }
+        }, true);
+    }
+    /**
+     * Check if element has a specific descendant
+     * EXACT from neo-blessed node.js lines 245-257
+     */
+    hasDescendant(target) {
+        const find = (el) => {
+            for (let i = 0; i < el.children.length; i++) {
+                if (el.children[i] === target) {
+                    return true;
+                }
+                if (find(el.children[i])) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return find(this);
     }
     // ============================================================================
     // Label Management
@@ -1941,6 +2399,10 @@ export class Element extends EventEmitter {
     destroy() {
         if (this.destroyed)
             return;
+        // Emit overlay hide event if element had opacity
+        if (this.options.style?.opacity !== undefined) {
+            this._emitOverlayEvent(false);
+        }
         this.destroyed = true;
         // Emit 'destroy' event BEFORE removing listeners so handlers can respond
         this.emit('destroy');
