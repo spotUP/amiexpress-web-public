@@ -1,0 +1,7 @@
+BBSCMD=SCROLLWARS
+TYPE=TS
+LOCATION=Doors/scrollwars
+DESCRIPTION=Scrollwars realtime multiuser line chat
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME

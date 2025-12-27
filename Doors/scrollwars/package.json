@@ -1,0 +1,26 @@
+{
+  "name": "@amiexpress/door-scrollwars",
+  "version": "1.0.0",
+  "description": "Realtime multiuser line chat for AmiExpress",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch"
+  },
+  "keywords": ["bbs", "door", "chat", "multinode", "realtime"],
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "door": {
+    "name": "scrollwars",
+    "command": "SCROLLWARS",
+    "description": "Realtime multiuser line chat",
+    "category": "Chat"
+  }
+}
