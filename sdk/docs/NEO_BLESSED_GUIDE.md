@@ -583,6 +583,176 @@ const overlay = blessed.box({
 // Also works with: 'none', 'default'
 ```
 
+## Advanced Terminal Control (Phase 4 Features)
+
+### Terminal Modes
+
+Control terminal behavior with mode commands:
+
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+const screen = blessed.screen({ /* ... */ });
+const program = screen.program;
+
+// Set/Reset standard modes
+program.setMode('4');    // Insert mode
+program.resetMode('4');  // Replace mode
+
+// DEC private modes (with ?)
+program.decset('25');   // Show cursor
+program.decrst('25');   // Hide cursor
+program.decset('47');   // Use alternate screen buffer
+program.decrst('47');   // Use normal screen buffer
+
+// Convenient buffer switching
+program.alternateBuffer();  // or program.smcup()
+program.normalBuffer();     // or program.rmcup()
+```
+
+**Common DEC Modes:**
+- `?25` - Cursor visibility (show/hide)
+- `?47` / `?1049` - Alternate screen buffer
+- `?1000` - Mouse X & Y on button press/release
+- `?1002` - Cell motion mouse tracking
+- `?1006` - SGR mouse mode (better encoding)
+
+### Character Sets
+
+Support international characters and special graphics:
+
+```typescript
+// Designate character set to G0-G3 level
+program.charset('ascii', 0);   // G0 = US ASCII (default)
+program.charset('uk', 1);      // G1 = UK character set
+program.charset('acs', 0);     // G0 = DEC Special Graphics (line drawing)
+
+// Quick switching
+program.smacs();  // Enter alternate charset mode (DEC Special Graphics)
+program.rmacs();  // Exit to ASCII
+
+// Invoke G1/G2/G3 as current
+program.setG(1);  // Use G1 character set
+program.setG(2);  // Use G2 character set
+```
+
+**Supported Charsets:**
+- `ascii`, `us`, `usascii` - US ASCII
+- `uk` - UK
+- `french`, `frenchcanadian`, `german`, `italian`, `spanish`, `swedish`, `dutch`, `finnish`, `swiss`
+- `acs`, `scld` - DEC Special Character and Line Drawing Set
+- `isolatin` - ISO Latin
+
+### Terminal Queries
+
+Query terminal capabilities and cursor position:
+
+```typescript
+// Get cursor position
+program.getCursor((err, data) => {
+  if (!err && data) {
+    console.log(`Cursor at: row ${data.y}, col ${data.x}`);
+  }
+});
+
+// Device status report
+program.deviceStatus(6, (err, data) => {
+  // Parameter 6 = cursor position
+  // Returns cursor row/column
+});
+
+// Query terminal type/version
+program.sendDeviceAttributes('', (err, data) => {
+  // Returns terminal identification
+  // Format: CSI ? Pp ; Pv ; Pc c
+  // Pp = terminal type (0=VT100, 1=VT220)
+  // Pv = firmware version
+  // Pc = ROM cartridge number
+});
+```
+
+**Note:** Terminal response handling in browser environment returns errors. These methods send the correct ANSI codes but full response parsing requires WebSocket integration (deferred for browser compatibility).
+
+### Advanced Screen Methods
+
+#### Visual Effects
+
+Apply hover, focus, and blur effects dynamically:
+
+```typescript
+const myBox = blessed.box({
+  parent: screen,
+  content: 'Hover over me!',
+  style: { fg: 'white', bg: 'black' },
+});
+
+// Define effects
+screen.setEffects(
+  myBox,           // Element to apply effects to
+  null,            // Focus element (optional)
+  'mouseover',     // Event to trigger "over" state
+  'mouseout',      // Event to trigger "out" state
+  {
+    mouseover: { fg: 'yellow', bg: 'blue' },   // Hover style
+    mouseout: { fg: 'white', bg: 'black' },    // Normal style
+  }
+);
+```
+
+#### Screen Capture
+
+Take a text screenshot of the current screen buffer:
+
+```typescript
+// Capture entire screen
+const screenshot = screen.screenshot();
+console.log(screenshot);  // Plain text representation
+
+// Capture specific region
+const region = screen.screenshot(
+  0,    // start x
+  80,   // end x
+  0,    // start y
+  24    // end y
+);
+
+// Save to file or send over network
+await fs.writeFile('screenshot.txt', screenshot);
+```
+
+#### External Programs (Node.js Only)
+
+These methods throw errors in browser environment but are available for Node.js-based doors:
+
+```typescript
+// Spawn external program
+try {
+  const ps = screen.spawn('ls', ['-la']);
+  ps.on('exit', (code) => {
+    console.log('Exited with code:', code);
+  });
+} catch (err) {
+  // Browser: "spawn() not supported in browser environment"
+}
+
+// Execute and get success status
+screen.exec('grep', ['pattern', 'file.txt'], {}, (err, success) => {
+  if (success) console.log('Command succeeded');
+});
+
+// Open text editor
+screen.readEditor({ editor: 'vim' }, (err, data) => {
+  if (!err) console.log('Edited text:', data);
+});
+
+// Display image via w3mimgdisplay
+screen.displayImage('/path/to/image.png', (err, success) => {
+  if (!err) console.log('Image displayed');
+});
+```
+
+**Browser Compatibility:** External program methods are stubbed with clear error messages in browser environment. Only `setEffects()` and `screenshot()` are fully functional across both browser and Node.js.
+
 ## Best Practices
 
 1. **Always enable mouse**: `screen.enableMouse()` and disable on cleanup
@@ -592,6 +762,11 @@ const overlay = blessed.box({
 5. **Cast to `any` when needed**: TypeScript types are sometimes too strict
 6. **Focus management**: Call `.focus()` on the element you want focused
 7. **Render after changes**: Call `screen.render()` after UI updates
+8. **Mode control**: Use `program.decset()` / `program.decrst()` for terminal modes
+9. **Character sets**: Use `program.charset()` for international support
+10. **Visual effects**: Use `screen.setEffects()` for dynamic hover/focus styling
+11. **Screen capture**: Use `screen.screenshot()` for debugging or logging
+12. **Terminal queries**: Aware of browser limitations for response handling
 
 ## Testing
 
