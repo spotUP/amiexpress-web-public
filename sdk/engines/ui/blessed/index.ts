@@ -104,250 +104,254 @@ export function screen(options?: ScreenOptions & { output?: (data: string) => vo
   return new Screen(options);
 }
 
+// ============================================================================
+// Factory Functions - ALL default to tags: true for color support
+// ============================================================================
+
 /**
- * Create a box widget
+ * Create a box widget (tags: true by default)
  */
 export function box(options?: ElementOptions): Box {
-  return new Box(options);
+  return new Box({ tags: true, ...options });
 }
 
 /**
- * Create a text widget
+ * Create a text widget (tags: true by default)
  */
 export function text(options?: ElementOptions): Text {
-  return new Text(options);
+  return new Text({ tags: true, ...options });
 }
 
 /**
- * Create a list widget
+ * Create a list widget (tags: true by default)
  */
 export function list(options?: ListOptions): List {
-  return new List(options);
+  return new List({ tags: true, ...options });
 }
 
 /**
- * Create a form widget
+ * Create a form widget (tags: true by default)
  */
 export function form(options?: FormOptions): Form {
-  return new Form(options);
+  return new Form({ tags: true, ...options });
 }
 
 /**
- * Create a textbox/input widget
+ * Create a textbox/input widget (tags: true by default)
  */
 export function textbox(options?: TextboxOptions): Textbox {
-  return new Textbox(options);
+  return new Textbox({ tags: true, ...options });
 }
 
 export function input(options?: TextboxOptions): Input {
-  return new Input(options);
+  return new Input({ tags: true, ...options });
 }
 
 export function textarea(options?: TextboxOptions): Textarea {
-  return new Textarea(options);
+  return new Textarea({ tags: true, ...options });
 }
 
 /**
- * Create a button widget
+ * Create a button widget (tags: true by default)
  */
 export function button(options?: ButtonOptions): Button {
-  return new Button(options);
+  return new Button({ tags: true, ...options });
 }
 
 /**
- * Create a progress bar widget
+ * Create a progress bar widget (tags: true by default)
  */
 export function progressbar(options?: ProgressBarOptions): ProgressBar {
-  return new ProgressBar(options);
+  return new ProgressBar({ tags: true, ...options });
 }
 
 /**
- * Create a table widget
+ * Create a table widget (tags: true by default)
  */
 export function table(options?: TableOptions): Table {
-  return new Table(options);
+  return new Table({ tags: true, ...options });
 }
 
 /**
- * Create a log widget
+ * Create a log widget (tags: true by default)
  */
 export function log(options?: LogOptions): Log {
-  return new Log(options);
+  return new Log({ tags: true, ...options });
 }
 
 /**
- * Create a scrollable box widget
+ * Create a scrollable box widget (tags: true by default)
  */
 export function scrollablebox(options?: ElementOptions): ScrollableBox {
-  return new ScrollableBox(options);
+  return new ScrollableBox({ tags: true, ...options });
 }
 
 /**
- * Create a scrollable text widget
+ * Create a scrollable text widget (tags: true by default)
  */
 export function scrollabletext(options?: ElementOptions): ScrollableText {
-  return new ScrollableText(options);
+  return new ScrollableText({ tags: true, ...options });
 }
 
 /**
- * Create a checkbox widget
+ * Create a checkbox widget (tags: true by default)
  */
 export function checkbox(options?: CheckboxOptions): Checkbox {
-  return new Checkbox(options);
+  return new Checkbox({ tags: true, ...options });
 }
 
 /**
- * Create a radio button widget
+ * Create a radio button widget (tags: true by default)
  */
 export function radiobutton(options?: RadioButtonOptions): RadioButton {
-  return new RadioButton(options);
+  return new RadioButton({ tags: true, ...options });
 }
 
 /**
- * Create a radio set widget
+ * Create a radio set widget (tags: true by default)
  */
 export function radioset(options?: RadioSetOptions): RadioSet {
-  return new RadioSet(options);
+  return new RadioSet({ tags: true, ...options });
 }
 
 /**
- * Create a message dialog widget
+ * Create a message dialog widget (tags: true by default)
  */
 export function message(options?: MessageOptions): Message {
-  return new Message(options);
+  return new Message({ tags: true, ...options });
 }
 
 /**
- * Create a question dialog widget
+ * Create a question dialog widget (tags: true by default)
  */
 export function question(options?: QuestionOptions): Question {
-  return new Question(options);
+  return new Question({ tags: true, ...options });
 }
 
 /**
- * Create a prompt dialog widget
+ * Create a prompt dialog widget (tags: true by default)
  */
 export function prompt(options?: PromptOptions): Prompt {
-  return new Prompt(options);
+  return new Prompt({ tags: true, ...options });
 }
 
 /**
- * Create a loading indicator widget
+ * Create a loading indicator widget (tags: true by default)
  */
 export function loading(options?: LoadingOptions): Loading {
-  return new Loading(options);
+  return new Loading({ tags: true, ...options });
 }
 
 /**
- * Create a line widget
+ * Create a line widget (tags: true by default)
  */
 export function line(options?: LineOptions): Line {
-  return new Line(options);
+  return new Line({ tags: true, ...options });
 }
 
 /**
- * Create a listbar widget
+ * Create a listbar widget (tags: true by default)
  */
 export function listbar(options?: ListbarOptions): Listbar {
-  return new Listbar(options);
+  return new Listbar({ tags: true, ...options });
 }
 
 /**
- * Create a big text widget
+ * Create a big text widget (tags: true by default)
  */
 export function bigtext(options?: BigTextOptions): BigText {
-  return new BigText(options);
+  return new BigText({ tags: true, ...options });
 }
 
 /**
- * Create a file manager widget
+ * Create a file manager widget (tags: true by default)
  */
 export function filemanager(options?: FileManagerOptions): FileManager {
-  return new FileManager(options);
+  return new FileManager({ tags: true, ...options });
 }
 
 /**
- * Create an overlay widget
+ * Create an overlay widget (tags: true by default)
  */
 export function overlay(options?: OverlayOptions): Overlay {
-  return new Overlay(options);
+  return new Overlay({ tags: true, ...options });
 }
 
 /**
- * Create a list table widget
+ * Create a list table widget (tags: true by default)
  */
 export function listtable(options?: ListTableOptions): ListTable {
-  return new ListTable(options);
+  return new ListTable({ tags: true, ...options });
 }
 
 /**
- * Create an ANSI image widget
+ * Create an ANSI image widget (tags: true by default)
  */
 export function ansiimage(options?: ANSIImageOptions): ANSIImage {
-  return new ANSIImage(options);
+  return new ANSIImage({ tags: true, ...options });
 }
 
 /**
- * Create a terminal widget
+ * Create a terminal widget (tags: true by default)
  */
 export function terminal(options?: TerminalOptions): Terminal {
-  return new Terminal(options);
+  return new Terminal({ tags: true, ...options });
 }
 
 /**
- * Create a layout widget
+ * Create a layout widget (tags: true by default)
  */
 export function layout(options?: LayoutOptions): Layout {
-  return new Layout(options);
+  return new Layout({ tags: true, ...options });
 }
 
 /**
- * Create a password box widget
+ * Create a password box widget (tags: true by default)
  */
 export function passbox(options?: PassBoxOptions): PassBox {
-  return new PassBox(options);
+  return new PassBox({ tags: true, ...options });
 }
 
 /**
- * Create a file box widget
+ * Create a file box widget (tags: true by default)
  */
 export function filebox(options?: FileBoxOptions): FileBox {
-  return new FileBox(options);
+  return new FileBox({ tags: true, ...options });
 }
 
 /**
- * Create an image widget
+ * Create an image widget (tags: true by default)
  */
 export function image(options?: ImageOptions): Image {
-  return new Image(options);
+  return new Image({ tags: true, ...options });
 }
 
 /**
- * Create a viewport widget
+ * Create a viewport widget (tags: true by default)
  */
 export function viewport(options?: ViewportOptions): Viewport {
-  return new Viewport(options);
+  return new Viewport({ tags: true, ...options });
 }
 
 /**
- * Create a canvas widget
+ * Create a canvas widget (tags: true by default)
  */
 export function canvas(options?: CanvasOptions): Canvas {
-  return new Canvas(options);
+  return new Canvas({ tags: true, ...options });
 }
 
 /**
- * Create an iframe widget
+ * Create an iframe widget (tags: true by default)
  */
 export function iframe(options?: IFrameOptions): IFrame {
-  return new IFrame(options);
+  return new IFrame({ tags: true, ...options });
 }
 
 /**
- * Create a video widget
+ * Create a video widget (tags: true by default)
  */
 export function video(options?: VideoOptions): Video {
-  return new Video(options);
+  return new Video({ tags: true, ...options });
 }
 
 // Default export with all factory functions

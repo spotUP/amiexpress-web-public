@@ -1,11 +1,8 @@
-"use strict";
 /**
  * PassBox - Password input widget with character masking
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.PassBox = void 0;
-const textbox_1 = require("./textbox");
-class PassBox extends textbox_1.Textbox {
+import { Textbox } from './textbox';
+export class PassBox extends Textbox {
     constructor(options = {}) {
         const { mask, ...textboxOptions } = options;
         super({
@@ -27,4 +24,3 @@ class PassBox extends textbox_1.Textbox {
         return this.mask;
     }
 }
-exports.PassBox = PassBox;

@@ -1,16 +1,23 @@
 /**
  * Prompt - Text input dialog box
+ *
+ * Supports optional overlay for semi-transparent dimming effect:
+ *   overlay: true (uses default 0.5 opacity)
+ *   overlayOpacity: 0.7 (custom opacity)
  */
 
 import { Box } from './box';
 import { Textbox } from './textbox';
 import { Button } from './button';
+import { Overlay } from './overlay';
 import type { ElementOptions } from '../core/types';
 
 export interface PromptOptions extends ElementOptions {
   text?: string;
   title?: string;
   value?: string;
+  overlay?: boolean;
+  overlayOpacity?: number;
 }
 
 export class Prompt extends Box {
@@ -19,13 +26,18 @@ export class Prompt extends Box {
   private okButton: Button;
   private cancelButton: Button;
   private buttonBox: Box;
+  private _overlay?: Overlay;
 
   constructor(options: PromptOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
     const height = typeof options.height === 'number' ? options.height : 12;
 
+    const originalParent = options.parent;
+    const useOverlay = options.overlay || options.overlayOpacity !== undefined;
+
     super({
       ...options,
+      parent: useOverlay ? undefined : originalParent,
       border: options.border || { type: 'line' },
       label: options.title || options.label || ' Input ',
       width: options.width || 50,
@@ -42,6 +54,16 @@ export class Prompt extends Box {
         bg: options.style?.bg || 'black',
       },
     });
+
+    if (useOverlay && originalParent) {
+      const overlayOpacity = options.overlayOpacity ?? 0.5;
+      this._overlay = new Overlay({
+        parent: originalParent,
+        opacity: overlayOpacity,
+        hidden: true,
+      });
+      this._overlay.append(this);
+    }
 
     // Prompt text - at top
     // Use 'transparent' for bg to inherit from parent dialog
@@ -187,6 +209,11 @@ export class Prompt extends Box {
       this.setValue(value);
     }
 
+    // Show overlay first if present
+    if (this._overlay) {
+      this._overlay.show();
+    }
+
     this.show();
     this.setFront();
     this.inputField.focus();
@@ -199,6 +226,16 @@ export class Prompt extends Box {
       this.once('cancel', () => {
         callback(new Error('cancelled'));
       });
+    }
+  }
+
+  /**
+   * Override hide to also hide overlay
+   */
+  hide(): void {
+    super.hide();
+    if (this._overlay) {
+      this._overlay.hide();
     }
   }
 

@@ -54,3 +54,4 @@ export declare class BigText extends Box {
      */
     setFillChar(ch: string): void;
 }
+//# sourceMappingURL=bigtext.d.ts.map

@@ -64,3 +64,4 @@ export declare class IFrame extends Box {
      */
     getFrameCount(): number;
 }
+//# sourceMappingURL=iframe.d.ts.map

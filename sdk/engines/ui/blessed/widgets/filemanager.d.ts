@@ -64,10 +64,12 @@ export declare class FileManager extends List {
     private joinPath;
     /**
      * Pick a file (show dialog and wait for selection)
+     * Overrides List.pick() with FileManager-specific behavior
      */
-    pick(callback: (err: Error | null, file?: string) => void): void;
+    pick(label?: string | ((err?: Error, file?: string) => void), callback?: (err?: Error, file?: string) => void): void;
     /**
      * Reset to initial directory
      */
     reset(cwd?: string): void;
 }
+//# sourceMappingURL=filemanager.d.ts.map

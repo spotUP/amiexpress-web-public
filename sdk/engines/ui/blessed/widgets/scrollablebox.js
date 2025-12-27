@@ -1,11 +1,8 @@
-"use strict";
 /**
  * ScrollableBox - Box with built-in scrolling support
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScrollableBox = void 0;
-const box_1 = require("./box");
-class ScrollableBox extends box_1.Box {
+import { Box } from './box';
+export class ScrollableBox extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -74,4 +71,3 @@ class ScrollableBox extends box_1.Box {
         }
     }
 }
-exports.ScrollableBox = ScrollableBox;

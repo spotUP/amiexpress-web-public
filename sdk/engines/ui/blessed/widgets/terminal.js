@@ -1,12 +1,9 @@
-"use strict";
 /**
  * Terminal - Simple terminal emulator widget
  * Note: This is a simplified browser-compatible version
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Terminal = void 0;
-const box_1 = require("./box");
-class Terminal extends box_1.Box {
+import { Box } from './box';
+export class Terminal extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -250,4 +247,3 @@ class Terminal extends box_1.Box {
         super.destroy();
     }
 }
-exports.Terminal = Terminal;

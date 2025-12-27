@@ -10,13 +10,13 @@ export interface OverlayOptions extends ElementOptions {
     opacity?: number;
 }
 export declare class Overlay extends Box {
-    private _opacity;
-    private _overlayId;
+    private _overlayOpacity;
+    private _overlayWidgetId;
     constructor(options?: OverlayOptions);
     /**
      * Emit overlay event for web clients to render actual transparency
      */
-    private _emitOverlayEvent;
+    private _emitOverlayWidgetEvent;
     /**
      * Get overlay opacity
      */
@@ -38,3 +38,4 @@ export declare class Overlay extends Box {
      */
     fadeOut(duration?: number, callback?: () => void): void;
 }
+//# sourceMappingURL=overlay.d.ts.map

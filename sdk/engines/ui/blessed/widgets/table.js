@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Table widget - Tabular data display
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Table = void 0;
-const element_1 = require("../core/element");
-class Table extends element_1.Element {
+import { Element } from '../core/element';
+export class Table extends Element {
     constructor(options = {}) {
         super({
             scrollable: true,
@@ -78,4 +75,3 @@ class Table extends element_1.Element {
         return this.rows.slice();
     }
 }
-exports.Table = Table;

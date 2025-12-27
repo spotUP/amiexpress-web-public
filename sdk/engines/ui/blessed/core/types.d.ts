@@ -11,6 +11,7 @@ export interface Colors {
     inverse?: Color | boolean;
     invisible?: Color | boolean;
     transparent?: boolean;
+    opacity?: number;
 }
 export interface Border {
     type?: 'line' | 'bg' | 'none' | 'heavy' | 'double' | 'round' | 'ascii';
@@ -33,6 +34,12 @@ export interface Position {
     xl: number;
     yi: number;
     yl: number;
+    left?: number | string | null;
+    right?: number | string | null;
+    top?: number | string | null;
+    bottom?: number | string | null;
+    width?: number | string | null;
+    height?: number | string | null;
 }
 export type TPosition = number | string;
 export interface ElementOptions {
@@ -65,6 +72,7 @@ export interface ElementOptions {
     keys?: boolean | string[];
     vi?: boolean;
     input?: boolean;
+    draggable?: boolean;
     dockBorders?: boolean;
     ignoreDockContrast?: boolean;
     scrollable?: boolean;
@@ -109,6 +117,7 @@ export interface ScreenOptions {
     tabSize?: number;
     autoPadding?: boolean;
     height?: number;
+    style?: ElementOptions['style'];
     cursor?: {
         artificial?: boolean;
         shape?: 'block' | 'underline' | 'line';
@@ -261,3 +270,4 @@ export interface Screen extends Element {
     hideCursor(): void;
     destroy(): void;
 }
+//# sourceMappingURL=types.d.ts.map

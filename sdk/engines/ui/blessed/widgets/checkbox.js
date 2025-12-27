@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Checkbox - Boolean toggle widget for forms
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Checkbox = void 0;
-const box_1 = require("./box");
-class Checkbox extends box_1.Box {
+import { Box } from './box';
+export class Checkbox extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -121,4 +118,3 @@ class Checkbox extends box_1.Box {
         this.setChecked(value);
     }
 }
-exports.Checkbox = Checkbox;

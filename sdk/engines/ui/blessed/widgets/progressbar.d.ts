@@ -15,3 +15,4 @@ export declare class ProgressBar extends Element {
     progress(amount: number): void;
     reset(): void;
 }
+//# sourceMappingURL=progressbar.d.ts.map

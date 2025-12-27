@@ -1,11 +1,8 @@
-"use strict";
 /**
  * ANSIImage - ANSI art display widget
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ANSIImage = void 0;
-const box_1 = require("./box");
-class ANSIImage extends box_1.Box {
+import { Box } from './box';
+export class ANSIImage extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -133,4 +130,3 @@ class ANSIImage extends box_1.Box {
         }
     }
 }
-exports.ANSIImage = ANSIImage;

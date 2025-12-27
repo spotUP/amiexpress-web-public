@@ -1,17 +1,23 @@
-"use strict";
 /**
  * Question - Yes/No dialog box
+ *
+ * Supports optional overlay for semi-transparent dimming effect:
+ *   overlay: true (uses default 0.5 opacity)
+ *   overlayOpacity: 0.7 (custom opacity)
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Question = void 0;
-const box_1 = require("./box");
-const button_1 = require("./button");
-class Question extends box_1.Box {
+import { Box } from './box';
+import { Button } from './button';
+import { Overlay } from './overlay';
+export class Question extends Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
         const height = typeof options.height === 'number' ? options.height : 9;
+        // If overlay is enabled, we'll reparent to the overlay later
+        const originalParent = options.parent;
+        const useOverlay = options.overlay || options.overlayOpacity !== undefined;
         super({
             ...options,
+            parent: useOverlay ? undefined : originalParent,
             border: options.border || { type: 'line' },
             label: options.title || options.label || ' Confirm ',
             width: options.width || 40,
@@ -28,10 +34,20 @@ class Question extends box_1.Box {
                 bg: options.style?.bg || 'black',
             },
         });
+        // Create overlay if enabled
+        if (useOverlay && originalParent) {
+            const overlayOpacity = options.overlayOpacity ?? 0.5;
+            this._overlay = new Overlay({
+                parent: originalParent,
+                opacity: overlayOpacity,
+                hidden: true,
+            });
+            this._overlay.append(this);
+        }
         // Question text - centered at top
         // Use 'transparent' for bg to inherit from parent dialog
         const dialogBg = options.style?.bg || 'black';
-        this.messageText = new box_1.Box({
+        this.messageText = new Box({
             parent: this,
             top: 0,
             left: 0,
@@ -47,7 +63,7 @@ class Question extends box_1.Box {
             },
         });
         // Button container for centering both buttons
-        this.buttonBox = new box_1.Box({
+        this.buttonBox = new Box({
             parent: this,
             bottom: 0,
             left: 'center',
@@ -58,7 +74,7 @@ class Question extends box_1.Box {
             },
         });
         // Yes button
-        this.yesButton = new button_1.Button({
+        this.yesButton = new Button({
             parent: this.buttonBox,
             top: 0,
             left: 0,
@@ -78,7 +94,7 @@ class Question extends box_1.Box {
             },
         });
         // No button
-        this.noButton = new button_1.Button({
+        this.noButton = new Button({
             parent: this.buttonBox,
             top: 0,
             left: 12,
@@ -148,12 +164,25 @@ class Question extends box_1.Box {
         if (text) {
             this.setText(text);
         }
+        // Show overlay first if present
+        if (this._overlay) {
+            this._overlay.show();
+        }
         this.show();
         this.setFront();
         this.yesButton.focus();
         this.screen?.render();
         if (callback) {
             this.once('answer', callback);
+        }
+    }
+    /**
+     * Override hide to also hide overlay
+     */
+    hide() {
+        super.hide();
+        if (this._overlay) {
+            this._overlay.hide();
         }
     }
     /**
@@ -169,4 +198,3 @@ class Question extends box_1.Box {
         return this.messageText.getContent();
     }
 }
-exports.Question = Question;

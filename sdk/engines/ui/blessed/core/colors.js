@@ -1,29 +1,295 @@
-"use strict";
 /**
- * ANSI color and style utilities
+ * colors.ts - color-related functions for blessed.
+ * EXACT 1:1 PORT of neo-blessed lib/colors.js
+ * Copyright (c) 2013-2015, Christopher Jeffrey and contributors (MIT License).
+ * https://github.com/chjj/blessed
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.screen = exports.cursor = exports.attrs = exports.colorNames = exports.TRANSPARENT = void 0;
-exports.parseColor = parseColor;
-exports.fg = fg;
-exports.bg = bg;
-exports.buildStyle = buildStyle;
-exports.parseTags = parseTags;
-exports.stripAnsi = stripAnsi;
-exports.textWidth = textWidth;
-const ESC = '\x1b';
-const CSI = `${ESC}[`;
 // ============================================================================
-// Color Name to Code Mapping
+// EXACT PORT OF NEO-BLESSED lib/colors.js
 // ============================================================================
-// Special value for transparent (no background)
-exports.TRANSPARENT = -1;
-exports.colorNames = {
-    // Special
-    transparent: exports.TRANSPARENT,
-    none: exports.TRANSPARENT,
-    default: exports.TRANSPARENT,
-    // Standard colors (0-7)
+// Match cache
+export const _cache = {};
+export function match(r1, g1, b1) {
+    if (typeof r1 === 'string') {
+        const hex = r1;
+        if (hex[0] !== '#') {
+            return -1;
+        }
+        const rgb = hexToRGB(hex);
+        r1 = rgb[0];
+        g1 = rgb[1];
+        b1 = rgb[2];
+    }
+    else if (Array.isArray(r1)) {
+        b1 = r1[2];
+        g1 = r1[1];
+        r1 = r1[0];
+    }
+    const hash = (r1 << 16) | (g1 << 8) | b1;
+    if (_cache[hash] !== null && _cache[hash] !== undefined) {
+        return _cache[hash];
+    }
+    let ldiff = Infinity;
+    let li = -1;
+    let i = 0;
+    let c;
+    let r2;
+    let g2;
+    let b2;
+    let diff;
+    for (; i < vcolors.length; i++) {
+        c = vcolors[i];
+        r2 = c[0];
+        g2 = c[1];
+        b2 = c[2];
+        diff = colorDistance(r1, g1, b1, r2, g2, b2);
+        if (diff === 0) {
+            li = i;
+            break;
+        }
+        if (diff < ldiff) {
+            ldiff = diff;
+            li = i;
+        }
+    }
+    _cache[hash] = li;
+    return _cache[hash];
+}
+export function RGBToHex(r, g, b) {
+    if (Array.isArray(r)) {
+        b = r[2];
+        g = r[1];
+        r = r[0];
+    }
+    function hex(n) {
+        const s = n.toString(16);
+        if (s.length < 2)
+            return '0' + s;
+        return s;
+    }
+    return '#' + hex(r) + hex(g) + hex(b);
+}
+export function hexToRGB(hex) {
+    if (hex.length === 4) {
+        hex = hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    }
+    const col = parseInt(hex.substring(1), 16);
+    const r = (col >> 16) & 0xff;
+    const g = (col >> 8) & 0xff;
+    const b = col & 0xff;
+    return [r, g, b];
+}
+// Color distance using human perception weights
+function colorDistance(r1, g1, b1, r2, g2, b2) {
+    return Math.pow(30 * (r1 - r2), 2)
+        + Math.pow(59 * (g1 - g2), 2)
+        + Math.pow(11 * (b1 - b2), 2);
+}
+// Mix two colors with alpha blending (EXACT from neo-blessed)
+export function mixColors(c1, c2, alpha) {
+    // if (c1 === 0x1ff) return c1;
+    // if (c2 === 0x1ff) return c1;
+    if (c1 === 0x1ff)
+        c1 = 0;
+    if (c2 === 0x1ff)
+        c2 = 0;
+    if (alpha === null || alpha === undefined)
+        alpha = 0.5;
+    const rgb1 = vcolors[c1];
+    let r1 = rgb1[0];
+    let g1 = rgb1[1];
+    let b1 = rgb1[2];
+    const rgb2 = vcolors[c2];
+    const r2 = rgb2[0];
+    const g2 = rgb2[1];
+    const b2 = rgb2[2];
+    r1 = (r1 + ((r2 - r1) * alpha)) | 0;
+    g1 = (g1 + ((g2 - g1) * alpha)) | 0;
+    b1 = (b1 + ((b2 - b1) * alpha)) | 0;
+    return match([r1, g1, b1]);
+}
+// Blend cache
+const _blendCache = {};
+// Blend function (EXACT from neo-blessed)
+export function blend(attr, attr2, alpha) {
+    let name;
+    let i;
+    let c;
+    let nc;
+    let bg = attr & 0x1ff;
+    if (attr2 !== null && attr2 !== undefined) {
+        let bg2 = attr2 & 0x1ff;
+        if (bg === 0x1ff)
+            bg = 0;
+        if (bg2 === 0x1ff)
+            bg2 = 0;
+        bg = mixColors(bg, bg2, alpha);
+    }
+    else {
+        if (_blendCache[bg] !== null && _blendCache[bg] !== undefined) {
+            bg = _blendCache[bg];
+            // } else if (bg < 8) {
+            //   bg += 8;
+        }
+        else if (bg >= 8 && bg <= 15) {
+            bg -= 8;
+        }
+        else {
+            name = ncolors[bg];
+            if (name) {
+                for (i = 0; i < ncolors.length; i++) {
+                    if (name === ncolors[i] && i !== bg) {
+                        c = vcolors[bg];
+                        nc = vcolors[i];
+                        if (nc[0] + nc[1] + nc[2] < c[0] + c[1] + c[2]) {
+                            _blendCache[bg] = i;
+                            bg = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    attr &= ~0x1ff;
+    attr |= bg;
+    let fg = (attr >> 9) & 0x1ff;
+    if (attr2 !== null && attr2 !== undefined) {
+        let fg2 = (attr2 >> 9) & 0x1ff;
+        // 0, 7, 188, 231, 251
+        if (fg === 0x1ff) {
+            // XXX workaround
+            fg = 248;
+        }
+        else {
+            if (fg === 0x1ff)
+                fg = 7;
+            if (fg2 === 0x1ff)
+                fg2 = 7;
+            fg = mixColors(fg, fg2, alpha);
+        }
+    }
+    else {
+        if (_blendCache[fg] !== null && _blendCache[fg] !== undefined) {
+            fg = _blendCache[fg];
+            // } else if (fg < 8) {
+            //   fg += 8;
+        }
+        else if (fg >= 8 && fg <= 15) {
+            fg -= 8;
+        }
+        else {
+            name = ncolors[fg];
+            if (name) {
+                for (i = 0; i < ncolors.length; i++) {
+                    if (name === ncolors[i] && i !== fg) {
+                        c = vcolors[fg];
+                        nc = vcolors[i];
+                        if (nc[0] + nc[1] + nc[2] < c[0] + c[1] + c[2]) {
+                            _blendCache[fg] = i;
+                            fg = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    attr &= ~(0x1ff << 9);
+    attr |= fg << 9;
+    return attr;
+}
+export function reduce(color, total) {
+    if (color >= 16 && total <= 16) {
+        color = ccolors[color];
+    }
+    else if (color >= 8 && total <= 8) {
+        color -= 8;
+    }
+    else if (color >= 2 && total <= 2) {
+        color %= 2;
+    }
+    return color;
+}
+// XTerm Colors (EXACT from neo-blessed)
+export const xterm = [
+    '#000000', // black
+    '#cd0000', // red3
+    '#00cd00', // green3
+    '#cdcd00', // yellow3
+    '#0000ee', // blue2
+    '#cd00cd', // magenta3
+    '#00cdcd', // cyan3
+    '#e5e5e5', // gray90
+    '#7f7f7f', // gray50
+    '#ff0000', // red
+    '#00ff00', // green
+    '#ffff00', // yellow
+    '#5c5cff', // rgb:5c/5c/ff
+    '#ff00ff', // magenta
+    '#00ffff', // cyan
+    '#ffffff' // white
+];
+// Seed all 256 colors (EXACT from neo-blessed)
+export const colors = [];
+export const vcolors = [];
+(function initColors() {
+    function hex(n) {
+        const s = n.toString(16);
+        if (s.length < 2)
+            return '0' + s;
+        return s;
+    }
+    function push(i, r, g, b) {
+        colors[i] = '#' + hex(r) + hex(g) + hex(b);
+        vcolors[i] = [r, g, b];
+    }
+    // 0 - 15
+    xterm.forEach(function (c, i) {
+        const val = parseInt(c.substring(1), 16);
+        push(i, (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff);
+    });
+    // 16 - 231
+    for (let r = 0; r < 6; r++) {
+        for (let g = 0; g < 6; g++) {
+            for (let b = 0; b < 6; b++) {
+                const i = 16 + (r * 36) + (g * 6) + b;
+                push(i, r ? (r * 40 + 55) : 0, g ? (g * 40 + 55) : 0, b ? (b * 40 + 55) : 0);
+            }
+        }
+    }
+    // 232 - 255 are grey.
+    for (let g = 0; g < 24; g++) {
+        const l = (g * 10) + 8;
+        const i = 232 + g;
+        push(i, l, l, l);
+    }
+})();
+// Map higher colors to the first 8 colors (EXACT from neo-blessed)
+export let ccolors = (function () {
+    const _cols = vcolors.slice();
+    const cols = colors.slice();
+    // Temporarily limit to 8 colors for matching
+    vcolors.length = 8;
+    colors.length = 8;
+    const out = cols.map((c) => match(c));
+    // Restore full arrays
+    for (let i = 0; i < _cols.length; i++) {
+        vcolors[i] = _cols[i];
+    }
+    for (let i = 0; i < cols.length; i++) {
+        colors[i] = cols[i];
+    }
+    return out;
+})();
+// Color names (EXACT from neo-blessed)
+export const colorNames = {
+    // special
+    default: -1,
+    normal: -1,
+    bg: -1,
+    fg: -1,
+    // normal
     black: 0,
     red: 1,
     green: 2,
@@ -32,123 +298,253 @@ exports.colorNames = {
     magenta: 5,
     cyan: 6,
     white: 7,
-    // Bright colors (8-15)
-    brightBlack: 8,
-    brightRed: 9,
-    brightGreen: 10,
-    brightYellow: 11,
-    brightBlue: 12,
-    brightMagenta: 13,
-    brightCyan: 14,
-    brightWhite: 15,
-    // Aliases
-    gray: 8,
+    // light
+    lightblack: 8,
+    lightred: 9,
+    lightgreen: 10,
+    lightyellow: 11,
+    lightblue: 12,
+    lightmagenta: 13,
+    lightcyan: 14,
+    lightwhite: 15,
+    // bright
+    brightblack: 8,
+    brightred: 9,
+    brightgreen: 10,
+    brightyellow: 11,
+    brightblue: 12,
+    brightmagenta: 13,
+    brightcyan: 14,
+    brightwhite: 15,
+    // alternate spellings
     grey: 8,
-    lightBlack: 8,
-    lightRed: 9,
-    lightGreen: 10,
-    lightYellow: 11,
-    lightBlue: 12,
-    lightMagenta: 13,
-    lightCyan: 14,
-    lightWhite: 15,
+    gray: 8,
+    lightgrey: 7,
+    lightgray: 7,
+    brightgrey: 7,
+    brightgray: 7
 };
+// Convert color input to color code (EXACT from neo-blessed)
+export function convert(color) {
+    if (typeof color === 'number') {
+        // already a number
+    }
+    else if (typeof color === 'string') {
+        color = color.replace(/[\- ]/g, '');
+        if (colorNames[color] !== null && colorNames[color] !== undefined) {
+            color = colorNames[color];
+        }
+        else {
+            color = match(color);
+        }
+    }
+    else if (Array.isArray(color)) {
+        color = match(color);
+    }
+    else {
+        color = -1;
+    }
+    return color !== -1 ? color : 0x1ff;
+}
+// ccolors mapping for color name lookup (EXACT from neo-blessed)
+const ccolorsMap = {
+    blue: [
+        4,
+        12,
+        [17, 21],
+        [24, 27],
+        [31, 33],
+        [38, 39],
+        45,
+        [54, 57],
+        [60, 63],
+        [67, 69],
+        [74, 75],
+        81,
+        [91, 93],
+        [97, 99],
+        [103, 105],
+        [110, 111],
+        117,
+        [128, 129],
+        [134, 135],
+        [140, 141],
+        [146, 147],
+        153,
+        165,
+        171,
+        177,
+        183,
+        189
+    ],
+    green: [
+        2,
+        10,
+        22,
+        [28, 29],
+        [34, 36],
+        [40, 43],
+        [46, 50],
+        [64, 65],
+        [70, 72],
+        [76, 79],
+        [82, 86],
+        [106, 108],
+        [112, 115],
+        [118, 122],
+        [148, 151],
+        [154, 158],
+        [190, 194]
+    ],
+    cyan: [
+        6,
+        14,
+        23,
+        30,
+        37,
+        44,
+        51,
+        66,
+        73,
+        80,
+        87,
+        109,
+        116,
+        123,
+        152,
+        159,
+        195
+    ],
+    red: [
+        1,
+        9,
+        52,
+        [88, 89],
+        [94, 95],
+        [124, 126],
+        [130, 132],
+        [136, 138],
+        [160, 163],
+        [166, 169],
+        [172, 175],
+        [178, 181],
+        [196, 200],
+        [202, 206],
+        [208, 212],
+        [214, 218],
+        [220, 224]
+    ],
+    magenta: [
+        5,
+        13,
+        53,
+        90,
+        96,
+        127,
+        133,
+        139,
+        164,
+        170,
+        176,
+        182,
+        201,
+        207,
+        213,
+        219,
+        225
+    ],
+    yellow: [
+        3,
+        11,
+        58,
+        [100, 101],
+        [142, 144],
+        [184, 187],
+        [226, 230]
+    ],
+    black: [
+        0,
+        8,
+        16,
+        59,
+        102,
+        [232, 243]
+    ],
+    white: [
+        7,
+        15,
+        145,
+        188,
+        231,
+        [244, 255]
+    ]
+};
+export const ncolors = [];
+// Populate ncolors (EXACT from neo-blessed)
+Object.keys(ccolorsMap).forEach(function (name) {
+    ccolorsMap[name].forEach(function (offset) {
+        if (typeof offset === 'number') {
+            ncolors[offset] = name;
+            ccolors[offset] = colorNames[name];
+            return;
+        }
+        for (let i = offset[0], l = offset[1]; i <= l; i++) {
+            ncolors[i] = name;
+            ccolors[i] = colorNames[name];
+        }
+    });
+    delete ccolorsMap[name];
+});
 // ============================================================================
-// Color Parsing
+// ADDITIONAL ANSI UTILITIES (not from neo-blessed, but needed for our use)
 // ============================================================================
-function parseColor(color) {
+const ESC = '\x1b';
+const CSI = `${ESC}[`;
+// Special value for transparent
+export const TRANSPARENT = -1;
+// Parse color name to code (handles case-insensitive lookup)
+export function parseColor(color) {
     if (color === undefined || color === null) {
         return -1;
     }
     if (typeof color === 'number') {
         return color;
     }
-    // Named color
-    if (exports.colorNames.hasOwnProperty(color)) {
-        return exports.colorNames[color];
-    }
-    // Hex color (#RGB or #RRGGBB)
-    if (color[0] === '#') {
-        return hexToColor(color);
-    }
-    // rgb(r, g, b)
-    const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-    if (match) {
-        const r = parseInt(match[1], 10);
-        const g = parseInt(match[2], 10);
-        const b = parseInt(match[3], 10);
-        return rgbToColor(r, g, b);
-    }
-    return -1;
+    // Use neo-blessed convert() which handles all formats
+    return convert(color);
 }
-function hexToColor(hex) {
-    hex = hex.slice(1);
-    // Expand shorthand (#RGB -> #RRGGBB)
-    if (hex.length === 3) {
-        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-    }
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return rgbToColor(r, g, b);
-}
-function rgbToColor(r, g, b) {
-    // Convert RGB to 256-color palette (16-231 are RGB, 232-255 are grayscale)
-    if (r === g && g === b) {
-        // Grayscale
-        if (r < 8)
-            return 16;
-        if (r > 248)
-            return 231;
-        return Math.round(((r - 8) / 247) * 24) + 232;
-    }
-    // RGB cube (6x6x6)
-    const rIdx = Math.round((r / 255) * 5);
-    const gIdx = Math.round((g / 255) * 5);
-    const bIdx = Math.round((b / 255) * 5);
-    return 16 + (rIdx * 36) + (gIdx * 6) + bIdx;
-}
-// ============================================================================
-// ANSI Escape Sequence Generation
-// ============================================================================
-function fg(color) {
+// Foreground color escape sequence
+export function fg(color) {
     const code = parseColor(color);
     if (code === -1)
         return '';
     if (code < 8) {
-        // Standard foreground
         return `${CSI}3${code}m`;
     }
     else if (code < 16) {
-        // Bright foreground
         return `${CSI}9${code - 8}m`;
     }
     else {
-        // 256-color foreground
         return `${CSI}38;5;${code}m`;
     }
 }
-function bg(color) {
+// Background color escape sequence
+export function bg(color) {
     const code = parseColor(color);
     if (code === -1)
         return '';
     if (code < 8) {
-        // Standard background
         return `${CSI}4${code}m`;
     }
     else if (code < 16) {
-        // Bright background
         return `${CSI}10${code - 8}m`;
     }
     else {
-        // 256-color background
         return `${CSI}48;5;${code}m`;
     }
 }
-// ============================================================================
-// Attributes
-// ============================================================================
-exports.attrs = {
+// Text attributes
+export const attrs = {
     reset: `${CSI}0m`,
     bold: `${CSI}1m`,
     dim: `${CSI}2m`,
@@ -158,7 +554,6 @@ exports.attrs = {
     inverse: `${CSI}7m`,
     invisible: `${CSI}8m`,
     strike: `${CSI}9m`,
-    // Reset specific attributes
     noBold: `${CSI}22m`,
     noItalic: `${CSI}23m`,
     noUnderline: `${CSI}24m`,
@@ -167,10 +562,8 @@ exports.attrs = {
     noInvisible: `${CSI}28m`,
     noStrike: `${CSI}29m`,
 };
-// ============================================================================
-// Cursor Control
-// ============================================================================
-exports.cursor = {
+// Cursor control
+export const cursor = {
     hide: `${CSI}?25l`,
     show: `${CSI}?25h`,
     save: `${ESC}7`,
@@ -185,10 +578,8 @@ exports.cursor = {
     col: (n) => `${CSI}${n + 1}G`,
     home: `${CSI}H`,
 };
-// ============================================================================
-// Screen Control
-// ============================================================================
-exports.screen = {
+// Screen control
+export const screen = {
     clear: `${CSI}2J`,
     clearToBottom: `${CSI}0J`,
     clearToTop: `${CSI}1J`,
@@ -202,7 +593,7 @@ exports.screen = {
     setScrollRegion: (top, bottom) => `${CSI}${top + 1};${bottom + 1}r`,
     resetScrollRegion: `${CSI}r`,
 };
-function buildStyle(flags) {
+export function buildStyle(flags) {
     let result = '';
     if (flags.fg !== undefined) {
         result += fg(flags.fg);
@@ -211,49 +602,101 @@ function buildStyle(flags) {
         result += bg(flags.bg);
     }
     if (flags.bold)
-        result += exports.attrs.bold;
+        result += attrs.bold;
     if (flags.dim)
-        result += exports.attrs.dim;
+        result += attrs.dim;
     if (flags.italic)
-        result += exports.attrs.italic;
+        result += attrs.italic;
     if (flags.underline)
-        result += exports.attrs.underline;
+        result += attrs.underline;
     if (flags.blink)
-        result += exports.attrs.blink;
+        result += attrs.blink;
     if (flags.inverse)
-        result += exports.attrs.inverse;
+        result += attrs.inverse;
     if (flags.invisible)
-        result += exports.attrs.invisible;
+        result += attrs.invisible;
     return result;
 }
-// ============================================================================
-// Tag Parsing
-// ============================================================================
-// Match tags like {bold}, {cyan-fg}, {/bold}, {/cyan-fg}, and {/} (reset shorthand)
+// Tag parsing for blessed-style tags
 const tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
-function parseTags(text) {
+// Default color codes (reset to terminal default)
+const defaultFg = `${CSI}39m`;
+const defaultBg = `${CSI}49m`;
+export function parseTags(text) {
     return text.replace(tagRegex, (match, close, name, value) => {
+        // Handle closing tags
         if (close) {
-            // Closing tag or {/} shorthand - reset attributes
-            return exports.attrs.reset;
+            // {/} with no name = reset all
+            if (!name) {
+                return attrs.reset;
+            }
+            // Handle specific closing tags without resetting everything
+            switch (name) {
+                case 'bold':
+                    return attrs.noBold;
+                case 'underline':
+                    return attrs.noUnderline;
+                case 'blink':
+                    return attrs.noBlink;
+                case 'inverse':
+                    return attrs.noInverse;
+                case 'invisible':
+                    return attrs.noInvisible;
+                // Foreground color closing tags - reset to default fg
+                case 'black-fg':
+                case 'red-fg':
+                case 'green-fg':
+                case 'yellow-fg':
+                case 'blue-fg':
+                case 'magenta-fg':
+                case 'cyan-fg':
+                case 'white-fg':
+                case 'gray-fg':
+                case 'grey-fg':
+                case 'black':
+                case 'red':
+                case 'green':
+                case 'yellow':
+                case 'blue':
+                case 'magenta':
+                case 'cyan':
+                case 'white':
+                case 'gray':
+                case 'grey':
+                case 'fg':
+                    return defaultFg;
+                // Background color closing tags - reset to default bg
+                case 'black-bg':
+                case 'red-bg':
+                case 'green-bg':
+                case 'yellow-bg':
+                case 'blue-bg':
+                case 'magenta-bg':
+                case 'cyan-bg':
+                case 'white-bg':
+                case 'gray-bg':
+                case 'grey-bg':
+                case 'bg':
+                    return defaultBg;
+                default:
+                    // Unknown closing tag - use reset as fallback
+                    return attrs.reset;
+            }
         }
-        // Empty tag with no close (like {}) - return as-is
         if (!name) {
             return match;
         }
-        // Opening tag
         switch (name) {
             case 'bold':
-                return exports.attrs.bold;
+                return attrs.bold;
             case 'underline':
-                return exports.attrs.underline;
+                return attrs.underline;
             case 'blink':
-                return exports.attrs.blink;
+                return attrs.blink;
             case 'inverse':
-                return exports.attrs.inverse;
+                return attrs.inverse;
             case 'invisible':
-                return exports.attrs.invisible;
-            // Basic colors (no suffix)
+                return attrs.invisible;
             case 'black':
             case 'red':
             case 'green':
@@ -265,7 +708,6 @@ function parseTags(text) {
             case 'gray':
             case 'grey':
                 return fg(name === 'grey' ? 'gray' : name);
-            // Foreground colors with -fg suffix (standard blessed format)
             case 'black-fg':
                 return fg('black');
             case 'red-fg':
@@ -285,7 +727,6 @@ function parseTags(text) {
             case 'gray-fg':
             case 'grey-fg':
                 return fg('gray');
-            // Background colors with -bg suffix
             case 'black-bg':
                 return bg('black');
             case 'red-bg':
@@ -305,7 +746,6 @@ function parseTags(text) {
             case 'gray-bg':
             case 'grey-bg':
                 return bg('gray');
-            // Custom color with value
             case 'fg':
                 return value ? fg(value) : '';
             case 'bg':
@@ -315,16 +755,15 @@ function parseTags(text) {
         }
     });
 }
-// ============================================================================
-// Strip ANSI Codes
-// ============================================================================
+// Strip ANSI codes
 const ansiRegex = /\x1b\[[0-9;]*m/g;
-function stripAnsi(text) {
+export function stripAnsi(text) {
     return text.replace(ansiRegex, '');
 }
-// ============================================================================
-// String Width (accounting for ANSI codes)
-// ============================================================================
-function textWidth(text) {
+// Text width accounting for ANSI codes
+export function textWidth(text) {
     return stripAnsi(text).length;
 }
+// Legacy aliases
+export const colorToRgb = (color) => vcolors[color] || [0, 0, 0];
+export const rgbToNearestColor = match;

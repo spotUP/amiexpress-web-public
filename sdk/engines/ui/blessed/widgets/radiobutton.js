@@ -1,11 +1,8 @@
-"use strict";
 /**
  * RadioButton - Single radio button (usually used within RadioSet)
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.RadioButton = void 0;
-const box_1 = require("./box");
-class RadioButton extends box_1.Box {
+import { Box } from './box';
+export class RadioButton extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -105,4 +102,3 @@ class RadioButton extends box_1.Box {
         return this._checked ? this.value : null;
     }
 }
-exports.RadioButton = RadioButton;

@@ -1,11 +1,8 @@
-"use strict";
 /**
  * BigText - Large ASCII text widget using figlet-style fonts
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.BigText = void 0;
-const box_1 = require("./box");
-class BigText extends box_1.Box {
+import { Box } from './box';
+export class BigText extends Box {
     constructor(options = {}) {
         super({
             ...options,
@@ -179,4 +176,3 @@ class BigText extends box_1.Box {
         }
     }
 }
-exports.BigText = BigText;

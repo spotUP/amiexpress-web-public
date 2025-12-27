@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Form widget - Container for form elements with focus management
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Form = void 0;
-const element_1 = require("../core/element");
-class Form extends element_1.Element {
+import { Element } from '../core/element';
+export class Form extends Element {
     constructor(options = {}) {
         super({
             focusable: true,
@@ -85,4 +82,3 @@ class Form extends element_1.Element {
         this.emit('reset');
     }
 }
-exports.Form = Form;

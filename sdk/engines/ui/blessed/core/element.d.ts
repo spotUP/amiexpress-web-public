@@ -21,9 +21,18 @@ export declare class Element extends EventEmitter {
     private childOffset;
     private clickable;
     private keyable;
-    private draggable;
     private input;
     private _hovered;
+    private _draggable?;
+    private _dragMD?;
+    private _dragM?;
+    private _drag?;
+    /**
+     * Draggable property with setter that enables/disables dragging
+     * EXACT from neo-blessed element.js: __defineSetter__('draggable', ...)
+     */
+    get draggable(): boolean;
+    set draggable(value: boolean);
     constructor(options?: ElementOptions);
     private calcPos;
     private getPadding;
@@ -102,14 +111,64 @@ export declare class Element extends EventEmitter {
      */
     get itop(): number;
     /**
-     * Get inner width (excluding border and padding)
+     * Get inner width (excluding border, padding, and scrollbar)
      */
     get iwidth(): number;
     /**
      * Get inner height (excluding border and padding)
      */
     get iheight(): number;
+    /**
+     * Set absolute left position
+     * EXACT from neo-blessed element.js lines 1312-1331
+     */
+    set aleft(val: number | string);
+    /**
+     * Set absolute right position
+     * EXACT from neo-blessed element.js lines 1333-1339
+     */
+    set aright(val: number);
+    /**
+     * Set absolute top position
+     * EXACT from neo-blessed element.js lines 1341-1360
+     */
+    set atop(val: number | string);
+    /**
+     * Set absolute bottom position
+     * EXACT from neo-blessed element.js lines 1362-1368
+     */
+    set abottom(val: number);
+    /**
+     * Set relative left position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1370-1376
+     */
+    set rleft(val: number | string);
+    /**
+     * Set relative right position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1378-1383
+     */
+    set rright(val: number);
+    /**
+     * Set relative top position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1385-1391
+     */
+    set rtop(val: number | string);
+    /**
+     * Set relative bottom position (relative to parent)
+     * EXACT from neo-blessed element.js lines 1393-1398
+     */
+    set rbottom(val: number);
+    /**
+     * Clear the element's rendered position on screen
+     * EXACT from neo-blessed element.js lines 901-909
+     */
+    clearPos(get?: boolean, override?: boolean): void;
     setContent(content: string): void;
+    /**
+     * Process {center} tags and convert to centered text
+     * CUSTOM EXTENSION: Blessed doesn't natively support {center} tags
+     */
+    private processCenterTags;
     getContent(): string;
     setText(text: string): void;
     getText(): string;
@@ -186,6 +245,15 @@ export declare class Element extends EventEmitter {
     private _propagateScreen;
     focus(): void;
     blur(): void;
+    private _overlayId?;
+    /**
+     * Get unique overlay ID for this element (lazily generated)
+     */
+    private _getOverlayId;
+    /**
+     * Emit overlay event for web clients to render CSS opacity
+     */
+    private _emitOverlayEvent;
     show(): void;
     hide(): void;
     toggle(): void;
@@ -200,6 +268,26 @@ export declare class Element extends EventEmitter {
     getScrollPerc(): number;
     setScrollPerc(perc: number): void;
     resetScroll(): void;
+    /**
+     * Screen event listeners tracking
+     * EXACT from neo-blessed element.js lines 267-297
+     */
+    private _slisteners?;
+    /**
+     * Register event listener on screen and track it for cleanup
+     * EXACT from neo-blessed element.js lines 267-271
+     */
+    onScreenEvent(type: string, handler: (...args: any[]) => void): void;
+    /**
+     * Register one-time event listener on screen and track it
+     * EXACT from neo-blessed element.js lines 273-282
+     */
+    onceScreenEvent(type: string, handler: (...args: any[]) => void): void;
+    /**
+     * Remove event listener from screen
+     * EXACT from neo-blessed element.js lines 284-297
+     */
+    removeScreenEvent(type: string, handler: (...args: any[]) => void): void;
     /**
      * Enable mouse events for this element
      */
@@ -226,12 +314,14 @@ export declare class Element extends EventEmitter {
     disableInput(): void;
     /**
      * Enable dragging for this element
+     * EXACT from neo-blessed element.js lines 789-851
      */
-    enableDrag(callback?: (data: any) => void): void;
+    enableDrag(verify?: (data: any) => boolean): boolean;
     /**
      * Disable dragging
+     * EXACT from neo-blessed element.js lines 853-861
      */
-    disableDrag(): void;
+    disableDrag(): boolean;
     /**
      * Enable resizing for this element
      * Resize by dragging the bottom-right corner (last 2 chars of bottom row)
@@ -347,9 +437,9 @@ export declare class Element extends EventEmitter {
      */
     getDescendants(): Element[];
     /**
-     * Collect all descendants recursively
+     * Collect all descendants recursively (helper)
      */
-    private collectDescendants;
+    private _collectDescendantsHelper;
     /**
      * Check if this element has a specific ancestor
      */
@@ -366,6 +456,41 @@ export declare class Element extends EventEmitter {
      * Get all ancestors up to root
      */
     getAncestors(): Element[];
+    /**
+     * Iterate over descendants with callback
+     * EXACT from neo-blessed node.js lines 185-191
+     */
+    forDescendants(iter: (el: Element) => void, includeSelf?: boolean): void;
+    /**
+     * Iterate over ancestors with callback
+     * EXACT from neo-blessed node.js lines 193-199
+     */
+    forAncestors(iter: (el: Element) => void, includeSelf?: boolean): void;
+    /**
+     * Collect descendants into array (alias for getDescendants for neo-blessed compat)
+     * EXACT from neo-blessed node.js lines 201-207
+     */
+    collectDescendants(includeSelf?: boolean): Element[];
+    /**
+     * Collect ancestors into array (alias for getAncestors for neo-blessed compat)
+     * EXACT from neo-blessed node.js lines 209-215
+     */
+    collectAncestors(includeSelf?: boolean): Element[];
+    /**
+     * Emit event to all descendants
+     * EXACT from neo-blessed node.js lines 217-229
+     */
+    emitDescendants(...args: any[]): void;
+    /**
+     * Emit event to all ancestors
+     * EXACT from neo-blessed node.js lines 231-243
+     */
+    emitAncestors(...args: any[]): void;
+    /**
+     * Check if element has a specific descendant
+     * EXACT from neo-blessed node.js lines 245-257
+     */
+    hasDescendant(target: Element): boolean;
     /**
      * Set element label
      */
@@ -439,3 +564,4 @@ export declare class Element extends EventEmitter {
     destroy(): void;
     free(): void;
 }
+//# sourceMappingURL=element.d.ts.map

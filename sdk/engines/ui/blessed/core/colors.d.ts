@@ -1,8 +1,24 @@
 /**
- * ANSI color and style utilities
+ * colors.ts - color-related functions for blessed.
+ * EXACT 1:1 PORT of neo-blessed lib/colors.js
+ * Copyright (c) 2013-2015, Christopher Jeffrey and contributors (MIT License).
+ * https://github.com/chjj/blessed
  */
-export declare const TRANSPARENT = -1;
+export declare const _cache: Record<number, number>;
+export declare function match(r1: number | string | number[], g1?: number, b1?: number): number;
+export declare function RGBToHex(r: number | number[], g?: number, b?: number): string;
+export declare function hexToRGB(hex: string): [number, number, number];
+export declare function mixColors(c1: number, c2: number, alpha?: number | null): number;
+export declare function blend(attr: number, attr2?: number | null, alpha?: number): number;
+export declare function reduce(color: number, total: number): number;
+export declare const xterm: string[];
+export declare const colors: string[];
+export declare const vcolors: number[][];
+export declare let ccolors: number[];
 export declare const colorNames: Record<string, number>;
+export declare function convert(color: number | string | number[]): number;
+export declare const ncolors: string[];
+export declare const TRANSPARENT = -1;
 export declare function parseColor(color: string | number | undefined): number;
 export declare function fg(color: string | number): string;
 export declare function bg(color: string | number): string;
@@ -68,3 +84,6 @@ export declare function buildStyle(flags: StyleFlags): string;
 export declare function parseTags(text: string): string;
 export declare function stripAnsi(text: string): string;
 export declare function textWidth(text: string): number;
+export declare const colorToRgb: (color: number) => number[];
+export declare const rgbToNearestColor: typeof match;
+//# sourceMappingURL=colors.d.ts.map

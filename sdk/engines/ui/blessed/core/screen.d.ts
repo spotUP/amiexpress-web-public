@@ -20,6 +20,7 @@ export declare class Screen extends Element {
     private cursorHidden;
     private cursorX;
     private cursorY;
+    private _dragging;
     private keyHandlers;
     constructor(options?: ScreenOptions & {
         output?: (data: string) => void;
@@ -100,6 +101,7 @@ export declare class Screen extends Element {
     private unpackAttr;
     /**
      * Convert attribute to ANSI string
+     * EXACT 1:1 PORT from neo-blessed screen.js codeAttr() lines 1508-1572
      */
     private attrToAnsi;
     /**
@@ -108,6 +110,11 @@ export declare class Screen extends Element {
     private styleToAttr;
     render(): void;
     private _renderElement;
+    /**
+     * Render shadow effect (EXACT 1:1 PORT FROM blessed element.js lines 2119-2145)
+     * Uses colors.blend() with single argument to darken pixels
+     */
+    private _renderShadow;
     private _renderContent;
     /**
      * Parse ANSI SGR parameters and update attribute
@@ -284,9 +291,52 @@ export declare class Screen extends Element {
      * Clear entire screen
      */
     clear(): void;
+    /**
+     * Spawn external program
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1737-1798
+     */
+    spawn(file: string, args?: string[] | any, options?: any): any;
+    /**
+     * Execute external program and get success status
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1800-1814
+     */
+    exec(file: string, args?: string[] | any, options?: any, callback?: (err: Error | null, success: boolean) => void): any;
+    /**
+     * Open text editor and return edited content
+     * NOTE: Browser environment stub - requires Node.js fs and child_process
+     * STUB from neo-blessed screen.js lines 1816-1864
+     */
+    readEditor(options?: string | any, callback?: (err: Error | null, data?: string) => void): void;
+    /**
+     * Display image using external image viewer
+     * NOTE: Browser environment stub - requires Node.js child_process and external w3mimgdisplay
+     * STUB from neo-blessed screen.js lines 1866-1904
+     */
+    displayImage(file: string, callback?: (err: Error | null, success?: boolean) => void): void;
+    /**
+     * Set visual effects (hover, blur, focus) on element
+     * EXACT from neo-blessed screen.js lines 1906-1957
+     */
+    setEffects(el: Element | (() => Element), fel: Element | (() => Element) | null, over: string, out: string, effects: any, temp?: string): void;
+    /**
+     * Initialize hover text box
+     * Creates tooltip-style box that appears on hover
+     * EXACT from neo-blessed screen.js lines 615-672
+     */
+    _initHover(): void;
+    private _hoverText;
+    /**
+     * Take screenshot of screen buffer as text
+     * Returns ANSI/plain text representation of current screen
+     * EXACT from neo-blessed screen.js lines 2108-2197
+     */
+    screenshot(xi?: number, xl?: number, yi?: number, yl?: number, term?: boolean): string;
     destroy(): void;
     /**
      * Handle input data (forward to program)
      */
     _handleData(data: string): void;
 }
+//# sourceMappingURL=screen.d.ts.map

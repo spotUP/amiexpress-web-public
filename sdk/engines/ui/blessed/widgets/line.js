@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Line - Horizontal or vertical line widget
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Line = void 0;
-const box_1 = require("./box");
-class Line extends box_1.Box {
+import { Box } from './box';
+export class Line extends Box {
     constructor(options = {}) {
         const orientation = options.orientation || 'horizontal';
         super({
@@ -78,4 +75,3 @@ class Line extends box_1.Box {
         }
     }
 }
-exports.Line = Line;

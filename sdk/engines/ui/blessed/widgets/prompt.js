@@ -1,18 +1,23 @@
-"use strict";
 /**
  * Prompt - Text input dialog box
+ *
+ * Supports optional overlay for semi-transparent dimming effect:
+ *   overlay: true (uses default 0.5 opacity)
+ *   overlayOpacity: 0.7 (custom opacity)
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Prompt = void 0;
-const box_1 = require("./box");
-const textbox_1 = require("./textbox");
-const button_1 = require("./button");
-class Prompt extends box_1.Box {
+import { Box } from './box';
+import { Textbox } from './textbox';
+import { Button } from './button';
+import { Overlay } from './overlay';
+export class Prompt extends Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
         const height = typeof options.height === 'number' ? options.height : 12;
+        const originalParent = options.parent;
+        const useOverlay = options.overlay || options.overlayOpacity !== undefined;
         super({
             ...options,
+            parent: useOverlay ? undefined : originalParent,
             border: options.border || { type: 'line' },
             label: options.title || options.label || ' Input ',
             width: options.width || 50,
@@ -29,10 +34,19 @@ class Prompt extends box_1.Box {
                 bg: options.style?.bg || 'black',
             },
         });
+        if (useOverlay && originalParent) {
+            const overlayOpacity = options.overlayOpacity ?? 0.5;
+            this._overlay = new Overlay({
+                parent: originalParent,
+                opacity: overlayOpacity,
+                hidden: true,
+            });
+            this._overlay.append(this);
+        }
         // Prompt text - at top
         // Use 'transparent' for bg to inherit from parent dialog
         const dialogBg = options.style?.bg || 'black';
-        this.messageText = new box_1.Box({
+        this.messageText = new Box({
             parent: this,
             top: 0,
             left: 0,
@@ -47,7 +61,7 @@ class Prompt extends box_1.Box {
         });
         // Input field - use right: 0 to respect parent boundaries
         // Input field keeps solid background for readability
-        this.inputField = new textbox_1.Textbox({
+        this.inputField = new Textbox({
             parent: this,
             top: 2,
             left: 0,
@@ -64,7 +78,7 @@ class Prompt extends box_1.Box {
             },
         });
         // Button container
-        this.buttonBox = new box_1.Box({
+        this.buttonBox = new Box({
             parent: this,
             bottom: 0,
             left: 'center',
@@ -75,7 +89,7 @@ class Prompt extends box_1.Box {
             },
         });
         // OK button
-        this.okButton = new button_1.Button({
+        this.okButton = new Button({
             parent: this.buttonBox,
             top: 0,
             left: 0,
@@ -95,7 +109,7 @@ class Prompt extends box_1.Box {
             },
         });
         // Cancel button
-        this.cancelButton = new button_1.Button({
+        this.cancelButton = new Button({
             parent: this.buttonBox,
             top: 0,
             left: 14,
@@ -163,6 +177,10 @@ class Prompt extends box_1.Box {
         if (value !== undefined) {
             this.setValue(value);
         }
+        // Show overlay first if present
+        if (this._overlay) {
+            this._overlay.show();
+        }
         this.show();
         this.setFront();
         this.inputField.focus();
@@ -174,6 +192,15 @@ class Prompt extends box_1.Box {
             this.once('cancel', () => {
                 callback(new Error('cancelled'));
             });
+        }
+    }
+    /**
+     * Override hide to also hide overlay
+     */
+    hide() {
+        super.hide();
+        if (this._overlay) {
+            this._overlay.hide();
         }
     }
     /**
@@ -201,4 +228,3 @@ class Prompt extends box_1.Box {
         return this.inputField.getValue();
     }
 }
-exports.Prompt = Prompt;

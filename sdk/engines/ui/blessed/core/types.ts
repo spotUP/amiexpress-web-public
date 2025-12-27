@@ -17,6 +17,7 @@ export interface Colors {
   inverse?: Color | boolean;
   invisible?: Color | boolean;
   transparent?: boolean;  // Enable 50% opacity color blending
+  opacity?: number;  // Web-only: CSS opacity for element (0-1). Emits OSC overlay event for web clients.
 }
 
 export interface Border {
@@ -38,10 +39,20 @@ export interface Padding {
 }
 
 export interface Position {
+  // Calculated absolute coordinates (always set)
   xi: number;  // absolute left
   xl: number;  // absolute right
   yi: number;  // absolute top
   yl: number;  // absolute bottom
+
+  // User-specified positioning (optional, set by position setters)
+  // Note: Can be null (explicitly cleared) or undefined (never set)
+  left?: number | string | null;
+  right?: number | string | null;
+  top?: number | string | null;
+  bottom?: number | string | null;
+  width?: number | string | null;
+  height?: number | string | null;
 }
 
 // ============================================================================
@@ -90,6 +101,7 @@ export interface ElementOptions {
   keys?: boolean | string[];  // Enable key bindings (true/false or custom key array)
   vi?: boolean;  // Enable vi-style navigation (j/k for up/down)
   input?: boolean;
+  draggable?: boolean;  // Enable drag-and-drop with mouse
   dockBorders?: boolean;
   ignoreDockContrast?: boolean;
 
@@ -156,6 +168,7 @@ export interface ScreenOptions {
   tabSize?: number;
   autoPadding?: boolean;
   height?: number;
+  style?: ElementOptions['style'];
   cursor?: {
     artificial?: boolean;
     shape?: 'block' | 'underline' | 'line';

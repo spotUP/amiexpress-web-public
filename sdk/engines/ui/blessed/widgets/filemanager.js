@@ -1,12 +1,9 @@
-"use strict";
 /**
  * FileManager - Directory browser widget
  * Note: This is a simplified browser-compatible version
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.FileManager = void 0;
-const list_1 = require("./list");
-class FileManager extends list_1.List {
+import { List } from './list';
+export class FileManager extends List {
     constructor(options = {}) {
         super({
             ...options,
@@ -170,19 +167,27 @@ class FileManager extends list_1.List {
     }
     /**
      * Pick a file (show dialog and wait for selection)
+     * Overrides List.pick() with FileManager-specific behavior
      */
-    pick(callback) {
+    pick(label, callback) {
+        // Handle overload: pick(callback) or pick(label, callback)
+        if (typeof label === 'function') {
+            callback = label;
+            label = undefined;
+        }
         this.show();
         this.focus();
         const onFile = (file, fullPath) => {
             this.removeListener('file', onFile);
             this.removeListener('cancel', onCancel);
-            callback(null, fullPath);
+            if (callback)
+                callback(undefined, fullPath);
         };
         const onCancel = () => {
             this.removeListener('file', onFile);
             this.removeListener('cancel', onCancel);
-            callback(new Error('cancelled'));
+            if (callback)
+                callback(new Error('cancelled'));
         };
         this.once('file', onFile);
         this.key(['escape'], onCancel);
@@ -198,4 +203,3 @@ class FileManager extends list_1.List {
         this.select(0);
     }
 }
-exports.FileManager = FileManager;

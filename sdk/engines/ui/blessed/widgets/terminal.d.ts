@@ -78,3 +78,4 @@ export declare class Terminal extends Box {
      */
     destroy(): void;
 }
+//# sourceMappingURL=terminal.d.ts.map

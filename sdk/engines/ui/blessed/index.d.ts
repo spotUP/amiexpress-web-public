@@ -86,141 +86,141 @@ export declare function screen(options?: ScreenOptions & {
     output?: (data: string) => void;
 }): Screen;
 /**
- * Create a box widget
+ * Create a box widget (tags: true by default)
  */
 export declare function box(options?: ElementOptions): Box;
 /**
- * Create a text widget
+ * Create a text widget (tags: true by default)
  */
 export declare function text(options?: ElementOptions): Text;
 /**
- * Create a list widget
+ * Create a list widget (tags: true by default)
  */
 export declare function list(options?: ListOptions): List;
 /**
- * Create a form widget
+ * Create a form widget (tags: true by default)
  */
 export declare function form(options?: FormOptions): Form;
 /**
- * Create a textbox/input widget
+ * Create a textbox/input widget (tags: true by default)
  */
 export declare function textbox(options?: TextboxOptions): Textbox;
 export declare function input(options?: TextboxOptions): Input;
 export declare function textarea(options?: TextboxOptions): Textarea;
 /**
- * Create a button widget
+ * Create a button widget (tags: true by default)
  */
 export declare function button(options?: ButtonOptions): Button;
 /**
- * Create a progress bar widget
+ * Create a progress bar widget (tags: true by default)
  */
 export declare function progressbar(options?: ProgressBarOptions): ProgressBar;
 /**
- * Create a table widget
+ * Create a table widget (tags: true by default)
  */
 export declare function table(options?: TableOptions): Table;
 /**
- * Create a log widget
+ * Create a log widget (tags: true by default)
  */
 export declare function log(options?: LogOptions): Log;
 /**
- * Create a scrollable box widget
+ * Create a scrollable box widget (tags: true by default)
  */
 export declare function scrollablebox(options?: ElementOptions): ScrollableBox;
 /**
- * Create a scrollable text widget
+ * Create a scrollable text widget (tags: true by default)
  */
 export declare function scrollabletext(options?: ElementOptions): ScrollableText;
 /**
- * Create a checkbox widget
+ * Create a checkbox widget (tags: true by default)
  */
 export declare function checkbox(options?: CheckboxOptions): Checkbox;
 /**
- * Create a radio button widget
+ * Create a radio button widget (tags: true by default)
  */
 export declare function radiobutton(options?: RadioButtonOptions): RadioButton;
 /**
- * Create a radio set widget
+ * Create a radio set widget (tags: true by default)
  */
 export declare function radioset(options?: RadioSetOptions): RadioSet;
 /**
- * Create a message dialog widget
+ * Create a message dialog widget (tags: true by default)
  */
 export declare function message(options?: MessageOptions): Message;
 /**
- * Create a question dialog widget
+ * Create a question dialog widget (tags: true by default)
  */
 export declare function question(options?: QuestionOptions): Question;
 /**
- * Create a prompt dialog widget
+ * Create a prompt dialog widget (tags: true by default)
  */
 export declare function prompt(options?: PromptOptions): Prompt;
 /**
- * Create a loading indicator widget
+ * Create a loading indicator widget (tags: true by default)
  */
 export declare function loading(options?: LoadingOptions): Loading;
 /**
- * Create a line widget
+ * Create a line widget (tags: true by default)
  */
 export declare function line(options?: LineOptions): Line;
 /**
- * Create a listbar widget
+ * Create a listbar widget (tags: true by default)
  */
 export declare function listbar(options?: ListbarOptions): Listbar;
 /**
- * Create a big text widget
+ * Create a big text widget (tags: true by default)
  */
 export declare function bigtext(options?: BigTextOptions): BigText;
 /**
- * Create a file manager widget
+ * Create a file manager widget (tags: true by default)
  */
 export declare function filemanager(options?: FileManagerOptions): FileManager;
 /**
- * Create an overlay widget
+ * Create an overlay widget (tags: true by default)
  */
 export declare function overlay(options?: OverlayOptions): Overlay;
 /**
- * Create a list table widget
+ * Create a list table widget (tags: true by default)
  */
 export declare function listtable(options?: ListTableOptions): ListTable;
 /**
- * Create an ANSI image widget
+ * Create an ANSI image widget (tags: true by default)
  */
 export declare function ansiimage(options?: ANSIImageOptions): ANSIImage;
 /**
- * Create a terminal widget
+ * Create a terminal widget (tags: true by default)
  */
 export declare function terminal(options?: TerminalOptions): Terminal;
 /**
- * Create a layout widget
+ * Create a layout widget (tags: true by default)
  */
 export declare function layout(options?: LayoutOptions): Layout;
 /**
- * Create a password box widget
+ * Create a password box widget (tags: true by default)
  */
 export declare function passbox(options?: PassBoxOptions): PassBox;
 /**
- * Create a file box widget
+ * Create a file box widget (tags: true by default)
  */
 export declare function filebox(options?: FileBoxOptions): FileBox;
 /**
- * Create an image widget
+ * Create an image widget (tags: true by default)
  */
 export declare function image(options?: ImageOptions): Image;
 /**
- * Create a viewport widget
+ * Create a viewport widget (tags: true by default)
  */
 export declare function viewport(options?: ViewportOptions): Viewport;
 /**
- * Create a canvas widget
+ * Create a canvas widget (tags: true by default)
  */
 export declare function canvas(options?: CanvasOptions): Canvas;
 /**
- * Create an iframe widget
+ * Create an iframe widget (tags: true by default)
  */
 export declare function iframe(options?: IFrameOptions): IFrame;
 /**
- * Create a video widget
+ * Create a video widget (tags: true by default)
  */
 export declare function video(options?: VideoOptions): Video;
 import { Element as ElementClass } from './core/element';
@@ -307,3 +307,4 @@ declare const _default: {
     video: typeof video;
 };
 export default _default;
+//# sourceMappingURL=index.d.ts.map

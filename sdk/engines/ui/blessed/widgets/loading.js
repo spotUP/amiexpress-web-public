@@ -1,14 +1,22 @@
-"use strict";
 /**
  * Loading - Loading indicator / spinner widget
+ *
+ * Supports optional overlay for semi-transparent dimming effect:
+ *   overlay: true (uses default 0.5 opacity)
+ *   overlayOpacity: 0.7 (custom opacity)
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Loading = void 0;
-const box_1 = require("./box");
-class Loading extends box_1.Box {
+import { Box } from './box';
+import { Overlay } from './overlay';
+export class Loading extends Box {
     constructor(options = {}) {
+        // If overlay is enabled, we'll reparent to the overlay later
+        const originalParent = options.parent;
+        const useOverlay = options.overlay || options.overlayOpacity !== undefined;
+        // Use 'transparent' for bg to inherit from parent dialog
+        const dialogBg = options.style?.bg || 'black';
         super({
             ...options,
+            parent: useOverlay ? undefined : originalParent,
             border: options.border || { type: 'line' },
             label: options.label || ' Loading ',
             width: options.width || '50%',
@@ -18,14 +26,30 @@ class Loading extends box_1.Box {
             padding: options.padding || 1,
             hidden: true,
             focusable: false,
-            shadow: options.shadow !== false,
+            shadow: false, // Disable shadow - causes rendering issues
+            ch: ' ', // Fill character for solid background
+            style: {
+                ...options.style,
+                bg: dialogBg,
+            },
         });
         this.spinnerIndex = 0;
         this.timer = null;
-        this.spinner = options.spinner || ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        // Create overlay if enabled
+        if (useOverlay && originalParent) {
+            const overlayOpacity = options.overlayOpacity ?? 0.5;
+            this._overlay = new Overlay({
+                parent: originalParent,
+                opacity: overlayOpacity,
+                hidden: true,
+            });
+            // Reparent dialog to overlay
+            this._overlay.append(this);
+        }
+        this.spinner = options.spinner || ['|', '/', '-', '\\']; // ASCII spinner for terminal compatibility
         this.interval = options.interval || 80;
         // Loading message
-        this.messageText = new box_1.Box({
+        this.messageText = new Box({
             parent: this,
             top: 0,
             left: 0,
@@ -34,9 +58,13 @@ class Loading extends box_1.Box {
             content: options.text || 'Please wait...',
             tags: true,
             align: 'center',
+            style: {
+                fg: options.style?.fg || 'white',
+                bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
+            },
         });
         // Spinner
-        this.spinnerText = new box_1.Box({
+        this.spinnerText = new Box({
             parent: this,
             top: 1,
             left: 'center',
@@ -45,8 +73,8 @@ class Loading extends box_1.Box {
             content: this.spinner[0],
             align: 'center',
             style: {
-                fg: 'blue',
-                bold: true,
+                fg: 'cyan',
+                bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
             },
         });
     }
@@ -57,10 +85,15 @@ class Loading extends box_1.Box {
         if (text) {
             this.setText(text);
         }
+        // Show overlay first if present
+        if (this._overlay) {
+            this._overlay.show();
+        }
         this.show();
         this.setFront();
         // Start spinner animation
         this.startSpinner();
+        this.screen?.render();
     }
     /**
      * Stop the loading animation and hide
@@ -69,6 +102,15 @@ class Loading extends box_1.Box {
         this.stopSpinner();
         this.hide();
         this.screen?.render();
+    }
+    /**
+     * Override hide to also hide overlay
+     */
+    hide() {
+        super.hide();
+        if (this._overlay) {
+            this._overlay.hide();
+        }
     }
     /**
      * Start spinner animation
@@ -117,7 +159,9 @@ class Loading extends box_1.Box {
      */
     destroy() {
         this.stopSpinner();
+        if (this._overlay) {
+            this._overlay.destroy();
+        }
         super.destroy();
     }
 }
-exports.Loading = Loading;

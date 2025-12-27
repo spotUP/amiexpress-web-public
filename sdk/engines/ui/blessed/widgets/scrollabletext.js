@@ -1,11 +1,8 @@
-"use strict";
 /**
  * ScrollableText - Text widget with built-in scrolling support
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.ScrollableText = void 0;
-const text_1 = require("./text");
-class ScrollableText extends text_1.Text {
+import { Text } from './text';
+export class ScrollableText extends Text {
     constructor(options = {}) {
         super({
             ...options,
@@ -44,4 +41,3 @@ class ScrollableText extends text_1.Text {
         this.setScrollPerc(percent);
     }
 }
-exports.ScrollableText = ScrollableText;

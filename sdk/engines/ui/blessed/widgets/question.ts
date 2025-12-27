@@ -1,14 +1,21 @@
 /**
  * Question - Yes/No dialog box
+ *
+ * Supports optional overlay for semi-transparent dimming effect:
+ *   overlay: true (uses default 0.5 opacity)
+ *   overlayOpacity: 0.7 (custom opacity)
  */
 
 import { Box } from './box';
 import { Button } from './button';
+import { Overlay } from './overlay';
 import type { ElementOptions } from '../core/types';
 
 export interface QuestionOptions extends ElementOptions {
   text?: string;
   title?: string;
+  overlay?: boolean;  // Enable overlay dimming (default opacity 0.5)
+  overlayOpacity?: number;  // Custom overlay opacity (0-1)
 }
 
 export class Question extends Box {
@@ -16,13 +23,19 @@ export class Question extends Box {
   private yesButton: Button;
   private noButton: Button;
   private buttonBox: Box;
+  private _overlay?: Overlay;
 
   constructor(options: QuestionOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
     const height = typeof options.height === 'number' ? options.height : 9;
 
+    // If overlay is enabled, we'll reparent to the overlay later
+    const originalParent = options.parent;
+    const useOverlay = options.overlay || options.overlayOpacity !== undefined;
+
     super({
       ...options,
+      parent: useOverlay ? undefined : originalParent,
       border: options.border || { type: 'line' },
       label: options.title || options.label || ' Confirm ',
       width: options.width || 40,
@@ -39,6 +52,17 @@ export class Question extends Box {
         bg: options.style?.bg || 'black',
       },
     });
+
+    // Create overlay if enabled
+    if (useOverlay && originalParent) {
+      const overlayOpacity = options.overlayOpacity ?? 0.5;
+      this._overlay = new Overlay({
+        parent: originalParent,
+        opacity: overlayOpacity,
+        hidden: true,
+      });
+      this._overlay.append(this);
+    }
 
     // Question text - centered at top
     // Use 'transparent' for bg to inherit from parent dialog
@@ -170,6 +194,11 @@ export class Question extends Box {
       this.setText(text);
     }
 
+    // Show overlay first if present
+    if (this._overlay) {
+      this._overlay.show();
+    }
+
     this.show();
     this.setFront();
     this.yesButton.focus();
@@ -177,6 +206,16 @@ export class Question extends Box {
 
     if (callback) {
       this.once('answer', callback);
+    }
+  }
+
+  /**
+   * Override hide to also hide overlay
+   */
+  hide(): void {
+    super.hide();
+    if (this._overlay) {
+      this._overlay.hide();
     }
   }
 

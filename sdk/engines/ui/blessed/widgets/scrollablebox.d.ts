@@ -26,3 +26,4 @@ export declare class ScrollableBox extends Box {
      */
     scrollToLine(line: number): void;
 }
+//# sourceMappingURL=scrollablebox.d.ts.map

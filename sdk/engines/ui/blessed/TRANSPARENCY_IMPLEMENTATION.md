@@ -1,411 +1,229 @@
 # Transparency/Opacity Implementation
 
-**Date:** December 22, 2025
-**Status:** ✅ COMPLETE
+**Date:** December 23, 2025
+**Status:** ✅ COMPLETE (Updated with CSS Overlay Support)
 
 ## Overview
 
-Implemented true color blending transparency for the blessed UI engine. Elements with `transparent: true` in their style now blend their background color with the content behind them at 50% opacity.
+Two transparency mechanisms are now supported:
+
+1. **ANSI Transparency** (`transparent: true`): Sets background to "none", showing underlying buffer content
+2. **CSS Opacity** (`opacity: number`): Web-only feature that emits OSC 9999 sequences for true CSS rgba overlays
 
 ---
 
 ## Implementation Details
 
-### 1. Added transparent Option ✅
+### 1. ANSI Transparency (transparent: true)
 
-**File:** `core/types.ts` (line 19)
+**File:** `core/types.ts`
 
 ```typescript
 export interface Colors {
   fg?: Color;
   bg?: Color;
-  bold?: Color | boolean;
-  underline?: Color | boolean;
-  blink?: Color | boolean;
-  inverse?: Color | boolean;
-  invisible?: Color | boolean;
-  transparent?: boolean;  // NEW: Enable 50% opacity color blending
+  transparent?: boolean;  // Set bg to transparent (shows buffer behind)
+  opacity?: number;       // Web-only: CSS opacity (0-1)
 }
 ```
 
----
-
-### 2. Color Blending Functions ✅
-
-**File:** `core/colors.ts` (lines 376-479)
-
-**Added Functions:**
-
-#### `colorToRGB(color: number): [number, number, number]`
-Converts ANSI color code (0-255) to RGB values.
-
-**Handles:**
-- Standard colors (0-7): black, red, green, yellow, blue, magenta, cyan, white
-- Bright colors (8-15): bright variants
-- RGB cube (16-231): 6x6x6 color palette
-- Grayscale (232-255): 24 shades of gray
-
-```typescript
-// Example:
-colorToRGB(1)   // [128, 0, 0] - red
-colorToRGB(9)   // [255, 0, 0] - bright red
-colorToRGB(16)  // [0, 0, 0]   - RGB cube black
-```
-
-#### `blendColors(fg: [number, number, number], bg: [number, number, number]): [number, number, number]`
-Blends two RGB colors at 50% opacity.
-
-```typescript
-// Example:
-const red = [255, 0, 0];
-const blue = [0, 0, 255];
-const blended = blendColors(red, blue);
-// Result: [128, 0, 128] - purple (50% red + 50% blue)
-```
-
-#### `rgbToClosestColor(r: number, g: number, b: number): number`
-Finds the closest ANSI color code for an RGB value.
-
-**Algorithm:**
-1. Check if grayscale (r === g === b)
-2. If grayscale, map to grayscale palette (232-255)
-3. Otherwise, map to RGB cube (16-231)
-
-```typescript
-// Example:
-rgbToClosestColor(128, 0, 128)  // Returns closest ANSI code for purple
-```
-
-#### `blendAnsiColors(fgColor: number, bgColor: number): number`
-High-level function that blends two ANSI colors.
-
-**Process:**
-1. Convert both colors to RGB
-2. Blend RGB values at 50%
-3. Find closest ANSI color
-4. Return blended ANSI code
-
-```typescript
-// Example:
-const blended = blendAnsiColors(1, 4);  // Blend red (1) with blue (4)
-// Returns ANSI code for purple
-```
+When `transparent: true`, the background is set to `0x1ff` (transparent constant), and `fillRegion()` preserves the existing buffer content.
 
 ---
 
-### 3. Transparent Flag in Attributes ✅
+### 2. CSS Opacity for Web Connections (opacity: number)
 
-**File:** `core/element.ts` (line 757)
+**NEW in December 2025**
 
-Added transparent flag (bit 32) to attribute packing:
+For web browser connections, elements can now have true CSS-based transparency via positioned overlay divs.
 
-```typescript
-sattr(style: any): number {
-  // ... existing flags
-  if (style.transparent) flags |= 32;  // Transparency/opacity blending
+**How It Works:**
 
-  // Pack into attribute: (flags << 18) | (fgCode << 9) | bgCode
-}
-```
+1. **Element sets opacity in style:**
+   ```typescript
+   style: { bg: 'black', opacity: 0.5 }
+   ```
 
-**Attribute Format (27-bit):**
-- Bits 0-8: Background color (0-255)
-- Bits 9-17: Foreground color (0-255)
-- Bits 18+: Flags (bold=1, underline=2, blink=4, inverse=8, invisible=16, transparent=32)
+2. **Element emits OSC 9999 overlay event** on show/hide/attach/destroy:
+   - Format: `ESC ] 9999 ; overlay ; <json> BEL`
+   - JSON includes: id, show, opacity, x, y, width, height
+
+3. **BBSTerminal renders positioned CSS div:**
+   - Calculates pixel position from terminal cell coordinates
+   - Creates rgba overlay with specified opacity
+   - Overlay is positioned precisely over the element
+
+**Files Modified for CSS Opacity:**
+
+- `core/types.ts` - Added `opacity?: number` to Colors interface
+- `core/element.ts` - Added `_emitOverlayEvent()` method, hooks in show/hide/destroy
+- `widgets/overlay.ts` - Updated to emit positioned overlay events
+- `packages/terminal/BBSTerminal.tsx` - Renders positioned CSS overlay divs
 
 ---
 
-### 4. Blending in Rendering ✅
+### 3. Overlay Widget
 
-**File:** `core/screen.ts` (lines 347-385)
-
-Modified `fillRegion()` to blend colors when transparent flag is set:
+The `Overlay` widget is purpose-built for modal dialogs with opacity:
 
 ```typescript
-fillRegion(attr: number, ch: string, xi: number, xl: number, yi: number, yl: number): void {
-  // Extract transparency flag
-  const flags = (attr >> 18) & 0x3f;
-  const isTransparent = (flags & 32) !== 0;
+import * as blessed from '@amiexpress/bbs-door-sdk/engines/ui/neo-blessed';
 
-  if (isTransparent && bgColor !== 0x1ff) {
-    // Read existing background from buffer
-    const existingAttr = this.buffer[y][x][0];
-    const existingBg = existingAttr & 0x1ff;
+const overlay = blessed.overlay({
+  parent: screen,
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  opacity: 0.5,  // 50% opacity overlay
+  hidden: true,
+  style: { bg: 'black' },
+});
 
-    if (existingBg !== 0x1ff) {
-      // Blend colors at 50% opacity
-      const blendedBg = blendAnsiColors(bgColor, existingBg);
+// Show overlay
+overlay.show();
 
-      // Apply blended color
-      const newAttr = (attr & ~0x1ff) | blendedBg;
-      this.buffer[y][x] = [newAttr, ch];
-    }
-  }
-}
+// Overlay automatically:
+// 1. Emits OSC event for web clients (CSS opacity)
+// 2. Focuses itself
+// 3. Handles ESC to hide
 ```
 
 ---
 
 ## Usage Examples
 
-### Basic Transparency
+### Using Overlay Widget (Recommended for Modals)
 
 ```typescript
-const overlay = new Box({
+const overlay = blessed.overlay({
   parent: screen,
-  top: 5,
-  left: 10,
-  width: 20,
-  height: 5,
-  content: 'Semi-transparent overlay',
-  style: {
-    bg: 'red',
-    fg: 'white',
-    transparent: true  // 50% opacity
-  }
-});
-```
-
-### Layered Overlays
-
-```typescript
-// Background layer (solid blue)
-const background = new Box({
-  parent: screen,
-  width: '100%',
-  height: '100%',
-  style: {
-    bg: 'blue'
-  }
+  opacity: 0.5,
+  hidden: true,
 });
 
-// Foreground layer (50% red over blue = purple)
-const foreground = new Box({
-  parent: screen,
-  top: 2,
-  left: 2,
-  width: 30,
-  height: 10,
-  style: {
-    bg: 'red',
-    transparent: true  // Blends with blue background
-  }
-});
-
-// Result: Foreground appears purple (50% red + 50% blue)
-```
-
-### Dialog with Transparency
-
-```typescript
-const dialog = new Box({
-  parent: screen,
+// Add content on top of overlay
+const dialog = blessed.box({
+  parent: overlay,
   top: 'center',
   left: 'center',
   width: 40,
   height: 10,
-  content: 'This dialog has a semi-transparent background',
-  border: 'line',
-  style: {
-    bg: 'black',
-    fg: 'white',
-    transparent: true,  // Background blends with content behind it
-    border: {
-      fg: 'white'
-    }
-  }
+  label: ' Dialog ',
+  border: { type: 'line' },
+  content: 'This appears over a semi-transparent overlay!',
+  style: { bg: 'blue', fg: 'white' },
 });
+
+// Show modal
+overlay.show();
+screen.render();
 ```
 
----
-
-## How It Works
-
-### Rendering Pipeline
-
-1. **Element defines style:**
-   ```typescript
-   style: { bg: 'red', transparent: true }
-   ```
-
-2. **sattr() packs attributes:**
-   - Sets transparent flag (bit 32)
-   - Encodes red as ANSI code 1
-   - Packs into 27-bit attribute
-
-3. **fillRegion() renders:**
-   - Detects transparent flag
-   - Reads existing background from buffer
-   - Blends: red (1) + existing → blended color
-   - Writes blended color to buffer
-
-4. **Screen outputs ANSI:**
-   - Converts blended color to ANSI escape sequence
-   - Renders to terminal
-
----
-
-## Color Blending Algorithm
-
-### Step-by-Step Example
-
-**Scenario:** Red overlay over blue background
-
-1. **Input Colors:**
-   - Foreground: red (ANSI code 1)
-   - Background: blue (ANSI code 4)
-
-2. **Convert to RGB:**
-   - Red: `[128, 0, 0]`
-   - Blue: `[0, 0, 128]`
-
-3. **Blend at 50%:**
-   ```
-   blended = [
-     (128 + 0) / 2 = 64,
-     (0 + 0) / 2 = 0,
-     (0 + 128) / 2 = 64
-   ]
-   // Result: [64, 0, 64] (purple-ish)
-   ```
-
-4. **Find Closest ANSI:**
-   - Map `[64, 0, 64]` to RGB cube
-   - Returns ANSI code for closest purple
-
-5. **Render:**
-   - Element appears purple (blended red + blue)
-
----
-
-## Limitations
-
-1. **Approximation:** ANSI 256-color palette is limited, so blended colors are approximated to the closest available color.
-
-2. **Character Blending:** Only backgrounds are blended, not the characters themselves (per blessed spec).
-
-3. **Performance:** Color blending requires RGB conversions on every render. For performance-critical applications, use sparingly.
-
-4. **No Alpha Channel:** Only 50% opacity is supported (per blessed spec). Variable opacity is not implemented.
-
----
-
-## Testing
-
-### Visual Test
+### Using opacity Style on Any Element
 
 ```typescript
-import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-
-const screen = new Screen({ title: 'Transparency Test' });
-
-// Background (blue)
-new Box({
-  parent: screen,
-  width: '100%',
-  height: '100%',
-  style: { bg: 'blue' }
-});
-
-// Foreground (transparent red) - should appear purple
-new Box({
+const dimmedBox = blessed.box({
   parent: screen,
   top: 5,
   left: 10,
   width: 30,
   height: 10,
-  content: 'This should appear purple',
   style: {
-    bg: 'red',
+    bg: 'black',
     fg: 'white',
-    transparent: true
-  }
+    opacity: 0.7,  // 70% opacity - web only
+  },
+  content: 'Semi-transparent on web clients!',
 });
-
-screen.render();
 ```
 
-**Expected Result:** Red overlay appears purple (50% red + 50% blue)
+### Using transparent for Buffer Transparency
+
+```typescript
+const transparentBox = blessed.box({
+  parent: screen,
+  style: {
+    fg: 'white',
+    bg: 'transparent',  // Shows buffer content behind
+  },
+  content: 'Text floats over whatever is behind it',
+});
+```
 
 ---
 
-## Performance Considerations
+## Technical Details
 
-### When to Use Transparency
+### OSC 9999 Protocol
 
-**Good Use Cases:**
-- Modal dialogs
-- Floating overlays
-- Highlight effects
-- Subtle UI accents
+Elements with opacity emit Operating System Command sequences:
 
-**Avoid for:**
-- Full-screen backgrounds
-- Rapidly changing content
-- Complex layered UIs (prefer solid colors)
+```
+ESC ] 9999 ; overlay ; {"id":"element-123","show":true,"opacity":0.5,"x":10,"y":5,"width":30,"height":10} BEL
+```
 
-### Optimization Tips
+**Fields:**
+- `id`: Unique identifier for this overlay
+- `show`: true to show, false to hide
+- `opacity`: CSS opacity value (0-1)
+- `x`, `y`: Position in terminal cells
+- `width`, `height`: Size in terminal cells
 
-1. **Minimize Layers:** Each transparent layer requires blending calculations
-2. **Use Solid Colors:** When transparency isn't needed, omit the flag
-3. **Cache Results:** Transparency blending happens per-pixel on every render
+### Frontend Rendering
+
+BBSTerminal.tsx parses OSC 9999 sequences and renders positioned div overlays:
+
+```typescript
+// Overlay div style calculation:
+{
+  position: 'absolute',
+  left: offsetLeft + (x * cellWidth),
+  top: offsetTop + (y * cellHeight),
+  width: width * cellWidth,
+  height: height * cellHeight,
+  backgroundColor: `rgba(0, 0, 0, ${opacity})`,
+  pointerEvents: 'none',
+  zIndex: 100,
+}
+```
 
 ---
 
-## API Reference
+## Platform Support
 
-### Style Option
+| Feature | Web Browser | Telnet | SSH |
+|---------|-------------|--------|-----|
+| `transparent: true` | ✅ | ✅ | ✅ |
+| `opacity: number` | ✅ CSS | ❌ N/A | ❌ N/A |
+| Overlay widget | ✅ CSS | ⚠️ Solid | ⚠️ Solid |
 
-```typescript
-interface Colors {
-  transparent?: boolean;  // Enable 50% opacity color blending
-}
-```
-
-**Default:** `false` (solid colors)
-
-**Usage:**
-```typescript
-style: {
-  bg: 'red',
-  transparent: true  // Enable blending
-}
-```
+**Note:** For telnet/SSH, opacity falls back to solid background (no CSS support).
 
 ---
 
 ## Files Modified
 
-1. **core/types.ts** - Added `transparent` to Colors interface
-2. **core/colors.ts** - Added 4 color blending functions (~100 lines)
-3. **core/element.ts** - Added transparent flag to sattr() (~1 line)
-4. **core/screen.ts** - Added blending logic to fillRegion() (~20 lines)
-
-**Total Lines Changed:** ~121 lines
+1. **core/types.ts** - Added `opacity?: number` to Colors interface
+2. **core/element.ts** - Added `_emitOverlayEvent()`, hooks in show/hide/destroy/attach
+3. **widgets/overlay.ts** - Emits positioned overlay events with x, y, width, height
+4. **packages/terminal/BBSTerminal.tsx** - Parses OSC 9999, renders positioned CSS overlays
 
 ---
 
-## Success Criteria
+## Testing
 
-✅ **Transparency option added to Colors interface**
-✅ **Color blending functions implemented**
-✅ **ANSI ↔ RGB conversion working**
-✅ **Transparent flag in attribute packing**
-✅ **Blending logic in fillRegion()**
-✅ **50% opacity effect achieved**
-✅ **Compatible with all widgets**
+The neo-blessed showcase includes an Overlay test:
 
----
-
-## Next Steps
-
-1. **Build SDK** - `npm run build`
-2. **Test visually** - Create test door with layered transparent elements
-3. **Verify colors** - Ensure blending produces expected colors
-4. **Performance test** - Check render performance with multiple transparent layers
+1. Run the BBS server: `./dev/scripts/start-servers.sh`
+2. Connect via web browser to `http://localhost:3001`
+3. Login and run `NEOSHOWCASE`
+4. Navigate to "Dialogs" section
+5. Click "Overlay" button
+6. Observe: Semi-transparent overlay with opacity 0.5
 
 ---
 
 **Implementation Complete!**
 
-Transparency/opacity is now fully functional in the blessed UI engine.
+True CSS opacity now works in the web terminal via OSC 9999 positioned overlays.

@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Canvas - Basic drawing canvas for custom rendering
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Canvas = void 0;
-const box_1 = require("./box");
-class Canvas extends box_1.Box {
+import { Box } from './box';
+export class Canvas extends Box {
     constructor(options = {}) {
         const { fillChar, clearChar, ...boxOptions } = options;
         super(boxOptions);
@@ -252,4 +249,3 @@ class Canvas extends box_1.Box {
         };
     }
 }
-exports.Canvas = Canvas;

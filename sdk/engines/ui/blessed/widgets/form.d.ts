@@ -19,3 +19,4 @@ export declare class Form extends Element {
     cancel(): void;
     reset(): void;
 }
+//# sourceMappingURL=form.d.ts.map

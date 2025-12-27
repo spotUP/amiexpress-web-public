@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Layout - Container widget for arranging children in rows/columns
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Layout = void 0;
-const box_1 = require("./box");
-class Layout extends box_1.Box {
+import { Box } from './box';
+export class Layout extends Box {
     constructor(options = {}) {
         const { layout, renderer, ...boxOptions } = options;
         super({
@@ -160,4 +157,3 @@ class Layout extends box_1.Box {
         }
     }
 }
-exports.Layout = Layout;

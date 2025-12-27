@@ -52,3 +52,4 @@ export declare class Viewport extends Box {
      */
     resetScroll(): void;
 }
+//# sourceMappingURL=viewport.d.ts.map

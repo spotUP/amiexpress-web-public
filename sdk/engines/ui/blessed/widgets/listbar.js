@@ -1,12 +1,9 @@
-"use strict";
 /**
  * Listbar - Horizontal menu bar widget
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Listbar = void 0;
-const box_1 = require("./box");
-const button_1 = require("./button");
-class Listbar extends box_1.Box {
+import { Box } from './box';
+import { Button } from './button';
+export class Listbar extends Box {
     constructor(options = {}) {
         const style = options.style || {};
         const itemStyle = style.item || {};
@@ -81,7 +78,7 @@ class Listbar extends box_1.Box {
             const text = item.text || key;
             const pad = this.itemPadding;
             const buttonText = pad > 0 ? `${' '.repeat(pad)}${text}${' '.repeat(pad)}` : text;
-            const button = new button_1.Button({
+            const button = new Button({
                 parent: this,
                 top: 0,
                 left: offset,
@@ -223,4 +220,3 @@ class Listbar extends box_1.Box {
         });
     }
 }
-exports.Listbar = Listbar;

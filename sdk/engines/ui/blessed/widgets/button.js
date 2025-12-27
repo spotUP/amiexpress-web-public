@@ -1,11 +1,8 @@
-"use strict";
 /**
  * Button widget - Clickable button
  */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Button = void 0;
-const element_1 = require("../core/element");
-class Button extends element_1.Element {
+import { Element } from '../core/element';
+export class Button extends Element {
     constructor(options = {}) {
         const baseStyle = options.style ?? {};
         const focusStyle = {
@@ -59,4 +56,3 @@ class Button extends element_1.Element {
         this.emit('action');
     }
 }
-exports.Button = Button;
