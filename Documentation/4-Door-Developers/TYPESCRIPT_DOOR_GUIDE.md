@@ -107,6 +107,24 @@ cd doors/my-door
 
 **CRITICAL**: Your door MUST export a `runDoor()` function. Without this export, the BBS cannot load your door.
 
+**⚠️ IMPORTANT: SDK Import Rules**
+
+When importing from the SDK, **ALWAYS use package paths**, NEVER relative paths:
+
+```typescript
+// ✅ CORRECT
+import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine';
+
+// ❌ WRONG - Will break your door!
+import { createBox } from '../../utils/blessed-helpers';
+import { AudioEngine } from '../../engines/audio/audio-engine';
+```
+
+See the "CRITICAL: SDK Import Rules" section in Troubleshooting for full details.
+
+---
+
 ```typescript
 /**
  * My Door - Description
@@ -728,6 +746,35 @@ export default { runDoor };
 
 **Reminder:** `.info` files are mandatory for TypeScript doors. The BBS will not auto-register doors from `package.json` alone.
 
+### EISDIR: illegal operation on a directory, read
+
+This error means the BBS is trying to read your door directory as a file, usually because:
+
+1. **Wrong .info file format** - Using `COMMAND=` instead of `BBSCMD=`
+2. **Wrong TYPE value** - Using `TYPE=TSDOOR` instead of `TYPE=TS`
+
+**Correct .info format:**
+```
+BBSCMD=MYDOOR
+TYPE=TS
+LOCATION=sdk/doors/my-door
+DESCRIPTION=My door description
+ACCESS=0
+MULTINODE=YES
+```
+
+**Wrong (causes EISDIR error):**
+```
+COMMAND=MYDOOR      <-- WRONG: Use BBSCMD=
+TYPE=TSDOOR         <-- WRONG: Use TYPE=TS
+LOCATION=sdk/doors/my-door
+```
+
+**Key differences:**
+- `BBSCMD=` (not `COMMAND=`) - Identifies the command name
+- `TYPE=TS` (not `TYPE=TSDOOR`) - Tells BBS this is a TypeScript door
+- The wrong format causes the door to be loaded as an Amiga 68K binary instead of TypeScript
+
 ### Input Not Working
 
 1. Ensure `bbsSession.doorInputHandler` is set (NOT `session.doorInputHandler`)
@@ -922,6 +969,78 @@ If you get errors like `Could not find a declaration file for module 'X'`:
 2. **Solution**: Remove the entire `"types"` line from tsconfig.json
 3. TypeScript will then automatically find all `@types/*` packages in node_modules
 
+### CRITICAL: SDK Import Rules (MUST READ)
+
+**🔴 NEVER use relative paths to import SDK files**
+
+This is a **critical mistake** that will break your door's color rendering and cause other bugs:
+
+```typescript
+// ❌ WRONG - Relative path imports
+import { AudioEngine } from '../../engines/audio/audio-engine';
+import { Screen } from '../../engines/ui/blessed/core/screen';
+import { NetworkEngine } from '../../engines/network/network-engine';
+
+// ✅ CORRECT - Package imports
+import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine';
+import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { NetworkEngine } from '@amiexpress/bbs-door-sdk/engines/network/network-engine';
+```
+
+**Why this matters:**
+
+1. **TypeScript will compile SDK source into your door's dist/** - When you use relative paths like `../../engines/audio/audio-engine`, TypeScript thinks those are YOUR source files and compiles them into your door's dist directory
+2. **Your door will use stale/old SDK code** - Your door will bundle an old snapshot of the SDK instead of using the latest compiled version
+3. **Color rendering breaks** - If the SDK has bug fixes (like the fg/bg color swap fix), your door won't get them because it's using old compiled code
+4. **Massive dist size** - Your door's dist will bloat to include the entire SDK (100+ files instead of just your code)
+5. **TypeScript errors** - You'll get "File is not under 'rootDir'" errors because SDK files are outside your door's directory
+
+**Correct tsconfig.json settings:**
+
+```json
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",  // Important: Set to current directory
+    "skipLibCheck": true,  // Skip type checking of SDK .d.ts files
+    // ... other options
+  },
+  "include": ["*.ts", "src/**/*.ts"],  // Only include YOUR door's files
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+**For multi-file doors, be specific about includes:**
+
+```json
+{
+  "include": [
+    "*.ts",
+    "commands/**/*.ts",
+    "ui/**/*.ts",
+    "core/**/*.ts",
+    "handlers/**/*.ts"
+    // List each subdirectory explicitly
+  ]
+}
+```
+
+**Never use `./**/*.ts` or `**/*.ts` as include patterns** - this will include SDK files via the node_modules symlink!
+
+**How to verify your door is correct:**
+
+```bash
+cd sdk/doors/your-door
+npm run build
+
+# Check dist structure - should only contain YOUR files
+ls dist/
+# ✅ Good: index.js, app.js, ui/, commands/, etc.
+# ❌ Bad: engines/, core/, doors/ (these are SDK directories)
+
+# If you see SDK directories in dist, fix your imports and tsconfig!
+```
+
 ### Neo-Blessed Import Errors
 
 **Error**: `ReferenceError: Element is not defined`
@@ -995,6 +1114,193 @@ export async function runDoor(doorSession: any): Promise<void> {
 - Never use default imports from blessed or blessed/contrib
 - This prevents runtime "Element is not defined" errors
 - SDK v2.0 has been fixed to support both import styles, but named imports are safer
+
+---
+
+### Neo-Blessed Color Rendering
+
+**IMPORTANT**: The SDK automatically handles terminal color initialization. On first render:
+1. Resets all terminal attributes (ESC[0m)
+2. Clears the screen (ESC[2J)
+3. Ensures clean state for color rendering
+
+**Color Format**:
+- Use standard color names: `'black'`, `'red'`, `'green'`, `'yellow'`, `'blue'`, `'magenta'`, `'cyan'`, `'white'`
+- For bright colors: `'lightred'`, `'lightgreen'`, etc. (or numbers 8-15)
+- For 256-color: use numeric values 0-255
+- For transparency: `'transparent'` or `'none'` (preserves underlying content)
+
+**Correct Color Usage**:
+```typescript
+// Style object with fg and bg
+const panel = createBox({
+  parent: screen,
+  style: {
+    fg: 'white',      // Foreground color for text
+    bg: 'black',      // Background color
+    border: { fg: 'cyan' }  // Border color
+  }
+});
+
+// Selected/focus states
+const list = createList({
+  parent: screen,
+  style: {
+    fg: 'white',
+    bg: 'black',
+    selected: { fg: 'black', bg: 'white' }  // Inverted for selection
+  }
+});
+```
+
+**Color Architecture (Internal)**:
+- Colors are packed into 27-bit attributes: `(flags << 18) | (fg << 9) | bg`
+- Standard colors 0-7 become ANSI 30-37 (fg) or 40-47 (bg)
+- Bright colors 8-15 become ANSI 90-97 (fg) or 100-107 (bg)
+- 256-color values use ESC[38;5;N (fg) or ESC[48;5;N (bg)
+- The SDK handles all ANSI escape sequence generation automatically
+
+---
+
+### Using SDK Blessed Helpers (Recommended)
+
+**IMPORTANT**: Always use SDK blessed-helpers instead of creating widgets directly. The helpers automatically add `tags: true` to prevent tag rendering bugs.
+
+**The Problem**:
+```typescript
+// Without tags:true, blessed renders {cyan-fg} as literal text instead of color
+const box = blessed.box({
+  parent: screen,
+  content: '{cyan-fg}Hello{/cyan-fg}'  // Renders as literal "{cyan-fg}Hello{/cyan-fg}"
+});
+```
+
+**The Solution - Use SDK Helpers**:
+```typescript
+import { createBox, createList, createText, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// SDK helpers automatically add tags:true
+const box = createBox({
+  parent: screen,
+  content: '{cyan-fg}Hello{/cyan-fg}'  // Renders with cyan foreground color
+});
+```
+
+**Available Helpers**:
+
+```typescript
+// All helpers from @amiexpress/bbs-door-sdk/utils/blessed-helpers
+import {
+  createBox,       // Box widget with auto tags:true
+  createList,      // List widget with auto tags:true
+  createText,      // Text widget with auto tags:true
+  createTextarea,  // Textarea widget with auto tags:true
+  createButton,    // Button widget with auto tags:true
+  createTable,     // Table widget with auto tags:true
+  createLog        // Log widget with auto tags:true
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+```
+
+**Complete Example Using Helpers**:
+
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createList, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, bbsSession, bbs } = doorSession;
+
+  // Create screen with dockBorders for responsive layouts
+  const screen = blessed.screen({
+    smartCSR: true,
+    dockBorders: true,  // Makes borders dock to screen edges
+    fullUnicode: true,
+    title: 'My Door',
+    output: (data: string) => bbs.write(data)
+  });
+
+  // Create header using createBox (auto tags:true)
+  const header = createBox({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: 3,
+    content: '{center}{bold}{cyan-fg}MY DOOR{/cyan-fg}{/bold}{/center}',
+    style: { fg: 'white', bg: 'blue' }
+  });
+
+  // Create list using createList (auto tags:true)
+  const list = createList({
+    parent: screen,
+    top: 3,
+    left: 0,
+    width: '100%',
+    height: '100%-6',
+    keys: true,
+    vi: true,
+    mouse: true,
+    style: {
+      selected: { bg: 'blue', fg: 'white' },
+      item: { fg: 'white' }
+    }
+  });
+
+  list.setItems([
+    '{yellow-fg}Option 1{/yellow-fg}',
+    '{green-fg}Option 2{/green-fg}',
+    '{cyan-fg}Option 3{/cyan-fg}'
+  ]);
+
+  // Create footer using createBox
+  const footer = createBox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 3,
+    content: '{yellow-fg}Arrows:{/yellow-fg} Navigate  {yellow-fg}Q:{/yellow-fg} Quit'
+  });
+
+  // Handle input
+  screen.key(['q', 'Q'], () => {
+    screen.destroy();
+  });
+
+  // Connect input
+  if (bbsSession) {
+    bbsSession.doorInputHandler = (data: string) => {
+      screen._handleData(data);
+    };
+  }
+
+  // Render
+  screen.render();
+
+  // Wait for exit
+  return new Promise<void>((resolve) => {
+    screen.on('destroy', () => {
+      if (bbsSession) {
+        bbsSession.doorInputHandler = null;
+      }
+      resolve();
+    });
+  });
+}
+```
+
+**Best Practices**:
+1. **Always use SDK helpers** - Never call `blessed.box()`, `blessed.list()`, etc. directly
+2. **Use dockBorders** - Add `dockBorders: true` to screen options for responsive layouts
+3. **Use percentages** - Width/height as `'100%'`, `'100%-4'`, `'70%'` instead of fixed pixels
+4. **Import helpers** - Always import from `@amiexpress/bbs-door-sdk/utils/blessed-helpers`
+5. **No emojis** - Use ASCII only (`[OK]`, `[ERROR]`, `*`, `X`, etc.) for BBS compatibility
+
+**Why This Matters**:
+- Prevents `{cyan-fg}` from rendering as literal text
+- Ensures consistent behavior across all doors
+- Centralizes widget creation logic in SDK
+- Makes doors portable and maintainable
 
 ---
 
@@ -1121,17 +1427,27 @@ export const rpcHandlers = { getHighscores, saveHighscore };
 
 ### SDK Audio Features
 
-The SDK AudioEngine provides:
+The SDK AudioEngine provides **65 procedural Tone.js sounds** across 7 categories:
 
-**Pre-defined Sounds:**
-- `laser` - Laser/shoot sound
-- `explosion` - Explosion noise
-- `jump` - Jump/bounce sound
-- `coin` - Pickup/collect sound
-- `hit` - Impact sound
-- `powerup` - Power-up fanfare
-- `menu-beep` - Menu navigation beep
-- `gameover` - Game over descending notes
+| Category | Count | Examples |
+|----------|-------|----------|
+| **UI** | 10 | click, hover, error, success, notification, confirm |
+| **Combat** | 11 | sword-swing, arrow, magic-cast, shield-block, critical-hit |
+| **Items** | 8 | pickup, drop, equip, potion-drink, chest-open, gold-collect |
+| **Movement** | 7 | footstep, jump, land, dash, teleport, swim |
+| **Environment** | 4 | door-open, door-close, switch, alarm |
+| **Cards/Casino** | 10 | card-deal, card-flip, chips-bet, chips-win, jackpot |
+| **Retro** | 15 | blip, boop, zap, 1up, death, powerup, level-up, countdown |
+
+**Full reference:** See [sdk/docs/SOUND_LIBRARY_REFERENCE.md](../../sdk/docs/SOUND_LIBRARY_REFERENCE.md)
+
+```typescript
+// Play any sound by name
+audio.playSound('click');
+audio.playSound('sword-swing');
+audio.playSound('card-deal');
+audio.playSound('level-up');
+```
 
 **Custom Sounds:**
 ```typescript

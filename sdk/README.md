@@ -8,7 +8,7 @@ Always aim for modern, desktop-like doors using neo-blessed windows, panels, and
 
 ## Quick Links
 
-- **[Game Development Guide](./docs/GAME_DEVELOPMENT_GUIDE.md)** - Complete reference for game development
+- **[TypeScript Door Guide](../Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md)** - Full TypeScript door patterns and pitfalls
 - **[TypeScript Examples](./examples/)** - Working TypeScript door examples
 - **[Templates](./templates/)** - Starter templates
 - **[68K SDK](./68k/README.md)** - Create authentic 68K Amiga binaries (C/Assembly)
@@ -225,7 +225,8 @@ sdk/
 
 ## Available Engines
 
-- **AudioEngine** - Web Audio sounds and music (Tone.js)
+- **AudioEngine** - Web Audio with **65 procedural sounds** (Tone.js) - See [Sound Library Reference](./docs/SOUND_LIBRARY_REFERENCE.md)
+- **TrackerEngine** - MOD/XM/S3M/IT tracker music player (libopenmpt) - 50+ formats with authentic playback
 - **CardEngine** - ASCII/ANSI playing cards, hands, and UNO (defaults to ASCII + ANSI)
 - **GraphicsEngine** - Sprites, particles, parallax scrolling
 - **InputEngine** - Key binding and input mapping
@@ -254,11 +255,6 @@ npm run preview       # Live preview environment
 
 ## Documentation
 
-See [docs/GAME_DEVELOPMENT_GUIDE.md](./docs/GAME_DEVELOPMENT_GUIDE.md) for the complete reference including:
-
-- Door types and when to use each
-- Full API reference for Door, ClientDoor, AudioEngine
-- ANSI color codes and escape sequences
-- Input handling patterns
-- Component usage examples
-- Troubleshooting guide
+See:
+- `sdk/docs/` for engine quick references and guides
+- `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` for door patterns, input handling, and troubleshooting
