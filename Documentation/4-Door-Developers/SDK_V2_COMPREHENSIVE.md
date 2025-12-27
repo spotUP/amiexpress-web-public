@@ -266,6 +266,67 @@ door.onStart(async (ctx) => {
 });
 ```
 
+### Tracker Engine (MOD/XM/S3M/IT)
+
+Play authentic tracker music using libopenmpt - supports 50+ formats with accurate playback matching original trackers (ProTracker, FastTracker 2, Scream Tracker, Impulse Tracker).
+
+```typescript
+import { TrackerEngine, InterpolationFilter, PlaybackState } from '@amiexpress/bbs-door-sdk';
+
+// Create tracker with options
+const tracker = new TrackerEngine({
+  repeatCount: -1,           // -1 = loop forever, 0 = play once
+  stereoSeparation: 100,     // 0-200 percent
+  interpolationFilter: InterpolationFilter.Sinc8,  // High quality
+  volume: 0.8
+});
+
+// Wait for initialization
+tracker.on('initialized', async () => {
+  // Load from URL
+  await tracker.load('/music/song.mod');
+
+  // Or play from ArrayBuffer
+  const buffer = await fetch('/music/cool.xm').then(r => r.arrayBuffer());
+  tracker.play(buffer);
+});
+
+// Track playback position
+tracker.on('progress', (pos) => {
+  console.log(`Order ${pos.order}, Pattern ${pos.pattern}, Row ${pos.row}`);
+});
+
+// Get module metadata
+tracker.on('metadata', (meta) => {
+  console.log(`Title: ${meta.title}`);
+  console.log(`Channels: ${meta.channels}`);
+  console.log(`Duration: ${meta.duration}s`);
+});
+
+// Handle song end
+tracker.on('ended', () => {
+  console.log('Song finished');
+});
+
+// Playback control
+tracker.pause();
+tracker.resume();
+tracker.stop();
+tracker.seek(30);              // Seek to 30 seconds
+tracker.seekToPosition(5, 0);  // Jump to order 5, row 0
+tracker.setVolume(0.5);
+tracker.setTempo(1.2);         // 20% faster
+tracker.setPitch(2);           // Up 2 semitones
+tracker.setRepeat(0);          // Play once
+
+// Check supported formats
+TrackerEngine.isFormatSupported('mod');  // true
+TrackerEngine.isFormatSupported('mp3');  // false
+TrackerEngine.getSupportedFormats();     // ['mod', 'xm', 's3m', 'it', ...]
+```
+
+**Supported Formats:** MOD, XM, S3M, IT, MPTM, STM, 669, MTM, MED, FAR, MDL, AMS, DSM, AMF, OKT, DMF, PTM, PSM, MT2, DBM, DIGI, IMF, J2B, GDM, UMX, PLM, MO3, and more.
+
 ### Graphics Engine (Braille/ASCII)
 
 ```typescript

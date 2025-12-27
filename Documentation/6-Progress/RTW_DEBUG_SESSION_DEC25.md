@@ -203,8 +203,219 @@ This debugging session has used 106K/200K tokens. If we continue looping, we sho
 2. Focus on disassembly to find root cause instead of trial-and-error
 3. Use MCP tools more effectively to search express.e for XIM specifics
 
+### Attempt 8: Kickstart ROM Integration (FAILED - CONCLUSIVE)
+**Hypothesis**: RTW needs real Kickstart 3.1 ROM instead of AROS ROM
+**Files Changed**:
+- Integrated KickstartRom into AmigaDoorSession startup
+- Copied Kickstart 3.1 ROM to `web/backend/data/amiga-roms/`
+- LibraryLoader now loads ROM-resident libraries from Kickstart ROM
+
+**Result**: FAILED - RTW shows identical error with Kickstart ROM
+**Logs**:
+- `[ROM] Kickstart 3.1 loaded successfully` ✅
+- `[LibraryLoader] ✅ dos.library is ROM-resident (using Kickstart ROM)` ✅
+- RTW still shows error banner, no FindPort calls
+
+**VAMOS Test (Ground Truth)**:
+```bash
+$ vamos doors/RTW/RTW
+ This is a XIM-DOOR for AmiExpress 3.x
+```
+- RTW shows SAME error in vamos (proper Amiga OS emulator)
+- vamos trace: RTW only opens dos.library, then exits
+- NO FindPort/FindSemaphore calls in vamos either
+
+**Conclusive Finding**:
+RTW's check is CORRECT - it detects it's NOT running under AmiExpress BBS. The error message is accurate. RTW reads memory at `A5-0x58` (0x10051C) expecting AmiExpress-provided structure pointer. When zero, displays error.
+
+**Root Cause**:
+RTW is NOT a standalone door. It requires AmiExpress to pre-populate memory structures/semaphores/environment before launching. This is beyond port creation - requires full AmiExpress environment initialization that happens BEFORE door execution.
+
 ---
 
-*Last Updated: 2024-12-25 14:45*
-*Status: Attempt 7 implemented - fixed alternate port naming (AEDoorPort for XIM doors)*
-*Critical Discovery: Door exits before XIM init due to missing AEDoorPort{N} port*
+## CONCLUSION - STOP INVESTIGATION LOOP
+
+**Status**: RTW requires AmiExpress-specific initialization not yet implemented
+**Evidence**: Identical behavior in vamos proves RTW check is working correctly
+**Solution Path**: Implement AmiExpress XIM door launch sequence (not just port creation)
+
+**Required Research** (express.e source):
+1. How does AmiExpress initialize XIM door environment?
+2. What structures/pointers does it set up before calling the door?
+3. What memory locations must be populated?
+4. Is there a global AmiExpress version/environment structure?
+
+**DO NOT**:
+- Try more port naming variations (ports are correct)
+- Try different ROM configurations (ROM is correct)
+- Investigate RTW binary (RTW is correct)
+- Adjust BBS polling logic (logic is correct)
+
+**DO**:
+- Research express.e XIM door launch code
+- Implement missing AmiExpress environment setup
+- Test with simpler XIM doors first (if available)
+
+---
+
+## December 26, 2024 - Session Continued
+
+### Progress Since Dec 25
+RTW now PASSES the initialization check and enters XIM protocol! The previous session's work on environment variables and Kickstart ROM was necessary but not sufficient. Additional fixes were made to populate missing structures.
+
+### Current Status: RTW Stuck After JH_REGISTER
+
+**What Works Now**:
+1. RTW loads and starts executing
+2. RTW sends JH_REGISTER (command=1) successfully
+3. BBS receives and processes JH_REGISTER
+4. BBS sends reply with lineLen=23, nodeId=1
+
+**What's Broken**:
+RTW is stuck in an infinite loop polling `AEDoorPort1` for messages, but our reply was sent to `AEDoorRP.010` (the door's reply port).
+
+### Root Cause Found: XIM Reply Port Mismatch
+
+**The Problem**:
+```
+Door sends:     JH_REGISTER to AEDoorPort1 (0xa0200)
+BBS receives:   GetMsg on AEDoorPort1 -> gets JH_REGISTER
+BBS replies:    ReplyMsg sends to mn_ReplyPort (0x100120 = AEDoorRP.010)
+Door waits:     GetMsg on AEDoorPort1 (0xa0200) <- WRONG PORT!
+Door never receives reply because it's on a different port
+```
+
+**Evidence from logs**:
+```
+[ExecLibrary][ReplyMsg] msg=0x100020 replyPort=0x100120
+[ExecLibrary][PutMsg] port=0x100120 name=AEDoorRP.010 msg=0x100020
+[ExecLibrary] >>> GetMsg(port=0xa0200)  <- Door polling wrong port!
+[ExecLibrary]   No messages in port
+[ExecLibrary] >>> GetMsg(port=0xa0200)  <- Infinite loop
+```
+
+**Comparison with Real Amiga RTW**:
+From `/Documentation/4-Door-Developers/rtw.log`:
+- Real RTW sends JH_REGISTER (cmd=1) with string "AEDoorRP.000"
+- Immediately continues to cmd=102, cmd=531, then output (cmd=4)
+- Does NOT wait for explicit reply - communication is on same port
+
+### Fix Applied: Send Reply to AEDoorPort
+
+**Files Changed**:
+
+1. **XIMProtocol.ts** (lines 129-131):
+   ```typescript
+   // Added to XIMState initialization:
+   ximPortAddr: doorPort,
+   aePortAddr: doorPort,
+   doorPortAddr: doorPort,
+   ```
+
+2. **system-commands.ts** (lines 92-107):
+   ```typescript
+   // Changed from:
+   this.execLibrary.replyMsg(msg.msgAddr);
+
+   // Changed to:
+   if (this.ximPortAddr !== 0) {
+     const NT_REPLYMSG = 6;
+     this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+     this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+   } else {
+     this.execLibrary.replyMsg(msg.msgAddr);
+   }
+   ```
+
+**Rationale**:
+XIM doors use a BIDIRECTIONAL model on AEDoorPort:
+- Door SENDS messages to AEDoorPort
+- Door RECEIVES replies from same port (AEDoorPort)
+- mn_ReplyPort is for something else (possibly async notifications)
+- Standard ReplyMsg to mn_ReplyPort doesn't work for XIM
+
+### DO NOT Try Again
+
+1. ❌ Using ReplyMsg for XIM door replies (goes to wrong port)
+2. ❌ Sending to AEDoorRP.XXX (door doesn't poll it for JH_REGISTER reply)
+3. ❌ Assuming standard Amiga message model (XIM is bidirectional on one port)
+
+### Key Insight: XIM Protocol is Different
+
+Standard Amiga message passing:
+- Sender sets mn_ReplyPort to own port
+- Receiver calls ReplyMsg which sends to mn_ReplyPort
+- Sender calls GetMsg on own port to get reply
+
+XIM door message passing:
+- Door sends to AEDoorPort
+- Door polls SAME port (AEDoorPort) for replies
+- BBS must put reply back on AEDoorPort, not mn_ReplyPort
+- mn_ReplyPort may be used for async events only
+
+### Next Steps
+
+1. Test if RTW progresses after this fix
+2. If yes, may need same fix for other XIM commands
+3. If no, check if door expects specific data in reply message
+
+### Other Session Fixes (Dec 26)
+
+- Fixed duplicate `amigaNodeId` variable in LibraryManager.ts
+- Fixed duplicate `portAddr` variable (renamed to `mainPortAddr`, `aedoorPortAddr`)
+- Fixed non-existent `findPortByName` method call (changed to `ensurePublicPort`)
+- Optimized CLAUDE.md from 41.3k to 9.7k characters (76% reduction)
+
+---
+
+## RTW WORKING - December 26, 2024 (cont.)
+
+**MAJOR BREAKTHROUGH**: RTW now outputs node list data correctly!
+
+### Fix: Double Line Breaks
+
+**Problem**: RTW output had double line breaks between each row:
+```
+| 00 |                  |                 | cARRIER lOST :- |              |
+
+| 01 | yOUR lINE         |                 | iN A kEWL dOOR! | rTW v2.01    |
+```
+
+**Root Cause**:
+- Door sends JH_SM (cmd=4) with `data=1` AND a string containing `\n`
+- We were adding another `\n` because of `data=1`
+- Result: `\n` (from string) + `\n` (from data=1) = double line breaks
+
+**Evidence** (from logs):
+```
+[XIMProtocol] <<< XIM Command: 4 (JH_SM) data=1 string="
+[XIMIOHandler] JH_SM: "
+```
+The log breaks after the opening quote because the string itself contains `\n`.
+
+Compared with real Amiga RTW log (`/Documentation/4-Door-Developers/rtw.log`):
+```
+msg request: 4
+data: 1
+string:
+```
+Real Amiga log shows empty string with data=1 (newline is just log format).
+
+**Fix Applied** (`xim/io.ts:937-942`):
+```typescript
+// CRITICAL: Only add newline if text doesn't already end with one
+// Some doors send data=1 with a string that already contains a trailing \n
+// Adding another would cause double line breaks (RTW does this)
+if (addNewline && !normalized.endsWith('\n')) {
+  normalized += '\n';
+}
+```
+
+**Result**: Single line breaks, correct output formatting.
+
+---
+
+*Last Updated: 2024-12-26 (late)*
+*Status: RTW WORKING - output displays correctly*
+*Key Finding: XIM doors use bidirectional communication on AEDoorPort*
+*Key Finding: Some doors send embedded \n in strings AND data=1, must not double-add*

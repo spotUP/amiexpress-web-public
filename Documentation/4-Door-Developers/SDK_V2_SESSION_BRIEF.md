@@ -85,7 +85,6 @@ Doors/<door>/
 
 ## Known gaps/mismatches
 
-- `sdk/docs/GAME_DEVELOPMENT_GUIDE.md` is referenced but missing.
 - Some docs refer to `sdk/src/core` but actual path is `sdk/core`.
 - Import path examples vary between `@amiexpress/sdk` and `@amiexpress/bbs-door-sdk`.
 
