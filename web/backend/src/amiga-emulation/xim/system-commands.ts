@@ -89,8 +89,22 @@ export class XIMSystemCommandsHandler {
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // Reply without mutating Data/Node/String fields; express.e reuses the door's message buffer
-    this.execLibrary.replyMsg(msg.msgAddr);
+    // CRITICAL FIX: XIM doors poll AEDoorPort for replies, not their mn_ReplyPort.
+    // RTW and other doors call GetMsg on AEDoorPort1 to receive both incoming
+    // commands from the BBS AND replies to their own messages.
+    // Instead of ReplyMsg (which sends to mn_ReplyPort), put the reply back
+    // on the XIM port (AEDoorPort) where the door is polling.
+    if (this.ximPortAddr !== 0) {
+      // Set message type to NT_REPLYMSG (6) so door knows it's a reply
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+      console.log(`[XIMSystem] Reply sent to AEDoorPort at 0x${this.ximPortAddr.toString(16)}`);
+    } else {
+      // Fallback to standard ReplyMsg if we don't have the XIM port
+      this.execLibrary.replyMsg(msg.msgAddr);
+      console.log(`[XIMSystem] Reply sent via ReplyMsg (fallback)`);
+    }
 
     console.log(`[XIMSystem] Registration acknowledged`);
 

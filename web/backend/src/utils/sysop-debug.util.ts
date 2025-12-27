@@ -9,6 +9,9 @@
  * - Magenta (35): Door-specific issues
  */
 
+import { config as appConfig } from '../config';
+import { loadBBSConfig } from '../services/bbs-config-file.service';
+
 export enum DebugSeverity {
   CRITICAL = 'critical',  // Red - file errors, crashes
   WARNING = 'warning',    // Yellow - non-fatal issues
@@ -34,11 +37,38 @@ export class SysopDebugUtil {
         return '\x1b[37m'; // White
     }
   }
+
+  private static readonly SYSOP_DEBUG_CACHE_MS = 5000;
+  private static sysopDebugCache: { enabled: boolean; loadedAt: number; dataDir: string } | null = null;
+
+  private static isSysopDebugEnabled(session: any): boolean {
+    const sessionFlag =
+      session?.sysop_debug_enabled ??
+      session?.systemConfig?.sysop_debug_enabled ??
+      session?.bbsConfig?.sysop_debug_enabled ??
+      session?.config?.sysop_debug_enabled;
+
+    if (typeof sessionFlag === 'boolean') {
+      return sessionFlag;
+    }
+
+    const dataDir = session?.dataDir || session?.bbsRoot || appConfig.get('dataDir') || process.cwd();
+    const now = Date.now();
+    const cache = this.sysopDebugCache;
+    if (cache && cache.dataDir === dataDir && now - cache.loadedAt < this.SYSOP_DEBUG_CACHE_MS) {
+      return cache.enabled;
+    }
+
+    const diskConfig = loadBBSConfig(dataDir);
+    const enabled = Boolean(diskConfig.sysop_debug_enabled);
+    this.sysopDebugCache = { enabled, loadedAt: now, dataDir };
+    return enabled;
+  }
   /**
    * Check if user is a sysop (security level 100+)
    */
   static isSysop(session: any): boolean {
-    return session?.user?.secLevel >= 100;
+    return session?.user?.secLevel >= 100 && this.isSysopDebugEnabled(session);
   }
 
   /**

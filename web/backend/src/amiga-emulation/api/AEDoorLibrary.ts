@@ -297,6 +297,12 @@ export class AEDoorLibrary {
       hour12: false
     }); // HH:MM:SS
 
+    // CRITICAL: Write node ID to BBSInfo+0xf (RTW and other doors read this!)
+    // RTW reads node number from offset 0xf to format "AEDoorPort%d" port name
+    const nodeId = this.resolveNodeId();
+    this.emulator.writeMemory(bbsInfoAddr + 0xf, nodeId); // Node ID as byte at +0xf
+    console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
+
     // Write to BBSInfo structure at known offsets
     // Based on AEDoor.library disassembly and XIM system-commands.ts
     this.writeCString(bbsInfoAddr + 0x14, username, 198);  // User name at +0x14

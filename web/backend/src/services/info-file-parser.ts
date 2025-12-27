@@ -70,7 +70,24 @@ export class InfoFileParser {
           continue;
         }
 
+        // Skip commented tooltypes
+        if (entry.startsWith('!')) {
+          continue;
+        }
+
         const eqIdx = entry.indexOf('=');
+        if (eqIdx === -1) {
+          const keyOnly = entry.trim();
+          if (!keyOnly) continue;
+
+          const normalizedKey = keyOnly.toUpperCase();
+          if (!/^[A-Z0-9_]+$/.test(normalizedKey)) continue;
+          if (toolTypes.has(normalizedKey)) continue;
+
+          toolTypes.set(normalizedKey, '');
+          continue;
+        }
+
         if (eqIdx < 1) continue;
 
         const key = entry.slice(0, eqIdx).trim();
@@ -78,7 +95,7 @@ export class InfoFileParser {
 
         // Remove trailing control chars
         value = value.replace(/[\x00-\x1F]+$/, '');
-        if (!key || value.length === 0) continue;
+        if (!key) continue;
 
         // Case-insensitive keys; preserve first occurrence like FindToolType
         const normalizedKey = key.toUpperCase();

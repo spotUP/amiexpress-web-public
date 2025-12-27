@@ -435,6 +435,11 @@ export class Database {
         console.log('✓ Added reg_key column');
       }
 
+      if (!systemConfigColumns.includes('sysop_debug_enabled')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN sysop_debug_enabled INTEGER DEFAULT 0');
+        console.log('✓ Added sysop_debug_enabled column');
+      }
+
       // New user defaults (security/time/flags)
       if (!systemConfigColumns.includes('new_user_sec_level')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_sec_level INTEGER DEFAULT 10 CHECK (new_user_sec_level >= 1 AND new_user_sec_level <= 255)');
@@ -1099,6 +1104,7 @@ export class Database {
           debug_mode INTEGER DEFAULT 0,
           log_level TEXT DEFAULT 'info',
           log_retention_days INTEGER DEFAULT 90,
+          sysop_debug_enabled INTEGER DEFAULT 0,
 
           -- Push Notifications (VAPID)
           vapid_public_key TEXT DEFAULT '',

@@ -376,10 +376,10 @@ export class LibraryManager {
     const amigaNodeId = nodeId === 0 ? 1 : nodeId;
     // CRITICAL: AEServer ports use DOT notation: "AEServer.1", "AEServer.2", etc.
     const portName = basePortName === "AEServer" ? `${basePortName}.${amigaNodeId}` : `${basePortName}${amigaNodeId}`;
-    const portAddr = this.execLibrary.createPublicPort(portName);
-    this.execLibrary.setDoorPortAddress(portAddr);
+    const mainPortAddr = this.execLibrary.createPublicPort(portName);
+    this.execLibrary.setDoorPortAddress(mainPortAddr);
     console.log(
-      `[LibraryManager] Created ${portName} at 0x${portAddr.toString(16)}`
+      `[LibraryManager] Created ${portName} at 0x${mainPortAddr.toString(16)}`
     );
 
     const simplePortName = basePortName === "AEServer" ? `${basePortName}.0` : basePortName;
@@ -404,15 +404,16 @@ export class LibraryManager {
     // Some doors are misdetected, so create alternate port names for compatibility
     // XIM doors (like RTW) check for AEDoorPort{N} first, then fall back to AEServer.{N}
     // SIM doors check for DoorControl{N} first, then fall back to AEDoorPort{N}
+    // CRITICAL: Do NOT pre-create these ports - XIM doors expect them to NOT exist at startup
+    // RTW calls FindPort("AEDoorPort1") and exits with code 30 if found (assumes another instance running)
+    // Doors create their own communication ports during initialization
     const altBasePortName = isSIMType ? "AEServer" : "AEDoorPort";
-    console.log(`[LibraryManager] Creating alternate port names (${altBasePortName}) for compatibility...`);
+    console.log(`[LibraryManager] Skipping alternate port pre-creation (${altBasePortName}) - doors create their own`);
 
-    this.execLibrary.createPublicPort(`${altBasePortName}${amigaNodeId}`);
-    this.execLibrary.createPublicPort(altBasePortName);
-    if (nodeId !== amigaNodeId) {
-      this.execLibrary.createPublicPort(`${altBasePortName}${nodeId}`);
-    }
-    console.log(`[LibraryManager] Alternate ports created - doors can FindPort with either naming convention`);
+    // REMOVED: this.execLibrary.createPublicPort(`${altBasePortName}${amigaNodeId}`);
+    // REMOVED: this.execLibrary.createPublicPort(altBasePortName);
+    // REMOVED: if (nodeId !== amigaNodeId) { this.execLibrary.createPublicPort(`${altBasePortName}${nodeId}`); }
+    console.log(`[LibraryManager] XIM doors will create their own ports when they initialize`);
 
     // Create AEServer ports for multinode doors (used for node status detection)
     // Doors call FindPort("AEServer.%d") to detect active nodes on the BBS
@@ -440,8 +441,8 @@ export class LibraryManager {
     }
     console.log(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
 
-    this.doorPortAddress = portAddr;
-    this.aePortAddress = portAddr;
+    this.doorPortAddress = mainPortAddr;
+    this.aePortAddress = mainPortAddr;
 
     // CRITICAL: Do NOT create DoorReplyPort - it doesn't exist in real AmiExpress!
     // Native AEDoor.library creates its own internal reply ports.
@@ -485,7 +486,7 @@ export class LibraryManager {
         this.emulator,
         this.execLibrary,
         this.socket,
-        portAddr,
+        mainPortAddr,
         this.config.bbsSession,
         this.iconLibrary  // Pass iconLibrary for command .info file loading
       );
@@ -702,6 +703,16 @@ export class LibraryManager {
     } else {
       console.warn("[LibraryManager] Failed to pre-open AEDoor.library");
     }
+
+    // CRITICAL: Create AEDoorPort BEFORE door starts (XIM protocol requirement)
+    // Real Amiga BBS creates these ports at startup, not dynamically
+    // XIM doors' CreateComm searches for AEDoorPort{nodeId} immediately
+    // Note: amigaNodeId already declared above from nodeId (line 376)
+    const aedoorPortName = `AEDoorPort${amigaNodeId}`;
+    const aedoorPortAddr = this.execLibrary.ensurePublicPort(aedoorPortName);
+    console.log(
+      `[LibraryManager] Ensured ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
+    );
 
     // Set up BBS API dispatcher for SIM doors (0x790 calling convention)
     if (isSIMType) {

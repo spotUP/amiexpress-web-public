@@ -289,9 +289,13 @@ export async function processBatchFile(
 
       // DISK-BASED: Write updated upload stats to user.data/keys/misc files
       try {
-        const userId = parseInt(session.user!.id, 10);
-        userFileManager.updateUserDataFile(session.user!, userId);
-        console.log(`[Upload] Updated user ${session.user!.username} disk files with upload stats (uploads=${session.user!.uploads}, bytes=${session.user!.bytesUpload})`);
+        // Extract slot number from user ID (format: "user-3" -> 3)
+        const slotNumber = parseInt(session.user!.id.split('-')[1], 10);
+        if (isNaN(slotNumber)) {
+          throw new Error(`Invalid user ID format: ${session.user!.id}`);
+        }
+        userFileManager.updateUserDataFile(session.user!, slotNumber);
+        console.log(`[Upload] Updated user ${session.user!.username} disk files with upload stats (uploads=${session.user!.uploads}, bytes=${session.user!.bytesUpload}, slot=${slotNumber})`);
       } catch (diskErr) {
         console.error('[Upload] Error writing user disk files:', diskErr);
         // Continue anyway - database has the stats, sync can happen later
@@ -861,6 +865,24 @@ export function registerFileHandlers(socket: Socket) {
         'UPDATE user_stats SET bytes_downloaded = bytes_downloaded + $1, files_downloaded = files_downloaded + 1 WHERE user_id = $2',
         [fileEntry.size, session.user.id]
       );
+
+      // Update session.user with new download values
+      session.user.downloads = (session.user.downloads || 0) + 1;
+      session.user.bytesDownload = (session.user.bytesDownload || 0) + fileEntry.size;
+
+      // DISK-BASED: Write updated download stats to user.data/keys/misc files
+      try {
+        // Extract slot number from user ID (format: "user-3" -> 3)
+        const slotNumber = parseInt(session.user.id.split('-')[1], 10);
+        if (isNaN(slotNumber)) {
+          throw new Error(`Invalid user ID format: ${session.user.id}`);
+        }
+        userFileManager.updateUserDataFile(session.user, slotNumber);
+        console.log(`[Download] Updated user ${session.user.username} disk files with download stats (downloads=${session.user.downloads}, bytes=${session.user.bytesDownload}, slot=${slotNumber})`);
+      } catch (diskErr) {
+        console.error('[Download] Error writing user disk files:', diskErr);
+        // Continue anyway - database has the stats, sync can happen later
+      }
 
       // Log file download (express.e:9493 callersLog)
       await callersLog(session.user.id, session.user.username, 'Downloaded file', fileEntry.filename);

@@ -30,6 +30,7 @@ import {
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
 import { nodeManager, arexxEngine } from '../services/node-manager.service';
 import { nodeFileManager } from '../services/NodeFileManager';
+import { userFileManager } from '../services/UserFileManager';
 import { runLogoffBatches } from '../services/batch-scheduler';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
@@ -848,6 +849,32 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
         DebugSeverity.WARNING
       );
       // Don't fail logout on history save error
+    }
+
+    // DISK-BASED: Write updated user stats to user.data/keys/misc files (express.e:8207)
+    // This is CRITICAL - must save user data before deleting node files
+    try {
+      const slotNumber = parseInt(session.user.id.split('-')[1], 10);
+      if (isNaN(slotNumber)) {
+        throw new Error(`Invalid user ID format: ${session.user.id}`);
+      }
+      userFileManager.updateUserDataFile(session.user, slotNumber);
+      console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${slotNumber})`);
+    } catch (diskErr) {
+      console.error('[LOGOFF] Error writing user disk files:', diskErr);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to write user data to disk on logoff`,
+        {
+          error: diskErr instanceof Error ? diskErr.message : String(diskErr),
+          userId: session.user.id,
+          username: session.user.username
+        },
+        DebugSeverity.ERROR
+      );
+      // Continue anyway - database has the stats, can sync later
     }
 
     // CRITICAL: Delete node{n}.user files on logoff

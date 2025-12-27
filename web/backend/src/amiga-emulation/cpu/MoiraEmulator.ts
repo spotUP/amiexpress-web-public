@@ -94,6 +94,16 @@ export interface MoiraCPU {
   getTrapCount?(): number;
   resetStatistics?(): void;
   dumpStatistics?(): void;
+  // Overclocking (0=disabled, 1=native, 2=2x, 10=10x, etc.)
+  setOverclocking?(factor: number): void;
+  getOverclocking?(): number;
+  // Enhanced debug flags
+  setDebugAddressErrors?(enabled: boolean): void;
+  setDebugExceptions?(enabled: boolean): void;
+  setDebugWatchpoints?(enabled: boolean): void;
+  setDebugMemoryAccess?(enabled: boolean): void;
+  getDebugAddressErrors?(): boolean;
+  getDebugExceptions?(): boolean;
 
   // ========== MOIRA NATIVE DEBUGGER ==========
   // Native Breakpoints (uses Moira's built-in debugger)
@@ -702,6 +712,101 @@ export class MoiraEmulator {
     this.refillPrefetch();
 
     return true;
+  }
+
+  /**
+   * Set CPU overclocking factor
+   * 0 = disabled (default)
+   * 1 = native speed with overclocking logic
+   * 2 = 2x speed (14.19 MHz)
+   * 10 = 10x speed
+   * @param factor - Overclocking multiplier
+   */
+  setOverclocking(factor: number): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setOverclocking) {
+      this.cpu.setOverclocking(factor);
+      console.log(`[MoiraEmulator] Overclocking set to ${factor}x`);
+    } else {
+      console.warn(
+        "[MoiraEmulator] setOverclocking not available (rebuild WASM)"
+      );
+    }
+  }
+
+  /**
+   * Get current overclocking factor
+   */
+  getOverclocking(): number {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.getOverclocking) {
+      return this.cpu.getOverclocking();
+    }
+    return 0; // Default: no overclocking
+  }
+
+  /**
+   * Enable detailed memory access logging
+   */
+  setDebugMemoryAccess(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setDebugMemoryAccess) {
+      this.cpu.setDebugMemoryAccess(enabled);
+      console.log(
+        `[MoiraEmulator] Debug memory access logging: ${enabled ? "ON" : "OFF"}`
+      );
+    }
+  }
+
+  /**
+   * Enable exception vector logging
+   */
+  setDebugExceptions(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setDebugExceptions) {
+      this.cpu.setDebugExceptions(enabled);
+      console.log(
+        `[MoiraEmulator] Debug exception logging: ${enabled ? "ON" : "OFF"}`
+      );
+    }
+  }
+
+  /**
+   * Enable address error logging
+   */
+  setDebugAddressErrors(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setDebugAddressErrors) {
+      this.cpu.setDebugAddressErrors(enabled);
+      console.log(
+        `[MoiraEmulator] Debug address error logging: ${enabled ? "ON" : "OFF"}`
+      );
+    }
+  }
+
+  /**
+   * Enable watchpoint hit logging
+   */
+  setDebugWatchpoints(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setDebugWatchpoints) {
+      this.cpu.setDebugWatchpoints(enabled);
+      console.log(
+        `[MoiraEmulator] Debug watchpoint logging: ${enabled ? "ON" : "OFF"}`
+      );
+    }
   }
 
   cleanup(): void {

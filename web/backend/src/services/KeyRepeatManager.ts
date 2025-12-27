@@ -9,13 +9,21 @@
  */
 
 export interface KeyRepeatConfig {
-  /** Initial delay before repeat starts (ms) - default 0 (instant) */
+  /** Initial delay before repeat starts (ms) - default 250ms (allows single char typing) */
   initialDelay: number;
   /** Repeat interval (ms) - default 50ms (~20 keys/sec) */
   repeatInterval: number;
 }
 
 export type KeyInputCallback = (char: string) => void;
+
+// Keys that should NOT auto-repeat (games track state for these)
+const NO_REPEAT_KEYS = new Set([
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'w', 'W', 'a', 'A', 's', 'S', 'd', 'D',
+  ' ', 'Control', 'Shift', 'Alt', 'Meta',
+  'Escape', 'Enter', 'Tab'
+]);
 
 export class KeyRepeatManager {
   private pressedKeys: Map<string, NodeJS.Timeout> = new Map();
@@ -27,7 +35,7 @@ export class KeyRepeatManager {
   constructor(inputCallback: KeyInputCallback, config?: Partial<KeyRepeatConfig>) {
     this.inputCallback = inputCallback;
     this.config = {
-      initialDelay: config?.initialDelay ?? 0,  // No initial delay (instant repeat)
+      initialDelay: config?.initialDelay ?? 250,  // 250ms delay allows single char typing
       repeatInterval: config?.repeatInterval ?? 50,  // 20 keys/sec
     };
   }
@@ -63,6 +71,11 @@ export class KeyRepeatManager {
 
     // Send initial keypress immediately
     this.inputCallback(char);
+
+    // Don't auto-repeat movement/action keys - games should poll key state instead
+    if (NO_REPEAT_KEYS.has(key)) {
+      return;
+    }
 
     // Start repeat timer after initial delay
     if (this.config.initialDelay > 0) {

@@ -13,6 +13,7 @@ import * as path from "path";
 import { notifySysop } from "../utils/sysop-alert.util.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { DoorLogger } from "./DoorLogger.js";
+import { SharedBBSData } from "./structures/GlobalStructures.js";
 
 export class DoorLoader {
   private emulator: MoiraEmulator;
@@ -22,6 +23,7 @@ export class DoorLoader {
   private stackSizeBytes: number = 0;
   private readonly exitTrapAddress = 0x1ff000;
   private logger: DoorLogger | null = null;
+  private sharedBBSData: SharedBBSData | null = null;
 
   constructor(
     emulator: MoiraEmulator,
@@ -91,6 +93,12 @@ export class DoorLoader {
       )}`
     );
     this.logger?.info(`Entry point: 0x${hunkFile.entryPoint.toString(16)}`);
+
+    // Initialize SharedBBSData for CommandsStructure access
+    // RTW and other XIM doors expect A5-88 to point to CommandsStructure
+    this.sharedBBSData = new SharedBBSData(this.emulator, 0xF00300);
+    this.sharedBBSData.writeBBSData(this.config.bbsSession || {});
+    console.log(`[DoorLoader] SharedBBSData initialized at 0x${this.sharedBBSData.getCmdsAddr().toString(16)}`);
 
     // Set up CPU for door execution
     this.setupCpuRegisters(hunkFile);
@@ -383,11 +391,38 @@ export class DoorLoader {
     // SAS/C and similar compilers use 16-bit signed A4-relative addressing
     // By setting A4 = dataSegment + 0x7FFE, we can address -32768 to +32767 range
     const dataSegmentForA4 = hunkFile.segments.find((seg: { type: string }) => seg.type.toUpperCase() === 'DATA');
+    let a4Value: number;
+
     if (!dataSegmentForA4) {
-      console.warn(`[DoorLoader] WARNING: No DATA segment found! A4 will be 0. Segment types: ${hunkFile.segments.map((s: any) => s.type).join(', ')}`);
+      // Single-hunk executable (CODE only) - allocate synthetic BSS area
+      // This is common for SAS/C and DICE-compiled programs where DATA/BSS is embedded in CODE
+      console.warn(`[DoorLoader] No DATA segment found - allocating synthetic BSS for single-hunk executable`);
+      console.warn(`[DoorLoader] Segment types: ${hunkFile.segments.map((s: any) => s.type).join(', ')}`);
+
+      if (codeSegment) {
+        // Allocate BSS after CODE segment
+        // SAS/C programs typically need 64KB-128KB for BSS (globals, static data, heap)
+        const bssSize = 0x20000; // 128KB - generous allocation for safety
+        const bssBase = codeSegment.address + codeSegment.size;
+
+        // Clear BSS to zero (critical for uninitialized globals)
+        console.log(`[DoorLoader] Allocating BSS: base=0x${bssBase.toString(16)}, size=0x${bssSize.toString(16)} (${bssSize} bytes)`);
+        for (let i = 0; i < bssSize; i++) {
+          this.emulator.writeMemory(bssBase + i, 0);
+        }
+
+        // Set A4 to BSS base + 0x7FFE (SAS/C small data model)
+        a4Value = bssBase + 0x7FFE;
+        console.log(`[DoorLoader] Synthetic BSS: base=0x${bssBase.toString(16)}, A4=0x${a4Value.toString(16)} (base+0x7FFE)`);
+      } else {
+        console.error(`[DoorLoader] ERROR: No CODE segment found! Cannot allocate BSS.`);
+        a4Value = 0;
+      }
+    } else {
+      a4Value = dataSegmentForA4.address + 0x7FFE;
     }
-    const a4Value = dataSegmentForA4 ? dataSegmentForA4.address + 0x7FFE : 0;
-    this.emulator.setRegister(12, a4Value); // A4 = DATA segment + 0x7FFE (SAS/C small data model)
+
+    this.emulator.setRegister(12, a4Value); // A4 = DATA/BSS segment + 0x7FFE (SAS/C small data model)
 
     this.emulator.setRegister(13, stackTop); // A5 = stack top (vamos)
     const a4Now = this.emulator.getRegister(12);
@@ -431,7 +466,12 @@ export class DoorLoader {
     writeFrame32(-48, intuitionBaseAddr);
     writeFrame32(-52, gfxBaseAddr);
     writeFrame32(-64, this.stackBaseAddr); // stack bottom
-    writeFrame32(-88, frameBase); // saved a5
+    // A5-88: Pointer to CommandsStructure (cmds) - XIM doors like RTW read BBS config from here
+    // NOT the saved A5 value - that was incorrect and caused RTW to exit with code 30
+    const cmdsAddr = this.sharedBBSData?.getCmdsAddr() || 0xF00300;
+    console.log(`[DoorLoader] DEBUG A5-88: sharedBBSData=${!!this.sharedBBSData}, cmdsAddr=0x${cmdsAddr.toString(16)}, frameBase=0x${frameBase.toString(16)}, A5=0x${a5Now.toString(16)}`);
+    writeFrame32(-88, cmdsAddr);
+    console.log(`[DoorLoader] DEBUG A5-88: Wrote 0x${cmdsAddr.toString(16)} to address 0x${(frameBase - 88).toString(16)}, verify: 0x${this.emulator.readMemory32(frameBase - 88).toString(16)}`);
     writeFrame32(-92, 1); // stdin (BPTR)
     writeFrame32(-120, taskAddr); // thistask
     writeFrame32(-128, 0); // opened files list (empty)

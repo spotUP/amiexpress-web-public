@@ -125,6 +125,10 @@ export class XIMProtocol {
       chainCommand: undefined,
       logonType: this.bbsSession?.logonType,
       _debugId: stateDebugId,  // Debug: track state object identity
+      // CRITICAL: Pass XIM port address so handlers can send replies back
+      ximPortAddr: doorPort,
+      aePortAddr: doorPort,
+      doorPortAddr: doorPort,
     } as XIMState;
 
     // Initialize specialized handlers

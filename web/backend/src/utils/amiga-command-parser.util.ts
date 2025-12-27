@@ -70,6 +70,7 @@ export interface CommandDefinition {
   mciText?: string;         // MCI text for MCI type doors (express.e:4295)
   args?: string;            // Command-line arguments to pass to door (ARGS tooltype)
   toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
+  overclockFactor?: number; // CPU overclocking multiplier (OVERCLOCK tooltype: 0=auto, 1-50=specific, -1=disable)
 }
 
 /**
@@ -304,6 +305,19 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   const stack = tooltypes.get('STACK');
   if (stack) {
     cmd.stack = parseInt(stack, 10);
+  }
+
+  // Parse OVERCLOCK tooltype (CPU overclocking factor)
+  // 0 = auto (10x for batch, 0x for interactive)
+  // 1-50 = specific multiplier
+  // -1 = force disable (even for batch doors)
+  const overclock = tooltypes.get('OVERCLOCK');
+  if (overclock) {
+    const factor = parseInt(overclock, 10);
+    if (!isNaN(factor)) {
+      cmd.overclockFactor = factor;
+      console.log(`[loadCommandFromInfo] OVERCLOCK=${factor} for ${cmd.command || cmd.path}`);
+    }
   }
 
   cmd.resident = tooltypes.get('RESIDENT') === 'YES';

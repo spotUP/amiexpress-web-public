@@ -2132,6 +2132,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       mimicVer: door.mimicVer,
       passParameters: door.passParameters,
       internal: door.internal,
+      overclockFactor: door.overclockFactor,  // CPU overclocking from OVERCLOCK tooltype
       toolTypes: interactiveToolTypes,
       env: doorEnv,  // Environment variables
       assigns: nodeAssigns,  // Node-specific assigns for 68K door compatibility

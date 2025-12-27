@@ -71,8 +71,8 @@ function parseTooltypesWithStrings(filePath: string): Tooltype[] {
     for (const line of lines) {
       const trimmed = line.trim();
 
-      // Skip empty lines and non-tooltype lines
-      if (!trimmed || !trimmed.includes('=')) {
+      // Skip empty lines
+      if (!trimmed) {
         continue;
       }
 
@@ -93,10 +93,29 @@ function parseTooltypesWithStrings(filePath: string): Tooltype[] {
         cleaned = cleaned.substring(1);
       }
 
+      const eqIdx = cleaned.indexOf('=');
+      if (eqIdx === -1) {
+        const keyOnly = cleaned.trim();
+        const normalized = keyOnly.toUpperCase();
+        if (!/^[A-Z0-9_]{2,64}$/.test(normalized)) {
+          continue;
+        }
+
+        tooltypes.push({
+          key: normalized,
+          value: '',
+          commented,
+          originalLine: trimmed
+        });
+        continue;
+      }
+
+      if (eqIdx < 1) continue;
+
       const [key, ...valueParts] = cleaned.split('=');
       const value = valueParts.join('=').trim();
 
-      if (key && value) {
+      if (key) {
         tooltypes.push({
           key: key.toUpperCase().trim(),
           value,

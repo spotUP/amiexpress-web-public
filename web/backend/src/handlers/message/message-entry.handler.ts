@@ -373,6 +373,24 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     // Save to database (for web UI, search indexing)
     const messageId = await _db.createMessage(message);
 
+    // Increment messagesPosted counter (express.e:10127)
+    session.user!.messagesPosted = (session.user!.messagesPosted || 0) + 1;
+
+    // DISK-BASED: Write updated user stats to user.data/keys/misc files
+    // This ensures messagesPosted is persisted immediately (safer than waiting for logoff)
+    try {
+      const { userFileManager } = require('../../services/UserFileManager');
+      const slotNumber = parseInt(session.user!.id.split('-')[1], 10);
+      if (isNaN(slotNumber)) {
+        throw new Error(`Invalid user ID format: ${session.user!.id}`);
+      }
+      userFileManager.updateUserDataFile(session.user!, slotNumber);
+      console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${slotNumber})`);
+    } catch (diskErr) {
+      console.error('[Message] Error writing user disk files:', diskErr);
+      // Continue anyway - database has the stats, can sync later
+    }
+
     // Log the action
     await _callersLog(
       session.user!.id,

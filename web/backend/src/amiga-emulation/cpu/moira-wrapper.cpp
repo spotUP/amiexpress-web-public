@@ -14,14 +14,19 @@ using namespace moira;
 class MoiraCPU : public Moira {
 private:
     // ========== Debug Flags (can be toggled at runtime from JavaScript) ==========
-    bool debugEnabled = false;      // Master debug switch (enables all below)
-    bool debugInstructions = false; // Log each instruction executed
-    bool debugRegisters = false;    // Log register changes (D0-D7, A0-A7)
-    bool debugPrefetch = false;     // Log prefetch queue operations
-    bool debugMemory = false;       // Log memory read/write operations
-    bool debugLibraryCalls = false; // Log library calls (JSR to negative offsets)
-    bool debugStack = false;        // Log stack push/pop operations
-    bool debugBranches = false;     // Log branch/jump instructions
+    // ========== Runtime Debug Flags ==========
+    bool debugEnabled = false;         // Master debug switch (enables all below)
+    bool debugInstructions = false;    // Log each instruction executed
+    bool debugRegisters = false;       // Log register changes (D0-D7, A0-A7)
+    bool debugPrefetch = false;        // Log prefetch queue operations
+    bool debugMemory = false;          // Log memory read/write operations
+    bool debugLibraryCalls = false;    // Log library calls (JSR to negative offsets)
+    bool debugStack = false;           // Log stack push/pop operations
+    bool debugBranches = false;        // Log branch/jump instructions
+    bool debugAddressErrors = false;   // Log address error exceptions (odd word/long accesses)
+    bool debugExceptions = false;      // Log all exception vectors
+    bool debugWatchpoints = false;     // Log when watchpoints are hit
+    bool debugMemoryAccess = false;    // Detailed memory access logging with stack traces
 
     // ========== Breakpoint Support ==========
     std::vector<uint32_t> breakpoints;  // PC addresses to break on
@@ -77,6 +82,10 @@ private:
     uint64_t branchCount = 0;
     uint64_t trapCount = 0;
 
+    // ========== Overclocking Support ==========
+    int overclocking = 0;    // 0=disabled, 1=native, 2=2x, 10=10x, etc.
+    i64 debt = 0;            // Accumulated CPU cycles (for sync)
+
 public:
     // ========== Runtime Debug Control (callable from JavaScript) ==========
     void setDebug(bool enabled) { debugEnabled = enabled; }
@@ -87,9 +96,15 @@ public:
     void setDebugLibraryCalls(bool enabled) { debugLibraryCalls = enabled; }
     void setDebugStack(bool enabled) { debugStack = enabled; }
     void setDebugBranches(bool enabled) { debugBranches = enabled; }
+    void setDebugAddressErrors(bool enabled) { debugAddressErrors = enabled; }
+    void setDebugExceptions(bool enabled) { debugExceptions = enabled; }
+    void setDebugWatchpoints(bool enabled) { debugWatchpoints = enabled; }
+    void setDebugMemoryAccess(bool enabled) { debugMemoryAccess = enabled; }
 
     bool getDebug() const { return debugEnabled; }
     bool getDebugInstructions() const { return debugInstructions; }
+    bool getDebugAddressErrors() const { return debugAddressErrors; }
+    bool getDebugExceptions() const { return debugExceptions; }
 
     // ========== Breakpoint Control ==========
     void addBreakpoint(uint32_t addr) { breakpoints.push_back(addr); }
@@ -270,6 +285,41 @@ public:
            (int)jsrCount, (int)rtsCount, (int)branchCount, (int)trapCount);
     }
 
+    // ========== Overclocking Control ==========
+    void setOverclocking(int factor) {
+        overclocking = factor;
+        debt = 0;  // Reset debt when changing overclock factor
+        EM_ASM({
+            console.log('[MOIRA] Overclocking set to ' + $0 + 'x');
+        }, factor);
+    }
+
+    int getOverclocking() const { return overclocking; }
+
+    // Sync function - called after instruction execution
+    // Implements vAmiga-style overclocking with debt counter
+    void sync(int cycles) override {
+        if (overclocking == 0) {
+            // Overclocking disabled - no sync needed
+            return;
+        }
+
+        // Add elapsed CPU cycles to debt
+        debt += cycles;
+
+        // Calculate how many DMA cycles we've accumulated
+        // Formula from vAmiga: CPU_AS_DMA_CYCLES(cycles) = (cycles >> 1)
+        // With overclocking: multiply CPU cycles by overclock factor first
+        i64 microCycles = 2 * overclocking;  // Micro-cycles per DMA cycle
+
+        // Process complete DMA cycles
+        while (debt >= microCycles) {
+            debt -= microCycles;
+            // In vAmiga, this would call agnus.executeOneCycle()
+            // For our purposes, we just track the timing
+        }
+    }
+
     // ========== File Operation Debug Logging ==========
     // Call this from JavaScript when a file operation occurs
     void logFileOperation(const char* op, uint32_t handle, uint32_t result) {
@@ -383,7 +433,7 @@ public:
                                 hposCounter(0),
                                 ciaTimerA(0),
                                 ciaTimerB(0) {
-        cpuModel = Model::M68000;
+        cpuModel = Model::M68020;  // Upgraded from M68000 for better performance
 
         // Allocate FAST RAM from requested memSize (after 2MB chip, before ROM)
         size_t fastSize = 0;
@@ -436,6 +486,14 @@ public:
     u8 read8(u32 addr) const override {
         // Mask to 24-bit address space
         addr &= 0xFFFFFF;
+
+        // General memory access tracking (debugMemoryAccess flag)
+        if (debugMemoryAccess) {
+            EM_ASM({
+                console.log('[MEMORY READ8] addr=0x' + $0.toString(16).padStart(6, '0') +
+                           ' PC=0x' + $1.toString(16).padStart(6, '0'));
+            }, addr, reg.pc);
+        }
 
         // Get page number (each page = 64KB)
         uint8_t page = (addr >> 16) & 0xFF;
@@ -526,6 +584,39 @@ public:
     void write8(u32 addr, u8 val) const override {
         // Mask to 24-bit address space
         addr &= 0xFFFFFF;
+
+        // General memory access tracking (debugMemoryAccess flag)
+        if (debugMemoryAccess) {
+            EM_ASM({
+                console.log('[MEMORY WRITE8] addr=0x' + $0.toString(16).padStart(6, '0') +
+                           ' val=0x' + $1.toString(16).padStart(2, '0') +
+                           ' PC=0x' + $2.toString(16).padStart(6, '0'));
+            }, addr, val, reg.pc);
+        }
+
+        // Check watchpoints (runtime watchpoint addresses)
+        if (debugWatchpoints) {
+            for (uint32_t watchAddr : const_cast<MoiraCPU*>(this)->watchAddresses) {
+                if (addr == watchAddr) {
+                    EM_ASM({
+                        console.log('[WATCHPOINT HIT] Write to 0x' + $0.toString(16).padStart(6, '0') +
+                                   ' val=0x' + $1.toString(16).padStart(2, '0') +
+                                   ' PC=0x' + $2.toString(16).padStart(6, '0'));
+                    }, addr, val, reg.pc);
+                    break;
+                }
+            }
+
+            // Check watchpoint range
+            if (watchRangeStart != 0 && addr >= watchRangeStart && addr <= watchRangeEnd) {
+                EM_ASM({
+                    console.log('[WATCHPOINT RANGE] Write to 0x' + $0.toString(16).padStart(6, '0') +
+                               ' val=0x' + $1.toString(16).padStart(2, '0') +
+                               ' PC=0x' + $2.toString(16).padStart(6, '0') +
+                               ' (in range 0x' + $3.toString(16) + '-0x' + $4.toString(16) + ')');
+                }, addr, val, reg.pc, watchRangeStart, watchRangeEnd);
+            }
+        }
 
         // WATCHPOINT: Detect writes to corruption range 0x1250-0x125F
         if (addr >= 0x1250 && addr <= 0x125F) {
@@ -838,7 +929,12 @@ public:
     int executeInstruction() {
         i64 startClock = getClock();
         execute();  // MOIRA's execute() with no parameters - one instruction
-        return (int)(getClock() - startClock);
+        int cycles = (int)(getClock() - startClock);
+
+        // Call sync for overclocking support
+        sync(cycles);
+
+        return cycles;
     }
 
     // Get registers
@@ -1050,10 +1146,37 @@ public:
     }
 
     void didJumpToVector(int nr, u32 addr) override {
-        if (debugEnabled) {
+        if (debugEnabled || debugExceptions) {
+            // Map exception vector numbers to names for clarity
+            const char* exceptionName = "Unknown";
+            switch (nr) {
+                case 2: exceptionName = "Bus Error"; break;
+                case 3: exceptionName = "Address Error"; break;
+                case 4: exceptionName = "Illegal Instruction"; break;
+                case 5: exceptionName = "Divide by Zero"; break;
+                case 6: exceptionName = "CHK Instruction"; break;
+                case 7: exceptionName = "TRAPV Instruction"; break;
+                case 8: exceptionName = "Privilege Violation"; break;
+                case 9: exceptionName = "Trace"; break;
+                case 10: exceptionName = "Line 1010 Emulator"; break;
+                case 11: exceptionName = "Line 1111 Emulator"; break;
+                default:
+                    if (nr >= 32 && nr <= 47) exceptionName = "TRAP";
+                    else if (nr >= 24 && nr <= 31) exceptionName = "Interrupt";
+                    break;
+            }
+
             EM_ASM({
-                console.log('[MOIRA DBG] Exception vector ' + $0 + ' -> PC=0x' + $1.toString(16));
-            }, nr, addr);
+                console.log('[MOIRA EXCEPTION] Vector ' + $0 + ' (' + UTF8ToString($1) + ') -> PC=0x' + $2.toString(16) +
+                           ' [SR=0x' + $3.toString(16) + ', SP=0x' + $4.toString(16) + ']');
+            }, nr, exceptionName, addr, getSR(), reg.a[7]);
+        }
+
+        // Log address errors specifically if that flag is enabled
+        if (debugAddressErrors && nr == 3) {
+            EM_ASM({
+                console.log('[MOIRA ADDRESS ERROR] Odd address access detected! PC=0x' + $0.toString(16) + ', SP=0x' + $1.toString(16));
+            }, addr, reg.a[7]);
         }
     }
 
@@ -1103,8 +1226,14 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("setDebugLibraryCalls", &MoiraCPU::setDebugLibraryCalls)
         .function("setDebugStack", &MoiraCPU::setDebugStack)
         .function("setDebugBranches", &MoiraCPU::setDebugBranches)
+        .function("setDebugAddressErrors", &MoiraCPU::setDebugAddressErrors)
+        .function("setDebugExceptions", &MoiraCPU::setDebugExceptions)
+        .function("setDebugWatchpoints", &MoiraCPU::setDebugWatchpoints)
+        .function("setDebugMemoryAccess", &MoiraCPU::setDebugMemoryAccess)
         .function("getDebug", &MoiraCPU::getDebug)
         .function("getDebugInstructions", &MoiraCPU::getDebugInstructions)
+        .function("getDebugAddressErrors", &MoiraCPU::getDebugAddressErrors)
+        .function("getDebugExceptions", &MoiraCPU::getDebugExceptions)
         // ========== Breakpoint Control ==========
         .function("addBreakpoint", &MoiraCPU::addBreakpoint)
         .function("removeBreakpoint", &MoiraCPU::removeBreakpoint)
@@ -1164,6 +1293,9 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("getTrapCount", &MoiraCPU::getTrapCount)
         .function("resetStatistics", &MoiraCPU::resetStatistics)
         .function("dumpStatistics", &MoiraCPU::dumpStatistics)
+        // ========== Overclocking ==========
+        .function("setOverclocking", &MoiraCPU::setOverclocking)
+        .function("getOverclocking", &MoiraCPU::getOverclocking)
         // ========== MOIRA NATIVE DEBUGGER ==========
         // Native Breakpoints (uses Moira's built-in debugger)
         .function("nativeSetBreakpoint", &MoiraCPU::nativeSetBreakpoint)

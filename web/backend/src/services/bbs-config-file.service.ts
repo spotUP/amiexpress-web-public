@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
+import { parseInfoFile, updateTooltype, writeInfoFile } from '../utils/info-file.util';
 import type { SystemConfig } from '../database/types';
 
 export interface BBSConfigData {
@@ -104,6 +105,7 @@ export interface BBSConfigData {
   debug_mode?: boolean;
   log_level?: string;
   log_retention_days?: number;
+  sysop_debug_enabled?: boolean;
 }
 
 /**
@@ -202,6 +204,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'DEBUG_MODE': 'debug_mode',
   'LOG_LEVEL': 'log_level',
   'LOG_RETENTION_DAYS': 'log_retention_days',
+  'SYSOP_DEBUG_OUTPUT': 'sysop_debug_enabled',
 };
 
 /**
@@ -211,27 +214,104 @@ const REVERSE_TOOLTYPE_MAP: Record<string, string> = Object.fromEntries(
   Object.entries(TOOLTYPE_MAP).map(([k, v]) => [v, k])
 );
 
+function normalizeTooltypeKey(rawKey: string): string {
+  const upper = rawKey.toUpperCase();
+  if (TOOLTYPE_MAP[upper]) {
+    return upper;
+  }
+
+  const stripped = upper.replace(/^[^A-Z0-9]+/, '');
+  return TOOLTYPE_MAP[stripped] ? stripped : upper;
+}
+
+function parseTooltypesTextFile(filePath: string): Map<string, string> {
+  const toolTypes = new Map<string, string>();
+
+  try {
+    const contents = fs.readFileSync(filePath, 'utf-8');
+    const lines = contents.split(/\r?\n/);
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line.startsWith('#') || line.startsWith(';') || line.startsWith('//')) continue;
+      if (line.startsWith('!')) continue;
+
+      const eqIdx = line.indexOf('=');
+      if (eqIdx === -1) {
+        const keyOnly = normalizeTooltypeKey(line);
+        if (!TOOLTYPE_MAP[keyOnly]) continue;
+        toolTypes.set(keyOnly, '');
+        continue;
+      }
+
+      const rawKey = line.slice(0, eqIdx).trim();
+      const value = line.slice(eqIdx + 1).trim();
+      if (!rawKey) continue;
+
+      const key = normalizeTooltypeKey(rawKey);
+      if (!TOOLTYPE_MAP[key]) continue;
+
+      toolTypes.set(key, value);
+    }
+  } catch (error) {
+    console.error('[BBSConfig] Failed to read bbsConfig.info.txt:', error);
+  }
+
+  return toolTypes;
+}
+
+function removeTooltype(info: { tooltypes: { key: string }[] }, key: string): void {
+  const upperKey = key.toUpperCase();
+  const index = info.tooltypes.findIndex(tt => tt.key === upperKey);
+  if (index !== -1) {
+    info.tooltypes.splice(index, 1);
+  }
+}
+
 /**
  * Load system configuration from bbsConfig.info
  */
 export function loadBBSConfig(bbsRoot: string): BBSConfigData {
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
+  const configTextPath = configPath + '.txt';
 
-  if (!fs.existsSync(configPath)) {
+  const mergedToolTypes = new Map<string, string>();
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const buffer = fs.readFileSync(configPath);
+      const parser = new InfoFileParser();
+      const parsed = parser.parse(buffer);
+      for (const [rawKey, rawValue] of parsed.toolTypes.entries()) {
+        const key = normalizeTooltypeKey(rawKey);
+        mergedToolTypes.set(key, rawValue);
+      }
+      console.log('[BBSConfig] Loaded configuration from bbsConfig.info');
+    } catch (error) {
+      console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
+    }
+  }
+
+  if (fs.existsSync(configTextPath)) {
+    const textToolTypes = parseTooltypesTextFile(configTextPath);
+    for (const [key, value] of textToolTypes.entries()) {
+      mergedToolTypes.set(key, value);
+    }
+    console.log('[BBSConfig] Loaded configuration overrides from bbsConfig.info.txt');
+  }
+
+  if (mergedToolTypes.size === 0) {
     console.log('[BBSConfig] bbsConfig.info not found, using defaults');
     return getDefaultConfig();
   }
 
   try {
-    const buffer = fs.readFileSync(configPath);
-    const parser = new InfoFileParser();
-    const parsed = parser.parse(buffer);
-
-    const config: BBSConfigData = {};
+    const config: Partial<BBSConfigData> = {};
 
     // Parse each tooltype
-    for (const [rawKey, rawValue] of parsed.toolTypes.entries()) {
-      const key = rawKey.toUpperCase();
+    for (const [rawKey, rawValue] of mergedToolTypes.entries()) {
+      const key = normalizeTooltypeKey(rawKey);
       const fieldName = TOOLTYPE_MAP[key];
 
       if (!fieldName) {
@@ -242,23 +322,22 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
       // Parse value based on field type
       if (typeof getDefaultConfig()[fieldName] === 'boolean') {
         // Boolean flag (presence = true)
-        config[fieldName] = true as any;
+        (config as any)[fieldName] = true;
       } else if (typeof getDefaultConfig()[fieldName] === 'number') {
         // Numeric value
         const num = parseInt(rawValue, 10);
         if (!isNaN(num)) {
-          config[fieldName] = num as any;
+          (config as any)[fieldName] = num;
         }
       } else {
         // String value
-        config[fieldName] = rawValue as any;
+        (config as any)[fieldName] = rawValue;
       }
     }
 
-    console.log('[BBSConfig] Loaded configuration from bbsConfig.info');
     return { ...getDefaultConfig(), ...config };
   } catch (error) {
-    console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
+    console.error('[BBSConfig] Failed to parse configuration:', error);
     return getDefaultConfig();
   }
 }
@@ -268,6 +347,7 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
  */
 export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): void {
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
+  const configTextPath = configPath + '.txt';
 
   try {
     // Read existing file to preserve structure
@@ -276,8 +356,24 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       const buffer = fs.readFileSync(configPath);
       const parser = new InfoFileParser();
       const parsed = parser.parse(buffer);
-      existing = parsed.toolTypes;
+      for (const [rawKey, rawValue] of parsed.toolTypes.entries()) {
+        const key = normalizeTooltypeKey(rawKey);
+        if (TOOLTYPE_MAP[key]) {
+          existing.set(key, rawValue);
+        } else {
+          existing.set(rawKey.toUpperCase(), rawValue);
+        }
+      }
     }
+
+    if (fs.existsSync(configTextPath)) {
+      const textToolTypes = parseTooltypesTextFile(configTextPath);
+      for (const [key, value] of textToolTypes.entries()) {
+        existing.set(key, value);
+      }
+    }
+
+    const infoFile = fs.existsSync(configPath) ? parseInfoFile(configPath) : null;
 
     // Update tooltypes with new values
     for (const [fieldName, value] of Object.entries(config)) {
@@ -290,13 +386,25 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
         // Boolean: present = true, absent = false
         if (value) {
           existing.set(tooltypeName, '');
+          if (infoFile) {
+            updateTooltype(infoFile, tooltypeName, '', false);
+          }
         } else {
           existing.delete(tooltypeName);
+          if (infoFile) {
+            removeTooltype(infoFile, tooltypeName);
+          }
         }
       } else if (typeof value === 'number') {
         existing.set(tooltypeName, value.toString());
+        if (infoFile) {
+          updateTooltype(infoFile, tooltypeName, value.toString(), false);
+        }
       } else {
         existing.set(tooltypeName, String(value));
+        if (infoFile) {
+          updateTooltype(infoFile, tooltypeName, String(value), false);
+        }
       }
     }
 
@@ -321,9 +429,15 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
       fs.copyFileSync(configPath, backupPath);
     }
 
-    fs.writeFileSync(configPath + '.txt', content, 'utf-8');
+    if (infoFile) {
+      writeInfoFile(infoFile);
+      console.log('[BBSConfig] Saved configuration to bbsConfig.info');
+    } else {
+      console.warn('[BBSConfig] bbsConfig.info not found; skipping .info update');
+    }
+
+    fs.writeFileSync(configTextPath, content, 'utf-8');
     console.log('[BBSConfig] Saved configuration to bbsConfig.info.txt');
-    console.log('[BBSConfig] NOTE: Full .info format writing not yet implemented');
   } catch (error) {
     console.error('[BBSConfig] Failed to save bbsConfig.info:', error);
     throw error;
@@ -400,5 +514,6 @@ function getDefaultConfig(): BBSConfigData {
     debug_mode: false,
     log_level: 'info',
     log_retention_days: 90,
+    sysop_debug_enabled: false,
   };
 }

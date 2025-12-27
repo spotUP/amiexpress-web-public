@@ -95,12 +95,14 @@ export function clearHistory(session: BBSSession): void {
  * @param userId - User ID (string for database)
  */
 export async function loadHistory(session: BBSSession, userId: number | string): Promise<void> {
+  console.log(`[CommandHistory] loadHistory called for userId=${userId}`);
   try {
     const db = getDatabase();
     if (!db) {
       console.log('[CommandHistory] Database not available for loadHistory');
       return;
     }
+    console.log('[CommandHistory] Database available, querying...');
 
     // Query command history from database
     const userIdStr = String(userId);
@@ -108,6 +110,7 @@ export async function loadHistory(session: BBSSession, userId: number | string):
       'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = ?',
       [userIdStr]
     );
+    console.log(`[CommandHistory] Query result: ${result?.rows?.length || 0} rows`);
 
     if (!result.rows || result.rows.length === 0) {
       // No history for this user yet - normal for new users
@@ -156,12 +159,14 @@ export async function loadHistory(session: BBSSession, userId: number | string):
  * @param userId - User ID (string for database)
  */
 export async function saveHistory(session: BBSSession, userId: number | string): Promise<void> {
+  console.log(`[CommandHistory] saveHistory called for userId=${userId}, historyLen=${session.commandHistory?.length || 0}`);
   try {
     const db = getDatabase();
     if (!db) {
       console.log('[CommandHistory] Database not available for saveHistory');
       return;
     }
+    console.log('[CommandHistory] Database available, saving...');
 
     const userIdStr = String(userId);
     const trimmed = session.commandHistory.slice(-MAX_HISTORY_SIZE);
@@ -178,6 +183,7 @@ export async function saveHistory(session: BBSSession, userId: number | string):
     const now = Math.floor(Date.now() / 1000);
 
     // Upsert command history (insert or replace)
+    console.log(`[CommandHistory] Running upsert for user ${userIdStr} with ${trimmed.length} commands`);
     await db.run(
       `INSERT INTO command_history (user_id, history_num, history_cycle, commands, updated_at)
        VALUES (?, ?, ?, ?, ?)

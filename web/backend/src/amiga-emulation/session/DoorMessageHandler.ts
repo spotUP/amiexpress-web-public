@@ -151,10 +151,18 @@ export class DoorMessageHandler {
     });
   }
 
-  // For XIM doors, express.e expects the BBS to deliver an initial node-status/register
-  // message via PutMsg so the door can call WaitPort/GetMsg to start IPC.
+  // CRITICAL FIX: Real Amiga logs show doors initiate communication, NOT the BBS!
+  // See Documentation/4-Door-Developers/REAL_AMIGA_XIM_SEQUENCES.md
+  // - RTW sends JH_REGISTER (cmd=1) first with reply port "AEDoorRP.000"
+  // - Bulls sends JH_REGISTER (cmd=1) first, then starts making requests
+  // - AquaScan sends JH_REGISTER (cmd=1) first
+  // The BBS does NOT send INIT (0) or STAT (1) - doors start the conversation.
+  // Previous implementation was backwards and caused doors to hang waiting.
   sendStartupMessage(): void {
-    this.sendInitAndStatusMessages();
+    console.log("[DoorMessageHandler] Skipping startup messages - door will initiate with JH_REGISTER");
+    // REMOVED: this.sendInitAndStatusMessages();
+    // Real protocol: Door sends JH_REGISTER, then BBS responds to requests
+    this.sentInitialMessage = true; // Mark as sent to prevent further attempts
   }
 
   /**

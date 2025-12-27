@@ -309,6 +309,7 @@ export interface SystemConfig {
   debug_mode: boolean;
   log_level: string;
   log_retention_days: number;
+  sysop_debug_enabled: boolean;
 
   // Push Notifications (VAPID)
   vapid_public_key: string;

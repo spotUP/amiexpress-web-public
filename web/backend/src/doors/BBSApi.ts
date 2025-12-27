@@ -894,6 +894,37 @@ export class BBSApi {
   onUserLeft(callback: (data: { userId: number; username: string }) => void): void {
     this.bindSocketEvent('room:user-left', callback);
   }
+
+  /**
+   * Get list of available doors
+   * Used by door menu systems to display available doors
+   */
+  async getDoorList(): Promise<Array<{
+    id: string;
+    command: string;
+    name: string;
+    description: string;
+    type: string;
+    doorType?: string;
+    size: number;
+    accessLevel: number;
+    enabled: boolean;
+  }>> {
+    const { getDoors } = await import('../handlers/door.handler');
+    const allDoors = getDoors();
+
+    return allDoors.map((door: any) => ({
+      id: door.id || door.command,
+      command: door.command || door.id,
+      name: door.name || door.command || door.id,
+      description: door.description || '',
+      type: door.type || 'AMI',
+      doorType: door.type,
+      size: door.size || 0,
+      accessLevel: door.accessLevel || 0,
+      enabled: door.enabled !== false // Default to enabled if not specified
+    }));
+  }
 }
 
 /**

@@ -27,6 +27,7 @@ export interface DoorConfig {
   passParameters?: number;
   internal?: string;
   toolTypes?: Record<string, string>;
+  overclockFactor?: number; // CPU overclocking multiplier (0=auto, 1-50=specific, -1=force disable)
 }
 
 export class DoorConstants {

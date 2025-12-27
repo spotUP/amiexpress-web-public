@@ -702,9 +702,13 @@ export async function loadHistory(session: BBSSession) {
     return;
   }
 
-  const { loadHistory: loadHistoryUtil } = require('../utils/command-history.util');
-  await loadHistoryUtil(session, session.user.id);
-  console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${session.user.username}`);
+  try {
+    const { loadHistory: loadHistoryUtil } = require('../utils/command-history.util');
+    await loadHistoryUtil(session, session.user.id);
+    console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${session.user.username}`);
+  } catch (error) {
+    console.error('[CommandHistory] Error in loadHistory wrapper:', error);
+  }
 }
 
 /**

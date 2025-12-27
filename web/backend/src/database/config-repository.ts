@@ -75,7 +75,7 @@ export class ConfigRepository extends BaseRepository<any> {
         http_enabled, http_host, http_port,
         telnet_port, ssh_port,
         quiet_join, convert_to_mb, reg_key,
-        debug_mode, log_level, log_retention_days,
+        debug_mode, log_level, log_retention_days, sysop_debug_enabled,
         vapid_public_key, vapid_private_key, vapid_contact_email
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
@@ -94,7 +94,7 @@ export class ConfigRepository extends BaseRepository<any> {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?,
-        ?, ?, ?,
+        ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?, ?, ?
@@ -167,6 +167,7 @@ export class ConfigRepository extends BaseRepository<any> {
       config.debug_mode ? 1 : 0,
       config.log_level || 'info',
       config.log_retention_days || 90,
+      config.sysop_debug_enabled ? 1 : 0,
       config.vapid_public_key || '',
       config.vapid_private_key || '',
       config.vapid_contact_email || ''
@@ -1038,6 +1039,7 @@ export class ConfigRepository extends BaseRepository<any> {
       debug_mode: Boolean(row.debug_mode),
       log_level: row.log_level,
       log_retention_days: row.log_retention_days,
+      sysop_debug_enabled: Boolean(row.sysop_debug_enabled),
       vapid_public_key: row.vapid_public_key || '',
       vapid_private_key: row.vapid_private_key || '',
       vapid_contact_email: row.vapid_contact_email || '',

@@ -268,6 +268,8 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
 
+  console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${day} (${batchName})`);
+
   const candidates = [
     path.join(baseDir, batchName),
     path.join(bbsRoot, `Node${nodeId}`, batchName),
@@ -276,8 +278,13 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
   ];
 
   for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      console.log(`[BatchScheduler] Found batch file: ${candidate}`);
+    }
     await runBatchFile(candidate, nodeId || 1);
   }
+
+  console.log(`[BatchScheduler] Logoff batches completed for node ${nodeId}`);
 }
 function runAmigaDoorViaRunner(
   doorPath: string,
@@ -362,8 +369,9 @@ function runAmigaDoorViaRunner(
       detached: true, // Create new process group so we can kill the entire tree
     });
 
-    // Timeout to prevent stuck doors from running forever (60 seconds max for batch doors)
-    const BATCH_DOOR_TIMEOUT = 60000;
+    // Timeout to prevent stuck doors from running forever (300 seconds max for batch doors)
+    // Increased from 60s to 300s to allow mtop to process large user databases (~1000 users)
+    const BATCH_DOOR_TIMEOUT = 300000;
     let killed = false;
     const timeoutHandle = setTimeout(() => {
       if (!child.killed && child.pid) {

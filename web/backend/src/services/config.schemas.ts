@@ -106,6 +106,7 @@ export const SystemConfigSchema = z.object({
   debug_mode: z.boolean().optional(),
   log_level: z.enum(['debug', 'info', 'warning', 'error']).optional(),
   log_retention_days: z.number().int().min(1).max(365).optional(),
+  sysop_debug_enabled: z.boolean().optional(),
 
   // Push Notifications (VAPID)
   vapid_public_key: z.string().max(500).optional(),

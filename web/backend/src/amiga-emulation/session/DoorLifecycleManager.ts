@@ -300,6 +300,53 @@ export class DoorLifecycleManager {
       if (this.lifecycleConfig.debugLevel !== "minimal") {
         this.logInitialState();
       }
+
+      // ========== CONFIGURABLE OVERCLOCKING SYSTEM ==========
+      // Priority order:
+      // 1. Environment variable DOOR_OVERCLOCK (highest priority)
+      // 2. Door .info OVERCLOCK tooltype (config.overclockFactor)
+      // 3. Auto-detection: batch=10x, interactive=0x (lowest priority)
+
+      let overclockFactor: number | undefined;
+      let overclockSource = 'auto-detection';
+
+      // Check environment variable first
+      const envOverclock = process.env.DOOR_OVERCLOCK;
+      if (envOverclock !== undefined) {
+        const envFactor = parseInt(envOverclock, 10);
+        if (!isNaN(envFactor)) {
+          overclockFactor = envFactor;
+          overclockSource = `environment variable DOOR_OVERCLOCK=${envOverclock}`;
+        }
+      }
+
+      // Check config override (from .info OVERCLOCK tooltype)
+      if (overclockFactor === undefined && this.config.overclockFactor !== undefined) {
+        overclockFactor = this.config.overclockFactor;
+        overclockSource = `.info OVERCLOCK=${overclockFactor}`;
+      }
+
+      // Auto-detection fallback
+      // Default: 10x for batch, 4x for interactive (most doors benefit from speed)
+      // Doors that need slower speed can set OVERCLOCK=-1 or OVERCLOCK=1 in .info
+      if (overclockFactor === undefined) {
+        const isBatchMode = this.lifecycleConfig.disableInputWaitExtension || !this.socket;
+        overclockFactor = isBatchMode ? 10 : 4;  // 4x for interactive, 10x for batch
+        overclockSource = `auto-detection (${isBatchMode ? 'batch' : 'interactive'} mode)`;
+      }
+
+      // Apply overclocking
+      this.emulator.setOverclocking(overclockFactor);
+
+      if (overclockFactor > 0) {
+        console.log(`[DoorLifecycleManager] 🚀 Overclocking: ${overclockFactor}x (source: ${overclockSource})`);
+      } else if (overclockFactor === -1) {
+        console.log(`[DoorLifecycleManager] Overclocking: FORCE DISABLED (source: ${overclockSource})`);
+      } else {
+        console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockSource})`);
+      }
+      // ========== END OVERCLOCKING SYSTEM ==========
+
       // Send the INIT/STAT startup messages so doors see the expected AEDoor handshake.
       await this.sendStartupMessage();
 
@@ -467,7 +514,10 @@ export class DoorLifecycleManager {
         await this.executeInstruction(pc);
 
         // === STEP 5B: Poll for XIM messages from native AEDoor.library ===
-        await this.pollXIMMessages();
+        // Only poll for XIM doors - SIM doors don't use XIM protocol
+        if (this.config.doorType === "XIM") {
+          await this.pollXIMMessages();
+        }
 
         // === STEP 6: Track progress and yield ===
         await this.trackProgressAndYield();
@@ -1531,6 +1581,11 @@ export class DoorLifecycleManager {
 
   private async pollXIMMessages(): Promise<void> {
     this.pollCount++;
+
+    // Log doorType on first poll
+    if (this.pollCount === 1) {
+      console.log(`[DoorLifecycleManager] pollXIMMessages called: doorType="${this.config.doorType}"`);
+    }
 
     // Log every 10000 polls to confirm polling is active
     if (this.pollCount - this.lastPollLog >= 10000) {

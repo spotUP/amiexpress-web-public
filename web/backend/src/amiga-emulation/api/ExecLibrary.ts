@@ -92,6 +92,7 @@ export class ExecLibrary {
   private execBase: ExecBaseStructure;
   private libraries: Map<string, LibraryNode> = new Map();
   private currentTask: Task;
+  private bbsTask: Task; // BBS handler task (owns AEDoorPort)
 
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map(); // address -> size
@@ -184,6 +185,30 @@ export class ExecLibrary {
       taskReady: 0, // TODO: Create list
       eclockFrequency: 709379, // PAL E-clock frequency
     };
+
+    // Create BBS handler task (owns AEDoorPort, handles door messages)
+    // BBS task at 0x088000 - between ExecBase and Door Task
+    const bbsTaskAddr = 0x088000;
+    const bbsMsgPortAddr = 0x08805c;
+    this.bbsTask = {
+      address: bbsTaskAddr,
+      name: "BBS Handler",
+      node: bbsTaskAddr,
+      sigRecvd: 0,
+      sigWait: 0,
+      state: 0, // TS_READY
+      msgPort: bbsMsgPortAddr,
+      isWaiting: false,
+    };
+
+    // Register BBS task's message port
+    this.messagePorts.set(bbsMsgPortAddr, {
+      address: bbsMsgPortAddr,
+      name: "BBS Handler Port",
+      messages: [],
+      sigBit: 0,
+      sigTask: bbsTaskAddr,
+    });
 
     // Create current task (the door itself)
     // Task is at 0x090000 - after ExecBase (0x080000) but before library stubs (0x0B0000+)
@@ -1745,10 +1770,62 @@ export class ExecLibrary {
           result.isNative ? "NATIVE" : "STUB"
         } library at 0x${result.address.toString(16)}`
       );
+
       return result.address;
     } else {
       console.log(`[ExecLibrary]   Hybrid OpenLibrary FAILED - returning NULL`);
       return 0;
+    }
+  }
+
+  /**
+   * Create AEDoorPort dynamically when AEDoor.library is opened
+   * XIM doors expect port to NOT exist at startup (duplicate check),
+   * but DO exist when library is opened (for IPC)
+   *
+   * CRITICAL: Only create on SUBSEQUENT opens (openCount > 1), not initial pre-open.
+   * LibraryManager pre-opens AEDoor.library before door starts, which would create
+   * port too early and fail duplicate-instance check.
+   */
+  private createDynamicAEDoorPort(libraryName: string): void {
+    if (libraryName.toLowerCase() !== "aedoor.library") {
+      return;
+    }
+
+    // Check if this is the initial pre-open (openCount will be 1)
+    // Only create port on SECOND open (when door itself calls OpenLibrary)
+    const lib = this.libraries.get(libraryName) || this.libraries.get(libraryName.toLowerCase());
+    if (!lib || lib.openCount <= 1) {
+      console.log(
+        `[ExecLibrary]   Skipping AEDoorPort creation on pre-open (openCount=${lib?.openCount || 0})`
+      );
+      return;
+    }
+
+    // Get node ID from global BBS session
+    const globalAny = global as any;
+    const nodeId =
+      globalAny?.currentBbsSession?.nodeId ??
+      globalAny?.currentBbsSession?.nodeNumber ??
+      1;
+    const portName = `AEDoorPort${nodeId}`;
+
+    // Check if port already exists
+    const tempAddr = 0x500; // Temporary address for port name lookup
+    this.emulator.writeString(tempAddr, portName);
+    const existingPortAddr = this.findPort(tempAddr);
+
+    if (!existingPortAddr || existingPortAddr === 0) {
+      // CRITICAL FIX: Create AEDoorPort with BBS Handler Task as owner
+      // This prevents the door from signaling itself when it sends messages
+      const portAddr = this.createPublicPort(portName, this.bbsTask);
+      console.log(
+        `[ExecLibrary]   Created ${portName} at 0x${portAddr.toString(16)} owned by BBS Handler (0x${this.bbsTask.address.toString(16)}) - (dynamic XIM port on door's OpenLibrary call)`
+      );
+    } else {
+      console.log(
+        `[ExecLibrary]   ${portName} already exists at 0x${existingPortAddr.toString(16)} (reusing)`
+      );
     }
   }
 
@@ -2507,8 +2584,20 @@ export class ExecLibrary {
       ? this.publicPorts.get(normalized)
       : undefined;
 
-    // Compatibility: some doors pass an empty string; fall back to AEDoorPort
-    if (portAddr === undefined || portAddr === 0) {
+    // CRITICAL FIX: Only use fallback for EMPTY searches or generic "AEDoorPort" (no node number)
+    // DO NOT use fallback when searching for specific numbered ports like "AEDoorPort1"
+    // that don't exist - this breaks duplicate-instance checks in doors
+    //
+    // Fallback is ONLY for:
+    // 1. Empty string searches (normalized.length === 0)
+    // 2. Generic "AEDoorPort" (no node number)
+    //
+    // If searching for "AEDoorPort1" and it doesn't exist, return 0 (NOT AEDoorPort3!)
+    const isEmptySearch = !normalized.length;
+    const isGenericPort = normalized === "aedoorport"; // No node number
+    const shouldUseFallback = isEmptySearch || isGenericPort;
+
+    if ((portAddr === undefined || portAddr === 0) && shouldUseFallback) {
       const globalAny: any = global as any;
       const nodeId =
         globalAny?.currentBbsSession?.nodeId ??
@@ -2525,7 +2614,7 @@ export class ExecLibrary {
           console.log(
             `[ExecLibrary]   Fallback matched "${candidate}" at 0x${addr.toString(
               16
-            )}`
+            )} (empty/generic search)`
           );
           portAddr = addr;
           break;
@@ -3600,10 +3689,11 @@ export class ExecLibrary {
    * Message ports are used for IPC. Doors create a reply port to receive
    * responses from the BBS.
    */
-  createMsgPort(): number {
+  createMsgPort(ownerTask?: Task): number {
+    const owner = ownerTask || this.currentTask;
     console.log("[ExecLibrary] CreateMsgPort() called");
     console.log(
-      `[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`
+      `[ExecLibrary]   Owner task: 0x${owner.address.toString(16)} (${owner.name})`
     );
     console.log(
       `[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(
@@ -3645,7 +3735,7 @@ export class ExecLibrary {
     this.emulator.writeMemory(portAddr + 15, signalBit);
 
     // mp_SigTask (4 bytes at offset 16)
-    this.emulator.writeMemory32(portAddr + 16, this.currentTask.address);
+    this.emulator.writeMemory32(portAddr + 16, owner.address);
 
     // mp_MsgList (14 bytes at offset 20)
     // Initialize as empty list
@@ -3661,7 +3751,7 @@ export class ExecLibrary {
       name: "", // Private port (CreateMsgPort has no name)
       messages: [],
       sigBit: signalBit,
-      sigTask: this.currentTask.address,
+      sigTask: owner.address,
       signaled: false,
     };
     this.messagePorts.set(portAddr, port);
@@ -3904,11 +3994,11 @@ export class ExecLibrary {
    * @param name - Port name (e.g., "AEDoorPort0")
    * @returns Port address
    */
-  createPublicPort(name: string): number {
+  createPublicPort(name: string, ownerTask?: Task): number {
     console.log(`[ExecLibrary] Creating public port: "${name}"`);
 
     // Create port using standard CreateMsgPort
-    const portAddr = this.createMsgPort();
+    const portAddr = this.createMsgPort(ownerTask);
 
     // Write name to port structure (ln_Name at offset 10) and registry entry
     const nameAddr = this.allocMem(name.length + 1, 0);
