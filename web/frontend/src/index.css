@@ -169,7 +169,7 @@ body {
 
 .xterm .xterm-rows .xterm-row {
   font-size: 16px !important;
-  line-height: 1.6 !important;
+  line-height: 1.0 !important;
   -webkit-font-smoothing: none !important;
   -moz-osx-font-smoothing: none !important;
   font-smooth: never !important;

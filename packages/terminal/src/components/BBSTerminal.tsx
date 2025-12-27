@@ -84,6 +84,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const passwordMode = useRef<boolean>(false);
   const doorActive = useRef<boolean>(false);
   const reconnectPending = useRef<boolean>(false);
+  const forcedDisconnectRef = useRef<boolean>(false);  // Track server-initiated disconnect (logoff)
   const doorReadyMap = useRef<Record<string, boolean>>({});
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
@@ -94,6 +95,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const lastMouseHoverTime = useRef<number>(0);  // Throttle hover events
   const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guruPhaseRef = useRef<number>(0);
+  const guruStaticRendered = useRef<boolean>(false);
   const normalFont = useRef<string>('mosoul, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
@@ -109,7 +111,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [ripMode, setRipMode] = useState<boolean>(false);
 
   // Web transparency overlays (CSS-based, for web connections only)
-  const [overlays, setOverlays] = useState<Map<string, { opacity: number; show: boolean }>>(new Map());
+  // Position info (x, y, width, height) is in terminal cells, converted to pixels during render
+  const [overlays, setOverlays] = useState<Map<string, {
+    opacity: number;
+    show: boolean;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  }>>(new Map());
   const overlayBufferRef = useRef<string>('');
   const ripCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ripBuffer = useRef<string>(''); // Buffer for RIP commands
@@ -520,40 +530,56 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const renderGuruMeditation = (phase: number) => {
       if (!showConnectionError) return;
 
-      const borderColor = phase % 2 === 0 ? '\x1b[31m' : '\x1b[91m';
-      const textColor = borderColor;
+      // Clear screen and render static content on first render only
+      if (!guruStaticRendered.current) {
+        term.write('\x1b[2J'); // Clear entire screen
+        term.write('\x1b[H');  // Move cursor to home (top-left)
+      } else {
+        // On subsequent renders, just position cursor at top for blinking frame
+        term.write('\x1b[H');
+      }
+
+      // Blink border between red and black backgrounds (like Amiga Guru Meditation)
+      const borderBg = phase % 2 === 0 ? '\x1b[41m' : '\x1b[40m'; // Red bg or black bg
+      const textColor = '\x1b[31m'; // Text always red foreground
       const reset = '\x1b[0m';
-      const interiorWidth = 78;
+      const frameWidth = 80;
+      const interiorWidth = 76; // 80 - 4 chars for border (2 on each side)
 
       const centerLine = (text: string) => {
         const leftPadding = Math.max(0, Math.floor((interiorWidth - text.length) / 2));
         const rightPadding = Math.max(0, interiorWidth - text.length - leftPadding);
-        return `${borderColor}║${' '.repeat(leftPadding)}${textColor}${text}${borderColor}${' '.repeat(rightPadding)}║${reset}`;
+        return `${borderBg}  ${reset}${' '.repeat(leftPadding)}${textColor}${text}${reset}${' '.repeat(rightPadding)}${borderBg}  ${reset}`;
       };
 
-      term.clear();
-      term.writeln(`${borderColor}╔${'═'.repeat(interiorWidth)}╗${reset}`);
-      term.writeln(`${borderColor}║${' '.repeat(interiorWidth)}║${reset}`);
-      term.writeln(centerLine('Software Failure.'));
-      term.writeln(centerLine('BBS Backend Connection Failed'));
-      term.writeln(centerLine('Guru Meditation'));
-      term.writeln(`${borderColor}║${' '.repeat(interiorWidth)}║${reset}`);
-      term.writeln(`${borderColor}╚${'═'.repeat(interiorWidth)}╝${reset}`);
-      term.writeln('');
-      term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
-      term.writeln('');
-      term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
-      term.writeln('');
-      term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
-      term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
-      term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
-      term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
-      term.writeln('');
-      term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
-      term.writeln('');
-      term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
-      term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
-      term.writeln('');
+      // Draw solid red background frame (thicker than box-drawing chars)
+      term.write(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Top border (full width)
+      term.write(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
+      term.write(centerLine('Software Failure.') + '\r\n');
+      term.write(centerLine('BBS Backend Connection Failed') + '\r\n');
+      term.write(centerLine('Guru Meditation') + '\r\n');
+      term.write(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
+      term.write(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Bottom border (full width)
+
+      // Render the static content below on first render only
+      if (!guruStaticRendered.current) {
+        guruStaticRendered.current = true;
+        term.writeln('');
+        term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
+        term.writeln('');
+        term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
+        term.writeln('');
+        term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
+        term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
+        term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
+        term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
+        term.writeln('');
+        term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
+        term.writeln('');
+        term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
+        term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
+        term.writeln('');
+      }
     };
 
     const startGuruAnimation = () => {
@@ -563,6 +589,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
+      // Reset static content flag and phase for new animation
+      guruStaticRendered.current = false;
       guruPhaseRef.current = 0;
       renderGuruMeditation(guruPhaseRef.current);
       guruTimerRef.current = setInterval(() => {
@@ -572,10 +600,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     // Game mode keyboard handlers - bypass OS key repeat delay with custom key repeat
-    const KEY_REPEAT_DELAY = 0;    // No initial delay - start repeating immediately
+    // Movement keys (arrows, WASD, space) don't repeat - games should use key state tracking
+    // Typing keys have initial delay before repeat for single character typing
+    const KEY_REPEAT_DELAY = 250;  // Initial delay before repeat starts (ms) - allows single char typing
     const KEY_REPEAT_RATE = 33;    // Interval between repeats (ms) - 30 keys/sec
 
+    // Keys that should NOT auto-repeat (games track state for these)
+    const NO_REPEAT_KEYS = new Set([
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+      'w', 'W', 'a', 'A', 's', 'S', 'd', 'D',
+      ' ', 'Control', 'Shift', 'Alt', 'Meta',
+      'Escape', 'Enter', 'Tab'
+    ]);
+
     const startKeyRepeat = (key: string, code: string) => {
+      // Don't auto-repeat movement/action keys - games should poll key state instead
+      if (NO_REPEAT_KEYS.has(key)) {
+        return;
+      }
+
       // Clear any existing timer for this key
       if (keyRepeatTimers.current[key]) {
         clearTimeout(keyRepeatTimers.current[key]);
@@ -589,8 +632,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
       };
 
-      // Start repeat immediately (no delay)
-      keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+      // Start repeat after initial delay (allows single character typing)
+      keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
     };
 
     const stopKeyRepeat = (key: string) => {
@@ -666,6 +709,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('connect', () => {
       console.log('[Terminal] Connected to BBS backend');
       stopGuruAnimation();
+
+      // Re-enable auto-reconnection if it was disabled by a previous forced disconnect
+      if (socket.io.opts.reconnection === false) {
+        socket.io.opts.reconnection = true;
+        console.log('[CONNECT] Auto-reconnection re-enabled after manual connection');
+      }
+
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
       keyState.current = {};
@@ -891,6 +941,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
+    // Server-initiated disconnect (e.g., user logged off with G command)
+    socket.on('force-disconnect', (data?: { reason?: string }) => {
+      console.log('[FORCE-DISCONNECT] Server initiated disconnect:', data?.reason || 'unknown');
+      forcedDisconnectRef.current = true;
+      // Disable auto-reconnection for this disconnect
+      socket.io.opts.reconnection = false;
+      console.log('[FORCE-DISCONNECT] Auto-reconnection disabled');
+    });
+
     socket.on('disconnect', (reason: string) => {
       console.log('[DISCONNECT] Client disconnected, reason:', reason);
 
@@ -899,10 +958,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         reason,
         socketId: socket.id,
         loginState: loginState.current,
+        forcedDisconnect: forcedDisconnectRef.current,
         timestamp: new Date().toISOString(),
       });
 
-      if (reason === 'io client disconnect') {
+      // Check if this was a server-initiated forced disconnect (logoff)
+      if (forcedDisconnectRef.current) {
+        console.log('[DISCONNECT] Forced disconnect (logoff) - clearing session state and preventing reconnect');
+        localStorage.removeItem('bbs_auth_token');
+        clearSessionState();
+        reconnectPending.current = false;
+        forcedDisconnectRef.current = false;  // Reset flag
+        // Auto-reconnection already disabled in force-disconnect handler
+      } else if (reason === 'io client disconnect') {
         // User intentionally disconnected - clear everything
         console.log('[DISCONNECT] User-initiated disconnect - clearing session state');
         localStorage.removeItem('bbs_auth_token');
@@ -979,11 +1047,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           setOverlays(prev => {
             const next = new Map(prev);
             if (overlayData.show) {
-              next.set(overlayData.id, { opacity: overlayData.opacity || 0.5, show: true });
+              next.set(overlayData.id, {
+                opacity: overlayData.opacity || 0.5,
+                show: true,
+                // Position info for positioned overlays (in terminal cells)
+                x: overlayData.x,
+                y: overlayData.y,
+                width: overlayData.width,
+                height: overlayData.height,
+              });
             } else {
               next.delete(overlayData.id);
             }
-            console.log('[Overlay] Updated overlays map, size:', next.size);
+            console.log('[Overlay] Updated overlays map, size:', next.size, 'data:', overlayData);
             return next;
           });
         } catch (e) {
@@ -1248,7 +1324,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('door-active', (active: boolean) => {
+      console.log('[BBSTerminal] door-active received:', active);
       doorActive.current = active;
+      console.log('[BBSTerminal] doorActive.current set to:', doorActive.current);
     });
 
     // Game mode: bypass OS key repeat for real-time game controls
@@ -1558,6 +1636,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     if (!coords) return;
 
     mouseButtonDown.current = true;
+    console.log('[BBSTerminal] mouseButtonDown set to:', mouseButtonDown.current);
 
     socket.emit('mouse-click', {
       x: coords.x,
@@ -1600,8 +1679,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const coords = getTerminalCoords(event);
     if (!coords) return;
 
+    console.log('[BBSTerminal] mousemove: mouseButtonDown=', mouseButtonDown.current, 'event.buttons=', event.buttons);
+
     if (mouseButtonDown.current) {
       // Dragging - send drag event
+      console.log('[BBSTerminal] Emitting mouse-drag');
       socket.emit('mouse-drag', {
         x: coords.x,
         y: coords.y,
@@ -1690,20 +1772,54 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       />
       {/* Web Transparency Overlays - CSS-based overlays for web connections */}
       {Array.from(overlays.entries()).map(([id, overlay]) => {
-        console.log('[Overlay] Rendering overlay:', id, 'opacity:', overlay.opacity);
+        // Calculate pixel position from terminal cell coordinates
+        const terminalEl = terminalRef.current;
+        const xtermScreen = terminalEl?.querySelector('.xterm-screen');
+        const rect = xtermScreen?.getBoundingClientRect();
+        const termRect = terminalEl?.getBoundingClientRect();
+
+        // Calculate cell dimensions
+        const cols = 80;
+        const rows = 24;
+        const cellWidth = rect ? rect.width / cols : 0;
+        const cellHeight = rect ? rect.height / rows : 0;
+
+        // Calculate offset from terminal container to xterm-screen
+        const offsetLeft = rect && termRect ? rect.left - termRect.left : 0;
+        const offsetTop = rect && termRect ? rect.top - termRect.top : 0;
+
+        // Determine overlay position and size (default to full screen if not specified)
+        const hasPosition = overlay.x !== undefined && overlay.y !== undefined &&
+                           overlay.width !== undefined && overlay.height !== undefined;
+
+        const style: React.CSSProperties = hasPosition ? {
+          position: 'absolute',
+          left: offsetLeft + (overlay.x! * cellWidth),
+          top: offsetTop + (overlay.y! * cellHeight),
+          width: overlay.width! * cellWidth,
+          height: overlay.height! * cellHeight,
+          backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
+          pointerEvents: 'none',
+          zIndex: 100,
+        } : {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
+          pointerEvents: 'none',
+          zIndex: 100,
+        };
+
+        console.log('[Overlay] Rendering overlay:', id, 'opacity:', overlay.opacity,
+          'hasPosition:', hasPosition, 'pos:', { x: overlay.x, y: overlay.y, w: overlay.width, h: overlay.height },
+          'cellSize:', { cellWidth, cellHeight });
+
         return (
           <div
             key={id}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: `rgba(0, 0, 0, ${overlay.opacity})`,
-              pointerEvents: 'none', // Allow clicks through to terminal
-              zIndex: 100, // High enough to be above terminal
-            }}
+            style={style}
           />
         );
       })}

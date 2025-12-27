@@ -1,967 +1,315 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-**🔴 MANDATORY: READ THIS ENTIRE FILE BEFORE ANY ACTION 🔴**
-
-You MUST read ALL of CLAUDE.md from top to bottom before doing ANY work.
-You MUST follow EVERY rule in this file without exception.
-Apologizing after violating rules is NOT acceptable - PREVENT violations.
+**🔴 READ ENTIRE FILE BEFORE ANY ACTION 🔴**
 
 ---
 
-## ⛔ CRITICAL RULES - READ FIRST ⛔
-
-**USE REAL LIBRARIES, NOT TYPESCRIPT REIMPLEMENTATIONS - NON-NEGOTIABLE**
-
-**CRITICAL ARCHITECTURAL PRINCIPLE**: The BBS uses REAL native Amiga library binaries executed by the 68K emulator (MOIRA), NOT TypeScript reimplementations.
-
-1. **NEVER trap library functions** with TypeScript implementations unless absolutely necessary
-2. **ALWAYS use native binaries** for:
-   - AEDoor.library (./Libs/AEDoor.library) - ALL functions execute natively
-   - dos.library - Native 68K code from Kickstart ROM
-   - exec.library - Native 68K code from Kickstart ROM
-   - Other AmigaOS libraries - Native binaries loaded via LibraryLoader
-
-3. **WHY this matters**:
-   - TypeScript implementations create DIFFERENT memory layouts than native code expects
-   - Native functions (like getname/getlocation) read from SPECIFIC offsets
-   - Trapping breaks compatibility with 4000+ existing Amiga doors
-   - Native binaries are battle-tested and correct
-
-4. **ONLY trap when**:
-   - Bridging to Node.js (PutMsg/GetMsg for BBS communication)
-   - Implementing functions that don't exist in ROM (utility functions)
-   - Absolutely required for emulation (never for convenience)
-
-5. **If a door doesn't work**:
-   - Check logs FIRST (don't assume library implementation is wrong)
-   - Verify native binary is executing (not TypeScript trap)
-   - Fix emulation environment, NOT library implementations
-   - Native code is correct - fix YOUR code
-
-**Violation = Architectural integrity compromised, doors will break**
-
----
-
-**SDK DOORS MUST BE BUILT - NEVER LOAD STALE CODE**
-
-**CRITICAL**: SDK doors in `sdk/doors/` are TypeScript projects that MUST be built before changes are visible.
-
-1. **How SDK doors work**:
-   - Source code: `sdk/doors/{doorname}/src/`
-   - Built output: `sdk/doors/{doorname}/dist/`
-   - Door handler loads: `dist/index.js` (NOT source files)
-   - Cache busting works on the built file, NOT the source
-
-2. **THE PROBLEM**:
-   - You edit source files in `src/app.ts`
-   - Door handler clears cache and reloads `dist/index.js`
-   - But `dist/index.js` is STALE (old build)
-   - Result: You see old code, cache busting appears broken
-
-3. **THE SOLUTION - ALWAYS BUILD**:
-   ```bash
-   cd sdk/doors/{doorname}
-   npm run build
-   ```
-
-4. **MANDATORY WORKFLOW**:
-   - **BEFORE testing ANY SDK door changes**: `npm run build`
-   - **AFTER editing source files**: `npm run build`
-   - **If door looks wrong**: Check if you built it
-   - **If "cache not working"**: You forgot to build
-
-5. **Which doors need building**:
-   - Any door in `sdk/doors/` with a `package.json`
-   - LiveChat: `sdk/doors/livechat/`
-   - 2048 Game: `sdk/doors/2048-game/`
-   - All example doors in `sdk/doors/`
-
-6. **How to identify SDK doors**:
-   ```bash
-   # Has package.json and src/ directory
-   ls sdk/doors/*/package.json
-   ls sdk/doors/*/src/
-   ```
-
-7. **start-servers.sh AUTO-BUILDS**:
-   - The startup script now builds all SDK doors automatically
-   - First start may take 30-60 seconds (building all doors)
-   - Subsequent starts are faster (only rebuilds if source changed)
-
-8. **Development workflow**:
-   ```bash
-   # Option 1: Manual build after changes
-   cd sdk/doors/livechat
-   npm run build
-   # Then test in BBS
-
-   # Option 2: Watch mode (auto-rebuild on save)
-   cd sdk/doors/livechat
-   npm run build:watch
-   # Leave running, edit files, changes auto-build
-   ```
-
-**Violation = You will see stale code and waste hours debugging "broken" cache busting**
-
-**See also**: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md` for complete SDK door workflow
-
----
-
-**NEO-BLESSED TAGS MUST BE ENABLED - ALWAYS USE HELPERS**
-
-**CRITICAL**: Neo-Blessed elements DON'T parse color tags by default. If you see literal `{gray-fg}` or `{red-fg}` in the UI, you forgot `tags: true`.
-
-1. **THE PROBLEM**:
-   ```typescript
-   // WRONG - tags show as literal text
-   const box = blessed.box({
-     content: '{red-fg}Error{/red-fg}'
-     // Missing: tags: true
-   });
-   // Result: User sees "{red-fg}Error{/red-fg}" literally
-   ```
-
-2. **THE SOLUTION - Use SDK helpers**:
-   ```typescript
-   import { createBox, createList, colorize } from '../../utils/blessed-helpers';
-
-   // RIGHT - tags are parsed
-   const box = createBox({
-     content: '{red-fg}Error{/red-fg}'
-     // tags: true is automatic
-   });
-
-   // OR use the colorize helper
-   const box = createBox({
-     content: colorize('Error', 'red')
-   });
-   ```
-
-3. **AVAILABLE HELPERS** (in `sdk/utils/blessed-helpers.ts`):
-   - `createBox()` - Box with tags enabled
-   - `createList()` - List with tags enabled
-   - `createText()` - Text with tags enabled
-   - `createTextarea()` - Textarea with tags enabled
-   - `createLog()` - Log with tags enabled
-   - `createTable()` - Table with tags enabled
-   - `createButton()` - Button with tags enabled
-   - `colorize(text, color)` - Wrap text in color tags
-
-4. **MANDATORY RULE**:
-   - **NEVER call `blessed.box()` directly** - use `createBox()`
-   - **NEVER call `blessed.list()` directly** - use `createList()`
-   - **ALWAYS import from** `'../../utils/blessed-helpers'`
-   - If you must use `blessed.*` directly, add `tags: true`
-
-5. **How to identify the issue**:
-   - UI shows `{gray-fg}text{/gray-fg}` literally
-   - UI shows `{red-fg}` instead of red text
-   - Colors don't work in lists/boxes
-
-6. **Quick fix**:
-   ```typescript
-   // Find: blessed.box({ ... })
-   // Replace: blessed.box({ tags: true, ... })
-
-   // Better: Use createBox() from blessed-helpers
-   ```
-
-**Violation = Users see ugly literal tags instead of colors, door looks broken**
-
----
-
-**MODERN DOOR UX - ALWAYS USE NEO-BLESSED DESKTOP-STYLE UI**
-
-When asked to create or redesign doors, default to modern, desktop-like interfaces with neo-blessed:
-- Windowed layouts, panels, and menu bars
-- Mouse support and focus management
-- Avoid 90's text-menu layouts unless explicitly requested
-- Reserve footer space for buttons (min 3 rows) to avoid clipped controls
-
-**Violation = Door UX is outdated and not aligned with project goals**
-
----
-
-**68K DOOR EMULATION DEBUGGING - ALWAYS CHECK LOGS FIRST**
-
-When debugging 68K door issues (doors not working, showing errors, hanging, etc.):
-
-1. **ALWAYS check existing logs BEFORE implementing new features**
-2. **MANDATORY log files to check IN ORDER**:
-   - `logs/door-68k-{DOORNAME}-{TIMESTAMP}.-N{NODE}.log` - Per-door execution trace
-     Examples: door-68k-AquaScan_000-20251205083456.-N1.log
-               door-68k-mtop-20251205083541.-N2.log
-   - `logs/xim-debug.log` - XIM protocol messages (if XIM_DEBUG=1)
-   - `logs/backend.log` - Backend server errors
-   - `logs/frontend.log` - Frontend errors (if relevant)
-
-   **Find most recent logs**: `ls -t logs/door-68k-{DOORNAME}* | head -3`
-   **Find largest logs** (most detailed): `ls -lS logs/door-68k-{DOORNAME}* | head -3`
-
-3. **What to look for in logs**:
-   - File not found errors (paths, missing files)
-   - Environment variable issues (ENVSTAT, ENV_* values)
-   - Assign errors (missing assigns like BBS:, Doors:, etc.)
-   - Directory access failures
-   - XIM message exchanges (what door requests vs what BBS responds)
-   - AmigaDOS errors (ERROR_OBJECT_NOT_FOUND, etc.)
-   - Library call failures (dos.library, icon.library, etc.)
-
-4. **CRITICAL**: Use Read tool on logs, search with Grep, analyze patterns
-5. **NEVER** jump to implementing new logging without checking existing logs first
-6. **ALWAYS** grep for error patterns: `ERROR`, `fail`, `not found`, `nil`, `0x0`
-7. **DO NOT** ask the user to check logs; always check logs yourself and report findings.
-
-**Debug Tools Available**:
-- `XIM_DEBUG=1` environment variable (enables logs/xim-debug.log)
-- Per-door logs show: file operations, XIM messages, library calls, errors
-- `grep` to search logs for specific paths, errors, messages
-- Examples:
-  ```bash
-  # Find most recent AquaScan logs
-  ls -t logs/door-68k-AquaScan* | head -3
-
-  # Search for errors in AquaScan logs
-  grep -i "error\|fail\|not found" logs/door-68k-AquaScan* | tail -20
-
-  # Find which files AquaScan tried to open
-  grep "Open.*ami=" logs/door-68k-AquaScan* | tail -20
-  ```
-
-**Violation = You wasted time implementing features that already exist**
-
-7. **CHECK LOGS FREQUENTLY DURING DEBUGGING**:
-   - Read door logs after EVERY change you make
-   - Don't wait until the end to check - check immediately after each test
-   - Compare log output before and after your changes
-   - If a fix doesn't change the log output, the fix didn't work
-
-8. **DOCUMENT YOUR DEBUGGING PROGRESS**:
-   - Create/update `Documentation/6-Progress/{DOORNAME}_DEBUG_SESSION.md` for each door
-   - Log EVERY step you take with results (what worked, what didn't)
-   - Include: hypothesis, action taken, result, next hypothesis
-   - This prevents repeating the same failed approaches across sessions
-   - Example format:
-     ```
-     ## Step 1: Check AllocSignal return value
-     Hypothesis: AllocSignal returning -1 (failure)
-     Action: Added debug log in ExecLibrary.allocSignal()
-     Result: AllocSignal returns 16 (success) - NOT the issue
-
-     ## Step 2: Check FindPort call
-     Hypothesis: Door can't find AEDoorPort
-     Action: grep FindPort in backend.log
-     Result: NO FindPort calls! Door exits before XIM init
-     ```
-
-**Violation = You wasted time repeating failed debugging steps**
-
----
-
-## LOG CHECKING - AGENT RESPONSIBILITY
-
-- Do not ask the user to check logs.
-- Always check logs yourself using available tools and report findings.
-
----
-
-**NEVER USE BACKGROUND PROCESSES - THIS IS NON-NEGOTIABLE**
-
-1. **NEVER use `run_in_background: true`** in Bash tool calls
-3. **NEVER use `&` in bash commands for servers**
-4. **NEVER create multiple server restarts in one session**
-5. **ALWAYS ask user to start server script** - Never start/restart servers yourself
-   - User will run `./dev/scripts/start-servers.sh` manually
-   - You may check if servers are running but never restart them
-   - If restart needed: inform user and wait for them to do it
-
-**Why:** Background bash processes create zombie references that:
-- Persist across session summarization
-- Generate 100-200 tokens per message in system reminders
-- Cannot be cleaned up with KillShell
-- Accumulate to thousands of wasted tokens
-- Cost money and consume context window
-
-**What TO do:**
-- Run commands synchronously (they complete in 5-10 seconds)
-- If servers need restart: user will handle it manually
-- Only use background for true long-running monitoring (rare)
-- Maximum ONE server operation per session
-
-**Violation = Session must end immediately**
-
----
-
-**DISK-BASED CONFIGURATION - NEVER USE DATABASE FOR BBS CONFIG**
-
-AmiExpress is a **disk-based BBS**, NOT a database-driven application. Configuration ALWAYS comes from disk files.
-
-1. **NEVER load conferences from database** - Use ConfConfig.info or Conf*.info files
-2. **NEVER load message bases from database** - Use MsgBase.DB or message base .info files
-3. **NEVER load file areas from database** - Use conference .info DLPATH/ULPATH tooltypes
-4. **NEVER assume database has accurate configuration** - It may be stale or empty
-
-**What TO use:**
-- **Conferences**: `ConfConfig.info` (NCONFS, NAME.n, LOCATION.n) → express.e:cmds.numConf
-- **Message Bases**: `Conf{N}/MsgBase.DB` binary files or base .info files
-- **File Areas**: `Conf{N}.info` tooltypes (NDIRS, DLPATH.1, ULPATH.1, etc.)
-- **Commands**: `Commands/BBSCmd/*.info` and `Commands/SysCmd/*.info`
-- **Doors**: `doors/*/*.info` files
-- **Users**: Users.DB binary file (legacy) OR SQLite database (modern)
-- **BBS Config**: `bbsConfig.info` tooltypes
-
-**Why:**
-- express.e reads from disk files, NOT a database
-- Database is ONLY for: users, messages, call logs, statistics
-- Configuration must be hot-reloadable from disk
-- Sysops edit .info files directly, not SQL
-
-**Implementation:**
+## ⛔ CRITICAL RULES ⛔
+
+### 1. USE NATIVE LIBRARIES - NOT TYPESCRIPT
+
+BBS uses REAL Amiga binaries via MOIRA 68K emulator, NOT TypeScript reimplementations.
+
+**NEVER trap library functions** except: Node.js bridging (PutMsg/GetMsg), functions not in ROM, required for emulation.
+
+**Use native binaries:** AEDoor.library (./Libs/), dos.library, exec.library (ROM), AmigaOS libraries (LibraryLoader)
+
+**Why:** TypeScript creates different memory layouts. Native functions read specific offsets. Trapping breaks 4000+ doors.
+
+**If door fails:** Check logs → Verify native binary executes → Fix emulator, NOT libraries.
+
+### 2. NO GUESSING - VERIFY WITH EVIDENCE
+
+**NEVER implement on assumptions.** Verify FIRST: radare2 (disassemble), strings (extract text), vamos (test reference), express.e (implementation), MCP (NDK autodocs).
+
+**Workflow:** logs → strings → radare2 → express.e → vamos → implement
+
+**Evidence needed:** Memory offset + structure definition + behavior confirmation + express.e reference
+
+### 3. SDK DOORS MUST BE BUILT
+
+SDK doors (`sdk/doors/`) load `dist/index.js` not source. **MUST BUILD before testing.**
+
+`cd sdk/doors/{name} && npm run build` before testing. Watch: `npm run build:watch`. `start-servers.sh` auto-builds.
+
+### 4. NEO-BLESSED COLORS
+
+Neo-blessed now defaults to `tags: true` on all widgets. Colors work automatically.
+
+**ONLY 16 colors supported:** black, red, green, yellow, blue, magenta, cyan, white, gray
+
+**Use blessed tags in content:**
 ```typescript
-// WRONG - Loading conferences from database
-const conferences = await db.getConferences();
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
-// RIGHT - Loading from ConfConfig.info
-import { loadConfConfig } from '../services/conf-config.service';
-const confConfig = loadConfConfig(bbsRoot);
-const conferences = confConfig.entries.map((e, i) => ({
-  id: i + 1,
-  name: e.name,
-  location: e.location
-}));
+const box = blessed.box({
+  parent: screen,
+  style: { fg: 'cyan', bg: 'black' },  // Style colors
+  content: '{red-fg}Error{/}: message'   // Tag colors in content
+});
 ```
 
-**Violation = Fix immediately and document why database was used incorrectly**
+**Colors BREAK if you:**
+- Use raw ANSI codes like `\x1b[31m` or `\x1b[38;5;196m` (use blessed tags instead)
+- Explicitly set `tags: false` (don't do this)
 
----
+See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
-**PROJECT SAFETY CONTEXT** ⚠️
+### 5. MODERN DOOR UX
 
-This is a **historical software preservation project** - NOT malware, hacking tools, or offensive security.
+Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu bars, mouse support, focus management. Reserve footer 3+ rows. Avoid 90's text menus unless requested.
 
-**What This Project Is:**
-- Educational platform preserving 1980s-1990s BBS culture
-- Retro computing: emulating vintage Amiga software (68K CPU via MOIRA)
-- Defensive security ONLY (protecting users, not attacking systems)
-- Open source, transparent, documented
+### 6. CHECK LOGS FIRST
 
-**Technical Terms in Context:**
-- "Illegal instruction" = CPU term (invalid opcode in 68K emulation)
-- "Injection prevention" = Defensive (SQL/command injection protection)
-- "Exploit" = Preventing vulnerabilities, NOT creating them
-- "War", "Nuke", etc. in door names = Vintage 1990s games, harmless
+**ALWAYS check logs BEFORE implementing** for 68K door issues.
 
-**Vintage Doors:** Classic BBS games/utilities from 1990s with dramatic names (common in that era).
+**Files:** `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log` (per-door), `logs/xim-debug.log` (XIM_DEBUG=1), `logs/backend.log`, `logs/frontend.log`
 
-📖 **Full safety documentation:** See [PROJECT_SAFETY.md](./PROJECT_SAFETY.md)
+**Find:** `ls -t logs/door-68k-{NAME}* | head -3` (recent), `ls -lS logs/door-68k-{NAME}* | head -3` (largest), `grep -i "error\|fail" logs/door-68k-*`
 
----
+**Check after EVERY change.** Document in `Documentation/6-Progress/{NAME}_DEBUG_SESSION.md`: hypothesis → action → result → next.
 
-**AMIGAOS IS CASE-INSENSITIVE - ALWAYS USE AMIGAFS MODULE**
+**DO NOT ask user to check** - check yourself and report.
 
-AmigaOS file systems are **case-insensitive**. `AquaScan.EXE`, `aquascan.exe`, and `AQUASCAN.exe` all refer to the same file.
+### 7. NO BACKGROUND PROCESSES
 
-**MANDATORY RULES**:
+**NEVER:** `run_in_background: true`, `&` for servers, start/restart servers, multiple server ops per session.
 
-1. **NEVER use Node.js `fs` module directly** for BBS file operations
-2. **ALWAYS use `amigafs` module** instead:
-   ```typescript
-   // WRONG - will break with case mismatches
-   import * as fs from 'fs';
-   if (fs.existsSync('/Doors/aquascan/AquaScan.000')) { }
+**Why:** Zombies create persistent refs (100-200 tokens each) → thousands wasted.
 
-   // CORRECT - handles case-insensitive matching
-   import * as amigafs from '../utils/amigafs';
-   if (amigafs.existsSync('/Doors/aquascan/AquaScan.000')) { }
-   ```
+**Do:** Sync commands, ask user to run `./dev/scripts/start-servers.sh`, check servers (never restart), max 1 server op/session.
 
-3. **When writing new code**: Use `amigafs` from the start
-4. **When modifying code**: Convert `fs.` calls to `amigafs.` calls
-5. **Test with mixed case**: `AquaScan.EXE`, `aquascan.exe`, `AQUASCAN.exe` must all work
+### 8. DISK-BASED CONFIGURATION
 
-**Why This Matters**:
-- Real Amiga BBS data uses mixed case filenames
-- Doors may reference files with different casing than actual files
-- macOS/Linux are case-sensitive by default, causing bugs
+AmiExpress is **disk-based**, NOT database. Config from disk files ONLY.
 
-**Available Functions**: **ALL** standard fs sync operations (22 functions total):
-- File ops: `existsSync`, `readFileSync`, `writeFileSync`, `appendFileSync`, `unlinkSync`, `openSync`, `truncateSync`, `chmodSync`, `utimesSync`
-- Directory ops: `readdirSync`, `mkdirSync`, `rmdirSync`, `rmSync`
-- Stats: `statSync`, `lstatSync`, `accessSync`
-- Paths: `renameSync`, `copyFileSync`, `realpathSync`, `linkSync`, `symlinkSync`, `readlinkSync`
-- **Every character** in filenames is case-insensitive: `aMiGa.eXe` = `AMIGA.exe` = `amiga.EXE`
-- See `Documentation/3-Developers/AMIGAFS_MIGRATION.md` for full guide
+**NEVER from DB:** Conferences (use ConfConfig.info), message bases (MsgBase.DB), file areas (Conf{N}.info DLPATH/ULPATH).
 
-**Violation = Fix immediately and test with multiple case variations**
+**Sources:** ConfConfig.info, Commands/*.info, doors/*.info, bbsConfig.info. **DB ONLY for:** users, messages, call logs, stats.
 
----
+### 9. AMIGAOS CASE-INSENSITIVE - USE AMIGAFS
 
-**NO EMOJIS ANYWHERE - THIS IS NON-NEGOTIABLE**
+`AquaScan.EXE` = `aquascan.exe` = `AQUASCAN.exe`
 
-1. **NEVER use emojis** in ANY code, scripts, output, comments, or documentation
-2. **Scripts**: Use ASCII tags only: `[OK]`, `[ERROR]`, `[WARNING]`, `[INFO]`, `[BUILD]`, etc.
-3. **BBS Output**: Use ASCII characters: `*`, `X`, `!`, `-`, `+`, `|`, `=`
-4. **Code Comments**: Plain text only, no decorative characters
-5. **Documentation**: ASCII-safe formatting only
+**NEVER use `fs` directly.** ALWAYS:
+```typescript
+import * as amigafs from '../utils/amigafs';
+amigafs.existsSync('/Doors/file');
+```
 
-**Why:** Emojis cause:
-- Terminal compatibility issues (telnet, SSH, various shells)
-- Display problems in different environments
-- Encoding issues in logs and error messages
-- Inconsistent rendering across platforms
-- Git diff noise and merge conflicts
-- Screen reader accessibility problems
+22 functions: existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync, etc. See `Documentation/3-Developers/AMIGAFS_MIGRATION.md`
 
-**What TO use:**
-- ASCII tags: `[OK]`, `[ERROR]`, `[WARNING]`, `[INFO]`, `[DEBUG]`, `[BUILD]`, `[START]`, `[STOP]`
-- ASCII symbols: `*`, `X`, `!`, `-`, `+`, `|`, `=`, `>`, `<`, `/`, `\`
-- Plain text descriptions
+### 10. NO EMOJIS
 
-**Violation = Fix immediately and document in commit message**
+**NEVER** in code/scripts/output/comments/docs. Use ASCII: `[OK]`, `[ERROR]`, `[INFO]`, `*`, `X`, `!`, `-`, `+`.
 
----
+**Why:** Terminal compat, encoding issues, accessibility.
 
-**KEEP HANDOFF.MD COMPACT - THIS IS CRITICAL FOR CONTEXT BUDGET**
+### 11. KEEP HANDOFF.MD COMPACT
 
-1. **Maximum size**: 5KB (50-60 lines)
-2. **Only essentials**: Current state, recent work (1-2 sessions), next steps, key files
-3. **Never include**: Detailed analysis, code snippets, disassembly, stack traces, old session summaries
-4. **Check size**: Run `wc -c handoff.md` before updating - must be under 5000 bytes
-5. **Archive old content**: Move detailed analysis to `Documentation/` or session-specific files
+**Max 5KB (50-60 lines).** Current state + 1-2 sessions only. Never: analysis, code, disassembly, traces.
 
-**Why:** When sessions are continued:
-- Verbose handoff.md (16KB) generates 40-50K token conversation summary
-- Compact handoff.md (2KB) generates 5-10K token conversation summary
-- Savings: 30-40K tokens (20-25% of 200K budget)
-- This is the BIGGEST source of context consumption in continued sessions
+**Why:** 16KB → 40-50K tokens. 2KB → 5-10K tokens. Saves 30-40K (20-25% budget).
 
-**What TO do:**
-- Keep handoff.md to current state + 1-2 recent sessions only
-- Move detailed technical analysis to Documentation/ files
-- Reference files by path instead of including content
-- Update handoff.md at end of session with minimal summary only
-
-**Violation = Trim handoff.md immediately to under 5KB**
-
-**Check Scripts**:
-- `./dev/scripts/check-handoff-size.sh` - Validates handoff.md size
-- `./dev/scripts/check-context-usage.sh` - Full context consumption analysis
-
----
-
-## ⚠️ Development Status
-
-**This project is in ACTIVE DEVELOPMENT - NOT production ready**
-
-- Actual completion: 60-70% (many features untested)
-- Time to production: 2-3 months minimum
-- Multi-user stability unknown
-- Performance not tested under load
-- See `Documentation/6-Progress/CURRENT_STATUS.md` for detailed status
+Check: `wc -c handoff.md` <5000. Archive details to `Documentation/`.
 
 ---
 
 ## Project Overview
 
-AmiExpress-Web is a TypeScript port of the classic Amiga BBS software AmiExpress/!X. It emulates 68K Amiga binaries in the browser using MOIRA (68000 CPU emulator) and recreates the BBS environment with modern web technologies.
+AmiExpress-Web: TypeScript port of Amiga BBS. 68K emulation via MOIRA.
 
-**Architecture**: Monorepo with 3 main areas:
-- `web/backend` - Node.js/TypeScript BBS server
-- `web/frontend` - React/Vite/xterm.js terminal interface
-- `sdk` - Door Development Kit for creating BBS doors/games
+**Arch:** `web/backend` (Node/TS server), `web/frontend` (React/xterm.js), `sdk` (Door Dev Kit)
 
-**Door Types**:
-- **68K Doors**: Legacy Amiga binaries executed via MOIRA emulator (in `doors/`)
-- **TypeScript Doors**: Modern doors using SDK, native execution (in `web/backend/src/doors/`)
-- Both types register commands the same way via `.info` files
+**Doors:** 68K (legacy via MOIRA in `doors/`), TypeScript (SDK in `sdk/doors/`)
 
-### Key Features
-- **68K Emulation**: MOIRA-based execution of Amiga binary doors
-- **AREXX Interpreter**: Full AREXX support (1905 lines, 40+ BBS API functions)
-- **Import/Export**: Amiga BBS data migration (users, messages, files, config)
-- **Multi-Protocol Access**: Telnet (port 2323), SSH (port 2222), WebSocket
-- **QWK/REP Mail**: Offline mail packet generation
-- **Multi-Node Chat**: Real-time Socket.IO-based chat system
+**Features:** 68K emulation, AREXX (1905 lines, 40+ APIs), Import/Export, Telnet:2323, SSH:2222, WebSocket, QWK/REP, Multi-node chat
 
-## Project Structure
-```
-/
-├── web/                    - Main BBS application
-│   ├── backend/           - TypeScript BBS server
-│   ├── frontend/          - React terminal UI
-│   └── config-app/        - Admin configuration UI (React)
-├── sdk/                    - Door Development Kit
-├── Documentation/          - All documentation
-├── dev/scripts/           - Development/test scripts
-├── doors/                  - Installed door programs
-├── mcp-server/            - MCP server for source analysis
-└── .mcp.json              - MCP server configuration
-```
+**Status:** 60-70% complete, NOT production, 2-3 months to ready. See `Documentation/6-Progress/CURRENT_STATUS.md`
 
-## Development Commands
+---
 
-### Server Management
-- Start: `./dev/scripts/start-servers.sh`
-  - **Auto-setup**: Automatically checks and installs dependencies, builds SDK, creates .env.local
-  - **First run**: May take 2-3 minutes as it installs all dependencies and builds SDK
-  - **Subsequent runs**: Fast startup, only checks if setup is current
-- Debug mode: `./dev/scripts/start-servers.sh --debug` (shows all logs)
+## Development
+
+### Server
+- Start: `./dev/scripts/start-servers.sh` (auto-setup, auto-build)
+- Debug: `./dev/scripts/start-servers.sh --debug`
 - Kill: `./dev/scripts/kill-servers.sh`
-- **NEVER**: `npm run dev &` or background bash or `run_in_background: true`
-- **Unified Deployment**: All frontends served from backend on port 3001
-  - BBS Terminal: `http://localhost:3001/`
-  - Admin Config: `http://localhost:3001/admin/`
-  - SDK Preview: `http://localhost:3001/sdk/`
-  - SDK Backend API: port 8080 (WebSocket for door preview)
-- **Just works**: No need to manually run npm install or builds
+- **Unified port 3001:** BBS `/`, Admin `/admin/`, SDK `/sdk/`
+- **Protocols:** Telnet:2323, SSH:2222 (needs SSH_HOST_KEY_PATH)
 
-### Multi-Protocol Access
-- **WebSocket**: Main browser interface at `http://localhost:3001/`
-- **Telnet**: Classic BBS access (port 2323)
-- **SSH**: Secure terminal access (port 2222)
-  - Generate host key: `ssh-keygen -t rsa -b 4096 -f ssh_host_rsa_key -N ""`
-  - Set path via `SSH_HOST_KEY_PATH` in `.env.local`
-  - See `Documentation/3-Developers/TELNET_SSH_SERVERS.md`
-
-### CRITICAL: Zombie Process Cleanup
-**VERY IMPORTANT** - Zombie processes consume context and must be killed immediately!
-
-When context usage seems high or you see many stale background bash references:
+### Zombie Cleanup (CRITICAL if high context)
 ```bash
-# Check for zombie processes
 ps aux | grep -E "(start-servers|kill-servers|build-wasm)" | grep -v grep
-
-# Kill all zombie processes (REQUIRED - do this immediately!)
 pkill -f "start-servers.sh" && pkill -f "kill-servers.sh" && pkill -f "build-wasm.sh"
-
-# Verify cleanup
-ps aux | grep -E "(start-servers|kill-servers|build-wasm)" | grep -v grep | wc -l
-# Should return: 0
 ```
 
-**Why this matters:**
-- Zombie processes from previous sessions leave stale background bash references
-- Each reference consumes 100-200 tokens with "has new output" reminders
-- Over many sessions, these accumulate and consume thousands of tokens
-- **ALWAYS kill zombie processes at start of session if context seems tight**
-
-**Signs of zombie process problem:**
-- Context window filling up quickly
-- Many duplicate "Background Bash has new output" system reminders
-- Dozens of start-servers.sh or build-wasm.sh processes in ps output
-
-### Backend (web/backend)
+### Backend (`web/backend`)
 ```bash
-cd web/backend
-npm install          # Install dependencies
-npm run dev          # Start development server
-npm test             # Run Jest tests
-npm run test:watch   # Run tests in watch mode
-npx tsc --noEmit     # TypeScript type check (REQUIRED before commits)
+npm install; npm run dev; npm test
+npx tsc --noEmit  # REQUIRED before commits
 ```
 
-### Frontend (web/frontend)
+### Frontend (`web/frontend`)
 ```bash
-cd web/frontend
-npm install          # Install dependencies
-npm run dev          # Start Vite dev server
-npm run build        # Production build
-npm run build:check  # Type check + build (REQUIRED before PRs)
-npm run lint         # ESLint check
-npm run preview      # Preview production build (port 8080)
+npm install; npm run dev; npm run build
+npm run build:check  # REQUIRED before PRs
 ```
 
-### Config App (Admin UI)
+### SDK (`sdk`)
 ```bash
-cd web/config-app
-npm install          # Install dependencies
-npm run dev          # Start config UI dev server
-npm run build        # Production build
-npm run build:check  # Type check + build (REQUIRED before PRs)
+npm install; npm run build  # REQUIRED before CLI
+npm test; npm run create-door
 ```
-- Standalone React app for BBS administration
-- Full CRUD for conferences, file areas, users, config
-- Runs on separate port from main frontend
-- See `Documentation/3-Developers/API_REFERENCE.md`
 
-### SDK (Door Development Kit)
-```bash
-cd sdk
-npm install          # Install dependencies
-npm run build        # Build SDK (REQUIRED before using CLI commands)
-npm test             # Run SDK tests
-npm run test:watch   # Watch mode
-npm run test:unit        # Unit tests only
-npm run test:integration # Integration tests only
+**Before PRs:** Test SDK + 2 example doors build.
 
-# CLI commands (require SDK to be built first)
-npm run create-door  # Create new door (interactive wizard)
-npm run pack         # Package door for distribution
-npm run validate     # Validate door package structure
-```
-- SDK located at `/sdk/`
-- **IMPORTANT**: Always run `npm run build` before using CLI commands
-- Builds doors for AmiExpress BBS
-- See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
-
-**CRITICAL - SDK Testing Before PRs:**
-- **ALWAYS** test SDK builds before creating PRs: `cd sdk && npm run build`
-- **ALWAYS** test at least 2 example doors build successfully:
-  ```bash
-  cd sdk/doors/neo-blessed-demo && npm run build
-  cd sdk/doors/2048-game && npm run build
-  ```
-- **NEVER** create a PR with broken SDK or example doors
-- Example doors are in `sdk/doors/` directory
-
-**CRITICAL - Creating New Doors:**
-- **ALWAYS** use the SDK when creating new doors
-- **NEVER** create integrated doors in `web/backend/src/doors/` directly
-- Use `npm run create-door` in the SDK to scaffold new doors
-- SDK doors are standalone packages with proper metadata
-- SDK doors can be shared and distributed independently
-- Only use integrated doors for core BBS functionality that requires deep backend integration
-
-### SDK Preview (Door Development Tool)
-```bash
-cd sdk
-npm run preview        # Start SDK preview at http://localhost:8080
-npm run preview:quick  # Skip dependency checks, start immediately
-```
-- Live door development environment
-- Hot reload on code changes
-- Integrated BBS terminal for testing
-- View door metadata, code, and test in real-time
-- No need to restart BBS server when developing doors
+**New doors:** ALWAYS use `npm run create-door`, NEVER create in `web/backend/src/doors/`.
 
 ### Testing
+- All commands: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts`
+- Quick: `./dev/scripts/test-all-commands-quick.sh`
+- Interactive: `dev/scripts/test-command-interactive.ts`
+- Doors: `./dev/scripts/test-example-doors.sh`
 
-**Backend Tests:**
+See `Documentation/3-Developers/TESTING.md`
+
+---
+
+## Git
+
+Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`
+
+Examples: `feat(sdk): Add Neo-Blessed`, `fix(backend): Door state bug`
+
+---
+
+## Environment
+
+`.env.local`: `JWT_SECRET` (`openssl rand -base64 32`), `DATABASE_DIR` (./data), `BACKEND_PORT` (3001)
+
+DB: `./data/amiexpress.db` (auto-created)
+
+---
+
+## Architecture
+
+**Backend** (`web/backend/src/`): amiga-emulation/, database/, handlers/, services/, utils/ (39+ - REUSE, DON'T DUPLICATE)
+
+**Key utils:** AnsiUtil, ErrorHandler, PermissionsUtil, FileDizUtil, AcsUtil, BbsPathsUtil, AmigaCommandParser - import from utils/
+
+**File limit:** 2000 lines - modularize when reached
+
+---
+
+## MCP Tools
+
+**ALWAYS use before implementing.**
+
+- `list_express_modules` - 19 modules
+- `read_express_module` - Read by module (BEST)
+- `search_express_source` - Find with context
+- `read_source_range` - Specific lines
+- `search_ndk_autodocs` - AmigaOS specs
+
+**Workflow:** `search_express_source "StrCmp(cmdcode,'CMD')"` → `read_express_module "internal-commands"` → implement EXACTLY.
+
+**Not in express.e:** Use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefix.
+
+---
+
+## Commands
+
+**Before creating:** Search express.e via MCP. If found: implement exactly. If not: `WEB_*` prefix.
+
+**Priority:** SYSCMD → BBSCMD → InternalCommand
+
+**AREXX:** Full support (1905 lines, 40+ funcs). See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
+
+---
+
+## BBS Output
+
+NO emojis (`*` `X` `!` instead), NO bold ANSI (`\x1b[0;XXm` not `\x1b[1;XXm`), Amiga ASCII only (`_/\|-`, NO PC box), 80x24 max, `\r\n` line endings.
+
+---
+
+## Files
+
+Docs: `Documentation/`, Scripts: `dev/scripts/`, Menu: `backend/Screens/MENU.TXT`, Bulletins: `backend/data/bbs/Conf01/Bulletins/`
+
+**Screen flow:** BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
+
+---
+
+## MOIRA
+
+**NEVER blame MOIRA.** 99.9% bugs in YOUR code. Check YOUR implementation first.
+
+---
+
+## 68K Debug
+
+**radare2:**
 ```bash
-cd web/backend
-npm test             # Run all Jest tests
-npm run test:watch   # Watch mode
-npm run test:coverage # Coverage report
-npx tsc --noEmit     # Type check (REQUIRED before commits)
+brew install radare2
+r2 -q -c "e asm.arch=m68k; e asm.bits=32; s 0x1156; pd 20" /path/binary
 ```
 
-**Frontend Tests:**
+**vamos:**
 ```bash
-cd web/frontend
-npm run build:check  # Type check + build (REQUIRED before PRs)
-npm run lint         # ESLint validation
-```
-
-**BBS Integration Tests:**
-- **All Commands**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts`
-- **Quick All Commands**: `./dev/scripts/test-all-commands-quick.sh`
-- **Interactive Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-command-interactive.ts`
-- **Door Install Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-door-install.ts`
-- **Example Doors**: `./dev/scripts/test-example-doors.sh` (or `--clean` to remove node_modules first)
-- **Deep Dive Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-deep-dive.ts`
-- **Simple Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-simple.ts`
-- **BBS Comprehensive**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-bbs-comprehensive.ts`
-- **Config API Test**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-config-api.ts`
-- **Import Testing**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-import-execution.ts`
-- **User Parsing**: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-user-parsing.ts`
-- See `Documentation/3-Developers/TESTING.md` for complete protocol
-- **CRITICAL**: Always use test scripts instead of manual testing
-
-## Git Workflow
-
-**Commit Messages:**
-- Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, etc.
-- Be descriptive: explain WHY, not just WHAT
-- Examples:
-  - `feat(sdk): Add Neo-Blessed UI engine support`
-  - `fix(backend): Resolve door state transition bug`
-  - `chore(deps): Update Socket.IO to 4.8.1`
-
-## Environment Variables
-- Copy `.env.example` to `.env.local`
-- Required for development:
-  - `JWT_SECRET` - Generate with `openssl rand -base64 32`
-  - `DATABASE_DIR` - SQLite database location (default: `./data`)
-  - `BACKEND_PORT` - Backend port (default: 3001, serves all frontends)
-- For deployment:
-  - `VERCEL_TOKEN` - For Vercel deployment
-  - `RENDER_API_KEY` - For Render.com webhooks
-- See `.env.example` for full list
-
-**Database Location**:
-- Development: `./data/amiexpress.db` (project root)
-- Production: Set via `DATABASE_DIR` environment variable
-- SQLite file created automatically on first run
-
-## Fonts
-- **Status**: Classic Amiga BBS fonts are referenced but TTF files are NOT included in repository
-- **Location**: Place font files in `web/frontend/public/fonts/`
-- **Required Fonts**:
-  - `mOsOul_v1.0.ttf` - Default BBS font
-  - `Topaz_a500_v1.0.ttf` / `Topaz_a1200_v1.0.ttf` - Classic Amiga fonts
-  - `MicroKnight_v1.0.ttf` / `MicroKnightPlus_v1.0.ttf`
-  - `P0T-NOoDLE_v1.0.ttf`
-  - `TopazPlus_a500_v1.0.ttf` / `TopazPlus_a1200_v1.0.ttf`
-- **Instructions**: See `web/frontend/public/fonts/README.md`
-- **Fallback**: System will use "Courier New" if fonts are missing
-- **Source**: Amiga bitmap fonts (.F16) available in `Docs/moebius/app/fonts/amiga/`
-
-## Deployment
-- Push and deploy: `./dev/scripts/push-and-deploy.sh`
-- Requires environment variables in `.env.local`:
-  - `VERCEL_TOKEN` - For Vercel deployment
-  - `RENDER_API_KEY` - For Render.com webhooks
-- See `.env.example` for deployment configuration
-
-## Server Logs
-- Backend: `logs/backend.log` (overwritten each start)
-- Frontend: `logs/frontend.log` (overwritten each start)
-- When user says "check the logs": Use Read tool on `logs/backend.log`
-- Normal mode: Terminal shows filtered output, full logs saved to files
-- Debug mode: Terminal shows all output, full logs saved to files
-
-## MCP Server Tools (ALWAYS use these)
-
-The project includes an MCP server at `.mcp.json` providing access to the original AmiExpress/!X source code.
-
-### Available Tools
-
-**Source Code Analysis:**
-- `list_express_modules` - Shows 19 modules with line ranges
-- `read_express_module` - Read by module (mci, internal-commands, doors, etc.) - **BEST option**
-- `search_express_source` - Find functions/commands with context (returns line numbers)
-- `read_source_range` - Read specific lines from express.e/hydra.e/acp.e
-
-**AmigaOS Reference:**
-- `search_ndk_autodocs` - AmigaOS function specs from NDK 3.2R4
-
-### Workflow Example
-
-**Implementing a BBS Command:**
-```
-1. Search for the command:
-   mcp__amiexpress-docs__search_express_source "StrCmp(cmdcode,'DOWNLOAD')"
-
-2. Results show: Found in express.e at lines 15234-15456
-
-3. Read the module containing it:
-   mcp__amiexpress-docs__read_express_module "internal-commands"
-
-   OR read specific lines:
-   mcp__amiexpress-docs__read_source_range
-     source: "express-e"
-     startLine: 15234
-     endLine: 15456
-
-4. Implement EXACTLY as shown in express.e
-   - Same logic flow
-   - Same state transitions
-   - Same error handling
-```
-
-**Finding MCI Codes:**
-```
-1. Search for MCI implementation:
-   mcp__amiexpress-docs__search_express_source "ParseMCI"
-
-2. Read the MCI module:
-   mcp__amiexpress-docs__read_express_module "mci"
-
-3. Implement the MCI handler matching express.e behavior
-```
-
-### Critical Rules
-1. **ALWAYS** use MCP tools before implementing ANY feature
-2. Use `search_express_source` → `read_express_module` or `read_source_range`
-3. Implement EXACTLY as express.e shows
-4. NO guessing, NO assumptions
-5. If express.e doesn't have it, use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefixes
-
-## TypeScript - Zero Errors Policy
-- Run `cd web/backend && npx tsc --noEmit` before commits
-- Pre-commit hook blocks commits with errors (when configured)
-- Emergency override: `SKIP_TS_CHECK=1 git commit`
-
-## Code Architecture
-
-### Backend Structure (`web/backend/src/`)
-**Note**: All backend code is in `web/backend/src/`, NOT `backend/backend/src/`
-
-```
-├── amiga-emulation/    - 68K emulation, door execution
-├── constants/          - ANSI codes, enums, static values
-├── database/           - Modular database code (10+ modules)
-├── doors/              - Door management
-├── handlers/           - Socket/HTTP request handlers
-├── middleware/         - Express/Socket.IO middleware
-├── nodes/              - Node/session management
-├── server/             - Server setup modules
-├── services/           - Business logic layer
-├── types/              - TypeScript types
-├── utils/              - Reusable utility functions
-├── database.ts         - Main database (being modularized)
-└── index.ts            - Main entry point
-```
-
-**Frontend Structure** (`web/frontend/src/`):
-```
-├── components/         - React components
-├── hooks/              - Custom React hooks
-├── services/           - API/Socket.IO clients
-├── types/              - TypeScript types
-├── utils/              - Utility functions
-└── App.tsx             - Main application component
-```
-
-### Modularization Rules
-- **File Size Limit**: 2,000 lines maximum
-- When file reaches limit: STOP, plan modularization, split into 5-10 focused modules
-- Use existing utilities from `utils/` - **DO NOT duplicate code**
-- See `Documentation/3-Developers/ARCHITECTURE.md` for full details
-
-### Key Utilities (Import These!)
-Backend has 39+ utility modules in `web/backend/src/utils/`:
-
-**Essential Utilities:**
-```typescript
-import { AnsiUtil } from './utils/ansi.util';           // ANSI codes (4.9KB)
-import { AnsiOutputUtil } from './utils/ansi-output.util';  // ANSI output (4.2KB)
-import { ErrorHandler } from './utils/error-handling.util';  // Error handling (6 methods)
-import { ParamsUtil } from './utils/params.util';       // Parameter parsing (5 methods)
-import { PermissionsUtil } from './utils/permissions.util';  // Permission checks (13+ methods)
-```
-
-**File Operations:**
-```typescript
-import { FileDizUtil } from './utils/file-diz.util';    // FILE_ID.DIZ extraction (12KB)
-import { FileFlagUtil } from './utils/file-flag.util';  // File flagging system (8.6KB)
-import { FileUploadUtil } from './utils/file-upload.util';  // Upload handling
-import { ArchiveExtractor } from './utils/archive-extractor';  // ZIP, LZX, LHA, TAR, DMS
-```
-
-**BBS-Specific:**
-```typescript
-import { AcsUtil } from './utils/acs.util';             // Access Control System (11KB)
-import { BbsPathsUtil } from './utils/bbs-paths.util';  // Path resolution (10KB)
-import { MenuUtil } from './utils/menu.util';           // Menu system
-import { MessagePointersUtil } from './utils/message-pointers.util';  // Message threading
-import { PetsciiUtil } from './utils/petscii.util';     // C64/PETSCII conversion (13KB)
-import { AmigaCommandParser } from './utils/amiga-command-parser.util';  // .info parsing (13KB)
-```
-
-**Always check `utils/` before implementing - DO NOT duplicate code**
-
-## Command Implementation
-
-### Before Creating Commands
-1. Use MCP `search_express_source` with query `"StrCmp(cmdcode,'COMMAND')"`
-2. If found: Implement EXACTLY as shown
-3. If not found: Use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefixes
-4. Command Priority: SYSCMD → BBSCMD → InternalCommand
-
-### AREXX Door Support
-- Full AREXX interpreter (1905 lines, `web/backend/src/services/arexx.ts`)
-- 40+ BBS API functions (BBSWRITE, BBSGETUSER, BBSPOSTMSG, etc.)
-- Drop file creation (DOOR.SYS, DORINFO1.DEF)
-- Amiga AREXX doors run as-is
-- See `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
-
-## BBS Output Rules
-- NO emojis (use `*` `X` `!` `-` `+`)
-- NO bold ANSI (`\x1b[1;XXm`) - use `\x1b[0;XXm`
-- Amiga ASCII art only: `_` `/` `\` `|` `-` (NO PC box-drawing)
-- 80x24 max, `\r\n` line endings
-
-## File Organization
-- Docs: `Documentation/` directory
-- Scripts: `Scripts/` directory
-- Dev scripts: `dev/scripts/` directory
-- Main menu: `backend/Screens/MENU.TXT`
-- Bulletins: `backend/data/bbs/Conf01/Bulletins/YYYYMMDD_CHANGELOG.TXT`
-
-## Screen Display Flow (express.e:28555-28648)
-BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
-
-## MOIRA Emulator
-- **NEVER blame MOIRA** - it's battle-tested and correct
-- 99.9% of bugs are in YOUR implementation
-- Check YOUR code first
-
-## 68K Disassembly
-- **Use radare2** for disassembling Amiga 68K binaries
-- Install: `brew install radare2`
-- Disassemble at specific address:
-  ```bash
-  r2 -q -c "e asm.arch=m68k; e asm.bits=32; s 0x1156; pd 20" /path/to/binary
-  ```
-- Disassemble range:
-  ```bash
-  r2 -q -c "e asm.arch=m68k; e asm.bits=32; s 0x1000; pd 100" doors/RTW/rtw
-  ```
-- Essential for debugging door execution, understanding polling loops, and identifying missing library calls
-- Much more effective than trying to infer behavior from register/memory logging
-
-## Amiga Binary Testing and Debugging (CRITICAL)
-- **vamos**: ALWAYS use as reference implementation when debugging 68K emulator issues
-- **amitools**: Complete suite of Amiga development/debugging tools
-- Install: `pip3 install amitools`
-
-### When to Use vamos/amitools
-1. **Emulator Bugs**: If a door works on real Amiga but fails in our emulator, compare with vamos
-2. **JSR/Branch Issues**: Verify branch targets and PC-relative calculations match vamos
-3. **Library Calls**: Compare library call sequences and return values
-4. **Memory Layout**: Check load addresses and segment placement
-5. **Before Patching Binaries**: NEVER patch Amiga binaries - fix the emulator instead
-
-### Usage Examples
-```bash
-# Test door execution
-vamos doors/who/who
-
-# Trace execution with detailed logging
+pip3 install amitools
+vamos doors/who/who  # Reference
 vamos --log-file=/tmp/vamos.log doors/Bulls/Bulls
-
-# Disassemble with vda68k
-vda68k doors/RTW/rtw -s 0x1156 -e 0x1200
 ```
 
-### Critical Rule
-**NEVER assume Amiga binaries are buggy** - if they work in vamos or on real Amiga, the bug is in OUR emulator, not the binary. Use vamos as ground truth for correct behavior.
+**CRITICAL:** Works in vamos/Amiga → bug in OUR emulator, NOT binary.
 
-## 68K Memory Layout and Structures (NO GUESSING)
-When debugging door addresses, jumps, relocations, memory overlaps, or overlapping stacks:
-- **NEVER guess** memory addresses, structure sizes, or offsets
-- **ALWAYS check the NDK first** - use `mcp__amiexpress-docs__search_ndk_autodocs` for official specs
-- **Reference amitools/vamos** - See `dev/docs/amitools/amitools/vamos/libstructs/dos.py` for structure definitions
-- Key structures and their ACTUAL sizes (from NDK):
-  - **FileLockStruct**: 20 bytes (fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
-  - **CLIStruct**: 64 bytes (16 fields x 4 bytes, offsets 0x00-0x3C)
-  - **ProcessStruct**: Check pr_CLI (offset 0xAC), pr_CurrentDir (offset 0x98)
-  - **ExecBase**: ThisTask at offset 0x114 (276)
-- When allocating memory regions, calculate exact size requirements from NDK structure definitions
-- Document memory layout with comments showing: address, size, and structure name
+**Memory:** NEVER guess. Use `mcp__amiexpress-docs__search_ndk_autodocs` for NDK. See `dev/docs/amitools/amitools/vamos/libstructs/dos.py`.
 
-## Amiga BBS Import/Export
-- Import users, messages, files, and configuration from classic Amiga BBS
-- Parses Amiga binary formats (BCD math, packed structures)
-- Conflict resolution strategies for duplicate data
-- Supports AmiExpress/!X binary user files and configuration
-- See `Documentation/1-Users/IMPORT_USER_GUIDE.md`
-- Test: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-import-execution.ts`
-- User parsing: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-user-parsing.ts`
+Sizes: FileLockStruct:20, CLIStruct:64, ProcessStruct pr_CLI@0xAC pr_CurrentDir@0x98, ExecBase ThisTask@0x114
 
-## NO STUBS OR TODOs
-- NEVER leave stub implementations that break functionality
-- Example of FORBIDDEN: `parsed.replace(/~SR_[^|]+\|\|/g, '')` silently breaks features
-- Fix completely or don't implement at all
+---
 
-## Documentation References
-- Architecture: `Documentation/3-Developers/ARCHITECTURE.md`
-- Testing: `Documentation/3-Developers/TESTING.md`
-- Door Dev: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
-- Database: `Documentation/3-Developers/DATABASE.md`
-- Current Status: `Documentation/6-Progress/CURRENT_STATUS.md`
-- User Guide: `Documentation/1-Users/USER_GUIDE.md`
-- AI Navigation Tip: Start at `Documentation/README.md` for the audience-based summaries, the `archive/` storage pattern, and the reference-source catalog in `Documentation/7-Reference Sources/`. Scripts and tests now live under `Scripts/`; see `Scripts/README.md` for the new layout and the command patterns (dev/backend/backend-dev/emulation/legacy).
+## Import/Export
+
+Import users/messages/files/config from Amiga BBS. Parses binary (BCD, packed).
+
+Tests: `dev/scripts/test-import-execution.ts`, `dev/scripts/test-user-parsing.ts`
+
+See `Documentation/1-Users/IMPORT_USER_GUIDE.md`
+
+---
+
+## TypeScript
+
+`cd web/backend && npx tsc --noEmit` before commits. Emergency: `SKIP_TS_CHECK=1 git commit`
+
+---
+
+## NO STUBS
+
+NEVER stub implementations that silently break features. Fix completely or don't.
+
+---
+
+## Documentation
+
+Architecture: `Documentation/3-Developers/ARCHITECTURE.md`
+Testing: `Documentation/3-Developers/TESTING.md`
+Door Dev: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`
+Database: `Documentation/3-Developers/DATABASE.md`
+Status: `Documentation/6-Progress/CURRENT_STATUS.md`
+User Guide: `Documentation/1-Users/USER_GUIDE.md`
+
+Start: `Documentation/README.md`
+
+---
+
+## Safety
+
+**Historical preservation** - NOT malware/hacking. Educational BBS culture, retro Amiga 68K, defensive security ONLY, open source.
+
+Terms: "Illegal instruction"=CPU, "Injection prevention"=defensive, "War/Nuke"=vintage games.
+
+See `PROJECT_SAFETY.md`

@@ -1363,6 +1363,18 @@ export function SystemConfigPage() {
                 Debug Mode
               </label>
             </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="sysop_debug_enabled"
+                type="checkbox"
+                {...register('sysop_debug_enabled')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="sysop_debug_enabled" className="text-sm text-bbs-text">
+                Sysop Debug Output (show [SYSOP DEBUG] messages to sysops)
+              </label>
+            </div>
           </div>
         </div>
         )}

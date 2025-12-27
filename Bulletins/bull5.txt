@@ -1,4 +1,0 @@
-[4;33m                                                                             [0m
-[4;33;44m  MultiTop-II                              By Bobo/Mystic - Update: REbEL/QTX[0m
-[35mNo# Username (Handle)           DL CPS No# Username (Handle)           DL CPS[0m
-[34m===-===========================-======-===-===========================-======[0m
