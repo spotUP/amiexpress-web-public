@@ -1,0 +1,46 @@
+{
+  "name": "@amiexpress/grandmaster",
+  "version": "1.0.0",
+  "description": "GRANDMASTER - TGM3-Inspired Multiplayer Tetris for BBS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "copy-assets": "mkdir -p dist/server/database && cp server/database/schema.sql dist/server/database/"
+  },
+  "keywords": [
+    "tetris",
+    "tgm3",
+    "bbs",
+    "door",
+    "multiplayer",
+    "grandmaster"
+  ],
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "door": {
+    "name": "GRANDMASTER",
+    "command": "GMASTER",
+    "aliases": [
+      "GRANDMASTER",
+      "TETRIS",
+      "TGM"
+    ],
+    "description": "TGM3-inspired multiplayer Tetris with 20G gravity, full grading system, and real-time versus modes",
+    "category": "Games",
+    "minPlayers": 1,
+    "maxPlayers": 64,
+    "version": "1.0.0",
+    "runtime": "hybrid"
+  }
+}
