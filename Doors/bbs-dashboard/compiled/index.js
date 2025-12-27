@@ -14,6 +14,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 class BBSDashboard {
     constructor() {
         this.updateInterval = null;
@@ -43,17 +44,17 @@ class BBSDashboard {
     createUI() {
         this.screen = new blessed_1.Screen({
             smartCSR: true,
+            dockBorders: true,
             title: 'BBS SysOp Dashboard',
             output: (data) => this.ctx.output.write(data),
         });
         // Main container
-        this.mainBox = new blessed_1.Box({
+        this.mainBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 0,
             left: 0,
             width: '100%',
             height: '100%',
-            tags: true,
             border: { type: 'line' },
             style: {
                 border: { fg: 'cyan' }
@@ -61,13 +62,12 @@ class BBSDashboard {
             label: ' BBS SYSOP DASHBOARD '
         });
         // Status text
-        this.statusText = new blessed_1.Text({
+        this.statusText = (0, blessed_helpers_1.createText)({
             parent: this.mainBox,
             bottom: 0,
             left: 1,
             right: 1,
             height: 1,
-            tags: true,
             content: ''
         });
         // Key handlers

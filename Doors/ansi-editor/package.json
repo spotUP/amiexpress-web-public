@@ -1,16 +1,22 @@
 {
-  "name": "ansi-editor-door",
-  "version": "1.0.0",
-  "description": "ANSI Screen Editor Door for AmiExpress-Web",
+  "name": "ansi-editor",
+  "version": "2.0.0",
+  "description": "State-of-the-art ANSI/ASCII art editor with full Moebius feature parity",
   "main": "index.ts",
   "type": "module",
   "author": "AmiExpress-Web",
   "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx index.ts",
+    "watch": "tsx watch index.ts"
+  },
   "dependencies": {
-    "socket.io": "^4.5.4"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
 }

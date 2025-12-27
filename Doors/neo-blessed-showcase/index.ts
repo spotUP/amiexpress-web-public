@@ -471,9 +471,9 @@ arrow keys or j/k!
 
 {bold}5. Use Lifecycle Hooks{/bold}
 
-   {green-fg}door.onStart(async (ctx) => {{ ... }});{/green-fg}
-   {green-fg}door.onClose(async (ctx) => {{ ... }});{/green-fg}
-   {green-fg}door.onError(async (ctx, error) => {{ ... }});{/green-fg}
+   {green-fg}door.onStart(async (ctx: DoorContext) => {{ ... }});{/green-fg}
+   {green-fg}door.onClose(async (ctx: DoorContext) => {{ ... }});{/green-fg}
+   {green-fg}door.onError(async (ctx: DoorContext, error: Error) => {{ ... }});{/green-fg}
 
 {center}{gray-fg}See Fire Emblem v2 and BBS Dashboard for complete examples!{/gray-fg}{/center}
 `
@@ -515,17 +515,17 @@ const door = new Door({
 
 let showcase: NeoBlessedShowcase;
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   showcase = new NeoBlessedShowcase();
   showcase.setContext(ctx);
   await showcase.start();
 });
 
-door.onClose(async (ctx) => {
+door.onClose(async (ctx: DoorContext) => {
   ctx.output.writeLine('\r\n\x1b[36mThanks for exploring neo-blessed!\x1b[0m\r\n');
 });
 
-door.onError(async (ctx, error) => {
+door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
   console.error('Showcase error:', error);
 });

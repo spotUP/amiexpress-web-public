@@ -13,7 +13,8 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen, Box, Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface BBSStats {
   totalUsers: number;
@@ -34,8 +35,8 @@ interface NodeInfo {
 class BBSDashboard {
   private ctx!: DoorContext;
   private screen!: Screen;
-  private mainBox!: Box;
-  private statusText!: Text;
+  private mainBox: any;
+  private statusText: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private exitResolve: (() => void) | null = null;
 
@@ -67,18 +68,18 @@ class BBSDashboard {
   private createUI(): void {
     this.screen = new Screen({
       smartCSR: true,
+      dockBorders: true,
       title: 'BBS SysOp Dashboard',
       output: (data: string) => this.ctx.output.write(data),
     });
 
     // Main container
-    this.mainBox = new Box({
+    this.mainBox = createBox({
       parent: this.screen,
       top: 0,
       left: 0,
       width: '100%',
       height: '100%',
-      tags: true,
       border: { type: 'line' },
       style: {
         border: { fg: 'cyan' }
@@ -87,13 +88,12 @@ class BBSDashboard {
     });
 
     // Status text
-    this.statusText = new Text({
+    this.statusText = createText({
       parent: this.mainBox,
       bottom: 0,
       left: 1,
       right: 1,
       height: 1,
-      tags: true,
       content: ''
     });
 
@@ -221,17 +221,17 @@ const door = new Door({
 
 let dashboard: BBSDashboard;
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   dashboard = new BBSDashboard();
   dashboard.setContext(ctx);
   await dashboard.start();
 });
 
-door.onClose(async (ctx) => {
+door.onClose(async (ctx: DoorContext) => {
   ctx.output.writeLine('\r\n\x1b[36mDashboard closed.\x1b[0m\r\n');
 });
 
-door.onError(async (ctx, error) => {
+door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
   console.error('Dashboard error:', error);
 });

@@ -436,6 +436,12 @@ class ArkanoidGame {
         // Stop tracking key
         this.heldKeys.delete(normalizedKey);
         return;
+      } else if (keyType === 'keypress') {
+        // Ignore keypress events in enterName state to prevent double character input
+        // The keydown event already handled the input
+        if (this.data.state === 'enterName') {
+          return;
+        }
       }
 
       // Fallback for regular key events (non-game-mode)

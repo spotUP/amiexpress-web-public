@@ -1,31 +1,43 @@
 {
   "name": "card-lobby",
-  "version": "1.0.0",
-  "description": "SDK v2 multiplayer card lobby with poker engine support",
-  "main": "index.ts",
+  "version": "2.0.0",
+  "description": "Multiplayer card lobby with poker engine and web audio",
+  "main": "server.ts",
+  "bbsCommand": "CARDLOBBY",
+  "doorType": "TS",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./server.ts"
+  },
+  "accessLevel": 0,
   "author": "AmiExpress Team",
   "license": "MIT",
   "category": "game",
-  "doorPattern": "runDoor",
-  "doorType": "TS",
-  "buildable": false,
-  "scripts": {
-    "preview": "cd ../.. && npm run preview doors/card-lobby"
-  },
   "keywords": [
     "bbs",
     "door",
     "cards",
     "poker",
     "lobby",
-    "sdk-v2",
-    "runDoor"
+    "hybrid",
+    "audio"
   ],
+  "scripts": {
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
+    "preview": "cd ../.. && npm run preview doors/card-lobby"
+  },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "tone": "^14.7.77"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
     "typescript": "^5.2.2"
   }
 }

@@ -5,7 +5,12 @@
  */
 
 import { Socket } from 'socket.io';
-import { BBSSession } from '../../index';
+
+/** Minimal session interface for door operations */
+interface DoorSession {
+  user?: { id: number; username?: string };
+  tempData: { gameState?: any };
+}
 import { PhreakWarsGameState } from './types';
 import {
   displayMainMenu,
@@ -571,10 +576,10 @@ export function handleStatsMenu(socket: Socket, gameState: PhreakWarsGameState, 
 /**
  * Handle delete confirmation
  */
-export function handleDeleteConfirmation(socket: Socket, gameState: PhreakWarsGameState, input: string, session: BBSSession): void {
+export function handleDeleteConfirmation(socket: Socket, gameState: PhreakWarsGameState, input: string, session: DoorSession): void {
   switch (input) {
     case 'Y':
-      const userId = session.user!.id;
+      const userId = String(session.user!.id);
       const newGameState = deletePlayer(userId);
 
       socket.emit('ansi-output', '\r\n\x1b[32mPlayer deleted successfully!\x1b[0m\r\n');

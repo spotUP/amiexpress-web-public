@@ -433,9 +433,9 @@ arrow keys or j/k!
 
 {bold}5. Use Lifecycle Hooks{/bold}
 
-   {green-fg}door.onStart(async (ctx) => {{ ... }});{/green-fg}
-   {green-fg}door.onClose(async (ctx) => {{ ... }});{/green-fg}
-   {green-fg}door.onError(async (ctx, error) => {{ ... }});{/green-fg}
+   {green-fg}door.onStart(async (ctx: DoorContext) => {{ ... }});{/green-fg}
+   {green-fg}door.onClose(async (ctx: DoorContext) => {{ ... }});{/green-fg}
+   {green-fg}door.onError(async (ctx: DoorContext, error: Error) => {{ ... }});{/green-fg}
 
 {center}{gray-fg}See Fire Emblem v2 and BBS Dashboard for complete examples!{/gray-fg}{/center}
 `

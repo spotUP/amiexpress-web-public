@@ -14,6 +14,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 // ===== Game Data =====
 const PLAYER_UNITS = [
     {
@@ -129,7 +130,7 @@ class FireEmblemGame {
     }
     showIntro() {
         // Create intro overlay
-        const intro = new blessed_1.Box({
+        const intro = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 'center',
             left: 'center',
@@ -200,11 +201,12 @@ class FireEmblemGame {
     createUI() {
         this.screen = new blessed_1.Screen({
             smartCSR: true,
+            dockBorders: true,
             title: 'Fire Emblem: Emblem of Valor',
             output: (data) => this.ctx.output.write(data),
         });
         // Map display
-        this.mapBox = new blessed_1.Box({
+        this.mapBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 0,
             left: 0,
@@ -215,7 +217,7 @@ class FireEmblemGame {
             label: ' Battlefield ',
         });
         // Status display
-        this.statusBox = new blessed_1.Box({
+        this.statusBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 0,
             left: '70%',

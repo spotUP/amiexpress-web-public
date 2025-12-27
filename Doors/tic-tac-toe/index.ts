@@ -4,7 +4,7 @@
  */
 
 import { CoreDoor as Door, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import type { DoorContext } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 
 type Cell = 'X' | 'O' | ' ';
 
@@ -183,21 +183,21 @@ const door = new Door({
 
 let game: TicTacToeGame;
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   game = new TicTacToeGame();
   game.setContext(ctx);
   game.render();
 });
 
-door.onInput(async (ctx, keyPress) => {
+door.onInput(async (ctx: DoorContext, keyPress: KeyPress) => {
   game.handleInput(keyPress.key);
 });
 
-door.onClose(async (ctx) => {
+door.onClose(async (ctx: DoorContext) => {
   ctx.output.writeLine('\r\nThanks for playing!\r\n');
 });
 
-door.onError(async (ctx, error) => {
+door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
 });
 

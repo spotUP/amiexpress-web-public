@@ -5,7 +5,7 @@
  */
 
 import { CoreDoor as Door, CardEngine, AnsiColor } from '@amiexpress/bbs-door-sdk';
-import type { DoorContext } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 
 const door = new Door({
   name: 'Card Hand Demo',
@@ -34,11 +34,11 @@ const drawHand = async (ctx: DoorContext): Promise<void> => {
   await ctx.output.writeLine('[R]edraw  [Q]uit');
 };
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   await drawHand(ctx);
 });
 
-door.onInput(async (ctx, key) => {
+door.onInput(async (ctx: DoorContext, key: KeyPress) => {
   const k = key.key.toLowerCase();
 
   if (k === 'q') {

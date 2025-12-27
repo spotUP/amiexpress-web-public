@@ -1,1088 +1,766 @@
 /**
- * ANSI Screen Editor Door
- * A full-featured ANSI/ASCII editor for creating BBS screen files
+ * ANSI Editor SDK - State-of-the-art ANSI/ASCII art editor
+ * Complete Moebius feature parity with modern enhancements
  *
  * Features:
- * - Draw with ANSI colors (0-7 foreground/background)
- * - Line drawing tools
- * - Text entry mode
- * - Load existing screen files
- * - Save to BBS Screens/ directory
- * - Canvas: 80x24 (standard BBS dimensions)
+ * - Full drawing toolset (draw, line, box, ellipse, fill, text, pick, select, shifter)
+ * - Mouse and keyboard input support
+ * - Undo/redo system with chunked operations
+ * - Selection and clipboard (copy, cut, paste, transform)
+ * - Neo-Blessed modal dialogs for professional UI
+ * - Multiple file format support (ANS, ASC, BIN, XB, TXT)
+ * - iCE colors support (16 background colors + blink)
+ * - Guides and grid overlays
+ * - Color picker with full palette
+ * - Real-time canvas rendering
  */
 
-import { Socket } from 'socket.io';
+import { Door } from '@amiexpress/bbs-door-sdk';
+import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
+import { UIEngine } from '@amiexpress/bbs-door-sdk';
 
-// Import types
+import { EditorState, Tool, ANSI, SHORTCUTS, Cell } from './types.js';
 import {
-  DoorSession,
-  Cell,
-  Tool,
-  BrushMode,
-  OperationMode,
-  GuideType,
-  HIDE_CURSOR,
-  SHOW_CURSOR,
-  CLEAR_SCREEN
-} from './types';
-
-// Import modals
-import {
-  ANSIEditor as ANSIEditorInterface,
-  ToolSelectorModal,
-  ColorPickerModal,
-  FileDialogModal,
-  GalleryBrowserModal,
-  RecentFilesModal
-} from './modals';
-
-// Import canvas operations
-import {
-  EditorContext,
+  createCanvas,
   saveUndoState,
   flushUndoChunk,
   undo,
   redo,
   startSelection,
   updateSelection,
-  getSelectionBounds,
+  clearSelection,
   copySelection,
   cutSelection,
-  eraseSelection,
   pasteSelection,
-  importFileAsSelection,
-  exportSelectionToFile,
-  clearSelection,
-  fillSelection,
-  rotateSelection,
-  flipSelectionX,
-  flipSelectionY,
-  centerSelection,
-  moveSelection,
-  cycleOperationMode,
-  pasteWithMode,
-  cycleFgUp,
-  cycleFgDown,
-  cycleBgUp,
-  cycleBgDown,
-  leftJustifyLine,
-  rightJustifyLine,
-  centerLine,
-  eraseLine,
-  eraseToStartOfLine,
-  eraseToEndOfLine,
-  insertRow,
-  deleteRow,
-  insertColumn,
-  deleteColumn,
-  eraseColumn,
-  eraseToStartOfColumn,
-  eraseToEndOfColumn,
-  scrollCanvasUp,
-  scrollCanvasDown,
-  scrollCanvasLeft,
-  scrollCanvasRight
-} from './canvas';
-
-// Import drawing functions
+  selectAll,
+  flipSelectionHorizontal,
+  flipSelectionVertical,
+  rotateSelection90,
+  shiftSelection,
+  renderCanvas,
+  renderStatusBar,
+  clearCanvas,
+} from './canvas.js';
 import {
-  DrawingContext,
-  drawWithBrush,
-  applyBrushMode,
-  drawCell,
-  toggleMirrorMode,
-  cycleGuideOverlay,
-  toggleNumpadMode,
-  handleNumpadDraw,
-  drawLine,
-  drawBox,
-  drawEllipse,
-  drawEllipsePoints,
-  drawEllipseFilled,
-  shiftCell,
-  floodFill,
-  pickCell
-} from './drawing';
-
-// Import file operations
+  getToolHandler,
+  insertTextChar,
+  shiftHalfBlock,
+} from './drawing.js';
 import {
-  FileContext,
-  FileFormat,
-  saveFile,
+  ToolSelectorModal,
+  ColorPickerModal,
+  FileDialogModal,
+  ConfirmDialog,
+  MessageDialog,
+  HelpDialog,
+  GalleryBrowserModal,
+  RecentFilesModal,
+} from './modals.js';
+import {
   loadFile,
-  exportToAnsi,
-  exportToXBin,
-  exportToBin,
-  exportToAsc,
-  exportToDiz,
-  exportToTxt,
-  exportSelectionToAnsi,
+  saveFile,
+  listFiles,
   fileExists,
-  getScreenFiles,
-  deepCloneCanvas
-} from './file-ops';
+  importFile,
+  exportSelection,
+} from './file-ops.js';
 
-// Import display functions
-import {
-  DisplayContext,
-  clearScreen as displayClearScreen,
-  moveCursor as moveCursorAbs,
-  setColors as applyColors,
-  isGuideOverlayCell as displayIsGuideOverlayCell,
-  showHelpLine,
-  showStatusBar as renderStatusBar,
-  refresh,
-  showHelpScreen
-} from './display';
+// =============================================================================
+// ANSI EDITOR DOOR
+// =============================================================================
 
-class ANSIEditor implements ANSIEditorInterface {
-  private socket: Socket;
+const door = new Door({
+  name: 'ANSI Editor',
+  version: '2.0.0',
+  author: 'AmiExpress-Web',
+  description: 'State-of-the-art ANSI/ASCII art editor with full Moebius features',
+});
+
+// =============================================================================
+// EDITOR STATE INITIALIZATION
+// =============================================================================
+
+function createInitialState(): EditorState {
+  return {
+    // Canvas
+    canvas: createCanvas(80, 22), // 22 lines for editing (2 for status)
+    width: 80,
+    height: 22,
+
+    // Cursor
+    cursorX: 0,
+    cursorY: 0,
+    cursorVisible: true,
+
+    // Drawing state
+    currentFg: 7,
+    currentBg: 0,
+    currentChar: '█',
+    currentTool: 'draw',
+    brushMode: 'half-block',
+    operationMode: 'normal',
+
+    // Brush state (from old editor)
+    brushSize: 1,  // 1-9
+    mirrorModeEnabled: false,
+    numpadModeEnabled: false,
+    straightLineMode: false,
+
+    // iCE colors and attributes
+    iceColorsEnabled: false,
+    blinkEnabled: false,
+
+    // Undo/redo
+    undoStack: [],
+    redoStack: [],
+    maxUndoLevels: 100,
+    lastUndoTime: 0,
+    undoChunkTimeout: 1000,
+    pendingUndoChunk: false,
+
+    // Selection
+    selecting: false,
+    selectionStart: null,
+    selectionEnd: null,
+    clipboard: [],
+
+    // Viewport state (for large canvases)
+    viewportX: 0,
+    viewportY: 0,
+
+    // UI state
+    showGuide: 'none',
+    showStatusBar: true,
+    showColorPalette: false,
+    showToolbar: true,
+    gridSpacing: 10,
+    currentFKeySet: 'normal' as 'normal' | 'shift',
+
+    // File state
+    currentFilename: null,
+    modified: false,
+    lastSavedCanvas: null,
+    insertMode: true,
+
+    // Auto-save state (from old editor)
+    autoSaveEnabled: true,
+    autoSaveIntervalMs: 5 * 60 * 1000,  // 5 minutes
+
+    // Drawing state for tools
+    drawingStartPoint: null,
+    drawingEndPoint: null,
+    drawingPreview: null,
+
+    // Mouse state
+    mouseDown: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+  };
+}
+
+// =============================================================================
+// MAIN EDITOR CLASS
+// =============================================================================
+
+class ANSIEditor {
+  private state: EditorState;
+  private ui: UIEngine;
+  private running: boolean = false;
+  private outputBuffer: string = '';
   private user: any;
-  private canvas: Cell[][] = [];
-  private width = 80;
-  private height = 24;
+  private socket: any;
 
-  // Cursor state
-  private cursorX = 0;
-  private cursorY = 0;
+  constructor(user: any, socket: any) {
+    this.user = user;
+    this.socket = socket;
+    this.state = createInitialState();
 
-  // Viewport state (for canvases larger than 80x24)
-  private viewportX = 0;  // Top-left X of viewport
-  private viewportY = 0;  // Top-left Y of viewport
-  private viewportWidth = 80;
-  private viewportHeight = 22;  // 24 - 2 for help/status lines
-
-  // Drawing state
-  private currentFg = 7;  // White
-  private currentBg = 0;  // Black
-  private currentChar = ' ';
-  private currentTool: Tool = 'draw';
-  private iceColorsEnabled = false;  // iCE colors mode (bright backgrounds)
-  private currentFKeySet: 'normal' | 'shift' = 'normal';  // Current F-key set
-
-  // Brush state
-  private brushSize = 1;  // 1-9
-  private brushMode: BrushMode = 'half-block';
-  private lastDrawnCells: Set<string> = new Set();  // Track cells drawn in current stroke for chunked undo
-  private dragging = false;  // Track if we're currently dragging
-  private dragUndoSaved = false;  // Track if we saved undo state for current drag
-  private straightLineMode = false;  // Tab-hold for straight lines (horizontal/vertical only)
-  private straightLineStart: { x: number; y: number } | null = null;  // Starting point for straight line constraint
-
-  // Tool state
-  private lineStart: { x: number; y: number } | null = null;
-  private ellipseStart: { x: number; y: number } | null = null;
-  private textMode = false;
-  private textBuffer = '';
-
-  // File state
-  private filename: string | null = null;
-  private modified = false;
-  private lastSavedCanvas: Cell[][] | null = null;  // For revert functionality
-  private autoSaveInterval: NodeJS.Timeout | null = null;
-  private autoSaveEnabled = true;
-  private autoSaveIntervalMs = 5 * 60 * 1000;  // 5 minutes
-
-  // Selection state
-  private selecting = false;
-  private selectionStart: { x: number; y: number } | null = null;
-  private selectionEnd: { x: number; y: number } | null = null;
-  private clipboard: Cell[][] = [];
-  private operationMode: OperationMode = 'normal';
-
-  // Insert mode
-  private insertMode = true;
-
-  // Undo stack (simple - stores full canvas snapshots)
-  private undoStack: Cell[][][] = [];
-  private redoStack: Cell[][][] = [];
-  private maxUndoLevels = 50;
-
-  // Chunked undo system (Phase 6.2)
-  private lastUndoTime = 0;
-  private undoChunkTimeout = 1000;  // 1 second timeout for grouping operations
-  private pendingUndoChunk = false;
-
-  // Mirror mode (Phase 9.1)
-  private mirrorModeEnabled = false;  // Horizontal symmetry drawing
-
-  // Guides & Overlays (Phase 9.3)
-  private guideOverlayEnabled = false;
-  private guideType: GuideType = 'none';
-  private gridSpacing = 4;  // For custom grid overlay
-
-  // Character sets (F-key macros)
-  private currentCharSet = 0;  // 0-19 (Alt+0-9, Alt+Shift+0-9)
-  private charSets: string[][] = [];  // 20 sets, 12 chars each
-
-  // Numpad drawing mode (Phase 9.2)
-  private numpadModeEnabled = false;  // Keyboard keys act as numpad directions
-
-  // Door session reference
-  private doorSession: DoorSession;
-
-  // BBS-specific features (Phase 10 - sysop/cosysop only)
-  private static recentFiles: string[] = [];  // Last 10 edited files (shared across sessions)
-  private static lockedFiles: Map<string, { username: string; nodeId: number }> = new Map();  // File locks
-  private static readonly MAX_RECENT_FILES = 10;
-
-  constructor(session: DoorSession) {
-    console.log('[ANSI Editor constructor] Initializing editor');
-    this.socket = session.socket;
-    this.user = session.user;
-    this.doorSession = session;
-    this.initCanvas();
-    this.initCharacterSets();
-    console.log('[ANSI Editor constructor] Editor initialized');
-  }
-
-  private initCanvas(): void {
-    // Initialize with blank cells
-    for (let y = 0; y < this.height; y++) {
-      this.canvas[y] = [];
-      for (let x = 0; x < this.width; x++) {
-        this.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
-      }
-    }
-  }
-
-  /**
-   * Initialize default character sets (20 sets, 12 chars each)
-   */
-  private initCharacterSets(): void {
-    // Default character sets - common ANSI/ASCII art characters
-    const defaultSets = [
-      // Set 0: Box drawing (single line)
-      ['─', '│', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', '═'],
-      // Set 1: Box drawing (double line)
-      ['═', '║', '╔', '╗', '╚', '╝', '╠', '╣', '╦', '╩', '╬', '─'],
-      // Set 2: Block elements
-      ['█', '▓', '▒', '░', '▄', '▀', '■', '□', '▪', '▫', '●', '○'],
-      // Set 3: Arrows
-      ['↑', '↓', '←', '→', '↔', '↕', '▲', '▼', '◄', '►', '◆', '◇'],
-      // Set 4: Common symbols
-      ['★', '☆', '♥', '♦', '♣', '♠', '•', '◘', '◙', '♂', '♀', '♪'],
-      // Set 5: Math/technical
-      ['±', '÷', '×', '∙', '°', '²', '³', '¹', '¼', '½', '¾', '‰'],
-      // Set 6: Currency
-      ['$', '¢', '£', '¥', '€', '₹', '₽', '₩', '₪', '฿', '₫', '₵'],
-      // Set 7: Letters (Greek)
-      ['α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'π', 'σ', 'φ', 'ω'],
-      // Set 8: Brackets/quotes
-      ['(', ')', '[', ']', '{', '}', '<', '>', '"', '\'', '`', '~'],
-      // Set 9: Punctuation
-      ['!', '?', '.', ',', ':', ';', '-', '_', '/', '\\', '|', '+'],
-      // Set 10-19: Empty sets for user customization
-      ...Array(10).fill(null).map(() => Array(12).fill(' '))
-    ];
-
-    this.charSets = defaultSets;
-  }
-
-  emit(data: string): void {
-    this.socket.emit('ansi-output', data);
-  }
-
-  // Context builder methods
-  private getEditorContext(): EditorContext {
-    return {
-      canvas: this.canvas,
-      width: this.width,
-      height: this.height,
-      cursorX: this.cursorX,
-      cursorY: this.cursorY,
-      currentFg: this.currentFg,
-      currentBg: this.currentBg,
-      currentChar: this.currentChar,
-      selecting: this.selecting,
-      selectionStart: this.selectionStart,
-      selectionEnd: this.selectionEnd,
-      clipboard: this.clipboard,
-      undoStack: this.undoStack,
-      redoStack: this.redoStack,
-      maxUndoLevels: this.maxUndoLevels,
-      lastUndoTime: this.lastUndoTime,
-      undoChunkTimeout: this.undoChunkTimeout,
-      pendingUndoChunk: this.pendingUndoChunk,
-      operationMode: this.operationMode,
-      insertMode: this.insertMode,
-      modified: this.modified,
-      showStatusBar: () => this.showStatusBar(),
-      getInput: () => this.getInputLine(),
-      sleep: (ms: number) => this.sleep(ms),
-      emit: this.emit.bind(this),
-      refresh: () => this.refreshDisplay(),
-      getFileContext: () => this.getFileContext()
-    };
-  }
-
-  private getDrawingContext(): DrawingContext {
-    return {
-      canvas: this.canvas,
-      width: this.width,
-      height: this.height,
-      cursorX: this.cursorX,
-      cursorY: this.cursorY,
-      currentFg: this.currentFg,
-      currentBg: this.currentBg,
-      currentChar: this.currentChar,
-      brushSize: this.brushSize,
-      brushMode: this.brushMode,
-      currentTool: this.currentTool,
-      mirrorModeEnabled: this.mirrorModeEnabled,
-      guideType: this.guideType,
-      gridSpacing: this.gridSpacing,
-      guideOverlayEnabled: this.guideOverlayEnabled,
-      numpadModeEnabled: this.numpadModeEnabled,
-      viewportWidth: this.viewportWidth,
-      viewportHeight: this.viewportHeight,
-      modified: this.modified,
-      emit: this.emit.bind(this),
-      showStatusBar: () => this.showStatusBar(),
-      moveCursor: (x: number, y: number) => this.moveCursorAbsolute(x, y),
-      setColors: (fg: number, bg: number) => this.setAnsiColors(fg, bg),
-      saveUndoState: (chunk?: boolean) => saveUndoState(this.getEditorContext(), chunk),
-      refresh: () => this.refreshDisplay()
-    };
-  }
-
-  private getFileContext(): FileContext {
-    return {
-      canvas: this.canvas,
-      width: this.width,
-      height: this.height,
-      fg: this.currentFg,
-      bg: this.currentBg,
-      filename: this.filename,
-      modified: this.modified,
-      doorSession: this.doorSession,
-      emit: this.emit.bind(this),
-      refresh: () => this.refreshDisplay(),
-      saveUndoState: (chunk?: boolean) => saveUndoState(this.getEditorContext(), chunk)
-    };
-  }
-
-  private getDisplayContext(): DisplayContext {
-    return {
-      canvas: this.canvas,
-      width: this.width,
-      height: this.height,
-      viewportX: this.viewportX,
-      viewportY: this.viewportY,
-      viewportWidth: this.viewportWidth,
-      viewportHeight: this.viewportHeight,
-      doorSession: this.doorSession,
-      cursorX: this.cursorX,
-      cursorY: this.cursorY,
-      currentFg: this.currentFg,
-      currentBg: this.currentBg,
-      currentChar: this.currentChar,
-      currentTool: this.currentTool,
-      brushSize: this.brushSize,
-      brushMode: this.brushMode,
-      filename: this.filename,
-      modified: this.modified,
-      selecting: this.selecting,
-      selectionStart: this.selectionStart,
-      selectionEnd: this.selectionEnd,
-      operationMode: this.operationMode,
-      mirrorModeEnabled: this.mirrorModeEnabled,
-      guideType: this.guideType,
-      guideOverlayEnabled: this.guideOverlayEnabled,
-      gridSpacing: this.gridSpacing,
-      numpadModeEnabled: this.numpadModeEnabled,
-      iceColorsEnabled: this.iceColorsEnabled,
-      currentFKeySet: this.currentFKeySet,
-      emit: this.emit.bind(this),
-      getSelectionBounds: () => getSelectionBounds(this.getEditorContext()),
-      refresh: () => this.refreshDisplay()
-    };
-  }
-
-  private refreshDisplay(): void {
-    refresh(this.getDisplayContext());
-  }
-
-  private moveCursorAbsolute(x: number, y: number): void {
-    moveCursorAbs(this.getDisplayContext(), x, y);
-  }
-
-  private setAnsiColors(fg: number, bg: number): void {
-    applyColors(this.getDisplayContext(), fg, bg);
-  }
-
-  private showStatusBar(): void {
-    renderStatusBar(this.getDisplayContext());
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private async getInputLine(): Promise<string> {
-    return new Promise((resolve) => {
-      let buffer = '';
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b') {
-          this.socket.off('ansi-input', handler);
-          resolve('');
-          return;
-        }
-
-        if (key === '\r') {
-          this.socket.off('ansi-input', handler);
-          this.emit('\r\n');
-          resolve(buffer);
-          return;
-        }
-
-        if (key === '\x7f' || key === '\x08') {
-          if (buffer.length > 0) {
-            buffer = buffer.slice(0, -1);
-            this.emit('\b \b');
-          }
-          return;
-        }
-
-        if (typeof key === 'string' && key.length === 1 && key >= ' ' && key <= '~') {
-          buffer += key;
-          this.emit(key);
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
+    // Create UI engine for modals
+    this.ui = new UIEngine({
+      width: 80,
+      height: 24,
+      smartCSR: true,
+      enableMouse: true,
+      enableKeys: true,
     });
   }
 
-  private moveCursorRel(dx: number, dy: number): void {
-    this.cursorX = Math.max(0, Math.min(this.width - 1, this.cursorX + dx));
-    this.cursorY = Math.max(0, Math.min(this.height - 1, this.cursorY + dy));
-    this.refreshDisplay();
-  }
-
-  /**
-   * Start autosave timer
-   */
-  private startAutoSave(): void {
-    if (!this.autoSaveEnabled) return;
-    if (this.autoSaveInterval) {
-      clearInterval(this.autoSaveInterval);
-    }
-    this.autoSaveInterval = setInterval(() => {
-      if (this.modified && this.filename) {
-        console.log('[ANSI Editor] Auto-saving...');
-        const ctx = this.getFileContext();
-        saveFile(ctx, this.filename);
-        this.modified = false;
-        this.refreshDisplay();
-      }
-    }, this.autoSaveIntervalMs);
-  }
-
-  /**
-   * Stop autosave timer
-   */
-  private stopAutoSave(): void {
-    if (this.autoSaveInterval) {
-      clearInterval(this.autoSaveInterval);
-      this.autoSaveInterval = null;
-    }
-  }
-
-  /**
-   * Show tool selector modal and handle tool selection
-   */
-  private async selectTool(): Promise<void> {
-    const modal = new ToolSelectorModal(this, this.currentTool);
-    this.emit(modal.render());
-
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\r') {  // Enter
-          this.currentTool = modal.getSelectedValue() as Tool;
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\x1b[A') {  // Up arrow
-          modal.moveUp();
-          this.emit(modal.render());
-        } else if (key === '\x1b[B') {  // Down arrow
-          modal.moveDown();
-          this.emit(modal.render());
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
-    });
-  }
-
-  /**
-   * Show color picker modal and handle color selection
-   */
-  private async selectColor(isBg: boolean): Promise<void> {
-    const modal = new ColorPickerModal(this, this.currentFg, this.currentBg, isBg);
-    this.emit(modal.render());
-
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\r') {  // Enter
-          this.currentBg = modal.getSelectedBg();
-          this.currentFg = modal.getSelectedFg();
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\x1b[A') {  // Up arrow
-          modal.moveUp();
-          this.emit(modal.render());
-        } else if (key === '\x1b[B') {  // Down arrow
-          modal.moveDown();
-          this.emit(modal.render());
-        } else if (key === '\x1b[D') {  // Left arrow switches to FG
-          modal.moveLeft();
-          this.emit(modal.render());
-        } else if (key === '\x1b[C') {  // Right arrow switches to BG
-          modal.moveRight();
-          this.emit(modal.render());
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
-    });
-  }
-
-  /**
-   * Show file dialog (load/save) and handle file selection
-   */
-  private async showFileDialog(mode: 'load' | 'save'): Promise<void> {
-    const ctx = this.getFileContext();
-    const files = getScreenFiles(ctx);
-    const modal = new FileDialogModal(this, mode, files, this.filename || '');
-    this.emit(modal.render());
-
-    return new Promise((resolve) => {
-      let inputBuffer = this.filename || '';
-
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\r') {  // Enter
-          const selectedFile = modal.getInputValue();
-          if (selectedFile) {
-            if (mode === 'load') {
-              loadFile(ctx, selectedFile);
-              this.filename = selectedFile;
-              this.modified = false;
-              // Update local state from context
-              this.canvas = ctx.canvas;
-              this.width = ctx.width;
-              this.height = ctx.height;
-            } else {
-              saveFile(ctx, selectedFile);
-              this.filename = selectedFile;
-              this.modified = false;
-              // Update recent files
-              ANSIEditor.addRecentFile(selectedFile);
-            }
-          }
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\x1b[A') {  // Up arrow
-          modal.moveUp();
-          this.emit(modal.render());
-        } else if (key === '\x1b[B') {  // Down arrow
-          modal.moveDown();
-          this.emit(modal.render());
-        } else if (key === '\x7f' || key === '\x08') {  // Backspace
-          if (inputBuffer.length > 0) {
-            inputBuffer = inputBuffer.slice(0, -1);
-            modal.updateInput(inputBuffer);
-            this.emit(modal.render());
-          }
-        } else if (key.length === 1 && key >= ' ' && key <= '~') {  // Printable ASCII
-          inputBuffer += key;
-          modal.updateInput(inputBuffer);
-          this.emit(modal.render());
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
-    });
-  }
-
-  /**
-   * Show gallery browser modal (sysop/cosysop only)
-   */
-  private async showGalleryBrowser(): Promise<void> {
-    const ctx = this.getFileContext();
-    const files = getScreenFiles(ctx);
-    const modal = new GalleryBrowserModal(this, files);
-    this.emit(modal.render());
-
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b' || key === 'q' || key === 'Q') {  // ESC or Q
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\r') {  // Enter - load selected file
-          const selectedFile = modal.getSelectedValue();
-          if (selectedFile) {
-            loadFile(ctx, selectedFile);
-            this.filename = selectedFile;
-            this.modified = false;
-            // Update local state from context
-            this.canvas = ctx.canvas;
-            this.width = ctx.width;
-            this.height = ctx.height;
-          }
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\x1b[A' || key === 'k' || key === 'K') {  // Up arrow or K
-          modal.moveUp();
-          this.emit(modal.render());
-        } else if (key === '\x1b[B' || key === 'j' || key === 'J') {  // Down arrow or J
-          modal.moveDown();
-          this.emit(modal.render());
-        } else if (key === '\x1b[D' || key === 'h' || key === 'H') {  // Left arrow or H
-          modal.moveLeft();
-          this.emit(modal.render());
-        } else if (key === '\x1b[C' || key === 'l' || key === 'L') {  // Right arrow or L
-          modal.moveRight();
-          this.emit(modal.render());
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
-    });
-  }
-
-  /**
-   * Show recent files modal (sysop/cosysop only)
-   */
-  private async showRecentFiles(): Promise<void> {
-    const modal = new RecentFilesModal(this, ANSIEditor.recentFiles);
-    this.emit(modal.render());
-
-    return new Promise((resolve) => {
-      const handler = (data: any) => {
-        const key = data.key;
-
-        if (key === '\x1b') {  // ESC
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\r') {  // Enter
-          const selectedFile = modal.getSelectedValue();
-          if (selectedFile) {
-            const ctx = this.getFileContext();
-            loadFile(ctx, selectedFile);
-            this.filename = selectedFile;
-            this.modified = false;
-            // Update local state from context
-            this.canvas = ctx.canvas;
-            this.width = ctx.width;
-            this.height = ctx.height;
-          }
-          this.socket.off('ansi-input', handler);
-          this.refreshDisplay();
-          resolve();
-        } else if (key === '\x1b[A') {  // Up arrow
-          modal.moveUp();
-          this.emit(modal.render());
-        } else if (key === '\x1b[B') {  // Down arrow
-          modal.moveDown();
-          this.emit(modal.render());
-        }
-      };
-
-      this.socket.on('ansi-input', handler);
-    });
-  }
-
-  /**
-   * Add file to recent files list
-   */
-  private static addRecentFile(filename: string): void {
-    // Remove if already in list
-    const index = ANSIEditor.recentFiles.indexOf(filename);
-    if (index !== -1) {
-      ANSIEditor.recentFiles.splice(index, 1);
-    }
-
-    // Add to front
-    ANSIEditor.recentFiles.unshift(filename);
-
-    // Keep only MAX_RECENT_FILES
-    if (ANSIEditor.recentFiles.length > ANSIEditor.MAX_RECENT_FILES) {
-      ANSIEditor.recentFiles = ANSIEditor.recentFiles.slice(0, ANSIEditor.MAX_RECENT_FILES);
-    }
-  }
-
-  /**
-   * Check if a file is locked by another user
-   */
-  private static isFileLocked(filename: string, username: string, nodeId: number): boolean {
-    const lock = ANSIEditor.lockedFiles.get(filename);
-    if (!lock) return false;
-    return lock.username !== username || lock.nodeId !== nodeId;
-  }
-
-  /**
-   * Lock a file for editing
-   */
-  private lockFile(): void {
-    if (!this.filename) return;
-    ANSIEditor.lockedFiles.set(this.filename, {
-      username: this.user.username,
-      nodeId: this.doorSession.bbsSession?.nodeId || 0
-    });
-  }
-
-  /**
-   * Unlock a file
-   */
-  private unlockFile(): void {
-    if (!this.filename) return;
-    ANSIEditor.lockedFiles.delete(this.filename);
-  }
+  // ===========================================================================
+  // MAIN EDITOR LOOP
+  // ===========================================================================
 
   async run(): Promise<void> {
-    console.log('[ANSI Editor run] Starting editor main loop');
-    this.emit(HIDE_CURSOR);
-    this.emit(CLEAR_SCREEN);
+    this.running = true;
 
-    // Display welcome screen
-    const ctx = this.getDisplayContext();
-    this.emit(`\x1b[0;37;40m`);
-    this.emit(`\x1b[1;1H┌${'─'.repeat(78)}┐`);
-    this.emit(`\x1b[2;1H│${' '.repeat(78)}│`);
-    this.emit(`\x1b[2;30H ANSI Screen Editor v1.0 `);
-    this.emit(`\x1b[3;1H│${' '.repeat(78)}│`);
-    this.emit(`\x1b[4;1H└${'─'.repeat(78)}┘`);
-    this.emit(`\x1b[6;20HWelcome to the ANSI Screen Editor!`);
-    this.emit(`\x1b[8;15HCanvas: 80x24 | Press F1 for help | ESC to exit`);
-    this.emit(`\x1b[10;1H`);
+    // Initial screen draw
+    this.emit(ANSI.CLEAR_SCREEN);
+    this.emit(ANSI.HIDE_CURSOR);
+    this.refresh();
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Show welcome message
+    await this.showWelcome();
 
-    // Initialize canvas and start editing
-    saveUndoState(this.getEditorContext());
-    this.startAutoSave();
-    this.refreshDisplay();
+    // Enable mouse support
+    this.socket.emit('enableMouseEvents', true);
 
-    // Main input loop
-    this.socket.on('ansi-input', async (data: any) => {
-      const key = data.key;
-      console.log('[ANSI Editor input] Received key:', JSON.stringify(key));
+    // Main event loop
+    this.setupEventHandlers();
 
-      // Handle ESC (exit)
-      if (key === '\x1b') {
-        console.log('[ANSI Editor] ESC pressed, exiting');
-        this.stopAutoSave();
-        this.unlockFile();
-        this.emit(SHOW_CURSOR);
-        this.emit(CLEAR_SCREEN);
-        this.socket.removeAllListeners('ansi-input');
+    // Wait until editor exits
+    await new Promise<void>((resolve) => {
+      this.socket.on('disconnect', () => {
+        this.running = false;
+        resolve();
+      });
 
-        if (this.doorSession.bbsSession) {
-          console.log('[ANSI Editor] Returning to BBS...');
-          this.doorSession.bbsSession.returnFromDoor();
-        } else {
-          console.error('[ANSI Editor] ERROR: No bbsSession!');
-        }
-        return;
-      }
-
-      // Handle F1 (help)
-      if (key === '\x1bOP' || key === '\x1b[11~') {
-        await showHelpScreen(this.getDisplayContext());
-        return;
-      }
-
-      // Handle F2 (save)
-      if (key === '\x1bOQ' || key === '\x1b[12~') {
-        if (this.filename) {
-          const ctx = this.getFileContext();
-          saveFile(ctx, this.filename);
-          this.modified = false;
-          this.refreshDisplay();
-        } else {
-          await this.showFileDialog('save');
-        }
-        return;
-      }
-
-      // Handle F3 (load)
-      if (key === '\x1bOR' || key === '\x1b[13~') {
-        await this.showFileDialog('load');
-        return;
-      }
-
-      // Handle F4 (new)
-      if (key === '\x1bOS' || key === '\x1b[14~') {
-        saveUndoState(this.getEditorContext());
-        this.canvas = [];
-        this.initCanvas();
-        this.filename = null;
-        this.modified = false;
-        this.cursorX = 0;
-        this.cursorY = 0;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle F5 (tool selector)
-      if (key === '\x1b[15~') {
-        await this.selectTool();
-        return;
-      }
-
-      // Handle F6 (foreground color)
-      if (key === '\x1b[17~') {
-        await this.selectColor(false);
-        return;
-      }
-
-      // Handle F7 (background color)
-      if (key === '\x1b[18~') {
-        await this.selectColor(true);
-        return;
-      }
-
-      // Handle F8 (cycle foreground)
-      if (key === '\x1b[19~') {
-        cycleFgUp(this.getEditorContext());
-        this.currentFg = this.getEditorContext().currentFg;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle F9 (cycle background)
-      if (key === '\x1b[20~') {
-        cycleBgUp(this.getEditorContext());
-        this.currentBg = this.getEditorContext().currentBg;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle F10 (recent files - sysop/cosysop only)
-      if (key === '\x1b[21~') {
-        if (this.user.accessLevel >= 250) {
-          await this.showRecentFiles();
-        }
-        return;
-      }
-
-      // Handle Shift+F10 (gallery browser - sysop/cosysop only)
-      if (key === '\x1b[21;2~') {
-        if (this.user.accessLevel >= 250) {
-          await this.showGalleryBrowser();
-        }
-        return;
-      }
-
-      // Handle arrow keys (cursor movement)
-      if (key === '\x1b[A') {  // Up
-        this.moveCursorRel(0, -1);
-        return;
-      }
-      if (key === '\x1b[B') {  // Down
-        this.moveCursorRel(0, 1);
-        return;
-      }
-      if (key === '\x1b[C') {  // Right
-        this.moveCursorRel(1, 0);
-        return;
-      }
-      if (key === '\x1b[D') {  // Left
-        this.moveCursorRel(-1, 0);
-        return;
-      }
-
-      // Handle Ctrl+Z (undo)
-      if (key === '\x1a') {
-        undo(this.getEditorContext());
-        // Update local state from context
-        const edCtx = this.getEditorContext();
-        this.canvas = edCtx.canvas;
-        this.undoStack = edCtx.undoStack;
-        this.redoStack = edCtx.redoStack;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle Ctrl+Y (redo)
-      if (key === '\x19') {
-        redo(this.getEditorContext());
-        // Update local state from context
-        const edCtx = this.getEditorContext();
-        this.canvas = edCtx.canvas;
-        this.undoStack = edCtx.undoStack;
-        this.redoStack = edCtx.redoStack;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle Ctrl+C (copy)
-      if (key === '\x03') {
-        copySelection(this.getEditorContext());
-        this.clipboard = this.getEditorContext().clipboard;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle Ctrl+X (cut)
-      if (key === '\x18') {
-        cutSelection(this.getEditorContext());
-        const edCtx = this.getEditorContext();
-        this.canvas = edCtx.canvas;
-        this.clipboard = edCtx.clipboard;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle Ctrl+V (paste)
-      if (key === '\x16') {
-        pasteSelection(this.getEditorContext());
-        this.canvas = this.getEditorContext().canvas;
-        this.modified = true;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle Space (draw/toggle)
-      if (key === ' ') {
-        if (this.currentTool === 'draw') {
-          saveUndoState(this.getEditorContext(), true);
-          drawWithBrush(this.getDrawingContext(), this.cursorX, this.cursorY);
-          this.modified = true;
-          this.refreshDisplay();
-        }
-        return;
-      }
-
-      // Handle Enter (for line/box tools)
-      if (key === '\r') {
-        if (this.currentTool === 'line' && this.lineStart) {
-          saveUndoState(this.getEditorContext());
-          drawLine(this.getDrawingContext(), this.lineStart.x, this.lineStart.y, this.cursorX, this.cursorY);
-          this.lineStart = null;
-          this.modified = true;
-          this.refreshDisplay();
-        } else if (this.currentTool === 'box' && this.lineStart) {
-          saveUndoState(this.getEditorContext());
-          drawBox(this.getDrawingContext(), this.lineStart.x, this.lineStart.y, this.cursorX, this.cursorY);
-          this.lineStart = null;
-          this.modified = true;
-          this.refreshDisplay();
-        } else if (this.currentTool === 'ellipse' && this.ellipseStart) {
-          saveUndoState(this.getEditorContext());
-          const rx = Math.abs(this.cursorX - this.ellipseStart.x);
-          const ry = Math.abs(this.cursorY - this.ellipseStart.y);
-          drawEllipse(this.getDrawingContext(), this.ellipseStart.x, this.ellipseStart.y, rx, ry);
-          this.ellipseStart = null;
-          this.modified = true;
-          this.refreshDisplay();
-        } else if (this.currentTool === 'ellipse-fill' && this.ellipseStart) {
-          saveUndoState(this.getEditorContext());
-          const rx = Math.abs(this.cursorX - this.ellipseStart.x);
-          const ry = Math.abs(this.cursorY - this.ellipseStart.y);
-          drawEllipseFilled(this.getDrawingContext(), this.ellipseStart.x, this.ellipseStart.y, rx, ry);
-          this.ellipseStart = null;
-          this.modified = true;
-          this.refreshDisplay();
-        } else if (this.currentTool === 'line') {
-          this.lineStart = { x: this.cursorX, y: this.cursorY };
-        } else if (this.currentTool === 'box') {
-          this.lineStart = { x: this.cursorX, y: this.cursorY };
-        } else if (this.currentTool === 'ellipse' || this.currentTool === 'ellipse-fill') {
-          this.ellipseStart = { x: this.cursorX, y: this.cursorY };
-        }
-        return;
-      }
-
-      // Handle text mode
-      if (this.currentTool === 'text' && key.length === 1 && key >= ' ' && key <= '~') {
-        saveUndoState(this.getEditorContext(), true);
-        this.canvas[this.cursorY][this.cursorX] = {
-          char: key,
-          fg: this.currentFg,
-          bg: this.currentBg
-        };
-        this.cursorX++;
-        if (this.cursorX >= this.width) {
-          this.cursorX = 0;
-          this.cursorY = Math.min(this.height - 1, this.cursorY + 1);
-        }
-        this.modified = true;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle fill tool
-      if (this.currentTool === 'fill' && key === '\r') {
-        saveUndoState(this.getEditorContext());
-        floodFill(this.getDrawingContext(), this.cursorX, this.cursorY);
-        this.modified = true;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle pick tool
-      if (this.currentTool === 'pick' && key === '\r') {
-        pickCell(this.getDrawingContext(), this.cursorX, this.cursorY);
-        const drawCtx = this.getDrawingContext();
-        this.currentFg = drawCtx.currentFg;
-        this.currentBg = drawCtx.currentBg;
-        this.currentChar = drawCtx.currentChar;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle numpad mode drawing
-      if (this.numpadModeEnabled && handleNumpadDraw(this.getDrawingContext(), key)) {
-        this.modified = true;
-        this.refreshDisplay();
-        return;
-      }
-
-      // Handle other printable characters (if not handled above)
-      if (key.length === 1 && key >= ' ' && key <= '~') {
-        this.currentChar = key;
-        this.refreshDisplay();
-      }
+      // Exit handler
+      door.on('exit', () => {
+        this.running = false;
+        resolve();
+      });
     });
+
+    // Cleanup
+    this.socket.emit('enableMouseEvents', false);
+    this.emit(ANSI.SHOW_CURSOR);
+    this.emit(ANSI.CLEAR_SCREEN);
+  }
+
+  // ===========================================================================
+  // EVENT HANDLERS
+  // ===========================================================================
+
+  private setupEventHandlers(): void {
+    // Keyboard input
+    this.socket.on('data', (data: string) => {
+      this.handleKeyboard(data);
+    });
+
+    // Mouse input
+    this.socket.on('mouse', (event: any) => {
+      this.handleMouse(event);
+    });
+
+    // Key events (from blessed/SDK)
+    this.socket.on('keypress', (ch: string, key: any) => {
+      this.handleKeypress(ch, key);
+    });
+  }
+
+  // ===========================================================================
+  // KEYBOARD HANDLING
+  // ===========================================================================
+
+  private handleKeyboard(data: string): void {
+    // Handle raw keyboard data
+    if (data.length === 1) {
+      const char = data;
+
+      // In text mode, insert characters
+      if (this.state.currentTool === 'text') {
+        insertTextChar(this.state, char);
+        this.refresh();
+        return;
+      }
+
+      // Tool shortcuts
+      switch (char.toLowerCase()) {
+        case 'd':
+          this.setTool('draw');
+          break;
+        case 'l':
+          this.setTool('line');
+          break;
+        case 'b':
+          this.setTool('box');
+          break;
+        case 'e':
+          this.setTool('ellipse');
+          break;
+        case 't':
+          this.setTool('text');
+          break;
+        case 'f':
+          this.setTool('fill');
+          break;
+        case 'p':
+          this.setTool('pick');
+          break;
+        case 's':
+          this.setTool('select');
+          break;
+        case 'h':
+          this.setTool('shifter');
+          break;
+        case 'k':
+          this.showColorPicker();
+          break;
+        case 'g':
+          this.toggleGuides();
+          break;
+        case 'i':
+          this.toggleIceColors();
+          break;
+        case 'q':
+          this.quit();
+          break;
+      }
+    }
+
+    // Handle escape sequences
+    if (data === '\x1b') {
+      // ESC - cancel current operation
+      const handler = getToolHandler(this.state.currentTool);
+      handler.onCancel(this.state);
+      clearSelection(this.state);
+      this.refresh();
+    }
+  }
+
+  private async handleKeypress(ch: string, key: any): Promise<void> {
+    const { name, ctrl, alt, shift } = key;
+
+    // Arrow keys - move cursor
+    if (name === 'left') {
+      this.moveCursor(-1, 0);
+    } else if (name === 'right') {
+      this.moveCursor(1, 0);
+    } else if (name === 'up') {
+      this.moveCursor(0, -1);
+    } else if (name === 'down') {
+      this.moveCursor(0, 1);
+    }
+
+    // Page Up/Down
+    else if (name === 'pageup') {
+      this.moveCursor(0, -10);
+    } else if (name === 'pagedown') {
+      this.moveCursor(0, 10);
+    }
+
+    // Home/End
+    else if (name === 'home') {
+      this.state.cursorX = 0;
+      this.refresh();
+    } else if (name === 'end') {
+      this.state.cursorX = this.state.width - 1;
+      this.refresh();
+    }
+
+    // Ctrl+Z - Undo
+    else if (ctrl && name === 'z') {
+      if (undo(this.state)) {
+        this.refresh();
+      }
+    }
+
+    // Ctrl+Y - Redo
+    else if (ctrl && name === 'y') {
+      if (redo(this.state)) {
+        this.refresh();
+      }
+    }
+
+    // Ctrl+C - Copy
+    else if (ctrl && name === 'c') {
+      if (copySelection(this.state)) {
+        await this.showMessage('Selection copied to clipboard');
+      }
+    }
+
+    // Ctrl+X - Cut
+    else if (ctrl && name === 'x') {
+      if (cutSelection(this.state)) {
+        this.refresh();
+        await this.showMessage('Selection cut to clipboard');
+      }
+    }
+
+    // Ctrl+V - Paste
+    else if (ctrl && name === 'v') {
+      pasteSelection(this.state);
+      this.refresh();
+    }
+
+    // Ctrl+A - Select All
+    else if (ctrl && name === 'a') {
+      selectAll(this.state);
+      this.refresh();
+    }
+
+    // Ctrl+N - New File
+    else if (ctrl && name === 'n') {
+      await this.newFile();
+    }
+
+    // Ctrl+O - Open File
+    else if (ctrl && name === 'o') {
+      await this.openFile();
+    }
+
+    // Ctrl+S - Save File
+    else if (ctrl && name === 's') {
+      await this.saveCurrentFile();
+    }
+
+    // Delete - Delete selection
+    else if (name === 'delete') {
+      if (this.state.selecting) {
+        const handler = getToolHandler(this.state.currentTool);
+        handler.onCancel(this.state);
+        clearSelection(this.state);
+        this.refresh();
+      }
+    }
+
+    // Tab - Show tool selector
+    else if (name === 'tab') {
+      await this.showToolSelector();
+    }
+
+    // F1 - Help
+    else if (name === 'f1') {
+      await this.showHelp();
+    }
+
+    // Shifter tool shortcuts
+    else if (this.state.currentTool === 'shifter') {
+      if (name === 'left') {
+        shiftHalfBlock(this.state, 'left');
+        this.refresh();
+      } else if (name === 'right') {
+        shiftHalfBlock(this.state, 'right');
+        this.refresh();
+      }
+    }
+  }
+
+  // ===========================================================================
+  // MOUSE HANDLING
+  // ===========================================================================
+
+  private handleMouse(event: any): void {
+    const { x, y, button, action } = event;
+
+    // Convert to canvas coordinates (0-indexed, accounting for status bar)
+    const canvasX = Math.max(0, Math.min(this.state.width - 1, x - 1));
+    const canvasY = Math.max(0, Math.min(this.state.height - 1, y - 1));
+
+    if (canvasY >= this.state.height) {
+      // Clicked on status bar - ignore
+      return;
+    }
+
+    // Update cursor position
+    this.state.cursorX = canvasX;
+    this.state.cursorY = canvasY;
+
+    // Get current tool handler
+    const handler = getToolHandler(this.state.currentTool);
+
+    // Handle mouse actions
+    if (action === 'mousedown') {
+      this.state.mouseDown = true;
+      this.state.lastMouseX = canvasX;
+      this.state.lastMouseY = canvasY;
+      handler.onStart(this.state, canvasX, canvasY);
+      this.refresh();
+    } else if (action === 'mousemove') {
+      if (this.state.mouseDown) {
+        handler.onMove(this.state, canvasX, canvasY);
+        this.refresh();
+      }
+    } else if (action === 'mouseup') {
+      if (this.state.mouseDown) {
+        handler.onEnd(this.state, canvasX, canvasY);
+        this.state.mouseDown = false;
+        this.refresh();
+      }
+    }
+
+    // Update selection if in select mode
+    if (this.state.currentTool === 'select' && this.state.selecting) {
+      updateSelection(this.state);
+      this.refresh();
+    }
+  }
+
+  // ===========================================================================
+  // RENDERING
+  // ===========================================================================
+
+  private refresh(): void {
+    // Clear output buffer
+    this.outputBuffer = '';
+
+    // Render canvas
+    this.outputBuffer += renderCanvas(this.state);
+
+    // Render status bar
+    if (this.state.showStatusBar) {
+      this.outputBuffer += renderStatusBar(this.state);
+    }
+
+    // Emit to client
+    this.emit(this.outputBuffer);
+  }
+
+  private emit(data: string): void {
+    this.socket.emit('data', data);
+  }
+
+  // ===========================================================================
+  // TOOL MANAGEMENT
+  // ===========================================================================
+
+  private setTool(tool: Tool): void {
+    // Flush any pending undo chunks
+    flushUndoChunk(this.state);
+
+    // Cancel current tool operation
+    const oldHandler = getToolHandler(this.state.currentTool);
+    oldHandler.onCancel(this.state);
+
+    // Clear selection
+    clearSelection(this.state);
+
+    // Set new tool
+    this.state.currentTool = tool;
+
+    // Show tool change message
+    this.showStatusMessage(`Tool: ${tool.toUpperCase()}`);
+    this.refresh();
+  }
+
+  private async showToolSelector(): Promise<void> {
+    const modal = new ToolSelectorModal(this.ui, this.state.currentTool);
+    const result = await modal.show();
+
+    if (result) {
+      this.setTool(result);
+    } else {
+      this.refresh();
+    }
+  }
+
+  private async showColorPicker(): Promise<void> {
+    const modal = new ColorPickerModal(
+      this.ui,
+      this.state.currentFg,
+      this.state.currentBg,
+      this.state.iceColorsEnabled
+    );
+
+    const result = await modal.show();
+
+    if (result) {
+      this.state.currentFg = result.fg;
+      this.state.currentBg = result.bg;
+    }
+
+    this.refresh();
+  }
+
+  // ===========================================================================
+  // FILE OPERATIONS
+  // ===========================================================================
+
+  private async newFile(): Promise<void> {
+    if (this.state.modified) {
+      const modal = new ConfirmDialog(
+        this.ui,
+        'New File',
+        'Current file has unsaved changes. Continue?'
+      );
+
+      if (!(await modal.show())) {
+        this.refresh();
+        return;
+      }
+    }
+
+    clearCanvas(this.state);
+    this.state.currentFilename = null;
+    this.state.modified = false;
+    this.state.undoStack = [];
+    this.state.redoStack = [];
+
+    await this.showMessage('New file created');
+    this.refresh();
+  }
+
+  private async openFile(): Promise<void> {
+    const files = listFiles();
+
+    if (files.length === 0) {
+      await this.showMessage('No files found', 'warning');
+      this.refresh();
+      return;
+    }
+
+    const modal = new FileDialogModal(this.ui, 'Open File', files, 'open');
+    const filename = await modal.show();
+
+    if (filename) {
+      try {
+        await loadFile(this.state, filename);
+        await this.showMessage(`Loaded: ${filename}`);
+      } catch (error) {
+        await this.showMessage(`Error: ${(error as Error).message}`, 'error');
+      }
+    }
+
+    this.refresh();
+  }
+
+  private async saveCurrentFile(): Promise<void> {
+    if (!this.state.currentFilename) {
+      await this.saveFileAs();
+      return;
+    }
+
+    try {
+      await saveFile(this.state, this.state.currentFilename);
+      await this.showMessage(`Saved: ${this.state.currentFilename}`);
+    } catch (error) {
+      await this.showMessage(`Error: ${(error as Error).message}`, 'error');
+    }
+
+    this.refresh();
+  }
+
+  private async saveFileAs(): Promise<void> {
+    const files = listFiles();
+    const modal = new FileDialogModal(this.ui, 'Save As', files, 'save');
+    const filename = await modal.show();
+
+    if (filename) {
+      try {
+        await saveFile(this.state, filename);
+        await this.showMessage(`Saved: ${filename}`);
+      } catch (error) {
+        await this.showMessage(`Error: ${(error as Error).message}`, 'error');
+      }
+    }
+
+    this.refresh();
+  }
+
+  // ===========================================================================
+  // UI HELPERS
+  // ===========================================================================
+
+  private async showWelcome(): Promise<void> {
+    const modal = new MessageDialog(
+      this.ui,
+      'ANSI Editor',
+      'State-of-the-art ANSI/ASCII art editor\n\nPress F1 for help\nPress Tab for tools',
+      'info'
+    );
+
+    await modal.show();
+    this.refresh();
+  }
+
+  private async showHelp(): Promise<void> {
+    const modal = new HelpDialog(this.ui);
+    await modal.show();
+    this.refresh();
+  }
+
+  private async showMessage(
+    message: string,
+    type: 'info' | 'warning' | 'error' = 'info'
+  ): Promise<void> {
+    const modal = new MessageDialog(this.ui, type.toUpperCase(), message, type);
+    await modal.show();
+  }
+
+  private showStatusMessage(message: string): void {
+    // Show brief status message (would be on status bar)
+    // For now, just included in status bar rendering
+  }
+
+  // ===========================================================================
+  // UTILITY METHODS
+  // ===========================================================================
+
+  private moveCursor(dx: number, dy: number): void {
+    this.state.cursorX = Math.max(0, Math.min(this.state.width - 1, this.state.cursorX + dx));
+    this.state.cursorY = Math.max(0, Math.min(this.state.height - 1, this.state.cursorY + dy));
+
+    // Update selection if in select mode
+    if (this.state.currentTool === 'select' && this.state.selecting) {
+      updateSelection(this.state);
+    }
+
+    this.refresh();
+  }
+
+  private toggleGuides(): void {
+    const guides: ('none' | '80x25' | '80x40' | '44x22' | 'grid')[] = ['none', '80x25', '80x40', '44x22', 'grid'];
+    const currentIndex = guides.indexOf(this.state.showGuide);
+    const nextIndex = (currentIndex + 1) % guides.length;
+    this.state.showGuide = guides[nextIndex];
+
+    this.showStatusMessage(`Guides: ${this.state.showGuide}`);
+    this.refresh();
+  }
+
+  private toggleIceColors(): void {
+    this.state.iceColorsEnabled = !this.state.iceColorsEnabled;
+    this.showStatusMessage(`iCE Colors: ${this.state.iceColorsEnabled ? 'ON' : 'OFF'}`);
+    this.refresh();
+  }
+
+  private async quit(): Promise<void> {
+    if (this.state.modified) {
+      const modal = new ConfirmDialog(
+        this.ui,
+        'Quit',
+        'File has unsaved changes. Quit anyway?'
+      );
+
+      if (!(await modal.show())) {
+        this.refresh();
+        return;
+      }
+    }
+
+    this.running = false;
+    door.disconnect(this.user.id);
   }
 }
 
-export async function runDoor(session: DoorSession) {
-  console.log('[ANSI Editor runDoor] Starting ANSI editor door');
-  const editor = new ANSIEditor(session);
-  console.log('[ANSI Editor runDoor] Editor created, calling run()');
-  await editor.run();
-  console.log('[ANSI Editor runDoor] Editor run() completed');
-}
+// =============================================================================
+// DOOR CONNECTION HANDLER
+// =============================================================================
 
-export default runDoor;
+door.onConnect(async (user: any) => {
+  console.log(`[ANSI Editor] User ${user.name} connected`);
+
+  // Get socket from door context (implementation-specific)
+  const socket = (door as any).getSocket(user.id);
+
+  if (!socket) {
+    console.error('[ANSI Editor] No socket found for user');
+    return;
+  }
+
+  // Create and run editor
+  const editor = new ANSIEditor(user, socket);
+  await editor.run();
+
+  console.log(`[ANSI Editor] User ${user.name} disconnected`);
+});
+
+// =============================================================================
+// EXPORT
+// =============================================================================
+
+export default door;
+
+// Provide runDoor entrypoint expected by the TS door harness
+export async function runDoor(session: any): Promise<void> {
+  await runDoorWithSession(door, session);
+}

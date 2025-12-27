@@ -4,6 +4,7 @@
  * Full-featured multi-window lobby for card games with PokerEngine support.
  */
 import blessed from '../../sdk/engines/ui/blessed';
+import { createBox, createList, createButton, createText, createLog } from '../../sdk/utils/blessed-helpers';
 import { CardEngine, PokerEngine, ActionType, pokerCardsToCards, Storage, } from '../../sdk';
 export const metadata = {
     name: 'Card Lobby',
@@ -449,6 +450,7 @@ class CardLobbyApp {
         this.screen = blessed.screen({
             height,
             smartCSR: true,
+            dockBorders: true,
             fullUnicode: false,
             title: 'Card Lobby',
             output: (data) => this.session.bbs.write(data),
@@ -552,7 +554,7 @@ class CardLobbyApp {
                 return;
             this.runAction(() => this.dealHand());
         });
-        this.desktop = blessed.box({
+        this.desktop = createBox({
             parent: this.screen,
             top: 0,
             left: 0,
@@ -595,7 +597,7 @@ class CardLobbyApp {
                 Quit: { callback: () => runAction(exitDoor) },
             },
         });
-        this.topInfoBar = blessed.box({
+        this.topInfoBar = createBox({
             parent: this.desktop,
             top: 0,
             left: 0,
@@ -608,7 +610,7 @@ class CardLobbyApp {
         });
     }
     buildStatusBar() {
-        this.statusBar = blessed.box({
+        this.statusBar = createBox({
             parent: this.desktop,
             bottom: 0,
             left: 0,
@@ -649,7 +651,7 @@ class CardLobbyApp {
             leftWidth,
             rightWidth,
         };
-        this.lobbyWindow = blessed.box({
+        this.lobbyWindow = createBox({
             parent: this.desktop,
             top: topOffset,
             left: 0,
@@ -659,7 +661,7 @@ class CardLobbyApp {
             border: { type: 'ascii' },
             style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
         });
-        this.tableWindow = blessed.box({
+        this.tableWindow = createBox({
             parent: this.desktop,
             top: topOffset,
             left: leftWidth,
@@ -668,7 +670,7 @@ class CardLobbyApp {
             border: 'none',
             style: { bg: UI_THEME.windowBg },
         });
-        this.lobbyList = blessed.list({
+        this.lobbyList = createList({
             parent: this.lobbyWindow,
             top: 1,
             left: 1,
@@ -728,7 +730,7 @@ class CardLobbyApp {
             },
             content: 'Select a table to view details.',
         });
-        this.tableActions = blessed.box({
+        this.tableActions = createBox({
             parent: this.tableWindow,
             top: 0,
             left: 1,
@@ -738,7 +740,7 @@ class CardLobbyApp {
             hidden: true,
         });
         this.actionButtons = {
-            fold: blessed.button({
+            fold: createButton({
                 parent: this.tableActions,
                 mouse: true,
                 keys: true,
@@ -750,7 +752,7 @@ class CardLobbyApp {
                 padding: { left: 1, right: 1, top: 0, bottom: 0 },
                 content: 'FOLD',
             }),
-            check: blessed.button({
+            check: createButton({
                 parent: this.tableActions,
                 mouse: true,
                 keys: true,
@@ -762,7 +764,7 @@ class CardLobbyApp {
                 padding: { left: 1, right: 1, top: 0, bottom: 0 },
                 content: 'CHECK',
             }),
-            call: blessed.button({
+            call: createButton({
                 parent: this.tableActions,
                 mouse: true,
                 keys: true,
@@ -774,7 +776,7 @@ class CardLobbyApp {
                 padding: { left: 1, right: 1, top: 0, bottom: 0 },
                 content: 'CALL',
             }),
-            raise: blessed.button({
+            raise: createButton({
                 parent: this.tableActions,
                 mouse: true,
                 keys: true,
@@ -786,7 +788,7 @@ class CardLobbyApp {
                 padding: { left: 1, right: 1, top: 0, bottom: 0 },
                 content: 'RAISE',
             }),
-            quit: blessed.button({
+            quit: createButton({
                 parent: this.tableActions,
                 mouse: true,
                 keys: true,
@@ -800,7 +802,7 @@ class CardLobbyApp {
             }),
         };
         this.registerActionButtonEvents();
-        this.logWindow = blessed.log({
+        this.logWindow = createLog({
             parent: this.desktop,
             bottom: statusHeight,
             left: 0,
@@ -825,7 +827,7 @@ class CardLobbyApp {
         const panelStyle = { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg };
         const contentStyle = { fg: 'white', bg: 'black' };
         const scrollbarStyle = { fg: UI_THEME.accent, bg: UI_THEME.accent };
-        this.flopPanel = blessed.box({
+        this.flopPanel = createBox({
             parent: this.tableWindow,
             top: 1,
             left: 1,
@@ -837,7 +839,7 @@ class CardLobbyApp {
             border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
-        this.flopContent = blessed.box({
+        this.flopContent = createBox({
             parent: this.flopPanel,
             top: 1,
             left: 1,
@@ -847,7 +849,7 @@ class CardLobbyApp {
             style: contentStyle,
             content: '',
         });
-        this.playersPanel = blessed.box({
+        this.playersPanel = createBox({
             parent: this.tableWindow,
             top: 1,
             left: 1,
@@ -878,7 +880,7 @@ class CardLobbyApp {
             },
             content: '',
         });
-        this.handPanel = blessed.box({
+        this.handPanel = createBox({
             parent: this.tableWindow,
             top: 1,
             left: 1,
@@ -890,7 +892,7 @@ class CardLobbyApp {
             border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
-        this.handContent = blessed.box({
+        this.handContent = createBox({
             parent: this.handPanel,
             top: 1,
             left: 1,
@@ -900,7 +902,7 @@ class CardLobbyApp {
             style: contentStyle,
             content: '',
         });
-        this.activityPanel = blessed.box({
+        this.activityPanel = createBox({
             parent: this.tableWindow,
             top: 1,
             left: 1,
@@ -912,7 +914,7 @@ class CardLobbyApp {
             border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
             style: panelStyle,
         });
-        this.activityContent = blessed.log({
+        this.activityContent = createLog({
             parent: this.activityPanel,
             top: 1,
             left: 1,
@@ -1161,7 +1163,7 @@ class CardLobbyApp {
         }
     }
     buildOverlay() {
-        this.overlayShade = blessed.box({
+        this.overlayShade = createBox({
             parent: this.desktop,
             top: 0,
             left: 0,
@@ -2756,7 +2758,7 @@ class CardLobbyApp {
             return;
         this.modalActive = true;
         this.overlayShade.show();
-        const modal = blessed.box({
+        const modal = createBox({
             parent: this.overlayShade,
             top: 'center',
             left: 'center',
@@ -2782,7 +2784,7 @@ class CardLobbyApp {
             style: { fg: 'white' },
         });
         if (opts?.footer) {
-            blessed.text({
+            createText({
                 parent: modal,
                 bottom: 3,
                 left: 1,
@@ -2792,7 +2794,7 @@ class CardLobbyApp {
                 style: { fg: UI_THEME.accent },
             });
         }
-        const backButton = blessed.button({
+        const backButton = createButton({
             parent: modal,
             bottom: 0,
             right: 2,
@@ -2828,7 +2830,7 @@ class CardLobbyApp {
         this.modalActive = true;
         this.overlayShade.show();
         return new Promise((resolve) => {
-            const modal = blessed.box({
+            const modal = createBox({
                 parent: this.overlayShade,
                 top: 'center',
                 left: 'center',
@@ -2838,7 +2840,7 @@ class CardLobbyApp {
                 label: ` ${title} `,
                 style: { border: UI_THEME.windowBorder, bg: 'black' },
             });
-            const list = blessed.list({
+            const list = createList({
                 parent: modal,
                 top: 1,
                 left: 1,

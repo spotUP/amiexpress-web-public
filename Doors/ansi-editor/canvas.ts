@@ -1,550 +1,687 @@
 /**
- * Canvas operations module for ANSI Editor
- * Handles undo/redo, selection, copy/paste, transformations, and canvas manipulations
+ * Canvas operations for ANSI Editor
+ * Handles undo/redo, selection, clipboard, transformations
  */
 
-import { Cell, Point, SelectionBounds, OperationMode } from './types';
-import * as fs from 'fs';
-import * as path from 'path';
+import { Cell, Point, SelectionBounds, EditorState, GuideType, ANSI } from './types.js';
 
-// Editor context interface - contains all state needed by canvas operations
-export interface EditorContext {
-  // Canvas state
-  canvas: Cell[][];
-  width: number;
-  height: number;
+// =============================================================================
+// CANVAS INITIALIZATION
+// =============================================================================
 
-  // Cursor state
-  cursorX: number;
-  cursorY: number;
-
-  // Drawing state
-  currentFg: number;
-  currentBg: number;
-  currentChar: string;
-
-  // Undo/redo stacks
-  undoStack: Cell[][][];
-  redoStack: Cell[][][];
-  maxUndoLevels: number;
-
-  // Chunked undo
-  lastUndoTime: number;
-  undoChunkTimeout: number;
-  pendingUndoChunk: boolean;
-
-  // Selection state
-  selecting: boolean;
-  selectionStart: Point | null;
-  selectionEnd: Point | null;
-  clipboard: Cell[][];
-  operationMode: OperationMode;
-  insertMode: boolean;
-
-  // File state
-  modified: boolean;
-
-  // Methods needed
-  refresh: () => void;
-  showStatusBar?: () => void;
-  emit: (data: string) => void;
-  getInput?: () => Promise<string>;
-  sleep?: (ms: number) => Promise<void>;
-  getFileContext?: () => any;
+export function createCanvas(width: number, height: number): Cell[][] {
+  const canvas: Cell[][] = [];
+  for (let y = 0; y < height; y++) {
+    canvas[y] = [];
+    for (let x = 0; x < width; x++) {
+      canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+    }
+  }
+  return canvas;
 }
 
-// ========== UNDO/REDO SYSTEM ==========
+export function cloneCanvas(canvas: Cell[][]): Cell[][] {
+  return canvas.map(row => row.map(cell => ({ ...cell })));
+}
 
-export function saveUndoState(ctx: EditorContext, chunk: boolean = false): void {
+export function clearCanvas(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+    }
+  }
+  state.modified = true;
+}
+
+// =============================================================================
+// UNDO/REDO SYSTEM
+// =============================================================================
+
+export function saveUndoState(state: EditorState, chunk: boolean = false): void {
   const now = Date.now();
 
   // Chunked undo: Group rapid consecutive operations
   if (chunk) {
     // If within chunk timeout, skip saving (we'll save when chunk ends)
-    if (now - ctx.lastUndoTime < ctx.undoChunkTimeout) {
-      ctx.pendingUndoChunk = true;
-      ctx.lastUndoTime = now;
+    if (now - state.lastUndoTime < state.undoChunkTimeout) {
+      state.pendingUndoChunk = true;
+      state.lastUndoTime = now;
       return;
     }
 
     // Chunk timeout expired - save if we had pending operations
-    if (ctx.pendingUndoChunk) {
-      // Fall through to save state
-      ctx.pendingUndoChunk = false;
+    if (state.pendingUndoChunk) {
+      state.pendingUndoChunk = false;
     }
   }
 
   // Save current canvas state to undo stack
-  const snapshot: Cell[][] = [];
-  for (let y = 0; y < ctx.height; y++) {
-    snapshot[y] = [];
-    for (let x = 0; x < ctx.width; x++) {
-      snapshot[y][x] = { ...ctx.canvas[y][x] };
-    }
+  const snapshot = cloneCanvas(state.canvas);
+  state.undoStack.push(snapshot);
+
+  if (state.undoStack.length > state.maxUndoLevels) {
+    state.undoStack.shift();
   }
-  ctx.undoStack.push(snapshot);
-  if (ctx.undoStack.length > ctx.maxUndoLevels) {
-    ctx.undoStack.shift();
-  }
+
   // Clear redo stack when new action is performed
-  ctx.redoStack = [];
-  ctx.modified = true;
-  ctx.lastUndoTime = now;
+  state.redoStack = [];
+  state.modified = true;
+  state.lastUndoTime = now;
 }
 
-/**
- * Force save any pending chunked undo operations
- * Call this when switching tools, exiting modes, etc.
- */
-export function flushUndoChunk(ctx: EditorContext): void {
-  if (ctx.pendingUndoChunk) {
-    ctx.pendingUndoChunk = false;
-    // Save the current state
-    const snapshot: Cell[][] = [];
-    for (let y = 0; y < ctx.height; y++) {
-      snapshot[y] = [];
-      for (let x = 0; x < ctx.width; x++) {
-        snapshot[y][x] = { ...ctx.canvas[y][x] };
-      }
+export function flushUndoChunk(state: EditorState): void {
+  if (state.pendingUndoChunk) {
+    state.pendingUndoChunk = false;
+    const snapshot = cloneCanvas(state.canvas);
+    state.undoStack.push(snapshot);
+    if (state.undoStack.length > state.maxUndoLevels) {
+      state.undoStack.shift();
     }
-    ctx.undoStack.push(snapshot);
-    if (ctx.undoStack.length > ctx.maxUndoLevels) {
-      ctx.undoStack.shift();
-    }
-    ctx.redoStack = [];
-    ctx.modified = true;
+    state.redoStack = [];
+    state.modified = true;
   }
 }
 
-export function undo(ctx: EditorContext): void {
-  // Flush any pending chunks before undo
-  flushUndoChunk(ctx);
+export function undo(state: EditorState): boolean {
+  flushUndoChunk(state);
 
-  if (ctx.undoStack.length === 0) return;
+  if (state.undoStack.length === 0) return false;
 
   // Save current state to redo stack
-  const current: Cell[][] = [];
-  for (let y = 0; y < ctx.height; y++) {
-    current[y] = [];
-    for (let x = 0; x < ctx.width; x++) {
-      current[y][x] = { ...ctx.canvas[y][x] };
-    }
-  }
-  ctx.redoStack.push(current);
+  const current = cloneCanvas(state.canvas);
+  state.redoStack.push(current);
 
   // Restore previous state
-  const prev = ctx.undoStack.pop()!;
-  ctx.canvas = prev;
-  ctx.refresh();
+  const prev = state.undoStack.pop()!;
+  state.canvas = prev;
+  return true;
 }
 
-export function redo(ctx: EditorContext): void {
-  // Flush any pending chunks before redo
-  flushUndoChunk(ctx);
+export function redo(state: EditorState): boolean {
+  flushUndoChunk(state);
 
-  if (ctx.redoStack.length === 0) return;
+  if (state.redoStack.length === 0) return false;
 
   // Save current state to undo stack
-  const current: Cell[][] = [];
-  for (let y = 0; y < ctx.height; y++) {
-    current[y] = [];
-    for (let x = 0; x < ctx.width; x++) {
-      current[y][x] = { ...ctx.canvas[y][x] };
-    }
-  }
-  ctx.undoStack.push(current);
+  const current = cloneCanvas(state.canvas);
+  state.undoStack.push(current);
 
   // Restore next state
-  const next = ctx.redoStack.pop()!;
-  ctx.canvas = next;
-  ctx.refresh();
+  const next = state.redoStack.pop()!;
+  state.canvas = next;
+  return true;
 }
 
-// ========== SELECTION SYSTEM ==========
+// =============================================================================
+// SELECTION SYSTEM
+// =============================================================================
 
-export function startSelection(ctx: EditorContext): void {
-  // Flush any pending chunks before starting selection
-  flushUndoChunk(ctx);
-  ctx.selecting = true;
-  ctx.selectionStart = { x: ctx.cursorX, y: ctx.cursorY };
-  ctx.selectionEnd = { x: ctx.cursorX, y: ctx.cursorY };
+export function startSelection(state: EditorState): void {
+  flushUndoChunk(state);
+  state.selecting = true;
+  state.selectionStart = { x: state.cursorX, y: state.cursorY };
+  state.selectionEnd = { x: state.cursorX, y: state.cursorY };
 }
 
-export function updateSelection(ctx: EditorContext): void {
-  if (ctx.selecting) {
-    ctx.selectionEnd = { x: ctx.cursorX, y: ctx.cursorY };
+export function updateSelection(state: EditorState): void {
+  if (state.selecting) {
+    state.selectionEnd = { x: state.cursorX, y: state.cursorY };
   }
 }
 
-export function getSelectionBounds(ctx: EditorContext): SelectionBounds | null {
-  if (!ctx.selectionStart || !ctx.selectionEnd) return null;
+export function clearSelection(state: EditorState): void {
+  state.selecting = false;
+  state.selectionStart = null;
+  state.selectionEnd = null;
+}
+
+export function getSelectionBounds(state: EditorState): SelectionBounds | null {
+  if (!state.selectionStart || !state.selectionEnd) return null;
   return {
-    x1: Math.min(ctx.selectionStart.x, ctx.selectionEnd.x),
-    y1: Math.min(ctx.selectionStart.y, ctx.selectionEnd.y),
-    x2: Math.max(ctx.selectionStart.x, ctx.selectionEnd.x),
-    y2: Math.max(ctx.selectionStart.y, ctx.selectionEnd.y)
+    x1: Math.min(state.selectionStart.x, state.selectionEnd.x),
+    y1: Math.min(state.selectionStart.y, state.selectionEnd.y),
+    x2: Math.max(state.selectionStart.x, state.selectionEnd.x),
+    y2: Math.max(state.selectionStart.y, state.selectionEnd.y)
   };
 }
 
-export function copySelection(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
-  if (!bounds) return;
+export function isInSelection(state: EditorState, x: number, y: number): boolean {
+  const bounds = getSelectionBounds(state);
+  if (!bounds) return false;
+  return x >= bounds.x1 && x <= bounds.x2 && y >= bounds.y1 && y <= bounds.y2;
+}
 
-  ctx.clipboard = [];
+export function selectAll(state: EditorState): void {
+  state.selecting = true;
+  state.selectionStart = { x: 0, y: 0 };
+  state.selectionEnd = { x: state.width - 1, y: state.height - 1 };
+}
+
+// =============================================================================
+// CLIPBOARD OPERATIONS
+// =============================================================================
+
+export function copySelection(state: EditorState): boolean {
+  const bounds = getSelectionBounds(state);
+  if (!bounds) return false;
+
+  state.clipboard = [];
   for (let y = bounds.y1; y <= bounds.y2; y++) {
     const row: Cell[] = [];
     for (let x = bounds.x1; x <= bounds.x2; x++) {
-      row.push({ ...ctx.canvas[y][x] });
+      row.push({ ...state.canvas[y][x] });
     }
-    ctx.clipboard.push(row);
+    state.clipboard.push(row);
   }
+  return true;
 }
 
-export function cutSelection(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  copySelection(ctx);
-  eraseSelection(ctx);
+export function cutSelection(state: EditorState): boolean {
+  if (!copySelection(state)) return false;
+  saveUndoState(state);
+  eraseSelection(state);
+  return true;
 }
 
-export function eraseSelection(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
+export function eraseSelection(state: EditorState): void {
+  const bounds = getSelectionBounds(state);
   if (!bounds) return;
 
   for (let y = bounds.y1; y <= bounds.y2; y++) {
     for (let x = bounds.x1; x <= bounds.x2; x++) {
-      ctx.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+      state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
     }
   }
-  clearSelection(ctx);
-  ctx.refresh();
+  clearSelection(state);
+  state.modified = true;
 }
 
-export function pasteSelection(ctx: EditorContext): void {
-  if (ctx.clipboard.length === 0) return;
+export function pasteSelection(state: EditorState): void {
+  if (state.clipboard.length === 0) return;
 
-  saveUndoState(ctx);
-  for (let y = 0; y < ctx.clipboard.length; y++) {
-    for (let x = 0; x < ctx.clipboard[y].length; x++) {
-      const targetY = ctx.cursorY + y;
-      const targetX = ctx.cursorX + x;
-      if (targetY < 22 && targetX < ctx.width) {
-        ctx.canvas[targetY][targetX] = { ...ctx.clipboard[y][x] };
+  saveUndoState(state);
+  for (let y = 0; y < state.clipboard.length; y++) {
+    for (let x = 0; x < state.clipboard[y].length; x++) {
+      const targetY = state.cursorY + y;
+      const targetX = state.cursorX + x;
+      if (targetY < state.height && targetX < state.width) {
+        state.canvas[targetY][targetX] = { ...state.clipboard[y][x] };
       }
     }
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-/**
- * Import file as selection (loads into clipboard for pasting)
- * Supports: ANS, XB, BIN, ASC, TXT
- */
-export async function importFileAsSelection(ctx: EditorContext): Promise<boolean> {
-  ctx.emit('\r\n\r\nFilename to import (no path): ');
+// =============================================================================
+// TRANSFORMATION OPERATIONS
+// =============================================================================
 
-  const filename = await ctx.getInput();
-  if (!filename || filename.length === 0) {
-    ctx.emit('\x1b[31mImport cancelled.\x1b[0m\r\n');
-    await ctx.sleep(1000);
-    return false;
-  }
-
-  const dataDir = process.env.DATA_DIR || path.join(__dirname, '../../backend/data/bbs');
-  const filepath = path.join(dataDir, 'BBS', 'Screens', filename);
-
-  if (!fs.existsSync(filepath)) {
-    ctx.emit(`\x1b[31mFile not found: ${filename}\x1b[0m\r\n`);
-    await ctx.sleep(2000);
-    return false;
-  }
-
-  try {
-    const content = fs.readFileSync(filepath, 'utf8');
-
-    // Parse into temporary canvas
-    const tempCanvas: Cell[][] = [];
-    for (let y = 0; y < 22; y++) {
-      tempCanvas[y] = [];
-      for (let x = 0; x < ctx.width; x++) {
-        tempCanvas[y][x] = { char: ' ', fg: 7, bg: 0 };
-      }
-    }
-
-    // Parse ANSI into temp canvas
-    let x = 0;
-    let y = 0;
-    let currentFg = 7;
-    let currentBg = 0;
-    let inEscape = false;
-    let escapeSeq = '';
-
-    for (let i = 0; i < content.length; i++) {
-      const char = content[i];
-
-      if (inEscape) {
-        escapeSeq += char;
-        if (char === 'm') {
-          // Parse color codes
-          const matches = escapeSeq.match(/\[([0-9;]+)m/);
-          if (matches) {
-            const codes = matches[1].split(';');
-            for (const code of codes) {
-              const num = parseInt(code);
-              if (num === 0) {
-                currentFg = 7;
-                currentBg = 0;
-              } else if (num >= 30 && num <= 37) {
-                currentFg = num - 30;
-              } else if (num >= 40 && num <= 47) {
-                currentBg = num - 40;
-              }
-            }
-          }
-          inEscape = false;
-          escapeSeq = '';
-        }
-      } else if (char === '\x1b') {
-        inEscape = true;
-        escapeSeq = '';
-      } else if (char === '\r') {
-        // Ignore CR
-      } else if (char === '\n') {
-        y++;
-        x = 0;
-        if (y >= 22) break;
-      } else {
-        if (y < 22 && x < ctx.width) {
-          tempCanvas[y][x] = { char, fg: currentFg, bg: currentBg };
-          x++;
-        }
-      }
-    }
-
-    // Find bounding box of non-space content
-    let minX = ctx.width, maxX = -1, minY = 22, maxY = -1;
-    for (let cy = 0; cy < 22; cy++) {
-      for (let cx = 0; cx < ctx.width; cx++) {
-        if (tempCanvas[cy][cx].char !== ' ' || tempCanvas[cy][cx].bg !== 0) {
-          minX = Math.min(minX, cx);
-          maxX = Math.max(maxX, cx);
-          minY = Math.min(minY, cy);
-          maxY = Math.max(maxY, cy);
-        }
-      }
-    }
-
-    // If nothing found, use entire canvas
-    if (maxX === -1) {
-      minX = 0;
-      maxX = ctx.width - 1;
-      minY = 0;
-      maxY = 21;
-    }
-
-    // Extract to clipboard
-    ctx.clipboard = [];
-    for (let cy = minY; cy <= maxY; cy++) {
-      const row: Cell[] = [];
-      for (let cx = minX; cx <= maxX; cx++) {
-        row.push({ ...tempCanvas[cy][cx] });
-      }
-      ctx.clipboard.push(row);
-    }
-
-    const width = maxX - minX + 1;
-    const height = maxY - minY + 1;
-
-    ctx.emit(`\x1b[32mImported: ${filename} (${width}x${height}) - use Ctrl+V to paste\x1b[0m\r\n`);
-    await ctx.sleep(2000);
-    return true;
-
-  } catch (error) {
-    ctx.emit(`\x1b[31mError importing: ${error}\x1b[0m\r\n`);
-    await ctx.sleep(2000);
-    return false;
-  }
-}
-
-/**
- * Export selection to file
- * Supports: ANS, XB, BIN
- */
-export async function exportSelectionToFile(ctx: EditorContext): Promise<boolean> {
-  const bounds = getSelectionBounds(ctx);
-  if (!bounds) {
-    ctx.emit('\r\n\x1b[31mNo selection to export.\x1b[0m\r\n');
-    await ctx.sleep(1500);
-    return false;
-  }
-
-  ctx.emit('\r\n\r\nFilename to export (no path): ');
-
-  const filename = await ctx.getInput();
-  if (!filename || filename.length === 0) {
-    ctx.emit('\x1b[31mExport cancelled.\x1b[0m\r\n');
-    await ctx.sleep(1000);
-    return false;
-  }
-
-  const dataDir = process.env.DATA_DIR || path.join(__dirname, '../../backend/data/bbs');
-  const screensDir = path.join(dataDir, 'BBS', 'Screens');
-
-  if (!fs.existsSync(screensDir)) {
-    fs.mkdirSync(screensDir, { recursive: true });
-  }
-
-  const filepath = path.join(screensDir, filename);
-
-  try {
-    // Convert selection to ANSI
-    let ansi = '';
-    let lastFg = -1;
-    let lastBg = -1;
-
-    for (let y = bounds.y1; y <= bounds.y2; y++) {
-      for (let x = bounds.x1; x <= bounds.x2; x++) {
-        const cell = ctx.canvas[y][x];
-
-        // Only emit color codes when colors change
-        if (cell.fg !== lastFg || cell.bg !== lastBg) {
-          ansi += `\x1b[0;3${cell.fg};4${cell.bg}m`;
-          lastFg = cell.fg;
-          lastBg = cell.bg;
-        }
-
-        ansi += cell.char;
-      }
-      ansi += '\r\n';
-    }
-
-    ansi += '\x1b[0m';  // Reset at end
-
-    fs.writeFileSync(filepath, ansi, 'utf8');
-
-    const width = bounds.x2 - bounds.x1 + 1;
-    const height = bounds.y2 - bounds.y1 + 1;
-
-    ctx.emit(`\x1b[32mExported: ${filename} (${width}x${height})\x1b[0m\r\n`);
-    await ctx.sleep(1500);
-    return true;
-
-  } catch (error) {
-    ctx.emit(`\x1b[31mError exporting: ${error}\x1b[0m\r\n`);
-    await ctx.sleep(2000);
-    return false;
-  }
-}
-
-export function clearSelection(ctx: EditorContext): void {
-  ctx.selecting = false;
-  ctx.selectionStart = null;
-  ctx.selectionEnd = null;
-}
-
-/**
- * Fill selection with current foreground color
- */
-export function fillSelection(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
+export function flipSelectionHorizontal(state: EditorState): void {
+  const bounds = getSelectionBounds(state);
   if (!bounds) return;
 
-  saveUndoState(ctx);
+  saveUndoState(state);
+
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    const row: Cell[] = [];
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      row.push({ ...state.canvas[y][x] });
+    }
+    row.reverse();
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      state.canvas[y][x] = row[x - bounds.x1];
+    }
+  }
+  state.modified = true;
+}
+
+export function flipSelectionVertical(state: EditorState): void {
+  const bounds = getSelectionBounds(state);
+  if (!bounds) return;
+
+  saveUndoState(state);
+
+  const rows: Cell[][] = [];
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    const row: Cell[] = [];
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      row.push({ ...state.canvas[y][x] });
+    }
+    rows.push(row);
+  }
+  rows.reverse();
   for (let y = bounds.y1; y <= bounds.y2; y++) {
     for (let x = bounds.x1; x <= bounds.x2; x++) {
-      // Fill with current foreground color as background
-      ctx.canvas[y][x].bg = ctx.currentFg;
+      state.canvas[y][x] = rows[y - bounds.y1][x - bounds.x1];
     }
   }
-  clearSelection(ctx);
-  ctx.refresh();
+  state.modified = true;
 }
 
-/**
- * Rotate selection 90 degrees clockwise
- */
-export function rotateSelection(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
+export function rotateSelection90(state: EditorState, clockwise: boolean = true): void {
+  const bounds = getSelectionBounds(state);
   if (!bounds) return;
 
-  saveUndoState(ctx);
-
-  // Extract selection into temp array
   const width = bounds.x2 - bounds.x1 + 1;
   const height = bounds.y2 - bounds.y1 + 1;
+
+  // Can only rotate square selections easily
+  if (width !== height) return;
+
+  saveUndoState(state);
+
   const temp: Cell[][] = [];
   for (let y = 0; y < height; y++) {
     temp[y] = [];
     for (let x = 0; x < width; x++) {
-      temp[y][x] = { ...ctx.canvas[bounds.y1 + y][bounds.x1 + x] };
+      temp[y][x] = { ...state.canvas[bounds.y1 + y][bounds.x1 + x] };
     }
   }
 
-  // Rotate: new[x][height-1-y] = old[y][x]
-  const rotated: Cell[][] = [];
-  for (let x = 0; x < width; x++) {
-    rotated[x] = [];
-    for (let y = 0; y < height; y++) {
-      rotated[x][y] = temp[height - 1 - y][x];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (clockwise) {
+        state.canvas[bounds.y1 + y][bounds.x1 + x] = temp[height - 1 - x][y];
+      } else {
+        state.canvas[bounds.y1 + y][bounds.x1 + x] = temp[x][width - 1 - y];
+      }
     }
   }
-
-  // Store rotated selection in clipboard
-  ctx.clipboard = rotated;
-  clearSelection(ctx);
-  ctx.refresh();
+  state.modified = true;
 }
 
-/**
- * Flip selection horizontally
- */
-export function flipSelectionX(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
+export function shiftSelection(state: EditorState, dx: number, dy: number): void {
+  const bounds = getSelectionBounds(state);
   if (!bounds) return;
 
-  saveUndoState(ctx);
-  const width = bounds.x2 - bounds.x1 + 1;
+  saveUndoState(state);
 
+  // Copy selection content
+  const content: Cell[][] = [];
   for (let y = bounds.y1; y <= bounds.y2; y++) {
-    for (let x = 0; x < Math.floor(width / 2); x++) {
-      const temp = ctx.canvas[y][bounds.x1 + x];
-      ctx.canvas[y][bounds.x1 + x] = ctx.canvas[y][bounds.x2 - x];
-      ctx.canvas[y][bounds.x2 - x] = temp;
+    const row: Cell[] = [];
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      row.push({ ...state.canvas[y][x] });
+    }
+    content.push(row);
+  }
+
+  // Clear original area
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
     }
   }
-  ctx.refresh();
+
+  // Paste at new location
+  const newY1 = bounds.y1 + dy;
+  const newX1 = bounds.x1 + dx;
+
+  for (let y = 0; y < content.length; y++) {
+    for (let x = 0; x < content[y].length; x++) {
+      const targetY = newY1 + y;
+      const targetX = newX1 + x;
+      if (targetY >= 0 && targetY < state.height && targetX >= 0 && targetX < state.width) {
+        state.canvas[targetY][targetX] = content[y][x];
+      }
+    }
+  }
+
+  // Update selection bounds
+  state.selectionStart = { x: newX1, y: newY1 };
+  state.selectionEnd = { x: bounds.x2 + dx, y: bounds.y2 + dy };
+  state.modified = true;
+}
+
+// =============================================================================
+// FILL OPERATIONS
+// =============================================================================
+
+export function floodFill(state: EditorState, x: number, y: number, newCell: Cell): void {
+  if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
+
+  const targetCell = state.canvas[y][x];
+
+  // Don't fill if already the same
+  if (targetCell.char === newCell.char &&
+      targetCell.fg === newCell.fg &&
+      targetCell.bg === newCell.bg) {
+    return;
+  }
+
+  saveUndoState(state);
+
+  const stack: Point[] = [{ x, y }];
+  const visited = new Set<string>();
+
+  while (stack.length > 0) {
+    const point = stack.pop()!;
+    const key = `${point.x},${point.y}`;
+
+    if (visited.has(key)) continue;
+    visited.add(key);
+
+    if (point.x < 0 || point.x >= state.width ||
+        point.y < 0 || point.y >= state.height) continue;
+
+    const cell = state.canvas[point.y][point.x];
+
+    // Check if matches target
+    if (cell.char !== targetCell.char ||
+        cell.fg !== targetCell.fg ||
+        cell.bg !== targetCell.bg) continue;
+
+    // Fill this cell
+    state.canvas[point.y][point.x] = { ...newCell };
+
+    // Add neighbors
+    stack.push({ x: point.x + 1, y: point.y });
+    stack.push({ x: point.x - 1, y: point.y });
+    stack.push({ x: point.x, y: point.y + 1 });
+    stack.push({ x: point.x, y: point.y - 1 });
+  }
+
+  state.modified = true;
+}
+
+// =============================================================================
+// DRAWING PRIMITIVES
+// =============================================================================
+
+export function setCell(state: EditorState, x: number, y: number, cell: Cell): void {
+  if (x < 0 || x >= state.width || y < 0 || y >= state.height) return;
+  state.canvas[y][x] = { ...cell };
+  state.modified = true;
+}
+
+export function getCell(state: EditorState, x: number, y: number): Cell | null {
+  if (x < 0 || x >= state.width || y < 0 || y >= state.height) return null;
+  return { ...state.canvas[y][x] };
+}
+
+export function drawLine(
+  state: EditorState,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cell: Cell
+): void {
+  // Bresenham's line algorithm
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
+  const sx = x1 < x2 ? 1 : -1;
+  const sy = y1 < y2 ? 1 : -1;
+  let err = dx - dy;
+
+  let x = x1;
+  let y = y1;
+
+  while (true) {
+    setCell(state, x, y, cell);
+
+    if (x === x2 && y === y2) break;
+
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+}
+
+export function drawBox(
+  state: EditorState,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cell: Cell,
+  filled: boolean = false
+): void {
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+
+  if (filled) {
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        setCell(state, x, y, cell);
+      }
+    }
+  } else {
+    // Draw outline
+    for (let x = minX; x <= maxX; x++) {
+      setCell(state, x, minY, cell);
+      setCell(state, x, maxY, cell);
+    }
+    for (let y = minY; y <= maxY; y++) {
+      setCell(state, minX, y, cell);
+      setCell(state, maxX, y, cell);
+    }
+  }
+}
+
+export function drawEllipse(
+  state: EditorState,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  cell: Cell,
+  filled: boolean = false
+): void {
+  // Midpoint ellipse algorithm
+  if (filled) {
+    for (let y = -ry; y <= ry; y++) {
+      for (let x = -rx; x <= rx; x++) {
+        if ((x * x * ry * ry + y * y * rx * rx) <= (rx * rx * ry * ry)) {
+          setCell(state, cx + x, cy + y, cell);
+        }
+      }
+    }
+  } else {
+    // Draw outline using parametric form
+    const steps = Math.max(rx, ry) * 4;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * 2 * Math.PI;
+      const x = Math.round(cx + rx * Math.cos(angle));
+      const y = Math.round(cy + ry * Math.sin(angle));
+      setCell(state, x, y, cell);
+    }
+  }
+}
+
+// =============================================================================
+// GUIDE OVERLAY HELPERS
+// =============================================================================
+
+/**
+ * Check if a cell is on a guide overlay line (from old editor display.ts)
+ */
+export function isGuideOverlayCell(state: EditorState, x: number, y: number): boolean {
+  if (state.showGuide === 'none') return false;
+
+  switch (state.showGuide) {
+    case '80x25':
+      // Standard BBS screen: border at edges
+      return x === 0 || x === 79 || y === 0 || y === 21;
+
+    case '80x40':
+      // Double-height screen: border at edges and midline
+      return x === 0 || x === 79 || y === 0 || y === 21 || y === 11;
+
+    case '44x22':
+      // Amiga screen size (44 columns): vertical borders at columns 18 and 61
+      return (x === 18 || x === 61) || y === 0 || y === 21;
+
+    case 'grid':
+      // Custom grid with configurable spacing
+      return (x % state.gridSpacing === 0) || (y % state.gridSpacing === 0);
+
+    default:
+      return false;
+  }
 }
 
 /**
- * Flip selection vertically
+ * Cycle through guide overlay types (from old editor drawing.ts)
  */
-export function flipSelectionY(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
-  if (!bounds) return;
+export function cycleGuideOverlay(state: EditorState): void {
+  const types: GuideType[] = ['none', '80x25', '80x40', '44x22', 'grid'];
+  const currentIndex = types.indexOf(state.showGuide);
+  const nextIndex = (currentIndex + 1) % types.length;
+  state.showGuide = types[nextIndex];
+}
 
-  saveUndoState(ctx);
-  const height = bounds.y2 - bounds.y1 + 1;
+// =============================================================================
+// CANVAS RENDERING
+// =============================================================================
 
-  for (let y = 0; y < Math.floor(height / 2); y++) {
-    for (let x = bounds.x1; x <= bounds.x2; x++) {
-      const temp = ctx.canvas[bounds.y1 + y][x];
-      ctx.canvas[bounds.y1 + y][x] = ctx.canvas[bounds.y2 - y][x];
-      ctx.canvas[bounds.y2 - y][x] = temp;
+export function renderCanvas(state: EditorState): string {
+  let output = ANSI.HIDE_CURSOR + ANSI.pos(1, 1);
+
+  // Get selection bounds for overlay rendering
+  const selBounds = state.selecting ? getSelectionBounds(state) : null;
+
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      const cell = state.canvas[y][x];
+
+      // Check if this cell is on the selection border (dashed rectangle)
+      let isSelectionBorder = false;
+      if (selBounds) {
+        const { x1, y1, x2, y2 } = selBounds;
+        const isTopOrBottom = (y === y1 || y === y2) && x >= x1 && x <= x2;
+        const isLeftOrRight = (x === x1 || x === x2) && y >= y1 && y <= y2;
+        isSelectionBorder = isTopOrBottom || isLeftOrRight;
+      }
+
+      // Check if this cell is on a guide overlay line
+      const isGuideLine = isGuideOverlayCell(state, x, y);
+
+      // Build ANSI sequence for this cell
+      output += ANSI.pos(x + 1, y + 1);
+
+      // Render with selection overlay if on border (dashed line effect: alternating chars)
+      if (isSelectionBorder) {
+        const isDashed = (x + y) % 2 === 0;  // Alternating pattern for dashed effect
+        if (isDashed) {
+          output += ANSI.colors(7, 0);  // White on black dash
+          output += '-';
+        } else {
+          output += ANSI.colors(cell.fg, cell.bg);
+          if (cell.blink && state.iceColorsEnabled) {
+            output += ANSI.BLINK;
+          }
+          output += cell.char;
+        }
+      } else if (isGuideLine) {
+        // Draw guide line (dim white dots)
+        const isDot = (x + y) % 2 === 0;  // Alternating pattern for dotted line
+        if (isDot) {
+          output += ANSI.colors(7, 0);  // White dot on black
+          output += '.';
+        } else {
+          output += ANSI.colors(cell.fg, cell.bg);
+          if (cell.blink && state.iceColorsEnabled) {
+            output += ANSI.BLINK;
+          }
+          output += cell.char;
+        }
+      } else {
+        // Normal cell rendering
+        output += ANSI.colors(cell.fg, cell.bg);
+        if (cell.blink && state.iceColorsEnabled) {
+          output += ANSI.BLINK;
+        }
+        output += cell.char;
+      }
     }
   }
-  ctx.refresh();
+
+  // Selection overlay is now integrated into main rendering loop above
+  // (No need for separate drawSelectionOverlay call)
+
+  // Draw cursor
+  if (state.cursorVisible) {
+    output += ANSI.pos(state.cursorX + 1, state.cursorY + 1);
+    output += ANSI.SHOW_CURSOR;
+  }
+
+  return output + ANSI.RESET;
+}
+
+function drawSelectionOverlay(state: EditorState, bounds: SelectionBounds): string {
+  let output = '';
+
+  // Draw corners and edges with inverted colors
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      const cell = state.canvas[y][x];
+      output += ANSI.pos(x + 1, y + 1);
+      output += `\x1b[7m`; // Inverse video
+      output += cell.char;
+      output += `\x1b[27m`; // Normal video
+    }
+  }
+
+  return output;
+}
+
+export function renderStatusBar(state: EditorState): string {
+  const pos = `X:${state.cursorX.toString().padStart(2)} Y:${state.cursorY.toString().padStart(2)}`;
+  const colors = `FG:${state.currentFg.toString().padStart(2)} BG:${state.currentBg.toString().padStart(2)}`;
+  const tool = `[${state.currentTool.toUpperCase()}]`;
+  const modified = state.modified ? '*' : ' ';
+  const filename = state.currentFilename || 'Untitled';
+
+  let status = ANSI.pos(1, state.height + 1);
+  status += ANSI.colors(0, 7); // Black on white
+  status += ` ${tool} ${pos} ${colors} | ${filename}${modified} `;
+  status += ' '.repeat(Math.max(0, state.width - status.length + 20));
+
+  return status + ANSI.RESET;
+}
+
+// =============================================================================
+// ADVANCED SELECTION OPERATIONS (from old editor)
+// =============================================================================
+
+/**
+ * Fill selection with current foreground color (as background)
+ */
+export function fillSelection(state: EditorState): void {
+  const bounds = getSelectionBounds(state);
+  if (!bounds) return;
+
+  saveUndoState(state);
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      state.canvas[y][x].bg = state.currentFg;
+    }
+  }
+  clearSelection(state);
+  state.modified = true;
 }
 
 /**
  * Center selection horizontally on canvas
  */
-export function centerSelection(ctx: EditorContext): void {
-  const bounds = getSelectionBounds(ctx);
+export function centerSelection(state: EditorState): void {
+  const bounds = getSelectionBounds(state);
   if (!bounds) return;
 
-  saveUndoState(ctx);
+  saveUndoState(state);
 
   const selWidth = bounds.x2 - bounds.x1 + 1;
-  const targetX = Math.floor((ctx.width - selWidth) / 2);
+  const targetX = Math.floor((state.width - selWidth) / 2);
 
   // If already centered, nothing to do
   if (targetX === bounds.x1) {
@@ -558,9 +695,9 @@ export function centerSelection(ctx: EditorContext): void {
   for (let y = bounds.y1; y <= bounds.y2; y++) {
     const row: Cell[] = [];
     for (let x = bounds.x1; x <= bounds.x2; x++) {
-      row.push({ ...ctx.canvas[y][x] });
+      row.push({ ...state.canvas[y][x] });
       // Clear original position
-      ctx.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+      state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
     }
     temp.push(row);
   }
@@ -569,111 +706,118 @@ export function centerSelection(ctx: EditorContext): void {
   for (let y = 0; y < temp.length; y++) {
     for (let x = 0; x < temp[y].length; x++) {
       const targetXPos = targetX + x;
-      if (targetXPos >= 0 && targetXPos < ctx.width) {
-        ctx.canvas[bounds.y1 + y][targetXPos] = temp[y][x];
+      if (targetXPos >= 0 && targetXPos < state.width) {
+        state.canvas[bounds.y1 + y][targetXPos] = temp[y][x];
       }
     }
   }
 
   // Update selection bounds
-  ctx.selectionStart = { x: targetX, y: bounds.y1 };
-  ctx.selectionEnd = { x: targetX + selWidth - 1, y: bounds.y2 };
-  ctx.refresh();
+  state.selectionStart = { x: targetX, y: bounds.y1 };
+  state.selectionEnd = { x: targetX + selWidth - 1, y: bounds.y2 };
+  state.modified = true;
 }
 
 /**
  * Move selection (M key) - cuts and allows placement
  */
-export function moveSelection(ctx: EditorContext): void {
-  copySelection(ctx);
-  eraseSelection(ctx);
+export function moveSelection(state: EditorState): void {
+  copySelection(state);
+  eraseSelection(state);
   // Selection is now in clipboard, ready to paste
 }
 
 /**
  * Cycle through operation modes (T/O/U keys)
  */
-export function cycleOperationMode(ctx: EditorContext, mode: OperationMode): void {
-  ctx.operationMode = mode;
-  ctx.showStatusBar();
+export function cycleOperationMode(state: EditorState): void {
+  const modes: Array<'normal' | 'transparent' | 'over' | 'underneath'> = [
+    'normal',
+    'transparent',
+    'over',
+    'underneath'
+  ];
+  const currentIndex = modes.indexOf(state.operationMode);
+  const nextIndex = (currentIndex + 1) % modes.length;
+  state.operationMode = modes[nextIndex];
 }
 
 /**
  * Paste with respect to operation mode
  */
-export function pasteWithMode(ctx: EditorContext): void {
-  if (ctx.clipboard.length === 0) return;
+export function pasteWithMode(state: EditorState): void {
+  if (state.clipboard.length === 0) return;
 
-  saveUndoState(ctx);
-  for (let y = 0; y < ctx.clipboard.length; y++) {
-    for (let x = 0; x < ctx.clipboard[y].length; x++) {
-      const targetY = ctx.cursorY + y;
-      const targetX = ctx.cursorX + x;
-      if (targetY < 22 && targetX < ctx.width) {
-        const srcCell = ctx.clipboard[y][x];
-        const destCell = ctx.canvas[targetY][targetX];
+  saveUndoState(state);
+  for (let y = 0; y < state.clipboard.length; y++) {
+    for (let x = 0; x < state.clipboard[y].length; x++) {
+      const targetY = state.cursorY + y;
+      const targetX = state.cursorX + x;
+      if (targetY < state.height && targetX < state.width) {
+        const srcCell = state.clipboard[y][x];
+        const destCell = state.canvas[targetY][targetX];
 
-        switch (ctx.operationMode) {
+        switch (state.operationMode) {
           case 'transparent':
             // Skip spaces (they become transparent)
             if (srcCell.char !== ' ') {
-              ctx.canvas[targetY][targetX] = { ...srcCell };
+              state.canvas[targetY][targetX] = { ...srcCell };
             }
             break;
           case 'over':
             // Always draw over existing
-            ctx.canvas[targetY][targetX] = { ...srcCell };
+            state.canvas[targetY][targetX] = { ...srcCell };
             break;
           case 'underneath':
             // Only draw where destination is space
             if (destCell.char === ' ') {
-              ctx.canvas[targetY][targetX] = { ...srcCell };
+              state.canvas[targetY][targetX] = { ...srcCell };
             }
             break;
           case 'normal':
           default:
             // Normal paste (replace all)
-            ctx.canvas[targetY][targetX] = { ...srcCell };
+            state.canvas[targetY][targetX] = { ...srcCell };
             break;
         }
       }
     }
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-// ========== COLOR CONTROLS ==========
+// =============================================================================
+// COLOR CONTROLS (from old editor)
+// =============================================================================
 
-export function cycleFgUp(ctx: EditorContext): void {
-  ctx.currentFg = (ctx.currentFg + 1) % 16;
-  ctx.showStatusBar();
+export function cycleFgUp(state: EditorState): void {
+  state.currentFg = (state.currentFg + 1) % 16;
 }
 
-export function cycleFgDown(ctx: EditorContext): void {
-  ctx.currentFg = (ctx.currentFg - 1 + 16) % 16;
-  ctx.showStatusBar();
+export function cycleFgDown(state: EditorState): void {
+  state.currentFg = (state.currentFg - 1 + 16) % 16;
 }
 
-export function cycleBgUp(ctx: EditorContext): void {
-  ctx.currentBg = (ctx.currentBg + 1) % 16;
-  ctx.showStatusBar();
+export function cycleBgUp(state: EditorState): void {
+  state.currentBg = (state.currentBg + 1) % 16;
 }
 
-export function cycleBgDown(ctx: EditorContext): void {
-  ctx.currentBg = (ctx.currentBg - 1 + 16) % 16;
-  ctx.showStatusBar();
+export function cycleBgDown(state: EditorState): void {
+  state.currentBg = (state.currentBg - 1 + 16) % 16;
 }
 
-// ========== LINE OPERATIONS ==========
+// =============================================================================
+// LINE OPERATIONS (from old editor)
+// =============================================================================
 
-export function leftJustifyLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  const row = ctx.canvas[y];
+export function leftJustifyLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  const row = state.canvas[y];
 
   // Find first non-space
   let firstNonSpace = 0;
-  for (let x = 0; x < ctx.width; x++) {
+  for (let x = 0; x < state.width; x++) {
     if (row[x].char !== ' ') {
       firstNonSpace = x;
       break;
@@ -682,24 +826,24 @@ export function leftJustifyLine(ctx: EditorContext): void {
 
   // Shift left
   if (firstNonSpace > 0) {
-    for (let x = 0; x < ctx.width - firstNonSpace; x++) {
+    for (let x = 0; x < state.width - firstNonSpace; x++) {
       row[x] = row[x + firstNonSpace];
     }
-    for (let x = ctx.width - firstNonSpace; x < ctx.width; x++) {
+    for (let x = state.width - firstNonSpace; x < state.width; x++) {
       row[x] = { char: ' ', fg: 7, bg: 0 };
     }
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function rightJustifyLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  const row = ctx.canvas[y];
+export function rightJustifyLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  const row = state.canvas[y];
 
   // Find last non-space
-  let lastNonSpace = ctx.width - 1;
-  for (let x = ctx.width - 1; x >= 0; x--) {
+  let lastNonSpace = state.width - 1;
+  for (let x = state.width - 1; x >= 0; x--) {
     if (row[x].char !== ' ') {
       lastNonSpace = x;
       break;
@@ -707,27 +851,27 @@ export function rightJustifyLine(ctx: EditorContext): void {
   }
 
   // Shift right
-  const shift = ctx.width - 1 - lastNonSpace;
+  const shift = state.width - 1 - lastNonSpace;
   if (shift > 0) {
-    for (let x = ctx.width - 1; x >= shift; x--) {
+    for (let x = state.width - 1; x >= shift; x--) {
       row[x] = row[x - shift];
     }
     for (let x = 0; x < shift; x++) {
       row[x] = { char: ' ', fg: 7, bg: 0 };
     }
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function centerLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  const row = ctx.canvas[y];
+export function centerLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  const row = state.canvas[y];
 
   // Find first and last non-space
   let firstNonSpace = -1;
   let lastNonSpace = -1;
-  for (let x = 0; x < ctx.width; x++) {
+  for (let x = 0; x < state.width; x++) {
     if (row[x].char !== ' ') {
       if (firstNonSpace === -1) firstNonSpace = x;
       lastNonSpace = x;
@@ -737,7 +881,7 @@ export function centerLine(ctx: EditorContext): void {
   if (firstNonSpace === -1) return;
 
   const contentLength = lastNonSpace - firstNonSpace + 1;
-  const leftPad = Math.floor((ctx.width - contentLength) / 2);
+  const leftPad = Math.floor((state.width - contentLength) / 2);
 
   // Copy content
   const content: Cell[] = [];
@@ -746,148 +890,152 @@ export function centerLine(ctx: EditorContext): void {
   }
 
   // Clear row
-  for (let x = 0; x < ctx.width; x++) {
+  for (let x = 0; x < state.width; x++) {
     row[x] = { char: ' ', fg: 7, bg: 0 };
   }
 
   // Paste centered
   for (let x = 0; x < content.length; x++) {
-    if (leftPad + x < ctx.width) {
+    if (leftPad + x < state.width) {
       row[leftPad + x] = content[x];
     }
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  for (let x = 0; x < ctx.width; x++) {
-    ctx.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+export function eraseLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  for (let x = 0; x < state.width; x++) {
+    state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseToStartOfLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  for (let x = 0; x <= ctx.cursorX; x++) {
-    ctx.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+export function eraseToStartOfLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  for (let x = 0; x <= state.cursorX; x++) {
+    state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseToEndOfLine(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  const y = ctx.cursorY;
-  for (let x = ctx.cursorX; x < ctx.width; x++) {
-    ctx.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
+export function eraseToEndOfLine(state: EditorState): void {
+  saveUndoState(state);
+  const y = state.cursorY;
+  for (let x = state.cursorX; x < state.width; x++) {
+    state.canvas[y][x] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-// ========== ROW/COLUMN OPERATIONS ==========
+// =============================================================================
+// ROW/COLUMN OPERATIONS (from old editor)
+// =============================================================================
 
-export function insertRow(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function insertRow(state: EditorState): void {
+  saveUndoState(state);
   // Remove bottom row and insert blank row at cursor
-  ctx.canvas.splice(21, 1);
+  state.canvas.splice(state.height - 1, 1);
   const newRow: Cell[] = [];
-  for (let x = 0; x < ctx.width; x++) {
+  for (let x = 0; x < state.width; x++) {
     newRow.push({ char: ' ', fg: 7, bg: 0 });
   }
-  ctx.canvas.splice(ctx.cursorY, 0, newRow);
-  ctx.refresh();
+  state.canvas.splice(state.cursorY, 0, newRow);
+  state.modified = true;
 }
 
-export function deleteRow(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function deleteRow(state: EditorState): void {
+  saveUndoState(state);
   // Remove current row and add blank row at bottom
-  ctx.canvas.splice(ctx.cursorY, 1);
+  state.canvas.splice(state.cursorY, 1);
   const newRow: Cell[] = [];
-  for (let x = 0; x < ctx.width; x++) {
+  for (let x = 0; x < state.width; x++) {
     newRow.push({ char: ' ', fg: 7, bg: 0 });
   }
-  ctx.canvas.splice(21, 0, newRow);
-  ctx.refresh();
+  state.canvas.splice(state.height - 1, 0, newRow);
+  state.modified = true;
 }
 
-export function insertColumn(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  for (let y = 0; y < 22; y++) {
-    ctx.canvas[y].splice(ctx.width - 1, 1);
-    ctx.canvas[y].splice(ctx.cursorX, 0, { char: ' ', fg: 7, bg: 0 });
+export function insertColumn(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = 0; y < state.height; y++) {
+    state.canvas[y].splice(state.width - 1, 1);
+    state.canvas[y].splice(state.cursorX, 0, { char: ' ', fg: 7, bg: 0 });
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function deleteColumn(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  for (let y = 0; y < 22; y++) {
-    ctx.canvas[y].splice(ctx.cursorX, 1);
-    ctx.canvas[y].splice(ctx.width - 1, 0, { char: ' ', fg: 7, bg: 0 });
+export function deleteColumn(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = 0; y < state.height; y++) {
+    state.canvas[y].splice(state.cursorX, 1);
+    state.canvas[y].splice(state.width - 1, 0, { char: ' ', fg: 7, bg: 0 });
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseColumn(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  for (let y = 0; y < 22; y++) {
-    ctx.canvas[y][ctx.cursorX] = { char: ' ', fg: 7, bg: 0 };
+export function eraseColumn(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = 0; y < state.height; y++) {
+    state.canvas[y][state.cursorX] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseToStartOfColumn(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  for (let y = 0; y <= ctx.cursorY; y++) {
-    ctx.canvas[y][ctx.cursorX] = { char: ' ', fg: 7, bg: 0 };
+export function eraseToStartOfColumn(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = 0; y <= state.cursorY; y++) {
+    state.canvas[y][state.cursorX] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function eraseToEndOfColumn(ctx: EditorContext): void {
-  saveUndoState(ctx);
-  for (let y = ctx.cursorY; y < 22; y++) {
-    ctx.canvas[y][ctx.cursorX] = { char: ' ', fg: 7, bg: 0 };
+export function eraseToEndOfColumn(state: EditorState): void {
+  saveUndoState(state);
+  for (let y = state.cursorY; y < state.height; y++) {
+    state.canvas[y][state.cursorX] = { char: ' ', fg: 7, bg: 0 };
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-// ========== CANVAS SCROLLING ==========
+// =============================================================================
+// CANVAS SCROLLING (from old editor)
+// =============================================================================
 
-export function scrollCanvasUp(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function scrollCanvasUp(state: EditorState): void {
+  saveUndoState(state);
   // Remove first row and add empty row at bottom
-  ctx.canvas.shift();
-  ctx.canvas.push(Array(ctx.width).fill(0).map(() => ({ char: ' ', fg: 7, bg: 0 })));
-  ctx.refresh();
+  state.canvas.shift();
+  state.canvas.push(Array(state.width).fill(0).map(() => ({ char: ' ', fg: 7, bg: 0 })));
+  state.modified = true;
 }
 
-export function scrollCanvasDown(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function scrollCanvasDown(state: EditorState): void {
+  saveUndoState(state);
   // Remove last row and add empty row at top
-  ctx.canvas.pop();
-  ctx.canvas.unshift(Array(ctx.width).fill(0).map(() => ({ char: ' ', fg: 7, bg: 0 })));
-  ctx.refresh();
+  state.canvas.pop();
+  state.canvas.unshift(Array(state.width).fill(0).map(() => ({ char: ' ', fg: 7, bg: 0 })));
+  state.modified = true;
 }
 
-export function scrollCanvasLeft(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function scrollCanvasLeft(state: EditorState): void {
+  saveUndoState(state);
   // Remove first column from each row and add empty column at right
-  for (let y = 0; y < 22; y++) {
-    ctx.canvas[y].shift();
-    ctx.canvas[y].push({ char: ' ', fg: 7, bg: 0 });
+  for (let y = 0; y < state.height; y++) {
+    state.canvas[y].shift();
+    state.canvas[y].push({ char: ' ', fg: 7, bg: 0 });
   }
-  ctx.refresh();
+  state.modified = true;
 }
 
-export function scrollCanvasRight(ctx: EditorContext): void {
-  saveUndoState(ctx);
+export function scrollCanvasRight(state: EditorState): void {
+  saveUndoState(state);
   // Remove last column from each row and add empty column at left
-  for (let y = 0; y < 22; y++) {
-    ctx.canvas[y].pop();
-    ctx.canvas[y].unshift({ char: ' ', fg: 7, bg: 0 });
+  for (let y = 0; y < state.height; y++) {
+    state.canvas[y].pop();
+    state.canvas[y].unshift({ char: ' ', fg: 7, bg: 0 });
   }
-  ctx.refresh();
+  state.modified = true;
 }

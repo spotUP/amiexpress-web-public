@@ -1,109 +1,129 @@
-# ANSI Screen Editor Door
+# ANSI Editor SDK - State-of-the-Art ANSI/ASCII Art Editor
 
-A full-featured ANSI/ASCII screen file editor for AmiExpress-Web.
+A comprehensive, professional-grade ANSI/ASCII art editor for AmiExpress BBS with full Moebius feature parity and modern enhancements.
+
+**Command:** `/ansied`
 
 ## Features
 
-- **80x24 Canvas** - Standard BBS screen dimensions
-- **Drawing Tools**:
-  - Draw mode - Freehand drawing with arrow keys
-  - Line mode - Draw straight lines
-  - Box mode - Draw rectangles
-  - Text mode - Type text onto canvas
-  - Fill mode - Flood-fill areas
-  - Pick mode - Sample color/character from canvas
+### Drawing Tools
+- **Draw** - Freehand drawing
+- **Line** - Straight lines with preview
+- **Box** - Rectangle outlines
+- **Box Fill** - Filled rectangles
+- **Ellipse** - Ellipse outlines
+- **Ellipse Fill** - Filled ellipses
+- **Text** - Type text directly on canvas
+- **Fill** - Flood fill areas
+- **Pick** - Color and character picker
+- **Select** - Selection tool for copy/cut/paste
+- **Shifter** - Half-block character shifter
 
-- **Color Support**:
-  - 8 foreground colors (F1-F8)
-  - 8 background colors
-  - ANSI color codes (30-37, 40-47)
+### Advanced Features
+- **Undo/Redo** - 100 levels with chunked operations
+- **Clipboard** - Copy, cut, paste, transform selections
+- **Mouse Support** - Full mouse input for all tools
+- **iCE Colors** - 16 background colors + blink attribute
+- **Guides** - 80x25, 80x40, 44x22, grid overlays
+- **Real-time Preview** - Live preview for line/box/ellipse tools
+- **Neo-Blessed Modals** - Professional UI overlays
 
-- **File Operations**:
-  - Save to BBS/Screens/ directory
-  - Load existing screen files
-  - ANSI format import/export
-  - Modified file tracking
+### File Formats
+- **ANS** - ANSI with color codes
+- **ASC** - Plain ASCII text
+- **BIN** - Binary format (char + attribute)
+- **XB** - XBin format
+- **TXT** - Text files
 
-## Controls
+### Keyboard Shortcuts
 
-### Navigation
-- **Arrow Keys** - Move cursor
-- **TAB** - Cycle through tools
-- **SPACE** - Draw (in draw mode)
-- **ENTER** - Execute tool action (place line, box, text, fill, pick)
+#### Tools
+- `D` - Draw
+- `L` - Line
+- `B` - Box
+- `E` - Ellipse
+- `T` - Text mode
+- `F` - Fill
+- `P` - Pick colors
+- `S` - Select
+- `H` - Shifter
 
-### Colors
-- **F1** - Black
-- **F2** - Red
-- **F3** - Green
-- **F4** - Yellow
-- **F5** - Blue
-- **F6** - Magenta
-- **F7** - Cyan
-- **F8** - White
+#### File Operations
+- `Ctrl+N` - New file
+- `Ctrl+O` - Open file
+- `Ctrl+S` - Save file
 
-### File Operations
-- **S** - Save file
-- **L** - Load file
-- **Q** - Quit (prompts to save if modified)
+#### Edit Operations
+- `Ctrl+Z` - Undo
+- `Ctrl+Y` - Redo
+- `Ctrl+C` - Copy
+- `Ctrl+X` - Cut
+- `Ctrl+V` - Paste
+- `Ctrl+A` - Select all
+- `Delete` - Delete selection
 
-### Text Mode
-- Type normally to build text buffer
-- **ENTER** - Place text on canvas
-- **ESC** - Cancel text entry
-- **BACKSPACE** - Delete last character
+#### View
+- `G` - Toggle guides
+- `I` - Toggle iCE colors
+- `K` - Color picker
+- `Tab` - Tool selector
+
+#### Navigation
+- `Arrow Keys` - Move cursor
+- `Page Up/Down` - Jump 10 lines
+- `Home/End` - Start/end of line
+
+#### Other
+- `F1` - Help
+- `Q` - Quit (with save prompt)
+- `Enter` - Confirm
+- `Esc` - Cancel
+
+## Installation
+
+```bash
+cd ~/Code/amiexpress-web/doors/ansi-editor-sdk
+npm install
+npm run build
+```
 
 ## Usage
 
-### From BBS
-1. Make yourself sysop (Level 5+)
-2. Type `X ANSI-EDITOR` to run the door
-3. Use the controls above to create your screen
-
-### For Sysops
-To make a custom command for easier access:
-
-```
-BBSCMD=EDIT
-DOORNAME=Doors:ansi-editor
-ACS=ACS_SYSOP
+Run standalone:
+```bash
+npm run dev
 ```
 
-Then just type `EDIT` from the main menu.
+## Architecture
 
-## File Format
+The editor is built with a modular architecture:
 
-Files are saved in standard ANSI format:
-- Color codes: `\x1b[0;3X;4Ym` where X=fg, Y=bg
-- Standard ASCII characters
-- `\r\n` line endings
-- 80 characters per line, 22 lines (24 minus status bars)
-
-## Tips
-
-1. **Creating Logos**: Use text mode + colors for quick logo creation
-2. **Borders**: Use box tool + line tool for clean borders
-3. **Fill Backgrounds**: Use fill tool to quickly color areas
-4. **Color Picking**: Use pick tool to sample colors from loaded files
-5. **Save Often**: Editor tracks modified state and prompts before quit
+- **types.ts** - Type definitions and constants
+- **canvas.ts** - Canvas operations (undo/redo, selection, rendering)
+- **drawing.ts** - Drawing tools implementation
+- **modals.ts** - Neo-Blessed UI modals
+- **file-ops.ts** - File loading/saving/import/export
+- **index.ts** - Main editor class and event handling
 
 ## Technical Details
 
-- Written in TypeScript
-- Uses Socket.IO for real-time communication
-- Canvas stored as 2D array of Cell objects
-- Bresenham's algorithm for line drawing
-- Flood-fill with stack-based traversal
-- Simple ANSI parser for file loading
+- **Canvas Size**: 80x22 (2 lines reserved for status bar)
+- **Color Support**: 16 foreground + 16 background (with iCE colors)
+- **Undo Levels**: 100 (configurable)
+- **File Formats**: 5 formats (ANS, ASC, BIN, XB, TXT)
+- **Mouse Events**: Full support via Socket.IO
+- **Keyboard Events**: Comprehensive key bindings
 
-## Future Enhancements
+## Requirements
 
-- [ ] Undo/redo
-- [ ] Copy/paste regions
-- [ ] Character palette selection
-- [ ] Grid display toggle
-- [ ] Preview mode
-- [ ] Export to other formats (plain text, HTML)
-- [ ] Brush sizes
-- [ ] Circle/ellipse tools
-- [ ] Color palette editor
+- Node.js 20+
+- TypeScript 5+
+- AmiExpress BBS Door SDK
+
+## License
+
+MIT
+
+## Author
+
+AmiExpress-Web Development Team

@@ -13,7 +13,8 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen, Box, Text, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createText, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 // ===== Game Types =====
 
@@ -180,7 +181,7 @@ class FireEmblemGame {
 
   private showIntro(): void {
     // Create intro overlay
-    const intro = new Box({
+    const intro = createBox({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -256,12 +257,13 @@ class FireEmblemGame {
   private createUI(): void {
     this.screen = new Screen({
       smartCSR: true,
+      dockBorders: true,
       title: 'Fire Emblem: Emblem of Valor',
       output: (data: string) => this.ctx.output.write(data),
     });
 
     // Map display
-    this.mapBox = new Box({
+    this.mapBox = createBox({
       parent: this.screen,
       top: 0,
       left: 0,
@@ -273,7 +275,7 @@ class FireEmblemGame {
     });
 
     // Status display
-    this.statusBox = new Box({
+    this.statusBox = createBox({
       parent: this.screen,
       top: 0,
       left: '70%',
@@ -504,17 +506,17 @@ const door = new Door({
 
 let game: FireEmblemGame;
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   game = new FireEmblemGame();
   game.setContext(ctx);
   await game.start();
 });
 
-door.onClose(async (ctx) => {
+door.onClose(async (ctx: DoorContext) => {
   ctx.output.writeLine('\r\n\x1b[36mThanks for playing Fire Emblem!\x1b[0m\r\n');
 });
 
-door.onError(async (ctx, error) => {
+door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
   console.error('Fire Emblem error:', error);
 });

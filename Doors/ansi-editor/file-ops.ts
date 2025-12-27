@@ -1,619 +1,601 @@
 /**
- * File Operations Module
- * Handles all file I/O operations for the ANSI Editor
- *
- * Supported formats:
- * - ANS: ANSI text with color codes
- * - XB: XBin format (binary with header)
- * - BIN: Raw binary format (char/attr pairs)
- * - ASC/TXT: Plain ASCII text
- * - DIZ: FILE_ID.DIZ format (limited size)
+ * File operations for ANSI Editor
+ * Handles loading, saving, importing, and exporting ANSI/ASCII art
+ * Supports formats: ANS, ASC, BIN, XB, TXT
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Cell } from './types';
+import { Cell, EditorState, FileMetadata, ANSI } from './types.js';
+import { cloneCanvas } from './canvas.js';
 
-/**
- * Context interface for file operations
- * Provides access to editor state needed for file I/O
- */
-export interface FileContext {
-  canvas: Cell[][];
-  width: number;
-  height: number;
-  fg: number;
-  bg: number;
-  filename?: string | null;
-  modified?: boolean;
-  doorSession?: any;
-  emit?: (data: string) => void;
-  refresh?: () => void;
-  saveUndoState?: (chunk?: boolean) => void;
-  dataDir?: string;
-}
+const SCREENS_DIR = process.env.SCREENS_DIR || path.join(process.cwd(), 'Screens');
 
-/**
- * File format type
- */
-export type FileFormat = 'ans' | 'xb' | 'bin' | 'asc' | 'txt' | 'diz';
+// =============================================================================
+// FILE LOADING
+// =============================================================================
 
-// ===== SAVE OPERATIONS =====
+export async function loadFile(state: EditorState, filename: string): Promise<boolean> {
+  const filepath = path.join(SCREENS_DIR, filename);
 
-/**
- * Save canvas to ANSI file
- */
-export function saveAnsiToFile(ctx: FileContext, filename: string): void {
-  const data = canvasToANSI(ctx);
-  const filepath = getFilePath(ctx, filename);
-  ensureDirectoryExists(filepath);
-  fs.writeFileSync(filepath, data, 'utf8');
-}
+  if (!fs.existsSync(filepath)) {
+    throw new Error(`File not found: ${filename}`);
+  }
 
-/**
- * Save canvas to XBin file
- */
-export function saveXBinToFile(ctx: FileContext, filename: string): void {
-  const data = canvasToXBin(ctx);
-  const filepath = getFilePath(ctx, filename);
-  ensureDirectoryExists(filepath);
-  fs.writeFileSync(filepath, data);
-}
-
-/**
- * Save canvas to BIN file
- */
-export function saveBinToFile(ctx: FileContext, filename: string): void {
-  const data = canvasToBIN(ctx);
-  const filepath = getFilePath(ctx, filename);
-  ensureDirectoryExists(filepath);
-  fs.writeFileSync(filepath, data);
-}
-
-/**
- * Save canvas to ASC/TXT file
- */
-export function saveAscToFile(ctx: FileContext, filename: string): void {
-  const data = canvasToASC(ctx);
-  const filepath = getFilePath(ctx, filename);
-  ensureDirectoryExists(filepath);
-  fs.writeFileSync(filepath, data, 'utf8');
-}
-
-/**
- * Save canvas to DIZ file
- */
-export function saveDizToFile(ctx: FileContext, filename: string): void {
-  const data = canvasToDIZ(ctx);
-  const filepath = getFilePath(ctx, filename);
-  ensureDirectoryExists(filepath);
-  fs.writeFileSync(filepath, data, 'utf8');
-}
-
-/**
- * Generic save function that detects format from extension
- */
-export function saveFile(ctx: FileContext, filename: string): void {
+  const content = fs.readFileSync(filepath, 'utf8');
   const format = detectFormat(filename);
 
   switch (format) {
-    case 'ans':
-      saveAnsiToFile(ctx, filename);
-      break;
-    case 'xb':
-      saveXBinToFile(ctx, filename);
-      break;
-    case 'bin':
-      saveBinToFile(ctx, filename);
-      break;
-    case 'asc':
-    case 'txt':
-      saveAscToFile(ctx, filename);
-      break;
-    case 'diz':
-      saveDizToFile(ctx, filename);
-      break;
+    case 'ANS':
+      return loadANSI(state, content, filename);
+    case 'ASC':
+    case 'TXT':
+      return loadASCII(state, content, filename);
+    case 'BIN':
+      return loadBinary(state, filepath, filename);
+    case 'XB':
+      return loadXBin(state, filepath, filename);
+    default:
+      throw new Error(`Unsupported format: ${format}`);
   }
 }
 
-// ===== LOAD OPERATIONS =====
+function detectFormat(filename: string): 'ANS' | 'ASC' | 'BIN' | 'XB' | 'TXT' {
+  const ext = path.extname(filename).toLowerCase();
 
-/**
- * Load ANSI file into canvas
- */
-export function loadAnsiFromFile(ctx: FileContext, filename: string): void {
-  const filepath = getFilePath(ctx, filename);
-  const content = fs.readFileSync(filepath, 'utf8');
-  parseANSI(ctx, content);
-}
-
-/**
- * Load XBin file into canvas
- */
-export function loadXBinFile(ctx: FileContext, filename: string): void {
-  const filepath = getFilePath(ctx, filename);
-  const data = fs.readFileSync(filepath);
-  parseXBin(ctx, data);
-}
-
-/**
- * Load BIN file into canvas
- */
-export function loadBinFile(ctx: FileContext, filename: string): void {
-  const filepath = getFilePath(ctx, filename);
-  const data = fs.readFileSync(filepath);
-  parseBIN(ctx, data);
-}
-
-/**
- * Load ASC/TXT/DIZ file into canvas
- */
-export function loadAscFile(ctx: FileContext, filename: string): void {
-  const filepath = getFilePath(ctx, filename);
-  const content = fs.readFileSync(filepath, 'utf8');
-  parseASC(ctx, content);
-}
-
-/**
- * Generic load function that detects format from extension
- */
-export function loadFile(ctx: FileContext, filename: string): void {
-  const format = detectFormat(filename);
-
-  switch (format) {
-    case 'ans':
-      loadAnsiFromFile(ctx, filename);
-      break;
-    case 'xb':
-      loadXBinFile(ctx, filename);
-      break;
-    case 'bin':
-      loadBinFile(ctx, filename);
-      break;
-    case 'asc':
-    case 'txt':
-    case 'diz':
-      loadAscFile(ctx, filename);
-      break;
+  switch (ext) {
+    case '.ans':
+      return 'ANS';
+    case '.asc':
+      return 'ASC';
+    case '.bin':
+      return 'BIN';
+    case '.xb':
+      return 'XB';
+    case '.txt':
+      return 'TXT';
+    default:
+      return 'TXT';
   }
 }
 
-// ===== EXPORT OPERATIONS =====
+// =============================================================================
+// ANSI FORMAT (.ANS)
+// =============================================================================
 
-/**
- * Export to ANSI format
- */
-export function exportToAnsi(ctx: FileContext): string {
-  return canvasToANSI(ctx);
-}
-
-/**
- * Export to XBin format
- */
-export function exportToXBin(ctx: FileContext): Buffer {
-  return canvasToXBin(ctx);
-}
-
-/**
- * Export to BIN format
- */
-export function exportToBin(ctx: FileContext): Buffer {
-  return canvasToBIN(ctx);
-}
-
-/**
- * Export to ASC/TXT format
- */
-export function exportToAsc(ctx: FileContext): string {
-  return canvasToASC(ctx);
-}
-
-/**
- * Export to DIZ format
- */
-export function exportToDiz(ctx: FileContext): string {
-  return canvasToDIZ(ctx);
-}
-
-/**
- * Export to plain text (no colors)
- */
-export function exportToTxt(ctx: FileContext): string {
-  return canvasToASC(ctx);
-}
-
-/**
- * Export selection to ANSI format
- */
-export function exportSelectionToAnsi(
-  ctx: FileContext,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): string {
-  let ansi = '';
-  let lastFg = -1;
-  let lastBg = -1;
-
-  for (let y = y1; y <= y2; y++) {
-    for (let x = x1; x <= x2; x++) {
-      const cell = ctx.canvas[y][x];
-
-      // Only emit color codes when colors change
-      if (cell.fg !== lastFg || cell.bg !== lastBg) {
-        ansi += `\x1b[0;3${cell.fg};4${cell.bg}m`;
-        lastFg = cell.fg;
-        lastBg = cell.bg;
-      }
-
-      ansi += cell.char;
-    }
-    ansi += '\r\n';
-  }
-
-  ansi += '\x1b[0m';  // Reset at end
-  return ansi;
-}
-
-// ===== FORMAT CONVERTERS =====
-
-/**
- * Convert canvas to ANSI format
- */
-function canvasToANSI(ctx: FileContext): string {
-  let ansi = '';
-  let lastFg = -1;
-  let lastBg = -1;
-
-  for (let y = 0; y < 22; y++) {
-    for (let x = 0; x < ctx.width; x++) {
-      const cell = ctx.canvas[y][x];
-
-      // Only emit color codes when colors change
-      if (cell.fg !== lastFg || cell.bg !== lastBg) {
-        ansi += `\x1b[0;3${cell.fg};4${cell.bg}m`;
-        lastFg = cell.fg;
-        lastBg = cell.bg;
-      }
-
-      ansi += cell.char;
-    }
-    ansi += '\r\n';
-  }
-
-  ansi += '\x1b[0m';  // Reset at end
-  return ansi;
-}
-
-/**
- * Convert canvas to XBin format
- */
-function canvasToXBin(ctx: FileContext): Buffer {
-  // XBin format specification:
-  // Header: 'XBIN' (4 bytes) + 0x1A (1 byte)
-  // Width: 2 bytes (little-endian)
-  // Height: 2 bytes (little-endian)
-  // Fontsize: 1 byte (16 for standard)
-  // Flags: 1 byte (0 = no compression, no palette, no font)
-  // Data: char + attr pairs (attr = fg + (bg << 4))
-
-  const header = Buffer.from([0x58, 0x42, 0x49, 0x4E, 0x1A]); // 'XBIN' + 0x1A
-  const width = Buffer.alloc(2);
-  width.writeUInt16LE(ctx.width, 0);
-  const height = Buffer.alloc(2);
-  height.writeUInt16LE(22, 0);
-  const fontsize = Buffer.from([16]);
-  const flags = Buffer.from([0]);
-
-  // Build character data
-  const data: number[] = [];
-  for (let y = 0; y < 22; y++) {
-    for (let x = 0; x < ctx.width; x++) {
-      const cell = ctx.canvas[y][x];
-      data.push(cell.char.charCodeAt(0) || 32);  // Character
-      data.push(cell.fg + (cell.bg << 4));        // Attribute
-    }
-  }
-
-  return Buffer.concat([header, width, height, fontsize, flags, Buffer.from(data)]);
-}
-
-/**
- * Convert canvas to BIN format
- */
-function canvasToBIN(ctx: FileContext): Buffer {
-  // BIN format: raw character/attribute pairs
-  // Each cell = char (1 byte) + attr (1 byte where attr = fg + (bg << 4))
-  const data: number[] = [];
-  for (let y = 0; y < 22; y++) {
-    for (let x = 0; x < ctx.width; x++) {
-      const cell = ctx.canvas[y][x];
-      data.push(cell.char.charCodeAt(0) || 32);  // Character
-      data.push(cell.fg + (cell.bg << 4));        // Attribute
-    }
-  }
-  return Buffer.from(data);
-}
-
-/**
- * Convert canvas to ASC/TXT format
- */
-function canvasToASC(ctx: FileContext): string {
-  // ASC/TXT format: plain text only (no colors)
-  let text = '';
-  for (let y = 0; y < 22; y++) {
-    for (let x = 0; x < ctx.width; x++) {
-      text += ctx.canvas[y][x].char;
-    }
-    text += '\r\n';
-  }
-  return text;
-}
-
-/**
- * Convert canvas to DIZ format
- */
-function canvasToDIZ(ctx: FileContext): string {
-  // DIZ format: plain text, typically limited to 10 lines, 45 chars wide
-  // We'll export the current canvas but trim to typical DIZ size
-  let text = '';
-  const maxLines = Math.min(22, 10);
-  const maxWidth = Math.min(ctx.width, 45);
-
-  for (let y = 0; y < maxLines; y++) {
-    let line = '';
-    for (let x = 0; x < maxWidth; x++) {
-      line += ctx.canvas[y][x].char;
-    }
-    // Trim trailing spaces
-    line = line.trimEnd();
-    text += line + '\r\n';
-  }
-  return text;
-}
-
-// ===== FORMAT PARSERS =====
-
-/**
- * Parse ANSI format into canvas
- */
-function parseANSI(ctx: FileContext, ansi: string): void {
-  // Simple ANSI parser - converts ANSI to canvas
-  initCanvas(ctx);  // Clear canvas
-
+function loadANSI(state: EditorState, content: string, filename: string): boolean {
+  // Parse ANSI escape sequences into canvas
   let x = 0;
   let y = 0;
-  let fg = 7;
-  let bg = 0;
+  let currentFg = 7;
+  let currentBg = 0;
+  let bold = false;
+  let blink = false;
+
   let i = 0;
+  while (i < content.length) {
+    const char = content[i];
 
-  while (i < ansi.length && y < 22) {
-    const ch = ansi[i];
-
-    if (ch === '\x1b') {
-      // ANSI escape sequence
-      i++;
-
-      if (ansi[i] === '[') {
-        i++;
-        let params = '';
-
-        while (i < ansi.length && ansi[i] !== 'm' && ansi[i] !== 'H' && ansi[i] !== 'J') {
-          params += ansi[i];
-          i++;
-        }
-
-        const cmd = ansi[i];
-        i++;
-
-        if (cmd === 'm') {
-          // Color codes
-          const codes = params.split(';').map(s => parseInt(s, 10));
-          for (const code of codes) {
-            if (code === 0 || code === 22) {
-              // Reset
-              fg = 7;
-              bg = 0;
-            } else if (code >= 30 && code <= 37) {
-              // Foreground color
-              fg = code - 30;
-            } else if (code >= 40 && code <= 47) {
-              // Background color
-              bg = code - 40;
-            }
-          }
-        } else if (cmd === 'H') {
-          // Cursor position
-          const parts = params.split(';');
-          if (parts.length === 2) {
-            y = parseInt(parts[0], 10) - 1;
-            x = parseInt(parts[1], 10) - 1;
-          }
-        }
+    // Handle ANSI escape sequences
+    if (char === '\x1b' && content[i + 1] === '[') {
+      // Find end of escape sequence
+      let j = i + 2;
+      while (j < content.length && !content[j].match(/[A-Za-z]/)) {
+        j++;
       }
-    } else if (ch === '\r') {
+
+      const escapeCode = content.substring(i + 2, j);
+      const command = content[j];
+
+      // Parse escape sequence
+      if (command === 'm') {
+        // Color/style codes
+        const codes = escapeCode.split(';').map(c => parseInt(c) || 0);
+
+        for (const code of codes) {
+          if (code === 0) {
+            // Reset
+            currentFg = 7;
+            currentBg = 0;
+            bold = false;
+            blink = false;
+          } else if (code === 1) {
+            bold = true;
+          } else if (code === 5) {
+            blink = true;
+          } else if (code >= 30 && code <= 37) {
+            currentFg = code - 30;
+            if (bold) currentFg += 8;
+          } else if (code >= 40 && code <= 47) {
+            currentBg = code - 40;
+          } else if (code >= 90 && code <= 97) {
+            currentFg = code - 90 + 8;
+          } else if (code >= 100 && code <= 107) {
+            currentBg = code - 100 + 8;
+          }
+        }
+      } else if (command === 'H' || command === 'f') {
+        // Cursor position
+        const params = escapeCode.split(';').map(c => parseInt(c) || 1);
+        y = Math.max(0, Math.min(state.height - 1, (params[0] || 1) - 1));
+        x = Math.max(0, Math.min(state.width - 1, (params[1] || 1) - 1));
+      }
+
+      i = j + 1;
+      continue;
+    }
+
+    // Handle control characters
+    if (char === '\r') {
+      x = 0;
       i++;
-    } else if (ch === '\n') {
+      continue;
+    }
+
+    if (char === '\n') {
       y++;
       x = 0;
       i++;
-    } else {
-      // Regular character
-      if (x < ctx.width && y < 22) {
-        ctx.canvas[y][x] = { char: ch, fg, bg };
-        x++;
+      continue;
+    }
+
+    // Regular character
+    if (y < state.height && x < state.width) {
+      state.canvas[y][x] = {
+        char,
+        fg: currentFg,
+        bg: currentBg,
+        blink,
+      };
+      x++;
+
+      if (x >= state.width) {
+        x = 0;
+        y++;
       }
-      i++;
     }
+
+    i++;
   }
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
 }
 
-/**
- * Parse XBin format into canvas
- */
-function parseXBin(ctx: FileContext, data: Buffer): void {
-  // Parse XBin format
-  if (data.length < 11 || data.toString('ascii', 0, 4) !== 'XBIN' || data[4] !== 0x1A) {
-    throw new Error('Invalid XBin format');
-  }
+// =============================================================================
+// ASCII FORMAT (.ASC, .TXT)
+// =============================================================================
 
-  const width = data.readUInt16LE(5);
-  const height = data.readUInt16LE(7);
-  // fontsize at byte 9, flags at byte 10
+function loadASCII(state: EditorState, content: string, filename: string): boolean {
+  // Simple ASCII - no color codes, just text
+  const lines = content.split(/\r?\n/);
 
-  initCanvas(ctx);
-
-  let offset = 11;  // Start of data
-  for (let y = 0; y < Math.min(height, 22); y++) {
-    for (let x = 0; x < Math.min(width, ctx.width); x++) {
-      if (offset + 1 >= data.length) break;
-
-      const char = String.fromCharCode(data[offset]);
-      const attr = data[offset + 1];
-      const fg = attr & 0x0F;
-      const bg = (attr >> 4) & 0x0F;
-
-      ctx.canvas[y][x] = { char, fg, bg };
-      offset += 2;
-    }
-  }
-}
-
-/**
- * Parse BIN format into canvas
- */
-function parseBIN(ctx: FileContext, data: Buffer): void {
-  // Parse BIN format: raw character/attribute pairs
-  initCanvas(ctx);
-
-  let offset = 0;
-  for (let y = 0; y < 22; y++) {
-    for (let x = 0; x < ctx.width; x++) {
-      if (offset + 1 >= data.length) break;
-
-      const char = String.fromCharCode(data[offset]);
-      const attr = data[offset + 1];
-      const fg = attr & 0x0F;
-      const bg = (attr >> 4) & 0x0F;
-
-      ctx.canvas[y][x] = { char, fg, bg };
-      offset += 2;
-    }
-    if (offset >= data.length) break;
-  }
-}
-
-/**
- * Parse ASC/TXT/DIZ format into canvas
- */
-function parseASC(ctx: FileContext, text: string): void {
-  // Parse ASC/TXT/DIZ format: plain text (no colors)
-  initCanvas(ctx);
-
-  const lines = text.split(/\r?\n/);
-  for (let y = 0; y < Math.min(lines.length, 22); y++) {
+  for (let y = 0; y < Math.min(lines.length, state.height); y++) {
     const line = lines[y];
-    for (let x = 0; x < Math.min(line.length, ctx.width); x++) {
-      ctx.canvas[y][x] = {
+    for (let x = 0; x < Math.min(line.length, state.width); x++) {
+      state.canvas[y][x] = {
         char: line[x],
-        fg: 7,  // Default white
-        bg: 0   // Default black
+        fg: 7,
+        bg: 0,
       };
     }
   }
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
 }
 
-// ===== HELPER FUNCTIONS =====
+// =============================================================================
+// BINARY FORMAT (.BIN)
+// =============================================================================
 
-/**
- * Initialize/clear canvas
- */
-function initCanvas(ctx: FileContext): void {
-  for (let y = 0; y < 22; y++) {
-    if (!ctx.canvas[y]) {
-      ctx.canvas[y] = [];
-    }
-    for (let x = 0; x < ctx.width; x++) {
-      ctx.canvas[y][x] = { char: ' ', fg: ctx.fg, bg: ctx.bg };
+function loadBinary(state: EditorState, filepath: string, filename: string): boolean {
+  const buffer = fs.readFileSync(filepath);
+
+  // Binary format: 2 bytes per cell (char + attribute)
+  // Attribute byte: [blink][bg2][bg1][bg0][bright][fg2][fg1][fg0]
+  let offset = 0;
+
+  for (let y = 0; y < state.height && offset < buffer.length; y++) {
+    for (let x = 0; x < state.width && offset < buffer.length; x++) {
+      const char = String.fromCharCode(buffer[offset]);
+      const attr = buffer[offset + 1];
+
+      const fg = (attr & 0x0f); // Low 4 bits
+      const bg = ((attr & 0x70) >> 4); // High 3 bits of low nibble
+      const blink = (attr & 0x80) !== 0; // High bit
+
+      state.canvas[y][x] = { char, fg, bg, blink };
+      offset += 2;
     }
   }
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
 }
 
-/**
- * Detect file format from extension
- */
-function detectFormat(filename: string): FileFormat {
-  const ext = filename.toLowerCase().split('.').pop() || '';
+// =============================================================================
+// XBIN FORMAT (.XB)
+// =============================================================================
 
-  if (ext === 'xb') return 'xb';
-  if (ext === 'bin') return 'bin';
-  if (ext === 'asc') return 'asc';
-  if (ext === 'txt') return 'txt';
-  if (ext === 'diz') return 'diz';
+function loadXBin(state: EditorState, filepath: string, filename: string): boolean {
+  const buffer = fs.readFileSync(filepath);
 
-  return 'ans';  // Default to ANSI
+  // XBin header: "XBIN\x1a" + header data
+  if (buffer.toString('ascii', 0, 4) !== 'XBIN') {
+    throw new Error('Invalid XBin file format');
+  }
+
+  // Read header (simplified - full XBin spec is more complex)
+  const width = buffer.readUInt16LE(5);
+  const height = buffer.readUInt16LE(7);
+  const flags = buffer.readUInt8(11);
+
+  // Start of image data (after header + optional palette + optional font)
+  let offset = 11;
+
+  // Skip palette if present
+  if (flags & 0x01) {
+    offset += 48; // 16 colors * 3 bytes (RGB)
+  }
+
+  // Skip font data if present
+  if (flags & 0x02) {
+    const fontHeight = buffer.readUInt8(9);
+    offset += 256 * fontHeight; // 256 chars * height bytes
+  }
+
+  // Read image data
+  for (let y = 0; y < Math.min(height, state.height) && offset < buffer.length; y++) {
+    for (let x = 0; x < Math.min(width, state.width) && offset < buffer.length; x++) {
+      const char = String.fromCharCode(buffer[offset]);
+      const attr = buffer[offset + 1];
+
+      const fg = attr & 0x0f;
+      const bg = (attr & 0x70) >> 4;
+      const blink = (attr & 0x80) !== 0;
+
+      state.canvas[y][x] = { char, fg, bg, blink };
+      offset += 2;
+    }
+  }
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
 }
 
-/**
- * Get full file path
- */
-function getFilePath(ctx: FileContext, filename: string): string {
-  const dataDir = ctx.dataDir || process.env.DATA_DIR || path.join(__dirname, '../../backend/data/bbs');
-  const screensDir = path.join(dataDir, 'BBS', 'Screens');
-  return path.join(screensDir, filename);
-}
+// =============================================================================
+// FILE SAVING
+// =============================================================================
 
-/**
- * Ensure directory exists
- */
-function ensureDirectoryExists(filepath: string): void {
+export async function saveFile(state: EditorState, filename: string): Promise<boolean> {
+  const filepath = path.join(SCREENS_DIR, filename);
+  const format = detectFormat(filename);
+
+  // Ensure directory exists
   const dir = path.dirname(filepath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+
+  switch (format) {
+    case 'ANS':
+      return saveANSI(state, filepath, filename);
+    case 'ASC':
+    case 'TXT':
+      return saveASCII(state, filepath, filename);
+    case 'BIN':
+      return saveBinary(state, filepath, filename);
+    case 'XB':
+      return saveXBin(state, filepath, filename);
+    default:
+      throw new Error(`Unsupported format: ${format}`);
+  }
 }
 
-/**
- * Check if file exists
- */
-export function fileExists(ctx: FileContext, filename: string): boolean {
-  const filepath = getFilePath(ctx, filename);
+function saveANSI(state: EditorState, filepath: string, filename: string): boolean {
+  let output = '';
+  let lastFg = -1;
+  let lastBg = -1;
+
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      const cell = state.canvas[y][x];
+
+      // Output ANSI codes if colors changed
+      if (cell.fg !== lastFg || cell.bg !== lastBg) {
+        output += ANSI.colors(cell.fg, cell.bg);
+        lastFg = cell.fg;
+        lastBg = cell.bg;
+      }
+
+      // Add blink if enabled
+      if (cell.blink && state.iceColorsEnabled) {
+        output += ANSI.BLINK;
+      }
+
+      output += cell.char;
+    }
+
+    // Line ending
+    if (y < state.height - 1) {
+      output += '\r\n';
+    }
+  }
+
+  // Reset at end
+  output += ANSI.RESET;
+
+  fs.writeFileSync(filepath, output, 'utf8');
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
+}
+
+function saveASCII(state: EditorState, filepath: string, filename: string): boolean {
+  let output = '';
+
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      output += state.canvas[y][x].char;
+    }
+    if (y < state.height - 1) {
+      output += '\r\n';
+    }
+  }
+
+  fs.writeFileSync(filepath, output, 'utf8');
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
+}
+
+function saveBinary(state: EditorState, filepath: string, filename: string): boolean {
+  const buffer = Buffer.alloc(state.width * state.height * 2);
+  let offset = 0;
+
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      const cell = state.canvas[y][x];
+
+      // Char byte
+      buffer.writeUInt8(cell.char.charCodeAt(0), offset);
+
+      // Attribute byte: [blink][bg2][bg1][bg0][bright][fg2][fg1][fg0]
+      let attr = cell.fg & 0x0f;
+      attr |= (cell.bg & 0x07) << 4;
+      if (cell.blink) attr |= 0x80;
+
+      buffer.writeUInt8(attr, offset + 1);
+      offset += 2;
+    }
+  }
+
+  fs.writeFileSync(filepath, buffer);
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
+}
+
+function saveXBin(state: EditorState, filepath: string, filename: string): boolean {
+  // Simplified XBin format (no palette, no font)
+  const headerSize = 11;
+  const dataSize = state.width * state.height * 2;
+  const buffer = Buffer.alloc(headerSize + dataSize);
+
+  // Write header
+  buffer.write('XBIN', 0, 'ascii');
+  buffer.writeUInt8(0x1a, 4); // EOF char
+  buffer.writeUInt16LE(state.width, 5);
+  buffer.writeUInt16LE(state.height, 7);
+  buffer.writeUInt8(16, 9); // Font height (default)
+  buffer.writeUInt8(0, 10); // Flags (no palette, no font)
+  buffer.writeUInt8(0, 11); // Reserved
+
+  // Write image data
+  let offset = headerSize;
+  for (let y = 0; y < state.height; y++) {
+    for (let x = 0; x < state.width; x++) {
+      const cell = state.canvas[y][x];
+
+      buffer.writeUInt8(cell.char.charCodeAt(0), offset);
+
+      let attr = cell.fg & 0x0f;
+      attr |= (cell.bg & 0x07) << 4;
+      if (cell.blink) attr |= 0x80;
+
+      buffer.writeUInt8(attr, offset + 1);
+      offset += 2;
+    }
+  }
+
+  fs.writeFileSync(filepath, buffer);
+
+  state.currentFilename = filename;
+  state.modified = false;
+  return true;
+}
+
+// =============================================================================
+// FILE LISTING
+// =============================================================================
+
+export function listFiles(pattern: string = '*'): string[] {
+  if (!fs.existsSync(SCREENS_DIR)) {
+    return [];
+  }
+
+  const files = fs.readdirSync(SCREENS_DIR);
+
+  // Filter by pattern
+  const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'), 'i');
+
+  return files
+    .filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      return ['.ans', '.asc', '.bin', '.xb', '.txt'].includes(ext) && regex.test(f);
+    })
+    .sort();
+}
+
+// =============================================================================
+// IMPORT/EXPORT
+// =============================================================================
+
+export async function importFile(state: EditorState, filename: string, x: number, y: number): Promise<boolean> {
+  // Import loads file into clipboard at cursor position
+  const filepath = path.join(SCREENS_DIR, filename);
+
+  if (!fs.existsSync(filepath)) {
+    throw new Error(`File not found: ${filename}`);
+  }
+
+  const content = fs.readFileSync(filepath, 'utf8');
+
+  // Parse into temporary canvas
+  const tempCanvas: Cell[][] = [];
+  for (let ty = 0; ty < state.height; ty++) {
+    tempCanvas[ty] = [];
+    for (let tx = 0; tx < state.width; tx++) {
+      tempCanvas[ty][tx] = { char: ' ', fg: 7, bg: 0 };
+    }
+  }
+
+  // Parse ANSI (simplified)
+  const lines = content.split(/\r?\n/);
+  for (let ty = 0; ty < Math.min(lines.length, state.height); ty++) {
+    const line = lines[ty];
+    for (let tx = 0; tx < Math.min(line.length, state.width); tx++) {
+      // Skip ANSI codes for simplicity in import
+      const char = line[tx];
+      if (char && char !== '\x1b') {
+        tempCanvas[ty][tx] = { char, fg: 7, bg: 0 };
+      }
+    }
+  }
+
+  // Copy relevant portion to clipboard
+  state.clipboard = [];
+  for (let ty = y; ty < state.height; ty++) {
+    const row: Cell[] = [];
+    for (let tx = x; tx < state.width; tx++) {
+      row.push({ ...tempCanvas[ty][tx] });
+    }
+    state.clipboard.push(row);
+  }
+
+  return true;
+}
+
+export async function exportSelection(
+  state: EditorState,
+  filename: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): Promise<boolean> {
+  // Export selection to file
+  const filepath = path.join(SCREENS_DIR, filename);
+  const format = detectFormat(filename);
+
+  // Create temporary state with selection only
+  const tempState: EditorState = { ...state };
+  tempState.width = x2 - x1 + 1;
+  tempState.height = y2 - y1 + 1;
+  tempState.canvas = [];
+
+  for (let y = y1; y <= y2; y++) {
+    const row: Cell[] = [];
+    for (let x = x1; x <= x2; x++) {
+      row.push({ ...state.canvas[y][x] });
+    }
+    tempState.canvas.push(row);
+  }
+
+  return saveFile(tempState, filename);
+}
+
+// =============================================================================
+// FILE UTILITIES
+// =============================================================================
+
+export function getFileMetadata(filename: string): FileMetadata | null {
+  const filepath = path.join(SCREENS_DIR, filename);
+
+  if (!fs.existsSync(filepath)) {
+    return null;
+  }
+
+  const stats = fs.statSync(filepath);
+  const format = detectFormat(filename);
+
+  return {
+    filename,
+    width: 80, // Default, would parse from file for accurate value
+    height: 24,
+    format,
+    iceColors: false,
+    created: stats.birthtime,
+    modified: stats.mtime,
+  };
+}
+
+export function fileExists(filename: string): boolean {
+  const filepath = path.join(SCREENS_DIR, filename);
   return fs.existsSync(filepath);
 }
 
-/**
- * Get list of screen files
- */
-export function getScreenFiles(ctx: FileContext): string[] {
-  const dataDir = ctx.dataDir || process.env.DATA_DIR || path.join(__dirname, '../../backend/data/bbs');
-  const screensDir = path.join(dataDir, 'BBS', 'Screens');
+// =============================================================================
+// ADDITIONAL FILE OPERATIONS (from old editor)
+// =============================================================================
 
-  try {
-    return fs.readdirSync(screensDir)
-      .filter(f =>
-        f.endsWith('.TXT') || f.endsWith('.ANS') || f.endsWith('.XB') ||
-        f.endsWith('.BIN') || f.endsWith('.ASC') || f.endsWith('.DIZ') ||
-        f.endsWith('.txt') || f.endsWith('.ans') || f.endsWith('.xb') ||
-        f.endsWith('.bin') || f.endsWith('.asc') || f.endsWith('.diz')
-      )
-      .sort();
-  } catch (error) {
-    console.error('[File Ops] Error reading screens directory:', error);
-    return [];
+/**
+ * Deep clone canvas (for revert functionality)
+ */
+export function deepCloneCanvas(canvas: Cell[][]): Cell[][] {
+  const cloned: Cell[][] = [];
+  for (let y = 0; y < canvas.length; y++) {
+    cloned[y] = [];
+    for (let x = 0; x < canvas[y].length; x++) {
+      cloned[y][x] = { ...canvas[y][x] };
+    }
   }
+  return cloned;
 }
 
 /**
- * Deep clone canvas for backup/undo
+ * Export to FILE_ID.DIZ format
+ * DIZ files are plain text descriptions, typically 10-20 lines
  */
-export function deepCloneCanvas(canvas: Cell[][]): Cell[][] {
-  const clone: Cell[][] = [];
-  for (let y = 0; y < canvas.length; y++) {
-    clone[y] = [];
-    for (let x = 0; x < canvas[y].length; x++) {
-      clone[y][x] = { ...canvas[y][x] };
+export async function exportToDiz(state: EditorState, filename: string): Promise<boolean> {
+  try {
+    const filepath = path.join(SCREENS_DIR, filename);
+
+    // Convert canvas to plain ASCII text (no ANSI codes)
+    let content = '';
+    for (let y = 0; y < Math.min(state.height, 20); y++) {  // DIZ files typically 10-20 lines
+      let line = '';
+      for (let x = 0; x < state.width; x++) {
+        line += state.canvas[y][x].char;
+      }
+      // Trim trailing spaces
+      line = line.trimEnd();
+      content += line + '\r\n';
     }
+
+    // Write to file
+    fs.writeFileSync(filepath, content, 'ascii');
+    return true;
+  } catch (error) {
+    console.error('Error exporting to DIZ:', error);
+    return false;
   }
-  return clone;
 }

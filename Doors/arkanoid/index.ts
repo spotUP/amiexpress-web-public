@@ -1497,7 +1497,7 @@ const door = new Door({
 
 let game: ArkanoidGame;
 
-door.onStart(async (ctx) => {
+door.onStart(async (ctx: DoorContext) => {
   game = new ArkanoidGame();
   game.setContext(ctx);
 
@@ -1511,11 +1511,11 @@ door.onStart(async (ctx) => {
   game.startGameLoop();
 });
 
-door.onInput(async (ctx, keyPress) => {
+door.onInput(async (ctx: DoorContext, keyPress: KeyPress) => {
   game.handleInput(keyPress.key);
 });
 
-door.onClose(async (ctx) => {
+door.onClose(async (ctx: DoorContext) => {
   // Cleanup
   game.cleanup();
 
@@ -1525,7 +1525,7 @@ door.onClose(async (ctx) => {
   await ctx.output.writeLine('\x1b[32mThanks for playing ARKANOID!\x1b[0m\r\n');
 });
 
-door.onError(async (ctx, error) => {
+door.onError(async (ctx: DoorContext, error: Error) => {
   await ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
 });
 
