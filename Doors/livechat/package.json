@@ -1,0 +1,27 @@
+{
+  "name": "@amiexpress/livechat-door",
+  "version": "2.0.0",
+  "description": "Advanced multi-user chat with channels, DMs, and real-time typing",
+  "main": "dist/doors/livechat/index.js",
+  "types": "dist/doors/livechat/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "doorMetadata": {
+    "name": "LiveChat",
+    "command": "LIVECHAT",
+    "aliases": ["CHAT", "IRC"],
+    "description": "Multi-user chat with channels and real-time typing",
+    "author": "AmiExpress Team",
+    "minSecLevel": 10,
+    "category": "Communication"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

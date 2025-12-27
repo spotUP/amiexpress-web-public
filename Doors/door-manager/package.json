@@ -1,0 +1,31 @@
+{
+  "name": "door-manager",
+  "version": "2.0.0",
+  "description": "Neo-blessed door management tool for AmiExpress BBS",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["bbs", "door", "manager", "sysop", "admin"],
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "amiexpress": {
+    "doorName": "Door Manager",
+    "command": "DOORMAN",
+    "description": "Manage installed BBS doors",
+    "version": "2.0.0",
+    "author": "AmiExpress Team",
+    "minSecurityLevel": 250,
+    "multiNode": false,
+    "engine": "blessed"
+  }
+}

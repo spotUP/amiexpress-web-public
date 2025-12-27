@@ -1,0 +1,27 @@
+{
+  "name": "@amiexpress/door-ncurses-pong",
+  "version": "1.0.0",
+  "description": "Port of vicentebolea/Pong-curses - validates ncurses compatibility layer",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch"
+  },
+  "keywords": ["bbs", "door", "pong", "ncurses", "game"],
+  "author": "Original: Vicente Adolfo Bolea Sanchez, Port: AmiExpress Team",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "door": {
+    "name": "ncurses-pong",
+    "command": "PONG",
+    "description": "Classic Pong game (ncurses port)",
+    "category": "Games",
+    "minAccessLevel": 0
+  }
+}

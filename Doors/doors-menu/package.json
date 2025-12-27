@@ -1,0 +1,31 @@
+{
+  "name": "doors-menu",
+  "version": "1.0.0",
+  "description": "Interactive door selection menu with arrow key navigation",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["bbs", "door", "menu", "navigation"],
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "amiexpress": {
+    "doorName": "Doors Menu",
+    "command": "DOORS",
+    "description": "Interactive door selection menu",
+    "version": "1.0.0",
+    "author": "AmiExpress",
+    "minSecurityLevel": 0,
+    "multiNode": true,
+    "engine": "blessed"
+  }
+}
