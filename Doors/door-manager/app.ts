@@ -9,7 +9,7 @@
  * - Upload new doors
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
@@ -127,34 +127,27 @@ export async function createApp(session: DoorSession) {
     });
   }
 
-  // Create screen
-  const screen = blessed.screen({
+  // Create responsive screen
+  const screen = new Screen({
     smartCSR: true,
     dockBorders: true,
     fullUnicode: true,
     title: 'Door Manager - SysOp',
     output: (data: string) => bbs.write(data),
+    responsive: true,
   });
 
   // Connect input
   if (session.bbsSession) {
     session.bbsSession.doorInputHandler = (data: string) => {
       screen._handleData(data);
+      return true;
     };
   }
 
-  // Create main container
-  const container = createBox({
-    parent: screen,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-  });
-
   // Create header
   const header = createBox({
-    parent: container,
+    parent: screen,
     top: 0,
     left: 0,
     width: '100%',
@@ -163,16 +156,35 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       bg: 'blue'
-    }
+    },
+    tags: true,
   });
 
-  // Create door list
-  const doorList = createList({
-    parent: container,
+  // Create dockable panel for door list
+  const doorPanel = new DockablePanel({
+    parent: screen,
+    title: ' Installed Doors ',
     top: 3,
     left: 0,
     width: '100%',
-    height: '100%-6',
+    height: '70%',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 60,
+    minHeight: 10,
+    border: { type: 'line', fg: 'cyan' },
+    style: { border: { fg: 'cyan' } },
+  });
+
+  // Create door list inside panel
+  const doorList = createList({
+    parent: doorPanel,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
     keys: true,
     vi: true,
     mouse: true,
@@ -194,7 +206,7 @@ export async function createApp(session: DoorSession) {
         fg: 'white'
       }
     },
-    label: ' Installed Doors '
+    tags: true,
   });
 
   // Populate door list
@@ -210,29 +222,37 @@ export async function createApp(session: DoorSession) {
   doorList.setItems(doorItems);
   doorList.focus();
 
-  // Create info panel
-  const infoPanel = createBox({
-    parent: container,
+  // Create dockable info panel
+  const infoPanel = new DockablePanel({
+    parent: screen,
+    title: ' Door Info ',
     bottom: 3,
     left: 0,
     width: '100%',
-    height: 3,
+    height: '27%',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 40,
+    minHeight: 5,
+    border: { type: 'line', fg: 'green' },
+    style: { border: { fg: 'green' } },
+  });
+
+  const infoText = createText({
+    parent: infoPanel,
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '100%-2',
     content: '',
-    style: {
-      fg: 'white',
-      border: {
-        fg: 'cyan'
-      }
-    },
-    border: {
-      type: 'line'
-    },
-    label: ' Door Info '
+    tags: true,
   });
 
   // Create footer
   const footer = createBox({
-    parent: container,
+    parent: screen,
     bottom: 0,
     left: 0,
     width: '100%',
@@ -240,7 +260,8 @@ export async function createApp(session: DoorSession) {
     content: '{yellow-fg}Arrows:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} Manage  {yellow-fg}I:{/yellow-fg} Info  {yellow-fg}E:{/yellow-fg} Enable/Disable  {yellow-fg}Q:{/yellow-fg} Quit',
     style: {
       fg: 'white'
-    }
+    },
+    tags: true,
   });
 
   // Update info panel when selection changes
@@ -251,10 +272,38 @@ export async function createApp(session: DoorSession) {
       const content = `{bold}${door.name}{/bold}\n` +
                      `Description: ${door.description || 'No description'}\n` +
                      `Location: ${door.location || 'Unknown'}`;
-      infoPanel.setContent(content);
+      infoText.setContent(content);
       screen.render();
     }
   }
+
+  // Register responsive constraints
+  screen.responsiveLayout.registerElement(doorPanel, {
+    minWidth: 60,
+    minHeight: 10,
+  });
+  screen.responsiveLayout.registerElement(infoPanel, {
+    minWidth: 40,
+    minHeight: 5,
+  });
+
+  // Responsive breakpoint handling
+  screen.responsiveLayout.onResize((width, height) => {
+    const breakpoint = screen.responsiveLayout.getBreakpoint();
+
+    if (breakpoint === 'small') {
+      // Stack panels vertically on small screens
+      infoPanel.hide();
+      doorPanel.options.height = '100%-6';
+    } else {
+      // Show info panel on medium/large screens
+      infoPanel.show();
+      doorPanel.options.height = '70%';
+      infoPanel.options.height = '27%';
+    }
+
+    screen.render();
+  });
 
   // Initial info update
   updateInfoPanel();
@@ -330,6 +379,15 @@ export async function createApp(session: DoorSession) {
         resolved = true;
         console.log('[Door Manager] Cleanup called');
         try {
+          // Remove all event listeners to prevent memory leaks
+          if (screen) {
+            screen.removeAllListeners('destroy');
+            screen.removeAllListeners('keypress');
+          }
+          if (doorList) {
+            doorList.removeAllListeners('select item');
+            doorList.removeAllListeners('select');
+          }
           if (!screen.destroyed) {
             screen.destroy();
           }

@@ -2,15 +2,13 @@
  * Screen creation and configuration
  * Creates the main blessed screen instance
  */
-import blessed, { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createScreen as createScreenHelper } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 export function createScreen(bbs: any): Screen {
-  const screen = blessed.screen({
-    smartCSR: true,
-    dockBorders: true,
-    fullUnicode: true,
+  const screen = createScreenHelper(bbs, {
     title: 'LiveChat v3.2',
-    output: (data: string) => bbs.write(data),
+    responsive: true,
   });
 
   screen.enableMouse();

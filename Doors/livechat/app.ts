@@ -13,7 +13,8 @@
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
-import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { stripTags, cleanTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/helpers';
 
@@ -38,13 +39,13 @@ import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT } from './ui/menu-bar';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, INPUT_HEIGHT } from './ui/input-box';
-import { createChatLog, updateChatHeader as updateChatHeaderFn } from './ui/chat-log';
+import { createChatLog, updateChatHeader as updateChatHeaderFn, TYPING_HEIGHT } from './ui/chat-log';
 
 // Overlays
 import { createHelpScreen } from './overlays/help-screen';
 import { createSettingsOverlay } from './overlays/settings-overlay';
 import { createProfileOverlay } from './overlays/profile-overlay';
-import { createDialogs } from './overlays/dialogs';
+// createDialogs now imported from SDK blessed-helpers
 
 // Features
 import { createInputHistory } from './features/input-history';
@@ -154,9 +155,10 @@ export async function createApp(session: DoorSession) {
       // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
       if (data === '\x1bOP' || data === '\x1b[11~') {
         if (showHelpFn) showHelpFn();
-        return;
+        return true;
       }
       screen._handleData(data);
+      return true;
     };
   }
 
@@ -309,8 +311,8 @@ export async function createApp(session: DoorSession) {
   });
 
   function updateSidebarTabs() {
-    const chTab = sidebarTab === 'channels' ? '{inverse}[Ch]{/}' : ' Ch ';
-    const usTab = sidebarTab === 'users' ? '{inverse}[Us]{/}' : ' Us ';
+    const chTab = sidebarTab === 'channels' ? '{inverse}[Ch]{/inverse}' : ' Ch ';
+    const usTab = sidebarTab === 'users' ? '{inverse}[Us]{/inverse}' : ' Us ';
     sidebarTabs.setContent(` ${chTab} ${usTab}`);
   }
 
@@ -343,17 +345,34 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== CHANNEL LIST (Left Sidebar) ==========
-  const channelList = createList({
+  // Create dockable panel for channels
+  const channelPanel = new DockablePanel({
     parent: screen,
+    title: ' Channels ',
     top: MENU_HEIGHT + 1,  // Below tab bar
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' Channels [Resize: Bottom-Right] ',
-    border: { type: 'line' },
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 15,
+    minHeight: 10,
+    border: { type: 'line', fg: 'cyan' },
+    style: { border: { fg: 'cyan' } },
+  });
+
+  const channelList = createList({
+    parent: channelPanel,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
+    label: '',
+    border: { type: 'none' },
     style: {
       fg: 'white',
-      border: { fg: 'cyan' },
       selected: { fg: 'white', bg: 'blue' },
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
@@ -370,18 +389,7 @@ export async function createApp(session: DoorSession) {
     items: [],
   });
 
-  // Make channel list resizable
-  channelList.enableResize((data) => {
-    // Update sidebar width constant for other panels
-    const newWidth = data.width;
-    // Update chat log position to match new sidebar width
-    (chatLog as any).left = newWidth;
-    (sidebarTabs as any).width = newWidth;
-    if (!userList.hidden) {
-      (userList as any).width = newWidth;
-    }
-    screen.render();
-  });
+  // Resize handling is now done by DockablePanel
 
   // Default channels to show when server hasn't responded
   const defaultChannels = [
@@ -423,15 +431,18 @@ export async function createApp(session: DoorSession) {
       const hasUnread = ch.unreadCount && ch.unreadCount > 0;
 
       let color: string;
+      let endColor: string;
       if (isActive) {
         color = '{white-fg}';
+        endColor = '{/white-fg}';
       } else if (hasUnread) {
         color = '{green-fg}';
+        endColor = '{/green-fg}';
       } else {
         color = '{gray-fg}';
+        endColor = '{/gray-fg}';
       }
 
-      const endColor = '{/}';
       return color + ch.name + unread + endColor;
     });
 
@@ -496,37 +507,45 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== USER LIST (Left Sidebar - same position as channels) ==========
-  const userList = createList({
+  // Create dockable panel for users
+  const userPanel = new DockablePanel({
     parent: screen,
+    title: ' Users ',
     top: MENU_HEIGHT + 1,  // Below tab bar
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' Users [Resize: Bottom-Right] ',
-    border: { type: 'line' },
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 15,
+    minHeight: 10,
+    border: { type: 'line', fg: 'magenta' },
+    style: { border: { fg: 'magenta' } },
+    hidden: true,  // Hidden by default, channels shown first
+  });
+
+  const userList = createList({
+    parent: userPanel,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
+    label: '',
+    border: { type: 'none' },
     mouse: true,
     keys: true,  // Enable arrow key navigation
     vi: true,    // j/k for up/down
     scrollable: true,
     tags: true,
-    hidden: true,  // Hidden by default, channels shown first
     style: {
       fg: 'white',
-      border: { fg: 'magenta' },
       selected: { fg: 'black', bg: 'magenta' },
     },
   });
 
-  // Make user list resizable
-  userList.enableResize((data) => {
-    const newWidth = data.width;
-    (chatLog as any).left = newWidth;
-    (sidebarTabs as any).width = newWidth;
-    if (!channelList.hidden) {
-      (channelList as any).width = newWidth;
-    }
-    screen.render();
-  });
+  // Resize handling is now done by DockablePanel
 
   function updateUserTable() {
     const items: string[] = [];
@@ -548,11 +567,11 @@ export async function createApp(session: DoorSession) {
     sidebarTab = tab;
     updateSidebarTabs();
     if (tab === 'channels') {
-      userList.hide();
-      channelList.show();
+      userPanel.hide();
+      channelPanel.show();
     } else {
-      channelList.hide();
-      userList.show();
+      channelPanel.hide();
+      userPanel.show();
     }
     screen.render();
   }
@@ -584,17 +603,51 @@ export async function createApp(session: DoorSession) {
 
   // ========== CHAT LOG (Main Area) ==========
   // Chat log fills from sidebar to right edge
-  const chatLog = createChatLog(screen, SIDEBAR_WIDTH);
+  const { panel: chatPanel, log: chatLog } = createChatLog(screen, SIDEBAR_WIDTH);
 
-  // Typing preview (hidden box for tracking - not displayed)
-  const typingBox = createBox({
+  // Typing preview - visible bar above input box showing who is typing in real-time
+  const typingBar = createBox({
     parent: screen,
-    top: 0,
-    left: 0,
-    width: 1,
-    height: 1,
-    hidden: true,
+    bottom: STATUS_HEIGHT + INPUT_HEIGHT,  // Above input box
+    left: SIDEBAR_WIDTH,
+    right: 0,
+    height: TYPING_HEIGHT,
     tags: true,
+    style: {
+      fg: 'cyan',
+      bg: 'black',
+    },
+    content: '',
+  });
+
+  // ========== RESPONSIVE LAYOUT ==========
+  // Handle terminal resize and adjust layout for different screen sizes
+  screen.responsiveLayout.onResize((width, height) => {
+    const breakpoint = screen.responsiveLayout.getBreakpoint();
+
+    if (breakpoint === 'small') {
+      // Hide sidebar on small screens (< 80 cols)
+      channelPanel.hide();
+      userPanel.hide();
+      sidebarTabs.hide();
+      chatPanel.options.left = 0;
+      chatPanel.options.width = '100%';
+      (typingBar as any).left = 0;
+    } else {
+      // Show sidebar on medium/large screens
+      sidebarTabs.show();
+      if (sidebarTab === 'channels') {
+        channelPanel.show();
+      } else {
+        userPanel.show();
+      }
+      chatPanel.options.left = SIDEBAR_WIDTH;
+      chatPanel.options.width = undefined;
+      chatPanel.options.right = 0;
+      (typingBar as any).left = SIDEBAR_WIDTH;
+    }
+
+    screen.render();
   });
 
   function getChannelDisplayName(channelId?: string): string {
@@ -777,7 +830,7 @@ export async function createApp(session: DoorSession) {
   );
 
   // ========== DRAWING CANVAS (for drawing channels) ==========
-  const { drawingCanvas, drawingChannels, isDrawingChannel, enterDrawingMode, exitDrawingMode } = createDrawingCanvas(screen, socket, state, chatLog, typingBox, bbs, inputBox, getChannelDisplayName, updateChannelList, updateStatusBar, addSystemMessage, MENU_HEIGHT, SIDEBAR_WIDTH, STATUS_HEIGHT, INPUT_HEIGHT);
+  const { drawingCanvas, drawingChannels, isDrawingChannel, enterDrawingMode, exitDrawingMode } = createDrawingCanvas(screen, socket, state, chatLog, typingBar, bbs, inputBox, getChannelDisplayName, updateChannelList, updateStatusBar, addSystemMessage, MENU_HEIGHT, SIDEBAR_WIDTH, STATUS_HEIGHT, INPUT_HEIGHT);
 
   // ========== FILE SHARING ==========
   const { fileSharingOverlay, showFileSharing } = createFileSharing(screen, socket, state, username, addSystemMessage, addChatMessage, addActivity, audio, showModal, hideModal);
@@ -863,10 +916,45 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
+  // Track the typing preview content
+  const typingPreviewLines = new Map<number, string>();
+
   function updateTypingPreview() {
-    const preview = renderTypingPreview(state.typingBuffers);
-    typingBox.setContent(preview || '{gray-fg}No one is typing...{/gray-fg}');
-    screen.render();
+    const now = Date.now();
+    let hasChanges = false;
+
+    // Update typing preview content for each user
+    for (const [userId, buf] of state.typingBuffers) {
+      if (now - buf.lastUpdate > 5000) {
+        // Expired - remove from preview
+        if (typingPreviewLines.has(userId)) {
+          typingPreviewLines.delete(userId);
+          hasChanges = true;
+        }
+        continue;
+      }
+
+      if (buf.buffer.length > 0) {
+        const color = getUserColor(buf.username);
+        const line = `{${color}-fg}${buf.username}:{/${color}-fg} ${buf.buffer}{inverse} {/inverse}`;
+
+        // Only update if content changed
+        if (typingPreviewLines.get(userId) !== line) {
+          typingPreviewLines.set(userId, line);
+          hasChanges = true;
+        }
+      } else if (typingPreviewLines.has(userId)) {
+        typingPreviewLines.delete(userId);
+        hasChanges = true;
+      }
+    }
+
+    // Display current typing preview in the typing bar
+    if (hasChanges) {
+      const lines = Array.from(typingPreviewLines.values());
+      typingBar.setContent(lines.join('  ') || '');
+      screen.render();
+    }
   }
 
   // Events and activity now go to chat log
@@ -1024,16 +1112,17 @@ export async function createApp(session: DoorSession) {
   // ========== INPUT HANDLING ==========
 
   inputBox.on('submit', async (value: string) => {
-    // Hide command suggestions on submit
-    hideCommandSuggestions();
+    try {
+      // Hide command suggestions on submit
+      hideCommandSuggestions();
 
-    const msg = value.trim();
-    if (!msg) {
-      inputBox.clearValue();
-      inputBox.focus();
-      screen.render();
-      return;
-    }
+      const msg = value.trim();
+      if (!msg) {
+        inputBox.clearValue();
+        inputBox.focus();
+        screen.render();
+        return;
+      }
 
     // Check if we're editing an existing message
     const isEditing = inputHistory.getEditingId() !== null;
@@ -1175,7 +1264,20 @@ export async function createApp(session: DoorSession) {
       }
     }
 
-    screen.render();
+      // Force complete clear by hiding and showing the input box
+      inputBox.clearValue();
+      inputBox.hide();
+      screen.render();
+      inputBox.show();
+      inputBox.focus();
+      screen.render();
+    } catch (error) {
+      console.error('[LiveChat] Error in submit handler:', error);
+      addSystemMessage(`{red-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/red-fg}`);
+      inputBox.clearValue();
+      inputBox.focus();
+      screen.render();
+    }
   });
 
   // Live typing indicator and command autocomplete
@@ -1234,7 +1336,16 @@ export async function createApp(session: DoorSession) {
   screen.key(['escape'], () => {
     // Close any open dialogs
     if (!settingsOverlay.hidden) {
-      settingsOverlay.hide();
+      hideModal(settingsOverlay);
+      return;  // Don't continue to inputBox.focus() since hideModal handles it
+    }
+    if (!profileOverlay.hidden) {
+      hideModal(profileOverlay);
+      return;
+    }
+    if (!fileSharingOverlay.hidden) {
+      hideModal(fileSharingOverlay);
+      return;
     }
     inputBox.focus();
     screen.render();
@@ -1253,6 +1364,22 @@ export async function createApp(session: DoorSession) {
   function cleanup() {
     socket.emit('room:leave');
     events.clear();
+
+    // Remove all socket listeners to prevent memory leaks
+    socket.removeAllListeners('chat:keystroke');
+    socket.removeAllListeners('chat:keystroke-submit');
+    socket.removeAllListeners('chat:keystroke-clear');
+    socket.removeAllListeners('chat:message');
+    socket.removeAllListeners('chat:edited');
+    socket.removeAllListeners('chat:dm');
+    socket.removeAllListeners('chat:presence');
+    socket.removeAllListeners('chat:reaction');
+    socket.removeAllListeners('bbs:event');
+    socket.removeAllListeners('room:joined');
+    socket.removeAllListeners('room:left');
+    socket.removeAllListeners('room:list');
+    socket.removeAllListeners('room:kicked');
+    socket.removeAllListeners('room:error');
 
     // Disable mouse and clean up input handler
     screen.disableMouse();
@@ -1293,9 +1420,9 @@ export async function createApp(session: DoorSession) {
       // Welcome messages
       addSystemMessage('Welcome to LiveChat v3.2!');
       addChatMessage('{cyan-fg}Hotkeys:{/cyan-fg}', false);
-      addChatMessage('  {white-fg}F1{/}=Help  {white-fg}F2{/}=Sidebar  {white-fg}F3{/}=Switch Tab  {white-fg}F4{/}=Emoji Picker', false);
-      addChatMessage('  {white-fg}F5{/}=Art Channel  {white-fg}F6{/}=Files  {white-fg}Tab{/}=Focus Cycle', false);
-      addChatMessage('  {white-fg}^S{/}=Settings  {white-fg}^E{/}=Emoji  {white-fg}^C/^Q{/}=Quit  {white-fg}Esc{/}=Close/Return', false);
+      addChatMessage('  {white-fg}F1{/white-fg}=Help  {white-fg}F2{/white-fg}=Sidebar  {white-fg}F3{/white-fg}=Switch Tab  {white-fg}F4{/white-fg}=Emoji Picker', false);
+      addChatMessage('  {white-fg}F5{/white-fg}=Art Channel  {white-fg}F6{/white-fg}=Files  {white-fg}Tab{/white-fg}=Focus Cycle', false);
+      addChatMessage('  {white-fg}^S{/white-fg}=Settings  {white-fg}^E{/white-fg}=Emoji  {white-fg}^C/^Q{/white-fg}=Quit  {white-fg}Esc{/white-fg}=Close/Return', false);
       addChatMessage('{yellow-fg}Commands:{/yellow-fg} /help /join /leave /msg /me /who /away /back /clear /emoji /events', false);
       addChatMessage('{gray-fg}Type a message and press Enter to send{/gray-fg}', false);
 

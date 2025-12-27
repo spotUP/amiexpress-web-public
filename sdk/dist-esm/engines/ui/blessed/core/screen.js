@@ -4,6 +4,8 @@
 import { Element } from './element';
 import { Program } from './program';
 import { cursor, screen as screenAnsi, attrs, blend } from './colors';
+import { KeyBindings } from './keybindings';
+import { ResponsiveLayoutManager } from './responsive-layout';
 export class Screen extends Element {
     constructor(options = {}) {
         // BBS Terminal Constraints:
@@ -27,6 +29,9 @@ export class Screen extends Element {
         // Focus history
         this.focusHistory = [];
         this.savedFocus = null;
+        // Focus trapping (for modals)
+        this.focusTrap = null;
+        this.focusTrapSavedFocus = null;
         // Rendering state
         // Buffer format: [y][x] = [attr, char]
         // attr is 27-bit packed: (flags << 18) | (fg << 9) | bg
@@ -43,6 +48,8 @@ export class Screen extends Element {
         this._dragging = null;
         // Key handlers
         this.keyHandlers = new Map();
+        // Global keyboard shortcuts
+        this.keyBindings = new KeyBindings();
         // ============================================================================
         // Key Locking
         // ============================================================================
@@ -80,6 +87,12 @@ export class Screen extends Element {
         if (this.cursorHidden) {
             this.write(cursor.hide);
         }
+        // Initialize responsive layout manager
+        const responsiveConfig = {
+            enableAutoResize: options.responsive !== false,
+            breakpoints: options.breakpoints,
+        };
+        this.responsiveLayout = new ResponsiveLayoutManager(this, responsiveConfig);
         // Setup event routing from program to screen/elements
         this.setupKeyRouting();
         this.setupMouseRouting();
@@ -240,6 +253,23 @@ export class Screen extends Element {
         }
     }
     /**
+     * Force a full screen redraw on the next render by invalidating lastBuffer.
+     * This ensures all cells are output to the terminal, which is useful after
+     * destroying dialogs or overlays where remnants might otherwise persist.
+     *
+     * Call this before render() when transitioning between dialogs/overlays.
+     */
+    forceFullRedraw() {
+        // Set lastBuffer to an impossible state (attr=-1) so _diff will output all cells
+        for (let y = 0; y < this.height; y++) {
+            if (!this.lastBuffer[y])
+                continue;
+            for (let x = 0; x < this.width; x++) {
+                this.lastBuffer[y][x] = [-1, '\x00'];
+            }
+        }
+    }
+    /**
      * Allocate (create) a new blank buffer
      */
     alloc() {
@@ -348,62 +378,56 @@ export class Screen extends Element {
         const flags = (attr >> 18) & 0x1ff;
         let fg = (attr >> 9) & 0x1ff;
         let bg = attr & 0x1ff;
-        let out = '';
-        // bold
-        if (flags & 1) {
-            out += '1;';
+        // CRITICAL: Start with reset (SGR 0) to clear ALL previous attributes.
+        // This ensures no bold/underline/inverse/etc. bleeding between cells.
+        let out = '0;';
+        // Flags (bold, underline, etc.)
+        if (flags & 1)
+            out += '1;'; // bold
+        if (flags & 2)
+            out += '4;'; // underline
+        if (flags & 4)
+            out += '5;'; // blink
+        if (flags & 8)
+            out += '7;'; // inverse
+        if (flags & 16)
+            out += '8;'; // invisible
+        // Background color - ALWAYS explicitly set
+        // BBS terminals expect black background by default, but web terminals often default to white.
+        // We must ALWAYS emit an explicit background color, never rely on terminal default.
+        if (bg === 0x1ff) {
+            // Default/transparent bg -> use black (40) for BBS compatibility
+            out += '40;';
         }
-        // underline
-        if (flags & 2) {
-            out += '4;';
-        }
-        // blink
-        if (flags & 4) {
-            out += '5;';
-        }
-        // inverse
-        if (flags & 8) {
-            out += '7;';
-        }
-        // invisible
-        if (flags & 16) {
-            out += '8;';
-        }
-        // Background color (process FIRST in neo-blessed)
-        if (bg !== 0x1ff) {
-            // For now, skip _reduceColor - assume color is already valid
-            if (bg < 16) {
-                if (bg < 8) {
-                    bg += 40; // Standard bg: 40-47
-                }
-                else if (bg < 16) {
-                    bg -= 8;
-                    bg += 100; // Bright bg: 100-107
-                }
-                out += bg + ';';
+        else if (bg < 16) {
+            if (bg < 8) {
+                out += (bg + 40) + ';'; // Standard bg: 40-47
             }
             else {
-                // 256-color mode for bg
-                out += '48;5;' + bg + ';';
+                out += ((bg - 8) + 100) + ';'; // Bright bg: 100-107
             }
         }
-        // Foreground color
-        if (fg !== 0x1ff) {
-            // For now, skip _reduceColor - assume color is already valid
-            if (fg < 16) {
-                if (fg < 8) {
-                    fg += 30; // Standard fg: 30-37
-                }
-                else if (fg < 16) {
-                    fg -= 8;
-                    fg += 90; // Bright fg: 90-97
-                }
-                out += fg + ';';
+        else {
+            // 256-color mode for bg
+            out += '48;5;' + bg + ';';
+        }
+        // Foreground color - ALWAYS explicitly set
+        // Use white (37) as default fg for visibility on black background
+        if (fg === 0x1ff) {
+            // Default fg -> use white (37) for BBS compatibility on black bg
+            out += '37;';
+        }
+        else if (fg < 16) {
+            if (fg < 8) {
+                out += (fg + 30) + ';'; // Standard fg: 30-37
             }
             else {
-                // 256-color mode for fg
-                out += '38;5;' + fg + ';';
+                out += ((fg - 8) + 90) + ';'; // Bright fg: 90-97
             }
+        }
+        else {
+            // 256-color mode for fg
+            out += '38;5;' + fg + ';';
         }
         // Remove trailing semicolon
         if (out[out.length - 1] === ';')
@@ -1051,19 +1075,81 @@ export class Screen extends Element {
         }
     }
     /**
-     * Get all focusable elements in tree order
+     * Enable focus trapping within a container (for modals)
+     * Tab/Shift+Tab will only cycle through elements within the container
+     */
+    trapFocus(container) {
+        if (this.focusTrap === container)
+            return;
+        // Save current focus before trapping
+        this.focusTrapSavedFocus = this._focused;
+        this.focusTrap = container;
+        // Focus first element in trap
+        const focusable = this._getFocusable(container);
+        if (focusable.length > 0) {
+            focusable[0].focus();
+        }
+    }
+    /**
+     * Disable focus trapping and restore previous focus
+     */
+    releaseFocusTrap() {
+        if (!this.focusTrap)
+            return;
+        this.focusTrap = null;
+        // Restore focus to element that had it before trapping
+        if (this.focusTrapSavedFocus && !this.focusTrapSavedFocus.destroyed) {
+            this.focusTrapSavedFocus.focus();
+        }
+        this.focusTrapSavedFocus = null;
+    }
+    /**
+     * Check if focus is currently trapped
+     */
+    isFocusTrapped() {
+        return this.focusTrap !== null;
+    }
+    /**
+     * Get the current focus trap container (if any)
+     */
+    getFocusTrap() {
+        return this.focusTrap;
+    }
+    /**
+     * Get all focusable elements in tree order, sorted by tabIndex
+     * If focus is trapped, only returns elements within the trap container
      */
     _getFocusable(element = this) {
+        // If focus is trapped, only get focusable elements within the trap
+        const root = this.focusTrap || element;
         const focusable = [];
         const traverse = (el) => {
-            if (el.options.focusable) {
+            // Check if element is tabbable
+            const tabbable = el.options.tabbable !== false && el.options.tabIndex !== -1;
+            const isFocusable = el.options.focusable && tabbable;
+            // Skip disabled, hidden, or destroyed elements
+            if (isFocusable && !el.hidden && !el.destroyed && !el.disabled) {
                 focusable.push(el);
             }
             for (const child of el.children) {
                 traverse(child);
             }
         };
-        traverse(element);
+        traverse(root);
+        // Sort by tabIndex (0 = default, 1+ = explicit order, -1 = not tabbable - already filtered)
+        focusable.sort((a, b) => {
+            const aIndex = a.options.tabIndex ?? 0;
+            const bIndex = b.options.tabIndex ?? 0;
+            // Elements with tabIndex > 0 come first, sorted by tabIndex
+            if (aIndex > 0 && bIndex > 0)
+                return aIndex - bIndex;
+            if (aIndex > 0)
+                return -1;
+            if (bIndex > 0)
+                return 1;
+            // Both have tabIndex 0 (or undefined) - maintain tree order
+            return 0;
+        });
         return focusable;
     }
     /**

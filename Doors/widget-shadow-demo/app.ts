@@ -7,7 +7,7 @@
  * Original: https://github.com/chjj/blessed/blob/master/test/widget-shadow.js
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
@@ -66,19 +66,21 @@ const lorem = 'Non eram nescius Brute cum quae summis ingeniis exquisitaque'
 export async function createApp(session: DoorSession) {
   const { bbs, bbsSession } = session;
 
-  // Create screen with BBS output
-  const screen = blessed.screen({
+  // Create responsive screen with BBS output
+  const screen = new Screen({
     smartCSR: true,
     dockBorders: true,
     fullUnicode: true,
     title: 'Widget Shadow Demo',
     output: (data: string) => bbs.write(data),
+    responsive: true,
   });
 
   // Connect input from BBS to screen
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
       screen._handleData(data);
+      return true;
     };
   }
 
@@ -102,62 +104,96 @@ export async function createApp(session: DoorSession) {
     content: 'Foo',
   });
 
-  // Yellow "under" box (with shadow) - made draggable too
-  const under = createBox({
+  // Yellow "under" box - now as dockable panel
+  const underPanel = new DockablePanel({
     parent: screen,
-    shadow: true,
+    title: ' Yellow Panel ',
     left: 10,
     top: 4,
     width: '40%',
     height: '30%',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 20,
+    minHeight: 8,
+    border: { type: 'line', fg: 'yellow' },
+    style: {
+      bg: 'yellow',
+      border: { fg: 'yellow' },
+    },
+  });
+
+  const under = createBox({
+    parent: underPanel,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
     style: {
       bg: 'yellow',
     },
-    border: 'line',
-    draggable: true,
-    // Original has no content, just empty yellow box
   });
 
-  // Red transparent "over" box (EXACT from neo-blessed)
-  const over = createBox({
+  // Red transparent "over" box - now as dockable panel
+  const overPanel = new DockablePanel({
     parent: screen,
-    shadow: true,
+    title: ' Drag Me ',
     left: 'center',
     top: 'center',
     width: '50%',
     height: '50%',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 30,
+    minHeight: 10,
+    border: { type: 'line', fg: 'red' },
+    style: {
+      bg: 'red',
+      transparent: true,
+      border: { fg: 'red' },
+    },
+  });
+
+  const over = createBox({
+    parent: overPanel,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
     style: {
       bg: 'red',
       transparent: true,
     },
-    border: 'line',
-    draggable: true,
     content: '{green-bg}{red-fg}{bold} --Drag Me-- {/}',
   });
 
-  // Arrow key movement (EXACT from neo-blessed)
-  over.key('left', function() {
-    (over as any).left -= 2;
+  // Arrow key movement - now moves the panel
+  overPanel.key('left', function() {
+    (overPanel as any).left = Math.max(0, ((overPanel as any).left || 0) - 2);
     screen.render();
   });
 
-  over.key('up', function() {
-    (over as any).top -= 1;
+  overPanel.key('up', function() {
+    (overPanel as any).top = Math.max(0, ((overPanel as any).top || 0) - 1);
     screen.render();
   });
 
-  over.key('right', function() {
-    (over as any).left += 2;
+  overPanel.key('right', function() {
+    (overPanel as any).left = ((overPanel as any).left || 0) + 2;
     screen.render();
   });
 
-  over.key('down', function() {
-    (over as any).top += 1;
+  overPanel.key('down', function() {
+    (overPanel as any).top = ((overPanel as any).top || 0) + 1;
     screen.render();
   });
 
-  // Focus the draggable box
-  over.focus();
+  // Focus the draggable panel
+  overPanel.focus();
 
   // Quit handler (EXACT from neo-blessed)
   screen.key('q', function() {

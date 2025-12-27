@@ -35,6 +35,7 @@ export class Element extends EventEmitter {
   hidden: boolean = false;
   focused: boolean = false;
   destroyed: boolean = false;
+  disabled: boolean = false;
 
   // Scrolling
   private childBase: number = 0;
@@ -104,8 +105,13 @@ export class Element extends EventEmitter {
       this.hide();
     }
 
-    // Set clickable from options
-    if (this.options.clickable) {
+    // Set disabled state
+    if (this.options.disabled) {
+      this.disabled = true;
+    }
+
+    // Set clickable from options (but not if disabled)
+    if (this.options.clickable && !this.disabled) {
       this.clickable = true;
     }
 
@@ -128,6 +134,18 @@ export class Element extends EventEmitter {
     // CRITICAL: Must be after parent/screen attachment so enableDrag() can access this.screen
     if (this.options.draggable) {
       this.draggable = true;
+    }
+
+    // Set up hover style handlers if hover style is defined
+    if (this.options.style?.hover) {
+      this.on('mouseenter', () => {
+        this.applyHoverStyle();
+        if (this.screen) this.screen.render();
+      });
+      this.on('mouseleave', () => {
+        this.removeHoverStyle();
+        if (this.screen) this.screen.render();
+      });
     }
   }
 
@@ -1174,6 +1192,9 @@ export class Element extends EventEmitter {
   focus(): void {
     if (this.destroyed || !this.screen) return;
 
+    // Disabled elements cannot receive focus
+    if (this.disabled) return;
+
     if (this.options.focusable !== false) {
       // setFocused handles blur of previous, setting focused=true, and emitting focus
       this.screen.setFocused(this);
@@ -1188,6 +1209,55 @@ export class Element extends EventEmitter {
       if (this.screen.getFocused() === this) {
         this.screen.setFocused(null);
       }
+    }
+  }
+
+  /**
+   * Disable element (prevents interaction, applies disabled style)
+   */
+  disable(): void {
+    if (this.disabled) return;
+
+    this.disabled = true;
+    this.options.disabled = true;
+
+    // Blur if currently focused
+    if (this.focused) {
+      this.blur();
+    }
+
+    // Disable mouse interaction
+    this.clickable = false;
+
+    // Emit state change
+    this.emit('disable');
+
+    // Re-render to apply disabled style
+    if (this.screen) {
+      this.screen.render();
+    }
+  }
+
+  /**
+   * Enable element (restores interaction, removes disabled style)
+   */
+  enable(): void {
+    if (!this.disabled) return;
+
+    this.disabled = false;
+    this.options.disabled = false;
+
+    // Restore clickable state
+    if (this.options.clickable || this.options.mouse) {
+      this.clickable = true;
+    }
+
+    // Emit state change
+    this.emit('enable');
+
+    // Re-render to remove disabled style
+    if (this.screen) {
+      this.screen.render();
     }
   }
 
@@ -1712,6 +1782,8 @@ export class Element extends EventEmitter {
    * Handle mouse event
    */
   onMouse(event: any): void {
+    // Ignore mouse events on disabled elements
+    if (this.disabled) return;
     if (!this.clickable) return;
 
     // Check if mouse is over this element
@@ -1871,14 +1943,24 @@ export class Element extends EventEmitter {
       borderStyle = { ...borderStyle, ...(this.options.style as any).border };
     }
 
-    // If focused, use focus border style (white border)
-    if (this.focused) {
+    // Apply state-specific border styles
+    if (this.disabled) {
+      // Disabled state (highest priority)
+      const disabledStyle = (this.options.style as any)?.disabled;
+      if (disabledStyle?.border) {
+        borderStyle = { ...borderStyle, ...disabledStyle.border };
+      } else {
+        // Default: gray foreground for border when disabled
+        borderStyle = { ...borderStyle, fg: 'gray' };
+      }
+    } else if (this.focused) {
+      // Focused state
       const focusStyle = (this.options.style as any)?.focus;
       if (focusStyle?.border) {
         borderStyle = { ...borderStyle, ...focusStyle.border };
       } else {
-        // Default: white foreground for border when focused
-        borderStyle = { ...borderStyle, fg: 'white' };
+        // Default: cyan bold foreground for border when focused (high visibility)
+        borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
       }
     }
     const attr = this.sattr(borderStyle);
@@ -2184,7 +2266,17 @@ export class Element extends EventEmitter {
     if (!pos) return;
 
     const lines = this.getVisibleLines();
-    const attr = this.sattr(this.options.style);
+
+    // Apply disabled style if element is disabled
+    let style = this.options.style;
+    if (this.disabled && (this.options.style as any)?.disabled) {
+      style = { ...style, ...(this.options.style as any).disabled };
+    } else if (this.disabled) {
+      // Default disabled style: gray text
+      style = { ...style, fg: 'gray' };
+    }
+
+    const attr = this.sattr(style);
 
     let y = this.itop;
     for (const line of lines) {
@@ -2768,6 +2860,12 @@ export class Element extends EventEmitter {
     // Destroy all children
     for (const child of this.children.slice()) {
       child.destroy();
+    }
+
+    // Request full redraw from screen to ensure destroyed element's area is properly cleared.
+    // This prevents remnants from showing through when new elements are displayed.
+    if (this.screen && typeof (this.screen as any).forceFullRedraw === 'function') {
+      (this.screen as any).forceFullRedraw();
     }
 
     // Detach from parent

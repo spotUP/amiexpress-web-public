@@ -13,7 +13,7 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createText, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 // ===== Game Types =====
@@ -150,8 +150,10 @@ const ENEMY_UNITS: Omit<Unit, 'x' | 'y'>[] = [
 class FireEmblemGame {
   private ctx!: DoorContext;
   private screen!: Screen;
-  private mapBox!: Box;
-  private statusBox!: Box;
+  private mapPanel!: DockablePanel;
+  private statusPanel!: DockablePanel;
+  private mapContent: any;
+  private statusContent: any;
   private state!: GameState;
   private exitResolve: (() => void) | null = null;
 
@@ -160,23 +162,29 @@ class FireEmblemGame {
   }
 
   async start(): Promise<void> {
-    // Initialize game state first
-    this.initializeChapter();
+    try {
+      // Initialize game state first
+      this.initializeChapter();
 
-    // Create neo-blessed UI
-    this.createUI();
+      // Create neo-blessed UI
+      this.createUI();
 
-    // Show intro screen
-    this.showIntro();
+      // Show intro screen
+      this.showIntro();
 
-    // Start game
-    this.render();
+      // Start game
+      this.render();
 
-    // Wait for game to complete
-    await new Promise<void>((resolve) => {
-      this.exitResolve = resolve;
-      this.screen.on('destroy', () => resolve());
-    });
+      // Wait for game to complete
+      await new Promise<void>((resolve) => {
+        this.exitResolve = resolve;
+        this.screen.on('destroy', () => resolve());
+      });
+    } catch (error) {
+      console.error('[Fire Emblem] Error in start():', error);
+      this.cleanup();
+      throw error; // Re-throw to be caught by onError handler
+    }
   }
 
   private showIntro(): void {
@@ -260,30 +268,90 @@ class FireEmblemGame {
       dockBorders: true,
       title: 'Fire Emblem: Emblem of Valor',
       output: (data: string) => this.ctx.output.write(data),
+      responsive: true,
     });
 
-    // Map display
-    this.mapBox = createBox({
+    // Map display panel
+    this.mapPanel = new DockablePanel({
       parent: this.screen,
+      title: ' Battlefield ',
       top: 0,
       left: 0,
       width: '70%',
       height: '100%',
-      tags: true,
-      border: { type: 'line' },
-      label: ' Battlefield ',
+      dockPosition: 'float',
+      showMinimizeButton: true,
+      resizable: true,
+      draggable: true,
+      minWidth: 40,
+      minHeight: 15,
+      border: { type: 'line', fg: 'cyan' },
+      style: { border: { fg: 'cyan' } },
     });
 
-    // Status display
-    this.statusBox = createBox({
+    this.mapContent = createBox({
+      parent: this.mapPanel,
+      top: 1,
+      left: 1,
+      width: '100%-2',
+      height: '100%-2',
+      tags: true,
+    });
+
+    // Status display panel
+    this.statusPanel = new DockablePanel({
       parent: this.screen,
+      title: ' Status ',
       top: 0,
       left: '70%',
       width: '30%',
       height: '100%',
+      dockPosition: 'float',
+      showMinimizeButton: true,
+      resizable: true,
+      draggable: true,
+      minWidth: 25,
+      minHeight: 15,
+      border: { type: 'line', fg: 'green' },
+      style: { border: { fg: 'green' } },
+    });
+
+    this.statusContent = createBox({
+      parent: this.statusPanel,
+      top: 1,
+      left: 1,
+      width: '100%-2',
+      height: '100%-2',
       tags: true,
-      border: { type: 'line' },
-      label: ' Status ',
+    });
+
+    // Register responsive constraints
+    this.screen.responsiveLayout.registerElement(this.mapPanel, {
+      minWidth: 40,
+      minHeight: 15,
+    });
+    this.screen.responsiveLayout.registerElement(this.statusPanel, {
+      minWidth: 25,
+      minHeight: 15,
+    });
+
+    // Responsive breakpoint handling
+    this.screen.responsiveLayout.onResize((width, height) => {
+      const breakpoint = this.screen.responsiveLayout.getBreakpoint();
+
+      if (breakpoint === 'small') {
+        // Stack panels vertically on small screens
+        this.statusPanel.hide();
+        this.mapPanel.options.width = '100%';
+      } else {
+        // Side-by-side layout for medium/large screens
+        this.statusPanel.show();
+        this.mapPanel.options.width = '70%';
+        this.statusPanel.options.width = '30%';
+        this.statusPanel.options.left = '70%';
+      }
+
+      this.render();
     });
 
     // Set up input handlers
@@ -454,7 +522,7 @@ class FireEmblemGame {
       mapContent += '\nPress Q to quit\n';
     }
 
-    this.mapBox.setContent(mapContent);
+    this.mapContent.setContent(mapContent);
 
     // Render status
     let statusContent = `{bold}Chapter ${this.state.chapter}: Bandit Raid{/bold}\n\n`;
@@ -479,13 +547,16 @@ class FireEmblemGame {
     statusContent += 'E: End Phase\n';
     statusContent += 'Q: Quit\n';
 
-    this.statusBox.setContent(statusContent);
+    this.statusContent.setContent(statusContent);
 
     this.screen.render();
   }
 
   private cleanup(): void {
+    // Remove event listeners to prevent memory leaks
     if (this.screen) {
+      this.screen.removeAllListeners('destroy');
+      this.screen.removeAllListeners('keypress');
       this.screen.destroy();
     }
     // Resolve the exit promise to allow door to complete

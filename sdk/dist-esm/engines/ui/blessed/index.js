@@ -7,6 +7,8 @@ export { Screen } from './core/screen';
 export { Element } from './core/element';
 export { Program } from './core/program';
 export { EventEmitter } from './core/events';
+export { KeyBindings } from './core/keybindings';
+export { ResponsiveLayoutManager } from './core/responsive-layout';
 export * as colors from './core/colors';
 // Widgets
 export { Box } from './widgets/box';
@@ -43,6 +45,9 @@ export { Viewport } from './widgets/viewport';
 export { Canvas } from './widgets/canvas';
 export { IFrame } from './widgets/iframe';
 export { Video } from './widgets/video';
+export { ContextMenu } from './widgets/contextmenu';
+export { Panel } from './widgets/panel';
+export { DockablePanel } from './widgets/dockable-panel';
 // Factory functions (blessed-style API)
 import { Screen } from './core/screen';
 import { Box } from './widgets/box';
@@ -89,214 +94,214 @@ export function screen(options) {
 // Factory Functions - ALL default to tags: true for color support
 // ============================================================================
 /**
- * Create a box widget (tags: true by default)
+ * Create a box widget (tags: true by default, cannot be overridden)
  */
 export function box(options) {
-    return new Box({ tags: true, ...options });
+    return new Box({ ...options, tags: true });
 }
 /**
- * Create a text widget (tags: true by default)
+ * Create a text widget (tags: true forced, cannot be overridden)
  */
 export function text(options) {
-    return new Text({ tags: true, ...options });
+    return new Text({ ...options, tags: true });
 }
 /**
- * Create a list widget (tags: true by default)
+ * Create a list widget (tags: true forced, cannot be overridden)
  */
 export function list(options) {
-    return new List({ tags: true, ...options });
+    return new List({ ...options, tags: true });
 }
 /**
- * Create a form widget (tags: true by default)
+ * Create a form widget (tags: true forced, cannot be overridden)
  */
 export function form(options) {
-    return new Form({ tags: true, ...options });
+    return new Form({ ...options, tags: true });
 }
 /**
- * Create a textbox/input widget (tags: true by default)
+ * Create a textbox/input widget (tags: true forced, cannot be overridden)
  */
 export function textbox(options) {
-    return new Textbox({ tags: true, ...options });
+    return new Textbox({ ...options, tags: true });
 }
 export function input(options) {
-    return new Input({ tags: true, ...options });
+    return new Input({ ...options, tags: true });
 }
 export function textarea(options) {
-    return new Textarea({ tags: true, ...options });
+    return new Textarea({ ...options, tags: true });
 }
 /**
- * Create a button widget (tags: true by default)
+ * Create a button widget (tags: true forced, cannot be overridden)
  */
 export function button(options) {
-    return new Button({ tags: true, ...options });
+    return new Button({ ...options, tags: true });
 }
 /**
- * Create a progress bar widget (tags: true by default)
+ * Create a progress bar widget (tags: true forced, cannot be overridden)
  */
 export function progressbar(options) {
-    return new ProgressBar({ tags: true, ...options });
+    return new ProgressBar({ ...options, tags: true });
 }
 /**
- * Create a table widget (tags: true by default)
+ * Create a table widget (tags: true forced, cannot be overridden)
  */
 export function table(options) {
-    return new Table({ tags: true, ...options });
+    return new Table({ ...options, tags: true });
 }
 /**
- * Create a log widget (tags: true by default)
+ * Create a log widget (tags: true forced, cannot be overridden)
  */
 export function log(options) {
-    return new Log({ tags: true, ...options });
+    return new Log({ ...options, tags: true });
 }
 /**
- * Create a scrollable box widget (tags: true by default)
+ * Create a scrollable box widget (tags: true forced, cannot be overridden)
  */
 export function scrollablebox(options) {
-    return new ScrollableBox({ tags: true, ...options });
+    return new ScrollableBox({ ...options, tags: true });
 }
 /**
- * Create a scrollable text widget (tags: true by default)
+ * Create a scrollable text widget (tags: true forced, cannot be overridden)
  */
 export function scrollabletext(options) {
-    return new ScrollableText({ tags: true, ...options });
+    return new ScrollableText({ ...options, tags: true });
 }
 /**
- * Create a checkbox widget (tags: true by default)
+ * Create a checkbox widget (tags: true forced, cannot be overridden)
  */
 export function checkbox(options) {
-    return new Checkbox({ tags: true, ...options });
+    return new Checkbox({ ...options, tags: true });
 }
 /**
- * Create a radio button widget (tags: true by default)
+ * Create a radio button widget (tags: true forced, cannot be overridden)
  */
 export function radiobutton(options) {
-    return new RadioButton({ tags: true, ...options });
+    return new RadioButton({ ...options, tags: true });
 }
 /**
- * Create a radio set widget (tags: true by default)
+ * Create a radio set widget (tags: true forced, cannot be overridden)
  */
 export function radioset(options) {
-    return new RadioSet({ tags: true, ...options });
+    return new RadioSet({ ...options, tags: true });
 }
 /**
- * Create a message dialog widget (tags: true by default)
+ * Create a message dialog widget (tags: true forced, cannot be overridden)
  */
 export function message(options) {
-    return new Message({ tags: true, ...options });
+    return new Message({ ...options, tags: true });
 }
 /**
- * Create a question dialog widget (tags: true by default)
+ * Create a question dialog widget (tags: true forced, cannot be overridden)
  */
 export function question(options) {
-    return new Question({ tags: true, ...options });
+    return new Question({ ...options, tags: true });
 }
 /**
- * Create a prompt dialog widget (tags: true by default)
+ * Create a prompt dialog widget (tags: true forced, cannot be overridden)
  */
 export function prompt(options) {
-    return new Prompt({ tags: true, ...options });
+    return new Prompt({ ...options, tags: true });
 }
 /**
- * Create a loading indicator widget (tags: true by default)
+ * Create a loading indicator widget (tags: true forced, cannot be overridden)
  */
 export function loading(options) {
-    return new Loading({ tags: true, ...options });
+    return new Loading({ ...options, tags: true });
 }
 /**
- * Create a line widget (tags: true by default)
+ * Create a line widget (tags: true forced, cannot be overridden)
  */
 export function line(options) {
-    return new Line({ tags: true, ...options });
+    return new Line({ ...options, tags: true });
 }
 /**
- * Create a listbar widget (tags: true by default)
+ * Create a listbar widget (tags: true forced, cannot be overridden)
  */
 export function listbar(options) {
-    return new Listbar({ tags: true, ...options });
+    return new Listbar({ ...options, tags: true });
 }
 /**
- * Create a big text widget (tags: true by default)
+ * Create a big text widget (tags: true forced, cannot be overridden)
  */
 export function bigtext(options) {
-    return new BigText({ tags: true, ...options });
+    return new BigText({ ...options, tags: true });
 }
 /**
- * Create a file manager widget (tags: true by default)
+ * Create a file manager widget (tags: true forced, cannot be overridden)
  */
 export function filemanager(options) {
-    return new FileManager({ tags: true, ...options });
+    return new FileManager({ ...options, tags: true });
 }
 /**
- * Create an overlay widget (tags: true by default)
+ * Create an overlay widget (tags: true forced, cannot be overridden)
  */
 export function overlay(options) {
-    return new Overlay({ tags: true, ...options });
+    return new Overlay({ ...options, tags: true });
 }
 /**
- * Create a list table widget (tags: true by default)
+ * Create a list table widget (tags: true forced, cannot be overridden)
  */
 export function listtable(options) {
-    return new ListTable({ tags: true, ...options });
+    return new ListTable({ ...options, tags: true });
 }
 /**
- * Create an ANSI image widget (tags: true by default)
+ * Create an ANSI image widget (tags: true forced, cannot be overridden)
  */
 export function ansiimage(options) {
-    return new ANSIImage({ tags: true, ...options });
+    return new ANSIImage({ ...options, tags: true });
 }
 /**
- * Create a terminal widget (tags: true by default)
+ * Create a terminal widget (tags: true forced, cannot be overridden)
  */
 export function terminal(options) {
-    return new Terminal({ tags: true, ...options });
+    return new Terminal({ ...options, tags: true });
 }
 /**
- * Create a layout widget (tags: true by default)
+ * Create a layout widget (tags: true forced, cannot be overridden)
  */
 export function layout(options) {
-    return new Layout({ tags: true, ...options });
+    return new Layout({ ...options, tags: true });
 }
 /**
- * Create a password box widget (tags: true by default)
+ * Create a password box widget (tags: true forced, cannot be overridden)
  */
 export function passbox(options) {
-    return new PassBox({ tags: true, ...options });
+    return new PassBox({ ...options, tags: true });
 }
 /**
- * Create a file box widget (tags: true by default)
+ * Create a file box widget (tags: true forced, cannot be overridden)
  */
 export function filebox(options) {
-    return new FileBox({ tags: true, ...options });
+    return new FileBox({ ...options, tags: true });
 }
 /**
- * Create an image widget (tags: true by default)
+ * Create an image widget (tags: true forced, cannot be overridden)
  */
 export function image(options) {
-    return new Image({ tags: true, ...options });
+    return new Image({ ...options, tags: true });
 }
 /**
- * Create a viewport widget (tags: true by default)
+ * Create a viewport widget (tags: true forced, cannot be overridden)
  */
 export function viewport(options) {
-    return new Viewport({ tags: true, ...options });
+    return new Viewport({ ...options, tags: true });
 }
 /**
- * Create a canvas widget (tags: true by default)
+ * Create a canvas widget (tags: true forced, cannot be overridden)
  */
 export function canvas(options) {
-    return new Canvas({ tags: true, ...options });
+    return new Canvas({ ...options, tags: true });
 }
 /**
- * Create an iframe widget (tags: true by default)
+ * Create an iframe widget (tags: true forced, cannot be overridden)
  */
 export function iframe(options) {
-    return new IFrame({ tags: true, ...options });
+    return new IFrame({ ...options, tags: true });
 }
 /**
- * Create a video widget (tags: true by default)
+ * Create a video widget (tags: true forced, cannot be overridden)
  */
 export function video(options) {
-    return new Video({ tags: true, ...options });
+    return new Video({ ...options, tags: true });
 }
 // Default export with all factory functions
 // Import all classes so they're available for the default export
@@ -305,6 +310,7 @@ import { Element as ElementClass } from './core/element';
 import { Program as ProgramClass } from './core/program';
 import * as colorsExport from './core/colors';
 import { EventEmitter as EventEmitterExport } from './core/events';
+import { KeyBindings as KeyBindingsClass } from './core/keybindings';
 // Import all widgets
 import { Box as BoxClass } from './widgets/box';
 import { Text as TextClass } from './widgets/text';
@@ -340,12 +346,17 @@ import { Viewport as ViewportClass } from './widgets/viewport';
 import { Canvas as CanvasClass } from './widgets/canvas';
 import { IFrame as IFrameClass } from './widgets/iframe';
 import { Video as VideoClass } from './widgets/video';
+import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
+import { Panel as PanelClass } from './widgets/panel';
+import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
+import { ResponsiveLayoutManager as ResponsiveLayoutManagerClass } from './core/responsive-layout';
 export default {
     // Core
     Screen: ScreenClass,
     Element: ElementClass,
     Program: ProgramClass,
     EventEmitter: EventEmitterExport,
+    KeyBindings: KeyBindingsClass,
     colors: colorsExport,
     // Widgets
     Box: BoxClass,
@@ -384,6 +395,10 @@ export default {
     Canvas: CanvasClass,
     IFrame: IFrameClass,
     Video: VideoClass,
+    ContextMenu: ContextMenuClass,
+    Panel: PanelClass,
+    DockablePanel: DockablePanelClass,
+    ResponsiveLayoutManager: ResponsiveLayoutManagerClass,
     // Factory functions
     screen,
     box,

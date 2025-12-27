@@ -13,7 +13,7 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface BBSStats {
@@ -35,7 +35,12 @@ interface NodeInfo {
 class BBSDashboard {
   private ctx!: DoorContext;
   private screen!: Screen;
-  private mainBox: any;
+  private systemPanel!: DockablePanel;
+  private statsPanel!: DockablePanel;
+  private nodesPanel!: DockablePanel;
+  private systemText: any;
+  private statsText: any;
+  private nodesText: any;
   private statusText: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private exitResolve: (() => void) | null = null;
@@ -71,30 +76,150 @@ class BBSDashboard {
       dockBorders: true,
       title: 'BBS SysOp Dashboard',
       output: (data: string) => this.ctx.output.write(data),
+      responsive: true,
     });
 
-    // Main container
-    this.mainBox = createBox({
+    // System Resources Panel (top-left)
+    this.systemPanel = new DockablePanel({
       parent: this.screen,
-      top: 0,
+      title: ' SYSTEM RESOURCES ',
       left: 0,
-      width: '100%',
-      height: '100%',
-      border: { type: 'line' },
-      style: {
-        border: { fg: 'cyan' }
-      },
-      label: ' BBS SYSOP DASHBOARD '
+      top: 0,
+      width: '50%',
+      height: '50%',
+      dockPosition: 'float',
+      showMinimizeButton: true,
+      resizable: true,
+      draggable: true,
+      minWidth: 30,
+      minHeight: 10,
+      border: { type: 'line', fg: 'yellow' },
+      style: { border: { fg: 'yellow' } },
     });
 
-    // Status text
-    this.statusText = createText({
-      parent: this.mainBox,
-      bottom: 0,
+    this.systemText = createText({
+      parent: this.systemPanel,
+      top: 1,
       left: 1,
       right: 1,
+      height: '100%-2',
+      content: '',
+      tags: true,
+    });
+
+    // BBS Statistics Panel (top-right)
+    this.statsPanel = new DockablePanel({
+      parent: this.screen,
+      title: ' BBS STATISTICS ',
+      left: '50%',
+      top: 0,
+      width: '50%',
+      height: '50%',
+      dockPosition: 'float',
+      showMinimizeButton: true,
+      resizable: true,
+      draggable: true,
+      minWidth: 30,
+      minHeight: 10,
+      border: { type: 'line', fg: 'cyan' },
+      style: { border: { fg: 'cyan' } },
+    });
+
+    this.statsText = createText({
+      parent: this.statsPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      height: '100%-2',
+      content: '',
+      tags: true,
+    });
+
+    // Node Status Panel (bottom, full width)
+    this.nodesPanel = new DockablePanel({
+      parent: this.screen,
+      title: ' NODE STATUS ',
+      left: 0,
+      top: '50%',
+      width: '100%',
+      height: '50%',
+      dockPosition: 'float',
+      showMinimizeButton: true,
+      resizable: true,
+      draggable: true,
+      minWidth: 50,
+      minHeight: 8,
+      border: { type: 'line', fg: 'green' },
+      style: { border: { fg: 'green' } },
+    });
+
+    this.nodesText = createText({
+      parent: this.nodesPanel,
+      top: 1,
+      left: 1,
+      right: 1,
+      height: '100%-2',
+      content: '',
+      tags: true,
+    });
+
+    // Status bar at the bottom
+    this.statusText = createText({
+      parent: this.screen,
+      bottom: 0,
+      left: 0,
+      right: 0,
       height: 1,
-      content: ''
+      content: '',
+      style: { fg: 'white', bg: 'blue' },
+      tags: true,
+    });
+
+    // Register responsive constraints
+    this.screen.responsiveLayout.registerElement(this.systemPanel, {
+      minWidth: 30,
+      minHeight: 10,
+    });
+    this.screen.responsiveLayout.registerElement(this.statsPanel, {
+      minWidth: 30,
+      minHeight: 10,
+    });
+    this.screen.responsiveLayout.registerElement(this.nodesPanel, {
+      minWidth: 50,
+      minHeight: 8,
+    });
+
+    // Responsive breakpoint handling
+    this.screen.responsiveLayout.onResize((width, height) => {
+      const breakpoint = this.screen.responsiveLayout.getBreakpoint();
+
+      if (breakpoint === 'small') {
+        // Stack panels vertically on small screens
+        this.systemPanel.options.width = '100%';
+        this.systemPanel.options.height = '33%';
+        this.statsPanel.options.left = 0;
+        this.statsPanel.options.top = '33%';
+        this.statsPanel.options.width = '100%';
+        this.statsPanel.options.height = '33%';
+        this.nodesPanel.options.top = '66%';
+        this.nodesPanel.options.height = '34%';
+      } else {
+        // Side-by-side layout for medium/large screens
+        this.systemPanel.options.width = '50%';
+        this.systemPanel.options.height = '50%';
+        this.systemPanel.options.left = 0;
+        this.systemPanel.options.top = 0;
+        this.statsPanel.options.left = '50%';
+        this.statsPanel.options.top = 0;
+        this.statsPanel.options.width = '50%';
+        this.statsPanel.options.height = '50%';
+        this.nodesPanel.options.left = 0;
+        this.nodesPanel.options.top = '50%';
+        this.nodesPanel.options.width = '100%';
+        this.nodesPanel.options.height = '50%';
+      }
+
+      this.renderDashboard();
     });
 
     // Key handlers
@@ -109,41 +234,43 @@ class BBSDashboard {
   }
 
   private renderDashboard(): void {
-    const lines: string[] = [];
-
-    // Header
-    lines.push('{center}{bold}{cyan-fg}=== BBS SYSOP DASHBOARD ==={/cyan-fg}{/bold}{/center}');
-    lines.push('');
-
-    // System Resources
-    lines.push('{bold}{yellow-fg}SYSTEM RESOURCES{/yellow-fg}{/bold}');
-    lines.push('{cyan-fg}' + '─'.repeat(76) + '{/cyan-fg}');
-
+    // Render System Resources Panel
+    const systemLines: string[] = [];
     const cpuUsage = Math.floor(Math.random() * 40) + 20;
     const memUsage = Math.floor(Math.random() * 30) + 50;
     const diskUsage = 67;
 
-    lines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 30, 'cyan')}`);
-    lines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, 30, 'magenta')}`);
-    lines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, 30, 'yellow')}`);
-    lines.push('');
+    systemLines.push('');
+    systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 20, 'cyan')}`);
+    systemLines.push('');
+    systemLines.push(`Memory:     ${memUsage}%  ${this.makeProgressBar(memUsage, 20, 'magenta')}`);
+    systemLines.push('');
+    systemLines.push(`Disk:       ${diskUsage}%  ${this.makeProgressBar(diskUsage, 20, 'yellow')}`);
 
-    // BBS Statistics
-    lines.push('{bold}{yellow-fg}BBS STATISTICS{/yellow-fg}{/bold}');
-    lines.push('{cyan-fg}' + '─'.repeat(76) + '{/cyan-fg}');
-    lines.push(`Total Users:    {white-fg}${this.stats.totalUsers.toLocaleString()}{/white-fg}`);
-    lines.push(`Active Now:     {green-fg}${this.stats.activeUsers}{/green-fg}`);
-    lines.push(`Total Calls:    {white-fg}${this.stats.totalCalls.toLocaleString()}{/white-fg}`);
-    lines.push(`Messages:       {white-fg}${this.stats.totalMessages.toLocaleString()}{/white-fg}`);
-    lines.push(`Files:          {white-fg}${this.stats.totalFiles.toLocaleString()}{/white-fg}`);
-    lines.push(`Uptime:         {white-fg}${this.formatUptime(this.stats.systemUptime)}{/white-fg}`);
-    lines.push('');
+    this.systemText.setContent(systemLines.join('\n'));
 
-    // Node Status
-    lines.push('{bold}{yellow-fg}NODE STATUS{/yellow-fg}{/bold}');
-    lines.push('{cyan-fg}' + '─'.repeat(76) + '{/cyan-fg}');
-    lines.push(`{bold}  Node    User              Status      Location{/bold}`);
-    lines.push('{cyan-fg}' + '─'.repeat(76) + '{/cyan-fg}');
+    // Render BBS Statistics Panel
+    const statsLines: string[] = [];
+    statsLines.push('');
+    statsLines.push(`Total Users:    {white-fg}${this.stats.totalUsers.toLocaleString()}{/white-fg}`);
+    statsLines.push('');
+    statsLines.push(`Active Now:     {green-fg}${this.stats.activeUsers}{/green-fg}`);
+    statsLines.push('');
+    statsLines.push(`Total Calls:    {white-fg}${this.stats.totalCalls.toLocaleString()}{/white-fg}`);
+    statsLines.push('');
+    statsLines.push(`Messages:       {white-fg}${this.stats.totalMessages.toLocaleString()}{/white-fg}`);
+    statsLines.push('');
+    statsLines.push(`Files:          {white-fg}${this.stats.totalFiles.toLocaleString()}{/white-fg}`);
+    statsLines.push('');
+    statsLines.push(`Uptime:         {white-fg}${this.formatUptime(this.stats.systemUptime)}{/white-fg}`);
+
+    this.statsText.setContent(statsLines.join('\n'));
+
+    // Render Node Status Panel
+    const nodesLines: string[] = [];
+    nodesLines.push('');
+    nodesLines.push(`{bold}  Node    User              Status      Location{/bold}`);
+    nodesLines.push('{cyan-fg}' + '─'.repeat(60) + '{/cyan-fg}');
 
     const nodes: NodeInfo[] = [
       { id: 1, user: 'CyberPunk', status: 'Active', location: 'Reading Mail' },
@@ -155,14 +282,14 @@ class BBSDashboard {
     for (const node of nodes) {
       const userName = node.user || 'Waiting';
       const color = node.status === 'Active' ? 'green' : 'white';
-      lines.push(`{${color}-fg}  ${node.id}       ${this.padRight(userName, 16)}  ${this.padRight(node.status, 10)}  ${node.location}{/${color}-fg}`);
+      nodesLines.push(`{${color}-fg}  ${node.id}       ${this.padRight(userName, 16)}  ${this.padRight(node.status, 10)}  ${node.location}{/${color}-fg}`);
     }
 
-    this.mainBox.setContent(lines.join('\n'));
+    this.nodesText.setContent(nodesLines.join('\n'));
 
     // Update status line
     const now = new Date().toLocaleTimeString();
-    this.statusText.setContent(`{green-fg}Last Update: ${now}{/green-fg}  {yellow-fg}Q: Quit  R/Space: Refresh{/yellow-fg}`);
+    this.statusText.setContent(` {green-fg}Last Update: ${now}{/green-fg}  {yellow-fg}Q: Quit  R/Space: Refresh{/yellow-fg} `);
 
     this.screen.render();
   }

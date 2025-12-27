@@ -81,6 +81,8 @@ export interface ElementOptions {
     scrollbar?: Colors;
     focus?: Colors;
     hover?: Colors;
+    active?: Colors;
+    disabled?: Colors;
   };
 
   border?: Border | 'line' | 'bg';
@@ -104,6 +106,11 @@ export interface ElementOptions {
   draggable?: boolean;  // Enable drag-and-drop with mouse
   dockBorders?: boolean;
   ignoreDockContrast?: boolean;
+  disabled?: boolean;  // Disable interaction (grayed out, not focusable/clickable)
+
+  // Focus management
+  tabIndex?: number;  // Tab order (0 = natural order, -1 = not tabbable, 1+ = explicit order)
+  tabbable?: boolean;  // Can be reached via Tab key (default: same as focusable)
 
   // Scrolling
   scrollable?: boolean;
@@ -187,6 +194,12 @@ export interface ScreenOptions {
   forceUnicode?: boolean;
   terminal?: string;
   tput?: boolean;
+  responsive?: boolean;
+  breakpoints?: {
+    small?: number;
+    medium?: number;
+    large?: number;
+  };
 }
 
 // ============================================================================

@@ -30,12 +30,14 @@ export class Overlay extends Box {
         this._overlayWidgetId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         // Enable key handling
         this.enableKeys();
-        // Auto-focus when shown - also emit web transparency event
+        // Auto-focus when shown - also emit web transparency event and trap focus
         this.on('show', () => {
             console.log('[Overlay] SHOW event triggered!');
-            console.log('[Overlay] About to call focus()...');
-            this.focus();
-            console.log('[Overlay] Focus done, about to emit OSC...');
+            console.log('[Overlay] About to trap focus...');
+            if (this.screen) {
+                this.screen.trapFocus(this);
+            }
+            console.log('[Overlay] Focus trapped, about to emit OSC...');
             this._emitOverlayWidgetEvent(true);
             console.log('[Overlay] OSC emitted, about to render...');
             if (this.screen) {
@@ -43,10 +45,13 @@ export class Overlay extends Box {
             }
             console.log('[Overlay] SHOW handler complete');
         });
-        // Emit hide event for web transparency
+        // Emit hide event for web transparency and release focus trap
         this.on('hide', () => {
             console.log('[Overlay] HIDE event triggered!');
             console.trace('[Overlay] Stack trace for hide:');
+            if (this.screen) {
+                this.screen.releaseFocusTrap();
+            }
             this._emitOverlayWidgetEvent(false);
         });
         // Default escape handler to hide overlay

@@ -6,6 +6,7 @@
  */
 
 import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 /** Door metadata */
 export const metadata = {
@@ -352,63 +353,125 @@ function handleKeypress(participant: Participant, ch: string | undefined, key: a
 function createUi(session: DoorSession): ParticipantUi {
   const { bbs, bbsSession } = session;
 
-  // Use createScreen helper for consistent initialization
+  // Use createScreen helper with responsive mode
   const screen = createScreen({
     smartCSR: true,
     dockBorders: false,
     fullUnicode: false,
     title: 'Scrollwars',
     output: (data: string) => bbs.write(data),
+    responsive: true,
   });
 
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
       screen._handleData(data);
+      return true;
     };
   }
 
   screen.program.hideCursor();
 
-  const userPanel = createBox({
+  // User panel (left side) as dockable panel
+  const userPanelDock = new DockablePanel({
     parent: screen,
+    title: ' Users ',
     top: 0,
-    left: USER_PANEL_LEFT,
-    width: USER_PANEL_WIDTH,
-    height: PANEL_HEIGHT,
-    border: { type: 'ascii' },
-    label: ' Users ',
-    // tags: true is automatic with createBox()
+    left: 0,
+    width: '25%',
+    height: '100%-1',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 15,
+    minHeight: 10,
+    border: { type: 'line', fg: 'cyan' },
+    style: { border: { fg: 'cyan' } },
+  });
+
+  const userPanel = createBox({
+    parent: userPanelDock,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
+    tags: true,
     style: {
       fg: 'white',
       bg: 'black',
-      border: { fg: 'cyan' }
     },
   });
 
-  const chatPanel = createBox({
+  // Chat panel (right side) as dockable panel
+  const chatPanelDock = new DockablePanel({
     parent: screen,
+    title: ' Scroll ',
     top: 0,
-    left: CHAT_PANEL_LEFT,
-    width: CHAT_PANEL_WIDTH,
-    height: PANEL_HEIGHT,
-    border: { type: 'ascii' },
-    label: ' Scroll ',
-    // tags: true is automatic with createBox()
+    left: '25%',
+    width: '75%',
+    height: '100%-1',
+    dockPosition: 'float',
+    showMinimizeButton: true,
+    resizable: true,
+    draggable: true,
+    minWidth: 40,
+    minHeight: 10,
+    border: { type: 'line', fg: 'cyan' },
+    style: { border: { fg: 'cyan' } },
+  });
+
+  const chatPanel = createBox({
+    parent: chatPanelDock,
+    top: 1,
+    left: 1,
+    width: '100%-2',
+    height: '100%-2',
+    tags: true,
     style: {
       fg: 'white',
       bg: 'black',
-      border: { fg: 'cyan' }
     },
   });
 
   const statusBar = createBox({
     parent: screen,
-    top: STATUS_ROW,
+    bottom: 0,
     left: 0,
-    width: SCREEN_WIDTH,
+    width: '100%',
     height: 1,
-    // tags: true is automatic with createBox()
+    tags: true,
     style: { fg: 'cyan', bg: 'blue' },
+  });
+
+  // Register responsive constraints
+  screen.responsiveLayout.registerElement(userPanelDock, {
+    minWidth: 15,
+    minHeight: 10,
+  });
+  screen.responsiveLayout.registerElement(chatPanelDock, {
+    minWidth: 40,
+    minHeight: 10,
+  });
+
+  // Responsive breakpoint handling
+  screen.responsiveLayout.onResize((width, height) => {
+    const breakpoint = screen.responsiveLayout.getBreakpoint();
+
+    if (breakpoint === 'small') {
+      // Hide user panel on small screens
+      userPanelDock.hide();
+      chatPanelDock.options.left = 0;
+      chatPanelDock.options.width = '100%';
+    } else {
+      // Show both panels on medium/large screens
+      userPanelDock.show();
+      userPanelDock.options.width = '25%';
+      chatPanelDock.options.left = '25%';
+      chatPanelDock.options.width = '75%';
+    }
+
+    screen.render();
   });
 
   return { screen, userPanel, chatPanel, statusBar };
@@ -416,15 +479,16 @@ function createUi(session: DoorSession): ParticipantUi {
 
 /** Main door entry point - required by BBS */
 export async function runDoor(session: DoorSession): Promise<void> {
-  const { socket, bbsSession, user, bbs } = session;
-  const lineIndex = allocateLineIndex();
+  try {
+    const { socket, bbsSession, user, bbs } = session;
+    const lineIndex = allocateLineIndex();
 
-  if (lineIndex === null) {
-    socket.emit('ansi-output', '\x1b[2J\x1b[H');
-    socket.emit('ansi-output', `\x1b[31mScrollwars is full (${MAX_USERS} users max).\x1b[0m\r\n`);
-    socket.emit('door:close');
-    return;
-  }
+    if (lineIndex === null) {
+      socket.emit('ansi-output', '\x1b[2J\x1b[H');
+      socket.emit('ansi-output', `\x1b[31mScrollwars is full (${MAX_USERS} users max).\x1b[0m\r\n`);
+      socket.emit('door:close');
+      return;
+    }
 
   if (bbs?.enableGameMode) {
     bbs.enableGameMode();
@@ -475,6 +539,12 @@ export async function runDoor(session: DoorSession): Promise<void> {
     syncLineAcrossParticipants(participant.lineIndex);
     syncStatusBars();
 
+    // Remove event listeners to prevent memory leaks
+    if (participant.ui.screen) {
+      participant.ui.screen.removeAllListeners('keypress');
+      participant.ui.screen.removeAllListeners('destroy');
+    }
+
     // Reset terminal state before destroying screen
     const program = participant.ui.screen.program;
     program.showCursor();
@@ -501,15 +571,23 @@ export async function runDoor(session: DoorSession): Promise<void> {
   syncLineAcrossParticipants(participant.lineIndex);
   syncStatusBars();
 
-  await new Promise<void>((resolve) => {
-    const finish = () => {
-      cleanup();
-      resolve();
-    };
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        cleanup();
+        resolve();
+      };
 
-    socket.once('door:close', finish);
-    socket.once('disconnect', finish);
-  });
+      socket.once('door:close', finish);
+      socket.once('disconnect', finish);
+    });
+  } catch (error) {
+    console.error('[Scrollwars] Error in runDoor():', error);
+    // Try to cleanup if we have the session
+    if (session?.bbs) {
+      session.bbs.write('\x1b[31mAn error occurred. Exiting...\x1b[0m\r\n');
+    }
+    throw error;
+  }
 }
 
 export default { runDoor, metadata };
