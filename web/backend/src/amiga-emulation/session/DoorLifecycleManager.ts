@@ -357,6 +357,12 @@ export class DoorLifecycleManager {
           console.error(`[DoorLifecycleManager] CRITICAL: ${failed} library trap(s) missing ILLEGAL instruction!`);
           console.error(`[DoorLifecycleManager] Failed addresses: ${failedAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
         }
+
+        // PERFORMANCE: Sync all trap addresses to MOIRA's C++ trap set
+        // This enables high-performance batch execution using executeUntilTrap()
+        this.libraryTraps.syncTrapAddressesToMoira();
+        const trapCount = this.emulator.getTrapAddressCount();
+        console.log(`[DoorLifecycleManager] Trap-aware batch execution enabled (${trapCount} trap addresses)`);
       }
 
       // DEBUG: Verify ExecBase pointer at 0x4 before execution
@@ -498,20 +504,46 @@ export class DoorLifecycleManager {
         // Targeted probes for runaway dispatches
         this.probeIndirectFlow(pc);
 
-        // === STEP 4: UNIFIED trap detection (single canonical check) ===
-        const trapHandled = await this.checkAndHandleLibraryTrap(pc);
-        if (trapHandled) {
-          await this.handleTrapExecution(pc);
+        // === STEP 4: Check if PC is at a trap address (before batch execution) ===
+        const isTrapAddr = this.libraryTraps?.isTrapAddress(pc);
+        if (isTrapAddr) {
+          // Handle the trap
+          const trapHandled = await this.checkAndHandleLibraryTrap(pc);
+          if (trapHandled) {
+            await this.handleTrapExecution(pc);
+            continue;
+          }
+          // Check for ILLEGAL instruction if trap wasn't handled by library
+          if (await this.handleIllegalInstruction(pc)) {
+            continue;
+          }
+        }
+
+        // === STEP 5: BATCH EXECUTION using executeUntilTrap() ===
+        // Execute instructions in tight C++ loop until a trap address is hit.
+        // This is MUCH faster than single-instruction execution for CPU-intensive doors.
+        // Batch size: 10000 instructions per yield (allows XIM polling and UI updates)
+        const BATCH_SIZE = 10000;
+        const result = this.emulator.executeUntilTrap(BATCH_SIZE);
+
+        // Update iteration count with actual instructions executed
+        const instructionsExecuted = result < 0 ? Math.abs(result) - 1 : result;
+        this.executionState.iterationCount += instructionsExecuted;
+
+        // Check if trap was hit (negative result means trap address encountered)
+        if (result < 0) {
+          // Clear trap hit flag for next iteration
+          this.emulator.clearTrapHit();
+          // Continue loop - next iteration will detect trap at current PC and handle it
           continue;
         }
 
-        // === STEP 4A: Check for ILLEGAL instruction ===
-        if (await this.handleIllegalInstruction(pc)) {
+        // Check if door exited during batch execution
+        const pcAfter = this.emulator.getRegister(16);
+        if (pcAfter === 0xffff00 || pcAfter === 0x1ff000) {
+          // Door exited - checkExitConditions will handle it on next iteration
           continue;
         }
-
-        // === STEP 5: Execute exactly ONE instruction ===
-        await this.executeInstruction(pc);
 
         // === STEP 5B: Poll for XIM messages from native AEDoor.library ===
         // Only poll for XIM doors - SIM doors don't use XIM protocol
@@ -519,8 +551,8 @@ export class DoorLifecycleManager {
           await this.pollXIMMessages();
         }
 
-        // === STEP 6: Track progress and yield ===
-        await this.trackProgressAndYield();
+        // === STEP 6: Yield to allow other async operations ===
+        await new Promise((resolve) => setImmediate(resolve));
       }
 
       console.log(

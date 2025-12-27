@@ -150,6 +150,19 @@ export interface MoiraCPU {
   clearNativeCatchpointHit?(): void;
   // Instruction Info
   getInstrInfo?(opcode: number): number;
+
+  // ========== TRAP-AWARE BATCH EXECUTION ==========
+  // Fast O(1) trap address lookup for high-performance batch execution
+  addTrapAddress?(addr: number): void;
+  removeTrapAddress?(addr: number): void;
+  clearTrapAddresses?(): void;
+  getTrapAddressCount?(): number;
+  // Execute until trap address hit or max iterations reached
+  // Returns: positive = iterations executed, negative = -(iterations+1) when trap hit
+  executeUntilTrap?(maxIterations: number): number;
+  hasTrapHit?(): boolean;
+  getLastTrapHit?(): number;
+  clearTrapHit?(): void;
 }
 
 // CPU Register indices
@@ -516,6 +529,118 @@ export class MoiraEmulator {
       }
     }
     return false;
+  }
+
+  /**
+   * Check if PC is in a registered code region (safe for batch execution)
+   * Used for fast path optimization - when PC is in door code, we can batch execute
+   */
+  isInCodeRegion(pc: number): boolean {
+    return this.isCodeAddress(pc);
+  }
+
+  /**
+   * Execute multiple cycles in batch (for fast path optimization)
+   * Returns cycles actually executed
+   */
+  executeBatch(cycles: number): number {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    return this.cpu.executeCycles(cycles);
+  }
+
+  // ========== TRAP-AWARE BATCH EXECUTION ==========
+  // These methods enable high-performance execution for CPU-intensive doors
+  // by running tight C++ loops that check for trap addresses before each instruction
+
+  /**
+   * Register a trap address for fast O(1) lookup during batch execution
+   * Call this for every library vector address that needs trap handling
+   */
+  addTrapAddress(addr: number): void {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.addTrapAddress) {
+      this.cpu.addTrapAddress(addr);
+    }
+  }
+
+  /**
+   * Remove a trap address from the lookup set
+   */
+  removeTrapAddress(addr: number): void {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.removeTrapAddress) {
+      this.cpu.removeTrapAddress(addr);
+    }
+  }
+
+  /**
+   * Clear all registered trap addresses
+   */
+  clearTrapAddresses(): void {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.clearTrapAddresses) {
+      this.cpu.clearTrapAddresses();
+    }
+  }
+
+  /**
+   * Get count of registered trap addresses
+   */
+  getTrapAddressCount(): number {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.getTrapAddressCount) {
+      return this.cpu.getTrapAddressCount();
+    }
+    return 0;
+  }
+
+  /**
+   * Execute instructions in tight C++ loop until a trap address is hit
+   * This is the KEY method for high-performance door execution
+   *
+   * @param maxIterations Maximum instructions to execute before yielding
+   * @returns positive = iterations executed (completed normally or door exited)
+   *          negative = -(iterations+1) when trap hit (PC is at trap address)
+   */
+  executeUntilTrap(maxIterations: number): number {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.executeUntilTrap) {
+      return this.cpu.executeUntilTrap(maxIterations);
+    }
+    // Fallback: single instruction execution
+    return this.executeInstruction();
+  }
+
+  /**
+   * Check if last executeUntilTrap hit a trap address
+   */
+  hasTrapHit(): boolean {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.hasTrapHit) {
+      return this.cpu.hasTrapHit();
+    }
+    return false;
+  }
+
+  /**
+   * Get the trap address that was hit (only valid if hasTrapHit() is true)
+   */
+  getLastTrapHit(): number {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.getLastTrapHit) {
+      return this.cpu.getLastTrapHit();
+    }
+    return 0;
+  }
+
+  /**
+   * Clear the trap hit flag (call after handling the trap)
+   */
+  clearTrapHit(): void {
+    if (!this.cpu) throw new Error("Emulator not initialized");
+    if (this.cpu.clearTrapHit) {
+      this.cpu.clearTrapHit();
+    }
   }
 
   getCycles(): number {

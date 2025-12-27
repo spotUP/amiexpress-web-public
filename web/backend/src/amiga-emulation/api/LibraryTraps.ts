@@ -2782,6 +2782,37 @@ export class LibraryTraps {
   }
 
   /**
+   * Sync all registered trap addresses to MOIRA's C++ trap set.
+   * This enables high-performance batch execution using executeUntilTrap().
+   *
+   * The C++ code uses an unordered_set for O(1) lookup of trap addresses,
+   * allowing tight loop execution that only stops when a trap is hit.
+   *
+   * Call this AFTER all library vectors are installed.
+   */
+  syncTrapAddressesToMoira(): void {
+    // First clear any existing trap addresses
+    this.emulator.clearTrapAddresses();
+
+    let count = 0;
+    for (const [addr] of this.trapMap) {
+      this.emulator.addTrapAddress(addr);
+      count++;
+    }
+
+    console.log(
+      `[LibraryTraps] Synced ${count} trap addresses to MOIRA for batch execution`
+    );
+  }
+
+  /**
+   * Get the number of registered trap addresses
+   */
+  getTrapCount(): number {
+    return this.trapMap.size;
+  }
+
+  /**
    * Install trap vectors for a library
    *
    * Writes ILLEGAL instruction (0x4AFC) at each vector address.

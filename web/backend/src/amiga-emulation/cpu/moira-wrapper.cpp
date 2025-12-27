@@ -6,6 +6,7 @@
 #include <cstring>
 #include <map>
 #include <algorithm>
+#include <unordered_set>
 
 using namespace emscripten;
 using namespace moira;
@@ -85,6 +86,12 @@ private:
     // ========== Overclocking Support ==========
     int overclocking = 0;    // 0=disabled, 1=native, 2=2x, 10=10x, etc.
     i64 debt = 0;            // Accumulated CPU cycles (for sync)
+
+    // ========== Library Trap Address Support ==========
+    // Fast O(1) lookup for trap addresses - enables batch execution
+    std::unordered_set<uint32_t> trapAddresses;
+    uint32_t lastTrapHit = 0;  // PC of last trap address hit
+    bool trapHitFlag = false;  // Flag set when trap is hit during executeUntilTrap
 
 public:
     // ========== Runtime Debug Control (callable from JavaScript) ==========
@@ -921,6 +928,64 @@ public:
         return (int)(getClock() - startClock);
     }
 
+    // ========== Library Trap Address Control ==========
+    void addTrapAddress(uint32_t addr) {
+        trapAddresses.insert(addr);
+    }
+
+    void removeTrapAddress(uint32_t addr) {
+        trapAddresses.erase(addr);
+    }
+
+    void clearTrapAddresses() {
+        trapAddresses.clear();
+    }
+
+    int getTrapAddressCount() {
+        return (int)trapAddresses.size();
+    }
+
+    bool hasTrapHit() {
+        return trapHitFlag;
+    }
+
+    uint32_t getLastTrapHit() {
+        return lastTrapHit;
+    }
+
+    void clearTrapHit() {
+        trapHitFlag = false;
+        lastTrapHit = 0;
+    }
+
+    // Execute until a trap address is hit or max iterations reached
+    // Returns: positive = iterations executed (completed normally)
+    //          negative = -(iterations+1) when trap hit (PC is at trap address)
+    int executeUntilTrap(int maxIterations) {
+        trapHitFlag = false;
+        lastTrapHit = 0;
+
+        for (int i = 0; i < maxIterations; i++) {
+            // Check if current PC is a trap address BEFORE executing
+            uint32_t pc = this->reg.pc;
+            if (trapAddresses.count(pc) > 0) {
+                trapHitFlag = true;
+                lastTrapHit = pc;
+                return -(i + 1);  // Negative indicates trap hit
+            }
+
+            // Check for exit sentinel addresses
+            if (pc == 0xffff00 || pc == 0x1ff000) {
+                return i;  // Door exited normally
+            }
+
+            // Execute one instruction
+            execute();
+        }
+
+        return maxIterations;  // Completed all iterations
+    }
+
     // Execute exactly ONE instruction (returns cycles consumed)
     // CRITICAL: This calls MOIRA's execute() with NO parameters,
     // which executes exactly one complete instruction, regardless of
@@ -1213,6 +1278,15 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("resetCPU", &MoiraCPU::resetCPU)
         .function("executeCycles", &MoiraCPU::executeCycles)
         .function("executeInstruction", &MoiraCPU::executeInstruction)
+        // ========== Library Trap Address Support ==========
+        .function("addTrapAddress", &MoiraCPU::addTrapAddress)
+        .function("removeTrapAddress", &MoiraCPU::removeTrapAddress)
+        .function("clearTrapAddresses", &MoiraCPU::clearTrapAddresses)
+        .function("getTrapAddressCount", &MoiraCPU::getTrapAddressCount)
+        .function("executeUntilTrap", &MoiraCPU::executeUntilTrap)
+        .function("hasTrapHit", &MoiraCPU::hasTrapHit)
+        .function("getLastTrapHit", &MoiraCPU::getLastTrapHit)
+        .function("clearTrapHit", &MoiraCPU::clearTrapHit)
         .function("getRegister", &MoiraCPU::getRegister)
         .function("setRegister", &MoiraCPU::setRegister)
         .function("getCycles", &MoiraCPU::getCycles)
