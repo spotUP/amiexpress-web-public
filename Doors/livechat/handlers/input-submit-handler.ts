@@ -44,7 +44,8 @@ export function createSubmitHandler(
   enterDrawingMode: (channel: string) => void,
   updateStatusBar: () => void,
   updateUserTable: () => void,
-  showFileSharing: () => void
+  showFileSharing: () => void,
+  updateTypingPreview: () => void
 ) {
   return async (value: string) => {
     console.log('[SUBMIT HANDLER] Called with value:', JSON.stringify(value));
@@ -72,8 +73,14 @@ export function createSubmitHandler(
       inputBox.clearValue();
       inputBox.focus();
 
-      // Clear typing indicator
+      // Clear typing indicator (for others and self)
       socketEmitter.keystrokeSubmit(state.currentChannel, userId);
+
+      // Clear own typing buffer and update display
+      if (state.typingBuffers && state.typingBuffers.has(userId)) {
+        state.typingBuffers.delete(userId);
+        updateTypingPreview(); // Remove typing preview from screen
+      }
 
       if (msg.startsWith('/')) {
         cmdCtx.currentChannel = state.currentChannel;

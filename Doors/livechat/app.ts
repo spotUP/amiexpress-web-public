@@ -13,7 +13,7 @@
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
-import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { DockablePanel, Question } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { stripTags, cleanTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/helpers';
@@ -409,6 +409,8 @@ export async function createApp(session: DoorSession) {
       fg: 'white',
       border: { fg: 'cyan' },
       selected: { fg: 'white', bg: 'blue' },
+      hover: { fg: 'yellow', bg: 'blue' },
+      item: { hover: { fg: 'yellow', bg: 'blue' } },
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
     mouse: true,
@@ -558,7 +560,9 @@ export async function createApp(session: DoorSession) {
       fg: 'white',
       border: { fg: 'magenta' },
       selected: { fg: 'black', bg: 'magenta' },
-    },
+      hover: { fg: 'yellow', bg: 'magenta' },
+      item: { hover: { fg: 'yellow', bg: 'magenta' } },
+    } as any,
   });
 
   function updateUserTable() {
@@ -609,7 +613,8 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Typing preview - visible bar above input box showing who is typing in real-time
+  // Typing preview - now integrated into chat log (not a separate bar)
+  // Keep the typingBar element for layout compatibility but hide it
   const typingBar = createBox({
     parent: screen,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,  // Above input box
@@ -622,6 +627,7 @@ export async function createApp(session: DoorSession) {
       bg: 'black',
     },
     content: '',
+    hidden: true,  // Hide since typing previews are now in chat log
   });
 
   // ========== RESPONSIVE LAYOUT ==========
@@ -932,18 +938,27 @@ export async function createApp(session: DoorSession) {
 
   // User list click to focus and show user context menu
   userList.on('click', (data: any) => {
+    console.log('[USER LIST CLICK] Event fired, data:', data);
     userList.focus();
     const selected = (userList as any).selected;
     const items = (userList as any).items || [];
+    console.log('[USER LIST CLICK] Selected:', selected, 'Items:', items);
     if (selected !== undefined && items[selected]) {
       const text = typeof items[selected] === 'string' ? items[selected] : (items[selected] as any)?.content || '';
+      console.log('[USER LIST CLICK] Text:', JSON.stringify(text));
       const match = text.match(/^.\s+(\S+)/);
+      console.log('[USER LIST CLICK] Match:', match);
       if (match && match[1]) {
         // Use mouse coordinates from click event, fallback to 0,0
         const x = data?.x || 0;
         const y = data?.y || 0;
+        console.log('[USER LIST CLICK] Showing context menu for user:', match[1], 'at', x, y);
         showContextMenu(x, y, 'user', match[1]);
+      } else {
+        console.log('[USER LIST CLICK] No match found for text:', text);
       }
+    } else {
+      console.log('[USER LIST CLICK] No item selected or items empty');
     }
     screen.render();
   });
@@ -1001,6 +1016,7 @@ export async function createApp(session: DoorSession) {
 
   // Track the typing preview content
   const typingPreviewLines = new Map<number, string>();
+  let typingPreviewLineCount = 0;
 
   function updateTypingPreview() {
     const now = Date.now();
@@ -1019,7 +1035,7 @@ export async function createApp(session: DoorSession) {
 
       if (buf.buffer.length > 0) {
         const color = getUserColor(buf.username);
-        const line = `{${color}-fg}${buf.username}:{/${color}-fg} ${buf.buffer}{inverse} {/inverse}`;
+        const line = `{gray-fg}${buf.username}: ${buf.buffer}█{/gray-fg}`;
 
         // Only update if content changed
         if (typingPreviewLines.get(userId) !== line) {
@@ -1032,10 +1048,31 @@ export async function createApp(session: DoorSession) {
       }
     }
 
-    // Display current typing preview in the typing bar
+    // Display current typing previews in the chat log (inline after last message)
     if (hasChanges) {
+      // Save current scroll position
+      const currentScroll = chatLog.getScrollPerc();
+      const wasAtBottom = currentScroll >= 95; // User was at or near bottom
+
+      // Get current log content and remove previous typing preview lines
+      const logLines = chatLog.getLines();
+      const contentLines = logLines.slice(0, logLines.length - typingPreviewLineCount);
+
+      // Build complete content with typing previews
       const lines = Array.from(typingPreviewLines.values());
-      typingBar.setContent(lines.join('  ') || '');
+      const fullContent = [...contentLines, ...lines].join('\n');
+
+      // Update content in one operation to minimize jumping
+      chatLog.setContent(fullContent);
+      typingPreviewLineCount = lines.length;
+
+      // Restore scroll position
+      if (wasAtBottom) {
+        chatLog.setScrollPerc(100);
+      } else {
+        chatLog.setScrollPerc(currentScroll);
+      }
+
       screen.render();
     }
   }
@@ -1238,6 +1275,80 @@ export async function createApp(session: DoorSession) {
     addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
   });
 
+  // ========== CONNECTION ERROR HANDLING ==========
+
+  let disconnectDialog: any = null;
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
+  function showConnectionErrorDialog(errorMessage: string) {
+    // Don't show multiple dialogs
+    if (disconnectDialog) return;
+
+    disconnectDialog = new Question({
+      parent: screen,
+      title: ' Connection Error ',
+      text: `{red-fg}Lost connection to server{/red-fg}\n\n${errorMessage}\n\nAttempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`,
+      width: 50,
+      height: 12,
+      overlay: true,
+      overlayOpacity: 0.7,
+      style: {
+        bg: 'black',
+        fg: 'white',
+      },
+    });
+
+    disconnectDialog.ask('Try to reconnect?', (answer: boolean) => {
+      disconnectDialog.destroy();
+      disconnectDialog = null;
+
+      if (answer) {
+        // User chose "Yes" - attempt reconnect
+        reconnectAttempts++;
+        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+          addSystemMessage('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
+          // The socket will automatically try to reconnect via socket.io
+          setTimeout(() => {
+            if (!socket.connected) {
+              showConnectionErrorDialog('Reconnection failed');
+            }
+          }, 3000);
+        } else {
+          addSystemMessage('{red-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/red-fg}');
+          setTimeout(() => cleanup(), 2000);
+        }
+      } else {
+        // User chose "No" or "Cancel" - exit gracefully
+        addSystemMessage('{yellow-fg}Disconnected by user. Exiting...{/yellow-fg}');
+        setTimeout(() => cleanup(), 1000);
+      }
+    });
+  }
+
+  socket.on('disconnect', (reason: string) => {
+    console.log('[LiveChat] Socket disconnected:', reason);
+    if (reason !== 'io client disconnect') {
+      // Server initiated disconnect or connection lost
+      showConnectionErrorDialog(`Disconnected: ${reason}`);
+    }
+  });
+
+  socket.on('connect_error', (error: any) => {
+    console.error('[LiveChat] Connection error:', error.message);
+    showConnectionErrorDialog(`Connection error: ${error.message}`);
+  });
+
+  socket.on('connect', () => {
+    console.log('[LiveChat] Socket reconnected');
+    reconnectAttempts = 0;
+    if (disconnectDialog) {
+      disconnectDialog.destroy();
+      disconnectDialog = null;
+    }
+    addSystemMessage('{green-fg}Reconnected to server!{/green-fg}');
+  });
+
   // ========== INPUT HANDLING ==========
 
   // Wrapper for handleCommandActions to match submit handler signature
@@ -1295,11 +1406,34 @@ export async function createApp(session: DoorSession) {
     enterDrawingMode,
     updateStatusBar,
     updateUserTable,
-    showFileSharing
+    showFileSharing,
+    updateTypingPreview
   ));
 
   // Live typing indicator and command autocomplete
   inputBox.on('keypress', (ch: string, key: any) => {
+    // Handle Enter key - submit message instead of inserting newline
+    if (key.name === 'enter' || key.name === 'return') {
+      if (commandSuggestionsVisible) {
+        // If ghost completion exists, accept it; otherwise select from dropdown
+        if (currentGhostCompletion) {
+          inputBox.setValue(`/${currentGhostCompletion} `);
+          inputBox.focus();
+          hideCommandSuggestions();
+          screen.render();
+        } else {
+          selectCommandSuggestion();
+        }
+        return;
+      } else {
+        // Regular message - submit it
+        // Prevent the default newline insertion by calling submit directly
+        const value = inputBox.getValue();
+        inputBox.emit('submit', value);
+        return;
+      }
+    }
+
     // Handle command autocomplete navigation when dropdown is visible
     if (commandSuggestionsVisible) {
       // Tab or Right arrow: accept ghost text completion (if available)
@@ -1318,28 +1452,23 @@ export async function createApp(session: DoorSession) {
         commandSuggestions.up(1);
         screen.render();
         return;
-      } else if (key.name === 'enter' || key.name === 'return') {
-        // If ghost completion exists, accept it; otherwise select from dropdown
-        if (currentGhostCompletion) {
-          inputBox.setValue(`/${currentGhostCompletion} `);
-          inputBox.focus();
-          hideCommandSuggestions();
-          screen.render();
-        } else {
-          selectCommandSuggestion();
-        }
-        return;
       } else if (key.name === 'escape') {
         hideCommandSuggestions();
         return;
       }
     }
 
-    // Keystroke transmission for typing indicators
+    // Keystroke transmission for typing indicators + local echo
     if (key.name === 'backspace') {
       socketEmitter.keystroke(state.currentChannel, userId, 'BACKSPACE');
+      // Local echo: update own typing preview
+      processKeystroke(state.typingBuffers, userId, username, 'BACKSPACE', getUserColor(username));
+      updateTypingPreview();
     } else if (ch && !key.ctrl && !key.meta && key.name !== 'enter') {
       socketEmitter.keystroke(state.currentChannel, userId, ch);
+      // Local echo: update own typing preview
+      processKeystroke(state.typingBuffers, userId, username, ch, getUserColor(username));
+      updateTypingPreview();
     }
 
     // Check for command autocomplete trigger
