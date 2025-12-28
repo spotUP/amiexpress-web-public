@@ -1,7 +1,6 @@
 BBSCMD=MTOP
 TYPE=SIM
 LOCATION=doors:multitop/mtop
-ARGS=doors:multitop/designs/MTopULBytes1.dsg bbs:bulletins/bull5.txt
 ACCESS=10
 MULTINODE=YES
 PRIORITY=SAME

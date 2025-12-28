@@ -367,7 +367,7 @@ const REFERENCE_DOCS = {
 const PROGRESS_DOCS = {
   'current-status': {
     path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'CURRENT_STATUS.md'),
-    description: 'Current project status: what works, what\'s in progress, known issues',
+    description: 'Current project status (~95% complete): what works, what\'s in progress',
     mimeType: 'text/markdown'
   },
   'known-issues': {
@@ -375,9 +375,9 @@ const PROGRESS_DOCS = {
     description: 'Known bugs and workarounds',
     mimeType: 'text/markdown'
   },
-  'progress-history': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', 'PROGRESS_HISTORY.md'),
-    description: 'Complete milestone history consolidated from 119 progress reports (July 2024 - December 2025)',
+  '68k-door-completion-plan': {
+    path: path.join(PROJECT_ROOT, 'Documentation', '6-Progress', '68K_DOOR_COMPLETION_PLAN.md'),
+    description: '68K door emulation completion plan (93% complete, Phase 3 polish remaining)',
     mimeType: 'text/markdown'
   }
 };
