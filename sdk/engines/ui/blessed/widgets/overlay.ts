@@ -44,12 +44,14 @@ export class Overlay extends Box {
     // Enable key handling
     this.enableKeys();
 
-    // Auto-focus when shown - also emit web transparency event
+    // Auto-focus when shown - also emit web transparency event and trap focus
     this.on('show', () => {
       console.log('[Overlay] SHOW event triggered!');
-      console.log('[Overlay] About to call focus()...');
-      this.focus();
-      console.log('[Overlay] Focus done, about to emit OSC...');
+      console.log('[Overlay] About to trap focus...');
+      if (this.screen) {
+        (this.screen as any).trapFocus(this);
+      }
+      console.log('[Overlay] Focus trapped, about to emit OSC...');
       this._emitOverlayWidgetEvent(true);
       console.log('[Overlay] OSC emitted, about to render...');
       if (this.screen) {
@@ -58,10 +60,13 @@ export class Overlay extends Box {
       console.log('[Overlay] SHOW handler complete');
     });
 
-    // Emit hide event for web transparency
+    // Emit hide event for web transparency and release focus trap
     this.on('hide', () => {
       console.log('[Overlay] HIDE event triggered!');
       console.trace('[Overlay] Stack trace for hide:');
+      if (this.screen) {
+        (this.screen as any).releaseFocusTrap();
+      }
       this._emitOverlayWidgetEvent(false);
     });
 
@@ -72,6 +77,18 @@ export class Overlay extends Box {
       this.emit('cancel');
       if (this.screen) {
         this.screen.render();
+      }
+    });
+
+    // Update overlay position on screen resize (for web clients)
+    this.on('attach', () => {
+      if (this.screen) {
+        this.screen.on('resize', () => {
+          // Only update if overlay is visible
+          if (!this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+          }
+        });
       }
     });
   }

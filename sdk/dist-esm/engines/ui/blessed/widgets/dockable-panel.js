@@ -29,6 +29,7 @@ export class DockablePanel extends Panel {
         this.dragStartTop = 0;
         this.resizeHandles = new Map();
         this.currentResizeEdge = null;
+        this.screenListenersBound = false;
         this.dockPosition = options.dockPosition || 'float';
         this.panelState = {
             position: this.dockPosition,
@@ -53,6 +54,109 @@ export class DockablePanel extends Panel {
         if (this.panelState.minimized) {
             this.minimize();
         }
+        // Defer screen event binding until element is attached to a screen
+        // The screen may not be available at construction time
+        this.on('attach', () => {
+            this.bindScreenEvents();
+        });
+        // Also try to bind immediately if screen is already available
+        if (this.screen) {
+            this.bindScreenEvents();
+        }
+    }
+    /**
+     * Override append to ensure UI elements (title bar, resize handles) stay on top
+     * When user content is added as children, we need to reorder so our UI is rendered last
+     */
+    append(element) {
+        super.append(element);
+        this.bringUIToFront();
+    }
+    /**
+     * Bring title bar and resize handles to front (rendered last = on top)
+     */
+    bringUIToFront() {
+        // Collect UI elements to move to front
+        const uiElements = [];
+        // Collect resize handles
+        for (const handle of this.resizeHandles.values()) {
+            uiElements.push(handle);
+        }
+        // Title bar and its buttons should be on top
+        if (this.titleBar) {
+            uiElements.push(this.titleBar);
+        }
+        // Move each UI element to the end of children array (rendered last)
+        for (const elem of uiElements) {
+            const idx = this.children.indexOf(elem);
+            if (idx !== -1 && idx !== this.children.length - 1) {
+                this.children.splice(idx, 1);
+                this.children.push(elem);
+            }
+        }
+    }
+    /**
+     * Bind mouse event handlers to the screen for dragging and resizing
+     * This is called when the element is attached to a screen
+     */
+    bindScreenEvents() {
+        if (this.screenListenersBound || !this.screen)
+            return;
+        this.screenListenersBound = true;
+        // Drag handlers
+        this.screen.on('mousemove', (data) => {
+            if (this.isDragging) {
+                this.handleDrag(data.x, data.y);
+            }
+            if (this.isResizing && this.currentResizeEdge) {
+                this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
+            }
+        });
+        this.screen.on('mouseup', () => {
+            if (this.isDragging) {
+                this.stopDrag();
+            }
+            if (this.isResizing) {
+                this.stopResize();
+            }
+        });
+        // Screen resize handler - update docked panels and constrain floating panels
+        this.screen.on('resize', () => {
+            if (this.dockPosition !== 'float') {
+                // Re-apply dock position to recalculate dimensions
+                this.applyDockPosition(this.dockPosition);
+            }
+            else {
+                // For floating panels, ensure they stay within screen bounds
+                this.constrainToScreen();
+            }
+        });
+    }
+    /**
+     * Constrain floating panel to stay within screen bounds
+     */
+    constrainToScreen() {
+        if (!this.screen)
+            return;
+        const currentLeft = typeof this.position.left === 'number' ? this.position.left : 0;
+        const currentTop = typeof this.position.top === 'number' ? this.position.top : 0;
+        const currentWidth = typeof this.position.width === 'number' ? this.position.width : this.width;
+        const currentHeight = typeof this.position.height === 'number' ? this.position.height : this.height;
+        // Ensure panel doesn't extend beyond screen bounds
+        let newLeft = Math.max(0, Math.min(currentLeft, this.screen.width - currentWidth));
+        let newTop = Math.max(0, Math.min(currentTop, this.screen.height - currentHeight));
+        // If panel is larger than screen, resize it
+        let newWidth = Math.min(currentWidth, this.screen.width);
+        let newHeight = Math.min(currentHeight, this.screen.height);
+        // Apply min constraints
+        if (this.minWidth)
+            newWidth = Math.max(newWidth, this.minWidth);
+        if (this.minHeight)
+            newHeight = Math.max(newHeight, this.minHeight);
+        this.position.left = newLeft;
+        this.position.top = newTop;
+        this.position.width = newWidth;
+        this.position.height = newHeight;
     }
     /**
      * Setup title bar with minimize/close buttons
@@ -137,6 +241,7 @@ export class DockablePanel extends Panel {
     }
     /**
      * Setup dragging behavior
+     * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
      */
     setupDragging() {
         this.on('mousedown', (data) => {
@@ -145,18 +250,6 @@ export class DockablePanel extends Panel {
                 this.startDrag(data.x, data.y);
             }
         });
-        if (this.screen) {
-            this.screen.on('mousemove', (data) => {
-                if (this.isDragging) {
-                    this.handleDrag(data.x, data.y);
-                }
-            });
-            this.screen.on('mouseup', () => {
-                if (this.isDragging) {
-                    this.stopDrag();
-                }
-            });
-        }
     }
     /**
      * Setup resizing behavior on all edges and corners
@@ -213,19 +306,7 @@ export class DockablePanel extends Panel {
                 this.hideResizeCursor();
             });
         }
-        // Global mouse handlers for dragging
-        if (this.screen) {
-            this.screen.on('mousemove', (data) => {
-                if (this.isResizing && this.currentResizeEdge) {
-                    this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
-                }
-            });
-            this.screen.on('mouseup', () => {
-                if (this.isResizing) {
-                    this.stopResize();
-                }
-            });
-        }
+        // Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
     }
     /**
      * Show visual resize cursor
@@ -304,8 +385,9 @@ export class DockablePanel extends Panel {
             newLeft = Math.max(0, Math.min(newLeft, this.screen.width - this.width));
             newTop = Math.max(0, Math.min(newTop, this.screen.height - this.height));
         }
-        this.options.left = newLeft;
-        this.options.top = newTop;
+        // Use position.* for runtime updates (not options.* which is only read at construction)
+        this.position.left = newLeft;
+        this.position.top = newTop;
         this.panelState.x = newLeft;
         this.panelState.y = newTop;
         if (this.screen) {
@@ -415,11 +497,11 @@ export class DockablePanel extends Panel {
                 newHeight = this.maxHeight;
             }
         }
-        // Update dimensions
-        this.options.width = newWidth;
-        this.options.height = newHeight;
-        this.options.left = newLeft;
-        this.options.top = newTop;
+        // Use position.* for runtime updates (not options.* which is only read at construction)
+        this.position.width = newWidth;
+        this.position.height = newHeight;
+        this.position.left = newLeft;
+        this.position.top = newTop;
         this.panelState.width = newWidth;
         this.panelState.height = newHeight;
         this.panelState.x = newLeft;
@@ -474,47 +556,48 @@ export class DockablePanel extends Panel {
     }
     /**
      * Apply dock position
+     * Uses position.* for runtime updates (not options.* which is only read at construction)
      */
     applyDockPosition(position) {
         if (!this.screen)
             return;
         switch (position) {
             case 'top':
-                this.options.left = 0;
-                this.options.top = 0;
-                this.options.width = this.screen.width;
-                this.options.height = Math.floor(this.screen.height * 0.3);
+                this.position.left = 0;
+                this.position.top = 0;
+                this.position.width = this.screen.width;
+                this.position.height = Math.floor(this.screen.height * 0.3);
                 break;
             case 'bottom':
-                this.options.left = 0;
-                this.options.top = Math.floor(this.screen.height * 0.7);
-                this.options.width = this.screen.width;
-                this.options.height = Math.floor(this.screen.height * 0.3);
+                this.position.left = 0;
+                this.position.top = Math.floor(this.screen.height * 0.7);
+                this.position.width = this.screen.width;
+                this.position.height = Math.floor(this.screen.height * 0.3);
                 break;
             case 'left':
-                this.options.left = 0;
-                this.options.top = 0;
-                this.options.width = Math.floor(this.screen.width * 0.3);
-                this.options.height = this.screen.height;
+                this.position.left = 0;
+                this.position.top = 0;
+                this.position.width = Math.floor(this.screen.width * 0.3);
+                this.position.height = this.screen.height;
                 break;
             case 'right':
-                this.options.left = Math.floor(this.screen.width * 0.7);
-                this.options.top = 0;
-                this.options.width = Math.floor(this.screen.width * 0.3);
-                this.options.height = this.screen.height;
+                this.position.left = Math.floor(this.screen.width * 0.7);
+                this.position.top = 0;
+                this.position.width = Math.floor(this.screen.width * 0.3);
+                this.position.height = this.screen.height;
                 break;
             case 'center':
-                this.options.left = Math.floor(this.screen.width * 0.25);
-                this.options.top = Math.floor(this.screen.height * 0.25);
-                this.options.width = Math.floor(this.screen.width * 0.5);
-                this.options.height = Math.floor(this.screen.height * 0.5);
+                this.position.left = Math.floor(this.screen.width * 0.25);
+                this.position.top = Math.floor(this.screen.height * 0.25);
+                this.position.width = Math.floor(this.screen.width * 0.5);
+                this.position.height = Math.floor(this.screen.height * 0.5);
                 break;
             case 'float':
                 // Restore saved position or use defaults
-                this.options.left = this.panelState.savedX || this.panelState.x;
-                this.options.top = this.panelState.savedY || this.panelState.y;
-                this.options.width = this.panelState.savedWidth || this.panelState.width;
-                this.options.height = this.panelState.savedHeight || this.panelState.height;
+                this.position.left = this.panelState.savedX || this.panelState.x;
+                this.position.top = this.panelState.savedY || this.panelState.y;
+                this.position.width = this.panelState.savedWidth || this.panelState.width;
+                this.position.height = this.panelState.savedHeight || this.panelState.height;
                 break;
         }
         if (this.screen) {
@@ -523,6 +606,7 @@ export class DockablePanel extends Panel {
     }
     /**
      * Minimize panel
+     * Uses position.* for runtime updates (not options.* which is only read at construction)
      */
     minimize() {
         if (this.panelState.minimized)
@@ -539,12 +623,12 @@ export class DockablePanel extends Panel {
             }
         }
         // Resize to title bar only
-        this.options.height = 1;
+        this.position.height = 1;
         this.panelState.minimized = true;
         // Create minimized bar at bottom if not docked
         if (this.dockPosition === 'float' && this.screen) {
-            this.options.top = this.screen.height - 1;
-            this.options.width = Math.min(this.panelState.savedWidth, 30);
+            this.position.top = this.screen.height - 1;
+            this.position.width = Math.min(this.panelState.savedWidth, 30);
         }
         if (this.screen) {
             this.screen.render();
@@ -553,6 +637,7 @@ export class DockablePanel extends Panel {
     }
     /**
      * Maximize/restore panel
+     * Uses position.* for runtime updates (not options.* which is only read at construction)
      */
     maximize() {
         if (!this.panelState.minimized)
@@ -562,10 +647,10 @@ export class DockablePanel extends Panel {
             child.show();
         }
         // Restore size and position
-        this.options.width = this.panelState.savedWidth || this.panelState.width;
-        this.options.height = this.panelState.savedHeight || this.panelState.height;
-        this.options.left = this.panelState.savedX || this.panelState.x;
-        this.options.top = this.panelState.savedY || this.panelState.y;
+        this.position.width = this.panelState.savedWidth || this.panelState.width;
+        this.position.height = this.panelState.savedHeight || this.panelState.height;
+        this.position.left = this.panelState.savedX || this.panelState.x;
+        this.position.top = this.panelState.savedY || this.panelState.y;
         this.panelState.minimized = false;
         if (this.screen) {
             this.screen.render();
@@ -609,25 +694,26 @@ export class DockablePanel extends Panel {
     }
     /**
      * Restore panel state
+     * Uses position.* for runtime updates (not options.* which is only read at construction)
      */
     setState(state) {
         if (state.position) {
             this.setDockPosition(state.position);
         }
         if (state.x !== undefined) {
-            this.options.left = state.x;
+            this.position.left = state.x;
             this.panelState.x = state.x;
         }
         if (state.y !== undefined) {
-            this.options.top = state.y;
+            this.position.top = state.y;
             this.panelState.y = state.y;
         }
         if (state.width !== undefined) {
-            this.options.width = state.width;
+            this.position.width = state.width;
             this.panelState.width = state.width;
         }
         if (state.height !== undefined) {
-            this.options.height = state.height;
+            this.position.height = state.height;
             this.panelState.height = state.height;
         }
         if (state.minimized !== undefined) {

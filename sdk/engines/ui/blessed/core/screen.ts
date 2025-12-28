@@ -56,12 +56,18 @@ export class Screen extends Element {
   // Responsive layout manager
   public responsiveLayout: ResponsiveLayoutManager;
 
-  constructor(options: ScreenOptions & { output?: (data: string) => void } = {}) {
-    // BBS Terminal Constraints:
-    // - Width: Always 80 columns (classic BBS standard)
-    // - Height: User-configurable via linesPerScreen (default 23, +2 for prompts = 25 total)
-    const bbsWidth = 80;
-    const bbsHeight = Math.min(options.height || 24, 25); // Max 25 rows total
+  // Responsive mode - allows wider than 80 columns
+  private _responsive: boolean = false;
+
+  constructor(options: ScreenOptions & { output?: (data: string) => void; responsive?: boolean } = {}) {
+    // BBS Terminal Constraints (when not in responsive mode):
+    // - Width: 80 columns (classic BBS standard)
+    // - Height: User-configurable, max 25 rows
+    // In responsive mode, use provided dimensions or defaults
+    const bbsWidth = options.responsive ? (options.width || 80) : 80;
+    const bbsHeight = options.responsive
+      ? (options.height || 24)
+      : Math.min(options.height || 24, 25);
 
     const style = { ...(options.style || {}) };
     if (style.bg === undefined) {
@@ -79,6 +85,7 @@ export class Screen extends Element {
 
     this._width = bbsWidth;
     this._height = bbsHeight;
+    this._responsive = options.responsive || false;
     this.screen = this;
 
     // Set output callback (for backward compatibility)
@@ -254,16 +261,20 @@ export class Screen extends Element {
 
   /**
    * Set screen dimensions based on user configuration
-   * BBS Constraints:
-   * - Width: Always 80 columns (classic BBS standard)
+   * BBS Constraints (non-responsive mode):
+   * - Width: 80 columns (classic BBS standard)
    * - Height: User-configurable (default 23 content + 2 prompts = 25 total max)
    *
    * @param linesPerScreen User's configured lines per screen (default 23)
+   * @param width Optional width (only used in responsive mode)
    */
-  setDimensions(linesPerScreen?: number): void {
-    const bbsWidth = 80; // Always 80 columns
-    const contentLines = Math.min(linesPerScreen || 23, 23); // Max 23 content lines
-    const bbsHeight = contentLines + 2; // +2 for prompts/status
+  setDimensions(linesPerScreen?: number, width?: number): void {
+    // In responsive mode, use provided width; otherwise 80 columns
+    const bbsWidth = this._responsive ? (width || this._width) : 80;
+    const contentLines = this._responsive
+      ? (linesPerScreen || this._height)
+      : Math.min(linesPerScreen || 23, 23);
+    const bbsHeight = this._responsive ? contentLines : (contentLines + 2);
 
     this._width = bbsWidth;
     this._height = bbsHeight;
@@ -650,8 +661,8 @@ export class Screen extends Element {
     const maxY = pos.yl - border - padBottom;
     const maxX = pos.xl - border - padRight;
 
-    // BBS Constraint: Enforce 80-column width limit
-    const bbsMaxX = Math.min(maxX, 80);
+    // BBS Constraint: Enforce 80-column width limit (unless responsive mode)
+    const bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
 
     // Get base style attribute code
     const style = element.options.style || {};
@@ -1651,6 +1662,50 @@ export class Screen extends Element {
    */
   unlockKeys(): void {
     this._lockKeys = false;
+  }
+
+  // ============================================================================
+  // Resize
+  // ============================================================================
+
+  /**
+   * Resize the screen to new dimensions
+   * Called when terminal size changes (e.g., browser window resize)
+   */
+  resize(cols: number, rows: number): void {
+    if (cols === this._width && rows === this._height) {
+      return; // No change
+    }
+
+    console.log(`[Screen] Resizing from ${this._width}x${this._height} to ${cols}x${rows}`);
+
+    const wasShrinking = cols < this._width || rows < this._height;
+
+    // Enable responsive mode if resizing to wider than 80 columns
+    if (cols > 80) {
+      this._responsive = true;
+    }
+
+    this._width = cols;
+    this._height = rows;
+    this.program.cols = cols;
+    this.program.rows = rows;
+
+    // When shrinking, clear the terminal first to prevent line wrap artifacts
+    // The old content rendered at larger width gets incorrectly wrapped otherwise
+    if (wasShrinking) {
+      // Clear entire screen and move cursor to home
+      this.program.write('\x1b[2J\x1b[H');
+    }
+
+    // Reallocate buffers for new size
+    this.realloc();
+
+    // Emit resize event for elements that need to respond
+    this.emit('resize');
+
+    // Force full redraw
+    this.render();
   }
 
   // ============================================================================

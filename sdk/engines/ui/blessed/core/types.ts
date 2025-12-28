@@ -117,8 +117,12 @@ export interface ElementOptions {
   alwaysScroll?: boolean;
   scrollbar?: {
     ch?: string;
+    thumb?: {
+      ch?: string;
+    };
     track?: {
       ch?: string;
+      style?: Colors;
     };
     style?: Colors;
   };
@@ -127,6 +131,10 @@ export interface ElementOptions {
   // Mouse
   mouse?: boolean;
   hoverText?: string;  // Tooltip text shown on hover
+
+  // Modal/Dialog features
+  closable?: boolean;  // Add X close button and ESC key binding
+  closeOnEscape?: boolean;  // Close on ESC key (default: true when closable)
 
   // Label
   label?: string;
@@ -174,6 +182,7 @@ export interface ScreenOptions {
   resizeTimeout?: number;
   tabSize?: number;
   autoPadding?: boolean;
+  width?: number;
   height?: number;
   style?: ElementOptions['style'];
   cursor?: {

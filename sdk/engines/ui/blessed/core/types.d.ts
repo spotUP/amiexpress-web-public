@@ -116,6 +116,7 @@ export interface ScreenOptions {
     resizeTimeout?: number;
     tabSize?: number;
     autoPadding?: boolean;
+    width?: number;
     height?: number;
     style?: ElementOptions['style'];
     cursor?: {

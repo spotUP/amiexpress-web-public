@@ -10,20 +10,27 @@ export class Log extends Element {
   private scrollOnInput: boolean = false;
 
   constructor(options: LogOptions = {}) {
+    // Build scrollbar config - preserve user's settings if provided, otherwise use defaults
+    let scrollbarConfig: any;
+    if (options.scrollbar && typeof options.scrollbar === 'object') {
+      // User provided scrollbar config
+      scrollbarConfig = {
+        ch: options.scrollbar.ch || '█'
+      };
+    } else {
+      // No scrollbar config provided - use defaults
+      scrollbarConfig = {
+        ch: '█'
+      };
+    }
+
     super({
       scrollable: true,
       alwaysScroll: true,
       clickable: true,
       mouse: true,
       ...options,
-      // Add scrollbar by default (unless explicitly disabled)
-      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
-        ch: '█',
-        track: {
-          ch: '│',
-        },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
-      } : undefined,
+      scrollbar: scrollbarConfig,
     });
 
     this.scrollback = options.scrollback || 1000;

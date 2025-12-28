@@ -164,9 +164,9 @@ export class ResponsiveLayoutManager {
       }
     }
 
-    // Update element dimensions via options
-    element.options.width = width;
-    element.options.height = height;
+    // Update element dimensions via position (not options which is only read at construction)
+    element.position.width = width;
+    element.position.height = height;
   }
 
   /**
@@ -246,10 +246,11 @@ export class ResponsiveLayoutManager {
         rowHeight = 0;
       }
 
-      child.options.left = x;
-      child.options.top = y;
-      child.options.width = childWidth;
-      child.options.height = childHeight;
+      // Use position.* for runtime updates (not options.* which is only read at construction)
+      child.position.left = x;
+      child.position.top = y;
+      child.position.width = childWidth;
+      child.position.height = childHeight;
 
       x += childWidth + gap;
       rowHeight = Math.max(rowHeight, childHeight);
@@ -283,10 +284,11 @@ export class ResponsiveLayoutManager {
         colWidth = 0;
       }
 
-      child.options.left = x;
-      child.options.top = y;
-      child.options.width = childWidth;
-      child.options.height = childHeight;
+      // Use position.* for runtime updates (not options.* which is only read at construction)
+      child.position.left = x;
+      child.position.top = y;
+      child.position.width = childWidth;
+      child.position.height = childHeight;
 
       y += childHeight + gap;
       colWidth = Math.max(colWidth, childWidth);
@@ -309,10 +311,11 @@ export class ResponsiveLayoutManager {
       const col = index % columns;
       const row = Math.floor(index / columns);
 
-      child.options.left = padding + (col * (cellWidth + gap));
-      child.options.top = padding + (row * (cellHeight + gap));
-      child.options.width = cellWidth;
-      child.options.height = cellHeight;
+      // Use position.* for runtime updates (not options.* which is only read at construction)
+      child.position.left = padding + (col * (cellWidth + gap));
+      child.position.top = padding + (row * (cellHeight + gap));
+      child.position.width = cellWidth;
+      child.position.height = cellHeight;
     });
   }
 

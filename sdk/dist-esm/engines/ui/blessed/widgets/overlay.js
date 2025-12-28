@@ -63,6 +63,17 @@ export class Overlay extends Box {
                 this.screen.render();
             }
         });
+        // Update overlay position on screen resize (for web clients)
+        this.on('attach', () => {
+            if (this.screen) {
+                this.screen.on('resize', () => {
+                    // Only update if overlay is visible
+                    if (!this.hidden) {
+                        this._emitOverlayWidgetEvent(true);
+                    }
+                });
+            }
+        });
     }
     /**
      * Emit overlay event for web clients to render actual transparency

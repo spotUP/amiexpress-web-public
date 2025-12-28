@@ -124,6 +124,9 @@ export function initscr(context?: unknown): Window | null {
       };
     } else if (typeof ctx.write === 'function') {
       outputFn = ctx.write as (data: string) => void;
+    } else if (ctx.bbs && typeof (ctx.bbs as Record<string, unknown>).write === 'function') {
+      // BBS door context
+      outputFn = (ctx.bbs as Record<string, unknown>).write as (data: string) => void;
     } else if (ctx.screen && typeof (ctx.screen as Record<string, unknown>).program === 'object') {
       const program = (ctx.screen as Record<string, unknown>).program as Record<string, unknown>;
       if (typeof program.write === 'function') {
@@ -132,24 +135,83 @@ export function initscr(context?: unknown): Window | null {
     }
 
     // Set up input callback
+    // Option 1: Blessed screen keypress events
+    console.log('[ncurses] initscr() setting up input - has screen:', !!ctx.screen);
     if (ctx.screen && typeof ctx.screen === 'object') {
       const screen = ctx.screen as Record<string, unknown>;
+      console.log('[ncurses] screen object found, checking for .on method:', typeof screen.on);
       if (typeof screen.on === 'function') {
+        console.log('[ncurses] Registering keypress handler on blessed screen');
         const onFn = screen.on as (event: string, handler: (ch: unknown, key: unknown) => void) => void;
         onFn('keypress', (ch: unknown, key: unknown) => {
           const keyCode = translateKey(
             ch as string | undefined,
             key as { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean; sequence?: string }
           );
+          console.log('[ncurses] keypress event - ch:', ch, 'key:', key, 'keyCode:', keyCode);
           // Resolve waiting input requests
           if (inputResolvers.length > 0) {
+            console.log('[ncurses] Resolving pending getch() with keyCode:', keyCode);
             const resolver = inputResolvers.shift()!;
             resolver(keyCode);
           } else if (keyCode !== ERR) {
+            console.log('[ncurses] Queueing keyCode:', keyCode);
             queueInput(keyCode);
           }
         });
       }
+    }
+    // Option 2: BBS session doorInputHandler
+    else if (ctx.bbsSession && typeof ctx.bbsSession === 'object') {
+      const bbsSession = ctx.bbsSession as Record<string, unknown>;
+
+      // Hook into BBS session input handler
+      bbsSession.doorInputHandler = (data: string) => {
+        // Process each character in the input
+        for (let i = 0; i < data.length; i++) {
+          const char = data[i];
+          const charCode = data.charCodeAt(i);
+
+          // Check for escape sequences (arrow keys, function keys, etc.)
+          if (char === '\x1b' && i + 1 < data.length) {
+            // Look ahead for escape sequence
+            let sequence = '\x1b';
+            let j = i + 1;
+
+            // Collect the escape sequence
+            while (j < data.length && j < i + 6) {
+              sequence += data[j];
+              j++;
+
+              // Check if we have a complete sequence
+              const keyCode = translateKey(undefined, { sequence });
+              if (keyCode !== ERR) {
+                i = j - 1; // Skip past the sequence
+
+                // Resolve waiting input or queue
+                if (inputResolvers.length > 0) {
+                  const resolver = inputResolvers.shift()!;
+                  resolver(keyCode);
+                } else {
+                  queueInput(keyCode);
+                }
+                break;
+              }
+            }
+          } else {
+            // Regular character
+            const keyCode = charCode;
+
+            // Resolve waiting input or queue
+            if (inputResolvers.length > 0) {
+              const resolver = inputResolvers.shift()!;
+              resolver(keyCode);
+            } else {
+              queueInput(keyCode);
+            }
+          }
+        }
+      };
     }
   }
 

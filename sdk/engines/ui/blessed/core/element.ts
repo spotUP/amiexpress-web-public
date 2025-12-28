@@ -147,6 +147,78 @@ export class Element extends EventEmitter {
         if (this.screen) this.screen.render();
       });
     }
+
+    // Set up closable feature (X button and ESC key)
+    if (this.options.closable) {
+      this.setupClosable();
+    }
+  }
+
+  /**
+   * Set up closable feature - adds X button and ESC key binding
+   */
+  private _closableXButton?: Element;
+
+  private setupClosable(): void {
+    // Create close button when attached to parent
+    this.on('attach', () => {
+      this.createClosableXButton();
+    });
+
+    // Also create immediately if we already have a parent
+    if (this.parent) {
+      this.createClosableXButton();
+    }
+
+    // Bind ESC key if closeOnEscape is not explicitly false
+    if (this.options.closeOnEscape !== false) {
+      this.key(['escape'], () => {
+        this.close();
+      });
+    }
+  }
+
+  private createClosableXButton(): void {
+    if (this._closableXButton) return;  // Already created
+
+    // Dynamically import Box to avoid circular dependency
+    const Box = require('../widgets/box').Box;
+
+    this._closableXButton = new Box({
+      parent: this,
+      top: 0,
+      right: 1,
+      width: 3,
+      height: 1,
+      content: '[X]',
+      mouse: true,
+      clickable: true,
+      style: {
+        fg: 'red',
+        bg: 'black',
+        hover: {
+          fg: 'white',
+          bg: 'red',
+        },
+      },
+    });
+
+    if (this._closableXButton) {
+      this._closableXButton.on('click', () => {
+        this.close();
+      });
+    }
+  }
+
+  /**
+   * Close this element - hides it and emits 'close' event
+   */
+  close(): void {
+    this.hide();
+    this.emit('close');
+    if (this.screen) {
+      this.screen.render();
+    }
   }
 
   // ============================================================================
@@ -164,7 +236,17 @@ export class Element extends EventEmitter {
 
     const str = value.toString();
 
-    // Percentage
+    // Percentage with offset (e.g., '100%-2', '50%+10', '100%-20')
+    const percentOffsetMatch = str.match(/^(\d+)%([+-])(\d+)$/);
+    if (percentOffsetMatch) {
+      const percent = parseInt(percentOffsetMatch[1], 10) / 100;
+      const operator = percentOffsetMatch[2];
+      const offset = parseInt(percentOffsetMatch[3], 10);
+      const baseValue = Math.floor(parentSize * percent);
+      return operator === '-' ? baseValue - offset : baseValue + offset;
+    }
+
+    // Simple percentage (e.g., '50%', '100%')
     if (str.endsWith('%')) {
       const percent = parseInt(str, 10) / 100;
       return Math.floor(parentSize * percent);
@@ -2073,9 +2155,14 @@ export class Element extends EventEmitter {
 
     const scrollbarOptions = this.options.scrollbar as any;
 
-    // Get scrollbar style - use scrollbar.style, fall back to element style
-    const scrollbarStyle = scrollbarOptions?.style || { fg: 'white', bg: 'black' };
-    const attr = this.sattr(scrollbarStyle);
+    // Get track style - use track.style if provided, otherwise dim/subtle style
+    const trackStyleObj = scrollbarOptions?.track?.style || { fg: 'gray', bg: 'black' };
+    const trackAttr = this.sattr(trackStyleObj);
+
+    // Get thumb style - use scrollbar.style for the thumb (the draggable part)
+    // This is what the user typically wants to customize
+    const thumbStyleObj = scrollbarOptions?.style || { fg: 'white', bg: 'black', inverse: true };
+    const thumbAttr = this.sattr(thumbStyleObj);
 
     const border = this.hasBorder() ? 1 : 0;
 
@@ -2100,9 +2187,9 @@ export class Element extends EventEmitter {
       ? scrollbarOptions.thumb
       : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || '█';
 
-    // Always render scrollbar track
+    // Always render scrollbar track (subtle/dim style)
     for (let y = pos.yi + border; y < pos.yl - border; y++) {
-      (this.screen as any).fillRegion(attr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
+      (this.screen as any).fillRegion(trackAttr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
     }
 
     // Only render thumb if content overflows
@@ -2112,11 +2199,11 @@ export class Element extends EventEmitter {
       const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
       const scrollbarY = Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
 
-      // Render scrollbar thumb
+      // Render scrollbar thumb (highlighted style)
       for (let i = 0; i < scrollbarHeight; i++) {
         const y = pos.yi + border + scrollbarY + i;
         if (y >= pos.yi + border && y < pos.yl - border) {
-          (this.screen as any).fillRegion(attr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
+          (this.screen as any).fillRegion(thumbAttr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
         }
       }
     }

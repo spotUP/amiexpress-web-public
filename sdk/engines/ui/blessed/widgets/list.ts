@@ -174,6 +174,8 @@ export class List extends Element {
     if (!this.interactive || !this.focused) return;
 
     const vi = (this.options as any).vi;
+
+    // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
       this.up();
       this.screen?.render();
@@ -186,15 +188,64 @@ export class List extends Element {
       return;
     }
 
+    // Home/End - jump to first/last item
+    if (key.name === 'home' || (vi && key.name === 'g')) {
+      this.select(0);
+      this.screen?.render();
+      return;
+    }
+
+    if (key.name === 'end' || (vi && key.name === 'G')) {
+      this.select(this.items.length - 1);
+      this.screen?.render();
+      return;
+    }
+
+    // Page Up/Down - jump by 10 items (or visible height if available)
+    if (key.name === 'pageup') {
+      const jump = Math.min(10, this.selected);
+      this.select(this.selected - jump);
+      this.screen?.render();
+      return;
+    }
+
+    if (key.name === 'pagedown') {
+      const jump = Math.min(10, this.items.length - 1 - this.selected);
+      this.select(this.selected + jump);
+      this.screen?.render();
+      return;
+    }
+
+    // Enter/Space - select item
     if (key.name === 'enter' || key.name === 'space') {
       this.emit('select', this.items[this.selected], this.selected);
       this.emit('action', this.items[this.selected], this.selected);
       return;
     }
 
+    // Escape - cancel
     if (key.name === 'escape') {
       this.emit('cancel');
       return;
+    }
+
+    // Type-to-search: jump to first item starting with typed character
+    if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9]/.test(ch)) {
+      const searchChar = ch.toLowerCase();
+      const startIndex = (this.selected + 1) % this.items.length;
+
+      // Search from current+1 to end, then wrap to beginning
+      for (let i = 0; i < this.items.length; i++) {
+        const index = (startIndex + i) % this.items.length;
+        const item = this.items[index];
+        const plainItem = parseTags(item).replace(/\x1b\[[0-9;]*m/g, ''); // Strip tags and ANSI
+
+        if (plainItem.toLowerCase().startsWith(searchChar)) {
+          this.select(index);
+          this.screen?.render();
+          return;
+        }
+      }
     }
   }
 

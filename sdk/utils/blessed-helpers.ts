@@ -188,18 +188,7 @@ export function ansiToTags(text: string): string {
   });
 }
 
-/**
- * Create a blessed screen
- *
- * ALWAYS use this instead of blessed.screen() for consistency
- * Note: Tags are enabled per-element (see createBox, createList, etc.)
- */
-export function createScreen(options?: ScreenOptions & { output?: (data: string) => void }): Screen {
-  return blessed.screen({
-    smartCSR: true,
-    ...options,
-  });
-}
+// createScreen moved to line 431 (below) - merged with proper default styles
 
 /**
  * Create a blessed box with tags ALWAYS enabled
@@ -417,3 +406,449 @@ export function sanitizeContent(content: string): string {
  * Supported align values: 'left', 'center', 'right'
  * Supported valign values: 'top', 'middle', 'bottom'
  */
+
+/**
+ * Create a blessed screen with proper default styles
+ *
+ * Sets default fg/bg colors to prevent inverted text rendering.
+ * All neo-blessed doors should use this instead of blessed.screen() directly.
+ *
+ * @example
+ * const screen = createScreen(bbs, { title: 'My Door' });
+ * // Or without bbs: const screen = createScreen({ title: 'Test', output: bbs.write });
+ */
+export function createScreen(
+  bbsOrOptions?: any,
+  optionsIfBbs?: Partial<ScreenOptions>
+): Screen {
+  // Handle both signatures: createScreen(bbs, options) and createScreen(options)
+  const isBbsFirst = bbsOrOptions && typeof bbsOrOptions.write === 'function';
+  const bbs = isBbsFirst ? bbsOrOptions : null;
+  const options = isBbsFirst ? optionsIfBbs : bbsOrOptions;
+
+  // Get initial terminal size from BBS if available
+  const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 24 };
+
+  // Enable responsive mode if terminal is wider than 80 or options.responsive is true
+  const responsive = options?.responsive || termSize.width > 80;
+
+  const screen = blessed.screen({
+    smartCSR: true,
+    dockBorders: true,
+    fullUnicode: true,
+    tags: true,
+    width: termSize.width,
+    height: termSize.height,
+    responsive,
+    output: bbs ? (data: string) => bbs.write(data) : options?.output,
+    style: {
+      fg: 'white',
+      bg: 'black'
+    },
+    ...options
+  });
+
+  // Listen for resize events from backend if bbs is provided
+  if (bbs && typeof bbs.on === 'function') {
+    console.log('[createScreen] Setting up screen:resize listener via bbs.on()');
+    bbs.on('screen:resize', (size: { cols: number; rows: number }) => {
+      console.log(`[createScreen] Received screen:resize event: ${size.cols}x${size.rows}`);
+      console.log(`[createScreen] Current screen size: ${screen.width}x${screen.height}`);
+      console.log(`[createScreen] screen.resize is: ${typeof screen.resize}`);
+      if (typeof screen.resize === 'function') {
+        screen.resize(size.cols, size.rows);
+        console.log(`[createScreen] After resize: ${screen.width}x${screen.height}`);
+      } else {
+        console.error('[createScreen] screen.resize is not a function!');
+      }
+    });
+  } else {
+    console.log('[createScreen] No bbs.on() available - resize events will not be handled');
+  }
+
+  return screen;
+}
+
+/**
+ * Setup input handler for blessed screen
+ *
+ * Connects terminal input from BBS session to blessed screen.
+ * Handles both raw data and F1 key for help.
+ *
+ * @example
+ * const screen = createScreen(bbs);
+ * setupInputHandler(session, screen, showHelpFn);
+ */
+export function setupInputHandler(session: any, screen: Screen, onF1Help?: () => void) {
+  if (!session.bbsSession) return;
+
+  session.bbsSession.doorInputHandler = (data: string) => {
+    // Check for F1 key (help)
+    if (onF1Help && (data === '\x1bOP' || data === '\x1b[11~')) {
+      onF1Help();
+      return;
+    }
+    // Pass input to blessed screen's program
+    if (screen.program) {
+      screen.program.emit('data', data);
+    }
+  };
+}
+
+/**
+ * Create cleanup function for blessed door
+ *
+ * Returns a cleanup function that:
+ * - Disables mouse
+ * - Clears input handler
+ * - Destroys screen
+ * - Optionally runs custom cleanup
+ *
+ * @example
+ * const cleanup = createCleanupHandler(screen, session, bbs, {
+ *   onCleanup: () => { socket.emit('disconnect'); }
+ * });
+ * screen.key(['C-q'], cleanup);
+ */
+export function createCleanupHandler(
+  screen: Screen,
+  session: any,
+  bbs: any,
+  options?: {
+    onCleanup?: () => void;
+    exitMessage?: string;
+  }
+) {
+  return () => {
+    // Run custom cleanup first
+    if (options?.onCleanup) {
+      options.onCleanup();
+    }
+
+    // Disable mouse and clean up input handler
+    screen.disableMouse();
+    if (session.bbsSession) {
+      delete session.bbsSession.doorInputHandler;
+    }
+
+    // Destroy screen
+    if (!screen.destroyed) {
+      screen.destroy();
+    }
+
+    // Show exit message
+    if (options?.exitMessage) {
+      bbs.write('\x1b[2J\x1b[H');
+      bbs.writeLine(options.exitMessage);
+    }
+  };
+}
+
+/**
+ * Setup door lifecycle with proper cleanup handling
+ *
+ * Combines screen creation, input handler, cleanup, and promise-based lifecycle.
+ * Returns { screen, cleanup, promise } for easy door setup.
+ *
+ * @example
+ * const { screen, cleanup } = setupDoorLifecycle(session, bbs, {
+ *   title: 'My Door',
+ *   onCleanup: () => socket.disconnect()
+ * });
+ * screen.key(['C-q'], cleanup);
+ */
+export function setupDoorLifecycle(
+  session: any,
+  bbs: any,
+  options?: {
+    title?: string;
+    onF1Help?: () => void;
+    onCleanup?: () => void;
+    exitMessage?: string;
+  }
+) {
+  const screen = createScreen(bbs, { title: options?.title });
+  setupInputHandler(session, screen, options?.onF1Help);
+
+  const cleanup = createCleanupHandler(screen, session, bbs, {
+    onCleanup: options?.onCleanup,
+    exitMessage: options?.exitMessage
+  });
+
+  // Setup destroy handler
+  screen.on('destroy', () => {
+    if (session.bbsSession) {
+      session.bbsSession.doorInputHandler = null;
+    }
+  });
+
+  // Create promise that resolves when door exits
+  const promise = new Promise<void>((resolve) => {
+    let resolved = false;
+    const onDestroy = () => {
+      if (!resolved) {
+        resolved = true;
+        try {
+          if (!screen.destroyed) {
+            screen.destroy();
+          }
+        } catch (err) {
+          console.error('[Door] Error destroying screen:', err);
+        }
+        resolve();
+      }
+    };
+    screen.on('destroy', onDestroy);
+  });
+
+  return { screen, cleanup, promise };
+}
+
+/**
+ * Modal Manager - Handles modal overlays and z-index layering
+ *
+ * Creates a transparent overlay and provides showModal/hideModal functions
+ * that properly manage z-index to ensure modals appear on top of the overlay.
+ *
+ * @example
+ * const { showModal, hideModal } = createModalManager(screen, inputBox);
+ * const settingsModal = createBox({ ... });
+ * showModal(settingsModal);  // Shows overlay + modal on top
+ * hideModal(settingsModal);  // Hides both and returns focus to inputBox
+ */
+export function createModalManager(screen: Screen, returnFocusElement?: any) {
+  const modalOverlay = blessed.overlay({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.5,
+    hidden: true,
+    style: { bg: 'black' }
+  });
+
+  function showModal(widget: any) {
+    modalOverlay.show();
+    modalOverlay.setFront();  // Bring overlay to front first
+    widget.show();
+    widget.setFront();        // Then bring modal on top of overlay
+    widget.focus();
+    screen.render();
+  }
+
+  function hideModal(widget: any) {
+    modalOverlay.hide();
+    widget.hide();
+    if (returnFocusElement) {
+      returnFocusElement.focus();
+    }
+    screen.render();
+  }
+
+  return { modalOverlay, showModal, hideModal };
+}
+
+/**
+ * Create standard dialog widgets (Message, Prompt, Question)
+ *
+ * Provides showMessageDialog, showPromptDialog, and showConfirmDialog functions
+ * that automatically handle the overlay and cleanup.
+ *
+ * @example
+ * const { showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
+ * showMessageDialog('File saved successfully!');
+ * showPromptDialog('Enter your name:', 'Guest', (err, name) => { ... });
+ * showConfirmDialog('Delete this file?', (confirmed) => { ... });
+ */
+export function createDialogs(screen: Screen, returnFocusElement?: any) {
+  const { modalOverlay, showModal, hideModal } = createModalManager(screen, returnFocusElement);
+
+  const messageDialog = blessed.message({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 50,
+    tags: true,
+    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+  });
+
+  const promptDialog = blessed.prompt({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 50,
+    tags: true,
+    style: { fg: 'white', bg: 'black', border: { fg: 'green' } }
+  });
+
+  const questionDialog = blessed.question({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 45,
+    title: ' Confirm ',
+    tags: true,
+    style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } }
+  });
+
+  function showMessageDialog(text: string, callback?: () => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    messageDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    messageDialog.display(text, () => {
+      if (callback) callback();
+    });
+  }
+
+  function showPromptDialog(text: string, value: string, callback: (err: Error | null, val?: string) => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    promptDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    promptDialog.showInput(text, value, (err, val) => {
+      callback(err, val);
+    });
+  }
+
+  function showConfirmDialog(text: string, callback: (answer: boolean) => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    questionDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    questionDialog.ask(text, (answer: boolean) => {
+      callback(answer);
+    });
+  }
+
+  return {
+    modalOverlay,
+    showModal,
+    hideModal,
+    messageDialog,
+    promptDialog,
+    questionDialog,
+    showMessageDialog,
+    showPromptDialog,
+    showConfirmDialog
+  };
+}
+
+/**
+ * Disable mouse click selection on an element
+ *
+ * Prevents accidental selections when using mouse for other interactions.
+ * Useful for games with custom mouse handling (e.g., arkanoid paddle control).
+ *
+ * @example
+ * const menu = createList({ items: ['Start', 'Quit'] });
+ * disableMouseSelect(menu);  // Can't click to select, must use keyboard
+ */
+export function disableMouseSelect(element: any): void {
+  if (element) {
+    element.options.clickable = false;
+    element.clickable = false;
+  }
+}
+
+/**
+ * Enable mouse click selection on an element
+ *
+ * Re-enables mouse selection after it was disabled.
+ *
+ * @example
+ * enableMouseSelect(menu);  // Re-enable clicking
+ */
+export function enableMouseSelect(element: any): void {
+  if (element) {
+    element.options.clickable = true;
+    element.clickable = true;
+  }
+}
+
+/**
+ * Add context menu to an element (right-click menu)
+ *
+ * Automatically handles right-click events and shows a popup menu.
+ *
+ * @example
+ * const menu = addContextMenu(myBox, screen, [
+ *   { label: 'Copy', action: () => console.log('Copy') },
+ *   { label: 'Paste', action: () => console.log('Paste'), disabled: true },
+ *   { separator: true },
+ *   { label: 'Delete', action: () => console.log('Delete') }
+ * ]);
+ */
+export function addContextMenu(
+  element: any,
+  screen: any,
+  items: Array<{
+    label: string;
+    action?: () => void;
+    disabled?: boolean;
+    separator?: boolean;
+  }>
+): any {
+  const { ContextMenu } = require('../engines/ui/blessed');
+
+  const contextMenu = new ContextMenu({
+    parent: screen,
+    items,
+  });
+
+  // Show menu on right-click
+  element.on('mousedown', (event: any) => {
+    if (event.button === 'right') {
+      contextMenu.showAt(event.x, event.y);
+    }
+  });
+
+  return contextMenu;
+}
+
+/**
+ * Create a Panel widget for multi-panel layouts
+ *
+ * Features:
+ * - Visual indication when panel is active (has focused child)
+ * - Alt+<number> shortcuts for quick switching
+ * - F6 cycles through panels
+ *
+ * @example
+ * const leftPanel = createPanel({
+ *   parent: screen,
+ *   left: 0,
+ *   top: 0,
+ *   width: '50%',
+ *   height: '100%',
+ *   title: 'Files',
+ *   panelIndex: 1,  // Alt+1 to activate
+ * });
+ *
+ * const rightPanel = createPanel({
+ *   parent: screen,
+ *   left: '50%',
+ *   top: 0,
+ *   width: '50%',
+ *   height: '100%',
+ *   title: 'Preview',
+ *   panelIndex: 2,  // Alt+2 to activate
+ * });
+ */
+export function createPanel(options: any): any {
+  const { Panel } = require('../engines/ui/blessed');
+  return new Panel({
+    tags: true,
+    ...options,
+  });
+}

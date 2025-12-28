@@ -17,8 +17,8 @@ export class Textbox extends Element {
       focusable: true,
       clickable: true,
       keys: true,
-      tags: true,  // Enable tag parsing for cursor display
       ...options,
+      tags: true,  // Enable tag parsing for cursor display (forced, cannot be overridden)
     });
 
     this.value = options.value || '';
@@ -235,7 +235,12 @@ export class Textbox extends Element {
   }
 
   clearValue(): void {
-    this.setValue('');
+    // Explicitly reset all state to ensure visual clear
+    this.value = '';
+    this.cursorPos = 0;
+    this.viewOffset = 0;
+    this._updateContent();
+    this.emit('change', this.value);
   }
 
   readInput(): void {
@@ -262,6 +267,7 @@ export class Textarea extends Element {
       keys: true,
       scrollable: true,
       alwaysScroll: true,
+      mouse: true,
       ...options,
       // Add scrollbar by default (unless explicitly disabled)
       scrollbar: options.scrollbar === undefined || options.scrollbar ? {
@@ -293,6 +299,25 @@ export class Textarea extends Element {
     this.on('click', () => {
       this.focus();
     });
+
+    // Mouse wheel scrolling
+    if (options.mouse !== false) {
+      this.on('wheelup', () => {
+        if (this.viewOffsetY > 0) {
+          this.viewOffsetY--;
+          this._updateContent();
+        }
+      });
+
+      this.on('wheeldown', () => {
+        const lines = this._getLines();
+        const visibleHeight = this._getVisibleHeight();
+        if (this.viewOffsetY < lines.length - visibleHeight) {
+          this.viewOffsetY++;
+          this._updateContent();
+        }
+      });
+    }
   }
 
   private _onKeypress(ch: any, key: KeyEvent): void {
