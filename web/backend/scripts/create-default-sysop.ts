@@ -43,58 +43,64 @@ db.exec(`
 
 console.log('[Setup] Database tables verified');
 
-// Check if sysop exists
-const existing = db.prepare('SELECT id, username, secLevel FROM users WHERE username = ?').get('sysop') as any;
+// Check if sysop exists (use actual column names: passwordhash, seclevel)
+const existing = db.prepare('SELECT id, username, seclevel FROM users WHERE username = ?').get('sysop') as any;
 
 // Hash the default password
 const passwordHash = bcrypt.hashSync('sysop', 10);
 
 if (existing) {
-  console.log(`[Setup] Sysop user exists (ID: ${existing.id}, Level: ${existing.secLevel})`);
+  console.log(`[Setup] Sysop user exists (ID: ${existing.id}, Level: ${existing.seclevel})`);
   console.log('[Setup] Resetting password to "sysop"...');
 
-  // Update password and ensure high security level
+  // Update password and ensure high security level (use actual column names)
   db.prepare(`
     UPDATE users
-    SET password = ?,
-        secLevel = CASE WHEN secLevel < 200 THEN 200 ELSE secLevel END,
-        updated_at = strftime('%s', 'now')
+    SET passwordhash = ?,
+        seclevel = CASE WHEN seclevel < 200 THEN 255 ELSE seclevel END,
+        updated = strftime('%s', 'now')
     WHERE username = ?
   `).run(passwordHash, 'sysop');
 
-  const updated = db.prepare('SELECT id, username, secLevel FROM users WHERE username = ?').get('sysop') as any;
-  console.log(`[Setup] ✓ Sysop password reset (Level: ${updated.secLevel})`);
+  const updated = db.prepare('SELECT id, username, seclevel FROM users WHERE username = ?').get('sysop') as any;
+  console.log(`[Setup] ✓ Sysop password reset (Level: ${updated.seclevel})`);
 } else {
   console.log('[Setup] Creating new sysop user...');
 
-  // Create new sysop user
+  // Create new sysop user (use actual column names)
+  const uuid = require('crypto').randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+
   const result = db.prepare(`
     INSERT INTO users (
-      username, password, email, realName, location,
-      secLevel, timebank, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+      id, username, passwordhash, email, realname, location,
+      seclevel, timelimit, created, updated
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
+    uuid,
     'sysop',
     passwordHash,
     'sysop@localhost',
     'System Operator',
     'The BBS',
     255,  // Maximum security level
-    999999  // Unlimited time
+    -1,   // Unlimited time (-1 in AmiExpress schema)
+    now,
+    now
   );
 
-  console.log(`[Setup] ✓ Sysop user created (ID: ${result.lastInsertRowid})`);
+  console.log(`[Setup] ✓ Sysop user created (ID: ${uuid})`);
 }
 
 // Verify
-const sysop = db.prepare('SELECT id, username, secLevel, created_at FROM users WHERE username = ?').get('sysop') as any;
+const sysop = db.prepare('SELECT id, username, seclevel, created FROM users WHERE username = ?').get('sysop') as any;
 
 console.log('\n=== Sysop User ===');
 console.log(`ID: ${sysop.id}`);
 console.log(`Username: ${sysop.username}`);
 console.log(`Password: sysop`);
-console.log(`Security Level: ${sysop.secLevel}`);
-console.log(`Created: ${new Date(sysop.created_at * 1000).toISOString()}`);
+console.log(`Security Level: ${sysop.seclevel}`);
+console.log(`Created: ${new Date(sysop.created * 1000).toISOString()}`);
 console.log('\n⚠️  CHANGE PASSWORD IMMEDIATELY AFTER FIRST LOGIN!\n');
 
 db.close();
