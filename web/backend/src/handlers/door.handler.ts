@@ -1467,7 +1467,9 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    const hotReload = process.env.DOOR_HOT_RELOAD === '1';
+    // Hot reload is ENABLED by default (no caching). Set DOOR_HOT_RELOAD=0 to disable.
+    // AmiExpress philosophy: Don't cache unless necessary (like slow door loading in doorman)
+    const hotReload = process.env.DOOR_HOT_RELOAD !== '0';
 
     if (hotReload) {
       // Clear module cache to ensure we get fresh code (critical for development)

@@ -506,12 +506,13 @@ export async function parseMciCodes(
   sysopName: string = 'Sysop',
   location: string = 'The Internet',
   socket?: any  // When provided, execute inline (express.e outdata=NIL mode)
-): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number }> {
+): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number; inlineEmitted?: boolean }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
   let slowmo = session?.slowmo || 0;
   const inlineMode = socket !== undefined;  // True = execute inline, False = build string
+  let inlineEmitted = false;  // Track if content was emitted inline (skip frame buffer later)
   let slowmoCount = session?.slowmoCount || 0;
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
@@ -1027,7 +1028,14 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
         toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
         socket.emit('ansi-output', toEmit);
         screenDebug('[MCI] Sequential: emitted remaining text');
+        inlineEmitted = true;
       }
+    }
+
+    // Mark that we've emitted content inline (even if just executing codes)
+    // This tells displayScreen to skip its frame buffer emission
+    if (lastIndex > 0) {
+      inlineEmitted = true;
     }
 
     // Clear parsed since we've already emitted everything
@@ -1294,7 +1302,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     session.lastScreenHadPause = hasPause;
   }
 
-  return { parsed, commands: commandsToExecute, hasPause, slowmo: slowmoApplied, slowmoCount: slowmoAppliedCount };
+  return { parsed, commands: commandsToExecute, hasPause, slowmo: slowmoApplied, slowmoCount: slowmoAppliedCount, inlineEmitted };
 }
 
 /**
@@ -1763,6 +1771,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
 
     let parsed: string;
     let commands: any[] = [];
+    let inlineEmitted = false;  // Track if parseMciCodes already emitted content inline
 
     // === ~SP (Soft Pause) Segment Processing ===
     // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
@@ -1803,6 +1812,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         commands = segmentResult.commands;
         if (segmentResult.slowmo !== undefined) session.slowmo = segmentResult.slowmo;
         if (segmentResult.slowmoCount !== undefined) session.slowmoCount = segmentResult.slowmoCount;
+        if (segmentResult.inlineEmitted) inlineEmitted = true;
 
         // DON'T set lastScreenHadPause here - let pauseDisplayFlow handle the pause
         // to avoid double pause prompts. screenSegments is already set for subsequent segments.
@@ -1818,6 +1828,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         commands = result.commands;
         if (result.slowmo !== undefined) session.slowmo = result.slowmo;
         if (result.slowmoCount !== undefined) session.slowmoCount = result.slowmoCount;
+        if (result.inlineEmitted) inlineEmitted = true;
         session.lastScreenHadPause = result.hasPause;
       }
     } else {
@@ -1833,6 +1844,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       if (result.slowmoCount !== undefined) {
         session.slowmoCount = result.slowmoCount;
       }
+      if (result.inlineEmitted) inlineEmitted = true;
       session.lastScreenHadPause = result.hasPause;
     }
 
@@ -2150,7 +2162,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       }
 
       screenDebug(`[displayScreen] Wipe animation complete: ${wipeFrames.length} frames`);
-    } else {
+    } else if (!inlineEmitted) {
       // Normal display: Double-buffered display
       // Build complete frame buffer before sending
       // This prevents tearing and visible redraws by sending everything atomically
@@ -2167,6 +2179,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
       screenDebug(`[displayScreen] Emitting ${eventName} event`);
       await emitWithModem(frameBuffer);
+    } else {
+      // Content was already emitted inline by parseMciCodes (express.e inline mode)
+      // Just emit color reset to prevent bleed, don't overwrite with frame buffer
+      screenDebug(`[displayScreen] Content already emitted inline, skipping frame buffer`);
+      socket.emit(eventName, '\x1b[0m');
     }
 
     // If screen requested a pause (e.g., ~SP), set a minimal pagination state
@@ -2327,12 +2344,16 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
     if (paged.onComplete) paged.onComplete();
     // Process all remaining screen segments without pausing
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      const eventName = session.screenSegments.eventName;
       while (session.screenSegments.segments.length > 0) {
         const segment = session.screenSegments.segments.shift()!;
         const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
-        let parsed = addAnsiEscapes(result.parsed);
-        parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-        socket.emit(session.screenSegments.eventName, parsed);
+        // Only emit if inline mode didn't already emit everything
+        if (!result.inlineEmitted) {
+          let parsed = addAnsiEscapes(result.parsed);
+          parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+          socket.emit(eventName, parsed);
+        }
       }
       session.screenSegments = undefined;
     }
@@ -2401,14 +2422,21 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
   if (result.slowmo !== undefined) session.slowmo = result.slowmo;
   if (result.slowmoCount !== undefined) session.slowmoCount = result.slowmoCount;
 
-  // Add ANSI escapes if needed
-  parsed = addAnsiEscapes(parsed);
+  // Only emit if inline mode didn't already emit everything
+  if (!result.inlineEmitted) {
+    // Add ANSI escapes if needed
+    parsed = addAnsiEscapes(parsed);
 
-  // Normalize line endings
-  parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    // Normalize line endings
+    parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
-  // Emit this segment's content
-  socket.emit(segState.eventName, parsed);
+    // Emit this segment's content
+    socket.emit(segState.eventName, parsed);
+  } else {
+    // Just emit color reset to prevent bleed
+    socket.emit(segState.eventName, '\x1b[0m');
+    screenDebug(`[processNextScreenSegment] Content already emitted inline`);
+  }
 
   // If there are more segments, set up another pause
   if (segState.segments.length > 0) {
