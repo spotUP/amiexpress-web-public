@@ -175,14 +175,14 @@ AmiExpress-Web: TypeScript port of Amiga BBS. 68K emulation via MOIRA.
 ## Development
 
 ### Server
-- Start: `./dev/scripts/start-servers.sh` (auto-setup, auto-build)
+- Start: `./dev/scripts/start-servers.sh` (auto-setup, auto-build, **door watcher enabled by default**)
 - Debug: `./dev/scripts/start-servers.sh --debug`
+- No watcher: `./dev/scripts/start-servers.sh --no-watch` (disable auto-restart)
 - Kill: `./dev/scripts/kill-servers.sh`
-- **Door Development:** `npm run dev:doors` (auto-restart on door changes - RECOMMENDED)
 - **Unified port 3001:** BBS `/`, Admin `/admin/`, SDK `/sdk/`
 - **Protocols:** Telnet:2323, SSH:2222 (needs SSH_HOST_KEY_PATH)
 
-**Door Watcher:** Node.js cannot hot reload ESM modules. Use `npm run dev:doors` to auto-restart backend when door files change. See `dev/scripts/DOOR_WATCHER.md`
+**Door Watcher:** Node.js cannot hot reload ESM modules. `start-servers.sh` uses file watcher by default to auto-restart backend when door files change. See `dev/scripts/DOOR_WATCHER.md`
 
 ### Zombie Cleanup (CRITICAL if high context)
 ```bash

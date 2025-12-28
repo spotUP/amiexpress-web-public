@@ -21,7 +21,11 @@ Options:
   --full | --all             Open BBS + Admin/Settings + SDK (default)
   --sdk-only                 Open SDK preview only; build SDK only
   --bbs-only                 Open BBS terminal only; build BBS only
+  --no-watch                 Disable door file watcher (auto-restart)
   --help                     Show this help and exit
+
+Note: Door file watcher is ENABLED by default. Backend auto-restarts when
+      door files change. Use --no-watch to disable for production-like testing.
 EOF
 }
 
@@ -29,6 +33,7 @@ EOF
 DEBUG_MODE=false
 DEBUG_OUTPUT="false"
 OPEN_MODE="full"  # Default: Open all three tabs (BBS, Admin, SDK)
+WATCH_DOORS=true  # Default: Enable door file watcher (auto-restart on changes)
 
 # Check all arguments
 for arg in "$@"; do
@@ -49,6 +54,9 @@ for arg in "$@"; do
       ;;
     --bbs-only)
       OPEN_MODE="bbs-only"
+      ;;
+    --no-watch)
+      WATCH_DOORS=false
       ;;
   esac
 done
@@ -76,6 +84,14 @@ elif [ "$OPEN_MODE" = "sdk-only" ]; then
 else
   printf "%b\n" "${CYAN}→ Will open BBS terminal only (no Admin/SDK tabs)${RESET}"
   printf "%b\n" "   ${WHITE}Use --full to open all three apps, or --sdk-only for SDK only${RESET}"
+fi
+
+if [ "$WATCH_DOORS" = true ]; then
+  printf "%b\n" "${CYAN}→ Door file watcher ENABLED (auto-restart on door changes)${RESET}"
+  printf "%b\n" "   ${WHITE}Use --no-watch to disable${RESET}"
+else
+  printf "%b\n" "${YELLOW}→ Door file watcher DISABLED (manual restart required)${RESET}"
+  printf "%b\n" "   ${WHITE}Remove --no-watch to enable auto-restart${RESET}"
 fi
 
 # Get the repository root directory (portable)
@@ -411,14 +427,24 @@ trap 'echo ""; printf "%b\n" "${CYAN}→ Stopping servers...${RESET}"; kill $BAC
 # - Admin Config at /admin/
 # - SDK Preview at /sdk/
 printf "%b" "   ${MAGENTA}[1/2]${RESET} Starting backend... "
-if [ "$DEBUG_MODE" = true ]; then
-  # DEBUG MODE: Show all logs and save to file
-  (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+
+if [ "$WATCH_DOORS" = true ]; then
+  # WATCH MODE: Use file watcher for auto-restart on door changes
+  printf "%b\n" "${GREEN}[WATCH MODE]${RESET}"
+  printf "%b\n" "   ${CYAN}Door file watcher will auto-restart backend when doors change${RESET}"
+  (cd "$REPO_ROOT" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
+  BACKEND_PID=$!
 else
-  # NORMAL MODE: Show filtered messages but save full logs to file
-  (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|[WEB]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+  # NORMAL MODE: Direct backend start (no auto-restart)
+  if [ "$DEBUG_MODE" = true ]; then
+    # DEBUG MODE: Show all logs and save to file
+    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+  else
+    # NORMAL MODE: Show filtered messages but save full logs to file
+    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|[WEB]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+  fi
+  BACKEND_PID=$!
 fi
-BACKEND_PID=$!
 
 # Start SDK preview backend server in background (handles SDK door preview WebSocket API)
 printf "%b\n" "${GREEN}[STARTED]${RESET}"
