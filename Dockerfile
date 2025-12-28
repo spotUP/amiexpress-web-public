@@ -53,7 +53,13 @@ RUN npm ci
 
 COPY web/frontend ./
 # Skip prebuild script (terminal already built), just run vite build
-RUN npm run build --ignore-scripts || vite build
+RUN (npm run build --ignore-scripts || vite build) && \
+    echo "[Build] Frontend build complete. Checking dist contents:" && \
+    ls -la dist/ && \
+    echo "[Build] Assets:" && \
+    ls -la dist/assets/ && \
+    echo "[Build] Fonts:" && \
+    ls -la dist/fonts/
 
 # ============================================================================
 # Stage 4: Build Config App (Admin UI)
@@ -133,6 +139,12 @@ RUN npm ci --only=production --ignore-scripts && \
 # Copy all built artifacts (frontend assets)
 WORKDIR /app
 COPY --from=frontend-builder /app/web/frontend/dist ./web/frontend/dist
+RUN echo "[Docker] Verifying frontend dist was copied:" && \
+    ls -la /app/web/frontend/dist/ && \
+    echo "[Docker] Assets:" && \
+    ls -la /app/web/frontend/dist/assets/ || echo "No assets directory!" && \
+    echo "[Docker] Fonts:" && \
+    ls -la /app/web/frontend/dist/fonts/ || echo "No fonts directory!"
 COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-preview-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist

@@ -39,7 +39,7 @@ import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT } from './ui/menu-bar';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
-import { createInputBox, INPUT_HEIGHT } from './ui/input-box';
+import { createInputBox, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
 import { createChatLog, updateChatHeader as updateChatHeaderFn, addBBSEvent, TYPING_HEIGHT } from './ui/chat-log';
 
 // Overlays
@@ -170,10 +170,29 @@ export async function createApp(session: DoorSession) {
   const statusBar = createStatusBar(screen);
 
   // ========== INPUT BOX (above status bar) ==========
-  const inputBox = createInputBox(screen);
+  const { inputBox, emojiButton } = createInputBox(screen);
 
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
+
+  // Emoji button click handler (modern chat app style)
+  emojiButton.on('press', () => {
+    if (!emojiPicker.isVisible()) {
+      emojiPicker.show(
+        screen,
+        (emoji: any) => {
+          const currentValue = inputBox.getValue();
+          inputBox.setValue(currentValue + emoji.code + ' ');
+          inputBox.focus();
+          screen.render();
+        },
+        () => {
+          inputBox.focus();
+          screen.render();
+        }
+      );
+    }
+  });
 
   loader.update(50, 'Setting up features...');
 
@@ -638,7 +657,7 @@ export async function createApp(session: DoorSession) {
 
     // Update full-width elements (percentage widths need recalculation on resize)
     statusBar.position.width = width;
-    inputBox.position.width = width;
+    inputBox.position.width = width - EMOJI_BUTTON_WIDTH;  // Leave space for emoji button
     menuBar.position.width = width;
     commandSuggestions.position.width = width;  // Full width for command suggestions
 
@@ -1363,7 +1382,7 @@ export async function createApp(session: DoorSession) {
       switchSidebarTab(t);
     }
   };
-  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, sidebarTab, channelList, userList, sidebarTabs, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH);
+  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, sidebarTab, channelList, userList, sidebarTabs, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar);
 
   // Escape key: close dialogs and return focus to input
   // Note: Drawing canvas handles its own escape key for exiting drawing mode

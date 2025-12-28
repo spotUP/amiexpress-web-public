@@ -185,6 +185,26 @@ export function registerHttpRoutes(app: Application): void {
   // Serve BBS Terminal Frontend at / (fallback)
   const bbsFrontendPath = join(projectRoot, 'web/frontend/dist');
 
+  console.log(`[Static] Project root: ${projectRoot}`);
+  console.log(`[Static] Process cwd: ${process.cwd()}`);
+  console.log(`[Static] Frontend path: ${bbsFrontendPath}`);
+  console.log(`[Static] Frontend path exists: ${fs.existsSync(bbsFrontendPath)}`);
+
+  if (fs.existsSync(bbsFrontendPath)) {
+    const assetsPath = join(bbsFrontendPath, 'assets');
+    const fontsPath = join(bbsFrontendPath, 'fonts');
+    console.log(`[Static] Assets path exists: ${fs.existsSync(assetsPath)}`);
+    console.log(`[Static] Fonts path exists: ${fs.existsSync(fontsPath)}`);
+    if (fs.existsSync(assetsPath)) {
+      const assetFiles = fs.readdirSync(assetsPath);
+      console.log(`[Static] Assets count: ${assetFiles.length}, first 5: ${assetFiles.slice(0, 5).join(', ')}`);
+    }
+    if (fs.existsSync(fontsPath)) {
+      const fontFiles = fs.readdirSync(fontsPath);
+      console.log(`[Static] Fonts count: ${fontFiles.length}`);
+    }
+  }
+
   if (!fs.existsSync(bbsFrontendPath)) {
     console.warn(`[Static] BBS Frontend dist not found: ${bbsFrontendPath}`);
     console.warn(`[Static] Run 'cd web/frontend && npm run build'`);

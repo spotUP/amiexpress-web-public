@@ -21,7 +21,7 @@ export function createMenuBar(screen: Screen): Box {
     },
   });
 
-  menuBar.setContent(' F1:Help  F2:Sidebar  F3:ChTab  F4:Emoji  F5:Art  F6:Files  Tab:Focus  ^S:Set  ^Q:Quit ');
+  menuBar.setContent(' F1:Help  F2:Sidebar  F3:ChTab  F5:Art  F6:Files  Tab:Focus  ^S:Set  ^Q:Quit ');
 
   return menuBar;
 }

@@ -33,5 +33,8 @@ export function createProfileOverlay(s: Screen, ib: any, users: any, uname: stri
   cl.on('press', () => hide(o));
   o.on('close', () => hide(o));
 
+  // Add explicit escape key handler to ensure it works even when child elements are focused
+  o.key(['escape'], () => hide(o));
+
   return { overlay: o, showProfile };
 }

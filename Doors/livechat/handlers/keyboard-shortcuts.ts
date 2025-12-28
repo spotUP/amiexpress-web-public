@@ -1,10 +1,28 @@
-export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: string, chl: any, ul: any, stb: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number) {
+export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: string, chl: any, ul: any, stb: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any) {
   let sv = true;
 
   function ucl() {
     const lo = sv ? SW : 0;
-    (cl as any).options.left = lo;
-    (dc as any).options.left = lo;
+    const sw = (s as any).width || 80;
+    const wd = sw - lo;  // Width is full screen minus left offset
+
+    // Update position and width for chat panel and drawing canvas
+    (cl as any).position.left = lo;
+    (cl as any).position.width = wd;
+    (dc as any).position.left = lo;
+    (dc as any).position.width = wd;
+
+    // Update chat log width inside the panel (panel width minus 2 for borders)
+    if (chatLog) {
+      (chatLog as any).position.width = wd - 2;
+    }
+
+    // Update typing bar
+    if (typingBar) {
+      (typingBar as any).position.left = lo;
+      (typingBar as any).position.width = wd;
+    }
+
     if (sv) {
       stb.show();
       if (sbt === 'channels') {
@@ -27,7 +45,7 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: s
   s.key(['f1'], () => { sh(); });
   s.key(['f2'], () => { sv = !sv; ucl(); asm(sv ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)'); });
   s.key(['f3'], () => { ssb(sbt === 'channels' ? 'users' : 'channels'); asm(`Switched to ${sbt} view`); });
-  s.key(['f4', 'C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
+  s.key(['C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
 
   const fp = () => {
     const ps: any[] = [ib];

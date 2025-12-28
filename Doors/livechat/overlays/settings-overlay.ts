@@ -86,5 +86,11 @@ export function createSettingsOverlay(
     hm(o);
   });
 
+  // Add explicit escape key handler to ensure it works even when child elements are focused
+  o.key(['escape'], () => {
+    saveSettings(st, { ...eCb, ...pCb }, usb);
+    hm(o);
+  });
+
   return o;
 }
