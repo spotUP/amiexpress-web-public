@@ -1,3 +1,0 @@
-Welcome to AmiExpress Web BBS
-Logon screen (security 100) placeholder.
-Replace this with your preferred artwork for high-level users.
