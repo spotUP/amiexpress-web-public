@@ -139,6 +139,7 @@
     "ora": "^5.4.1",
     "scribbletune": "^4.0.4",
     "socket.io": "^4.7.0",
+    "socket.io-client": "^4.8.3",
     "tone": "^15.3.7",
     "ws": "^8.14.2"
   },

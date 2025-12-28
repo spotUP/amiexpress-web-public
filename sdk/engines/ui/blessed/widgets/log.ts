@@ -51,19 +51,29 @@ export class Log extends Element {
   }
 
   add(text: string): void {
+    console.log('[Log.add] Adding text:', text.substring(0, 100));
     const lines = this.getLines();
+    console.log('[Log.add] Current lines count:', lines.length);
     lines.push(text);
+    console.log('[Log.add] After push, lines count:', lines.length);
 
     // Enforce scrollback limit
     while (lines.length > this.scrollback) {
       lines.shift();
     }
 
-    this.setContent(lines.join('\n'));
+    const content = lines.join('\n');
+    console.log('[Log.add] Setting content, length:', content.length);
+    this.setContent(content);
+    console.log('[Log.add] After setContent, _lines count:', (this as any)._lines?.length);
 
     // Auto-scroll to bottom
     if (this.scrollOnInput) {
-      this.setScroll(this.getScrollHeight());
+      const scrollHeight = this.getScrollHeight();
+      console.log('[Log.add] Auto-scrolling to bottom, scrollHeight:', scrollHeight);
+      this.setScroll(scrollHeight);
+    } else {
+      console.log('[Log.add] scrollOnInput is false, not auto-scrolling');
     }
 
     this.emit('log', text);

@@ -288,8 +288,11 @@ async function countNewMessages(
 }
 
 /**
- * Scan all conferences for new mail
- * 1:1 port from express.e:28066-28150 confScan()
+ * Scan all conferences for new mail and files
+ * Simplified version that delegates to AquaScan door for all scanning
+ *
+ * express.e:28066-28150 confScan() calls runSysCommand('N','S U') for file scanning
+ * We let AquaScan handle both mail and file scanning to avoid duplicate output
  *
  * @param socket - Socket.io socket
  * @param session - BBS session
@@ -300,153 +303,23 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     return 0; // RESULT_SUCCESS
   }
 
-  // express.e:28067-28070 - DEF mystat,conf,n,msgbase / DEF prompt=FALSE / DEF mscan=TRUE / DEF fscan=TRUE
-  let mscan = true;
-
   // express.e:28071 - setEnvStat(ENV_SCANNING)
-  console.log('[ENV] Scanning conferences for mail');
+  console.log('[ENV] Scanning conferences for mail and files (via AquaScan door)');
 
-  // express.e:28073 - displayScreen(SCREEN_MAILSCAN)
-  // SKIP: Displaying MAILSCAN screen causes confusion when file scan (AquaScan) takes 5+ minutes
-  // User sees static "Scanning..." message while AquaScan runs, thinks it's frozen
-  // Better to let AquaScan output its own progress directly
+  // Let AquaScan door handle all scanning output and logic
+  // express.e:28101-28102 - runSysCommand('N','S U')
+  try {
+    const { runSysCommand } = require('../command-execution.handler');
 
-  // express.e:28075-28080 - Check MAILSCAN_PROMPT tooltype (skip for now, always scan)
-  // const prompt = checkToolTypeExists(TOOLTYPE_NODE, node, 'MAILSCAN_PROMPT');
-  // if (prompt) { ... yesNo() ... }
-
-  // express.e:28082-28084 - IF (prompt=FALSE) OR (mscan=TRUE)
-  if (mscan) {
-    // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
-    // Clear pause prompt line and emit scanning message
-    socket.emit('ansi-output', '\r' + ' '.repeat(80) + '\r\r\n' + AnsiUtil.colorize('Scanning conferences for mail and files...', 'cyan') + '\r\n\r\n');
-
-    // express.e:28084-28085 - lineCount:=2 / mciViewSafe:=FALSE
-    // (lineCount and mciViewSafe are UI-specific, not needed for web)
-
-    // express.e:28086 - FOR conf:=1 TO cmds.numConf
-    for (let conf = 1; conf <= _conferences.length; conf++) {
-      const conference = _conferences[conf - 1];
-      if (!conference) continue;
-
-      // express.e:28087 - IF (checkConfAccess(conf))
-      if (!checkConfAccess(session.user, conf)) {
-        console.log(`[confScan] Skip conference ${conf} (${conference.name}) - no access`);
-        continue;
-      }
-
-      // express.e:28089 - fscan:=checkFileConfScan(conf)
-      const fscan = await checkFileConfScan(conf, session.user.id);
-
-      // express.e:28092-28093 - n:=getConfMsgBaseCount(conf) / FOR msgbase:=1 TO n
-      const confMessageBases = _messageBases.filter(mb => mb.conferenceId === conference.id);
-      const n = confMessageBases.length;
-
-      for (let msgbaseIdx = 0; msgbaseIdx < n; msgbaseIdx++) {
-        const msgbase = confMessageBases[msgbaseIdx];
-        console.log(`[confScan] Checking msgbase ${msgbase.id} in conf ${conf}`);
-
-        // express.e:28094-28096 - IF prompt=FALSE THEN mscan:=checkMailConfScan(conf,msgbase)
-        const shouldScanMail = await checkMailConfScan(conf, msgbase.id, session.user.id);
-        console.log(`[confScan] shouldScanMail=${shouldScanMail} for conf ${conf} msgbase ${msgbase.id}`);
-
-        // express.e:28097 - mystat:=joinConf(conf,msgbase,TRUE,FALSE,IF mscan=FALSE THEN FORCE_MAILSCAN_SKIP ELSE FORCE_MAILSCAN_NOFORCE)
-        // When confScan=TRUE, joinConf: loads pointers, gets mail stats, calls MAIL_SCAN if mscan=TRUE, saves pointers
-        // We implement this inline since our joinConference doesn't have confScan parameter
-        try {
-          console.log(`[confScan] Loading pointers for conf ${conf} msgbase ${msgbase.id}`);
-          // Load message pointers (express.e:5026 loadMsgPointers)
-          const pointers = await loadMsgPointers(session.user.id, conf, msgbase.id);
-
-          console.log(`[confScan] Getting mail stats for conf ${conf} msgbase ${msgbase.id}`);
-          // Get mail stats (express.e:5029 getMailStatFile)
-          const mailStat = await getMailStatFile(conf, msgbase.id);
-
-          // Validate pointers (express.e:5037-5049)
-          const validated = mailStat ? validatePointers(pointers, mailStat) : pointers;
-
-          // express.e:5119-5127 - IF (auto=FALSE) AND (forceMailScan<>FORCE_MAILSCAN_SKIP)
-          // During confScan, auto=FALSE, so if shouldScanMail=TRUE, call MAIL_SCAN
-          if (shouldScanMail) {
-            console.log(`[confScan] Counting new messages for conf ${conf} msgbase ${msgbase.id}`);
-            // express.e:5122 - mystat:=callMsgFuncs(MAIL_SCAN,conf,msgBaseNum)
-            // MAIL_SCAN counts new messages and returns them
-            const counts = await countNewMessages(session.user.id, conf, msgbase.id, session.user.username || session.user.name || '');
-            console.log(`[confScan] Found ${counts.newPublic} public, ${counts.newPrivate} private for conf ${conf} msgbase ${msgbase.id}`);
-
-            // express.e:5126 - saveMsgPointers(conf,msgBaseNum)
-            // Update scan pointer to mark messages as scanned
-            const newPointer = counts.mailStatHigh || counts.lastScanned;
-            if (newPointer > 0) {
-              console.log(`[confScan] Updating scan pointer to ${newPointer} for conf ${conf} msgbase ${msgbase.id}`);
-              await updateScanPointer(session.user.id, conf, msgbase.id, newPointer);
-            }
-          }
-          console.log(`[confScan] Done with msgbase ${msgbase.id} in conf ${conf}`);
-        } catch (err) {
-          console.error(`[confScan] Failed to scan conf ${conf} msgbase ${msgbase.id}:`, err);
-          // Express.e doesn't abort on error, continue with next msgbase
-        }
-      }
-
-      // express.e:28099-28104 - IF (mystat=RESULT_SUCCESS) AND (fscan)
-      console.log(`[confScan] fscan=${fscan} for conf ${conf}`);
-      if (fscan) {
-        try {
-          console.log(`[confScan] Running new files scan for conf ${conf}`);
-          // express.e:28100 - newFilesPauseFlag:=TRUE
-          // (UI flag, not needed for web)
-
-          // express.e:28101-28102 - currentConf:=conf / runSysCommand('N','S U')
-          const currentConfBackup = session.currentConf;
-          session.currentConf = conf;
-          const { runSysCommand } = require('../command-execution.handler');
-
-          // File scan doors don't exit cleanly in batch mode - add 30s timeout
-          const FILE_SCAN_TIMEOUT = 30000;
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('File scan timeout')), FILE_SCAN_TIMEOUT)
-          );
-
-          try {
-            await Promise.race([
-              runSysCommand(socket, session, 'N', 'S U'),
-              timeoutPromise
-            ]);
-          } catch (err) {
-            if (err instanceof Error && err.message === 'File scan timeout') {
-              console.log(`[confScan] File scan timed out after ${FILE_SCAN_TIMEOUT}ms for conf ${conf} - continuing`);
-              // Force kill the door session if it's still running
-              if ((session as any).inDoorManager) {
-                (session as any).inDoorManager = false;
-              }
-            } else {
-              throw err;
-            }
-          }
-
-          // express.e:28103 - currentConf:=0
-          session.currentConf = currentConfBackup;
-          console.log(`[confScan] New files scan complete for conf ${conf}`);
-
-          // express.e:28104 - newFilesPauseFlag:=FALSE
-        } catch (err) {
-          console.error(`[confScan] Failed to run new-files scan for conf ${conf}:`, err);
-          // Continue with next conference
-        }
-      }
-
-      console.log(`[confScan] Finished conf ${conf} (${conference.name})`);
-
-      // express.e:28109-28113 - EXIT mystat=RESULT_FAILURE / check timeout/no carrier
-      // (For web, we don't need carrier checks)
-    }
-
-    // express.e:28115 - mciViewSafe:=TRUE
+    // Run AquaScan with S (silent conferences already scanned) and U (unattended/batch mode)
+    // This will scan all conferences the user has access to
+    console.log('[confScan] Delegating to AquaScan door (N S U)');
+    await runSysCommand(socket, session, 'N', 'S U');
+    console.log('[confScan] AquaScan door completed');
+  } catch (err) {
+    console.error('[confScan] AquaScan door failed:', err);
+    // Continue even if door fails - don't block login
   }
-
-  // express.e:28117-28147 - Part upload check (TODO: implement if needed)
-  // For now, skip this section
 
   // express.e:28149 - ENDPROC RESULT_SUCCESS
   return 0; // RESULT_SUCCESS

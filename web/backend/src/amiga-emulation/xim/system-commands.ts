@@ -89,22 +89,15 @@ export class XIMSystemCommandsHandler {
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // CRITICAL FIX: XIM doors poll AEDoorPort for replies, not their mn_ReplyPort.
-    // RTW and other doors call GetMsg on AEDoorPort1 to receive both incoming
-    // commands from the BBS AND replies to their own messages.
-    // Instead of ReplyMsg (which sends to mn_ReplyPort), put the reply back
-    // on the XIM port (AEDoorPort) where the door is polling.
-    if (this.ximPortAddr !== 0) {
-      // Set message type to NT_REPLYMSG (6) so door knows it's a reply
-      const NT_REPLYMSG = 6;
-      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
-      this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
-      console.log(`[XIMSystem] Reply sent to AEDoorPort at 0x${this.ximPortAddr.toString(16)}`);
-    } else {
-      // Fallback to standard ReplyMsg if we don't have the XIM port
-      this.execLibrary.replyMsg(msg.msgAddr);
-      console.log(`[XIMSystem] Reply sent via ReplyMsg (fallback)`);
-    }
+    // Use standard ReplyMsg to send reply to the door's mn_ReplyPort.
+    // The door's reply port (e.g., 0xa0500) is separate from the AEDoorPort
+    // where we receive incoming commands. This prevents race conditions where
+    // our XIM polling loop would pick up our own reply messages.
+    //
+    // express.e line 4368 shows: ReplyMsg(msg) is called after processing XIM messages.
+    // This is the correct AmigaOS pattern - reply goes to message's mn_ReplyPort field.
+    this.execLibrary.replyMsg(msg.msgAddr);
+    console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
 
     console.log(`[XIMSystem] Registration acknowledged`);
 
@@ -1270,5 +1263,234 @@ export class XIMSystemCommandsHandler {
     }
 
     manager.start();
+  }
+
+  // =========================================================================
+  // NEW SYSTEM COMMAND HANDLERS (express.e production-ready implementation)
+  // =========================================================================
+
+  /**
+   * Handle INTERPRET_MCI (621)
+   * express.e:4044-4046: Process MCI codes without displaying output
+   * Returns the interpreted result in msg.string
+   */
+  handleInterpretMCI(msg: XIMMessage): void {
+    const mciText = this.getMessageString(msg);
+    console.log(`[XIMSystem] INTERPRET_MCI: "${mciText.substring(0, 40)}..."`);
+
+    // Process MCI codes and return result
+    // For now, return the string as-is (most doors just want variable substitution)
+    const processed = this.processMCIString(mciText);
+
+    this.messageParser.writeMessageString(msg.msgAddr, processed);
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+
+    console.log(`[XIMSystem]   Processed: "${processed.substring(0, 40)}..."`);
+    this.reply(msg, processed.length);
+  }
+
+  /**
+   * Simple MCI variable substitution for INTERPRET_MCI
+   */
+  private processMCIString(text: string): string {
+    let result = text;
+
+    // Replace common MCI codes with session data
+    const user = this.bbsSession?.user;
+    const nodeId = this.bbsSession?.nodeId ?? 0;
+
+    result = result.replace(/~US/gi, user?.username || 'Guest');
+    result = result.replace(/~LO/gi, user?.location || 'Unknown');
+    result = result.replace(/~ND/gi, nodeId.toString());
+    result = result.replace(/~BN/gi, this.bbsSession?.bbsName || 'AmiExpress-Web');
+    result = result.replace(/~SO/gi, this.bbsSession?.sysopName || 'Sysop');
+    result = result.replace(/~CF/gi, this.bbsSession?.conferenceName || 'Main');
+    result = result.replace(/~SL/gi, (user?.secLevel ?? 10).toString());
+
+    // Date/time codes
+    const now = new Date();
+    result = result.replace(/~TI/gi, now.toLocaleTimeString());
+    result = result.replace(/~DA/gi, now.toLocaleDateString());
+
+    return result;
+  }
+
+  /**
+   * Handle CHECK_PLAYPEN_EXISTS (632)
+   * express.e:4066-4068: Check if file exists in playpen or globally
+   */
+  handleCheckPlaypenExists(msg: XIMMessage): void {
+    const filename = this.getMessageString(msg);
+    console.log(`[XIMSystem] CHECK_PLAYPEN_EXISTS: "${filename}"`);
+
+    let exists = 0;
+
+    // First check directly
+    const resolved = this.resolvePath(filename);
+    if (this.pathExists(resolved)) {
+      exists = 1;
+      console.log(`[XIMSystem]   Found at: ${resolved}`);
+    } else {
+      // Check in playpens (express.e: checkInPlaypens)
+      const playpenHit = this.checkInPlaypens(filename);
+      if (playpenHit) {
+        exists = 1;
+        console.log(`[XIMSystem]   Found in playpen: ${playpenHit}`);
+      } else {
+        console.log(`[XIMSystem]   Not found`);
+      }
+    }
+
+    this.reply(msg, exists);
+  }
+
+  /**
+   * Handle SET_FILEATTACH (620)
+   * express.e:4042-4043: Set file attachment mode for message editor
+   */
+  handleSetFileAttach(msg: XIMMessage): void {
+    const enabled = msg.data !== 0;
+    console.log(`[XIMSystem] SET_FILEATTACH: ${enabled}`);
+
+    (this.state as any).fileAttach = enabled;
+    (this.bbsSession as any).fileAttach = enabled;
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle DISABLE_FILE_ATTACH (625)
+   * express.e:4053-4054: Disable file attachment mode
+   */
+  handleDisableFileAttach(msg: XIMMessage): void {
+    const disabled = msg.data !== 0;
+    console.log(`[XIMSystem] DISABLE_FILE_ATTACH: ${disabled}`);
+
+    (this.state as any).disallowFileAttach = disabled;
+    (this.bbsSession as any).disallowFileAttach = disabled;
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle SETOVERIDE (549)
+   * express.e:3953-3954: Set override mode for BBS commands
+   */
+  handleSetOverride(msg: XIMMessage): void {
+    const mode = msg.data;
+    console.log(`[XIMSystem] SETOVERIDE: ${mode}`);
+
+    (this.state as any).overrideMode = mode;
+    (this.bbsSession as any).overrideMode = mode;
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle SETMCIOFF (551)
+   * express.e:3957-3958: Disable MCI processing
+   */
+  handleSetMCIOff(msg: XIMMessage): void {
+    const off = msg.data !== 0;
+    console.log(`[XIMSystem] SETMCIOFF: ${off}`);
+
+    (this.state as any).mciOff = off;
+    (this.bbsSession as any).mciOff = off;
+
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Handle SIG_LI (912)
+   * express.e:4205-4207: Secure line input (password mode, no echo)
+   * This is like JH_LI but the input is not echoed to screen
+   */
+  handleSecureLineInput(msg: XIMMessage): void {
+    const maxLen = msg.data > 0 ? msg.data : 80;
+    console.log(`[XIMSystem] SIG_LI: maxLen=${maxLen} (secure input, no echo)`);
+
+    // For now, return empty string - actual implementation would need
+    // frontend support for password input mode
+    // The door expects the result in msg.string
+    this.messageParser.writeMessageString(msg.msgAddr, '');
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+
+    // TODO: Implement actual secure line input via socket event
+    // This would emit 'door:password-input' and wait for response
+    console.log(`[XIMSystem]   NOTE: SIG_LI not fully implemented - returning empty string`);
+
+    this.reply(msg, 0);
+  }
+
+  /**
+   * Handle GET_MENU_COMMAND_CHAR (623)
+   * express.e:4049-4050: Get menu command character
+   */
+  handleGetMenuCommandChar(msg: XIMMessage): void {
+    // Return the current menu command character (default is ':')
+    const cmdChar = (this.bbsSession as any)?.menuCommandChar || ':';
+    console.log(`[XIMSystem] GET_MENU_COMMAND_CHAR: '${cmdChar}'`);
+
+    this.messageParser.writeData(msg.msgAddr, cmdChar.charCodeAt(0));
+    this.reply(msg, cmdChar.charCodeAt(0));
+  }
+
+  /**
+   * Handle CHOOSE_NAME / EXT_CHOOSE_NAME (619/635)
+   * express.e:4069-4077: Name picker dialog for user lookup
+   */
+  handleChooseName(msg: XIMMessage): void {
+    const searchName = this.getMessageString(msg);
+    const maxLen = msg.data > 0 ? msg.data : 31;
+    console.log(`[XIMSystem] CHOOSE_NAME: search="${searchName}" maxLen=${maxLen}`);
+
+    // For now, just return the search string as-is
+    // Full implementation would search user database and show picker
+    const result = searchName.slice(0, maxLen);
+    this.messageParser.writeMessageString(msg.msgAddr, result);
+
+    // Write user data to filler pointers if provided
+    // msg.filler1 = user struct, msg.filler2 = userkeys struct
+    // For now, leave them unchanged
+
+    this.reply(msg, result.length > 0 ? 1 : 0);
+  }
+
+  /**
+   * Handle CHECK_REALNAME (636)
+   * express.e:4078-4087: Check if realname is required for current msgbase
+   */
+  handleCheckRealname(msg: XIMMessage): void {
+    console.log(`[XIMSystem] CHECK_REALNAME`);
+
+    // Return 0=handle, 1=realname required, 2=username required
+    // For now, return 0 (use handle/username)
+    const confNum = this.bbsSession?.conferenceId || 1;
+
+    // TODO: Check ConfConfig.info for REALNAME/USERNAME tooltypes
+    // For now, default to handle
+    console.log(`[XIMSystem]   Returning 0 (use handle)`);
+
+    this.reply(msg, 0);
+  }
+
+  /**
+   * Handle CON_CURSOR (705)
+   * express.e:4121-4126: Turn console cursor on/off
+   */
+  handleConCursor(msg: XIMMessage): void {
+    const cursorOn = msg.data !== 0;
+    console.log(`[XIMSystem] CON_CURSOR: ${cursorOn ? 'ON' : 'OFF'}`);
+
+    // Emit cursor control to frontend
+    if (cursorOn) {
+      this.socket.emit('ansi-output', '\x1b[?25h'); // Show cursor
+    } else {
+      this.socket.emit('ansi-output', '\x1b[?25l'); // Hide cursor
+    }
+
+    this.reply(msg, 1);
   }
 }

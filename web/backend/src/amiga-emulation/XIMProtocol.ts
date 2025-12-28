@@ -184,6 +184,24 @@ export class XIMProtocol {
   }
 
   /**
+   * Update the XIM port address used for replies.
+   * This is called when we discover the actual port the door created.
+   * Native AEDoor.library creates its own AEDoorPort{nodeId}, which may be
+   * different from the AEServer.{nodeId} we pre-created.
+   */
+  setXimPortAddress(addr: number): void {
+    console.log(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16)} to 0x${addr.toString(16)}`);
+    this.doorPort = addr;
+    this.state.ximPortAddr = addr;
+    this.state.aePortAddr = addr;
+    this.state.doorPortAddr = addr;
+    // Also update the systemCommandsHandler's cached port address
+    if ((this.systemCommandsHandler as any).ximPortAddr !== undefined) {
+      (this.systemCommandsHandler as any).ximPortAddr = addr;
+    }
+  }
+
+  /**
    * Check if waiting for line input from user
    */
   isWaitingForLineInput(): boolean {
@@ -558,8 +576,7 @@ export class XIMProtocol {
         break;
       case XIMCommand.JH_SMPTR:
         // JH_SMPTR uses stringPtr instead of embedded string
-        msg.string = '';
-        this.ioHandler.handleSendMessage(msg);
+        this.ioHandler.handleSendMessagePtr(msg);
         break;
 
       case XIMCommand.JH_PM:
@@ -649,9 +666,11 @@ export class XIMProtocol {
     const inRange =
       (command >= 100 && command <= 146) ||
       (command >= 527 && command <= 548) ||  // Extended to include MOD_TYPE, EDITOR_STRUCT, BYPASS_CSI_CHECK, SENTBY
-      command === 606 ||
-      (command >= 700 && command <= 701) ||
-      (command >= 1000 && command <= 1002);
+      command === 606 ||                      // DT_REALNAME
+      (command >= 637 && command <= 639) ||   // DT_INTERNETNAME, DT_TRANSLATOR, DT_HOST_LANGUAGE
+      (command >= 700 && command <= 704) ||   // DT_HOSTNAME, DT_HOSTIP, DT_GEOGRAPHIC, DT_SIZEUPLOAD, DT_SIZEDOWNLOAD
+      (command >= 900 && command <= 906) ||   // DT_CONFACCESS2, DT_CBYTESUPLOAD, DT_CBYTESDOWNLOAD, DT_CFILESUPLOAD, DT_CFILESDOWNLOAD, DT_CALLEDTODAY
+      (command >= 1000 && command <= 1002);   // DT_ADDBIT, DT_REMBIT, DT_QUERYBIT
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
       console.log(
         `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`
@@ -916,6 +935,19 @@ export class XIMProtocol {
       XIMCommand.SV_NEWMSG,
       XIMCommand.PRV_COMMAND,
       XIMCommand.PRV_GROUP,
+      // New production-ready system commands
+      XIMCommand.INTERPRET_MCI,
+      XIMCommand.CHECK_PLAYPEN_EXISTS,
+      XIMCommand.SET_FILEATTACH,
+      XIMCommand.DISABLE_FILE_ATTACH,
+      XIMCommand.SETOVERIDE,
+      XIMCommand.SETMCIOFF,
+      XIMCommand.SIG_LI,
+      XIMCommand.GET_MENU_COMMAND_CHAR,
+      XIMCommand.CHOOSE_NAME,
+      XIMCommand.EXT_CHOOSE_NAME,
+      XIMCommand.CHECK_REALNAME,
+      XIMCommand.CON_CURSOR,
     ];
 
     // Debug: log once to confirm runtime list
@@ -1032,6 +1064,52 @@ export class XIMProtocol {
       case XIMCommand.APPEND_ACCOUNT:
       case XIMCommand.LAST_ACCOUNTNUM:
         this.systemCommandsHandler.handleAccountOrConf(msg);
+        break;
+
+      // New production-ready system command handlers
+      case XIMCommand.INTERPRET_MCI:
+        this.systemCommandsHandler.handleInterpretMCI(msg);
+        break;
+
+      case XIMCommand.CHECK_PLAYPEN_EXISTS:
+        this.systemCommandsHandler.handleCheckPlaypenExists(msg);
+        break;
+
+      case XIMCommand.SET_FILEATTACH:
+        this.systemCommandsHandler.handleSetFileAttach(msg);
+        break;
+
+      case XIMCommand.DISABLE_FILE_ATTACH:
+        this.systemCommandsHandler.handleDisableFileAttach(msg);
+        break;
+
+      case XIMCommand.SETOVERIDE:
+        this.systemCommandsHandler.handleSetOverride(msg);
+        break;
+
+      case XIMCommand.SETMCIOFF:
+        this.systemCommandsHandler.handleSetMCIOff(msg);
+        break;
+
+      case XIMCommand.SIG_LI:
+        this.systemCommandsHandler.handleSecureLineInput(msg);
+        break;
+
+      case XIMCommand.GET_MENU_COMMAND_CHAR:
+        this.systemCommandsHandler.handleGetMenuCommandChar(msg);
+        break;
+
+      case XIMCommand.CHOOSE_NAME:
+      case XIMCommand.EXT_CHOOSE_NAME:
+        this.systemCommandsHandler.handleChooseName(msg);
+        break;
+
+      case XIMCommand.CHECK_REALNAME:
+        this.systemCommandsHandler.handleCheckRealname(msg);
+        break;
+
+      case XIMCommand.CON_CURSOR:
+        this.systemCommandsHandler.handleConCursor(msg);
         break;
     }
   }

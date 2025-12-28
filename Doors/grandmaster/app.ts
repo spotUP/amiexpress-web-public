@@ -731,6 +731,12 @@ export class GrandmasterApp {
       console.log('[GRANDMASTER] Game mode disabled');
     }
 
+    // Disconnect from network to prevent socket leaks
+    if (this.network) {
+      this.network.disconnect();
+      console.log('[GRANDMASTER] Network disconnected');
+    }
+
     // Clean up
     if (this.session.bbsSession) {
       this.session.bbsSession.doorInputHandler = null;

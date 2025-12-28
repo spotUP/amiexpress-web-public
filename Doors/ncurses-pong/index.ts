@@ -25,12 +25,20 @@ interface DoorSession {
   bbsSession: any;
   bbs: any;
   params: string[];
+  doorInputHandler?: (data: string) => void;
 }
 
 /** Main door entry point - required by BBS */
 export async function runDoor(session: DoorSession): Promise<void> {
   const door = new PongDoor();
   let inputHandlerInstalled = false;
+
+  // Enable game mode for real-time input (required for ncurses games)
+  // This makes the frontend send immediate key-down events instead of waiting for Enter
+  if (session.bbs?.enableGameMode) {
+    session.bbs.enableGameMode();
+    console.log('[ncurses-pong] Game mode enabled for real-time input');
+  }
 
   // Parse escape sequences into key names
   function parseKeyData(data: string): { ch: string | undefined; key: { name?: string; sequence: string } } {
@@ -84,11 +92,14 @@ export async function runDoor(session: DoorSession): Promise<void> {
       on: (event: string, handler: (ch: any, key: any) => void) => {
         if (event === 'keypress') {
           if (session.bbsSession) {
-            session.bbsSession.doorInputHandler = (data: string) => {
+            session.doorInputHandler = (data: string) => {
+              console.log('[ncurses-pong] doorInputHandler called with:', JSON.stringify(data));
               const { ch, key } = parseKeyData(data);
+              console.log('[ncurses-pong] parseKeyData result:', { ch, keyName: key.name, sequence: JSON.stringify(key.sequence) });
               handler(ch, key);
             };
             inputHandlerInstalled = true;
+            console.log('[ncurses-pong] doorInputHandler installed on session.doorInputHandler');
           } else {
             session.socket.on('data', (data: string) => {
               const { ch, key } = parseKeyData(data);
@@ -100,11 +111,18 @@ export async function runDoor(session: DoorSession): Promise<void> {
     }
   };
 
+  console.log('[ncurses-pong] Starting door.onStart()');
   try {
     await door.onStart(context as any);
   } finally {
-    if (inputHandlerInstalled && session.bbsSession?.doorInputHandler) {
-      delete session.bbsSession.doorInputHandler;
+    console.log('[ncurses-pong] door.onStart() completed, cleaning up');
+    // Remove socket listeners to prevent memory leaks
+    if (session.socket) {
+      session.socket.removeAllListeners('data');
+    }
+    if (inputHandlerInstalled && session.doorInputHandler) {
+      delete session.doorInputHandler;
+      console.log('[ncurses-pong] doorInputHandler cleaned up');
     }
   }
 }

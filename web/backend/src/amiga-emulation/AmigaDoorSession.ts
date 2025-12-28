@@ -448,8 +448,13 @@ export class AmigaDoorSession {
           this.createdDoorPort = false; // Don't delete on cleanup
         } else {
           // Create the port before door starts (express.e:4327)
-          const portAddr = this.sharedState.execLibrary?.createPublicPort(portName);
-          console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)} BEFORE door execution`);
+          // CRITICAL: Use createLightweightPort instead of createPublicPort!
+          // AEDoorPort is where doors send messages TO the BBS. We poll for messages
+          // in handlePausedState(), so we don't need PA_SIGNAL. Using PA_SIGNAL with
+          // the door's task as sigTask would cause the door to signal ITSELF when
+          // sending messages to the BBS, which is wrong and breaks Wait() synchronization.
+          const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
+          console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)} BEFORE door execution (lightweight, no PA_SIGNAL)`);
           this.createdDoorPort = true; // Delete on cleanup
         }
       }
@@ -636,10 +641,12 @@ export class AmigaDoorSession {
     const result2NameAddr = 0x110380;
 
     const progName = path.basename(this.config.executablePath);
+    // CRITICAL: Default to 1, not 0, to match port creation at line 437
+    // This ensures the door's first argument matches the AEDoorPort name
     const nodeId =
       this.config.bbsSession?.nodeId ??
       this.config.bbsSession?.nodeNumber ??
-      0;
+      1;
 
     // Full command line BSTR (program + node)
     const cmdLine = progName.toUpperCase();

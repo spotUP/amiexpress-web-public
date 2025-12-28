@@ -263,3 +263,5 @@ a.out
 # Runtime bulletin updates - INCLUDE AS TEMPLATE DATA
 # (Commented out to include bulletins in git)
 # Bulletins/bull*.txt
+bbsConfig.info.backup
+bbsConfig.info.txt

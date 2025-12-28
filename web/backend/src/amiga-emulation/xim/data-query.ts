@@ -757,11 +757,195 @@ export class XIMDataQueryHandler {
         }
         break;
 
+      // === NEW COMMANDS: DT_INTERNETNAME through DT_CALLEDTODAY ===
+      // express.e:4088-4195
+
+      case XIMCommand.DT_INTERNETNAME:
+        // express.e:4088-4093: Internet/email name
+        if (isRead) {
+          const internetName = (user as any)?.internetName || user?.email || '';
+          this.messageParser.writeString(stringAddr, internetName, 10);
+          console.log(`  [READ] DT_INTERNETNAME: "${internetName}"`);
+        } else {
+          const newName = this.messageParser.readString(stringAddr, 10);
+          if (user) (user as any).internetName = newName;
+          console.log(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
+        }
+        break;
+
+      case XIMCommand.DT_TRANSLATOR:
+        // express.e:4094-4100: Translation setting (userLanguage)
+        if (isRead) {
+          const translator = (this.state as any).userLanguage || '';
+          this.messageParser.writeString(stringAddr, translator, 200);
+          console.log(`  [READ] DT_TRANSLATOR: "${translator}"`);
+        } else {
+          const newTranslator = this.messageParser.readString(stringAddr, 200);
+          (this.state as any).userLanguage = newTranslator;
+          console.log(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
+        }
+        break;
+
+      case XIMCommand.DT_HOST_LANGUAGE:
+        // express.e:4101-4106: Host language setting
+        if (isRead) {
+          const hostLang = (this.state as any).hostLanguage || 'English';
+          this.messageParser.writeString(stringAddr, hostLang, 200);
+          console.log(`  [READ] DT_HOST_LANGUAGE: "${hostLang}"`);
+        } else {
+          const newLang = this.messageParser.readString(stringAddr, 200);
+          (this.state as any).hostLanguage = newLang;
+          console.log(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
+        }
+        break;
+
+      case XIMCommand.DT_GEOGRAPHIC:
+        // express.e:4113-4114: BBS geographic location (mybbsLoc)
+        if (isRead) {
+          const geo = (this.bbsSession as any)?.bbsLocation || 'The Internet';
+          this.messageParser.writeString(stringAddr, geo, 200);
+          console.log(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
+        }
+        break;
+
+      case XIMCommand.DT_SIZEUPLOAD:
+        // express.e:4115-4117: Human-readable upload size (e.g., "1.5 MB")
+        if (isRead) {
+          const bytesUp = user?.bytesUpload || 0;
+          const sizeText = this.formatSizeText(bytesUp);
+          this.messageParser.writeString(stringAddr, sizeText, 200);
+          console.log(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
+        }
+        break;
+
+      case XIMCommand.DT_SIZEDOWNLOAD:
+        // express.e:4118-4120: Human-readable download size (e.g., "2.3 GB")
+        if (isRead) {
+          const bytesDown = user?.bytesDownload || 0;
+          const sizeText = this.formatSizeText(bytesDown);
+          this.messageParser.writeString(stringAddr, sizeText, 200);
+          console.log(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
+        }
+        break;
+
+      case XIMCommand.DT_CONFACCESS2:
+        // express.e:4141-4150: Extended 25-character conference access string
+        if (isRead) {
+          let confAccess2 = '';
+          const numConfs = (this.bbsSession as any)?.numConfs || 25;
+          const baseAccess = this.state.confAccess || (this.bbsSession as any)?.confAccess || '';
+          for (let i = 1; i <= Math.min(25, numConfs); i++) {
+            const hasAccess = i <= baseAccess.length && baseAccess[i - 1].toUpperCase() === 'X';
+            confAccess2 += hasAccess ? 'X' : '_';
+          }
+          this.messageParser.writeString(stringAddr, confAccess2, 200);
+          console.log(`  [READ] DT_CONFACCESS2: "${confAccess2}"`);
+        } else {
+          const newAccess = this.messageParser.readString(stringAddr, 25);
+          // Update the first 10 chars to main confAccess, store full in confAccess2
+          this.state.confAccess = newAccess.slice(0, 10);
+          (this.state as any).confAccess2 = newAccess;
+          console.log(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
+        }
+        break;
+
+      case XIMCommand.DT_CBYTESUPLOAD:
+        // express.e:4151-4159: Conference-specific bytes uploaded (same as DT_BYTESUPLOAD in web)
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          if (isRead) {
+            const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
+            this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
+            console.log(`  [READ] DT_CBYTESUPLOAD: ${bytesUp}`);
+          } else {
+            const newBytes = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newBytes) && user) user.bytesUpload = newBytes;
+            console.log(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
+          }
+        }
+        break;
+
+      case XIMCommand.DT_CBYTESDOWNLOAD:
+        // express.e:4160-4168: Conference-specific bytes downloaded
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          if (isRead) {
+            const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
+            this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
+            console.log(`  [READ] DT_CBYTESDOWNLOAD: ${bytesDown}`);
+          } else {
+            const newBytes = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newBytes) && user) user.bytesDownload = newBytes;
+            console.log(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
+          }
+        }
+        break;
+
+      case XIMCommand.DT_CFILESUPLOAD:
+        // express.e:4169-4175: Conference-specific files uploaded
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          if (isRead) {
+            const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
+            this.messageParser.writeString(stringAddr, uploads.toString(), 200);
+            console.log(`  [READ] DT_CFILESUPLOAD: ${uploads}`);
+          } else {
+            const newUploads = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newUploads) && user) user.uploads = newUploads;
+            console.log(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
+          }
+        }
+        break;
+
+      case XIMCommand.DT_CFILESDOWNLOAD:
+        // express.e:4176-4182: Conference-specific files downloaded
+        {
+          const diskStats = (this.bbsSession as any)?.diskUserStats;
+          if (isRead) {
+            const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
+            this.messageParser.writeString(stringAddr, downloads.toString(), 200);
+            console.log(`  [READ] DT_CFILESDOWNLOAD: ${downloads}`);
+          } else {
+            const newDownloads = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newDownloads) && user) user.downloads = newDownloads;
+            console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
+          }
+        }
+        break;
+
+      case XIMCommand.DT_CALLEDTODAY:
+        // express.e:4189-4195: Times called today
+        {
+          if (isRead) {
+            const timesOnToday = (user as any)?.timesOnToday ?? 1;
+            this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
+            console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday}`);
+          } else {
+            const newCount = parseInt(this.messageParser.readString(stringAddr));
+            if (!isNaN(newCount) && user) (user as any).timesOnToday = newCount;
+            console.log(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
+          }
+        }
+        break;
+
       default:
         console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }
 
     this.reply(msg, replyData);
+  }
+
+  /**
+   * Format bytes as human-readable size text (e.g., "1.5 MB", "2.3 GB")
+   * express.e uses calcSizeText() for DT_SIZEUPLOAD/DT_SIZEDOWNLOAD
+   */
+  private formatSizeText(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const value = bytes / Math.pow(k, i);
+    return `${value.toFixed(1)} ${units[i]}`;
   }
 
   /**

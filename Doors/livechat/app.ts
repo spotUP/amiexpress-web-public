@@ -849,9 +849,27 @@ export async function createApp(session: DoorSession) {
   });
 
   // Chat log click to focus and show context menu
-  chatLog.on('click', () => {
+  chatLog.on('click', (data: any) => {
     chatLog.focus();
-    showContextMenu(0, 0, 'chat');
+
+    // Don't show context menu if clicking near the edges (resize handle area)
+    // Resize handles are 3 cols wide and 2 rows tall at each corner
+    const x = data?.x || 0;
+    const y = data?.y || 0;
+    const width = (chatLog as any).width || 80;
+    const height = (chatLog as any).height || 24;
+
+    // Check if click is in a resize handle area (corners or edges)
+    const nearLeft = x < 2;
+    const nearRight = x > width - 3;
+    const nearTop = y < 2;
+    const nearBottom = y > height - 2;
+
+    // Only show context menu if NOT in a resize handle area
+    if (!nearLeft && !nearRight && !nearTop && !nearBottom) {
+      showContextMenu(x, y, 'chat');
+    }
+
     screen.render();
   });
 
@@ -864,18 +882,24 @@ export async function createApp(session: DoorSession) {
       const text = typeof items[selected] === 'string' ? items[selected] : (items[selected] as any)?.content || '';
       const match = text.match(/^.\s+(\S+)/);
       if (match && match[1]) {
-        showContextMenu(0, 0, 'user', match[1]);
+        // Use mouse coordinates from click event, fallback to 0,0
+        const x = data?.x || 0;
+        const y = data?.y || 0;
+        showContextMenu(x, y, 'user', match[1]);
       }
     }
     screen.render();
   });
 
   // Channel list click to focus and show channel context menu
-  channelList.on('click', () => {
+  channelList.on('click', (data: any) => {
     channelList.focus();
     const selected = (channelList as any).selected;
     if (selected !== undefined && channelItems[selected]) {
-      showContextMenu(0, 0, 'channel', channelItems[selected].name);
+      // Use mouse coordinates from click event, fallback to 0,0
+      const x = data?.x || 0;
+      const y = data?.y || 0;
+      showContextMenu(x, y, 'channel', channelItems[selected].name);
     }
     screen.render();
   });
@@ -891,10 +915,17 @@ export async function createApp(session: DoorSession) {
   // ========== HELPER FUNCTIONS ==========
 
   function addChatMessage(line: string, applyMarkdown = true) {
+    console.log('[addChatMessage] Called with line:', line.substring(0, 100));
+    console.log('[addChatMessage] applyMarkdown:', applyMarkdown);
     const parsed = applyMarkdown ? parseContent(line) : line;
+    console.log('[addChatMessage] After parsing:', parsed.substring(0, 100));
     const highlighted = highlightMentions(parsed, username);
+    console.log('[addChatMessage] After highlighting:', highlighted.substring(0, 100));
+    console.log('[addChatMessage] Calling chatLog.log()...');
     chatLog.log(highlighted);
+    console.log('[addChatMessage] Calling screen.render()...');
     screen.render();
+    console.log('[addChatMessage] Done');
   }
 
   function addSystemMessage(msg: string) {
@@ -1368,6 +1399,10 @@ export async function createApp(session: DoorSession) {
       await loader.delay(500);
       loader.hide();
       loader.destroy();  // Completely remove loader and overlay from screen
+
+      // Force initial layout calculation to ensure full-width elements are properly sized
+      // Emit a resize event to trigger the responsive layout manager
+      screen.emit('resize');
 
       screen.render();
 

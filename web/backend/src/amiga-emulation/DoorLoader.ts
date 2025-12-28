@@ -145,7 +145,8 @@ export class DoorLoader {
     console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
 
     // Set up CLI/argument string similar to AmigaDOS
-    const nodeId = this.config.bbsSession?.nodeId || 0;
+    // CRITICAL: Default to 1, not 0, to match AEDoorPort naming convention
+    const nodeId = this.config.bbsSession?.nodeId || 1;
     const doorType = (this.config.doorType || "").toUpperCase();
     // CRITICAL FIX: AmiExpress convention requires argv[0] to contain node number, NOT program name
     // This differs from standard AmigaDOS where argv[0] is the program name

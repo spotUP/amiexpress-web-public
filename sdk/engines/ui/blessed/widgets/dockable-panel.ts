@@ -46,6 +46,8 @@ export interface PanelState {
   savedHeight?: number;
   savedX?: number;
   savedY?: number;
+  // Original dock position before dragging (for swapping)
+  originalDockPosition?: DockPosition;
 }
 
 /**
@@ -333,6 +335,14 @@ export class DockablePanel extends Panel {
    */
   private setupDragging(): void {
     this.on('mousedown', (data: any) => {
+      // Don't start drag if clicking on a resize handle
+      // Check if the event originated from a resize handle by checking all handles
+      for (const handle of this.resizeHandles.values()) {
+        if (data.target === handle) {
+          return; // Let the resize handle process this event
+        }
+      }
+
       // Only start drag from title bar or if no title bar exists
       if (!this.titleBar || data.y === 0) {
         this.startDrag(data.x, data.y);
@@ -399,6 +409,11 @@ export class DockablePanel extends Panel {
         handle.style.fg = 'yellow';
         handle.style.bg = 'blue';
         this.showResizeCursor(handleConfig.name);
+
+        // Force render to show color change
+        if (this.screen) {
+          this.screen.render();
+        }
       });
 
       handle.on('mouseout', () => {
@@ -406,6 +421,11 @@ export class DockablePanel extends Panel {
         handle.style.fg = 'cyan';
         handle.style.bg = 'black';
         this.hideResizeCursor();
+
+        // Force render to show color change
+        if (this.screen) {
+          this.screen.render();
+        }
       });
     }
     // Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
@@ -485,9 +505,13 @@ export class DockablePanel extends Panel {
     // Bring to front
     this.bringToFront();
 
-    // Undock if currently docked
+    // Save original dock position before undocking (for panel swapping)
     if (this.dockPosition !== 'float') {
+      this.panelState.originalDockPosition = this.dockPosition;
       this.setDockPosition('float');
+    } else {
+      // Already floating, no original position to save
+      this.panelState.originalDockPosition = undefined;
     }
 
     this.emit('drag-start');
@@ -735,6 +759,9 @@ export class DockablePanel extends Panel {
   private checkPanelSwap(): boolean {
     if (!this.screen) return false;
 
+    // Can only swap if we had an original dock position (were docked before dragging)
+    if (!this.panelState.originalDockPosition) return false;
+
     const myX = this.left as number;
     const myY = this.top as number;
     const myW = this.width as number;
@@ -761,13 +788,16 @@ export class DockablePanel extends Panel {
       if (myCenterX >= otherX && myCenterX <= otherX + otherW &&
           myCenterY >= otherY && myCenterY <= otherY + otherH) {
 
-        // Swap positions
-        const myPosition = this.dockPosition;
+        // Swap positions using the original position we saved before dragging
+        const myOriginalPosition = this.panelState.originalDockPosition;
         const otherPosition = otherPanel.getDockPosition();
 
         // Swap the dock positions
         this.setDockPosition(otherPosition);
-        otherPanel.setDockPosition(myPosition);
+        otherPanel.setDockPosition(myOriginalPosition);
+
+        // Clear the saved original position after successful swap
+        this.panelState.originalDockPosition = undefined;
 
         return true;
       }

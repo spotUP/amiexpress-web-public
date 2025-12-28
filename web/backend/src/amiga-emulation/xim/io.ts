@@ -375,6 +375,34 @@ export class XIMIOHandler {
   }
 
   /**
+   * Handle JH_SMPTR (Send Message via Pointer)
+   * From E sources (express.e:3412-3417)
+   *
+   * Like JH_SM but uses msg.strptr instead of msg.string embedded buffer.
+   * This allows doors to pass longer strings via a separate memory pointer.
+   */
+  handleSendMessagePtr(msg: XIMMessage): void {
+    // Read text from strptr (filler1 field contains the string pointer)
+    let text = '';
+    if (msg.stringPtr && msg.stringPtr > 0) {
+      text = this.messageParser.readString(msg.stringPtr, 255);
+    } else if (msg.filler1 && msg.filler1 > 0) {
+      text = this.messageParser.readString(msg.filler1, 255);
+    } else {
+      // Fall back to embedded string
+      text = this.getMessageString(msg);
+    }
+
+    const shouldAddNewline = msg.data !== 0;
+
+    console.log(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})`);
+
+    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
+
+    this.reply(msg, 1);
+  }
+
+  /**
    * Handle JH_PM (Prompt Message)
    * From E sources (express.e:3418-3424)
    *

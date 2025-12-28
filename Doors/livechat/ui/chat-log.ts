@@ -40,21 +40,26 @@ export function createChatLog(
   });
 
   // Create log inside the panel
-  // NOTE: Position must avoid DockablePanel's resize handles:
-  //   - top: 1 (below title bar which is at row 0)
-  //   - left: 1 (right of west resize handle which is 1 col wide)
-  //   - width: '100%-2' (avoid west AND east resize handles)
-  //   - height: '100%-2' (avoid title bar AND bottom resize handles)
+  // Calculate dimensions to fill panel interior (avoiding borders and title bar)
+  const panelWidth = screenWidth - sidebarWidth;
+  const panelHeight = screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT - TYPING_HEIGHT;
+
+  // Log dimensions: panel size minus borders (2 cols/rows for left+right, top+bottom)
+  const logWidth = panelWidth - 2;  // -2 for left and right borders
+  const logHeight = panelHeight - 2;  // -2 for title bar and bottom border
+
   const chatLog = createLog({
     parent: chatPanel,
     top: 1,      // Below title bar
-    left: 1,     // Right of west resize handle
-    width: '100%-2',   // Avoid west and east resize handles
-    height: '100%-2',  // Avoid title bar and bottom resize handles
+    left: 1,     // Right of left border
+    width: logWidth,
+    height: logHeight,
     label: '',
     border: { type: 'none' },
     mouse: true,
     scrollable: true,
+    alwaysScroll: true,
+    scrollOnInput: true,
     scrollbar: {
       ch: '█'
     },

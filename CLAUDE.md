@@ -349,6 +349,12 @@ Start: `Documentation/README.md`
 
 ---
 
+## Collaboration Notes
+
+**Timezone differences:** The user and AI may have different time contexts. Log timestamps in logs are in UTC/server time. When discussing "today's logs" or "recent changes", always verify by checking actual file modification times with `ls -la` rather than assuming based on date references.
+
+---
+
 ## Safety
 
 **Historical preservation** - NOT malware/hacking. Educational BBS culture, retro Amiga 68K, defensive security ONLY, open source.

@@ -52,7 +52,7 @@ export function setupMouseHandling(s: any, cm: any, hcm: () => void, stb: any, s
           s.render();
         }
         if (e.button === 'right' || (e.button === 'left' && sel !== undefined)) {
-          if (sel !== undefined && its[sel]) {
+          if (sel !== undefined && Array.isArray(its) && sel >= 0 && sel < its.length && its[sel]) {
             const txt = typeof its[sel] === 'string' ? its[sel] : (its[sel] as any)?.content || '';
             const m = txt.match(/^.\s+(\S+)/);
             if (m) {
@@ -73,7 +73,9 @@ export function setupMouseHandling(s: any, cm: any, hcm: () => void, stb: any, s
           s.render();
         }
         if (e.button === 'right' || (e.button === 'left' && sel !== undefined)) {
-          if (sel !== undefined && ci[sel]) scm(x, y, 'channel', ci[sel].name);
+          if (sel !== undefined && ci && Array.isArray(ci) && sel >= 0 && sel < ci.length && ci[sel]) {
+            scm(x, y, 'channel', ci[sel].name);
+          }
         }
       }
       return;

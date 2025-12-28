@@ -127,10 +127,10 @@ export async function createApp(session: DoorSession) {
 
   const under = createBox({
     parent: underPanel,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
     style: {
       bg: 'yellow',
     },
@@ -160,10 +160,10 @@ export async function createApp(session: DoorSession) {
 
   const over = createBox({
     parent: overPanel,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
     style: {
       bg: 'red',
       transparent: true,
