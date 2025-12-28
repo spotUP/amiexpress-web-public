@@ -86,6 +86,54 @@ function checkForUnsupportedAnsi(content: string, context: string): void {
 }
 
 /**
+ * Setup auto-resize handler for elements with percentage widths/heights
+ * Ensures percentage-based dimensions update correctly when screen resizes
+ */
+function setupAutoResize(element: any, options?: any): void {
+  if (!options) return;
+
+  const hasPercentageWidth = typeof options.width === 'string' && options.width.includes('%');
+  const hasPercentageHeight = typeof options.height === 'string' && options.height.includes('%');
+
+  if (!hasPercentageWidth && !hasPercentageHeight) return;
+
+  // Store original percentage values
+  const originalWidth = options.width;
+  const originalHeight = options.height;
+
+  // Wait for element to attach to screen
+  element.once('attach', () => {
+    if (!element.screen) return;
+
+    // Update dimensions on screen resize
+    element.screen.on('resize', () => {
+      if (hasPercentageWidth && element.parent) {
+        // Recalculate percentage width
+        const parentWidth = (element.parent as any).width || element.screen.width;
+        if (typeof originalWidth === 'string' && originalWidth.endsWith('%')) {
+          const percent = parseInt(originalWidth, 10) / 100;
+          element.position.width = Math.floor(parentWidth * percent);
+        }
+      }
+
+      if (hasPercentageHeight && element.parent) {
+        // Recalculate percentage height
+        const parentHeight = (element.parent as any).height || element.screen.height;
+        if (typeof originalHeight === 'string' && originalHeight.endsWith('%')) {
+          const percent = parseInt(originalHeight, 10) / 100;
+          element.position.height = Math.floor(parentHeight * percent);
+        }
+      }
+
+      // Trigger render
+      if (element.screen) {
+        element.screen.render();
+      }
+    });
+  });
+}
+
+/**
  * Process options to ensure tags work correctly
  * - Forces tags: true (cannot be overridden)
  * - Warns if tags: false was attempted
@@ -202,10 +250,15 @@ export function ansiToTags(text: string): string {
 export function createBox(options?: ElementOptions): Box {
   const processedOptions = processElementOptions(options, 'createBox');
 
-  return blessed.box({
+  const box = blessed.box({
     ...processedOptions,
     tags: true,  // FORCED AFTER spread - cannot be overridden
   });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(box, options);
+
+  return box;
 }
 
 /**
@@ -256,14 +309,20 @@ export function createText(options?: ElementOptions): Text {
  *
  * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
  */
 export function createTextarea(options?: TextboxOptions): Textarea {
   const processedOptions = processElementOptions(options, 'createTextarea');
 
-  return blessed.textarea({
+  const textarea = blessed.textarea({
     ...processedOptions,
     tags: true,  // FORCED AFTER spread - cannot be overridden
   });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(textarea, options);
+
+  return textarea;
 }
 
 /**
@@ -273,14 +332,20 @@ export function createTextarea(options?: TextboxOptions): Textarea {
  *
  * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
  */
 export function createLog(options?: LogOptions): Log {
   const processedOptions = processElementOptions(options, 'createLog');
 
-  return blessed.log({
+  const log = blessed.log({
     ...processedOptions,
     tags: true,  // FORCED AFTER spread - cannot be overridden
   });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(log, options);
+
+  return log;
 }
 
 /**
