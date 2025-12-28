@@ -39,6 +39,10 @@ export function createChatLog(
     style: { border: { fg: 'green' } },
   });
 
+  // Explicitly set position after creation (DockablePanel may override initial values)
+  (chatPanel as any).position.left = sidebarWidth;
+  (chatPanel as any).position.top = MENU_HEIGHT;
+
   // Create log inside the panel
   // Calculate dimensions to fill panel interior (avoiding borders and title bar)
   const panelWidth = screenWidth - sidebarWidth;

@@ -634,6 +634,337 @@ class DockablePanel extends Panel {
 - Consider docking panels to edges
 - Use different starting positions
 
+## Advanced Tips & Best Practices
+
+### DockablePanel Initial Positioning
+
+When using `dockPosition: 'float'`, the panel may override initial position values. Always explicitly set position after creation:
+
+```typescript
+const panel = new DockablePanel({
+  parent: screen,
+  left: 20,
+  top: 5,
+  width: 60,
+  height: 20,
+  dockPosition: 'float',
+  // ... other options
+});
+
+// IMPORTANT: Explicitly set position after creation
+(panel as any).position.left = 20;
+(panel as any).position.top = 5;
+```
+
+This ensures the panel appears at the correct coordinates even when floating.
+
+### Element Z-Index and Rendering Order
+
+Use `setIndex()` to control which elements render on top:
+
+```typescript
+// Create an emoji button that should appear above other elements
+const emojiButton = createButton({
+  parent: screen,
+  bottom: 1,
+  right: 0,
+  width: 5,
+  height: 1,
+  content: ':)',
+  // ... other options
+});
+
+// Ensure button renders above panels
+emojiButton.setIndex(100);
+```
+
+Higher z-index values render on top. Use:
+- `0-10`: Background elements
+- `10-50`: Main panels
+- `50-100`: Floating overlays
+- `100+`: Top-level UI elements (buttons, badges)
+
+### Overlay ESC Key Handling
+
+Overlays with `closable: true` need explicit handling to work reliably:
+
+```typescript
+const overlay = blessed.box({
+  parent: screen,
+  top: 'center',
+  left: 'center',
+  width: '80%',
+  height: '80%',
+  closable: true,  // Adds [X] button
+  keys: true,
+  // ... other options
+});
+
+// IMPORTANT: close event doesn't auto-hide - you must do it manually
+overlay.on('close', () => {
+  overlay.hide();
+  inputBox.focus();
+  screen.render();
+});
+
+// CRITICAL: Add explicit ESC handler for when child elements are focused
+overlay.key(['escape'], () => {
+  overlay.hide();
+  inputBox.focus();
+  screen.render();
+});
+```
+
+**Why both handlers?**
+- `on('close')` - Triggered by [X] button click
+- `key(['escape'])` - Works when child elements (buttons, lists) are focused
+
+Without the explicit escape handler, ESC will only remove focus but won't close the overlay.
+
+### Responsive Layout with Dynamic Elements
+
+When adding UI elements that affect layout (like emoji buttons), update responsive handlers:
+
+```typescript
+// Constants for spacing
+export const INPUT_HEIGHT = 3;
+export const EMOJI_BUTTON_WIDTH = 6;
+
+export function createInputBox(screen: Screen) {
+  const screenWidth = (screen as any).width || 80;
+
+  const inputBox = createTextarea({
+    parent: screen,
+    bottom: STATUS_HEIGHT,
+    left: 0,
+    width: screenWidth - EMOJI_BUTTON_WIDTH,  // Leave space for button
+    height: INPUT_HEIGHT,
+    // ... other options
+  });
+
+  const emojiButton = createButton({
+    parent: screen,
+    bottom: STATUS_HEIGHT + 1,
+    right: 0,  // Flush with right edge
+    width: EMOJI_BUTTON_WIDTH - 1,
+    height: 1,
+    content: ' :) ',
+    // ... other options
+  });
+
+  return { inputBox, emojiButton };
+}
+
+// In responsive resize handler
+screen.responsiveLayout.onResize((width, height) => {
+  // Update input box width to account for emoji button
+  inputBox.position.width = width - EMOJI_BUTTON_WIDTH;
+
+  // Other full-width elements still use full width
+  statusBar.position.width = width;
+  menuBar.position.width = width;
+
+  screen.render();
+});
+```
+
+**Key points:**
+- Export spacing constants for reuse
+- Account for button space in input width
+- Update widths in responsive handler
+- Return objects when creating multi-element components
+
+### Sidebar Toggle Pattern
+
+When implementing sidebar show/hide, update BOTH position and width:
+
+```typescript
+function toggleSidebar(visible: boolean) {
+  const leftOffset = visible ? SIDEBAR_WIDTH : 0;
+  const screenWidth = (screen as any).width || 80;
+  const availableWidth = screenWidth - leftOffset;
+
+  // Update main panel position AND width
+  chatPanel.position.left = leftOffset;
+  chatPanel.position.width = availableWidth;
+
+  // Update child elements inside panel
+  if (chatLog) {
+    chatLog.position.width = availableWidth - 2;  // -2 for borders
+  }
+
+  // Update other full-width elements
+  if (typingBar) {
+    typingBar.position.left = leftOffset;
+    typingBar.position.width = availableWidth;
+  }
+
+  // Show/hide sidebar elements
+  if (visible) {
+    sidebarTabs.show();
+    channelList.show();
+  } else {
+    sidebarTabs.hide();
+    channelList.hide();
+  }
+
+  screen.render();
+}
+```
+
+**Common mistake:** Only updating `left` without updating `width` causes panels to not fill the space.
+
+### Ghost Text / Inline Autocomplete
+
+Implement Claude-style inline completion with split coloring:
+
+```typescript
+// Create ghost text overlay
+const ghostText = createBox({
+  parent: screen,
+  bottom: INPUT_HEIGHT + STATUS_HEIGHT - 1,
+  left: 10,  // Dynamically positioned based on cursor
+  width: 70,
+  height: 1,
+  tags: true,
+  content: '',
+  style: { fg: 'gray', bg: 'black' },
+});
+ghostText.hide();
+
+let currentGhostCompletion = '';
+
+function showCommandSuggestions(input: string) {
+  const searchTerm = input.slice(1).toLowerCase();  // Remove '/'
+
+  // Filter and find top match
+  const topMatch = filteredCommands[0];
+
+  if (topMatch && topMatch.name.toLowerCase().startsWith(searchTerm)) {
+    const typedPortion = searchTerm;
+    const remainingPortion = topMatch.name.slice(searchTerm.length);
+
+    // Store full completion
+    currentGhostCompletion = topMatch.name;
+
+    // Position after typed characters
+    ghostText.position.left = 1 + typedPortion.length;
+
+    // Show typed in white, remaining in gray
+    ghostText.setContent(
+      `{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`
+    );
+    ghostText.show();
+  } else {
+    ghostText.hide();
+    currentGhostCompletion = '';
+  }
+
+  screen.render();
+}
+
+// Accept completion with Tab or Enter
+inputBox.on('keypress', (ch, key) => {
+  if ((key.name === 'tab' || key.name === 'enter') && currentGhostCompletion) {
+    inputBox.setValue(`/${currentGhostCompletion} `);
+    ghostText.hide();
+    currentGhostCompletion = '';
+    screen.render();
+  }
+});
+```
+
+**Key points:**
+- Use blessed tags for split coloring: `{white-fg}typed{/}{gray-fg}remaining{/}`
+- Position dynamically based on cursor location
+- Store full completion for easy acceptance
+- Hide on no match or after acceptance
+
+### Blessed Positioning Gotchas
+
+**Right-edge positioning:**
+```typescript
+// Flush with right edge
+element.position.right = 0;  // NOT 1!
+
+// With 1-column padding
+element.position.right = 1;
+```
+
+**Bottom-edge positioning:**
+```typescript
+// Bottom of screen
+element.position.bottom = 0;
+
+// Above status bar (height 1)
+element.position.bottom = 1;
+
+// Above input box (height 3) and status bar (height 1)
+element.position.bottom = 4;
+```
+
+**Width calculations:**
+```typescript
+// For element inside panel with borders
+const elementWidth = panelWidth - 2;  // -2 for left + right borders
+const elementHeight = panelHeight - 2;  // -2 for title + bottom border
+```
+
+### Function Return Type Changes
+
+When refactoring functions to return objects instead of single values:
+
+```typescript
+// Before
+export function createInputBox(screen: Screen): Textarea {
+  return inputBox;
+}
+
+// After
+export function createInputBox(screen: Screen): { inputBox: Textarea; emojiButton: any } {
+  return { inputBox, emojiButton };
+}
+```
+
+**Update ALL call sites:**
+```typescript
+// Before
+const inputBox = createInputBox(screen);
+
+// After
+const { inputBox, emojiButton } = createInputBox(screen);
+```
+
+Missed call sites will cause `undefined` errors when trying to access properties.
+
+### Performance Optimization
+
+**Batch renders when updating multiple elements:**
+```typescript
+// BAD: Renders after each change
+element1.position.width = newWidth;
+screen.render();
+element2.position.width = newWidth;
+screen.render();
+element3.position.width = newWidth;
+screen.render();
+
+// GOOD: Single render after all changes
+element1.position.width = newWidth;
+element2.position.width = newWidth;
+element3.position.width = newWidth;
+screen.render();
+```
+
+**Use position properties, not options:**
+```typescript
+// BAD: Options only read at construction
+element.options.width = newWidth;
+
+// GOOD: Position properties update immediately
+element.position.width = newWidth;
+```
+
 ## Further Reading
 
 - [KEYBOARD_NAVIGATION.md](./KEYBOARD_NAVIGATION.md) - Keyboard shortcuts for panels

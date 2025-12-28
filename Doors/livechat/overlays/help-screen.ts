@@ -83,6 +83,14 @@ export function createHelpScreen(
 
   // When closed (via X button, ESC, or F1), focus input
   helpOverlay.on('close', () => {
+    helpOverlay.hide();
+    inputBox.focus();
+    screen.render();
+  });
+
+  // Add explicit escape key handler to ensure it works
+  helpOverlay.key(['escape'], () => {
+    helpOverlay.hide();
     inputBox.focus();
     screen.render();
   });

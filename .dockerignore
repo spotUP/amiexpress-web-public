@@ -4,8 +4,11 @@ npm-debug.log
 yarn-error.log
 package-lock.json
 
-# Build outputs
+# Build outputs (exclude from Docker context to reduce size)
+# But keep Doors/**/dist - TypeScript doors need their built code!
 dist
+!Doors/**/dist
+!doors/**/dist
 build
 .next
 out

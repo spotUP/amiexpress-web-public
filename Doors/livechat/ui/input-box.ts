@@ -32,12 +32,13 @@ export function createInputBox(screen: Screen): { inputBox: Textarea; emojiButto
   const emojiButton = createButton({
     parent: screen,
     bottom: STATUS_HEIGHT + 1,  // +1 to align with input content (skip top border)
-    right: 1,
-    width: EMOJI_BUTTON_WIDTH - 2,  // -2 for spacing
+    right: 0,  // Flush with right edge
+    width: EMOJI_BUTTON_WIDTH - 1,  // -1 to fit within emoji button space
     height: 1,
-    content: ':)',
+    content: ' :) ',
     mouse: true,
     clickable: true,
+    tags: true,
     style: {
       fg: 'yellow',
       bg: 'black',
@@ -51,6 +52,9 @@ export function createInputBox(screen: Screen): { inputBox: Textarea; emojiButto
       },
     },
   });
+
+  // Ensure button renders above other elements
+  emojiButton.setIndex(100);
 
   return { inputBox, emojiButton };
 }
