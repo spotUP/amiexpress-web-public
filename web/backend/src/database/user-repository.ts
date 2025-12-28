@@ -143,6 +143,7 @@ export class UserRepository extends BaseRepository<User> {
 
     return {
       id: user.id,
+      slotNumber: user.slotnumber ? safeNumber(user.slotnumber) : undefined,
       username: user.username,
       passwordHash: user.passwordhash,
       realname: user.realname,
@@ -214,26 +215,21 @@ export class UserRepository extends BaseRepository<User> {
 
     // CRITICAL: Sync to disk files for Amiga door compatibility
     const updatedUser = await this.getUserById(id);
-    if (updatedUser) {
-      // Find user's slot number (would need to track this better in production)
-      const allUsers = await this.getUsers({});
-      const slotNumber = allUsers.findIndex(u => u.id === id);
-      if (slotNumber >= 0) {
-        try {
-          userFileManager.updateUserDataFile(updatedUser, slotNumber);
-          console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${slotNumber})`);
-        } catch (error) {
-          console.error(`[Database] Failed to sync user update to disk:`, error);
-          SysopDebugUtil.debug(
-            null,
-            null,
-            'Database',
-            `Failed to sync updated user "${updatedUser.username}" to disk files`,
-            { error: error instanceof Error ? error.message : String(error), slotNumber },
-            DebugSeverity.WARNING
-          );
-          // Don't throw - DB update succeeded, file write is best-effort
-        }
+    if (updatedUser && updatedUser.slotNumber) {
+      try {
+        userFileManager.updateUserDataFile(updatedUser, updatedUser.slotNumber);
+        console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${updatedUser.slotNumber})`);
+      } catch (error) {
+        console.error(`[Database] Failed to sync user update to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync updated user "${updatedUser.username}" to disk files`,
+          { error: error instanceof Error ? error.message : String(error), slotNumber: updatedUser.slotNumber },
+          DebugSeverity.WARNING
+        );
+        // Don't throw - DB update succeeded, file write is best-effort
       }
     }
   }

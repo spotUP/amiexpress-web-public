@@ -16,6 +16,7 @@ import { LibraryManager } from "./LibraryManager.js";
 import { DoorLoader } from "./DoorLoader.js";
 import { DoorLifecycleManager } from "./session/DoorLifecycleManager.js";
 import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
+import { TIMDoorMessageHandler } from "./session/TIMDoorMessageHandler.js";
 import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 
@@ -47,6 +48,11 @@ export class AmigaDoorSession {
   private doorLoader: DoorLoader | null = null;
   private lifecycleManager: DoorLifecycleManager | null = null;
   private messageHandler: DoorMessageHandler | null = null;
+  private timHandler: TIMDoorMessageHandler | null = null;
+
+  // Port tracking for cleanup (express.e:4527 - deletePort if we created it)
+  private createdDoorPort = false;
+  private doorPortName = "";
 
   // Shared state between components
   private sharedState = {
@@ -147,6 +153,9 @@ export class AmigaDoorSession {
       const ximWaitingForInput =
         this.sharedState.ximProtocol?.isWaitingForLineInput() ?? false;
 
+      // Check if TIM handler is waiting for input
+      const timWaitingForInput = this.timHandler?.isWaitingForInput() ?? false;
+
       // Route to XIM protocol if active
       if (this.sharedState.ximProtocol) {
         console.log(
@@ -155,16 +164,24 @@ export class AmigaDoorSession {
         this.sharedState.ximProtocol.queueInput(data);
       }
 
-      // Route to DOS stdin ONLY when XIM protocol is not active or wasn't waiting for input
-      // This prevents double-delivery: once via XIM (hotkey/line input) and once via DOS
-      if (!this.sharedState.ximProtocol || !ximWaitingForInput) {
+      // Route to TIM handler if active and waiting
+      if (this.timHandler && timWaitingForInput) {
+        console.log(
+          `[AmigaDoorSession] Forwarding input to TIM handler: "${data}"`
+        );
+        this.timHandler.queueInput(data);
+      }
+
+      // Route to DOS stdin ONLY when no protocol handler consumed the input
+      // This prevents double-delivery: once via XIM/TIM and once via DOS
+      if ((!this.sharedState.ximProtocol || !ximWaitingForInput) && !timWaitingForInput) {
         console.log(
           `[AmigaDoorSession] Queueing input for DOS stdin: "${data}"`
         );
         this.sharedState.dosLibrary.queueInput(data);
       } else {
         console.log(
-          `[AmigaDoorSession] Skipping DOS queue - input was consumed by XIM`
+          `[AmigaDoorSession] Skipping DOS queue - input was consumed by protocol handler`
         );
       }
     });
@@ -412,7 +429,45 @@ export class AmigaDoorSession {
       this.lifecycleManager.setLibraryTraps(this.sharedState.libraryTraps);
       this.lifecycleManager.setXIMProtocol(this.sharedState.ximProtocol);
 
-      console.log("[AmigaDoorSession] ✅ All modular components initialized");
+      // Create AEDoorPort BEFORE starting door execution
+      // Express.e creates the port at lines 4316-4328 BEFORE calling startProcess() at line 4336
+      // This matches: IF (mp:=FindPort(doorPort)) alreadyActive:=TRUE ELSE mp:=createPort(doorPort,0) ENDIF
+      const doorType = (this.config.doorType || "").toUpperCase();
+      if (doorType === "XIM" || doorType === "AIM") {
+        const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
+        const portName = `AEDoorPort${nodeId}`;
+        this.doorPortName = portName;
+
+        // Check if port already exists (alreadyActive mode from express.e:4324)
+        const portNameAddr = 0x500;
+        this.emulator.writeString(portNameAddr, portName);
+        const existingPort = this.sharedState.execLibrary?.findPort(portNameAddr);
+
+        if (existingPort && existingPort !== 0) {
+          console.log(`[AmigaDoorSession] ${portName} already exists at 0x${existingPort.toString(16)} (alreadyActive mode)`);
+          this.createdDoorPort = false; // Don't delete on cleanup
+        } else {
+          // Create the port before door starts (express.e:4327)
+          const portAddr = this.sharedState.execLibrary?.createPublicPort(portName);
+          console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)} BEFORE door execution`);
+          this.createdDoorPort = true; // Delete on cleanup
+        }
+      }
+
+      // Initialize TIM Door Handler for TIM-type doors (Phase 5C)
+      // TIM doors use DoorControl{n} port with simpler doorMsg structure
+      // Reference: express.e lines 4371-4525
+      if (this.config.doorType === "TIM") {
+        this.timHandler = new TIMDoorMessageHandler(
+          this.emulator,
+          this.socket,
+          this.config
+        );
+        this.lifecycleManager.setTIMHandler(this.timHandler);
+        console.log("[AmigaDoorSession] TIM door handler initialized");
+      }
+
+      console.log("[AmigaDoorSession] All modular components initialized");
       console.log(`[AmigaDoorSession] 📊 Architecture:`);
       console.log(
         `[AmigaDoorSession]   - LibraryManager: Library initialization and traps`
@@ -720,6 +775,23 @@ export class AmigaDoorSession {
       }
     } catch (_) {
       /* ignore */
+    }
+
+    // Delete AEDoorPort if we created it (express.e:4527 - IF alreadyActive=FALSE THEN deletePort(mp))
+    if (this.createdDoorPort && this.doorPortName && this.sharedState.execLibrary && this.emulator) {
+      try {
+        const portNameAddr = 0x500;
+        this.emulator.writeString(portNameAddr, this.doorPortName);
+        const portAddr = this.sharedState.execLibrary.findPort(portNameAddr);
+        if (portAddr && portAddr !== 0) {
+          this.sharedState.execLibrary.deletePort(portAddr);
+          console.log(`[AmigaDoorSession] Deleted ${this.doorPortName} at 0x${portAddr.toString(16)} (cleanup)`);
+        }
+      } catch (err) {
+        console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, err);
+      }
+      this.createdDoorPort = false;
+      this.doorPortName = "";
     }
 
     // Terminate through Lifecycle Manager

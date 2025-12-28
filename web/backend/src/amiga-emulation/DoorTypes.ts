@@ -82,6 +82,48 @@ export enum AEDoorCommand {
   GETKEY = 500, // Get user input
 }
 
+/**
+ * TIM Door Protocol Commands (PG_*)
+ * Used by DoorControl{n} port for older SIM/TIM/IIM/SUP doors
+ * Reference: express.e lines 4371-4525
+ */
+export enum TIMDoorCommand {
+  PG_SHUTDOWN = 0,  // Exit door
+  PG_SO = 1,        // Serial output (character)
+  PG_CC = 2,        // Console output (character)
+  PG_CH = 3,        // Both serial and console output (character)
+  PG_CO = 4,        // Console puts (string)
+  PG_SM = 5,        // Send message (string)
+  PG_PM = 6,        // Prompt message (with input)
+  PG_SC = 7,        // Serial input
+  PG_HK = 8,        // Hot key
+  PG_SG = 9,        // Security screen
+  PG_SF = 10,       // Show file
+  PG_EF = 11,       // Edit file
+  PG_UD = 12,       // User data (numeric)
+  PG_US = 13,       // User string
+  PG_RD = 14,       // Random number
+  PG_TM = 15,       // Time modify
+  PG_FF = 16,       // File find
+  BB_TASKPRI = 17,  // Task priority
+}
+
+/**
+ * TIM Door Message Structure (doorMsg)
+ * Simpler structure than jhMessage used by XIM doors
+ * Reference: express.e lines 4374-4376 (carrier, command, string fields)
+ */
+export class TIMDoorConstants {
+  // doorMsg structure offsets (simpler than jhMessage)
+  static readonly DOORMSG_HEADER_SIZE = 0x14;      // Message Node header
+  static readonly DOORMSG_CARRIER_OFFSET = 0x14;   // carrier: BOOL (2 bytes)
+  static readonly DOORMSG_COMMAND_OFFSET = 0x16;   // command: WORD (2 bytes)
+  static readonly DOORMSG_DATA_OFFSET = 0x18;      // data: LONG (4 bytes)
+  static readonly DOORMSG_STRING_OFFSET = 0x1c;    // string: CHAR[80] (80 bytes)
+  static readonly DOORMSG_STRING_CAPACITY = 80;
+  static readonly DOORMSG_TOTAL_SIZE = 0x6c;       // Total size (~108 bytes)
+}
+
 // DOS Library offsets (for getAEDoorFunctionName reference)
 export const DOS_FUNCTION_OFFSETS: Record<string, string> = {
   "-6": "Open",

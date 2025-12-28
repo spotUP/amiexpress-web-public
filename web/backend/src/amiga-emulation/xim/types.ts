@@ -343,6 +343,7 @@ export interface BBSSessionData {
   lineCount?: number;
   lineWrap?: number;
   pauseLines?: number;
+  autoPauseEnabled?: boolean; // If true, XIM auto-pauses after pauseLines; if false (default), door handles pagination
   chainRequest?: string;
   carrierDropped?: boolean;
   timeoutSeconds?: number;
@@ -360,6 +361,7 @@ export interface XIMState {
   registered: boolean;
   shuttingDown: boolean;
   nonStopText: boolean;
+  autoPauseEnabled: boolean; // If true, XIM auto-pauses at pauseLines; if false, door handles pagination
   lineCount: number;
   lineWrap: number;
   pauseLines: number;

@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
+import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 
@@ -68,6 +69,10 @@ export class BBSApi {
   private inputCallback?: (input: string) => void;
   private boundSocketHandlers: Array<{ event: string; handler: (...args: any[]) => void }> = [];
 
+  // Internal event emitter for server-side events (like resize)
+  // This is needed because socket.emit() sends to the client, not to server-side listeners
+  private internalEmitter: EventEmitter = new EventEmitter();
+
   constructor(socket: Socket, session: BBSSession) {
     this.socket = socket;
     this.session = session;
@@ -90,6 +95,26 @@ export class BBSApi {
   private bindSocketEvent(event: string, handler: (...args: any[]) => void): void {
     this.boundSocketHandlers.push({ event, handler });
     this.socket.on(event, handler);
+  }
+
+  /**
+   * Register an event handler
+   * Used by doors to listen for events like screen:resize
+   * Listens on BOTH socket (client->server) AND internal emitter (server-side)
+   */
+  on(event: string, handler: (...args: any[]) => void): void {
+    // Listen on socket for client-originated events
+    this.bindSocketEvent(event, handler);
+    // Also listen on internal emitter for server-side events (like resize)
+    this.internalEmitter.on(event, handler);
+  }
+
+  /**
+   * Emit an event internally (server-side only)
+   * Used by socket handlers to notify the door of events like resize
+   */
+  emitInternal(event: string, ...args: any[]): void {
+    this.internalEmitter.emit(event, ...args);
   }
 
   // ========================================
@@ -333,6 +358,32 @@ export class BBSApi {
   disableMouseEvents(): void {
     this.session.mouseEventsEnabled = false;
     console.log('[BBSApi] Mouse events disabled');
+  }
+
+  /**
+   * Set terminal mode for responsive sizing
+   * - 'fixed': 80 columns (default, for ANSI art compatibility)
+   * - 'wide': responsive width (for neo-blessed doors that support wider layouts)
+   */
+  setTerminalMode(mode: 'fixed' | 'wide'): void {
+    this.socket.emit('terminal-mode', mode);
+    console.log(`[BBSApi] Terminal mode set to: ${mode}`);
+  }
+
+  /**
+   * Enable wide terminal mode (responsive width)
+   * Call this at door startup if your door supports wider layouts
+   */
+  enableWideMode(): void {
+    this.setTerminalMode('wide');
+  }
+
+  /**
+   * Restore fixed 80-column terminal mode
+   * Call this before door exit to restore normal BBS display
+   */
+  disableWideMode(): void {
+    this.setTerminalMode('fixed');
   }
 
   /**

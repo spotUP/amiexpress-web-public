@@ -43,6 +43,7 @@ import { BBSPaths } from '../utils/bbs-paths.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
+import { emitUserLogout } from '../services/bbs-event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -206,16 +207,63 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
     console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.message);
   });
 
+  // Handle terminal resize from client (for responsive terminal sizing)
+  socket.on('terminal-size', (size: { cols: number; rows: number }) => {
+    const session = getSession(socket.id);
+    if (!session) return;
+
+    const { cols, rows } = size;
+    console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
+
+    // Update session terminal dimensions
+    session.screenWidth = cols;
+    session.screenHeight = rows;
+
+    // Also update tempData for doors
+    if (!session.tempData) {
+      session.tempData = {} as any;
+    }
+    (session.tempData as any).termWidth = cols;
+    (session.tempData as any).termHeight = rows;
+
+    // Emit resize event to the door's BBSApi (if a door is running)
+    // This uses the internal EventEmitter, not socket.emit (which goes to client)
+    if (session.bbsApi && typeof session.bbsApi.emitInternal === 'function') {
+      console.log(`[TERMINAL] Emitting screen:resize to door via bbsApi.emitInternal`);
+      session.bbsApi.emitInternal('screen:resize', { cols, rows });
+    }
+  });
+
   // Register all event handlers
   registerCommandHandler(socket);
   registerDisconnectHandler(socket);
 
   // Register modular socket handlers (imported from separate modules)
   // These handlers were extracted from index.ts for better code organization
-  import('./auth-socket-handlers').then(({ registerAuthHandlers }) => registerAuthHandlers(socket));
-  import('./file-socket-handlers').then(({ registerFileHandlers }) => registerFileHandlers(socket));
-  import('./chat-socket-handlers').then(({ registerChatHandlers }) => registerChatHandlers(socket, chatState));
-  import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket));
+  import('./auth-socket-handlers').then(({ registerAuthHandlers }) => registerAuthHandlers(socket)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load auth-socket-handlers:', err);
+  });
+  import('./file-socket-handlers').then(({ registerFileHandlers }) => registerFileHandlers(socket)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load file-socket-handlers:', err);
+  });
+  import('./chat-socket-handlers').then(({ registerChatHandlers }) => registerChatHandlers(socket, chatState)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load chat-socket-handlers:', err);
+  });
+  import('./thread-socket-handlers').then(({ setupThreadHandlers }) => setupThreadHandlers(socket, session)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load thread-socket-handlers:', err);
+  });
+  import('./pin-socket-handlers').then(({ setupPinHandlers }) => setupPinHandlers(socket, session)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load pin-socket-handlers:', err);
+  });
+  import('./search-socket-handlers').then(({ setupSearchHandlers }) => setupSearchHandlers(socket, session)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load search-socket-handlers:', err);
+  });
+  import('./moderation-socket-handlers').then(({ setupModerationHandlers }) => setupModerationHandlers(socket, session, io)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load moderation-socket-handlers:', err);
+  });
+  import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load preference-socket-handlers:', err);
+  });
 }
 
 function logDoorDebug(message: string) {
@@ -549,10 +597,18 @@ function registerCommandHandler(socket: Socket) {
       input = `\x1b[${input.slice(2)}`;
     }
     if (input.startsWith('\x1b[') && input.length >= 2) {
-      handleCommand(socket, session, input);
+      handleCommand(socket, session, input).catch((error: any) => {
+        console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+        console.error('[COMMAND ERROR] Stack:', error.stack);
+        socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
+      });
     } else {
       for (const char of input) {
-        handleCommand(socket, session, char);
+        handleCommand(socket, session, char).catch((error: any) => {
+          console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+          console.error('[COMMAND ERROR] Stack:', error.stack);
+          socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
+        });
       }
     }
     console.log('=== COMMAND PROCESSED ===\n');
@@ -809,6 +865,19 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Logged off');
 
+    // Emit BBS event for LiveChat integration
+    try {
+      const sessionDuration = session.connectionStart ? Math.floor((Date.now() - session.connectionStart) / 1000) : undefined;
+      emitUserLogout({
+        username: session.user.username,
+        nodeId: session.nodeId || 1,
+        timestamp: Date.now(),
+        duration: sessionDuration
+      });
+    } catch (error) {
+      console.error('[BBSEvent] Error emitting logout event:', error);
+    }
+
     // Run logoff batches (mirror logon batch runner)
     try {
       await runLogoffBatches(session.nodeId || 0);
@@ -853,28 +922,26 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
 
     // DISK-BASED: Write updated user stats to user.data/keys/misc files (express.e:8207)
     // This is CRITICAL - must save user data before deleting node files
-    try {
-      const slotNumber = parseInt(session.user.id.split('-')[1], 10);
-      if (isNaN(slotNumber)) {
-        throw new Error(`Invalid user ID format: ${session.user.id}`);
+    if (session.user.slotNumber) {
+      try {
+        userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
+        console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${session.user.slotNumber})`);
+      } catch (diskErr) {
+        console.error('[LOGOFF] Error writing user disk files:', diskErr);
+        SysopDebugUtil.debug(
+          socket,
+          session,
+          'Socket Connection',
+          `Failed to write user data to disk on logoff`,
+          {
+            error: diskErr instanceof Error ? diskErr.message : String(diskErr),
+            userId: session.user.id,
+            username: session.user.username
+          },
+          DebugSeverity.CRITICAL
+        );
+        // Continue anyway - database has the stats, can sync later
       }
-      userFileManager.updateUserDataFile(session.user, slotNumber);
-      console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${slotNumber})`);
-    } catch (diskErr) {
-      console.error('[LOGOFF] Error writing user disk files:', diskErr);
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'Socket Connection',
-        `Failed to write user data to disk on logoff`,
-        {
-          error: diskErr instanceof Error ? diskErr.message : String(diskErr),
-          userId: session.user.id,
-          username: session.user.username
-        },
-        DebugSeverity.ERROR
-      );
-      // Continue anyway - database has the stats, can sync later
     }
 
     // CRITICAL: Delete node{n}.user files on logoff

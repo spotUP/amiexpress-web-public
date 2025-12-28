@@ -8,9 +8,9 @@
     "build": "npm install",
     "start": "npx tsx src/index.ts",
     "render-start": "npx tsx src/index.ts",
-    "test": "jest --config dev-scripts/jest.config.js --rootDir .",
-    "test:watch": "jest --config dev-scripts/jest.config.js --rootDir . --watch",
-    "test:coverage": "jest --config dev-scripts/jest.config.js --rootDir . --coverage"
+    "test": "jest --config dev-scripts/jest.config.ts --rootDir .",
+    "test:watch": "jest --config dev-scripts/jest.config.ts --rootDir . --watch",
+    "test:coverage": "jest --config dev-scripts/jest.config.ts --rootDir . --coverage"
   },
   "keywords": [],
   "author": "",

@@ -29,6 +29,12 @@ import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, simulateNaturalTyping } from './grumpy-sysop-bot.handler';
 import { userSessions, socketToUser } from '../server/session-manager';
+import { loadBBSConfig } from '../services/bbs-config-file.service';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// BBS root for config and log files
+const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
 const activeChatSessions = new Map<string, ChatSession>();
@@ -330,8 +336,9 @@ export async function handlePageSysop(
   // Display waiting message with animated dots (match express.e exactly)
   // express.e: FOR i:=0 TO 19, each iteration: DisplayBeep, aePuts(' .'), Delay 50 ticks (~1 sec)
   const currentTime = new Date().toLocaleString();
-  // TODO: Get sysopName from BBS config (cmds.sysopName in express.e)
-  const sysopName = 'the operator';
+  // Get sysop name from BBS config (cmds.sysopName in express.e)
+  const bbsConfig = loadBBSConfig(bbsRoot);
+  const sysopName = bbsConfig.sysop_name || 'the operator';
 
   socket.emit('ansi-output', `\r\n${currentTime}\r\n`);
   socket.emit('ansi-output', `\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
@@ -913,8 +920,15 @@ async function logChatTranscript(repository: OperatorChatRepository, session: Ch
 
   transcript.push(`--- End of Transcript ---`);
 
-  // TODO: Write to SysLogs file
-  console.log(`[Operator Chat] Transcript logged for page ${session.pageId}`);
+  // Write to SysLogs file
+  try {
+    const sysLogsPath = path.join(bbsRoot, 'SysLogs');
+    const logEntry = `\n${transcript.join('\n')}\n`;
+    fs.appendFileSync(sysLogsPath, logEntry, 'utf8');
+    console.log(`[Operator Chat] Transcript written to SysLogs for page ${session.pageId}`);
+  } catch (error) {
+    console.error(`[Operator Chat] Failed to write to SysLogs:`, error);
+  }
 }
 
 /**

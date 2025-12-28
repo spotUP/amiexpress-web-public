@@ -378,17 +378,15 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
 
     // DISK-BASED: Write updated user stats to user.data/keys/misc files
     // This ensures messagesPosted is persisted immediately (safer than waiting for logoff)
-    try {
-      const { userFileManager } = require('../../services/UserFileManager');
-      const slotNumber = parseInt(session.user!.id.split('-')[1], 10);
-      if (isNaN(slotNumber)) {
-        throw new Error(`Invalid user ID format: ${session.user!.id}`);
+    if (session.user!.slotNumber) {
+      try {
+        const { userFileManager } = require('../../services/UserFileManager');
+        userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
+        console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
+      } catch (diskErr) {
+        console.error('[Message] Error writing user disk files:', diskErr);
+        // Continue anyway - database has the stats, can sync later
       }
-      userFileManager.updateUserDataFile(session.user!, slotNumber);
-      console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${slotNumber})`);
-    } catch (diskErr) {
-      console.error('[Message] Error writing user disk files:', diskErr);
-      // Continue anyway - database has the stats, can sync later
     }
 
     // Log the action

@@ -14,6 +14,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
+import { getDatabase } from '../command-handler/dependency-injection';
 
 import type { BBSSession } from '../../index';
 
@@ -448,7 +449,24 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
     case 'A': // Reset Voting Booth - express.e:22836-22838
       socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
-      // TODO: Implement reset voting booth
+      try {
+        const confId = session.tempData?.cmConf || session.currentConf || 1;
+        const db = getDatabase();
+        // Reset vote results and status for this conference (keeps topics/questions/answers)
+        await db.query(`
+          DELETE FROM vote_results
+          WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
+        `, [confId]);
+        await db.query(`
+          DELETE FROM vote_status
+          WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
+        `, [confId]);
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mVoting booth reset for conference ${confId}.\x1b[0m\r\n`);
+        console.log(`[CM] Voting booth reset for conference ${confId}`);
+      } catch (error) {
+        console.error('[CM] Error resetting voting booth:', error);
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError resetting voting booth.\x1b[0m\r\n`);
+      }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 

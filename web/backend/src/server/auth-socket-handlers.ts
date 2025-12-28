@@ -32,6 +32,7 @@ import { displayScreen, doPause } from '../handlers/screen.handler';
 import { runLoginBatches } from '../services/batch-scheduler';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
+import { emitUserLogin } from '../services/bbs-event-emitter';
 
 /**
  * Register authentication socket event handlers
@@ -326,21 +327,16 @@ export function registerAuthHandlers(socket: Socket) {
 
         // CRITICAL: Sync user to disk files for 68K door compatibility
         // 68K doors use XIM protocol and read from user.data, not database
-        try {
-          // Get all users to determine slot number (sorted by creation date)
-          const allUsers = await db.getUsers({});
-          const slotNumber = allUsers.findIndex((u: any) => u.id === user.id);
-
-          if (slotNumber >= 0) {
-            // Write/update user.data, user.keys, user.misc
-            userFileManager.updateUserDataFile(user, slotNumber + 1); // Slots are 1-indexed in AmiExpress
-            console.log(`[LOGIN] Synced user ${user.username} to disk files (slot ${slotNumber + 1})`);
-          } else {
-            console.error(`[LOGIN] Failed to find slot number for user ${user.username}`);
+        if (user.slotNumber) {
+          try {
+            userFileManager.updateUserDataFile(user, user.slotNumber);
+            console.log(`[LOGIN] Synced user ${user.username} to disk files (slot ${user.slotNumber})`);
+          } catch (error) {
+            console.error(`[LOGIN] Failed to sync user to disk:`, error);
+            // Don't fail login - disk sync is best-effort
           }
-        } catch (error) {
-          console.error(`[LOGIN] Failed to sync user to disk:`, error);
-          // Don't fail login - disk sync is best-effort
+        } else {
+          console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sync`);
         }
 
         // Generate JWT tokens for this session
@@ -447,9 +443,8 @@ export function registerAuthHandlers(socket: Socket) {
       sessionLogManager.updateSession(socket.id, user.id, user.username, session.nodeId);
 
       // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
-      try {
-        await runLoginBatches(session.nodeId || 0);
-      } catch (err) {
+      // NOTE: Don't await - run in background so login flow continues immediately
+      runLoginBatches(session.nodeId || 0).catch((err) => {
         console.error('[LOGIN] Batch scheduler failed:', err);
         SysopDebugUtil.debug(
           socket,
@@ -459,7 +454,7 @@ export function registerAuthHandlers(socket: Socket) {
           { nodeId: session.nodeId, error: (err as Error).message },
           DebugSeverity.WARNING
         );
-      }
+      });
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
       // This fixes the multi-socket connection issue where new sockets get fresh sessions
@@ -476,6 +471,18 @@ export function registerAuthHandlers(socket: Socket) {
       socketToUser.set(socket.id, user.id);
 
       console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
+
+      // Emit BBS event for LiveChat integration
+      try {
+        emitUserLogin({
+          username: user.username,
+          nodeId: session.nodeId || 1,
+          location: user.location || 'Unknown',
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error('[BBSEvent] Error emitting login event:', error);
+      }
 
       // CRITICAL: Write node{n}.user and node{n}.userkeys files for WHO door compatibility
       // express.e:2935-2950 createNodeUserFiles()
@@ -579,6 +586,39 @@ export function registerAuthHandlers(socket: Socket) {
         return;
       }
 
+      // CHAT-ONLY MODE: Auto-launch LiveChat door for web chat connections
+      // Detected by ?chatOnly=true query parameter or session.tempData.chatOnly flag
+      const chatOnly = socket.handshake?.query?.chatOnly === 'true' || session.tempData?.chatOnly;
+      if (chatOnly) {
+        console.log('[AUTH] Chat-only mode detected - auto-launching LiveChat door');
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DOOR_RUNNING;
+
+        // Import and execute the door handler to launch LiveChat
+        const { executeDoor } = require('../handlers/door.handler');
+
+        // Create a door object for LiveChat
+        const liveChatDoor = {
+          name: 'livechat',
+          path: 'Doors/livechat',
+          location: 'Doors/livechat',
+          executable: 'livechat',
+          type: 'typescript',
+          category: 'Chat',
+          args: [],
+        };
+
+        try {
+          await executeDoor(socket, session, liveChatDoor, []);
+        } catch (error) {
+          console.error('[AUTH] Failed to launch LiveChat door:', error);
+          socket.emit('ansi-output', '\r\n\x1b[31mFailed to launch LiveChat. Please try again.\x1b[0m\r\n');
+        }
+
+        triggerSamiLogRefresh();
+        return;
+      }
+
       // TOKEN-BASED RECONNECTION: Skip LOGON/bulletin flow when reconnecting with JWT
       // This prevents showing the LOGON screen when the user's socket reconnects
       // (e.g., due to network blips, browser tab sleeping, page refresh)
@@ -594,14 +634,27 @@ export function registerAuthHandlers(socket: Socket) {
 
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
       const logonDisplayed = await displayScreen(socket, session, 'LOGON', false);
-      // If the screen didn't set up its own pause, add one so the user can read it
-      if (logonDisplayed && !session.paginatedScreen) {
-        doPause(socket, session);
-      }
 
+      // express.e:29859-29861 - After LOGON screen, state:=STATE_LOGGEDON (main loop processes it)
       // Begin bulletin flow: BULL -> NODE_BULL -> confScan -> CONF_BULL -> MENU
       session.subState = LoggedOnSubState.DISPLAY_BULL;
       triggerSamiLogRefresh();
+
+      if (logonDisplayed) {
+        // LOGON screen displayed - honor express.e doPause() (express.e:29854)
+        // NOTE: We don't pass an onComplete callback because handleCommand (command.handler.ts:692-693)
+        // automatically calls advanceDisplayFlow() when pagination completes in a display flow state.
+        // Passing a callback that calls handleCommand would cause DOUBLE advancement (BULL displays twice).
+        console.log('[LOGIN] LOGON displayed, adding pause per express.e:29854');
+        doPause(socket, session);
+        console.log('[LOGIN] Pause set up, waiting for user input to continue');
+        return;
+      }
+
+      // No LOGON screen - immediately trigger the bulletin display flow
+      console.log('[LOGIN] No LOGON screen, immediately triggering bulletin flow');
+      const { handleCommand } = require('../handlers/command.handler');
+      await handleCommand(socket, session, '');
     } catch (error) {
       console.error('Socket login error:', error);
       SysopDebugUtil.debug(

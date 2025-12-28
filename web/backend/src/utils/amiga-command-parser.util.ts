@@ -71,6 +71,7 @@ export interface CommandDefinition {
   args?: string;            // Command-line arguments to pass to door (ARGS tooltype)
   toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
   overclockFactor?: number; // CPU overclocking multiplier (OVERCLOCK tooltype: 0=auto, 1-50=specific, -1=disable)
+  pagination?: number; // Pagination override (PAGINATION tooltype: 0=door handles, >0=auto-pause at N lines, -1=use user setting)
 }
 
 /**
@@ -316,7 +317,20 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     const factor = parseInt(overclock, 10);
     if (!isNaN(factor)) {
       cmd.overclockFactor = factor;
-      console.log(`[loadCommandFromInfo] OVERCLOCK=${factor} for ${cmd.command || cmd.path}`);
+      console.log(`[loadCommandFromInfo] OVERCLOCK=${factor} for ${cmd.name || cmd.location}`);
+    }
+  }
+
+  // Parse PAGINATION tooltype (pagination behavior)
+  // 0 or not set = door handles its own pagination (default)
+  // >0 = auto-pause after N lines
+  // -1 = use user's screen height setting
+  const pagination = tooltypes.get('PAGINATION');
+  if (pagination) {
+    const lines = parseInt(pagination, 10);
+    if (!isNaN(lines)) {
+      cmd.pagination = lines;
+      console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.location}`);
     }
   }
 

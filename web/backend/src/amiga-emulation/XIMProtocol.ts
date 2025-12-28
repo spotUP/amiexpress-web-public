@@ -111,6 +111,7 @@ export class XIMProtocol {
       registered: false,
       shuttingDown: false,
       nonStopText: !!this.bbsSession?.nonStopText,
+      autoPauseEnabled: !!this.bbsSession?.autoPauseEnabled,
       lineCount: this.bbsSession?.lineCount ?? 0,
       lineWrap: wrapWidth,
       pauseLines: this.bbsSession?.pauseLines ?? defaultLineLength,

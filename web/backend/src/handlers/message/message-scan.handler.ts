@@ -13,7 +13,8 @@ import {
   loadMsgPointers,
   updateScanPointer,
   validatePointers,
-  getConferenceScanFlags
+  getConferenceScanFlags,
+  getMailStatFile
 } from '../../utils/message-pointers.util';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
@@ -66,6 +67,40 @@ function isConfAccessAreaName(user: any): boolean {
     }
   }
   return count !== 0;
+}
+
+/**
+ * Check if conference should scan for new files
+ * 1:1 port from express.e:591-608 checkFileConfScan()
+ *
+ * @param conf - Conference ID (1-based)
+ * @param userId - User ID for checking scan flags
+ * @returns True if should scan files
+ */
+async function checkFileConfScan(conf: number, userId: string): Promise<boolean> {
+  const flags = getConferenceToolFlags(conf);
+
+  // express.e:595-596 - IF((checkToolTypeExists(TOOLTYPE_CONF,conf,'SHOW_NEW_FILES')))
+  if (flags.showNewFiles) {
+    return true;
+  }
+
+  // express.e:597-598 - ELSEIF (checkToolTypeExists(TOOLTYPE_CONF,conf,'NO_NEW_FILES'))
+  if (flags.noNewFiles) {
+    return false;
+  }
+
+  // express.e:601-607 - cb:=confBases.item(getConfIndex(conf,1))
+  // Get first message base for this conference and check FILE_SCAN_MASK
+  try {
+    const scanFlags = await getConferenceScanFlags(userId, conf, 1);
+    const FILE_SCAN_MASK = 8; // express.e FILE_SCAN_MASK
+    // express.e:604 - IF (cb.handle[0] AND FILE_SCAN_MASK)<>0 THEN res:=TRUE ELSE res:=FALSE
+    return (scanFlags & FILE_SCAN_MASK) !== 0;
+  } catch (err) {
+    // express.e:606 - ELSE res:=TRUE (default to TRUE if no confBase)
+    return true;
+  }
 }
 
 /**
@@ -254,175 +289,167 @@ async function countNewMessages(
 
 /**
  * Scan all conferences for new mail
- * 1:1 port from express.e:28066-28120 confScan()
+ * 1:1 port from express.e:28066-28150 confScan()
  *
  * @param socket - Socket.io socket
  * @param session - BBS session
  */
-export async function performConferenceScan(socket: any, session: any): Promise<void> {
+export async function performConferenceScan(socket: any, session: any): Promise<number> {
   if (!session.user) {
     console.warn('confScan: No user in session');
-    return;
+    return 0; // RESULT_SUCCESS
   }
+
+  // express.e:28067-28070 - DEF mystat,conf,n,msgbase / DEF prompt=FALSE / DEF mscan=TRUE / DEF fscan=TRUE
+  let mscan = true;
 
   // express.e:28071 - setEnvStat(ENV_SCANNING)
   console.log('[ENV] Scanning conferences for mail');
 
-  // express.e:28073 - await displayScreen(SCREEN_MAILSCAN)
-  // But don't display yet - we'll build a custom scan report
+  // express.e:28073 - displayScreen(SCREEN_MAILSCAN)
+  // SKIP: Displaying MAILSCAN screen causes confusion when file scan (AquaScan) takes 5+ minutes
+  // User sees static "Scanning..." message while AquaScan runs, thinks it's frozen
+  // Better to let AquaScan output its own progress directly
 
-  // express.e:28076-28079 - Check MAILSCAN_PROMPT tooltype
-  // For now we always scan; prompt behavior can be added when frontend supports it
+  // express.e:28075-28080 - Check MAILSCAN_PROMPT tooltype (skip for now, always scan)
+  // const prompt = checkToolTypeExists(TOOLTYPE_NODE, node, 'MAILSCAN_PROMPT');
+  // if (prompt) { ... yesNo() ... }
 
-  // express.e:28082 - "Scanning conferences for mail..."
-  socket.emit('ansi-output', '\r\n' + AnsiUtil.header('Scanning Conferences for Mail') + '\r\n');
-  socket.emit('ansi-output', '\r\n');
+  // express.e:28082-28084 - IF (prompt=FALSE) OR (mscan=TRUE)
+  if (mscan) {
+    // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
+    // Clear pause prompt line and emit scanning message
+    socket.emit('ansi-output', '\r' + ' '.repeat(80) + '\r\r\n' + AnsiUtil.colorize('Scanning conferences for mail and files...', 'cyan') + '\r\n\r\n');
 
-  let totalNewPublic = 0;
-  let totalNewPrivate = 0;
-  let scannedConferences = 0;
+    // express.e:28084-28085 - lineCount:=2 / mciViewSafe:=FALSE
+    // (lineCount and mciViewSafe are UI-specific, not needed for web)
 
-  // express.e:28085-28093 - Loop through all conferences
-  for (let confNum = 1; confNum <= _conferences.length; confNum++) {
-    const conference = _conferences[confNum - 1];
+    // express.e:28086 - FOR conf:=1 TO cmds.numConf
+    for (let conf = 1; conf <= _conferences.length; conf++) {
+      const conference = _conferences[conf - 1];
+      if (!conference) continue;
 
-    if (!conference) continue;
-
-    const flags = getConferenceToolFlags(confNum);
-    // express.e:28086 - Check conference access
-    if (!checkConfAccess(session.user, confNum)) {
-      console.log(`  Skip conference ${confNum} (${conference.name}) - no access`);
-      continue;
-    }
-
-    scannedConferences++;
-    socket.emit('ansi-output', `  ${AnsiUtil.colorize('●', 'cyan')} Scanning ${AnsiUtil.colorize(conference.name, 'white')}...`);
-
-    // express.e:28091-28096 - Loop through message bases in conference
-    const confMessageBases = _messageBases.filter(mb => mb.conferenceId === conference.id);
-    let confNewPublic = 0;
-    let confNewPrivate = 0;
-    let fileScanForConf = false;
-    let skipMailScanForConf = flags.noNewscan;
-
-    for (const msgBase of confMessageBases) {
-      // express.e:28093-28094 - Check if should scan this msgbase
-      const scanMail = skipMailScanForConf ? false : await checkMailConfScan(confNum, msgBase.id, session.user.id);
-      if (!scanMail) {
-        skipMailScanForConf = true;
+      // express.e:28087 - IF (checkConfAccess(conf))
+      if (!checkConfAccess(session.user, conf)) {
+        console.log(`[confScan] Skip conference ${conf} (${conference.name}) - no access`);
         continue;
       }
 
-      // Count new messages
-      const counts = await countNewMessages(session.user.id, conference.id, msgBase.id, session.user.username || session.user.name || '');
-      confNewPublic += counts.newPublic;
-      confNewPrivate += counts.newPrivate;
+      // express.e:28089 - fscan:=checkFileConfScan(conf)
+      const fscan = await checkFileConfScan(conf, session.user.id);
 
-      // Update the user's auto-scan pointer (express.e saveMsgPointers after MAIL_SCAN)
-      const newPointer = counts.mailStatHigh || counts.lastScanned;
-      if (newPointer > 0) {
+      // express.e:28092-28093 - n:=getConfMsgBaseCount(conf) / FOR msgbase:=1 TO n
+      const confMessageBases = _messageBases.filter(mb => mb.conferenceId === conference.id);
+      const n = confMessageBases.length;
+
+      for (let msgbaseIdx = 0; msgbaseIdx < n; msgbaseIdx++) {
+        const msgbase = confMessageBases[msgbaseIdx];
+        console.log(`[confScan] Checking msgbase ${msgbase.id} in conf ${conf}`);
+
+        // express.e:28094-28096 - IF prompt=FALSE THEN mscan:=checkMailConfScan(conf,msgbase)
+        const shouldScanMail = await checkMailConfScan(conf, msgbase.id, session.user.id);
+        console.log(`[confScan] shouldScanMail=${shouldScanMail} for conf ${conf} msgbase ${msgbase.id}`);
+
+        // express.e:28097 - mystat:=joinConf(conf,msgbase,TRUE,FALSE,IF mscan=FALSE THEN FORCE_MAILSCAN_SKIP ELSE FORCE_MAILSCAN_NOFORCE)
+        // When confScan=TRUE, joinConf: loads pointers, gets mail stats, calls MAIL_SCAN if mscan=TRUE, saves pointers
+        // We implement this inline since our joinConference doesn't have confScan parameter
         try {
-          await updateScanPointer(session.user.id, conference.id, msgBase.id, newPointer);
+          console.log(`[confScan] Loading pointers for conf ${conf} msgbase ${msgbase.id}`);
+          // Load message pointers (express.e:5026 loadMsgPointers)
+          const pointers = await loadMsgPointers(session.user.id, conf, msgbase.id);
+
+          console.log(`[confScan] Getting mail stats for conf ${conf} msgbase ${msgbase.id}`);
+          // Get mail stats (express.e:5029 getMailStatFile)
+          const mailStat = await getMailStatFile(conf, msgbase.id);
+
+          // Validate pointers (express.e:5037-5049)
+          const validated = mailStat ? validatePointers(pointers, mailStat) : pointers;
+
+          // express.e:5119-5127 - IF (auto=FALSE) AND (forceMailScan<>FORCE_MAILSCAN_SKIP)
+          // During confScan, auto=FALSE, so if shouldScanMail=TRUE, call MAIL_SCAN
+          if (shouldScanMail) {
+            console.log(`[confScan] Counting new messages for conf ${conf} msgbase ${msgbase.id}`);
+            // express.e:5122 - mystat:=callMsgFuncs(MAIL_SCAN,conf,msgBaseNum)
+            // MAIL_SCAN counts new messages and returns them
+            const counts = await countNewMessages(session.user.id, conf, msgbase.id, session.user.username || session.user.name || '');
+            console.log(`[confScan] Found ${counts.newPublic} public, ${counts.newPrivate} private for conf ${conf} msgbase ${msgbase.id}`);
+
+            // express.e:5126 - saveMsgPointers(conf,msgBaseNum)
+            // Update scan pointer to mark messages as scanned
+            const newPointer = counts.mailStatHigh || counts.lastScanned;
+            if (newPointer > 0) {
+              console.log(`[confScan] Updating scan pointer to ${newPointer} for conf ${conf} msgbase ${msgbase.id}`);
+              await updateScanPointer(session.user.id, conf, msgbase.id, newPointer);
+            }
+          }
+          console.log(`[confScan] Done with msgbase ${msgbase.id} in conf ${conf}`);
         } catch (err) {
-          console.error(`[confScan] Failed to update scan pointer for conf ${conference.id} msgBase ${msgBase.id}:`, err);
-          SysopDebugUtil.debug(
-            null,
-            null,
-            'Message Scanning',
-            `Failed to update scan pointer after conference scan`,
-            {
-              error: err instanceof Error ? err.message : String(err),
-              conferenceId: conference.id,
-              messageBaseId: msgBase.id,
-              newPointer
-            },
-            DebugSeverity.WARNING
+          console.error(`[confScan] Failed to scan conf ${conf} msgbase ${msgbase.id}:`, err);
+          // Express.e doesn't abort on error, continue with next msgbase
+        }
+      }
+
+      // express.e:28099-28104 - IF (mystat=RESULT_SUCCESS) AND (fscan)
+      console.log(`[confScan] fscan=${fscan} for conf ${conf}`);
+      if (fscan) {
+        try {
+          console.log(`[confScan] Running new files scan for conf ${conf}`);
+          // express.e:28100 - newFilesPauseFlag:=TRUE
+          // (UI flag, not needed for web)
+
+          // express.e:28101-28102 - currentConf:=conf / runSysCommand('N','S U')
+          const currentConfBackup = session.currentConf;
+          session.currentConf = conf;
+          const { runSysCommand } = require('../command-execution.handler');
+
+          // File scan doors don't exit cleanly in batch mode - add 30s timeout
+          const FILE_SCAN_TIMEOUT = 30000;
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('File scan timeout')), FILE_SCAN_TIMEOUT)
           );
+
+          try {
+            await Promise.race([
+              runSysCommand(socket, session, 'N', 'S U'),
+              timeoutPromise
+            ]);
+          } catch (err) {
+            if (err instanceof Error && err.message === 'File scan timeout') {
+              console.log(`[confScan] File scan timed out after ${FILE_SCAN_TIMEOUT}ms for conf ${conf} - continuing`);
+              // Force kill the door session if it's still running
+              if ((session as any).inDoorManager) {
+                (session as any).inDoorManager = false;
+              }
+            } else {
+              throw err;
+            }
+          }
+
+          // express.e:28103 - currentConf:=0
+          session.currentConf = currentConfBackup;
+          console.log(`[confScan] New files scan complete for conf ${conf}`);
+
+          // express.e:28104 - newFilesPauseFlag:=FALSE
+        } catch (err) {
+          console.error(`[confScan] Failed to run new-files scan for conf ${conf}:`, err);
+          // Continue with next conference
         }
       }
 
-      // Track if any base has file-scan enabled to decide N-files scan (express.e checkFileConfScan)
-      try {
-        const scanFlags = await getConferenceScanFlags(session.user.id, conference.id, msgBase.id);
-        const FILE_SCAN_MASK = 8; // matches advanced-commands handler
-        if ((scanFlags & FILE_SCAN_MASK) !== 0) {
-          fileScanForConf = true;
-        }
-      } catch (err) {
-        console.error(`[confScan] Failed to read scan flags for conf ${conference.id} msgBase ${msgBase.id}:`, err);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Message Scanning',
-          `Failed to read scan flags for file-scan check`,
-          {
-            error: err instanceof Error ? err.message : String(err),
-            conferenceId: conference.id,
-            messageBaseId: msgBase.id
-          },
-          DebugSeverity.WARNING
-        );
-      }
+      console.log(`[confScan] Finished conf ${conf} (${conference.name})`);
+
+      // express.e:28109-28113 - EXIT mystat=RESULT_FAILURE / check timeout/no carrier
+      // (For web, we don't need carrier checks)
     }
 
-    // Mirror express.e checkFileConfScan: if tooltype SHOW_NEW_FILES or per-base FILE_SCAN_MASK, run new files scan
-    const fileFlags = getConferenceToolFlags(confNum);
-    const shouldScanFiles =
-      fileFlags.showNewFiles ||
-      (!fileFlags.noNewFiles && fileScanForConf);
-
-    if (shouldScanFiles) {
-      try {
-        const { runSysCommand } = require('../command-execution.handler');
-        const currentConfBackup = session.currentConf;
-        session.currentConf = conference.id;
-        // "N" with params "S U" (express.e: runSysCommand('N','S U'))
-        await runSysCommand(socket, session, 'N', 'S U');
-        session.currentConf = currentConfBackup;
-      } catch (err) {
-        console.error(`[confScan] Failed to run new-files scan for conf ${conference.id}:`, err);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Message Scanning',
-          `Failed to run new-files scan during conference scan`,
-          {
-            error: err instanceof Error ? err.message : String(err),
-            conferenceId: conference.id
-          },
-          DebugSeverity.WARNING
-        );
-      }
-    }
-
-    totalNewPublic += confNewPublic;
-    totalNewPrivate += confNewPrivate;
-
-    // Show result for this conference
-    const totalNew = confNewPublic + confNewPrivate;
-    if (totalNew > 0) {
-      socket.emit('ansi-output', ` ${AnsiUtil.colorize(`${totalNew} new`, 'green')}\r\n`);
-    } else {
-      socket.emit('ansi-output', ` ${AnsiUtil.colorize('no new mail', 'yellow')}\r\n`);
-    }
+    // express.e:28115 - mciViewSafe:=TRUE
   }
 
-  // express.e:28105-28115 - Display summary
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.line('────────────────────────────────────────'));
-  socket.emit('ansi-output', AnsiUtil.successLine(`Mail scan complete!`));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', `  ${AnsiUtil.colorize('• Conferences scanned:', 'white')} ${AnsiUtil.colorize(scannedConferences.toString(), 'cyan')}\r\n`);
-  socket.emit('ansi-output', `  ${AnsiUtil.colorize('• New public messages:', 'white')} ${AnsiUtil.colorize(totalNewPublic.toString(), 'green')}\r\n`);
-  socket.emit('ansi-output', `  ${AnsiUtil.colorize('• New private messages:', 'white')} ${AnsiUtil.colorize(totalNewPrivate.toString(), 'green')}\r\n`);
-  socket.emit('ansi-output', `  ${AnsiUtil.colorize('• Total unread:', 'white')} ${AnsiUtil.colorize((totalNewPublic + totalNewPrivate).toString(), 'cyan')}\r\n`);
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.line('────────────────────────────────────────'));
+  // express.e:28117-28147 - Part upload check (TODO: implement if needed)
+  // For now, skip this section
 
-  // Store scan results in session for display in other screens
-  session.lastScanNewPublic = totalNewPublic;
-  session.lastScanNewPrivate = totalNewPrivate;
-  session.lastScanTotal = totalNewPublic + totalNewPrivate;
+  // express.e:28149 - ENDPROC RESULT_SUCCESS
+  return 0; // RESULT_SUCCESS
 }
 
 /**

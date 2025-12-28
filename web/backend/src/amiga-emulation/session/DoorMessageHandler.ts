@@ -623,8 +623,15 @@ export class DoorMessageHandler {
           this.writeStringToMessage(msgAddr, userName);
           console.log(`[DoorMessageHandler]   Replied with name: "${userName}"`);
         } else {
-          // Set name (not implemented)
-          console.log(`[DoorMessageHandler]   Set name not implemented`);
+          // Set name - update session user
+          const newName = str?.trim();
+          if (newName && this.config.bbsSession?.user) {
+            const oldName = this.config.bbsSession.user.username;
+            this.config.bbsSession.user.username = newName;
+            console.log(`[DoorMessageHandler]   Set name: "${oldName}" -> "${newName}"`);
+          } else {
+            console.log(`[DoorMessageHandler]   Set name: no value or no user`);
+          }
         }
         break;
 
@@ -637,8 +644,15 @@ export class DoorMessageHandler {
           this.writeStringToMessage(msgAddr, location);
           console.log(`[DoorMessageHandler]   Replied with location: "${location}"`);
         } else {
-          // Set location (not implemented)
-          console.log(`[DoorMessageHandler]   Set location not implemented`);
+          // Set location - update session user
+          const newLocation = str?.trim();
+          if (newLocation && this.config.bbsSession?.user) {
+            const oldLocation = this.config.bbsSession.user.location;
+            this.config.bbsSession.user.location = newLocation;
+            console.log(`[DoorMessageHandler]   Set location: "${oldLocation}" -> "${newLocation}"`);
+          } else {
+            console.log(`[DoorMessageHandler]   Set location: no value or no user`);
+          }
         }
         break;
 
@@ -650,7 +664,15 @@ export class DoorMessageHandler {
           this.writeStringToMessage(msgAddr, phone);
           console.log(`[DoorMessageHandler]   Replied with phone: "${phone}"`);
         } else {
-          console.log(`[DoorMessageHandler]   Set phone not implemented`);
+          // Set phone - update session user
+          const newPhone = str?.trim();
+          if (newPhone && this.config.bbsSession?.user) {
+            const oldPhone = this.config.bbsSession.user.phone;
+            this.config.bbsSession.user.phone = newPhone;
+            console.log(`[DoorMessageHandler]   Set phone: "${oldPhone}" -> "${newPhone}"`);
+          } else {
+            console.log(`[DoorMessageHandler]   Set phone: no value or no user`);
+          }
         }
         break;
 
@@ -1263,14 +1285,29 @@ export class DoorMessageHandler {
       case XIMCommand.CONF_ACCESS:
         // express.e:4023-4028: Check conference access
         // Returns: 0=no access, 1=has access, 2=invalid conf
-        if (data < 0 || data >= 256) {
-          // Invalid conference number
-          console.log(`[DoorMessageHandler]   CONF_ACCESS: Invalid conf ${data}, returning 2`);
-          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 2);
-        } else {
-          // For now, assume all conferences are accessible (requires conference system integration)
-          console.log(`[DoorMessageHandler]   CONF_ACCESS: Conf ${data} accessible, returning 1`);
-          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
+        // Reference: express.e checkConfAccess() lines 8499-8512
+        {
+          const confNum = data; // 0-indexed conference number
+          const user = this.config.bbsSession?.user;
+          const confAccess = user?.confAccess || user?.conferenceAccess || '';
+
+          // Check bounds
+          if (confNum < 0 || confNum >= 256) {
+            console.log(`[DoorMessageHandler]   CONF_ACCESS: Invalid conf ${confNum}, returning 2`);
+            this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 2);
+          } else {
+            // express.e:8504-8508: Check conferenceAccess string
+            // confNum is 0-indexed, conferenceAccess is 1-indexed in express.e
+            // so confNum+1 maps to conferenceAccess[confNum]
+            let hasAccess = false;
+            if (confAccess && confNum < confAccess.length) {
+              // "X" = access, anything else (usually "_") = no access
+              hasAccess = confAccess.charAt(confNum).toUpperCase() === 'X';
+            }
+            const accessStatus = hasAccess ? 1 : 0;
+            console.log(`[DoorMessageHandler]   CONF_ACCESS: conf=${confNum}, confAccess="${confAccess}", status=${accessStatus}`);
+            this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, accessStatus);
+          }
         }
         break;
 
@@ -1750,42 +1787,8 @@ export class DoorMessageHandler {
         console.log(`[DoorMessageHandler]   UNKNOWN4: Not implemented`);
         break;
 
-      // Conference-related XIM commands
-      // CONF_ACCESS (614) - Check user's access to a specific conference
-      // Per axcommon.e, this is the ONLY command at 614 (BB_NUMCONFS does NOT exist)
-      // Returns: 0=no access, 1=has access, 2=invalid conference
-      case XIMCommand.CONF_ACCESS:
-        {
-          const confNum = data; // Conference number to check (0-indexed)
-          const fs = require('fs');
-          const path = require('path');
-          const bbsRoot = this.config.bbsSession?.dataDir ||
-                         (this.config.bbsSession as any)?.bbsRoot ||
-                         process.cwd();
-          const confConfigPath = path.join(bbsRoot, 'ConfConfig.info');
-          let numConfs = 14; // Default
-          try {
-            if (fs.existsSync(confConfigPath)) {
-              const { parseInfoFile } = require('../../utils/amiga-command-parser.util');
-              const tooltypes = parseInfoFile(confConfigPath);
-              if (tooltypes.has('NCONFS')) {
-                numConfs = parseInt(tooltypes.get('NCONFS') || '14') || 14;
-              }
-            }
-          } catch (e) {
-            console.log(`[DoorMessageHandler]   CONF_ACCESS: Error reading ConfConfig.info: ${e}`);
-          }
-          // Check if conference is valid and user has access
-          // For now, grant access to all valid conferences (0 to numConfs-1)
-          let accessStatus = 2; // 2 = invalid conference
-          if (confNum >= 0 && confNum < numConfs) {
-            // TODO: Check user's actual conference access from confAccess string
-            accessStatus = 1; // 1 = has access
-          }
-          console.log(`[DoorMessageHandler]   CONF_ACCESS: conf=${confNum}, status=${accessStatus}`);
-          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, accessStatus);
-        }
-        break;
+      // NOTE: CONF_ACCESS is handled earlier in the switch statement (around line 1285)
+      // It now properly checks user's conferenceAccess string per express.e:8499-8512
 
       case XIMCommand.BB_PCONFNAME: // BB_PCONFNAME=148 - Get conference name by number
         {

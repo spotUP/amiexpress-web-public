@@ -504,12 +504,14 @@ export async function parseMciCodes(
   session: BBSSession,
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
-  location: string = 'The Internet'
+  location: string = 'The Internet',
+  socket?: any  // When provided, execute inline (express.e outdata=NIL mode)
 ): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
   let slowmo = session?.slowmo || 0;
+  const inlineMode = socket !== undefined;  // True = execute inline, False = build string
   let slowmoCount = session?.slowmoCount || 0;
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
@@ -739,9 +741,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   parsed = parsed.replace(mciRegex('IN'), user.email || '');  // IN - Internet Name (email)
   parsed = parsed.replace(mciRegex('RN'), user.realName || username);  // RN - Real Name
 
-  // Conference Information (express.e:5440-5490)
-  parsed = parsed.replace(mciRegex('CF'), session.currentConfName || 'Main');  // CF - Current Conference
-  parsed = parsed.replace(mciRegex('CN'), (session.currentConf + 1).toString());  // CN - Conference Number
+  // Conference Information (express.e:5413-5427)
+  // ~CF = Conference Number (relConfNum) - express.e:5413-5416
+  // ~CN = Conference Name (currentConfName) - express.e:5417-5419
+  parsed = parsed.replace(mciRegex('CF'), ((session.currentConf || 0) + 1).toString());  // CF - Conference Number
+  parsed = parsed.replace(mciRegex('CN'), session.currentConfName || 'Main');  // CN - Conference Name
 
   // ~MB - Current Message Base Number (express.e:5442)
   const currentMsgBase = session.currentMsgBase || 1;
@@ -767,13 +771,16 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   }
   parsed = parsed.replace(mciRegex('MN'), msgBaseName);
 
-  parsed = parsed.replace(mciRegex('CT'), conferences.length.toString());  // CT - Total Conferences
+  // ~CT - Current Time (express.e:5431-5434) - formatLongTime(logonTime)
+  parsed = parsed.replace(mciRegex('CT'), timeStr);  // CT - Current Time
   parsed = parsed.replace(mciRegex('VD'), '2.00');  // VD - Version Number (display)
   parsed = parsed.replace(mciRegex('VE'), 'AmiExpress-Web 2.0');  // VE - Version (full)
 
   // System Information
-  parsed = parsed.replace(mciRegex('ND'), fullDateTime);  // ND - Node Date/Time
-  parsed = parsed.replace(mciRegex('DT'), fullDateTime);  // DT - Date/Time
+  // ~ND - Node Number (express.e:5409-5412) - StringF(tempstr,'\d',node)
+  parsed = parsed.replace(mciRegex('ND'), (session.nodeId || 1).toString());  // ND - Node Number
+  // ~DT - Date (express.e:5435-5438) - formatLongDate(getSystemTime())
+  parsed = parsed.replace(mciRegex('DT'), `${day}-${month}-${year}`);  // DT - Date
   parsed = parsed.replace(mciRegex('OT'), timeStr);  // OT - Time Only
   parsed = parsed.replace(mciRegex('OD'), `${day}-${month}-${year}`);  // OD - Date Only
 
@@ -863,16 +870,17 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   parsed = parsed.replace(mciRegex('z6'), '\x1b[43m');
   parsed = parsed.replace(mciRegex('z7'), '\x1b[47m');
 
-  // Text styles (n1-n9)
-  parsed = parsed.replace(mciRegex('n1'), '\x1b[1m');   // Bold
-  parsed = parsed.replace(mciRegex('n2'), '\x1b[2m');   // Dim
-  parsed = parsed.replace(mciRegex('n3'), '\x1b[3m');   // Italic
-  parsed = parsed.replace(mciRegex('n4'), '\x1b[4m');   // Underline
-  parsed = parsed.replace(mciRegex('n5'), '\x1b[5m');   // Blink
-  parsed = parsed.replace(mciRegex('n6'), '\x1b[7m');   // Reverse
-  parsed = parsed.replace(mciRegex('n7'), '\x1b[8m');   // Hidden
-  parsed = parsed.replace(mciRegex('n8'), '\x1b[0m');   // Reset
-  parsed = parsed.replace(mciRegex('n9'), '\x1b[0m');   // Normal (reset)
+  // Blank lines (express.e:5699-5725) - ~n1 through ~n9 output 1-9 blank lines
+  // These call blankLines(n) which outputs n newlines
+  parsed = parsed.replace(mciRegex('n1'), '\r\n');                    // 1 blank line
+  parsed = parsed.replace(mciRegex('n2'), '\r\n\r\n');                // 2 blank lines
+  parsed = parsed.replace(mciRegex('n3'), '\r\n\r\n\r\n');            // 3 blank lines
+  parsed = parsed.replace(mciRegex('n4'), '\r\n\r\n\r\n\r\n');        // 4 blank lines
+  parsed = parsed.replace(mciRegex('n5'), '\r\n\r\n\r\n\r\n\r\n');    // 5 blank lines
+  parsed = parsed.replace(mciRegex('n6'), '\r\n\r\n\r\n\r\n\r\n\r\n');              // 6 blank lines
+  parsed = parsed.replace(mciRegex('n7'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n');          // 7 blank lines
+  parsed = parsed.replace(mciRegex('n8'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n');      // 8 blank lines
+  parsed = parsed.replace(mciRegex('n9'), '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n');  // 9 blank lines
 
   // ~f - Fill character (express.e:5471-5480)
   // Format: ~f or ~f<char> - clears screen or fills with character
@@ -927,7 +935,6 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SS_ - Show String / Display File (express.e:5490-5500)
   // Format: ~SS_<filename>|| or ~2S<filename> (short form) - displays another screen file
   // Note: || terminator is optional in some screen files
-  // Store for async file loading - we'll process these after parsing
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
   // Path stops at whitespace, tilde (next MCI code), pipe, or newline
@@ -937,13 +944,27 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Keep provided extensions; only trim whitespace/terminators.
   const normalizeScreenReference = (screenRef: string): string => screenRef.trim();
 
-  parsed = parsed.replace(ssRegex, (_match, ref) => {
-    const filename = normalizeScreenReference(ref.trim());
-    screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
-    filesToDisplay.push(filename);
-    return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
-  });
-  screenDebug('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
+  if (inlineMode) {
+    // Inline mode (express.e outdata=NIL): Display files immediately as we encounter them
+    let ssMatch;
+    while ((ssMatch = ssRegex.exec(parsed)) !== null) {
+      const filename = normalizeScreenReference(ssMatch[1].trim());
+      screenDebug('[MCI] ~SS_ displaying file inline:', filename);
+      // Display the file immediately (like express.e displayFile())
+      await displayScreen(socket, session, filename, false);
+    }
+    // Remove ~SS_ codes from parsed content (they've been displayed)
+    parsed = parsed.replace(ssRegex, '');
+  } else {
+    // String mode: Create placeholders for later replacement
+    parsed = parsed.replace(ssRegex, (_match, ref) => {
+      const filename = normalizeScreenReference(ref.trim());
+      screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
+      filesToDisplay.push(filename);
+      return `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
+    });
+    screenDebug('[MCI DEBUG] Total ~SS_ MCI codes found in screen:', filesToDisplay.length);
+  }
 
   // ~SX_ - String Exact / Sequential File Display (express.e:5505-5530)
   // Format: ~SX_<path>/<basename>|| - displays files sequentially (file.1, file.2, file.3...)
@@ -1025,8 +1046,22 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     const randomFile = formatNumberedFilename(basePath, randomNum);
 
     screenDebug('[MCI] ~SR_ selected random file:', randomFile);
-    filesToDisplay.push(randomFile);
-    parsed = parsed.replace(srMatch[0], `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`);
+
+    if (inlineMode) {
+      // Inline mode: Display the random file immediately (like express.e displayFile())
+      await displayScreen(socket, session, randomFile, false);
+    } else {
+      // String mode: Create placeholder for later replacement
+      filesToDisplay.push(randomFile);
+      const placeholder = `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
+      console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
+      parsed = parsed.replace(srMatch[0], placeholder);
+    }
+  }
+
+  // Remove ~SR_ codes from parsed content if in inline mode (they've been displayed)
+  if (inlineMode) {
+    parsed = parsed.replace(srRegex, '');
   }
 
   // ~SP. - Stop Pause (express.e:5455-5461)
@@ -1064,10 +1099,26 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // reference-board screens sometimes omit the pipe and just terminate with whitespace/~SP.
   // Accept either a pipe delimiter or whitespace/end of line.
   const ccRegex = /~CC_([^\s|~\r\n]+)(\|{1,2})?/g;
-  parsed = parsed.replace(ccRegex, (_fullMatch: string, commandStr: string) => {
-    commandsToExecute.push(commandStr.trim());
-    return '';
-  });
+
+  if (inlineMode) {
+    // Inline mode (express.e outdata=NIL): Execute commands immediately as we encounter them
+    let ccMatch;
+    while ((ccMatch = ccRegex.exec(parsed)) !== null) {
+      const commandStr = ccMatch[1].trim();
+      screenDebug('[MCI] ~CC_ executing command inline:', commandStr);
+      // Execute the command immediately (like express.e processSysCommand())
+      const { handleCommand } = require('./command-handler/core');
+      await handleCommand(socket, session, commandStr);
+    }
+    // Remove ~CC_ codes from parsed content (they've been executed)
+    parsed = parsed.replace(ccRegex, '');
+  } else {
+    // String mode: Queue commands for later execution
+    parsed = parsed.replace(ccRegex, (_fullMatch: string, commandStr: string) => {
+      commandsToExecute.push(commandStr.trim());
+      return '';
+    });
+  }
 
   // ~CR_ - Prompted keypress (express.e:5571-5580)
   // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
@@ -1142,10 +1193,17 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       if (embedded.hasPause) {
         hasPause = true;
       }
+      // Add ESC prefix to bare ANSI sequences in embedded content (like FLT logos)
+      let embeddedContent = embedded.parsed;
+      if (!screenData.isPetscii) {
+        embeddedContent = addAnsiEscapes(embeddedContent);
+      }
       // Replace placeholder with embedded content
-      parsed = parsed.replace(placeholder, embedded.parsed);
+      console.log(`[MCI] Replacing placeholder ${placeholder} with ${embeddedContent.length} bytes from ${filename}`);
+      parsed = parsed.replace(placeholder, embeddedContent);
     } else {
       // File not found - remove placeholder
+      console.log(`[MCI] File not found, removing placeholder: ${filename}`);
       screenDebug(`[MCI] ~SS_ file not found: ${filename}`);
       parsed = parsed.replace(placeholder, '');
     }
@@ -1630,7 +1688,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     let commands: any[] = [];
 
     // Always parse MCI so ~SS_ and other codes work even in PETSCII screens
-    const result = await parseMciCodes(content, session);
+    // Pass socket to enable inline mode (express.e outdata=NIL): execute ~SS_/~SR_/~CC_ immediately
+    const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
     parsed = result.parsed;
     commands = result.commands;
     if (result.slowmo !== undefined) {
@@ -2236,8 +2295,8 @@ export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
  * @param session - Current BBS session (for future enhancements)
  */
 export function doPause(socket: any, session: BBSSession, onComplete?: () => void): void {
-  // Express.e:5143 - "(Pause)...Space To Resume:"
-  socket.emit('ansi-output', '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  // Express.e:5143-5144 - "\b\n(Pause)...Space To Resume:"
+  socket.emit('ansi-output', '\b\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
 
   // Install a minimal pagination gate so the next keypress is required before
   // the display flow continues (matches express.e pause semantics).

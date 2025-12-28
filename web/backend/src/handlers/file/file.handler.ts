@@ -675,8 +675,13 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
   // Check for non-stop flag (NS parameter)
   const nonStopDisplay = parsedParams.includes('NS');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[36m-= New Files Since Last Login =-\x1b[0m\r\n');
+  // Check for silent/unattended mode (S or U parameters)
+  const silentMode = parsedParams.includes('S') || parsedParams.includes('U');
+
+  if (!silentMode) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\x1b[36m-= New Files Since Last Login =-\x1b[0m\r\n');
+  }
 
   // Get date to search from
   let searchDate: Date;
@@ -697,28 +702,37 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
     searchDate = session.user?.lastLogin || new Date(Date.now() - 86400000);
   }
 
-  socket.emit('ansi-output', `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
+  if (!silentMode) {
+    socket.emit('ansi-output', `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
+  }
 
   // Get file areas for current conference from database
   const conferenceId = session.currentConf || 1;
   const areas = await db.getFileAreas(conferenceId);
 
   if (areas.length === 0) {
+    // In silent mode, just return without output or state changes
+    if (silentMode) {
+      return;
+    }
     socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
     finalizeCommand(socket, session, 'New files unavailable');
     return;
   }
 
-  // Display new files from database
-  await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
+  // Display new files from database (silentMode passed to suppress output)
+  await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay, silentMode);
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-  session.menuPause = true;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Only show pause prompt if not in silent/unattended mode (express.e behavior)
+  if (!silentMode) {
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 }
 
 // Display new files from database - express.e:28115+ myNewFiles()
-async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
+async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean, silentMode: boolean = false) {
   let foundNewFiles = false;
   let totalNewFiles = 0;
 
@@ -747,6 +761,11 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
       if (newFiles.length > 0) {
         foundNewFiles = true;
         totalNewFiles += newFiles.length;
+
+        // Skip all output in silent mode (just count the files)
+        if (silentMode) {
+          continue;
+        }
 
         // Display area header
         socket.emit('ansi-output', `\r\n\x1b[33m${area.name}\x1b[0m\r\n`);
@@ -782,12 +801,14 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
     }
   }
 
-  // Summary
-  socket.emit('ansi-output', '\r\n');
-  if (foundNewFiles) {
-    socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
-  } else {
-    socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
+  // Summary (skip in silent mode)
+  if (!silentMode) {
+    socket.emit('ansi-output', '\r\n');
+    if (foundNewFiles) {
+      socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
+    } else {
+      socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
+    }
   }
 
   if (!nonStop) {

@@ -169,6 +169,35 @@ export class CallersLogManager {
   }
 
   /**
+   * Get the last caller (most recent login) from CallersLog
+   * Returns the username of the last user who logged in
+   */
+  getLastCaller(nodeId: number = 0): string | null {
+    try {
+      // Try all nodes starting from nodeId
+      for (let i = nodeId; i < 8; i++) {
+        const logPath = this.getLogPath(i);
+        if (!fs.existsSync(logPath)) continue;
+
+        const content = fs.readFileSync(logPath, 'utf8');
+        const lines = content.trim().split('\n').reverse();
+
+        // Find the most recent login entry
+        for (const line of lines) {
+          const loginMatch = line.match(/Login:\s*(\S+)/);
+          if (loginMatch) {
+            return loginMatch[1];
+          }
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error(`[CallersLog] Error getting last caller:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Read CallersLog for a node
    */
   readLog(nodeId: number): string | null {

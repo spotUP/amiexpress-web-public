@@ -13,6 +13,7 @@ import { DoorConfig, DoorConstants } from "../DoorTypes.js";
 import { LibraryManager } from "../LibraryManager.js";
 import { DoorLoader } from "../DoorLoader.js";
 import { DoorMessageHandler } from "./DoorMessageHandler.js";
+import { TIMDoorMessageHandler } from "./TIMDoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 
@@ -66,6 +67,7 @@ export class DoorLifecycleManager {
   private config: DoorConfig;
   private libraryTraps: LibraryTraps | null = null;
   private ximProtocol: XIMProtocol | null = null;
+  private timHandler: TIMDoorMessageHandler | null = null;
   private libraryManager: LibraryManager;
   private doorLoader: DoorLoader;
   private messageHandler: DoorMessageHandler | null = null;
@@ -243,6 +245,10 @@ export class DoorLifecycleManager {
 
   setXIMProtocol(ximProtocol: XIMProtocol | null): void {
     this.ximProtocol = ximProtocol;
+  }
+
+  setTIMHandler(timHandler: TIMDoorMessageHandler | null): void {
+    this.timHandler = timHandler;
   }
 
   /**
@@ -549,6 +555,12 @@ export class DoorLifecycleManager {
         // Only poll for XIM doors - SIM doors don't use XIM protocol
         if (this.config.doorType === "XIM") {
           await this.pollXIMMessages();
+        }
+
+        // === STEP 5C: Poll for TIM messages from DoorControl port ===
+        // TIM doors use DoorControl{n} port with simpler doorMsg structure
+        if (this.config.doorType === "TIM") {
+          await this.pollTIMMessages();
         }
 
         // === STEP 6: Yield to allow other async operations ===
@@ -1687,6 +1699,88 @@ export class DoorLifecycleManager {
       }
     } catch (error) {
       console.error(`[DoorLifecycleManager] XIM polling error:`, error);
+    }
+  }
+
+  private timPollCount = 0;
+  private lastTimPollLog = 0;
+
+  /**
+   * Poll for TIM door messages from DoorControl{n} port
+   * Reference: express.e lines 4371-4525
+   * TIM doors use simpler doorMsg structure instead of jhMessage
+   */
+  private async pollTIMMessages(): Promise<void> {
+    this.timPollCount++;
+
+    // Log doorType on first poll
+    if (this.timPollCount === 1) {
+      console.log(`[DoorLifecycleManager] pollTIMMessages called: doorType="${this.config.doorType}"`);
+    }
+
+    // Log every 10000 polls to confirm polling is active
+    if (this.timPollCount - this.lastTimPollLog >= 10000) {
+      console.log(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} polls so far`);
+      this.lastTimPollLog = this.timPollCount;
+    }
+
+    // Only poll for TIM doors
+    if (this.config.doorType !== "TIM") {
+      if (this.timPollCount === 1) {
+        console.log(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${this.config.doorType}`);
+      }
+      return;
+    }
+
+    const execLib = this.libraryManager?.execLibrary;
+    if (!execLib) {
+      if (this.timPollCount === 1) {
+        console.log(`[DoorLifecycleManager] TIM polling FAILED: execLib is null`);
+      }
+      return;
+    }
+
+    // Get the DoorControl port address
+    // For TIM doors, port name is DoorControl{nodeId} (e.g., "DoorControl1")
+    const nodeId = this.config.bbsSession?.nodeNumber || 1;
+    const portName = `DoorControl${nodeId}`;
+
+    // Write port name to temporary memory for findPort
+    const portNameAddr = 0x500; // Temporary address for port name
+    this.emulator.writeString(portNameAddr, portName);
+
+    const timPortAddr = execLib.findPort(portNameAddr);
+    if (!timPortAddr || timPortAddr === 0) {
+      // Port not found yet, door might not have registered
+      if (this.timPollCount === 1) {
+        console.log(`[DoorLifecycleManager] TIM polling: DoorControl port not found yet (will retry)`);
+      }
+      return;
+    }
+
+    if (this.timPollCount === 1) {
+      console.log(`[DoorLifecycleManager] TIM polling: Found DoorControl port at 0x${timPortAddr.toString(16)}`);
+    }
+
+    // Poll for messages with GetMsg
+    try {
+      const msgAddr = execLib.getMsg(timPortAddr);
+      if (msgAddr && msgAddr !== 0) {
+        console.log(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toString(16)}`);
+
+        // Found a message! Handle it with TIM handler
+        if (this.timHandler) {
+          const result = await this.timHandler.handleMessage(msgAddr);
+          if (result.exit) {
+            console.log(`[DoorLifecycleManager] TIM door requested exit`);
+            this.executionState.isRunning = false;
+          }
+        } else {
+          console.log(`[DoorLifecycleManager] TIM polling: timHandler is null`);
+        }
+      }
+    } catch (error) {
+      console.error(`[DoorLifecycleManager] TIM polling error:`, error);
     }
   }
 

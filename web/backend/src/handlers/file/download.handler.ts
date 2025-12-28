@@ -24,6 +24,8 @@ import * as path from 'path';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { userFileManager } from '../../services/UserFileManager';
+import { doorDropFileManager } from '../../services/DoorDropFileManager';
+import { emitDownload } from '../../services/bbs-event-emitter';
 
 /**
  * Download Handler
@@ -341,9 +343,28 @@ export class DownloadHandler {
 
       await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
 
+      // Emit BBS event for LiveChat integration
+      try {
+        const conference = await db.getConferenceById(session.currentConf);
+        emitDownload({
+          username: session.user.username,
+          nodeId: session.nodeId || 1,
+          fileName: fileInfo.name,
+          fileSize: fileInfo.size,
+          conferenceId: session.currentConf,
+          conferenceName: conference?.name,
+          timestamp: Date.now()
+        });
+      } catch (error) {
+        console.error('[BBSEvent] Error emitting download event:', error);
+      }
+
       await updateDownloadStats(session.user, fileInfo.size, isFree);
       await this.persistDownloadStats(session);
       await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+
+      // Update per-node download tracking for DOOR.SYS line 32
+      doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
     }
 
     // express.e:20251 - "File transfer Completed."
@@ -395,9 +416,28 @@ export class DownloadHandler {
         const isFree = this.isFreeDownload(fileInfo);
         await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
 
+        // Emit BBS event for LiveChat integration
+        try {
+          const conference = await db.getConferenceById(session.currentConf);
+          emitDownload({
+            username: session.user.username,
+            nodeId: session.nodeId || 1,
+            fileName: fileInfo.name,
+            fileSize: fileInfo.size,
+            conferenceId: session.currentConf,
+            conferenceName: conference?.name,
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          console.error('[BBSEvent] Error emitting download event:', error);
+        }
+
         await updateDownloadStats(session.user, fileInfo.size, isFree);
         await this.persistDownloadStats(session);
         await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+
+        // Update per-node download tracking for DOOR.SYS line 32
+        doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
       }
     }
 
@@ -611,13 +651,14 @@ export class DownloadHandler {
         });
 
         // DISK-BASED: Write updated download stats to user.data/keys/misc files
-        try {
-          const userId = parseInt(user.id, 10);
-          userFileManager.updateUserDataFile(user, userId);
-          console.log(`[DOWNLOAD] Updated user ${user.username} disk files with download stats`);
-        } catch (diskErr) {
-          console.error('[DOWNLOAD] Error writing user disk files:', diskErr);
-          // Continue anyway - database has the stats, sync can happen later
+        if (user.slotNumber) {
+          try {
+            userFileManager.updateUserDataFile(user, user.slotNumber);
+            console.log(`[DOWNLOAD] Updated user ${user.username} disk files with download stats`);
+          } catch (diskErr) {
+            console.error('[DOWNLOAD] Error writing user disk files:', diskErr);
+            // Continue anyway - database has the stats, sync can happen later
+          }
         }
       }
     } catch (err) {

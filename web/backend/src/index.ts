@@ -17,6 +17,7 @@ import { doorDropFileManager } from './services/DoorDropFileManager';
 import { triggerSamiLogRefresh } from './services/SamiLogService';
 import { conferenceFileManager } from './services/ConferenceFileManager';
 import { loadConfConfig } from './services/conf-config.service';
+import { bbsEventEmitter } from './services/bbs-event-emitter';
 import {
   loadFileAreasFromDisk,
   ensureConferenceStructure,
@@ -40,7 +41,7 @@ import { displayScreen, doPause, parseMciCodes, loadScreenFile, addAnsiEscapes, 
 import { registerSocketHandlers } from './server/socket-handlers';
 import { displaySystemBulletins } from './server/database-helpers';
 import { initializeData } from './server/initialization';
-import { sessions, userSessions, socketToUser, setSession } from './server/session-manager';
+import { sessions, userSessions, socketToUser, setSession, getNextAvailableNodeId, createSession, socketToNodeId } from './server/session-manager';
 import { app } from './server/app';
 import { TelnetServer, TelnetConnection } from './server/telnet-server';
 import { SSHServerImpl, SSHConnection } from './server/ssh-server';
@@ -448,6 +449,49 @@ const io = new Server(server, {
   connectTimeout: 60000, // 60s connection timeout (increased from 45s)
 });
 
+// Initialize BBS event emitter for LiveChat integration
+bbsEventEmitter.setIO(io);
+
+// CRITICAL: Process-level error handlers to prevent crashes
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
+  console.error('[CRITICAL] Promise:', promise);
+  console.error('[CRITICAL] Stack:', reason?.stack || 'No stack trace');
+  // Log to file for debugging
+  const fs = require('fs');
+  const logPath = join(config.get('dataDir') || './data', 'logs/unhandled-errors.log');
+  const timestamp = new Date().toISOString();
+  const errorLog = `\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${reason?.stack || reason}\n`;
+  fs.appendFileSync(logPath, errorLog, 'utf8');
+  // Don't exit - keep server running
+});
+
+process.on('uncaughtException', (error: Error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  console.error('[CRITICAL] Stack:', error.stack);
+  // Log to file for debugging
+  const fs = require('fs');
+  const logPath = join(config.get('dataDir') || './data', 'logs/unhandled-errors.log');
+  const timestamp = new Date().toISOString();
+  const errorLog = `\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`;
+  fs.appendFileSync(logPath, errorLog, 'utf8');
+  // Don't exit - keep server running unless it's truly fatal
+  // Only exit for critical errors that could corrupt state
+  const fatalErrors = ['EADDRINUSE', 'EACCES', 'EMFILE'];
+  if (fatalErrors.some(code => (error as any).code === code)) {
+    console.error('[CRITICAL] Fatal error - shutting down');
+    process.exit(1);
+  }
+});
+
+// Socket.IO global error handler
+io.engine.on('connection_error', (err: any) => {
+  console.error('[Socket.IO] Connection error:', err);
+  console.error('[Socket.IO] Error code:', err.code);
+  console.error('[Socket.IO] Error message:', err.message);
+  console.error('[Socket.IO] Error context:', err.context);
+});
+
 // Socket.IO authentication middleware for operator chat
 io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
@@ -483,17 +527,41 @@ io.use(async (socket, next) => {
         throw new Error('User not found');
       }
 
-      // Attach user info to socket for operator chat handlers
-      (socket as any).session = {
-        user: {
+      // Check if this is a chat-only user (from web chat login)
+      if (decoded.chatOnly) {
+        // Create a proper BBS session for web chat users
+        const nodeId = getNextAvailableNodeId();
+        const session = createSession(nodeId);
+
+        // Attach user info to the session
+        (session as any).user = {
           id: user.id,
           username: user.username,
           secLevel: user.secLevel
-        },
-        nodeId: 0 // Admin UI doesn't have a node
-      };
+        };
+        session.nodeId = nodeId;
+        (session as any).chatOnly = true; // Mark as web chat session
 
-      console.log(`[Socket.IO Auth] Admin authenticated: ${user.username} (secLevel: ${user.secLevel})`);
+        // Register the session so getSessionBySocketId() will find it
+        setSession(socket.id, session);
+
+        // Also attach to socket for direct access
+        (socket as any).session = session;
+
+        console.log(`[Socket.IO Auth] Web chat user authenticated: ${user.username} (nodeId: ${nodeId})`);
+      } else {
+        // Admin UI user - attach user info without full BBS session
+        (socket as any).session = {
+          user: {
+            id: user.id,
+            username: user.username,
+            secLevel: user.secLevel
+          },
+          nodeId: 0 // Admin UI doesn't have a node
+        };
+
+        console.log(`[Socket.IO Auth] Admin authenticated: ${user.username} (secLevel: ${user.secLevel})`);
+      }
       return next();
     } catch (jwtError: any) {
       // JWT failed - check if it's expired vs invalid
@@ -601,27 +669,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000); // 5 minutes
 
-// Helper: Get next available node ID (1-99)
-// In AmiExpress, each physical node had a number - we simulate this for websockets
-function getNextAvailableNodeId(): number {
-  const usedNodeIds = new Set<number>();
-
-  // Collect all currently used node IDs
-  for (const session of sessions.values()) {
-    if (session.nodeId) {
-      usedNodeIds.add(session.nodeId);
-    }
-  }
-
-  // Find first available node ID (1-99)
-  for (let i = 1; i < 100; i++) {
-    if (!usedNodeIds.has(i)) {
-      return i;
-    }
-  }
-
-  return 1; // Fallback (shouldn't happen with 99 nodes)
-}
+// getNextAvailableNodeId is now imported from session-manager
 
 // Helper: Get session by socket ID
 // Checks both pre-login (socketId-based) and post-login (userId-based) storage
@@ -891,6 +939,15 @@ io.on('connection', async (socket) => {
   const clientIp = socket.handshake.address;
   console.log(`Client connected from ${clientIp}`);
 
+  // Check if this is a web chat user (session already created in JWT auth middleware)
+  const existingSession = (socket as any).session;
+  if (existingSession?.chatOnly) {
+    console.log(`[Socket.IO] Web chat user ${existingSession.user?.username} - skipping BBS initialization`);
+    // Just register the socket handlers for chat functionality
+    registerSocketHandlers(io, socket, chatState);
+    return;
+  }
+
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
     console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
@@ -899,6 +956,72 @@ io.on('connection', async (socket) => {
     socket.emit('ansi-output', '\x1b[33mPlease wait a moment and try again.\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
     socket.disconnect();
+    return;
+  }
+
+  // CHAT-ONLY MODE: Skip all BBS screens and show simple login
+  const chatOnly = socket.handshake?.query?.chatOnly === 'true';
+  if (chatOnly) {
+    console.log('[ChatOnly] Minimal login mode - skipping BBS screens');
+
+    // Create minimal session for chat
+    const sessionStart = Date.now();
+    const session: BBSSession = {
+      state: BBSState.LOGON,
+      subState: undefined,
+      screenWidth: 80,  // Will be updated by terminal-size event
+      screenHeight: 24,
+      currentConf: 1,
+      conferenceId: 1,
+      currentMsgBase: 1,
+      timeRemaining: 60,
+      lastActivity: sessionStart,
+      confRJoin: 1,
+      msgBaseRJoin: 1,
+      commandBuffer: '',
+      menuPause: false,
+      inputBuffer: '',
+      maskInput: false,
+      connectionType: 'web',
+      remoteAddress: clientIp,
+      connectionStart: sessionStart,
+      relConfNum: 0,
+      currentConfName: 'General',
+      cmdShortcuts: false,
+      shortcuts: new Map(),
+      doorExpertMode: false,
+      acsLevel: -1,
+      securityFlags: '',
+      secOverride: '',
+      overrideDefaultAccess: false,
+      userSpecificAccess: false,
+      currentStat: EnvStat.IDLE,
+      quietFlag: false,
+      blockOLM: false,
+      loginTime: Date.now(),
+      nodeStartTime: Date.now(),
+      nodeId: getNextAvailableNodeId(),
+      loginRetryCount: 0,
+      lastMsgReadConf: 0,
+      lastNewReadConf: 0,
+      commandHistory: [],
+      historyIndex: 0,
+      historyCycle: 0,
+      modemEmulationEnabled: false,
+      modemBps: 0,
+      tempData: { loginPhase: 'username', chatOnly: true }
+    };
+    setSession(socket.id, session);
+
+    // Register socket handlers
+    registerSocketHandlers(io, socket, chatState);
+
+    // Show simple login prompt
+    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    socket.emit('ansi-output', '\x1b[36mLiveChat Login\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', 'Username: ');
+    socket.emit('prompt-login');
+
     return;
   }
 
@@ -923,14 +1046,61 @@ io.on('connection', async (socket) => {
   const { loadBBSConfig } = await import('./services/bbs-config-file.service');
   const diskConfig = loadBBSConfig(bbsConfig.dataDir);
 
+  // Get version from package.json
+  const packageJson = require('../package.json');
+  const bbsVersion = packageJson.version || '1.0.0-web';
+
+  const connectionTime = new Date();
+  const dateStr = connectionTime.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+
   // ===== /X NATIVE TELNET CONNECTION SEQUENCE (reference-board-style) =====
   // Simulate classic AmiExpress telnet connection messages
   socket.emit('ansi-output', '\r\n/X Native Telnet:  Searching for free node...\r\n');
   socket.emit('ansi-output', `/X Native Telnet:  Successful connection to node ${nodeSession.nodeId}\r\n`);
   socket.emit('ansi-output', '\r\nCONNECT 19200\r\n');
-  socket.emit('ansi-output', '**EMSI_IRQ8E08\r\n\r\n');
+  socket.emit('ansi-output', '**EMSI_IRQ8E08\r\n');
 
-  // 3-second pause after EMSI handshake (like real BBS connection negotiation)
+  // express.e:29507-29512 - Welcome to {bbsName}, located in {location}
+  // Display banner AFTER EMSI but BEFORE pause so it's visible during the pause
+  const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
+  const location = diskConfig.location || bbsConfig.location;
+
+  // Blank line before banner
+  socket.emit('ansi-output', '\r\n');
+
+  if (location && location.length > 0) {
+    socket.emit('ansi-output', `\x1b[0mWelcome to ${bbsName}, located in ${location}`);
+  } else {
+    socket.emit('ansi-output', `\x1b[0mWelcome to ${bbsName}.`);
+  }
+
+  // express.e:29514-29515 - Running AmiExpress {version} Copyright...
+  const currentYear = new Date().getFullYear();
+  socket.emit('ansi-output', `\r\n\r\nRunning AmiExpress ${bbsVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`);
+  socket.emit('ansi-output', `Web port by Spot/Up Rough\r\n`);
+
+  // express.e:29516-29517 - Registration and node info
+  // Use reg_key from disk config (bbsConfig.info REG_KEY tooltype)
+  const regKey = diskConfig.reg_key || 'UNREGISTERED';
+  socket.emit('ansi-output', `\r\nRegistered to ${regKey}. You are connected to Node ${nodeSession.nodeId} at ${DEFAULT_CONNECTION_BAUD} baud`);
+
+  // express.e:29518-29522 - Connection timestamp
+  socket.emit('ansi-output', `\r\nConnection occurred at ${dateStr}.`);
+
+  // Blank line after banner
+  socket.emit('ansi-output', '\r\n');
+
+  // 3-second pause after banner (like real BBS connection negotiation)
+  // User can read the banner during this pause before screen clear
   await new Promise(resolve => setTimeout(resolve, 3000));
 
   const session: BBSSession = {
@@ -996,49 +1166,6 @@ io.on('connection', async (socket) => {
   } catch (error) {
     console.error('[SamiLog] Initial refresh failed:', error);
   }
-
-  // ===== CONNECTION BANNER (express.e:29507-29524) =====
-  // Display welcome banner before AWAITSCREEN like real AmiExpress
-
-  // Get version from package.json
-  const packageJson = require('../package.json');
-  const bbsVersion = packageJson.version || '1.0.0-web';
-
-  const connectionTime = new Date();
-  const dateStr = connectionTime.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  });
-
-  // express.e:29507-29512 - Welcome to {bbsName}, located in {location}
-  // Use values from disk config (bbsConfig.info)
-  const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
-  const location = diskConfig.location || bbsConfig.location;
-
-  if (location && location.length > 0) {
-    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsName}, located in ${location}`);
-  } else {
-    socket.emit('ansi-output', `\r\n\x1b[0mWelcome to ${bbsName}.`);
-  }
-
-  // express.e:29514-29515 - Running AmiExpress {version} Copyright...
-  const currentYear = new Date().getFullYear();
-  socket.emit('ansi-output', `\r\n\r\nRunning AmiExpress ${bbsVersion} Copyright (c) 2018-${currentYear} Darren Coles, Web port by Spot/Up Rough\r\n`);
-
-  // express.e:29516-29517 - Registration and node info
-  // Use reg_key from disk config (bbsConfig.info REG_KEY tooltype)
-  const regKey = diskConfig.reg_key || 'UNREGISTERED';
-  socket.emit('ansi-output', `Registration ${regKey}. You are connected to Node ${session.nodeId} at ${session.connectionBaud} baud`);
-
-  // express.e:29518-29522 - Connection timestamp
-  socket.emit('ansi-output', `\r\nConnection occurred at ${dateStr}.\r\n`);
-  socket.emit('ansi-output', '\r\n');
 
   // express.e:29524 - Run FRONTEND syscmd (optional - runs custom telnet frontend screen)
   // This runs the FRONTEND door which typically displays who's online

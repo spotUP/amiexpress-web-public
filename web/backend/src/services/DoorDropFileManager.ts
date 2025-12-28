@@ -64,10 +64,18 @@ import * as path from 'path';
 import { User } from '../database';
 import { loadBBSConfig } from './bbs-config-file.service';
 
+// Cache for previous caller info per node (avoids reading logs repeatedly)
+interface PreviousCallerInfo {
+  name: string;
+  time: string;
+  baud: string;
+}
+
 export class DoorDropFileManager {
   private bbsRoot: string;
   private bbsName: string = 'AmiExpress BBS';
   private sysopName: string = 'Sysop';
+  private previousCallerCache: Map<number, PreviousCallerInfo> = new Map();
 
   constructor() {
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
@@ -91,6 +99,119 @@ export class DoorDropFileManager {
     this.loadConfigFromDisk();
     console.log(`[DoorDropFile] Root updated -> ${bbsRoot}`);
     console.log(`[DoorDropFile] Config reloaded: bbsName="${this.bbsName}" sysopName="${this.sysopName}"`);
+  }
+
+  /**
+   * Get previous caller info from CallersLog or session logs
+   * Returns cached value if available, otherwise parses log file
+   */
+  private getPreviousCaller(nodeId: number): PreviousCallerInfo {
+    // Check cache first
+    if (this.previousCallerCache.has(nodeId)) {
+      return this.previousCallerCache.get(nodeId)!;
+    }
+
+    const result: PreviousCallerInfo = {
+      name: 'No Previous Caller',
+      time: '00:00',
+      baud: '115200',
+    };
+
+    try {
+      // Try reading from CallersLog in Node directory
+      const callersLogPath = path.join(this.bbsRoot, `Node${nodeId}`, 'CallersLog');
+      if (fs.existsSync(callersLogPath)) {
+        const content = fs.readFileSync(callersLogPath, 'utf8');
+        const lines = content.trim().split('\n').filter(l => l.trim());
+
+        // Get second-to-last entry (previous caller, not current)
+        // Format varies but typically: "Username [timestamp] action"
+        if (lines.length >= 2) {
+          const prevLine = lines[lines.length - 2];
+          // Try to parse caller name from log line
+          const nameMatch = prevLine.match(/^([A-Za-z0-9 ]+?)\s*[\[\(]/);
+          if (nameMatch) {
+            result.name = nameMatch[1].trim().slice(0, 30);
+          }
+          // Try to extract time
+          const timeMatch = prevLine.match(/(\d{1,2}:\d{2})/);
+          if (timeMatch) {
+            result.time = timeMatch[1];
+          }
+        }
+      }
+    } catch (err) {
+      // Silent fail - use defaults
+      console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
+    }
+
+    // Cache the result
+    this.previousCallerCache.set(nodeId, result);
+    return result;
+  }
+
+  /**
+   * Get estimated available memory (used for DOOR.SYS line 47)
+   * Returns a reasonable estimate based on system state
+   */
+  private getAvailableMemory(): number {
+    // Amiga can handle 128-256MB+ with accelerators
+    // Report 64MB as a reasonable "plenty of memory" value
+    // This indicates to doors that memory is not a constraint
+    return 64 * 1024 * 1024; // 64MB in bytes
+  }
+
+  /**
+   * Update session download bytes today (for DOOR.SYS line 32)
+   * This should be called by download handlers
+   */
+  updateDownloadBytesToday(nodeId: number, bytes: number): void {
+    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const trackingPath = path.join(nodeDir, '.download_today');
+    try {
+      let total = 0;
+      if (fs.existsSync(trackingPath)) {
+        const content = fs.readFileSync(trackingPath, 'utf8').trim();
+        const [dateStr, bytesStr] = content.split(':');
+        const today = new Date().toISOString().slice(0, 10);
+        if (dateStr === today) {
+          total = parseInt(bytesStr) || 0;
+        }
+      }
+      total += bytes;
+      const today = new Date().toISOString().slice(0, 10);
+      fs.writeFileSync(trackingPath, `${today}:${total}`, 'utf8');
+    } catch (err) {
+      // Silent fail
+    }
+  }
+
+  /**
+   * Get download bytes today for a node
+   */
+  private getDownloadBytesToday(nodeId: number): number {
+    const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
+    const trackingPath = path.join(nodeDir, '.download_today');
+    try {
+      if (fs.existsSync(trackingPath)) {
+        const content = fs.readFileSync(trackingPath, 'utf8').trim();
+        const [dateStr, bytesStr] = content.split(':');
+        const today = new Date().toISOString().slice(0, 10);
+        if (dateStr === today) {
+          return parseInt(bytesStr) || 0;
+        }
+      }
+    } catch (err) {
+      // Silent fail
+    }
+    return 0;
+  }
+
+  /**
+   * Clear previous caller cache (call when a new user logs in)
+   */
+  clearPreviousCallerCache(nodeId: number): void {
+    this.previousCallerCache.delete(nodeId);
   }
 
   /**
@@ -156,7 +277,7 @@ export class DoorDropFileManager {
       user.protocol ? user.protocol.charAt(0) : 'Z', // 29: Default protocol
       String(user.uploads),                       // 30: Total uploads
       String(user.downloads),                     // 31: Total downloads
-      '0',                                        // 32: Download KB today
+      String(Math.floor(this.getDownloadBytesToday(nodeId) / 1024)), // 32: Download KB today
       String(Math.floor(user.byteLimit / 1024)),  // 33: Daily download limit KB
       '00/00/00',                                 // 34: Birth date
       this.bbsRoot + '/user.data',                // 35: Path to user file
@@ -168,10 +289,10 @@ export class DoorDropFileManager {
       this.bbsRoot,                               // 41: System path
       formatTime(now),                            // 42: Logon time
       formatTime(logoffTime),                     // 43: Forced logoff time
-      'Previous Caller',                          // 44: Previous caller
-      '00:00',                                    // 45: Previous call time
-      '115200',                                   // 46: Previous baud
-      '0',                                        // 47: Available memory
+      this.getPreviousCaller(nodeId).name,        // 44: Previous caller
+      this.getPreviousCaller(nodeId).time,        // 45: Previous call time
+      this.getPreviousCaller(nodeId).baud,        // 46: Previous baud
+      String(this.getAvailableMemory()),          // 47: Available memory
       String(nodeId),                             // 48: Node number
       'N',                                        // 49: FOSSIL mode
       'N',                                        // 50: 24-hour format

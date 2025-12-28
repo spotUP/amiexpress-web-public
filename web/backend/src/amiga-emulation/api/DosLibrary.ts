@@ -23,8 +23,9 @@ const DEBUG_FILE_OPS = process.env.DEBUG_FILE_OPS === "1";
  * -78 = Rename        -84 = Lock          -90 = UnLock        -96 = DupLock
  * -102 = Examine      -108 = ExNext       -114 = Info         -120 = CreateDir
  * -126 = CurrentDir   -132 = IoErr        -138 = CreateProc   -144 = Exit
- * -150 = LoadSeg      -156 = UnLoadSeg    -162 = DeviceProc   -168 = SetComment
- * -174 = SetProtection -180 = DateStamp   -186 = Delay        -192 = WaitForChar
+ * -150 = LoadSeg      -156 = UnLoadSeg    -162 = GetPacket    -168 = QueuePacket
+ * -174 = DeviceProc   -180 = SetComment   -186 = SetProtection -192 = DateStamp
+ * -198 = Delay        -204 = WaitForChar
  * -210 = ParentDir    -216 = IsInteractive -222 = Execute
  * -948 = PutStr       -954 = VPrintf
  *
@@ -967,14 +968,20 @@ export class DosLibrary {
 
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
-      // Do not allow standard handles to be closed; return success like AmigaDOS.
-      if (handle === this.STDIN_HANDLE || handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE) {
+      // Do not allow ORIGINAL standard handles (stdin/stdout/stderr) to be closed
+      // BUT allow closing if stdout has been redirected to a file (different BPTR)
+      const isOriginalStdout = (handle === this.STDOUT_HANDLE && this.stdoutBptr === this.STDOUT_HANDLE);
+      const isOriginalStdin = (handle === this.STDIN_HANDLE && this.stdinBptr === this.STDIN_HANDLE);
+      const isOriginalStderr = (handle === this.STDERR_HANDLE);
+
+      if (isOriginalStdin || isOriginalStdout || isOriginalStderr) {
         console.log(
-          `[dos.library] Close: standard handle ${handle} (FileManager) -> success`
+          `[dos.library] Close: original standard handle ${handle} (FileManager) -> success`
         );
         this.logDoorFile(`CLOSE ok handle=${handle} standard=true`);
         return -1; // DOSTRUE
       }
+
       const success = this.fileManager.close(handle);
       if (success) {
         console.log(
@@ -2136,8 +2143,8 @@ export class DosLibrary {
     }
 
     try {
-      // Delete the file
-      fs.unlinkSync(realPath);
+      // Delete the file (case-insensitive)
+      amigafs.unlinkSync(realPath);
       console.log(`[dos.library] DeleteFile: Deleted file ${realPath}`);
 
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
@@ -2204,7 +2211,8 @@ export class DosLibrary {
     }
 
     try {
-      fs.renameSync(oldPath, newPath);
+      // Case-insensitive rename
+      amigafs.renameSync(oldPath, newPath);
       console.log(`[dos.library] Rename: Renamed ${oldPath} to ${newPath}`);
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = this.ERROR_NO_ERROR;
@@ -3076,9 +3084,9 @@ export class DosLibrary {
           `[dos.library] SetComment: Wrote comment to ${commentPath}`
         );
       } else {
-        // Empty comment = delete comment file
+        // Empty comment = delete comment file (case-insensitive)
         if (amigafs.existsSync(commentPath)) {
-          fs.unlinkSync(commentPath);
+          amigafs.unlinkSync(commentPath);
           console.log(
             `[dos.library] SetComment: Removed comment file ${commentPath}`
           );
@@ -4487,6 +4495,7 @@ export class DosLibrary {
       this.lastError = code;
     };
 
+    // Find /M entry for special handling
     let multiEntry = -1;
     entries.forEach((entry, idx) => {
       if (entry.isMultiple) {
@@ -4494,13 +4503,44 @@ export class DosLibrary {
       }
     });
 
+    // Track collected /M values for potential /M+/A interaction
+    const multiStrings: string[] = [];
+
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
 
+      // Skip /M entries - handled separately after other args
       if (entry.isMultiple) {
         continue;
       }
 
+      // Handle /F (rest of line) - captures EVERYTHING remaining
+      if (entry.isRest) {
+        // Collect all unconsumed tokens as a single string (rest of line)
+        const restParts: string[] = [];
+        tokens.forEach((token, idx) => {
+          if (!token.consumed) {
+            // Use raw value to preserve original formatting
+            restParts.push(token.raw);
+            token.consumed = true;
+            consumedTokens.add(idx);
+          }
+        });
+
+        if (restParts.length > 0) {
+          const restString = restParts.join(" ");
+          const ptr = this.allocateStringStorage(context, restString);
+          if (!ptr) {
+            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for /F value");
+            return;
+          }
+          entryState[i].provided = true;
+          setArrayValue(i, ptr);
+        }
+        continue;
+      }
+
+      // Handle /S (switch) and /T (toggle)
       if (entry.isSwitch || entry.isToggle) {
         let state = false;
         let matched = false;
@@ -4525,6 +4565,7 @@ export class DosLibrary {
         continue;
       }
 
+      // Handle regular arguments (/A, /K, /N, or plain)
       let stringValue: string | null = null;
       let numericValue: number | null = null;
 
@@ -4592,8 +4633,8 @@ export class DosLibrary {
       }
     }
 
+    // Collect remaining tokens for /M processing
     if (multiEntry !== -1) {
-      const multiStrings: string[] = [];
       tokens.forEach((token, idx) => {
         if (!token.consumed && token.value.length > 0) {
           multiStrings.push(token.value);
@@ -4601,27 +4642,90 @@ export class DosLibrary {
           consumedTokens.add(idx);
         }
       });
+    }
 
-      if (multiStrings.length > 0) {
-        const ptrArray = this.allocatePointerArray(
-          context,
-          multiStrings.length + 1
-        );
+    // /M+/A INTERACTION: If there are unfilled /A parameters AFTER a /M,
+    // steal strings from the END of the /M array to fill the /A's.
+    // Example: "From/A/M,To/A" with "foo bar baz" -> From=["foo","bar"], To="baz"
+    if (multiStrings.length > 0 && multiEntry !== -1) {
+      // Find unfilled /A entries that come AFTER the /M entry
+      const unfilledAfterMulti: { idx: number; entry: ReadArgsTemplateEntry }[] = [];
+      for (let i = multiEntry + 1; i < entries.length; i++) {
+        if (entries[i].required && !entryState[i].provided) {
+          unfilledAfterMulti.push({ idx: i, entry: entries[i] });
+        }
+      }
+
+      // Steal from end of multiStrings to fill /A entries (in order)
+      while (unfilledAfterMulti.length > 0 && multiStrings.length > 0) {
+        const { idx, entry } = unfilledAfterMulti.shift()!;
+        const stolenValue = multiStrings.pop()!;
+
+        if (entry.isNumeric) {
+          const parsed = this.parseReadArgsNumber(stolenValue);
+          if (parsed === null) {
+            fail(this.ERROR_BAD_NUMBER, `Invalid number for ${entry.displayName}`);
+            return;
+          }
+          const ptr = this.allocateNumberStorage(context, parsed);
+          if (!ptr) {
+            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
+            return;
+          }
+          setArrayValue(idx, ptr);
+        } else {
+          const ptr = this.allocateStringStorage(context, stolenValue);
+          if (!ptr) {
+            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for string value");
+            return;
+          }
+          setArrayValue(idx, ptr);
+        }
+        entryState[idx].provided = true;
+      }
+    }
+
+    // Now write the /M array (after potential stealing)
+    if (multiEntry !== -1 && multiStrings.length > 0) {
+      const multiEntryInfo = entries[multiEntry];
+
+      // Handle /M/N (multiple numbers)
+      if (multiEntryInfo.isNumeric) {
+        const ptrArray = this.allocatePointerArray(context, multiStrings.length + 1);
         if (!ptrArray) {
-          fail(
-            this.ERROR_LINE_TOO_LONG,
-            "Insufficient buffer for multi arguments"
-          );
+          fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
+          return;
+        }
+        let offset = 0;
+        for (const value of multiStrings) {
+          const parsed = this.parseReadArgsNumber(value);
+          if (parsed === null) {
+            fail(this.ERROR_BAD_NUMBER, `Invalid number in /M/N: ${value}`);
+            return;
+          }
+          const ptr = this.allocateNumberStorage(context, parsed);
+          if (!ptr) {
+            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
+            return;
+          }
+          this.emulator.writeMemory32(ptrArray + offset, ptr);
+          offset += 4;
+        }
+        this.emulator.writeMemory32(ptrArray + offset, 0);
+        entryState[multiEntry].provided = true;
+        setArrayValue(multiEntry, ptrArray);
+      } else {
+        // Regular /M (strings)
+        const ptrArray = this.allocatePointerArray(context, multiStrings.length + 1);
+        if (!ptrArray) {
+          fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
           return;
         }
         let offset = 0;
         for (const value of multiStrings) {
           const ptr = this.allocateStringStorage(context, value);
           if (!ptr) {
-            fail(
-              this.ERROR_LINE_TOO_LONG,
-              "Insufficient buffer for multi value"
-            );
+            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi value");
             return;
           }
           this.emulator.writeMemory32(ptrArray + offset, ptr);
@@ -4633,6 +4737,7 @@ export class DosLibrary {
       }
     }
 
+    // Check for missing required arguments
     const missing = entries.filter(
       (entry, idx) => entry.required && !entryState[idx].provided
     );
@@ -5315,25 +5420,26 @@ export class DosLibrary {
         return true;
 
       // File attributes
-      case -168:
+      // -168 = QueuePacket (not implemented)
+      // -174 = DeviceProc (not implemented)
+
+      // File attributes (STANDARD Amiga offsets from NDK LVOs.i)
+      case -180: // _LVOSetComment
         this.SetComment();
         return true;
-      case -174:
+      case -186: // _LVOSetProtection
         this.SetProtection();
         return true;
 
-      // Date/time (STANDARD Amiga offsets from Amiga include files)
-      case -180:
-        this.WaitForChar();
-        return true;
-      case -192:
+      // Date/time
+      case -192: // _LVODateStamp
         this.DateStamp();
         return true;
-      case -198:
+      case -198: // _LVODelay
         this.Delay();
         return true;
-      case -204:
-        this.WaitForChar(); // Also at -204 for compatibility
+      case -204: // _LVOWaitForChar
+        this.WaitForChar();
         return true;
 
       // Buffered I/O (V36+) - CORRECTED LVO OFFSETS (was -588 to -684, now correct)

@@ -25,6 +25,7 @@ import { authenticateToken, requireSysop, AuthRequest } from '../middleware/auth
 import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
+import { createChatRouter } from '../api/chat-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
@@ -126,6 +127,10 @@ export function registerHttpRoutes(app: Application): void {
   // ===== Info Editor API - Sysop-only Routes =====
   const { infoEditorRouter } = require('../api/info-editor-routes');
   app.use('/api/info-editor', authenticateToken(db), requireSysop(), infoEditorRouter);
+
+  // ===== Chat API - Public Routes (for web chat authentication) =====
+  const chatRouter = createChatRouter(db);
+  app.use('/api/chat', chatRouter);
 
   // ===== Static File Serving for Unified Deployment =====
   // Note: Using process.cwd() instead of __dirname for tsx compatibility

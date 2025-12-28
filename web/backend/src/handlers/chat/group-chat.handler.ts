@@ -479,8 +479,8 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
       messageType: 'message'
     });
 
-    // Broadcast message to all room members (pass senderId for structured events)
-    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, undefined, parseInt(session.user?.id || '0', 10));
+    // Broadcast message to all room members EXCEPT sender (they already see their own message)
+    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10));
 
     console.log('💬 Room message:', session.user?.username, '→', session.currentRoomName, message.substring(0, 50));
 

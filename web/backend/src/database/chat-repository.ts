@@ -285,13 +285,27 @@ export class ChatRepository extends BaseRepository<any> {
     return parseInt(row.count);
   }
 
-  async saveChatRoomMessage(message: any): Promise<void> {
+  async saveChatRoomMessage(message: any): Promise<number> {
 
     const stmt = this.prepare(`
-      INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO chat_room_messages (room_id, sender_id, sender_username, message, message_type, thread_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(message.roomId, message.senderId, message.senderUsername, message.message, message.messageType || 'message');
+    const result = stmt.run(message.roomId, message.senderId, message.senderUsername, message.message, message.messageType || 'message', message.threadId || null);
+    const messageId = result.lastInsertRowid as number;
+
+    // Update FTS index
+    try {
+      const ftsStmt = this.prepare(`
+        INSERT INTO chat_messages_fts(rowid, message, sender_username, room_id)
+        VALUES (?, ?, ?, ?)
+      `);
+      ftsStmt.run(messageId, message.message, message.senderUsername, message.roomId);
+    } catch (e) {
+      console.error('[ChatRepository] FTS index update failed:', e);
+    }
+
+    return messageId;
   }
 
   async getChatRoomHistory(roomId: string, limit: number = 50): Promise<any[]> {
@@ -299,6 +313,28 @@ export class ChatRepository extends BaseRepository<any> {
     const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?');
     const rows = stmt.all(roomId, limit);
     return (rows as any[]).reverse();
+  }
+
+  async getMessageById(messageId: number): Promise<any> {
+
+    const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE id = ?');
+    return stmt.get(messageId);
+  }
+
+  async getThreadReplies(threadId: number): Promise<any[]> {
+
+    const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE thread_id = ? ORDER BY created_at');
+    return stmt.all(threadId) as any[];
+  }
+
+  async updateThreadReplyCount(threadId: number): Promise<void> {
+
+    const stmt = this.prepare(`
+      UPDATE chat_room_messages
+      SET reply_count = (SELECT COUNT(*) FROM chat_room_messages WHERE thread_id = ?)
+      WHERE id = ?
+    `);
+    stmt.run(threadId, threadId);
   }
 
   async updateRoomMember(roomId: string, userId: string, updates: any): Promise<void> {

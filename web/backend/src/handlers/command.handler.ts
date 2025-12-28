@@ -397,12 +397,13 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
   }
 
   // Honor express.e doPause between screens in the display flow
+  // express.e:28556-28557: IF (displayScreen(SCREEN_BULL)) THEN doPause()
+  // NOTE: Don't pass an onComplete callback - handleCommand (line 692-693) automatically
+  // calls advanceDisplayFlow() when pagination completes in a display flow state.
+  // Passing a callback would cause DOUBLE advancement (screen displays twice with two pauses).
   const { doPause } = require('./screen.handler');
   try {
-    doPause(socket, session, () => {
-      // Resume the display flow after the pause completes
-      setImmediate(() => advanceDisplayFlow(socket, session));
-    });
+    doPause(socket, session);
     // If a pause was installed, stop advancing until the user presses a key
     if (session.paginatedScreen) {
       return true;
@@ -1042,12 +1043,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
             console.error('[SystemStats] Error tracking login:', error);
           }
 
-          // Welcome and transition to main menu
+          // Welcome and proceed to bulletin display flow
           socket.emit('ansi-output', '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
-          const { displayScreen } = require('./screen.handler');
-          await displayScreen(socket, session, 'LOGON');
-          session.state = BBSState.LOGGEDON;
-          session.subState = LoggedOnSubState.DISPLAY_BULL;
+          // State already set to LOGGEDON/DISPLAY_BULL above (line 993-994)
+          // Trigger display flow by calling handleCommand with empty string
+          await handleCommand(socket, session, '', io);
         } catch (err: any) {
           console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
           socket.emit('ansi-output', '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
@@ -2767,40 +2767,32 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
         if (body.length === 0) {
           socket.emit('ansi-output', '\r\nMessage posting aborted.\r\n');
         } else {
-          // TODO: Store message in database instead of in-memory array
-          // Create and store the message
-          // const newMessage: any = {
-          //   id: messages.length + 1,
-          //   subject: session.messageSubject || 'No Subject',
-          //   body: body,
-          //   author: session.user?.username || 'Anonymous',
-          //   timestamp: new Date(),
-          //   conferenceId: session.currentConf,
-          //   messageBaseId: session.currentMsgBase
-          // };
-          // messages.push(newMessage);
-          socket.emit('ansi-output', '\r\nMessage posted successfully!\r\n');
+          // Store message in database
+          try {
+            const db = getDatabase();
+            await db.createMessage({
+              subject: session.messageSubject || 'No Subject',
+              body: body,
+              author: session.user?.username || 'Anonymous',
+              timestamp: new Date(),
+              conferenceId: session.currentConf,
+              messageBaseId: session.currentMsgBase,
+              isPrivate: session.tempData?.isPrivate || false,
+              toUser: session.messageRecipient,
+              parentId: session.tempData?.parentId
+            });
+            socket.emit('ansi-output', '\r\nMessage posted successfully!\r\n');
 
-          // TODO: Log message posting activity (express.e:9493 callersLog)
-          // await callersLog(session.user!.id, session.user!.username, 'Posted message', session.messageSubject);
+            // Log message posting activity
+            console.log(`[Message] Posted by ${session.user?.username} in conf ${session.currentConf}: ${session.messageSubject}`);
+          } catch (error) {
+            console.error('[Message] Failed to store message:', error);
+            socket.emit('ansi-output', '\r\n\x1b[31mError posting message.\x1b[0m\r\n');
+          }
         }
         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        // TODO: Create and store the message in database
-        // const newMessage: any = {
-        //   id: messages.length + 1,
-        //   subject: session.messageSubject || 'No Subject',
-        //   body: body,
-        //   author: session.user?.username || 'Anonymous',
-        //   timestamp: new Date(),
-        //   conferenceId: session.currentConf,
-        //   messageBaseId: session.currentMsgBase,
-        //   isPrivate: session.tempData?.isPrivate || false,
-        //   toUser: session.messageRecipient,
-        //   parentId: session.tempData?.parentId
-        // };
-        // messages.push(newMessage);
 
         // Clear message data
         session.messageSubject = undefined;

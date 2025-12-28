@@ -8,6 +8,7 @@
 // Database interfaces matching AmiExpress data structures
 export interface User {
   id: string;
+  slotNumber?: number;  // Permanent slot in user.data/keys/misc files (1-indexed)
   username: string;
   passwordHash: string;
   realname: string;

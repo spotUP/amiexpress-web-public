@@ -804,7 +804,78 @@ export class Database {
           sender_username TEXT NOT NULL,
           message TEXT NOT NULL,
           message_type TEXT DEFAULT 'message',
+          thread_id INTEGER REFERENCES chat_room_messages(id),
+          reply_count INTEGER DEFAULT 0,
           created_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
+      // Add thread columns if they don't exist (migration for existing databases)
+      try {
+        this.db.exec(`ALTER TABLE chat_room_messages ADD COLUMN thread_id INTEGER REFERENCES chat_room_messages(id)`);
+      } catch (e) { /* Column already exists */ }
+      try {
+        this.db.exec(`ALTER TABLE chat_room_messages ADD COLUMN reply_count INTEGER DEFAULT 0`);
+      } catch (e) { /* Column already exists */ }
+
+      // Pinned messages table
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS pinned_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          message_id INTEGER NOT NULL REFERENCES chat_room_messages(id) ON DELETE CASCADE,
+          pinned_by TEXT NOT NULL,
+          pinned_at INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(room_id, message_id)
+        )
+      `);
+
+      // Full-text search virtual table for messages
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
+          message,
+          sender_username,
+          room_id,
+          content='chat_room_messages',
+          content_rowid='id'
+        )
+      `);
+
+      // Populate FTS index from existing messages (if empty)
+      try {
+        const count = this.db.prepare('SELECT COUNT(*) as cnt FROM chat_messages_fts').get() as { cnt: number };
+        if (count.cnt === 0) {
+          this.db.exec(`
+            INSERT INTO chat_messages_fts(rowid, message, sender_username, room_id)
+            SELECT id, message, sender_username, room_id FROM chat_room_messages
+          `);
+        }
+      } catch (e) { /* FTS table may not exist yet */ }
+
+      // Room bans table
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS room_bans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          banned_by TEXT NOT NULL,
+          reason TEXT,
+          banned_at INTEGER DEFAULT (strftime('%s', 'now')),
+          expires_at INTEGER,
+          UNIQUE(room_id, user_id)
+        )
+      `);
+
+      // Room mutes table
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS room_mutes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          room_id TEXT NOT NULL REFERENCES chat_rooms(room_id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          muted_by TEXT NOT NULL,
+          duration INTEGER,
+          muted_at INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(room_id, user_id)
         )
       `);
 

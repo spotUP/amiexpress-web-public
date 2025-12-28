@@ -20,6 +20,7 @@ import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer
 import { getSessionBySocketId } from './session-manager';
 import { callersLog } from './database-helpers';
 import { SysopDebugUtil } from '../utils/sysop-debug.util';
+import { emitUpload } from '../services/bbs-event-emitter';
 import { userFileManager } from '../services/UserFileManager';
 import { getUploadContextById, deleteUploadContextById } from './upload-session-store';
 
@@ -288,17 +289,14 @@ export async function processBatchFile(
       session.user!.bytesUpload = (session.user!.bytesUpload || 0) + data.size;
 
       // DISK-BASED: Write updated upload stats to user.data/keys/misc files
-      try {
-        // Extract slot number from user ID (format: "user-3" -> 3)
-        const slotNumber = parseInt(session.user!.id.split('-')[1], 10);
-        if (isNaN(slotNumber)) {
-          throw new Error(`Invalid user ID format: ${session.user!.id}`);
+      if (session.user!.slotNumber) {
+        try {
+          userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
+          console.log(`[Upload] Updated user ${session.user!.username} disk files with upload stats (uploads=${session.user!.uploads}, bytes=${session.user!.bytesUpload}, slot=${session.user!.slotNumber})`);
+        } catch (diskErr) {
+          console.error('[Upload] Error writing user disk files:', diskErr);
+          // Continue anyway - database has the stats, sync can happen later
         }
-        userFileManager.updateUserDataFile(session.user!, slotNumber);
-        console.log(`[Upload] Updated user ${session.user!.username} disk files with upload stats (uploads=${session.user!.uploads}, bytes=${session.user!.bytesUpload}, slot=${slotNumber})`);
-      } catch (diskErr) {
-        console.error('[Upload] Error writing user disk files:', diskErr);
-        // Continue anyway - database has the stats, sync can happen later
       }
     }
 
@@ -321,6 +319,22 @@ export async function processBatchFile(
 
     // Log file upload (express.e:9493 callersLog)
     await callersLog(session.user!.id, session.user!.username, 'Uploaded file', currentFile.filename);
+
+    // Emit BBS event for LiveChat integration
+    try {
+      const conference = await db.getConferenceById(session.currentConf);
+      emitUpload({
+        username: session.user!.username,
+        nodeId: session.nodeId || 1,
+        fileName: currentFile.filename,
+        fileSize: data.size,
+        conferenceId: session.currentConf,
+        conferenceName: conference?.name,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('[BBSEvent] Error emitting upload event:', error);
+    }
 
     // Trigger webhook for file upload
     try {
@@ -672,12 +686,13 @@ export function registerFileHandlers(socket: Socket) {
         `, [data.cps, session.user.id]);
 
         // DISK-BASED: Write updated CPS to user.keys file for mtop
-        try {
-          const userId = parseInt(session.user.id, 10);
-          userFileManager.updateUserDataFile(session.user, userId);
-          console.log(`[file-download-complete] Updated user ${session.user.username} disk files with download CPS`);
-        } catch (diskErr) {
-          console.error('[file-download-complete] Error writing user disk files:', diskErr);
+        if (session.user.slotNumber) {
+          try {
+            userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
+            console.log(`[file-download-complete] Updated user ${session.user.username} disk files with download CPS`);
+          } catch (diskErr) {
+            console.error('[file-download-complete] Error writing user disk files:', diskErr);
+          }
         }
       } catch (err) {
         console.error('[file-download-complete] Failed to persist download CPS', err);
@@ -871,17 +886,14 @@ export function registerFileHandlers(socket: Socket) {
       session.user.bytesDownload = (session.user.bytesDownload || 0) + fileEntry.size;
 
       // DISK-BASED: Write updated download stats to user.data/keys/misc files
-      try {
-        // Extract slot number from user ID (format: "user-3" -> 3)
-        const slotNumber = parseInt(session.user.id.split('-')[1], 10);
-        if (isNaN(slotNumber)) {
-          throw new Error(`Invalid user ID format: ${session.user.id}`);
+      if (session.user.slotNumber) {
+        try {
+          userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
+          console.log(`[Download] Updated user ${session.user.username} disk files with download stats (downloads=${session.user.downloads}, bytes=${session.user.bytesDownload}, slot=${session.user.slotNumber})`);
+        } catch (diskErr) {
+          console.error('[Download] Error writing user disk files:', diskErr);
+          // Continue anyway - database has the stats, sync can happen later
         }
-        userFileManager.updateUserDataFile(session.user, slotNumber);
-        console.log(`[Download] Updated user ${session.user.username} disk files with download stats (downloads=${session.user.downloads}, bytes=${session.user.bytesDownload}, slot=${slotNumber})`);
-      } catch (diskErr) {
-        console.error('[Download] Error writing user disk files:', diskErr);
-        // Continue anyway - database has the stats, sync can happen later
       }
 
       // Log file download (express.e:9493 callersLog)

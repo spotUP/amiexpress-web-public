@@ -121,9 +121,11 @@ export class UserFileManager {
   private userMiscPath: string;
 
   // Struct sizes (must match E structs exactly)
-  private readonly USER_STRUCT_SIZE = 239;
-  private readonly USERKEYS_STRUCT_SIZE = 54;
-  private readonly USERMISC_STRUCT_SIZE = 256;
+  // Correct struct sizes matching mtop.e and Amiga E alignment rules
+  // See Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e
+  private readonly USER_STRUCT_SIZE = 232;     // mtop reads 232 bytes per user
+  private readonly USERKEYS_STRUCT_SIZE = 56;  // mtop reads 56 bytes per userKeys
+  private readonly USERMISC_STRUCT_SIZE = 248; // mtop reads 248 bytes per userMisc
 
   constructor() {
     // BBS: logical assignment points to project root
@@ -266,8 +268,10 @@ export class UserFileManager {
     offset += this.writeString(buffer, offset, struct.pass, 9);
     offset += this.writeString(buffer, offset, struct.location, 30);
     offset += this.writeString(buffer, offset, struct.phoneNumber, 13);
+    // 1 byte padding after phoneNumber[13] to align slotNumber (INT) to even address
+    buffer.writeUInt8(0, offset++);
 
-    // INTs (2 bytes each, little-endian)
+    // INTs (2 bytes each, big-endian for 68K)
     offset = this.writeInt16(buffer, offset, struct.slotNumber);
     offset = this.writeInt16(buffer, offset, struct.secStatus);
     offset = this.writeInt16(buffer, offset, struct.secBoard);
@@ -320,10 +324,8 @@ export class UserFileManager {
     // CHAR
     buffer.writeUInt8(struct.expert, offset++);
 
-    // Padding for alignment (E structs align LONGs to 4-byte boundaries)
-    // After expert (1 byte), we need 3 bytes padding to align chatRemain (LONG)
-    buffer.writeUInt8(0, offset++);
-    buffer.writeUInt8(0, offset++);
+    // 68K aligns to 2-byte boundaries (even addresses), not 4-byte
+    // After expert (1 byte), we need 1 byte padding to align chatRemain (LONG) to even
     buffer.writeUInt8(0, offset++);
 
     // More LONGs
@@ -352,25 +354,36 @@ export class UserFileManager {
     buffer.writeUInt8(struct.lineLength, offset++);
     buffer.writeUInt8(struct.newUser, offset++);
 
-    // Final padding to reach 239 bytes (E structs may have trailing padding for alignment)
-    while (offset < this.USER_STRUCT_SIZE) {
-      buffer.writeUInt8(0, offset++);
+    // Offset should now be exactly 232 bytes (matching mtop expectations)
+    if (offset !== this.USER_STRUCT_SIZE) {
+      console.warn(`[UserFileManager] User struct size mismatch: ${offset} bytes, expected ${this.USER_STRUCT_SIZE}`);
     }
-
     console.log(`[UserFileManager] Serialized user struct: ${offset} bytes (expected ${this.USER_STRUCT_SIZE})`);
     return buffer;
   }
 
   /**
-   * Serialize UserKeysFileStruct to binary buffer (54 bytes)
+   * Serialize UserKeysFileStruct to binary buffer (56 bytes)
+   * Layout with 68K alignment padding:
+   * - userName[31] = 31 bytes (offsets 0-30)
+   * - [1 byte padding to align LONG]
+   * - number = 4 bytes (offsets 32-35)
+   * - newUser = 1 byte (offset 36)
+   * - [1 byte padding to align INT]
+   * - oldUpCPS = 2 bytes (offsets 38-39)
+   * - etc.
    */
   private serializeUserKeysStruct(struct: UserKeysFileStruct): Buffer {
     const buffer = Buffer.alloc(this.USERKEYS_STRUCT_SIZE);
     let offset = 0;
 
     offset += this.writeString(buffer, offset, struct.userName, 31);
+    // 1 byte padding after userName[31] to align number (LONG) to even address
+    buffer.writeUInt8(0, offset++);
     offset = this.writeInt32(buffer, offset, struct.number);
     buffer.writeUInt8(struct.newUser, offset++);
+    // 1 byte padding after newUser to align oldUpCPS (INT) to even address
+    buffer.writeUInt8(0, offset++);
     offset = this.writeInt16(buffer, offset, struct.oldUpCPS);
     offset = this.writeInt16(buffer, offset, struct.oldDnCPS);
     offset = this.writeInt16(buffer, offset, struct.userFlags);
@@ -379,12 +392,16 @@ export class UserFileManager {
     offset = this.writeInt32(buffer, offset, struct.dnCPS2);
     offset = this.writeInt16(buffer, offset, struct.timesOnToday);
 
+    if (offset !== this.USERKEYS_STRUCT_SIZE) {
+      console.warn(`[UserFileManager] UserKeys struct size mismatch: ${offset} bytes, expected ${this.USERKEYS_STRUCT_SIZE}`);
+    }
     console.log(`[UserFileManager] Serialized userKeys struct: ${offset} bytes (expected ${this.USERKEYS_STRUCT_SIZE})`);
     return buffer;
   }
 
   /**
-   * Serialize UserMiscFileStruct to binary buffer (256 bytes)
+   * Serialize UserMiscFileStruct to binary buffer (248 bytes)
+   * Layout: 10+26+8+8+50+4+32+8+4+4+4+4+86 = 248
    */
   private serializeUserMiscStruct(struct: UserMiscFileStruct): Buffer {
     const buffer = Buffer.alloc(this.USERMISC_STRUCT_SIZE);
@@ -407,9 +424,9 @@ export class UserFileManager {
     offset = this.writeInt32(buffer, offset, struct.ipMask);
     struct.unused.copy(buffer, offset); offset += 86;
 
-    // Final padding to reach 256 bytes
-    while (offset < this.USERMISC_STRUCT_SIZE) {
-      buffer.writeUInt8(0, offset++);
+    // Offset should now be exactly 248 bytes (matching mtop expectations)
+    if (offset !== this.USERMISC_STRUCT_SIZE) {
+      console.warn(`[UserFileManager] UserMisc struct size mismatch: ${offset} bytes, expected ${this.USERMISC_STRUCT_SIZE}`);
     }
 
     console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expected ${this.USERMISC_STRUCT_SIZE})`);
@@ -429,13 +446,15 @@ export class UserFileManager {
 
   private writeInt16(buffer: Buffer, offset: number, value: number): number {
     // Clamp to signed 16-bit range (-32768 to 32767)
+    // Use big-endian for Amiga 68K compatibility
     const clamped = Math.max(-32768, Math.min(32767, value));
-    buffer.writeInt16LE(clamped, offset);
+    buffer.writeInt16BE(clamped, offset);
     return offset + 2;
   }
 
   private writeInt32(buffer: Buffer, offset: number, value: number): number {
-    buffer.writeInt32LE(value, offset);
+    // Use big-endian for Amiga 68K compatibility
+    buffer.writeInt32BE(value, offset);
     return offset + 4;
   }
 
@@ -451,11 +470,13 @@ export class UserFileManager {
   }
 
   private readInt16(buffer: Buffer, offset: number): number {
-    return buffer.readInt16LE(offset);
+    // Use big-endian for Amiga 68K compatibility
+    return buffer.readInt16BE(offset);
   }
 
   private readInt32(buffer: Buffer, offset: number): number {
-    return buffer.readInt32LE(offset);
+    // Use big-endian for Amiga 68K compatibility
+    return buffer.readInt32BE(offset);
   }
 
   // Helper methods for E enum conversions (write)
@@ -581,8 +602,10 @@ export class UserFileManager {
     pos += location.bytesRead;
     const phoneNumber = this.readString(buffer, pos, 13);
     pos += phoneNumber.bytesRead;
+    // 1 byte padding after phoneNumber[13] to align slotNumber (INT) to even address
+    pos += 1;
 
-    // INTs (2 bytes each, little-endian)
+    // INTs (2 bytes each, big-endian for 68K)
     const slotNumber = this.readInt16(buffer, pos); pos += 2;
     const secStatus = this.readInt16(buffer, pos); pos += 2;
     const secBoard = this.readInt16(buffer, pos); pos += 2;
@@ -636,8 +659,8 @@ export class UserFileManager {
     // CHAR
     const expert = buffer.readUInt8(pos); pos++;
 
-    // Padding for alignment (3 bytes)
-    pos += 3;
+    // 68K aligns to 2-byte boundaries, so only 1 byte padding after expert
+    pos += 1;
 
     // More LONGs
     const chatRemain = this.readInt32(buffer, pos); pos += 4;
@@ -725,7 +748,7 @@ export class UserFileManager {
   }
 
   /**
-   * Deserialize UserKeysFileStruct from binary buffer (54 bytes)
+   * Deserialize UserKeysFileStruct from binary buffer (56 bytes)
    * Reverses serializeUserKeysStruct()
    */
   private deserializeUserKeysStruct(buffer: Buffer, offset: number = 0): UserKeysFileStruct {
@@ -733,8 +756,12 @@ export class UserFileManager {
 
     const userName = this.readString(buffer, pos, 31);
     pos += userName.bytesRead;
+    // 1 byte padding after userName[31] to align number (LONG) to even address
+    pos += 1;
     const number = this.readInt32(buffer, pos); pos += 4;
     const newUser = buffer.readUInt8(pos); pos++;
+    // 1 byte padding after newUser to align oldUpCPS (INT) to even address
+    pos += 1;
     const oldUpCPS = this.readInt16(buffer, pos); pos += 2;
     const oldDnCPS = this.readInt16(buffer, pos); pos += 2;
     const userFlags = this.readInt16(buffer, pos); pos += 2;
@@ -758,7 +785,7 @@ export class UserFileManager {
   }
 
   /**
-   * Deserialize UserMiscFileStruct from binary buffer (256 bytes)
+   * Deserialize UserMiscFileStruct from binary buffer (248 bytes)
    * Reverses serializeUserMiscStruct()
    */
   private deserializeUserMiscStruct(buffer: Buffer, offset: number = 0): UserMiscFileStruct {

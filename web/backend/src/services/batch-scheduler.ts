@@ -211,7 +211,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
-  // Generic external execution attempt
+  // Generic Amiga binary execution (works for any utility: SuperAmiLog, custom tools, etc.)
   const resolvedProg = resolveExecutable(resolveAssign(parts[0]));
   if (!resolvedProg) {
     console.warn('[BatchScheduler] Skipping missing program:', parts[0]);

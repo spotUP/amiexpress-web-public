@@ -21,6 +21,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
+import { emitDoorActivity } from '../services/bbs-event-emitter';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -518,6 +519,22 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     const sysopName = bbsConfig.sysop_name || 'Sysop';
     console.log(`[launchAmigaDoor] Loaded from bbsConfig.info: bbsName="${bbsName}" sysopName="${sysopName}"`);
 
+    // Handle door-specific pagination (PAGINATION tooltype)
+    // 0 or undefined = door handles its own pagination (default, autoPauseEnabled=false)
+    // >0 = auto-pause after N lines (autoPauseEnabled=true, pauseLines=N)
+    // -1 = use user's screen height (autoPauseEnabled=true, pauseLines=terminalHeight)
+    let autoPauseEnabled = false;
+    let effectivePauseLines = terminalHeight;
+    if (doorInfo.pagination !== undefined && doorInfo.pagination !== 0) {
+      autoPauseEnabled = true;
+      if (doorInfo.pagination === -1) {
+        effectivePauseLines = terminalHeight;
+      } else if (doorInfo.pagination > 0) {
+        effectivePauseLines = doorInfo.pagination;
+      }
+      console.log(`[launchAmigaDoor] PAGINATION=${doorInfo.pagination}: autoPause=${autoPauseEnabled}, pauseLines=${effectivePauseLines}`);
+    }
+
     const amigaSession = new AmigaDoorSession(socket, {
       executablePath: doorInfo.resolvedPath,
       timeout: 600,
@@ -535,7 +552,8 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         doorName: doorInfo.name,
         dataDir: bbsRoot,
         doorId: doorInfo.command || doorInfo.id,
-        pauseLines: terminalHeight,
+        pauseLines: effectivePauseLines,
+        autoPauseEnabled: autoPauseEnabled,
         lineWrap: terminalWidth,
         lineCount: 0,
         confAccess: confAccess,
@@ -1127,112 +1145,178 @@ function padString(str: string, length: number): string {
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
   console.log('Executing door:', door.name);
 
-  // Check if this is a client door (needs to detect runtime from manifest)
-  const doorManifest = await loadDoorManifestForExecution(door);
+  const nodeId = session.nodeId || 0;
+  let doorSession: DoorSession | null = null;
 
-  // Client-only doors: Just load the client bundle and return
-  if (doorManifest && doorManifest.runtime === 'client') {
-    await executeClientDoor(socket, session, door, doorManifest);
-    return;
-  }
+  try {
+    // Check if this is a client door (needs to detect runtime from manifest)
+    const doorManifest = await loadDoorManifestForExecution(door);
 
-  // Hybrid doors: Load client bundle but ALSO continue to execute server part
-  let hybridSessionId: string | null = null;
-  if (doorManifest && doorManifest.runtime === 'hybrid') {
-    console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
-    // Load client bundle and get session ID for RPC registration
-    hybridSessionId = await executeClientDoor(socket, session, door, doorManifest);
-    if (!hybridSessionId) {
-      console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name}`);
+    // Client-only doors: Just load the client bundle and return
+    if (doorManifest && doorManifest.runtime === 'client') {
+      await executeClientDoor(socket, session, door, doorManifest);
       return;
     }
-    // Continue to execute server part below (don't return)
+
+    // Hybrid doors: Load client bundle but ALSO continue to execute server part
+    let hybridSessionId: string | null = null;
+    if (doorManifest && doorManifest.runtime === 'hybrid') {
+      console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
+      // Load client bundle and get session ID for RPC registration
+      hybridSessionId = await executeClientDoor(socket, session, door, doorManifest);
+      if (!hybridSessionId) {
+        console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name}`);
+        return;
+      }
+      // Continue to execute server part below (don't return)
+    }
+
+    const { user: doorUser, isGuest } = resolveDoorExecutionUser(session);
+
+    // Create drop files (DOOR.SYS, DORINFOx.DEF) before door execution
+    const timeRemaining = session.timeRemaining || 3600; // Default 1 hour
+    doorDropFileManager.createAllDropFiles(nodeId, doorUser, timeRemaining);
+
+    // Create door session
+    doorSession = {
+      doorId: door.id,
+      userId: doorUser.id,
+      startTime: new Date(),
+      status: 'running'
+    };
+    doorSessions.push(doorSession);
+
+    // Log door execution
+    callersLog(isGuest ? null : doorUser.id, doorUser.username, 'Executed door', door.name);
+    callersLogManager.logDoor(nodeId, door.name);
+
+    // Emit BBS event for LiveChat integration (door entered)
+    emitDoorActivity({
+      username: doorUser.username,
+      nodeId: nodeId,
+      doorName: door.name,
+      action: 'entered',
+      timestamp: Date.now()
+    });
+
+    // Execute based on door type
+    switch (door.type) {
+      case 'MCI': // MCI door - process MCI codes and display (express.e:4293-4297)
+        await executeMciDoor(socket, session, door, doorSession);
+        break;
+      case 'TS': // TypeScript door type from BBSCMD file
+      case 'typescript': // TypeScript door with runDoor() export
+        await executeTypeScriptDoor(socket, session, door, doorSession, hybridSessionId);
+        break;
+      case 'SDK': // SDK door with Door wrapper class (separate process)
+        await executeSDKDoor(socket, session, door, doorSession);
+        break;
+      case 'python': // Python door
+      case 'PY': // Python door type from BBSCMD file
+        await executePythonDoor(socket, session, door, doorSession);
+        break;
+      case 'arexx': // ARexx door
+      case 'AREXX': // ARexx door type from BBSCMD file
+      case 'REXX': // REXX door type from BBSCMD file
+        await executeARexxDoor(socket, session, door, doorSession);
+        break;
+      case 'web':
+        await executeWebDoor(socket, session, door, doorSession);
+        break;
+      case 'native':
+        // Web version: Execute Node.js scripts instead of Amiga native executables
+        await executeNativeDoor(socket, session, door, doorSession);
+        break;
+      case 'script':
+        // Web version: Execute shell scripts
+        await executeScriptDoor(socket, session, door, doorSession);
+        break;
+      case 'XIM': // eXpress Internal Module (Amiga executable)
+      case 'AIM': // Amiga Internal Module
+      case 'SIM': // Standard Internal Module
+      case 'TIM': // Text Internal Module
+      case 'IIM': // Interactive Internal Module
+        await executeAmigaDoor(socket, session, door, doorSession);
+        break;
+      default:
+        socket.emit('ansi-output', `Unknown door type: ${door.type}\r\n`);
+        console.error(`Unknown door type: ${door.type}`);
+        SysopDebugUtil.debugDoorError(
+          socket,
+          session,
+          door.name,
+          `Unknown door type: ${door.type}`,
+          { doorType: door.type, doorPath: door.path },
+          DebugSeverity.CRITICAL
+        );
+    }
+
+    // Clean up drop files after door exit
+    doorDropFileManager.cleanupDropFiles(nodeId);
+    callersLogManager.logDoorExit(nodeId, door.name);
+
+    // Emit BBS event for LiveChat integration (door exited)
+    emitDoorActivity({
+      username: doorUser.username,
+      nodeId: nodeId,
+      doorName: door.name,
+      action: 'exited',
+      timestamp: Date.now()
+    });
+
+    // Mark session as completed
+    if (doorSession) {
+      doorSession.endTime = new Date();
+      doorSession.status = 'completed';
+    }
+
+    // After door completes, return to menu (express.e behavior after doors)
+    // Set subState so PROCESS_COMMAND handler knows door is done
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  } catch (error: any) {
+    console.error(`[executeDoor] CRITICAL ERROR in door ${door.name}:`, error);
+    console.error(`[executeDoor] Stack trace:`, error.stack);
+
+    // Notify user of error
+    socket.emit('ansi-output', `\r\n\r\n[ERROR] Door crashed: ${error.message}\r\n`);
+    socket.emit('ansi-output', `Press any key to continue...\r\n`);
+
+    // Log critical error
+    SysopDebugUtil.debugDoorError(
+      socket,
+      session,
+      door.name,
+      `Door execution failed: ${error.message}`,
+      {
+        error: error.message,
+        stack: error.stack,
+        doorType: door.type,
+        doorPath: door.path
+      },
+      DebugSeverity.CRITICAL
+    );
+
+    // Clean up resources
+    try {
+      doorDropFileManager.cleanupDropFiles(nodeId);
+      callersLogManager.logDoorExit(nodeId, `${door.name} (ERROR)`);
+
+      if (doorSession) {
+        doorSession.endTime = new Date();
+        doorSession.status = 'error';
+      }
+    } catch (cleanupError) {
+      console.error('[executeDoor] Error during cleanup:', cleanupError);
+    }
+
+    // Ensure session returns to menu
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    // Re-throw to ensure error is logged at process level
+    throw error;
   }
-
-  const nodeId = session.nodeId || 0;
-  const { user: doorUser, isGuest } = resolveDoorExecutionUser(session);
-
-  // Create drop files (DOOR.SYS, DORINFOx.DEF) before door execution
-  const timeRemaining = session.timeRemaining || 3600; // Default 1 hour
-  doorDropFileManager.createAllDropFiles(nodeId, doorUser, timeRemaining);
-
-  // Create door session
-  const doorSession: DoorSession = {
-    doorId: door.id,
-    userId: doorUser.id,
-    startTime: new Date(),
-    status: 'running'
-  };
-  doorSessions.push(doorSession);
-
-  // Log door execution
-  callersLog(isGuest ? null : doorUser.id, doorUser.username, 'Executed door', door.name);
-  callersLogManager.logDoor(nodeId, door.name);
-
-  // Execute based on door type
-  switch (door.type) {
-    case 'MCI': // MCI door - process MCI codes and display (express.e:4293-4297)
-      await executeMciDoor(socket, session, door, doorSession);
-      break;
-    case 'TS': // TypeScript door type from BBSCMD file
-    case 'typescript': // TypeScript door with runDoor() export
-      await executeTypeScriptDoor(socket, session, door, doorSession, hybridSessionId);
-      break;
-    case 'SDK': // SDK door with Door wrapper class (separate process)
-      await executeSDKDoor(socket, session, door, doorSession);
-      break;
-    case 'python': // Python door
-    case 'PY': // Python door type from BBSCMD file
-      await executePythonDoor(socket, session, door, doorSession);
-      break;
-    case 'arexx': // ARexx door
-    case 'AREXX': // ARexx door type from BBSCMD file
-    case 'REXX': // REXX door type from BBSCMD file
-      await executeARexxDoor(socket, session, door, doorSession);
-      break;
-    case 'web':
-      await executeWebDoor(socket, session, door, doorSession);
-      break;
-    case 'native':
-      // Web version: Execute Node.js scripts instead of Amiga native executables
-      await executeNativeDoor(socket, session, door, doorSession);
-      break;
-    case 'script':
-      // Web version: Execute shell scripts
-      await executeScriptDoor(socket, session, door, doorSession);
-      break;
-    case 'XIM': // eXpress Internal Module (Amiga executable)
-    case 'AIM': // Amiga Internal Module
-    case 'SIM': // Standard Internal Module
-    case 'TIM': // Text Internal Module
-    case 'IIM': // Interactive Internal Module
-      await executeAmigaDoor(socket, session, door, doorSession);
-      break;
-    default:
-      socket.emit('ansi-output', `Unknown door type: ${door.type}\r\n`);
-      console.error(`Unknown door type: ${door.type}`);
-      SysopDebugUtil.debugDoorError(
-        socket,
-        session,
-        door.name,
-        `Unknown door type: ${door.type}`,
-        { doorType: door.type, doorPath: door.path },
-        DebugSeverity.CRITICAL
-      );
-  }
-
-  // Clean up drop files after door exit
-  doorDropFileManager.cleanupDropFiles(nodeId);
-  callersLogManager.logDoorExit(nodeId, door.name);
-
-  // Mark session as completed
-  doorSession.endTime = new Date();
-  doorSession.status = 'completed';
-
-  // After door completes, return to menu (express.e behavior after doors)
-  // Set subState so PROCESS_COMMAND handler knows door is done
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
@@ -1976,6 +2060,58 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       }
     }
 
+    // Prefer 68020 binaries over 68000 since we use 68020 emulation
+    // Try multiple naming conventions for 68020 binaries
+    let found020 = false;
+    const doorDir = path.dirname(doorPath);
+    const doorFileName = path.basename(doorPath);
+
+    // Pattern 1: name.000 -> name.020 (e.g., AquaScan.000 -> AquaScan.020)
+    if (doorPath.endsWith('.000')) {
+      const doorBaseName = doorPath.replace(/\.000$/, '');
+      const door020Path = doorBaseName + '.020';
+      if (amigafs.existsSync(door020Path)) {
+        console.log(`[executeAmigaDoor] Found 68020 version: ${door020Path} - using instead of ${doorPath}`);
+        doorPath = door020Path;
+        found020 = true;
+      }
+    }
+
+    // Pattern 2: name000.x -> name020.x (e.g., Conftop000.x -> Conftop020.x)
+    if (!found020 && doorPath.match(/000\.x$/)) {
+      const door020Path = doorPath.replace(/000\.x$/, '020.x');
+      if (amigafs.existsSync(door020Path)) {
+        console.log(`[executeAmigaDoor] Found 68020 version: ${door020Path} - using instead of ${doorPath}`);
+        doorPath = door020Path;
+        found020 = true;
+      }
+    }
+
+    // Pattern 3: name.x -> name020.x (e.g., Conftop.x -> Conftop020.x)
+    if (!found020 && doorPath.endsWith('.x')) {
+      const doorBaseName = doorPath.replace(/\.x$/, '');
+      const door020Path = doorBaseName + '020.x';
+      if (amigafs.existsSync(door020Path)) {
+        console.log(`[executeAmigaDoor] Found 68020 version: ${door020Path} - using instead of ${doorPath}`);
+        doorPath = door020Path;
+        found020 = true;
+      }
+    }
+
+    // Pattern 4: name -> name020 (e.g., Bulls -> Bulls020)
+    if (!found020 && !doorFileName.includes('020')) {
+      const door020Path = doorPath + '020';
+      if (amigafs.existsSync(door020Path)) {
+        console.log(`[executeAmigaDoor] Found 68020 version: ${door020Path} - using instead of ${doorPath}`);
+        doorPath = door020Path;
+        found020 = true;
+      }
+    }
+
+    if (!found020 && (doorPath.endsWith('.000') || doorPath.endsWith('.x') || doorPath.match(/000\.x$/))) {
+      console.log(`[executeAmigaDoor] No .020 version found for ${doorPath}, using 68000 binary`);
+    }
+
     console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
 
     // Create DoorConfig for AmigaDoorSession
@@ -1992,14 +2128,31 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     const nodeNumber = session.nodeId || 1;
     const doorArgs: string[] = [];
 
-    // Add ARGS from .info file (e.g., ARGS=REVSCAN for AquaScan)
+    console.log(`[executeAmigaDoor] door.args=${JSON.stringify(door.args)} door.parameters=${JSON.stringify(door.parameters)}`);
+
+    // Add ARGS from .info file (e.g., ARGS=NEWSCAN for AquaScan)
     if (door.args) {
       doorArgs.push(...door.args.split(' ').filter((a: string) => a));
+      console.log(`[executeAmigaDoor] Added ARGS from .info: ${JSON.stringify(door.args.split(' '))} -> doorArgs=${JSON.stringify(doorArgs)}`);
+    } else {
+      console.log(`[executeAmigaDoor] No ARGS in door.args`);
     }
 
-    // Add any additional arguments from door.passParameters
+    // Add any additional arguments from door.passParameters (from .info file)
     if (door.passParameters && typeof door.passParameters === 'string') {
       doorArgs.push(...door.passParameters.split(' ').filter((a: string) => a));
+    }
+
+    // CRITICAL: Add runtime parameters from command invocation (e.g., "S U" from runSysCommand('N', 'S U'))
+    // These override/supplement .info file ARGS for batch mode execution
+    if (door.parameters && Array.isArray(door.parameters) && door.parameters.length > 0) {
+      // door.parameters is an array like ['S U'] from command-execution.handler.ts
+      for (const param of door.parameters) {
+        if (param && typeof param === 'string') {
+          doorArgs.push(...param.split(' ').filter((a: string) => a));
+        }
+      }
+      console.log(`[executeAmigaDoor] Added runtime parameters: ${JSON.stringify(door.parameters)} -> doorArgs=${JSON.stringify(doorArgs)}`);
     }
 
     // Add doorCommand and doorId to session for XIMProtocol to access

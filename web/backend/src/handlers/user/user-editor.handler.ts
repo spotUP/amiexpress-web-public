@@ -287,8 +287,8 @@ async function handleBulkAccountEditor(socket: any, session: BBSSession, db: Dat
         // DISK-BASED: Update user files after database update
         try {
           const updatedUser = await db.getUserById(user.id);
-          if (updatedUser) {
-            userFileManager.updateUserDataFile(updatedUser, parseInt(user.id, 10));
+          if (updatedUser && updatedUser.slotNumber) {
+            userFileManager.updateUserDataFile(updatedUser, updatedUser.slotNumber);
           }
         } catch (error) {
           console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
@@ -414,11 +414,13 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
         if (saveInput.toUpperCase() === 'Y') {
           await db.updateUser(user.id, user);
           // DISK-BASED: Update user files after database update
-          try {
-            userFileManager.updateUserDataFile(user, parseInt(user.id, 10));
-            console.log(`[UserEditor] Updated user ${user.username} disk files`);
-          } catch (error) {
-            console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+          if (user.slotNumber) {
+            try {
+              userFileManager.updateUserDataFile(user, user.slotNumber);
+              console.log(`[UserEditor] Updated user ${user.username} disk files`);
+            } catch (error) {
+              console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+            }
           }
           socket.emit('ansi-output', '\r\nSaved.\r\n');
         }
@@ -462,11 +464,13 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
     user.newUser = false;
     await db.updateUser(user.id, user);
     // DISK-BASED: Update user files after database update
-    try {
-      userFileManager.updateUserDataFile(user, parseInt(user.id, 10));
-      console.log(`[UserEditor] Updated user ${user.username} disk files`);
-    } catch (error) {
-      console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+    if (user.slotNumber) {
+      try {
+        userFileManager.updateUserDataFile(user, user.slotNumber);
+        console.log(`[UserEditor] Updated user ${user.username} disk files`);
+      } catch (error) {
+        console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+      }
     }
     state.changes = false;
     await displayAccount(socket, user, state.page!);

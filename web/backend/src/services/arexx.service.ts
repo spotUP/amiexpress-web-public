@@ -4,6 +4,7 @@
 import { db } from '../database';
 import { AREXXContext, AREXXScript } from '../types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { callersLogManager } from './CallersLogManager';
 
 /**
  * AREXX Variable Storage
@@ -465,13 +466,14 @@ class BBSFunctions {
   }
 
   /**
-   * Get last caller info
+   * Get last caller info from CallersLog
+   * Returns the username of the most recent user who logged in
    */
   async BBSGETLASTCALLER(): Promise<string> {
     try {
-      // In a real implementation, would query sessions table
-      // For now, return placeholder
-      return 'System';
+      const nodeId = this.context.session?.nodeId || 0;
+      const lastCaller = callersLogManager.getLastCaller(nodeId);
+      return lastCaller || 'System';
     } catch (error) {
       SysopDebugUtil.debug(
         this.context.socket || null,

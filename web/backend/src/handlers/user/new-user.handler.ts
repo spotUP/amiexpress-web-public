@@ -20,6 +20,7 @@ import { displayScreen, doPause } from '../screen.handler';
 import { config } from '../../config';
 import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
+import { emitUserLogin } from '../../services/bbs-event-emitter';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -1216,6 +1217,18 @@ async function createAccount(socket: Socket, session: any) {
         ansi: newUser.ansi
       }
     });
+
+    // Emit BBS event for LiveChat integration
+    try {
+      emitUserLogin({
+        username: newUser.username,
+        nodeId: session.nodeId || 1,
+        location: newUser.location || 'Unknown',
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('[BBSEvent] Error emitting new user login event:', error);
+    }
 
     // Show welcome screen and bulletins
     socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');

@@ -303,8 +303,10 @@ export class XIMIOHandler {
       JSON.stringify(text)
     );
 
-    // Disable autoPause - doors handle their own pagination
-    const bytesWritten = this.emitText(text, addNewline, true, false, msg);
+    // Use door-specific pagination setting (PAGINATION tooltype)
+    // If autoPauseEnabled=true, XIM will pause after pauseLines
+    // If autoPauseEnabled=false (default), door handles its own pagination
+    const bytesWritten = this.emitText(text, addNewline, true, this.state.autoPauseEnabled, msg);
 
     console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
     this.reply(msg, bytesWritten);
@@ -364,9 +366,10 @@ export class XIMIOHandler {
     const hexBytes = hasControlChars ? ' hex=' + Array.from(text.slice(0, 20)).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ') : '';
     console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})${hexBytes}`);
 
-    // Disable autoPause - doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
-    // autoPause was interfering with door pagination and causing output to be lost
-    this.emitText(text, shouldAddNewline, true, false, msg);
+    // Use door-specific pagination setting (PAGINATION tooltype)
+    // Most doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
+    // but doors with PAGINATION tooltype set will use XIM auto-pause
+    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
 
     this.reply(msg, 1);
   }
@@ -1046,6 +1049,9 @@ export class XIMIOHandler {
 
   /**
    * Simple fixed-width wrapper for a single line (no line breaks)
+   * Properly handles:
+   * - Tab characters (expand to next 8-column tab stop)
+   * - ANSI escape sequences (don't count toward visible width)
    */
   private wrapLine(line: string, width: number): string[] {
     if (width <= 0 || line.length === 0) {
@@ -1064,6 +1070,7 @@ export class XIMIOHandler {
 
     let i = 0;
     while (i < line.length) {
+      // Handle ANSI escape sequences (don't count toward visible width)
       if (line[i] === '\x1b') {
         const remainder = line.slice(i);
         const escMatch = remainder.match(/^\x1b\[[0-9;]*[A-Za-z]/);
@@ -1072,6 +1079,22 @@ export class XIMIOHandler {
           i += escMatch[0].length;
           continue;
         }
+      }
+
+      // Handle tab characters - expand to next 8-column tab stop
+      if (line[i] === '\t') {
+        const tabWidth = 8 - (visibleCount % 8);
+        // Check if tab would cause overflow
+        if (visibleCount + tabWidth > width) {
+          flushCurrent();
+        }
+        current += line[i];
+        visibleCount += tabWidth;
+        i += 1;
+        if (visibleCount >= width) {
+          flushCurrent();
+        }
+        continue;
       }
 
       current += line[i];

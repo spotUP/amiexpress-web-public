@@ -73,7 +73,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     await handleChatDecline(socket, session, data);
   });
 
-  socket.on('chat:message', async (data: { message: string }) => {
+  socket.on('chat:message', async (data: { message?: string; content?: string; room?: string }) => {
     console.log('📨 [SOCKET.IO] Received chat:message event from client');
     console.log('📨 [SOCKET.IO] Data:', data);
     console.log('📨 [SOCKET.IO] Socket ID:', socket.id);
@@ -84,9 +84,21 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     }
     console.log('📨 [SOCKET.IO] Session found, user:', session.user?.username);
 
-    const { handleChatMessage } = require('../handlers/chat/internode-chat.handler');
-    await handleChatMessage(socket, session, data);
-    console.log('📨 [SOCKET.IO] handleChatMessage completed');
+    // Check if this is a room message (has room property or content instead of message)
+    if (data.room || data.content || session.currentRoomId) {
+      // Route to group chat handler
+      const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
+      const roomData = {
+        message: data.content || data.message || ''
+      };
+      console.log('📨 [SOCKET.IO] Routing to handleRoomMessage:', roomData);
+      await handleRoomMessage(socket, session, roomData);
+    } else {
+      // Route to internode chat handler (1:1 BBS chat)
+      const { handleChatMessage } = require('../handlers/chat/internode-chat.handler');
+      await handleChatMessage(socket, session, data);
+    }
+    console.log('📨 [SOCKET.IO] chat:message completed');
   });
 
   socket.on('chat:end', async () => {
@@ -107,7 +119,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     await handleRoomCreate(socket, session, data);
   });
 
-  socket.on('room:join', async (data: { roomId?: string; roomName?: string; password?: string }) => {
+  socket.on('room:join', async (data: { roomId?: string; roomName?: string; room?: string; password?: string }) => {
     console.log('[CHAT DEBUG] room:join received:', data);
     const session = getSessionBySocketId(socket.id);
     if (!session) {
@@ -116,8 +128,16 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     }
     console.log('[CHAT DEBUG] Session found - userId:', session.user?.id, 'username:', session.user?.username, 'currentRoomId:', session.currentRoomId);
 
+    // Normalize: accept room, roomId, or roomName
+    const normalizedData = {
+      roomId: data.roomId || data.room,
+      roomName: data.roomName || data.room,
+      password: data.password
+    };
+    console.log('[CHAT DEBUG] Normalized room:join data:', normalizedData);
+
     const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
-    await handleRoomJoin(socket, session, data);
+    await handleRoomJoin(socket, session, normalizedData);
   });
 
   socket.on('room:leave', async () => {
@@ -142,8 +162,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   });
 
   socket.on('room:list', async (data?: { showPrivate?: boolean }) => {
+    console.log('[CHAT DEBUG] room:list event received for socket:', socket.id);
     const session = getSessionBySocketId(socket.id);
-    if (!session) return;
+    console.log('[CHAT DEBUG] room:list session lookup result:', session ? `found (user: ${session.user?.username}, nodeId: ${session.nodeId})` : 'NOT FOUND');
+    if (!session) {
+      console.log('[CHAT DEBUG] room:list returning early - no session');
+      return;
+    }
 
     const { handleRoomList } = require('../handlers/chat/group-chat.handler');
     await handleRoomList(socket, session, data);

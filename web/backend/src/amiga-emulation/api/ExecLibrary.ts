@@ -117,6 +117,12 @@ export class ExecLibrary {
   // Standard signal bit definitions (from exec/tasks.h)
   private static readonly SIGBREAKB_CTRL_C = 12; // Bit number for CTRL-C
   private static readonly SIGBREAKF_CTRL_C = 1 << 12; // Signal mask (0x1000)
+
+  // Memory limits (Amiga classic has 16MB max addressable memory)
+  private static readonly MAX_MEMORY = 0x1000000; // 16MB limit
+  private static readonly MAX_SINGLE_ALLOC = 0x800000; // 8MB max single allocation (sanity check)
+  private static readonly MEMORY_WARNING_THRESHOLD = 0xc00000; // 12MB - warn when exceeded
+
   private static readonly ROM_START = 0xf80000;
   private static readonly ROM_END = 0xffffff;
   private static readonly RTC_MATCHWORD = 0x4afc;
@@ -208,6 +214,7 @@ export class ExecLibrary {
       messages: [],
       sigBit: 0,
       sigTask: bbsTaskAddr,
+      signaled: false,
     });
 
     // Create current task (the door itself)
@@ -1555,19 +1562,39 @@ export class ExecLibrary {
         this.remSemaphore(remSemAddr);
         return true;
 
-      case -330: // _LVOAllocSignal ✓
+      case -330: // _LVOAllocSignal
         console.log(`[ExecLibrary]   AllocSignal trap called`);
         const sigNum = this.emulator.getRegister(0); // D0
         const sigResult = this.AllocSignal(sigNum);
         this.emulator.setRegister(0, sigResult);
         return true;
 
-      case -306: // _LVOSetSignal ✓
+      case -336: // _LVOFreeSignal
+        console.log(`[ExecLibrary]   FreeSignal trap called`);
+        const freeSigNum = this.emulator.getRegister(0); // D0 = signal number to free
+        this.freeSignal(freeSigNum);
+        return true;
+
+      case -306: // _LVOSetSignal
         console.log(`[ExecLibrary]   SetSignal trap called`);
         const newSignals = this.emulator.getRegister(0); // D0
         const signalMask = this.emulator.getRegister(1); // D1
         const oldSignals = this.setSignal(newSignals, signalMask);
         this.emulator.setRegister(0, oldSignals);
+        return true;
+
+      case -318: // _LVOWait - Wait for signals (blocks until signal received)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Wait() (LVO -318) ***`);
+        const waitSignalMask = this.emulator.getRegister(0); // D0 = signal mask to wait for
+        const waitResult = this.wait(waitSignalMask);
+        this.emulator.setRegister(0, waitResult); // Return received signals in D0
+        return true;
+
+      case -324: // _LVOSignal - Send signals to a task (wakes waiting task)
+        console.log(`[ExecLibrary] *** INTERCEPTED: Signal() (LVO -324) ***`);
+        const signalTaskAddr = this.emulator.getRegister(9); // A1 = task address
+        const signalBits = this.emulator.getRegister(0); // D0 = signal bits to send
+        this.signal(signalTaskAddr, signalBits);
         return true;
 
       // *** I/O REQUEST FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
@@ -1697,8 +1724,8 @@ export class ExecLibrary {
         console.log(`[ExecLibrary] *** INTERCEPTED: WaitPort() (LVO -384) ***`);
         // FIXED: A0 = register 8 (not 12 which is A4)
         const waitPortAddr = this.emulator.getRegister(8); // A0
-        const waitResult = this.waitPort(waitPortAddr);
-        this.emulator.setRegister(0, waitResult);
+        const waitPortResult = this.waitPort(waitPortAddr);
+        this.emulator.setRegister(0, waitPortResult);
         return true;
 
       // *** MEMORY COPY FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
@@ -1730,6 +1757,12 @@ export class ExecLibrary {
         console.log(`[ExecLibrary] *** INTERCEPTED: FreeVec() (LVO -690) ***`);
         const vecAddr = this.emulator.getRegister(9); // A1
         this.freeVec(vecAddr);
+        return true;
+
+      case -732: // _LVOStackSwap
+        console.log(`[ExecLibrary] *** INTERCEPTED: StackSwap() (LVO -732) ***`);
+        const stackSwapStructAddr = this.emulator.getRegister(8); // A0
+        this.stackSwap(stackSwapStructAddr);
         return true;
 
       default:
@@ -2091,26 +2124,78 @@ export class ExecLibrary {
    * AllocMem(size, flags) -> memory address or NULL
    *
    * Allocates memory block of specified size
+   * Returns 0 (NULL) on failure (out of memory or invalid size)
    */
   allocMem(size: number, flags: number): number {
+    // Bounds check: reject zero or negative sizes
+    if (size <= 0) {
+      console.log(
+        `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(16)}) - FAILED: invalid size`
+      );
+      return 0;
+    }
+
+    // Bounds check: reject unreasonably large single allocations
+    if (size > ExecLibrary.MAX_SINGLE_ALLOC) {
+      console.log(
+        `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(16)}) - FAILED: exceeds max single allocation (${ExecLibrary.MAX_SINGLE_ALLOC})`
+      );
+      return 0;
+    }
+
     // Align size to 4-byte boundary
     const alignedSize = (size + 3) & ~3;
 
-    // Try to reuse a free block of sufficient size (first-fit)
+    // Try to reuse a free block of sufficient size (best-fit for better memory usage)
     let addr = 0;
+    let bestFitIndex = -1;
+    let bestFitSize = Infinity;
+
     for (let i = 0; i < this.freeList.length; i++) {
       const block = this.freeList[i];
-      if (block.size >= alignedSize) {
-        addr = block.addr;
-        this.freeList.splice(i, 1);
-        break;
+      if (block.size >= alignedSize && block.size < bestFitSize) {
+        bestFitIndex = i;
+        bestFitSize = block.size;
+        // Perfect fit - use immediately
+        if (block.size === alignedSize) break;
+      }
+    }
+
+    if (bestFitIndex !== -1) {
+      const block = this.freeList[bestFitIndex];
+      addr = block.addr;
+
+      // If block is significantly larger, split it
+      const remainder = block.size - alignedSize;
+      if (remainder >= 32) {
+        // Only split if remainder is worth tracking (32+ bytes)
+        block.addr += alignedSize;
+        block.size = remainder;
+      } else {
+        // Use entire block
+        this.freeList.splice(bestFitIndex, 1);
       }
     }
 
     // Fallback to bump allocator
     if (addr === 0) {
+      // Check if allocation would exceed memory limit
+      if (this.nextFreeMemory + alignedSize > ExecLibrary.MAX_MEMORY) {
+        console.log(
+          `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(16)}) - FAILED: would exceed ${ExecLibrary.MAX_MEMORY} (16MB) limit`
+        );
+        return 0;
+      }
+
       addr = this.nextFreeMemory;
       this.nextFreeMemory += alignedSize;
+
+      // Warn if approaching memory limit
+      if (this.nextFreeMemory > ExecLibrary.MEMORY_WARNING_THRESHOLD) {
+        console.log(
+          `[ExecLibrary] WARNING: Memory usage at ${((this.nextFreeMemory / ExecLibrary.MAX_MEMORY) * 100).toFixed(1)}% (${this.nextFreeMemory} bytes)`
+        );
+      }
     }
 
     // Track allocation
@@ -2134,7 +2219,8 @@ export class ExecLibrary {
   /**
    * FreeMem(address, size)
    *
-   * Frees previously allocated memory
+   * Frees previously allocated memory with heap coalescing
+   * Adjacent free blocks are merged to reduce fragmentation
    */
   freeMem(addr: number, size: number): void {
     try {
@@ -2163,8 +2249,63 @@ export class ExecLibrary {
       // Simple stack-like reuse: if freeing the topmost block, rewind bump pointer
       if (addr + allocation === this.nextFreeMemory) {
         this.nextFreeMemory = addr;
+
+        // Also check if we can coalesce with the highest free block
+        // to further rewind the bump pointer
+        let coalesced = true;
+        while (coalesced && this.freeList.length > 0) {
+          coalesced = false;
+          for (let i = this.freeList.length - 1; i >= 0; i--) {
+            const block = this.freeList[i];
+            if (block.addr + block.size === this.nextFreeMemory) {
+              this.nextFreeMemory = block.addr;
+              this.freeList.splice(i, 1);
+              coalesced = true;
+              break;
+            }
+          }
+        }
       } else {
-        this.freeList.push({ addr, size: allocation });
+        // Try to coalesce with adjacent blocks in free list
+        let newBlock = { addr, size: allocation };
+        let merged = true;
+
+        while (merged) {
+          merged = false;
+          for (let i = 0; i < this.freeList.length; i++) {
+            const block = this.freeList[i];
+
+            // Check if this block is immediately before newBlock
+            if (block.addr + block.size === newBlock.addr) {
+              newBlock.addr = block.addr;
+              newBlock.size += block.size;
+              this.freeList.splice(i, 1);
+              merged = true;
+              break;
+            }
+
+            // Check if this block is immediately after newBlock
+            if (newBlock.addr + newBlock.size === block.addr) {
+              newBlock.size += block.size;
+              this.freeList.splice(i, 1);
+              merged = true;
+              break;
+            }
+          }
+        }
+
+        // Add the (possibly merged) block to free list
+        this.freeList.push(newBlock);
+
+        // Keep free list sorted by address for better cache locality
+        this.freeList.sort((a, b) => a.addr - b.addr);
+
+        // Limit free list size to prevent memory bloat (keep largest blocks)
+        if (this.freeList.length > 100) {
+          this.freeList.sort((a, b) => b.size - a.size);
+          this.freeList = this.freeList.slice(0, 50);
+          this.freeList.sort((a, b) => a.addr - b.addr);
+        }
       }
     } else {
       console.log(
@@ -3437,25 +3578,30 @@ export class ExecLibrary {
   }
 
   /**
-   * AvailMem() - LVO -210 (P1)
+   * AvailMem() - LVO -216
    *
    * Get available memory.
    *
    * Parameters:
    *   D1 = Requirements (memory flags)
+   *        MEMF_CHIP (1<<1) = Chip memory
+   *        MEMF_FAST (1<<2) = Fast memory
+   *        MEMF_LARGEST (1<<17) = Return largest block
    *
    * Returns:
    *   D0 = Available memory in bytes
    *
-   * Returns a reasonable amount for BBS operations.
+   * Amiga can handle 128-256MB+ with accelerators.
+   * Returns 64MB for web environment (plenty for any door).
    */
   availMem(requirements: number): number {
     console.log(`[ExecLibrary] AvailMem(requirements=0x${requirements.toString(16)})`);
 
-    // Return 8MB available (plenty for any BBS door)
-    const availableMemory = 8 * 1024 * 1024;
+    // Report 64MB available - Amiga can handle 128-256MB+ with accelerators
+    // This signals to doors that memory is not a constraint
+    const availableMemory = 64 * 1024 * 1024;
 
-    console.log(`[ExecLibrary]   Returning ${availableMemory} bytes available`);
+    console.log(`[ExecLibrary]   Returning ${availableMemory} bytes (64MB) available`);
     return availableMemory;
   }
 
@@ -4904,28 +5050,39 @@ export class ExecLibrary {
 
     const fmt = this.emulator.readString(fmtPtr);
     this.rawDoFmtCount++;
-    if (this.rawDoFmtCount <= 3) {
+    const formatted = this.formatRawString(fmt, argvAddr);
+    if (this.rawDoFmtCount <= 5) {
+      // Show what string the %s is reading
+      const strPtr = fmt.includes('%s') ? this.emulator.readMemory32(argvAddr) : 0;
+      const strVal = strPtr ? this.emulator.readString(strPtr).substring(0, 40) : '';
       console.log(
-        `[ExecLibrary] RawDoFmt #${this.rawDoFmtCount} fmt="${fmt}" argv=0x${argvAddr.toString(
-          16
-        )} putch=0x${putChFunc.toString(16)} data=0x${putChDataPtr.toString(16)}`
+        `[ExecLibrary] RawDoFmt #${this.rawDoFmtCount} fmt="${fmt.substring(0, 30)}" A3=0x${putChDataPtr.toString(16)} strPtr=0x${strPtr.toString(16)} strVal="${strVal}"`
       );
     }
-    const formatted = this.formatRawString(fmt, argvAddr);
 
     // If a putch callback is provided, invoke it directly with D0=char and A3=putData.
+    // Track A3 across callbacks - callbacks often use move.b d0,(a3)+ to write and increment.
+    // Without tracking, the output buffer stays at the same position forever.
     if (putChFunc !== 0) {
       const baseState = this.captureCpuState();
       const returnStub = this.ensureRawDoFmtReturnStub();
+      let trackedA3 = putChDataPtr;  // Start with initial A3 value
+
       for (let i = 0; i < formatted.length; i++) {
-        this.invokePutChCallback(
+        trackedA3 = this.invokePutChCallback(
           putChFunc,
-          putChDataPtr,
+          trackedA3,  // Use tracked A3 that may have been incremented by callback
           formatted.charCodeAt(i) & 0xff,
           baseState,
           returnStub
         );
       }
+
+      // Write null terminator if the callback was incrementing a pointer
+      if (trackedA3 !== putChDataPtr) {
+        this.emulator.writeMemory(trackedA3, 0);
+      }
+
       return 0;
     }
 
@@ -4988,7 +5145,7 @@ export class ExecLibrary {
     charCode: number,
     baseState: number[],
     returnStub: number
-  ): void {
+  ): number {
     // Start from the captured state for each invocation to avoid drift.
     this.restoreCpuState(baseState);
 
@@ -5005,25 +5162,54 @@ export class ExecLibrary {
     // Execute until the callback returns or a safety limit is hit
     let returned = false;
     const maxSteps = 1000;
+    const DEBUG_CALLBACK = this.rawDoFmtCount <= 3; // Debug first 3 RawDoFmt calls
     for (let steps = 0; steps < maxSteps; steps++) {
+      const pcBefore = this.emulator.getRegister(CPURegister.PC);
+      const instrWord = this.emulator.readMemory16(pcBefore);
+
+      // Check for ILLEGAL instruction (0x4afc) which indicates library trap
+      if (instrWord === 0x4afc) {
+        if (DEBUG_CALLBACK) {
+          console.log(`[ExecLibrary] RawDoFmt callback hit ILLEGAL at pc=0x${pcBefore.toString(16)} - library trap!`);
+        }
+        // Skip the callback - it's trying to call a library function
+        // This is a problem for batch doors that don't have the full emulation loop
+        break;
+      }
+
       this.emulator.executeInstruction();
       const pcNow = this.emulator.getRegister(CPURegister.PC);
+
+      if (DEBUG_CALLBACK && steps < 5) {
+        console.log(`[ExecLibrary] RawDoFmt callback step ${steps}: pc 0x${pcBefore.toString(16)} -> 0x${pcNow.toString(16)} instr=0x${instrWord.toString(16)}`);
+      }
+
       if (pcNow === returnStub) {
         returned = true;
         break;
       }
     }
 
-    if (!returned) {
+    if (!returned && DEBUG_CALLBACK) {
+      const pcFinal = this.emulator.getRegister(CPURegister.PC);
       console.warn(
         `[ExecLibrary] RawDoFmt putch callback did not return within ${maxSteps} steps (func=0x${funcAddr.toString(
           16
-        )})`
+        )}) finalPC=0x${pcFinal.toString(16)}`
       );
     }
 
-    // Restore state for continued RawDoFmt processing
+    // Capture A3 after callback (it may have been incremented by move.b d0,(a3)+)
+    const a3After = this.emulator.getRegister(CPURegister.A3);
+    if (DEBUG_CALLBACK) {
+      console.log(`[ExecLibrary] RawDoFmt callback: char='${String.fromCharCode(charCode)}' (0x${charCode.toString(16)}) A3 0x${putChDataPtr.toString(16)} -> 0x${a3After.toString(16)} func=0x${funcAddr.toString(16)}`);
+    }
+
+    // Restore state for continued RawDoFmt processing, but preserve tracked A3
     this.restoreCpuState(baseState);
+
+    // Return the updated A3 value for tracking across callbacks
+    return a3After;
   }
 
   private formatRawString(fmt: string, argvAddr: number): string {

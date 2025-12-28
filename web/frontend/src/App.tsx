@@ -3,6 +3,7 @@ import Terminal from './components/terminal/Terminal';
 import GamePromptWizard from './components/wizard/GamePromptWizard';
 import ImportExport from './components/admin/ImportExport';
 import SystemStatus from './components/admin/SystemStatus';
+import ChatRoutes from './chat';
 import './App.css';
 
 function App() {
@@ -16,6 +17,8 @@ function App() {
           <Route path="/door-wizard" element={<GamePromptWizard />} />
           <Route path="/admin/import" element={<ImportExport />} />
           <Route path="/system" element={<SystemStatus />} />
+          {/* Standalone web chat */}
+          <Route path="/chat/*" element={<ChatRoutes />} />
           {/* Catch-all redirect to main terminal */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

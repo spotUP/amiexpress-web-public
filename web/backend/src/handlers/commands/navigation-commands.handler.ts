@@ -105,21 +105,17 @@ export async function handleNewFilesCommand(socket: any, session: BBSSession, pa
   // express.e:25279 - myNewFiles(params)
   if (_displayNewFiles) {
     await _displayNewFiles(socket, session, params);
+    // displayNewFiles handles its own pause/prompt and state management
   } else {
     // Fallback if displayNewFiles not injected yet
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.headerBox('New Files'));
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.warningLine('New files display not yet implemented'));
-    finalizeCommand(socket, session, 'New files placeholder displayed');
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
-
-  // Mirror express.e: after display, prompt and return to menu without extra pause
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.paginatedScreen = undefined;
-  session.lastScreenHadPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
 /**
