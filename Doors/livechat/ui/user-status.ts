@@ -27,7 +27,7 @@ export function formatUserStatus(counts: Record<PresenceStatus, number>): string
   const online = counts.online || 0;
   const away = counts.away || 0;
   const dnd = counts.dnd || 0;
-  return ` {green-fg}*${online}{/} {yellow-fg}~${away}{/} {red-fg}-${dnd}{/}`;
+  return ` {green-fg}*${online}{/green-fg} {yellow-fg}~${away}{/yellow-fg} {red-fg}-${dnd}{/red-fg}`;
 }
 
 /** Update user status display */

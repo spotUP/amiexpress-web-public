@@ -25,11 +25,13 @@ export function createSettingsOverlay(
     left: 'center',
     width: w,
     height: h,
-    label: ' Settings [ESC:Close] ',
+    label: ' Settings ',
     border: { type: 'line' },
     shadow: true,
     hidden: true,
     mouse: true,
+    keys: true,
+    closable: true,
     draggable: true,
     ch: ' ',
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
@@ -78,7 +80,11 @@ export function createSettingsOverlay(
     hm(o);
   });
 
-  o.key(['escape'], () => hm(o));
+  // Handle close from X button or ESC key
+  o.on('close', () => {
+    saveSettings(st, { ...eCb, ...pCb }, usb);
+    hm(o);
+  });
 
   return o;
 }

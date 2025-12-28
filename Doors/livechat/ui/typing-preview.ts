@@ -1,5 +1,12 @@
 import type { TypingUser } from '../types';
+import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { color } from '../utils/ansi';
+import { STATUS_HEIGHT } from './status-bar';
+import { INPUT_HEIGHT } from './input-box';
+
+// Height of the typing indicator bar (shows who is typing in real-time)
+export const TYPING_HEIGHT = 3;
 
 /** Typing buffer for a user */
 export interface TypingBuffer {
@@ -10,13 +17,13 @@ export interface TypingBuffer {
 }
 
 /** Create typing preview component */
-export function createTypingPreview(blessed: any, screen: any) {
-  return blessed.box({
+export function createTypingPreview(screen: Screen): Box {
+  return createBox({
     parent: screen,
-    bottom: 4,
+    bottom: STATUS_HEIGHT + INPUT_HEIGHT,
     left: 16,
     width: '100%-16',
-    height: 3,
+    height: TYPING_HEIGHT,
     border: { type: 'line' },
     style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
     tags: true,
@@ -24,18 +31,22 @@ export function createTypingPreview(blessed: any, screen: any) {
   });
 }
 
-/** Render typing preview content */
+/** Render typing preview content - shows other users typing in real-time */
 export function renderTypingPreview(buffers: Map<number, TypingBuffer>): string {
-  const lines: string[] = [];
+  const parts: string[] = [];
   const now = Date.now();
 
   for (const [userId, buf] of buffers) {
+    // Skip stale buffers (no keystroke in 5 seconds)
     if (now - buf.lastUpdate > 5000) continue;
-    if (buf.buffer.length === 0) continue;
-    lines.push(color(`${buf.username}:`, buf.color) + ` ${buf.buffer}|`);
+    // Show user's buffer with cursor indicator
+    if (buf.buffer.length > 0) {
+      parts.push(`{${buf.color}-fg}${buf.username}:{/${buf.color}-fg} ${buf.buffer}{inverse} {/inverse}`);
+    }
   }
 
-  return lines.slice(-3).join('\n') || color('(No one typing)', 'gray');
+  // Return all typing users on one line, separated by spaces
+  return parts.length > 0 ? parts.slice(0, 3).join('  ') : '';
 }
 
 /** Process keystroke for typing buffer */

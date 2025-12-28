@@ -3,21 +3,22 @@
  * Three-panel interface: Categories | Emojis | Preview
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Screen, Box, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { EMOJIS, getEmojisByCategory, getCategories, Emoji } from '../utils/emojis';
 
 export class EmojiPicker {
-  private overlay: any;
-  private categoryList: any;
-  private emojiList: any;
-  private previewBox: any;
+  private overlay: Box;
+  private categoryList: List;
+  private emojiList: List;
+  private previewBox: Box;
   private currentCategory: Emoji['category'] = 'emotions';
   private onSelect: ((emoji: Emoji) => void) | null = null;
   private onCancel: (() => void) | null = null;
 
-  constructor(screen: any) {
+  constructor(screen: Screen) {
     // Create overlay container
-    this.overlay = blessed.box({
+    this.overlay = createBox({
       parent: screen,
       top: 'center',
       left: 'center',
@@ -36,7 +37,7 @@ export class EmojiPicker {
     });
 
     // Category list (left panel)
-    this.categoryList = blessed.list({
+    this.categoryList = createList({
       parent: this.overlay,
       top: 0,
       left: 0,
@@ -57,7 +58,7 @@ export class EmojiPicker {
     });
 
     // Emoji list (center panel)
-    this.emojiList = blessed.list({
+    this.emojiList = createList({
       parent: this.overlay,
       top: 0,
       left: 15,
@@ -80,7 +81,7 @@ export class EmojiPicker {
     });
 
     // Preview box (right panel)
-    this.previewBox = blessed.box({
+    this.previewBox = createBox({
       parent: this.overlay,
       top: 0,
       left: 40,

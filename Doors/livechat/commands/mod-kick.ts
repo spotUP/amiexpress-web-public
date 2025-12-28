@@ -10,7 +10,7 @@ export const kickCmd: SlashCommand = {
     const target = args[0]?.replace('@', '');
     const reason = args.slice(1).join(' ') || 'No reason given';
     if (!target) return { handled: true, error: 'Usage: /kick @user [reason]' };
-    return { handled: true, message: `Kicked ${target}: ${reason}`, data: { target, reason } };
+    return { handled: true, action: 'kick', data: { target, reason } };
   }
 };
 
@@ -24,6 +24,19 @@ export const muteCmd: SlashCommand = {
     const target = args[0]?.replace('@', '');
     const minutes = parseInt(args[1] || '5', 10);
     if (!target) return { handled: true, error: 'Usage: /mute @user [minutes]' };
-    return { handled: true, message: `Muted ${target} for ${minutes} min`, data: { target, minutes } };
+    return { handled: true, action: 'mute', data: { target, duration: minutes * 60 } };
+  }
+};
+
+/** /unmute - Unmute user */
+export const unmuteCmd: SlashCommand = {
+  name: 'unmute',
+  description: 'Unmute user in channel',
+  usage: '/unmute @user',
+  minSecLevel: 80,
+  handler: (ctx, args) => {
+    const target = args[0]?.replace('@', '');
+    if (!target) return { handled: true, error: 'Usage: /unmute @user' };
+    return { handled: true, action: 'unmute', data: { target } };
   }
 };

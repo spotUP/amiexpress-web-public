@@ -10,7 +10,7 @@ export const banCmd: SlashCommand = {
     const target = args[0]?.replace('@', '');
     const reason = args.slice(1).join(' ') || 'No reason given';
     if (!target) return { handled: true, error: 'Usage: /ban @user [reason]' };
-    return { handled: true, message: `Banned ${target}: ${reason}`, data: { target, reason } };
+    return { handled: true, action: 'ban', data: { target, reason } };
   }
 };
 
@@ -23,7 +23,7 @@ export const unbanCmd: SlashCommand = {
   handler: (ctx, args) => {
     const target = args[0]?.replace('@', '');
     if (!target) return { handled: true, error: 'Usage: /unban @user' };
-    return { handled: true, message: `Unbanned ${target}`, data: { target } };
+    return { handled: true, action: 'unban', data: { target } };
   }
 };
 

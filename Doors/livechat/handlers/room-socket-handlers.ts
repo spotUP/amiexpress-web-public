@@ -26,10 +26,17 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
     crl = d.roomName || crl;
     if (d.members && Array.isArray(d.members)) {
       ou.clear();
-      ou.set(String(uid), { username: un, status: 'online', nodeId: nid, joinedAt: new Date() });
-      for (const m of d.members) {
-        if (String(m.user_id || m.userId) !== String(uid)) {
-          ou.set(String(m.user_id || m.userId), { username: m.username, status: m.is_muted ? 'dnd' : 'online', joinedAt: new Date() });
+      // Find current user in members list to get their UUID
+      const currentUserMember = d.members.find((m: any) => m.username === un);
+      if (currentUserMember) {
+        const currentUserId = String(currentUserMember.user_id || currentUserMember.userId);
+        ou.set(currentUserId, { username: un, status: 'online', nodeId: nid, joinedAt: new Date() });
+        // Add all other members using UUID comparison
+        for (const m of d.members) {
+          const memberId = String(m.user_id || m.userId);
+          if (memberId !== currentUserId) {
+            ou.set(memberId, { username: m.username, status: m.is_muted ? 'dnd' : 'online', joinedAt: new Date() });
+          }
         }
       }
     }

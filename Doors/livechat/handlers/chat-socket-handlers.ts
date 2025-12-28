@@ -1,34 +1,25 @@
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
-  sock.on('ansi-output', (d: string) => {
-    const c = d.replace(/\x1b\[[0-9;]*[mK]/g, '').replace(/\r\n/g, '').trim();
-    if (c.length > 0) {
-      if (c.match(/^\[\d{2}:\d{2}\]/)) {
-        cl.log(d.replace(/\r\n/g, ''));
-        if (mu(c, un)) {
-          aud.onMessage(true);
-          aa(`{yellow-fg}@mention{/yellow-fg}`);
-        }
-      }
-    }
-  });
+  // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
+  // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
+  // If cross-chat with BBS terminal users is needed, the server should emit proper events.
 
   sock.on('chat:keystroke', (d: any) => {
     if (d.channelId !== st.currentChannel) return;
-    if (d.userId === uid) return;
+    if (String(d.userId) === String(uid)) return;  // Skip own keystrokes
     pk(st.typingBuffers, d.userId, d.username, d.char, guc(d.username));
     utp();
   });
 
   sock.on('chat:keystroke-submit', (d: any) => {
     if (d.channelId !== st.currentChannel) return;
-    if (d.userId === uid) return;
+    if (String(d.userId) === String(uid)) return;  // Skip own submit
     pk(st.typingBuffers, d.userId, d.username, 'SUBMIT', '');
     utp();
   });
 
   sock.on('chat:keystroke-clear', (d: any) => {
     if (d.channelId !== st.currentChannel) return;
-    if (d.userId === uid) return;
+    if (String(d.userId) === String(uid)) return;  // Skip own clear
     pk(st.typingBuffers, d.userId, d.username, 'CLEAR', '');
     utp();
   });

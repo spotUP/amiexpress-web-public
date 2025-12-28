@@ -3,7 +3,7 @@ import type { AppState } from '../core/state';
 
 export function createProfileOverlay(s: Screen, ib: any, users: any, uname: string, st: AppState, getColor: any, getChan: any, showMsg: any, showDM: any, show: any, hide: any) {
   let target = '';
-  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: 48, height: 15, border: { type: 'line' }, hidden: true, mouse: true, draggable: true, style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } } });
+  const o = blessed.box({ parent: s, top: 'center', left: 'center', width: 48, height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } } });
   o.enableResize();
 
   const n = blessed.box({ parent: o, top: 1, left: 2, tags: true });
@@ -31,7 +31,7 @@ export function createProfileOverlay(s: Screen, ib: any, users: any, uname: stri
 
   dm.on('press', () => { hide(o); if (target && target !== uname) showDM(target); });
   cl.on('press', () => hide(o));
-  o.key(['escape'], () => hide(o));
+  o.on('close', () => hide(o));
 
   return { overlay: o, showProfile };
 }

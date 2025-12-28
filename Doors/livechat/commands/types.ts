@@ -14,7 +14,7 @@ export interface CommandResult {
   handled: boolean;
   message?: string;
   error?: string;
-  action?: 'quit' | 'join' | 'leave' | 'switch';
+  action?: 'quit' | 'join' | 'leave' | 'switch' | 'thread' | 'pin' | 'unpin' | 'showpinned' | 'search' | 'kick' | 'ban' | 'unban' | 'mute' | 'unmute';
   data?: any;
 }
 

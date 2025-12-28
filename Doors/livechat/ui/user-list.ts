@@ -1,10 +1,12 @@
+import type { Screen, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { ChannelMember, PresenceStatus } from '../types';
 import { PRESENCE_INDICATORS, PRESENCE_COLORS } from '../types';
 import { color, bold } from '../utils/ansi';
 
 /** Create user list component */
-export function createUserList(blessed: any, screen: any) {
-  return blessed.list({
+export function createUserList(screen: Screen): List {
+  return createList({
     parent: screen,
     top: 1,
     right: 0,
@@ -18,9 +20,8 @@ export function createUserList(blessed: any, screen: any) {
       bg: 'black',
       border: { fg: 'magenta' },
       selected: { bg: 'blue', fg: 'white' },
-      label: { fg: 'magenta', bold: true }
     },
-    scrollbar: { ch: '|', style: { inverse: true } },
+    scrollbar: { ch: '█' },
     tags: true
   });
 }

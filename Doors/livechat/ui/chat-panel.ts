@@ -10,13 +10,12 @@ export function chatPanelConfig() {
     border: { type: 'line' as const },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { ch: ' ', inverse: true },
+    scrollbar: { ch: '█', track: { ch: '│', style: { fg: 'gray' } }, style: { fg: 'cyan' } },
     tags: true,
     style: {
       fg: 'white',
       bg: 'black',
-      border: { fg: 'cyan' },
-      scrollbar: { bg: 'cyan' }
+      border: { fg: 'cyan' }
     }
   };
 }

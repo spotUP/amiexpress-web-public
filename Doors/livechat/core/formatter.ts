@@ -7,13 +7,13 @@ import { color, bold, userName } from '../utils/ansi';
 
 /** Format a message for display */
 export function formatMessage(msg: Message, currentUser: string, compact: boolean): string {
-  const time = compact ? '' : `{gray-fg}[${formatTime(msg.createdAt)}]{/} `;
+  const time = compact ? '' : `{gray-fg}[${formatTime(msg.createdAt)}]{/gray-fg} `;
   const name = userName(msg.username, getUserColor(msg.username));
   let content = parseContent(msg.content);
   content = highlightMentions(content, currentUser);
 
   if (msg.type === 'action') {
-    return `${time}{magenta-fg}* ${msg.username} ${content}{/}`;
+    return `${time}{magenta-fg}* ${msg.username} ${content}{/magenta-fg}`;
   }
 
   return `${time}${name}: ${content}`;
@@ -24,7 +24,7 @@ export function formatReactions(reactions: ReactionGroup[]): string {
   if (!reactions.length) return '';
   return ' ' + reactions.map(r => {
     const emoji = EMOJI_DISPLAY[r.emoji] || r.emoji;
-    return `{cyan-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/}`;
+    return `{cyan-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/cyan-fg}`;
   }).join(' ');
 }
 
@@ -43,10 +43,10 @@ export function getUserColor(username: string): string {
 /** Format thread indicator */
 export function formatThread(replyCount: number): string {
   if (replyCount <= 0) return '';
-  return ` {gray-fg}[${replyCount} replies]{/}`;
+  return ` {gray-fg}[${replyCount} replies]{/gray-fg}`;
 }
 
 /** Format pinned indicator */
 export function formatPinned(isPinned: boolean): string {
-  return isPinned ? ' {cyan-fg}[PIN]{/}' : '';
+  return isPinned ? ' {cyan-fg}[PIN]{/cyan-fg}' : '';
 }

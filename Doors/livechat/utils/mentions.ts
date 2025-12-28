@@ -49,12 +49,13 @@ export function highlightMentions(text: string, currentUser: string): string {
   return text.replace(/@(\w+)/g, (match, name) => {
     const lower = name.toLowerCase();
     if (lower === currentUser.toLowerCase()) {
-      return `{yellow-bg}{black-fg}@${name}{/}`;
+      // Use specific closing tags to avoid resetting ALL attributes
+      return `{yellow-bg}{black-fg}@${name}{/black-fg}{/yellow-bg}`;
     }
     if (lower === 'everyone' || lower === 'here') {
-      return `{red-fg}@${name}{/}`;
+      return `{red-fg}@${name}{/red-fg}`;
     }
-    return `{cyan-fg}@${name}{/}`;
+    return `{cyan-fg}@${name}{/cyan-fg}`;
   });
 }
 

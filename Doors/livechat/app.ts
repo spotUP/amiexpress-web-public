@@ -19,11 +19,11 @@ import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { stripTags, cleanTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/helpers';
 
 // Core state and services
-import { createInitialState, addMessage, setChannel, AppState } from './core/state';
-import { createCommandContext, executeCommand } from './core/command-exec';
+import { addMessage, setChannel, AppState } from './core/state';
+import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage, formatReactions } from './core/formatter';
-import { createCommandRegistry } from './commands';
 import { shouldShowEvent } from './core/socket-typing';
+import { initializeLiveChat } from './core/initialization';
 
 // Services
 import { events, formatBBSEvent, getEventMessage, SocketEmitter, PresenceService, ExtendedEventBus } from './services';
@@ -39,7 +39,7 @@ import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT } from './ui/menu-bar';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, INPUT_HEIGHT } from './ui/input-box';
-import { createChatLog, updateChatHeader as updateChatHeaderFn, TYPING_HEIGHT } from './ui/chat-log';
+import { createChatLog, updateChatHeader as updateChatHeaderFn, addBBSEvent, TYPING_HEIGHT } from './ui/chat-log';
 
 // Overlays
 import { createHelpScreen } from './overlays/help-screen';
@@ -57,6 +57,19 @@ import { createContextMenus } from './features/context-menus';
 import { setupRoomHandlers } from './handlers/room-socket-handlers';
 import { setupChatHandlers } from './handlers/chat-socket-handlers';
 import { setupKeyboardShortcuts } from './handlers/keyboard-shortcuts';
+import { BBSEventHandler } from './handlers/bbs-event.handler';
+import { setupThreadListeners, replyToThread, getThreadMessages, cleanupThreadListeners } from './handlers/thread-handlers';
+import { createThreadView } from './ui/thread-view';
+import { setupPinListeners, pinMessage, unpinMessage, getPinnedMessages, cleanupPinListeners } from './handlers/pin-handlers';
+import { createPinnedPanel } from './ui/pinned-panel';
+import { pinCmd, unpinCmd, pinnedCmd } from './commands/pin';
+import { setupSearchListeners, searchMessages, cleanupSearchListeners } from './handlers/search-handlers';
+import { createSearchOverlay } from './ui/search-overlay';
+import { searchCmd } from './commands/search';
+import { kickCmd, banCmd, unbanCmd, muteCmd, unmuteCmd } from './commands/moderation';
+import { createDialogHelpers } from './ui/dialog-helpers';
+import { handleCommandActions } from './handlers/command-execution-handlers';
+import { createSubmitHandler } from './handlers/input-submit-handler';
 
 // Utils
 import { formatTime } from './utils/format';
@@ -93,53 +106,17 @@ interface DoorSession {
 
 export async function createApp(session: DoorSession) {
   console.log('[LiveChat DEBUG] createApp called - LiveChat 3.0 with updated UI');
-  const { bbs, user, socket } = session;
-  const username = user?.username || 'Guest';
-  const userId = parseInt(user?.id, 10) || 0;
-  const nodeId = session.bbsSession?.nodeId || 1;
-  const secLevel = user?.secLevel || 10;
+  const { bbs, socket } = session;
+  bbs.enableWideMode?.();
 
-  // Initialize state
-  const state = createInitialState();
-  const registry = createCommandRegistry();
+  const ctx = initializeLiveChat(session);
+  const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService,
+    eventBus, audioEngine, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
+  let { currentRoomLabel } = ctx;
+
+  // Room state
   const initialRoomId = session.bbsSession?.currentRoomId as string | undefined;
   const initialRoomName = session.bbsSession?.currentRoomName as string | undefined;
-  let currentRoomLabel = initialRoomName || '';
-  if (initialRoomId) {
-    state.currentChannel = initialRoomId;
-  }
-
-  // Services
-  const socketEmitter = new SocketEmitter(socket);
-  const presenceService = new PresenceService();
-  const eventBus = new ExtendedEventBus(socket);
-  const audioEngine = new AudioEngine({ enabled: true, sfxVolume: 0.5 });
-  const audio = new AudioService(audioEngine);
-
-  // Handlers for message history and processing
-  const messageHandler = new MessageHandler();
-  const commandHandler = new CommandHandler();
-
-  // Initialize self presence
-  presenceService.setStatus(userId, 'online');
-
-  // Online users map with extended info
-  const onlineUsers = new Map<string, {
-    username: string;
-    status: PresenceStatus;
-    nodeId?: number;
-    activity?: string;
-    joinedAt: Date;
-  }>();
-  onlineUsers.set(String(userId), {
-    username,
-    status: 'online',
-    nodeId,
-    joinedAt: new Date()
-  });
-
-  // Command context
-  const cmdCtx = createCommandContext(state, { id: userId, username, securityLevel: secLevel });
 
   // ========== CREATE NEO-BLESSED SCREEN ==========
   const screen = createScreen(bbs);
@@ -170,6 +147,10 @@ export async function createApp(session: DoorSession) {
 
   // ========== MENU BAR (at top) ==========
   const menuBar = createMenuBar(screen);
+
+  // ========== CHAT LOG (Main Area) - CREATE FIRST so it renders behind fixed UI ==========
+  // Chat log fills from sidebar to right edge
+  const { panel: chatPanel, log: chatLog } = createChatLog(screen, SIDEBAR_WIDTH);
 
   // ========== STATUS BAR (at very bottom) ==========
   const statusBar = createStatusBar(screen);
@@ -345,34 +326,17 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== CHANNEL LIST (Left Sidebar) ==========
-  // Create dockable panel for channels
-  const channelPanel = new DockablePanel({
+  const channelList = createList({
     parent: screen,
-    title: ' Channels ',
     top: MENU_HEIGHT + 1,  // Below tab bar
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    dockPosition: 'float',
-    showMinimizeButton: true,
-    resizable: true,
-    draggable: true,
-    minWidth: 15,
-    minHeight: 10,
-    border: { type: 'line', fg: 'cyan' },
-    style: { border: { fg: 'cyan' } },
-  });
-
-  const channelList = createList({
-    parent: channelPanel,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
-    label: '',
-    border: { type: 'none' },
+    label: ' Channels ',
+    border: { type: 'line' },
     style: {
       fg: 'white',
+      border: { fg: 'cyan' },
       selected: { fg: 'white', bg: 'blue' },
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
@@ -382,14 +346,10 @@ export async function createApp(session: DoorSession) {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
-      ch: '|',
-      track: { ch: '|', bg: 'black' },
-      style: { fg: 'cyan', bg: 'cyan' }
-    } as any,
+      ch: '█'
+    },
     items: [],
   });
-
-  // Resize handling is now done by DockablePanel
 
   // Default channels to show when server hasn't responded
   const defaultChannels = [
@@ -507,45 +467,26 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== USER LIST (Left Sidebar - same position as channels) ==========
-  // Create dockable panel for users
-  const userPanel = new DockablePanel({
+  const userList = createList({
     parent: screen,
-    title: ' Users ',
     top: MENU_HEIGHT + 1,  // Below tab bar
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    dockPosition: 'float',
-    showMinimizeButton: true,
-    resizable: true,
-    draggable: true,
-    minWidth: 15,
-    minHeight: 10,
-    border: { type: 'line', fg: 'magenta' },
-    style: { border: { fg: 'magenta' } },
-    hidden: true,  // Hidden by default, channels shown first
-  });
-
-  const userList = createList({
-    parent: userPanel,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
-    label: '',
-    border: { type: 'none' },
+    label: ' Users ',
+    border: { type: 'line' },
     mouse: true,
     keys: true,  // Enable arrow key navigation
     vi: true,    // j/k for up/down
     scrollable: true,
     tags: true,
+    hidden: true,  // Hidden by default, channels shown first
     style: {
       fg: 'white',
+      border: { fg: 'magenta' },
       selected: { fg: 'black', bg: 'magenta' },
     },
   });
-
-  // Resize handling is now done by DockablePanel
 
   function updateUserTable() {
     const items: string[] = [];
@@ -553,7 +494,7 @@ export async function createApp(session: DoorSession) {
     for (const [uid, u] of onlineUsers) {
       const presence = presenceService.get(parseInt(uid));
       const status = presence?.status || u.status;
-      const indicator = PRESENCE_INDICATORS[status] || '*';
+      const indicator = PRESENCE_INDICATORS[status as PresenceStatus] || '*';
       const name = u.username.slice(0, 12);
       items.push(`${indicator} ${name}`);
     }
@@ -567,11 +508,11 @@ export async function createApp(session: DoorSession) {
     sidebarTab = tab;
     updateSidebarTabs();
     if (tab === 'channels') {
-      userPanel.hide();
-      channelPanel.show();
+      userList.hide();
+      channelList.show();
     } else {
-      channelPanel.hide();
-      userPanel.show();
+      channelList.hide();
+      userList.show();
     }
     screen.render();
   }
@@ -595,16 +536,6 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Direct click handler for userList - ensures focus on click
-  userList.on('click', () => {
-    userList.focus();
-    screen.render();
-  });
-
-  // ========== CHAT LOG (Main Area) ==========
-  // Chat log fills from sidebar to right edge
-  const { panel: chatPanel, log: chatLog } = createChatLog(screen, SIDEBAR_WIDTH);
-
   // Typing preview - visible bar above input box showing who is typing in real-time
   const typingBar = createBox({
     parent: screen,
@@ -622,29 +553,51 @@ export async function createApp(session: DoorSession) {
 
   // ========== RESPONSIVE LAYOUT ==========
   // Handle terminal resize and adjust layout for different screen sizes
+  // NOTE: Must update element.position (not element.options) because _getCoords() reads from position
   screen.responsiveLayout.onResize((width, height) => {
+    console.log(`[LiveChat] Responsive layout resize: ${width}x${height}`);
     const breakpoint = screen.responsiveLayout.getBreakpoint();
+
+    // Update chat panel dimensions based on new screen size
+    // Use position properties, not options (options are only read at construction)
+    const chatWidth = width - SIDEBAR_WIDTH;
+    const chatHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT - TYPING_HEIGHT;
+
+    // Update full-width elements (percentage widths need recalculation on resize)
+    statusBar.position.width = width;
+    inputBox.position.width = width;
+    menuBar.position.width = width;
+    commandSuggestions.position.width = Math.min(80, width);
 
     if (breakpoint === 'small') {
       // Hide sidebar on small screens (< 80 cols)
-      channelPanel.hide();
-      userPanel.hide();
+      channelList.hide();
+      userList.hide();
       sidebarTabs.hide();
-      chatPanel.options.left = 0;
-      chatPanel.options.width = '100%';
-      (typingBar as any).left = 0;
+      chatPanel.position.left = 0;
+      chatPanel.position.width = width;
+      chatPanel.position.height = chatHeight;
+      // Update chatLog to match panel (minus 2 for resize handles)
+      chatLog.position.width = width - 2;
+      chatLog.position.height = chatHeight - 2;
+      typingBar.position.left = 0;
+      typingBar.position.width = width;
     } else {
       // Show sidebar on medium/large screens
       sidebarTabs.show();
       if (sidebarTab === 'channels') {
-        channelPanel.show();
+        channelList.show();
       } else {
-        userPanel.show();
+        userList.show();
       }
-      chatPanel.options.left = SIDEBAR_WIDTH;
-      chatPanel.options.width = undefined;
-      chatPanel.options.right = 0;
-      (typingBar as any).left = SIDEBAR_WIDTH;
+      chatPanel.position.left = SIDEBAR_WIDTH;
+      chatPanel.position.width = chatWidth;
+      chatPanel.position.height = chatHeight;
+      // Update chatLog to match panel (minus 2 for resize handles)
+      chatLog.position.width = chatWidth - 2;
+      chatLog.position.height = chatHeight - 2;
+      typingBar.position.left = SIDEBAR_WIDTH;
+      typingBar.position.width = chatWidth;
     }
 
     screen.render();
@@ -815,6 +768,32 @@ export async function createApp(session: DoorSession) {
     updateStatusBar,
     hideModal
   );
+
+  // ========== CREATE DIALOG HELPERS ==========
+  const {
+    showHelpDialog,
+    showSettingsOverlay,
+    showNewMessagePrompt,
+    showRoomMenu,
+    showUserList,
+    showDMPrompt
+  } = createDialogHelpers(
+    showHelp,
+    showModal,
+    showPromptDialog,
+    showMessageDialog,
+    settingsOverlay,
+    inputBox,
+    screen,
+    socket,
+    state,
+    onlineUsers,
+    addSystemMessage,
+    addChatMessage,
+    replaceEmojis,
+    PRESENCE_INDICATORS
+  );
+
   const { overlay: profileOverlay, showProfile: showUserProfile } = createProfileOverlay(
     screen,
     inputBox,
@@ -868,7 +847,7 @@ export async function createApp(session: DoorSession) {
     if (selected !== undefined && items[selected]) {
       const text = typeof items[selected] === 'string' ? items[selected] : (items[selected] as any)?.content || '';
       const match = text.match(/^.\s+(\S+)/);
-      if (match && match[1] && match[1] !== username) {
+      if (match && match[1]) {
         showContextMenu(0, 0, 'user', match[1]);
       }
     }
@@ -977,61 +956,20 @@ export async function createApp(session: DoorSession) {
   // ========== REGISTER EVENT FILTERING COMMAND ==========
   registry.register(createEventsCommand(state, addSystemMessage, updateStatusBar));
 
+  // ========== REGISTER PIN COMMANDS ==========
+  registry.register(pinCmd);
+  registry.register(unpinCmd);
+  registry.register(pinnedCmd);
 
-  function showHelpDialog() {
-    // Show the comprehensive help overlay
-    showHelp();
-  }
+  // ========== REGISTER SEARCH COMMAND ==========
+  registry.register(searchCmd);
 
-  function showSettingsOverlay() {
-    showModal(settingsOverlay);
-  }
-
-  function showNewMessagePrompt() {
-    inputBox.focus();
-    screen.render();
-  }
-
-  function showRoomMenu() {
-    showPromptDialog('Enter room name to join:', '', (err, value) => {
-      if (!err && value) {
-        const roomName = value.replace(/^#/, '');
-        if (isCurrentChannel(undefined, roomName)) {
-          addSystemMessage(`Already in #${roomName}`);
-          inputBox.focus();
-          screen.render();
-          return;
-        }
-        if (state.currentChannel) socket.emit('room:leave');
-        socket.emit('room:join', { roomName });
-        addSystemMessage(`Joining #${roomName}...`);
-      }
-      inputBox.focus();
-      screen.render();
-    });
-  }
-
-  function showUserList() {
-    const users = Array.from(onlineUsers.values())
-      .map(u => `${PRESENCE_INDICATORS[u.status]} ${u.username}`)
-      .join('\n');
-    showMessageDialog(
-      '{bold}Users Online{/bold}\n\n' + users,
-      () => { inputBox.focus(); }
-    );
-  }
-
-  function showDMPrompt(targetUser: string) {
-    showPromptDialog(`Message to @${targetUser}:`, '', (err, value) => {
-      if (!err && value) {
-        const processedMsg = replaceEmojis(value);
-        socket.emit('chat:dm', { to: targetUser, message: processedMsg });
-        addChatMessage(`{magenta-fg}[DM to ${targetUser}]: ${processedMsg}{/magenta-fg}`);
-      }
-      inputBox.focus();
-      screen.render();
-    });
-  }
+  // ========== REGISTER MODERATION COMMANDS ==========
+  registry.register(kickCmd);
+  registry.register(banCmd);
+  registry.register(unbanCmd);
+  registry.register(muteCmd);
+  registry.register(unmuteCmd);
 
   function showLoading(text: string) {
     loadingBox.load(text);
@@ -1108,177 +1046,149 @@ export async function createApp(session: DoorSession) {
   // ========== CHAT SOCKET HANDLERS ==========
   setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime);
 
+  // ========== BBS EVENT HANDLERS ==========
+  // Listen to BBS system events (login, logout, upload, download, door activity)
+  const bbsEventHandler = new BBSEventHandler(socket);
+  bbsEventHandler.onEvent((event) => {
+    const formattedEvent = bbsEventHandler.formatEvent(event);
+    addBBSEvent(chatLog, formattedEvent);
+    screen.render();
+  });
+  bbsEventHandler.listen();
+
+  // ========== THREAD HANDLERS ==========
+  let currentThreadView: any = null;
+  setupThreadListeners(
+    socket,
+    (data) => {
+      // Thread created
+      addSystemMessage(`Thread created: ${data.title}`);
+    },
+    (data) => {
+      // Thread reply received
+      addSystemMessage(`New reply in thread`);
+      if (currentThreadView) {
+        currentThreadView.destroy();
+        getThreadMessages(socket, data.threadId);
+      }
+    },
+    (data) => {
+      // Thread messages received - show thread view
+      if (currentThreadView) currentThreadView.destroy();
+      currentThreadView = createThreadView(screen, data);
+    }
+  );
+
+  // ========== PIN HANDLERS ==========
+  let currentPinnedPanel: any = null;
+  let pinnedMessages: any[] = [];
+
+  setupPinListeners(
+    socket,
+    (data) => {
+      // Pin updated - store and refresh if panel open
+      pinnedMessages = data.pinnedMessages;
+      addSystemMessage(`Pinned messages updated (${pinnedMessages.length} total)`);
+      if (currentPinnedPanel) {
+        currentPinnedPanel.destroy();
+        currentPinnedPanel = createPinnedPanel(screen, pinnedMessages);
+      }
+    },
+    (data) => {
+      // Pin list received - show panel
+      pinnedMessages = data.pinnedMessages;
+      if (currentPinnedPanel) currentPinnedPanel.destroy();
+      currentPinnedPanel = createPinnedPanel(screen, pinnedMessages);
+    }
+  );
+
+  // ========== SEARCH HANDLERS ==========
+  const currentSearchOverlayRef = { current: null as any };
+
+  setupSearchListeners(socket, (data) => {
+    // Search results received
+    if (currentSearchOverlayRef.current) {
+      currentSearchOverlayRef.current.updateResults(data.results);
+      addSystemMessage(`Found ${data.count} results for "${data.query}"`);
+    }
+  });
+
+  // ========== MODERATION EVENT LISTENERS ==========
+  socket.on('chat:kicked', (data: any) => {
+    addSystemMessage(`{red-fg}You have been kicked${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
+    addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+    setTimeout(() => cleanup(), 2000);
+  });
+
+  socket.on('chat:banned', (data: any) => {
+    addSystemMessage(`{red-fg}You have been banned${data.duration ? ' for ' + data.duration + 's' : ''}${data.reason ? ': ' + data.reason : ''}{/red-fg}`);
+    addSystemMessage(`{yellow-fg}Disconnecting...{/yellow-fg}`);
+    setTimeout(() => cleanup(), 2000);
+  });
+
+  socket.on('chat:muted', (data: any) => {
+    addSystemMessage(`{yellow-fg}You have been muted${data.duration ? ' for ' + data.duration + 's' : ''}{/yellow-fg}`);
+  });
 
   // ========== INPUT HANDLING ==========
 
-  inputBox.on('submit', async (value: string) => {
-    try {
-      // Hide command suggestions on submit
-      hideCommandSuggestions();
+  // Wrapper for handleCommandActions to match submit handler signature
+  const commandActionHandler = (r: any) => handleCommandActions(
+    r,
+    socket,
+    state,
+    onlineUsers,
+    currentSearchOverlayRef,
+    createSearchOverlay,
+    searchMessages,
+    addSystemMessage,
+    replyToThread,
+    pinMessage,
+    unpinMessage,
+    getPinnedMessages,
+    screen,
+    inputBox,
+    cleanup
+  );
 
-      const msg = value.trim();
-      if (!msg) {
-        inputBox.clearValue();
-        inputBox.focus();
-        screen.render();
-        return;
-      }
-
-    // Check if we're editing an existing message
-    const isEditing = inputHistory.getEditingId() !== null;
-    const editId = inputHistory.getEditingId();
-
-    // Reset editing state
-    inputHistory.reset();
-
-    inputBox.clearValue();
-    inputBox.focus();
-
-    // Clear typing indicator
-    socketEmitter.keystrokeSubmit(state.currentChannel, userId);
-
-    if (msg.startsWith('/')) {
-      cmdCtx.currentChannel = state.currentChannel;
-      const r = await executeCommand(msg, registry, cmdCtx);
-      const cmdName = msg.slice(1).split(' ')[0].toLowerCase();
-
-      if (r.action === 'quit') {
-        cleanup();
-        return;
-      }
-
-      // Handle various commands
-      if (r.action === 'join' && r.data?.channel) {
-        if (state.currentChannel) socket.emit('room:leave');
-        socket.emit('room:join', { roomName: r.data.channel });
-        showLoading(`Joining #${r.data.channel}...`);
-      }
-
-      if (r.action === 'leave' || cmdName === 'leave' || cmdName === 'part') {
-        socket.emit('room:leave');
-      }
-
-      if (cmdName === 'create' && r.data?.name) {
-        socket.emit('room:create', { roomName: r.data.name, topic: r.data.topic || '', isPublic: true });
-      }
-
-      if (cmdName === 'who' || cmdName === 'users') {
-        showUserList();
-      }
-
-      if (cmdName === 'kick' && r.data?.target) {
-        socket.emit('room:kick', { targetUsername: r.data.target });
-      }
-
-      if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.target && r.data?.message) {
-        const processedMsg = replaceEmojis(r.data.message);
-        socket.emit('chat:dm', { to: r.data.target, message: processedMsg });
-        addChatMessage(`{magenta-fg}[DM to ${r.data.target}]: ${processedMsg}{/magenta-fg}`);
-      }
-
-      if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
-        const processedMsg = replaceEmojis(r.message);
-        socket.emit('room:message', { message: processedMsg });
-        const action = processedMsg.replace('ACTION: ', '');
-        addChatMessage(`{magenta-fg}* ${action}{/magenta-fg}`);
-      }
-
-      if (cmdName === 'away' || cmdName === 'afk') {
-        presenceService.setStatus(userId, 'away', r.data?.message);
-        socket.emit('chat:presence', { status: 'away', custom: r.data?.message });
-        const u = onlineUsers.get(String(userId));
-        if (u) u.status = 'away';
-        updateUserTable();
-        updateStatusBar();
-        addSystemMessage('You are now away');
-      }
-
-      if (cmdName === 'back' || cmdName === 'online') {
-        presenceService.setStatus(userId, 'online');
-        socket.emit('chat:presence', { status: 'online' });
-        const u = onlineUsers.get(String(userId));
-        if (u) u.status = 'online';
-        updateUserTable();
-        updateStatusBar();
-        addSystemMessage('You are now online');
-      }
-
-      if (cmdName === 'clear' || cmdName === 'cls') {
-        chatLog.setContent('');
-      }
-
-      if (cmdName === 'settings') {
-        showSettingsOverlay();
-      }
-
-      if (cmdName === 'help') {
-        showHelpDialog();
-      }
-
-      // Drawing commands - create/join a drawing channel
-      if (cmdName === 'draw' || cmdName === 'whiteboard' || cmdName === 'art') {
-        const args = msg.split(' ').slice(1);
-        if (args.length === 0) {
-          // Show the drawing channel menu
-          showDrawMenu();
-        } else {
-          // Create/join specific drawing channel
-          let channelName = args[0].replace(/^art:/i, '');
-          const fullName = `art:${channelName}`;
-          drawingChannels.add(fullName);
-          socket.emit('room:join', { room: fullName });
-          state.currentChannel = fullName;
-          currentRoomLabel = fullName;
-          updateStatusBar();
-          enterDrawingMode(fullName);
-          addSystemMessage(`Joined drawing channel #${fullName}`);
-        }
-      }
-
-      // File sharing commands
-      if (cmdName === 'files' || cmdName === 'file' || cmdName === 'share') {
-        showFileSharing();
-      }
-
-      if (r.error) addSystemMessage(`Error: ${r.error}`);
-      if (r.message && !r.message.startsWith('ACTION:')) addChatMessage(r.message);
-    } else {
-      // Regular message or edit
-      const time = formatTime(new Date());
-      const color = getUserColor(username);
-
-      if (isEditing && editId) {
-        // Editing an existing message
-        const processedMsg = replaceEmojis(msg);
-        socket.emit('chat:edit', { messageId: editId, newText: processedMsg });
-        addSystemMessage(`(edited) ${msg}`);
-      } else {
-        // New message - generate ID and add to history
-        const messageId = `${userId}-${Date.now()}`;
-        const processedMsg = replaceEmojis(msg);
-        socket.emit('room:message', { message: processedMsg, messageId });
-        addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`);
-
-        // Add to history with ID
-        inputHistory.add(messageId, msg);
-      }
-    }
-
-      // Force complete clear by hiding and showing the input box
-      inputBox.clearValue();
-      inputBox.hide();
-      screen.render();
-      inputBox.show();
-      inputBox.focus();
-      screen.render();
-    } catch (error) {
-      console.error('[LiveChat] Error in submit handler:', error);
-      addSystemMessage(`{red-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/red-fg}`);
-      inputBox.clearValue();
-      inputBox.focus();
-      screen.render();
-    }
-  });
+  inputBox.on('submit', createSubmitHandler(
+    socket,
+    state,
+    registry,
+    cmdCtx,
+    userId,
+    username,
+    onlineUsers,
+    presenceService,
+    socketEmitter,
+    inputHistory,
+    inputBox,
+    screen,
+    chatLog,
+    currentSearchOverlayRef,
+    drawingChannels,
+    currentRoomLabel,
+    hideCommandSuggestions,
+    commandActionHandler,
+    showLoading,
+    showUserList,
+    addChatMessage,
+    addSystemMessage,
+    replyToThread,
+    pinMessage,
+    unpinMessage,
+    getPinnedMessages,
+    createSearchOverlay,
+    searchMessages,
+    cleanup,
+    showSettingsOverlay,
+    showHelpDialog,
+    showDrawMenu,
+    enterDrawingMode,
+    updateStatusBar,
+    updateUserTable,
+    showFileSharing
+  ));
 
   // Live typing indicator and command autocomplete
   inputBox.on('keypress', (ch: string, key: any) => {
@@ -1329,7 +1239,7 @@ export async function createApp(session: DoorSession) {
       switchSidebarTab(t);
     }
   };
-  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatLog, drawingCanvas, inputBox, sidebarTab, channelList, userList, sidebarTabs, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH);
+  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, sidebarTab, channelList, userList, sidebarTabs, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH);
 
   // Escape key: close dialogs and return focus to input
   // Note: Drawing canvas handles its own escape key for exiting drawing mode
@@ -1365,6 +1275,23 @@ export async function createApp(session: DoorSession) {
     socket.emit('room:leave');
     events.clear();
 
+    // Stop listening to BBS events to prevent memory leak
+    bbsEventHandler.unlisten();
+
+    // Stop listening to thread events
+    cleanupThreadListeners(socket);
+
+    // Stop listening to pin events
+    cleanupPinListeners(socket);
+
+    // Stop listening to search events
+    cleanupSearchListeners(socket);
+
+    // Remove moderation event listeners
+    socket.removeAllListeners('chat:kicked');
+    socket.removeAllListeners('chat:banned');
+    socket.removeAllListeners('chat:muted');
+
     // Remove all socket listeners to prevent memory leaks
     socket.removeAllListeners('chat:keystroke');
     socket.removeAllListeners('chat:keystroke-submit');
@@ -1388,6 +1315,10 @@ export async function createApp(session: DoorSession) {
     }
 
     screen.destroy();
+
+    // Restore fixed terminal mode for BBS screens
+    bbs.disableWideMode?.();
+
     bbs.write('\x1b[2J\x1b[H');
     bbs.writeLine('\x1b[33mThanks for using LiveChat v3.2! Goodbye.\x1b[0m');
     state.running = false;

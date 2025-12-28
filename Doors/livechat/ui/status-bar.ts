@@ -2,7 +2,8 @@
  * Status bar component
  * Shows user info, channel, and status at the bottom
  */
-import blessed, { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { PRESENCE_INDICATORS } from '../types';
 import type { AppState } from '../core/state';
 import type { PresenceService } from '../services';
@@ -10,7 +11,7 @@ import type { PresenceService } from '../services';
 export const STATUS_HEIGHT = 1;
 
 export function createStatusBar(screen: Screen): Box {
-  return blessed.box({
+  return createBox({
     parent: screen,
     bottom: 0,
     left: 0,

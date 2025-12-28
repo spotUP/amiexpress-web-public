@@ -1,11 +1,11 @@
-import type { Screen, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Screen, Textarea } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface HistoryEntry {
   id: string;
   text: string;
 }
 
-export function createInputHistory(s: Screen, ib: Textbox) {
+export function createInputHistory(s: Screen, ib: Textarea) {
   const h: HistoryEntry[] = [];
   let hi = -1;
   let si = '';

@@ -2,18 +2,18 @@
  * Menu bar component
  * Shows keyboard shortcuts at the top of the screen
  */
-import blessed, { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 export const MENU_HEIGHT = 1;
 
 export function createMenuBar(screen: Screen): Box {
-  const menuBar = blessed.box({
+  const menuBar = createBox({
     parent: screen,
     top: 0,
     left: 0,
     width: '100%',
     height: MENU_HEIGHT,
-    tags: true,
     ch: ' ',
     style: {
       fg: 'yellow',

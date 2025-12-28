@@ -7,7 +7,7 @@ export function parseMarkdown(text: string): string {
     .replace(/\*(.+?)\*/g, '{italic}$1{/italic}')
     // Underline __text__
     .replace(/__(.+?)__/g, '{underline}$1{/underline}')
-    // Inline code `code`
+    // Inline code `code` - use inverse for contrast without setting bg
     .replace(/`([^`]+)`/g, '{inverse} $1 {/inverse}')
     // Strikethrough ~~text~~
     .replace(/~~(.+?)~~/g, '{gray-fg}$1{/gray-fg}');
@@ -17,7 +17,8 @@ export function parseMarkdown(text: string): string {
 export function parseCodeBlock(text: string): string {
   return text.replace(/```([\s\S]*?)```/g, (_, code) => {
     const lines = code.trim().split('\n');
-    return lines.map((l: string) => `{gray-bg}{white-fg} ${l} {/}`).join('\n');
+    // Use specific closing tags to avoid resetting ALL attributes
+    return lines.map((l: string) => `{gray-bg}{white-fg} ${l} {/white-fg}{/gray-bg}`).join('\n');
   });
 }
 

@@ -1,14 +1,14 @@
 /**
  * Help screen overlay
  */
-import blessed, { Screen, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Textarea } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { HELP_PART_1 } from './help-content-1';
 import { HELP_PART_2 } from './help-content-2';
 import { HELP_PART_3 } from './help-content-3';
 
 export function createHelpScreen(
   screen: Screen,
-  inputBox: Textbox
+  inputBox: Textarea
 ): () => void {
   const helpOverlay = blessed.box({
     parent: screen,
@@ -21,6 +21,8 @@ export function createHelpScreen(
     shadow: false,
     hidden: true,
     mouse: true,
+    keys: true,
+    closable: true,  // Adds [X] button and ESC key binding
     ch: ' ',
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
   });
@@ -74,13 +76,21 @@ export function createHelpScreen(
     screen.render();
   });
 
-  helpContent.key(['escape', 'f1'], () => {
-    helpOverlay.hide();
+  // F1 also closes help
+  helpContent.key(['f1'], () => {
+    helpOverlay.close();
+  });
+
+  // When closed (via X button, ESC, or F1), focus input
+  helpOverlay.on('close', () => {
     inputBox.focus();
     screen.render();
   });
 
   return function showHelp() {
+    // Update dimensions to current screen size (percentage widths only calculated at construction)
+    helpOverlay.position.width = screen.width;
+    helpOverlay.position.height = screen.height;
     helpOverlay.show();
     helpOverlay.setFront();
     helpContent.focus();

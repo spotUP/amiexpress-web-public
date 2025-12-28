@@ -1,8 +1,10 @@
+import type { Screen, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Channel } from '../types';
 
 /** Create channel list component */
-export function createChannelList(blessed: any, screen: any) {
-  return blessed.list({
+export function createChannelList(screen: Screen): List {
+  return createList({
     parent: screen,
     top: 1,
     left: 0,
@@ -16,11 +18,10 @@ export function createChannelList(blessed: any, screen: any) {
       border: { fg: 'cyan' },
       selected: { bg: 'blue', fg: 'white', bold: true },
       item: { fg: 'white' },
-      label: { fg: 'cyan', bold: true }
     },
     keys: true,
     vi: true,
-    scrollbar: { ch: '|', style: { inverse: true } }
+    scrollbar: { ch: '█' }
   });
 }
 

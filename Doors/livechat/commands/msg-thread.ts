@@ -17,12 +17,14 @@ export const replyCmd: SlashCommand = {
 export const threadCmd: SlashCommand = {
   name: 'thread',
   description: 'Reply in thread',
-  usage: '/thread [msg-id] message',
+  usage: '/thread <msg-id> message',
   aliases: ['t'],
   handler: (ctx, args) => {
-    const message = args.join(' ');
-    if (!message) return { handled: true, error: 'Usage: /thread message' };
-    return { handled: true, data: { message, type: 'thread' } };
+    if (args.length < 2) return { handled: true, error: 'Usage: /thread <msg-id> message' };
+    const messageId = parseInt(args[0], 10);
+    if (isNaN(messageId)) return { handled: true, error: 'Invalid message ID' };
+    const message = args.slice(1).join(' ');
+    return { handled: true, data: { messageId, message, action: 'thread' } };
   }
 };
 
