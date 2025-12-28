@@ -52,8 +52,11 @@ COPY web/frontend/package*.json ./
 RUN npm ci
 
 COPY web/frontend ./
+# Set NODE_ENV for production build
+ENV NODE_ENV=production
 # Skip prebuild script (terminal already built), just run vite build
-RUN (npm run build --ignore-scripts || vite build) && \
+RUN echo "[Build] Starting frontend build with NODE_ENV=$NODE_ENV" && \
+    (npm run build --ignore-scripts || vite build) && \
     echo "[Build] Frontend build complete. Checking dist contents:" && \
     ls -la dist/ && \
     echo "[Build] Assets:" && \
