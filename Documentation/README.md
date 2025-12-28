@@ -117,14 +117,11 @@ Choose your role to find relevant documentation:
 
 **For Claude and developers tracking progress:**
 
-📊 **[Current Status](6-Progress/CURRENT_STATUS.md)** - Implementation status
-📜 **[Progress History](6-Progress/PROGRESS_HISTORY.md)** - Complete milestone history (consolidated from 119 reports)
-🗺️ **[Implementation Roadmap](6-Progress/IMPLEMENTATION_ROADMAP.md)** - Complete feature roadmap (1043 lines)
-🎯 **[Milestones](6-Progress/MILESTONES.md)** - Major achievements
-📋 **[Master Plan](6-Progress/MASTERPLAN.md)** - Overall project plan
+📊 **[Current Status](6-Progress/CURRENT_STATUS.md)** - Implementation status (~95% complete)
+🚀 **[68K Door Completion Plan](6-Progress/68K_DOOR_COMPLETION_PLAN.md)** - Door emulation roadmap
 ⚠️ **[Known Issues](6-Progress/KNOWN_ISSUES.md)** - Known bugs and workarounds
 
-**Session Logs:** [6-Progress/archive/2025-10/](6-Progress/archive/2025-10/) | [6-Progress/archive/2025-11/](6-Progress/archive/2025-11/)
+**Session Logs:** [6-Progress/archive/](6-Progress/archive/) - Historical debug sessions, completed plans
 
 ---
 
@@ -274,8 +271,8 @@ find Documentation/archive -name "FILENAME.md"
 
 ---
 
-**Last Updated**: 2025-11-01
-**Documentation Version**: 2.0 (Reorganized Structure)
+**Last Updated**: 2025-12-28
+**Documentation Version**: 2.1 (Streamlined Structure)
 ## Archive Pattern Update
 Each numbered directory now hosts an `archive/` subfolder that preserves the detailed legacy markdown files (root-level summaries remain front-and-center). Door/emulator/source archives live under `7-Reference Sources/` so readers can focus on summaries before stepping into the deep research notes.
 

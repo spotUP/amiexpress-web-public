@@ -2,9 +2,30 @@
 # Multi-stage build for production-ready BBS container
 
 # ============================================================================
-# Stage 1: Build Terminal Package (needed by frontend)
+# Stage 1: Build SDK (needed by terminal and other packages)
+# ============================================================================
+FROM node:18-alpine AS sdk-builder
+
+WORKDIR /app/sdk
+
+# Copy SDK source and package files
+COPY sdk/package*.json ./
+COPY sdk/tsconfig.json ./
+COPY sdk/tsconfig.client.json ./
+COPY sdk ./
+
+# Install dependencies (skip prepare script) and build
+RUN npm ci --ignore-scripts && npm run build
+
+# ============================================================================
+# Stage 2: Build Terminal Package (needs SDK, needed by frontend)
 # ============================================================================
 FROM node:18-alpine AS terminal-builder
+
+WORKDIR /app
+
+# Copy built SDK first (terminal depends on it)
+COPY --from=sdk-builder /app/sdk ./sdk
 
 WORKDIR /app/packages/terminal
 
@@ -15,13 +36,14 @@ COPY packages/terminal ./
 RUN npm run build
 
 # ============================================================================
-# Stage 2: Build Frontend (BBS Terminal)
+# Stage 3: Build Frontend (BBS Terminal)
 # ============================================================================
 FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Copy terminal package first (frontend depends on it)
+# Copy SDK and terminal package (frontend depends on both)
+COPY --from=sdk-builder /app/sdk ./sdk
 COPY --from=terminal-builder /app/packages/terminal ./packages/terminal
 
 WORKDIR /app/web/frontend
@@ -34,7 +56,7 @@ COPY web/frontend ./
 RUN npm run build --ignore-scripts || vite build
 
 # ============================================================================
-# Stage 3: Build Config App (Admin UI)
+# Stage 4: Build Config App (Admin UI)
 # ============================================================================
 FROM node:18-alpine AS config-builder
 
@@ -47,22 +69,15 @@ COPY web/config-app ./
 RUN npm run build
 
 # ============================================================================
-# Stage 4: Build SDK Preview
+# Stage 5: Build SDK Preview (needs SDK + terminal)
 # ============================================================================
-FROM node:18-alpine AS sdk-builder
+FROM node:18-alpine AS sdk-preview-builder
 
-WORKDIR /app/sdk
+WORKDIR /app
 
-# Copy SDK source and package files
-COPY sdk/package*.json ./
-COPY sdk/tsconfig.json ./
-COPY sdk ./
-
-# Install dependencies (skip prepare script) and build
-RUN npm ci --ignore-scripts && npm run build
-
-# Copy terminal package (required by SDK preview frontend)
-COPY --from=terminal-builder /app/packages/terminal /app/packages/terminal
+# Copy SDK and terminal
+COPY --from=sdk-builder /app/sdk ./sdk
+COPY --from=terminal-builder /app/packages/terminal ./packages/terminal
 
 # Build SDK preview frontend
 WORKDIR /app/sdk/tools/preview/frontend
@@ -71,7 +86,7 @@ COPY sdk/tools/preview/frontend ./
 RUN npm ci --ignore-scripts && npm run build
 
 # ============================================================================
-# Stage 5: Build Backend
+# Stage 6: Build Backend
 # ============================================================================
 FROM node:18-alpine AS backend-builder
 
@@ -85,7 +100,7 @@ COPY web/backend ./
 RUN npm run build
 
 # ============================================================================
-# Stage 6: Production Image
+# Stage 7: Production Image
 # ============================================================================
 FROM node:18-alpine
 
@@ -121,7 +136,7 @@ COPY --from=frontend-builder /app/web/frontend/dist ./web/frontend/dist
 COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-builder /app/sdk/doors ./sdk/doors
-COPY --from=sdk-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
+COPY --from=sdk-preview-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
 COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dist
 
 # Copy backend source files (backend runs TypeScript directly with tsx)

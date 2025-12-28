@@ -6,7 +6,48 @@
 
 ## ⛔ CRITICAL RULES ⛔
 
-### 1. USE NATIVE LIBRARIES - NOT TYPESCRIPT
+### 1. ALWAYS VALIDATE AGAINST EXPRESS.E SOURCES
+
+**BEFORE changing ANY BBS behavior, validate against express.e sources via MCP tools.**
+
+**NEVER "fix" UX issues without checking express.e.** What seems like a bug is often intentional AmiExpress design.
+
+**Required workflow for behavior changes:**
+1. Use MCP: `search_express_source "keyword"` → `read_express_module "module"`
+2. Find exact express.e implementation (line numbers, logic flow)
+3. Implement IDENTICALLY - same pauses, same screens, same flow
+4. If express.e does it, YOU do it exactly the same way
+
+**Examples of express.e patterns to honor:**
+- `IF (displayScreen(SCREEN_BULL)) THEN doPause()` (express.e:28556-28557)
+- `IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()` (express.e:29854)
+- Display flow: BBSTITLE → LOGON → BULL → NODE_BULL → confScan → CONF_BULL → MENU
+
+**Why this is rule #1:** Breaking express.e compatibility destroys the authentic AmiExpress experience. Users expect EXACT original behavior. "Improvements" that deviate from express.e are bugs, not features.
+
+**When express.e doesn't have it:** Use `WEB_*`, `MODERN_*`, `CUSTOM_*`, `ADMIN_*` prefix to mark new features.
+
+### 2. 100% FEATURE COVERAGE - NO SHORTCUTS
+
+**We require 1:1 feature parity with AmiExpress E sources. If express.e implements it, WE implement it.**
+
+**NEVER skip features** because "no current doors use it" or "it's an edge case". We have 4000+ doors to support. You don't know what future doors will need.
+
+**NEVER mark phases as "complete" at 93%** - that's NOT complete. 100% means 100%.
+
+**If express.e has:**
+- XIM protocol with jhMessage → Implement ALL XIM commands
+- TIM protocol with doorMsg and PG_* commands → Implement ALL PG_* commands
+- SIM doors with DoorControl port → Implement full DoorControl handling
+- Any feature, function, or behavior → Implement it EXACTLY
+
+**No stubs that silently fail.** No "TODO" comments left unimplemented. No lazy approximations.
+
+**The goal:** Run ANY AmiExpress door from 1990-2000 with ZERO compatibility issues.
+
+**Why this is rule #2:** Partial implementations create false confidence. Users try a door, it fails mysteriously, they blame the BBS. Every missing feature is a potential door that won't work. We are not done until express.e parity is 100%.
+
+### 3. USE NATIVE LIBRARIES - NOT TYPESCRIPT
 
 BBS uses REAL Amiga binaries via MOIRA 68K emulator, NOT TypeScript reimplementations.
 
@@ -18,7 +59,7 @@ BBS uses REAL Amiga binaries via MOIRA 68K emulator, NOT TypeScript reimplementa
 
 **If door fails:** Check logs → Verify native binary executes → Fix emulator, NOT libraries.
 
-### 2. NO GUESSING - VERIFY WITH EVIDENCE
+### 4. NO GUESSING - VERIFY WITH EVIDENCE
 
 **NEVER implement on assumptions.** Verify FIRST: radare2 (disassemble), strings (extract text), vamos (test reference), express.e (implementation), MCP (NDK autodocs).
 
@@ -26,13 +67,13 @@ BBS uses REAL Amiga binaries via MOIRA 68K emulator, NOT TypeScript reimplementa
 
 **Evidence needed:** Memory offset + structure definition + behavior confirmation + express.e reference
 
-### 3. SDK DOORS MUST BE BUILT
+### 5. SDK DOORS MUST BE BUILT
 
 SDK doors (`sdk/doors/`) load `dist/index.js` not source. **MUST BUILD before testing.**
 
 `cd sdk/doors/{name} && npm run build` before testing. Watch: `npm run build:watch`. `start-servers.sh` auto-builds.
 
-### 4. NEO-BLESSED COLORS
+### 6. NEO-BLESSED COLORS
 
 Neo-blessed now defaults to `tags: true` on all widgets. Colors work automatically.
 
@@ -55,11 +96,11 @@ const box = blessed.box({
 
 See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
-### 5. MODERN DOOR UX
+### 7. MODERN DOOR UX
 
 Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu bars, mouse support, focus management. Reserve footer 3+ rows. Avoid 90's text menus unless requested.
 
-### 6. CHECK LOGS FIRST
+### 8. CHECK LOGS FIRST
 
 **ALWAYS check logs BEFORE implementing** for 68K door issues.
 
@@ -71,7 +112,7 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **DO NOT ask user to check** - check yourself and report.
 
-### 7. NO BACKGROUND PROCESSES
+### 9. NO BACKGROUND PROCESSES
 
 **NEVER:** `run_in_background: true`, `&` for servers, start/restart servers, multiple server ops per session.
 
@@ -79,7 +120,7 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **Do:** Sync commands, ask user to run `./dev/scripts/start-servers.sh`, check servers (never restart), max 1 server op/session.
 
-### 8. DISK-BASED CONFIGURATION
+### 10. DISK-BASED CONFIGURATION
 
 AmiExpress is **disk-based**, NOT database. Config from disk files ONLY.
 
@@ -87,7 +128,9 @@ AmiExpress is **disk-based**, NOT database. Config from disk files ONLY.
 
 **Sources:** ConfConfig.info, Commands/*.info, doors/*.info, bbsConfig.info. **DB ONLY for:** users, messages, call logs, stats.
 
-### 9. AMIGAOS CASE-INSENSITIVE - USE AMIGAFS
+**BATCH FILES (batch0-batch6):** Contain AmigaDOS commands for utilities like MultiTop, Bulls, QuickNew. These are NOT doors - they're standalone Amiga executables run at maintenance events. **NEVER modify or clear batch files.** Args come from batch files, NOT .info files.
+
+### 11. AMIGAOS CASE-INSENSITIVE - USE AMIGAFS
 
 `AquaScan.EXE` = `aquascan.exe` = `AQUASCAN.exe`
 
@@ -99,13 +142,13 @@ amigafs.existsSync('/Doors/file');
 
 22 functions: existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, statSync, etc. See `Documentation/3-Developers/AMIGAFS_MIGRATION.md`
 
-### 10. NO EMOJIS
+### 12. NO EMOJIS
 
 **NEVER** in code/scripts/output/comments/docs. Use ASCII: `[OK]`, `[ERROR]`, `[INFO]`, `*`, `X`, `!`, `-`, `+`.
 
 **Why:** Terminal compat, encoding issues, accessibility.
 
-### 11. KEEP HANDOFF.MD COMPACT
+### 13. KEEP HANDOFF.MD COMPACT
 
 **Max 5KB (50-60 lines).** Current state + 1-2 sessions only. Never: analysis, code, disassembly, traces.
 

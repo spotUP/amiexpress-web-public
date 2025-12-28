@@ -5,7 +5,7 @@
 
 ## Executive Summary
 
-Create a **standalone web page** at `/chat` that provides direct access to the LiveChat system, independent of the full BBS terminal experience. This page is designed **mobile-first** with a responsive terminal that adapts to any screen size, breaking free from the traditional 80x25 BBS constraints.
+Create a **standalone web page** at `/chat` that provides direct access to the LiveChat door, independent of the full BBS terminal experience. This page is designed **mobile-first** with a responsive terminal that adapts to any screen size, breaking free from the traditional 80x25 BBS constraints. It should use the same code as the livechat door if possible, if not, make a copy and adapt it
 
 **Key Differentiators from BBS LiveChat:**
 - **Responsive terminal** - Dynamically calculates rows/columns based on viewport
@@ -13,7 +13,8 @@ Create a **standalone web page** at `/chat` that provides direct access to the L
 - **Direct chat access** - Login directly to chat without BBS menu navigation
 - **Always-connected** - Designed for persistent background connection
 - **PWA-ready** - Installable on home screen with push notifications
-
+- **LOGIN PROMPT** - That let's the user log in with his bbs credentials
+- **PERSISTAN LOGIN** - Log in once, stay logged in until user manually logs off, persist during browser sessions, logged in forever until manually logged out
 **CRITICAL: The BBS LiveChat door MUST remain 80x25** - this web app is a separate interface.
 
 ---

@@ -55,6 +55,7 @@ cd doors/my-door
   "version": "1.0.0",
   "description": "My awesome BBS door",
   "main": "index.ts",
+  "type": "module",
   "bbsCommand": "MYDOOR",
   "doorType": "TS",
   "runtime": "server",
@@ -66,11 +67,22 @@ cd doors/my-door
     "build": "tsc",
     "start": "npx tsx index.ts"
   },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
   "devDependencies": {
     "typescript": "^5.0.0"
   }
 }
 ```
+
+### 3. Install Dependencies
+
+```bash
+npm install
+```
+
+This creates a symlink to the SDK at `node_modules/@amiexpress/bbs-door-sdk`.
 
 **Required Fields:**
 - `bbsCommand`: The command users type to run your door (e.g., "MYDOOR")
@@ -79,7 +91,7 @@ cd doors/my-door
 - `runtime`: Must be "server" for server-side TypeScript doors
 - `doorPattern`: Must be "runDoor" (the exported function name)
 
-### 3. Create tsconfig.json
+### 4. Create tsconfig.json
 
 ```json
 {
@@ -103,7 +115,7 @@ cd doors/my-door
 
 **NOTE:** Do NOT include `"types": ["node"]` in the compilerOptions unless you explicitly want to limit TypeScript to only Node.js types. If you add npm packages with `@types/*`, they won't be found if types is restricted.
 
-### 4. Create index.ts
+### 5. Create index.ts
 
 **CRITICAL**: Your door MUST export a `runDoor()` function. Without this export, the BBS cannot load your door.
 
@@ -178,7 +190,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 }
 ```
 
-### 5. Create .info File (Required)
+### 6. Create .info File (Required)
 
 Create `Commands/BBSCmd/MYDOOR.info`:
 
@@ -205,7 +217,7 @@ Use the packer:
 npm run pack
 ```
 
-### 6. Test Your Door
+### 7. Test Your Door
 
 Restart the BBS server, then type `MYDOOR` at the main menu.
 
@@ -745,6 +757,31 @@ export default { runDoor };
 4. Check `package.json` has `runtime: "server"` and `doorPattern: "runDoor"`
 
 **Reminder:** `.info` files are mandatory for TypeScript doors. The BBS will not auto-register doors from `package.json` alone.
+
+### Cannot find package '@amiexpress/bbs-door-sdk'
+
+This error means the SDK symlink is missing or broken.
+
+**Fix**: Run `npm install` in your door directory:
+
+```bash
+cd Doors/my-door
+npm install
+```
+
+This creates a symlink at `node_modules/@amiexpress/bbs-door-sdk` pointing to the SDK.
+
+**If npm install doesn't fix it**, verify your `package.json` has the SDK dependency:
+
+```json
+{
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  }
+}
+```
+
+The path `../../sdk` is relative to doors in `Doors/` directory. For doors in subdirectories, adjust the path accordingly.
 
 ### EISDIR: illegal operation on a directory, read
 

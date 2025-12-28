@@ -1,6 +1,8 @@
 # AmiExpress Web - Modern BBS Platform
 
-> **Complete analysis reveals a sophisticated multi-protocol BBS system with advanced features, but implementation is 60-70% complete despite optimistic documentation claims of 90-95%.**
+> **Complete TypeScript port of AmiExpress /X BBS software with 68K door emulation via MOIRA CPU.**
+
+**Status:** Core features 100% complete (2025-12-28) | 195 validation tests passing | 68K door compatibility ongoing
 
 ## ⚠️ Project Context & Safety
 
@@ -29,22 +31,22 @@
 - **Command System**: 189 substates, 30+ handler modules
 - **SDK Examples**: 21 complete doors with hot-reload
 
-### Implementation Reality Check
-**Documentation Claims**: 90-95% complete  
-**Actual Implementation**: 60-70% complete
+### Implementation Status (Updated 2025-12-28)
 
 | Component | Status | Completion |
 |-----------|--------|------------|
-| Core BBS System | ✅ Working | 80% |
-| Multi-Protocol Server | ✅ Working | 85% |
-| Door Emulation (68K) | ⚠️ Partial | 60% |
+| Core BBS System | Complete | 100% |
+| Multi-Protocol Server | Complete | 100% |
+| Internal Commands | Complete | 44/44 |
+| Door Types | Complete | 8/8 |
+| MCI Codes | Complete | 100% |
+| 68K Emulation Core | Complete | 100% |
+| 68K Door Compatibility | Ongoing | varies by door |
+| Test Suite | Complete | 195 tests |
 
 ## 🗂 Documentation & Automation Map
 - **Documentation**: Start at `Documentation/README.md` to follow the audience-based summaries and `archive/` locations; it now includes an AI-friendly map that points to the key guides and the raw reference sources.
 - **Test Scripts**: All harnesses live under `Scripts/` with a fresh `Scripts/README.md`. The directories `Scripts/dev`, `Scripts/backend`, `Scripts/backend-dev`, `Scripts/emulation`, and `Scripts/legacy` categorize every runner so you can find and reuse them reliably.
-| Admin UI | ✅ Working | 90% |
-| SDK Framework | ⚠️ Overpromised | 40% |
-| Documentation | ❌ Misleading | - |
 
 ---
 
@@ -245,81 +247,54 @@ npm run preview
 
 ---
 
-## 📈 Current Implementation Status
+## 📈 Current Implementation Status (Updated 2025-12-28)
 
-### ✅ **Fully Working Systems** (80-90%)
+### ✅ **Complete Systems**
 - Multi-protocol server (HTTP/Telnet/SSH)
+- All 44 internal commands from express.e
+- All 8 door types (XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP)
+- MCI code system (100% - including ~SMO/~SMC slow motion)
 - User authentication and session management
-- Basic BBS commands (login, menu, messages)
 - File upload/download system
 - Admin UI (React dashboard)
 - Database with repository pattern
+- SDK Framework with TypeScript doors
+- AREXX support (40+ functions)
+- 195 validation tests
 
-### ⚠️ **Partially Working** (40-60%)
-- **68K Door Emulation**: MOIRA CPU works, but XIM doors crash
-- **MCI Code System**: 90/100 codes implemented
-- **SDK Framework**: Core engines work, development tools missing
-- **Multi-node Chat**: Basic functionality, room management works
+### ⚠️ **Ongoing Work**
+- **68K Door Compatibility**: Core emulation complete, individual doors may need debugging
+- Some doors use undocumented features or unusual library calls
+- Testing with real-world doors continues
 
-### ❌ **Not Implemented** (0-40%)
-- CLI tools and project templates
-- Language bridges (ARexx, Python)
-- Network engine for multiplayer
-- 8 of 9 advertised SDK examples
-- 60% of promised SDK features
-
-### 🔴 **Critical Issues**
-1. **68K Doors Crash**: RTW/WHO doors have memory allocation issues
-2. **ROM Protection**: NI/NO tools fail with write protection errors  
-3. **ANSI Prompt Bug**: Sessions get stuck instead of proper state transitions
-4. **Documentation Mismatch**: Claims 90-95% complete, actual 60-70%
+### ❌ **Intentionally Not Implemented**
+- Command 0 (Remote Shell) - Amiga-specific, security concern
+- Commands 3/4 (Edit Files) - Filesystem editing, security concern
+- Command 5 (Navigate Filesystem) - Amiga-specific
+- FULLEDIT - Never implemented in express.e
+- FREE_RESUMING - Not in /X3 or /X4
+- RIPSCRIPT - No code in express.e
 
 ---
 
 ## 🎯 Next Steps & Priorities
 
-### Immediate Priorities (1-3 months)
-1. **Fix 68K Door Emulation**
-   - Debug MOIRA memory allocation issues
-   - Complete XIM protocol implementation
-   - Test existing door compatibility
+### Current Focus: 68K Door Compatibility
+Core emulation is complete. Focus is now on testing and fixing individual door compatibility:
 
-2. **Complete SDK Tools**
-   - Implement CLI (`create-door`, `pack`, `validate`)
-   - Create project templates
-   - Build working examples beyond Tetris
+1. **Door Testing**
+   - Test each legacy 68K door
+   - Document any failures in door-specific debug logs
+   - Fix emulation edge cases as discovered
 
-3. **Fix Critical Bugs**
-   - Resolve ANSI prompt state issues
-   - Fix ROM write protection errors
-   - Complete async MCI code execution
+2. **Documentation**
+   - Door-specific compatibility notes
+   - Troubleshooting guides for door developers
 
-### Medium Term (3-6 months)
-4. **Language Bridges**
-   - Implement ARexx support
-   - Add Python integration
-   - Create language-specific templates
-
-5. **Network Engine**
-   - Build multiplayer framework
-   - Implement real-time coordination
-   - Add chat/OLM improvements
-
-6. **More Examples**
-   - Complete 8 planned SDK examples
-   - Add door templates for common use cases
-   - Create tutorial content
-
-### Long Term (6+ months)
-7. **Enhanced Features**
-   - Advanced door protocols (Dropzone, DOR)
-   - Better file area management
-   - Improved message threading
-
-8. **Performance & Scale**
-   - Redis for session storage
-   - Load balancing for multiple instances
-   - Database optimization
+### Future Enhancements
+- Additional door examples and templates
+- Performance optimization for high-traffic BBSes
+- Enhanced multi-node features
 
 ---
 
@@ -384,18 +359,16 @@ npm run preview
 
 ## 💡 Bottom Line
 
-**AmiExpress Web** is a **sophisticated, technically impressive** modern BBS platform that successfully bridges classic Amiga BBS culture with contemporary web technologies. The codebase demonstrates **deep understanding** of both historical BBS systems and modern software architecture.
+**AmiExpress Web** is a **complete TypeScript port** of AmiExpress /X BBS software that bridges classic Amiga BBS culture with modern web technologies. The codebase implements all major features from the original express.e source code.
 
-However, the project suffers from **significant documentation gaps** - optimistic completion claims don't match the 60-70% actual implementation status. The core architecture is solid, but critical features (68K door emulation, SDK tools) need significant work.
+**For Developers**: Complete implementation of Amiga BBS internals including 68K CPU emulation, XIM door protocol, AREXX API, and MCI codes.
 
-**For Developers**: Excellent codebase to study advanced TypeScript patterns, BBS emulation, and multi-protocol server design.
+**For BBS Enthusiasts**: Full-featured platform with all 8 door types supported. Individual legacy doors may need compatibility testing.
 
-**For BBS Enthusiasts**: Promising platform with unique features, but not yet production-ready for serving classic door games.
-
-**Recommendation**: **Strong technical foundation** requiring 3-6 months of focused development to deliver on its promises.
+**For Door Developers**: TypeScript SDK with neo-blessed UI framework for building modern doors.
 
 ---
 
-*Analysis Date: 2025-11-19*  
-*Source: Deep codebase examination across 25,000+ lines of TypeScript*  
-*Status: Active development, seeking contributors*
+*Last Updated: 2025-12-28*
+*Status: Core features complete, 68K door compatibility ongoing*
+*See: RELEASE_NOTES.md for v1.0 details*

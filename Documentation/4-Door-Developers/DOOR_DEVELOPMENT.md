@@ -69,6 +69,44 @@ Python doors provide an alternative scripting approach:
 - Similar API to TypeScript doors
 - Good for quick prototyping
 
+## Batch Files and Amiga Utilities (NOT Doors)
+
+**IMPORTANT DISTINCTION:** Not all Amiga executables in the BBS are doors!
+
+Some utilities like **MultiTop (mtop)**, **Bulls**, **QuickNew**, etc. are standalone Amiga executables that:
+- Are **NOT** doors - they don't interact with online users
+- Must be run from **batch files** (batch0, batch1, etc.) with proper arguments
+- Execute in an AmigaDOS environment, not through the BBS command interface
+- Generate output files (bulletins, statistics) that are later displayed to users
+
+### Batch Files
+
+Batch files (`batch0` through `batch6` in the BBS root) contain AmigaDOS commands that run at specific events:
+- `batch0` - Runs at system startup/nightly maintenance
+- `batch1-6` - Run at various events (logoff, etc.)
+
+**Example batch file content:**
+```
+doors:multitop/mtop doors:multitop/designs/MTopULBytes1.dsg bbs:bulletins/bull5.txt bbs:user.data UKEYS bbs:user.keys
+doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.txt
+```
+
+### Key Points
+
+1. **Never clear batch files** - They contain user-configured commands
+2. **Don't add ARGS to .info files** for these utilities - args come from batch files
+3. **These utilities read/write BBS data files** - They need correct paths to user.data, bulletins, etc.
+4. **They run offline** - Not during user sessions, but at maintenance events
+
+### Common Utilities (Not Doors)
+
+| Utility | Purpose | Typical Location |
+|---------|---------|------------------|
+| MultiTop (mtop) | Generate top uploaders/downloaders bulletins | doors:multitop/ |
+| Bulls | Bulletin management | doors:EmP_Tools/ |
+| QuickNew | New files listing | doors:quicknew/ |
+| ByteKiller | Log management | doors:bytekiller/ |
+
 ## Additional Resources
 
 - **[DOOR_MANAGER.md](DOOR_MANAGER.md)** - BBS door management and installation
