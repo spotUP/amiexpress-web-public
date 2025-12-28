@@ -249,11 +249,23 @@ export class DockablePanel extends Panel {
       content: options.label || options.title || 'Panel',
     });
 
-    // Make title bar draggable
-    if (options.draggable !== false && this.titleBar) {
-      this.titleBar.on('mousedown', (data: any) => {
-        this.startDrag(data.x, data.y);
+    // Make title bar draggable and double-click to restore from minimized
+    if (this.titleBar) {
+      // Double-click to restore when minimized
+      this.titleBar.on('click', () => {
+        if (this.panelState.minimized) {
+          this.maximize();
+        }
       });
+
+      // Drag to move (only when not minimized)
+      if (options.draggable !== false) {
+        this.titleBar.on('mousedown', (data: any) => {
+          if (!this.panelState.minimized) {
+            this.startDrag(data.x, data.y);
+          }
+        });
+      }
     }
 
     // Add minimize button
@@ -267,10 +279,10 @@ export class DockablePanel extends Panel {
         height: 1,
         content: '_',
         style: {
-          fg: 'black',
-          bg: 'yellow',
+          fg: 'white',
+          bg: 'blue',
           focus: {
-            bg: 'green',
+            bg: 'cyan',
           },
         },
       });
@@ -337,17 +349,18 @@ export class DockablePanel extends Panel {
     const Box = require('./box').Box;
 
     // Create resize handles for all 8 positions (4 corners + 4 edges)
+    // Larger hit areas for better usability
     const handles = [
-      // Corners
-      { name: 'nw', left: 0, top: 0, width: 2, height: 1, content: '┌', cursor: 'nw' },
-      { name: 'ne', right: 0, top: 0, width: 2, height: 1, content: '┐', cursor: 'ne' },
-      { name: 'sw', left: 0, bottom: 0, width: 2, height: 1, content: '└', cursor: 'sw' },
-      { name: 'se', right: 0, bottom: 0, width: 2, height: 1, content: '┘', cursor: 'se' },
-      // Edges
-      { name: 'n', left: 2, top: 0, right: 2, height: 1, content: '', cursor: 'n' },
-      { name: 's', left: 2, bottom: 0, right: 2, height: 1, content: '', cursor: 's' },
-      { name: 'w', left: 0, top: 1, bottom: 1, width: 1, content: '', cursor: 'w' },
-      { name: 'e', right: 0, top: 1, bottom: 1, width: 1, content: '', cursor: 'e' },
+      // Corners (3x2 for easier clicking)
+      { name: 'nw', left: 0, top: 0, width: 3, height: 2, content: '┌', cursor: 'nw' },
+      { name: 'ne', right: 0, top: 0, width: 3, height: 2, content: '┐', cursor: 'ne' },
+      { name: 'sw', left: 0, bottom: 0, width: 3, height: 2, content: '└', cursor: 'sw' },
+      { name: 'se', right: 0, bottom: 0, width: 3, height: 2, content: '┘', cursor: 'se' },
+      // Edges (visible with border characters for better clickability)
+      { name: 'n', left: 3, top: 0, right: 3, height: 1, content: '─', cursor: 'n' },
+      { name: 's', left: 3, bottom: 0, right: 3, height: 1, content: '─', cursor: 's' },
+      { name: 'w', left: 0, top: 2, bottom: 2, width: 1, content: '│', cursor: 'w' },
+      { name: 'e', right: 0, top: 2, bottom: 2, width: 1, content: '│', cursor: 'e' },
     ];
 
     for (const handleConfig of handles) {
@@ -380,12 +393,18 @@ export class DockablePanel extends Panel {
         this.startResizeFromEdge(handleConfig.name, data.x, data.y);
       });
 
-      // Hover effect
+      // Hover effect - manually change colors (blessed doesn't auto-apply style.hover)
       handle.on('mouseover', () => {
+        // Apply hover style
+        handle.style.fg = 'yellow';
+        handle.style.bg = 'blue';
         this.showResizeCursor(handleConfig.name);
       });
 
       handle.on('mouseout', () => {
+        // Restore normal style
+        handle.style.fg = 'cyan';
+        handle.style.bg = 'black';
         this.hideResizeCursor();
       });
     }
@@ -427,10 +446,10 @@ export class DockablePanel extends Panel {
       ne: '┐',
       sw: '└',
       se: '┘',
-      n: '',
-      s: '',
-      w: '',
-      e: '',
+      n: '─',
+      s: '─',
+      w: '│',
+      e: '│',
     };
 
     for (const [edge, handle] of this.resizeHandles) {
@@ -453,6 +472,15 @@ export class DockablePanel extends Panel {
     this.dragStartY = y;
     this.dragStartLeft = typeof this.left === 'number' ? this.left : 0;
     this.dragStartTop = typeof this.top === 'number' ? this.top : 0;
+
+    // Visual feedback: Change border color during drag
+    const panel = this as any;
+    if (panel.style && panel.style.border) {
+      panel.style.border.fg = 'yellow';
+    }
+    if (this.titleBar) {
+      (this.titleBar as any).style.bg = 'cyan';
+    }
 
     // Bring to front
     this.bringToFront();
@@ -500,8 +528,22 @@ export class DockablePanel extends Panel {
   private stopDrag(): void {
     this.isDragging = false;
 
+    // Restore border color
+    const panel = this as any;
+    if (panel.style && panel.style.border) {
+      const borderOptions = this.options.border as any;
+      panel.style.border.fg = borderOptions?.fg || 'green';
+    }
+    if (this.titleBar) {
+      (this.titleBar as any).style.bg = 'blue';
+    }
+
     // Check for edge docking
     this.checkEdgeDocking();
+
+    if (this.screen) {
+      this.screen.render();
+    }
 
     this.emit('drag-end');
   }
@@ -516,6 +558,16 @@ export class DockablePanel extends Panel {
     this.dragStartY = y;
     this.dragStartLeft = typeof this.left === 'number' ? this.left : 0;
     this.dragStartTop = typeof this.top === 'number' ? this.top : 0;
+
+    // Visual feedback: Change border color during resize
+    const panel = this as any;
+    if (panel.style && panel.style.border) {
+      panel.style.border.fg = 'yellow';
+    }
+    if (this.titleBar) {
+      (this.titleBar as any).style.bg = 'cyan';
+    }
+
     this.emit('resize-start');
   }
 
@@ -628,23 +680,43 @@ export class DockablePanel extends Panel {
   private stopResize(): void {
     this.isResizing = false;
     this.currentResizeEdge = null;
+
+    // Restore border color
+    const panel = this as any;
+    if (panel.style && panel.style.border) {
+      const borderOptions = this.options.border as any;
+      panel.style.border.fg = borderOptions?.fg || 'green';
+    }
+    if (this.titleBar) {
+      (this.titleBar as any).style.bg = 'blue';
+    }
+
     this.hideResizeCursor();
+
+    if (this.screen) {
+      this.screen.render();
+    }
+
     this.emit('resize-end');
   }
 
   /**
-   * Check if panel should dock to an edge
+   * Check if panel should dock to an edge or swap with another panel
    */
   private checkEdgeDocking(): void {
     if (!this.screen) return;
 
-    const threshold = 5;  // pixels from edge to trigger docking
+    const threshold = 30;  // pixels from edge to trigger docking (increased for easier snapping)
     const x = this.left as number;
     const y = this.top as number;
     const w = this.width as number;
     const h = this.height as number;
 
-    // Check edges
+    // First check if we're overlapping with another docked panel and should swap
+    const swapped = this.checkPanelSwap();
+    if (swapped) return;
+
+    // Check edges for docking
     if (x < threshold) {
       this.setDockPosition('left');
     } else if (x + w > this.screen.width - threshold) {
@@ -654,6 +726,54 @@ export class DockablePanel extends Panel {
     } else if (y + h > this.screen.height - threshold) {
       this.setDockPosition('bottom');
     }
+  }
+
+  /**
+   * Check if this panel should swap positions with another docked panel
+   * Returns true if a swap occurred
+   */
+  private checkPanelSwap(): boolean {
+    if (!this.screen) return false;
+
+    const myX = this.left as number;
+    const myY = this.top as number;
+    const myW = this.width as number;
+    const myH = this.height as number;
+    const myCenterX = myX + myW / 2;
+    const myCenterY = myY + myH / 2;
+
+    // Find other docked panels
+    for (const child of this.screen.children) {
+      if (!(child instanceof DockablePanel) || child === this) continue;
+
+      const otherPanel = child as DockablePanel;
+      const otherPos = otherPanel.getDockPosition();
+
+      // Only swap with docked panels (not floating)
+      if (otherPos === 'float') continue;
+
+      const otherX = (otherPanel.left as number) || 0;
+      const otherY = (otherPanel.top as number) || 0;
+      const otherW = (otherPanel.width as number) || 0;
+      const otherH = (otherPanel.height as number) || 0;
+
+      // Check if our center point is over the other panel
+      if (myCenterX >= otherX && myCenterX <= otherX + otherW &&
+          myCenterY >= otherY && myCenterY <= otherY + otherH) {
+
+        // Swap positions
+        const myPosition = this.dockPosition;
+        const otherPosition = otherPanel.getDockPosition();
+
+        // Swap the dock positions
+        this.setDockPosition(otherPosition);
+        otherPanel.setDockPosition(myPosition);
+
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
