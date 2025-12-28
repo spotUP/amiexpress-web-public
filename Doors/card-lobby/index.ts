@@ -16,17 +16,17 @@ import blessed, {
   Question,
   ScrollableText,
   type MouseEvent,
-} from '../../sdk/engines/ui/blessed';
-import { createBox, createList, createButton, createText, createLog } from '../../sdk/utils/blessed-helpers';
+} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import {
   CardEngine,
   PokerEngine,
   ActionType,
   pokerCardsToCards,
   Storage,
-} from '../../sdk';
-import type { Snapshot } from '../../sdk';
-import type { Colors } from '../../sdk/engines/ui/blessed/core/types';
+} from '@amiexpress/bbs-door-sdk';
+import type { Snapshot } from '@amiexpress/bbs-door-sdk';
+import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
 
 interface DoorSession {
   socket: any;
@@ -1547,11 +1547,30 @@ class CardLobbyApp {
     if (this.currentProfile?.currentTableId) {
       await this.leaveCurrentTable();
     }
+    this.cleanup();
     this.screen.disableMouse();
     this.screen.destroy();
   }
 
   private cleanup(): void {
+    // Remove all event listeners to prevent memory leaks
+    if (this.screen) {
+      this.screen.removeAllListeners('destroy');
+      this.screen.removeAllListeners('keypress');
+    }
+
+    if (this.lobbyList) {
+      this.lobbyList.removeAllListeners('select');
+    }
+
+    if (this.actionButtons) {
+      this.actionButtons.fold?.removeAllListeners('press');
+      this.actionButtons.check?.removeAllListeners('press');
+      this.actionButtons.call?.removeAllListeners('press');
+      this.actionButtons.raise?.removeAllListeners('press');
+      this.actionButtons.quit?.removeAllListeners('press');
+    }
+
     if (this.session.bbsSession) {
       delete this.session.bbsSession.doorInputHandler;
       delete this.session.bbsSession.doorReconnectHandler;
