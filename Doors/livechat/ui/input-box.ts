@@ -1,22 +1,19 @@
 /**
  * Input box component
- * Text input for chat messages with emoji button
+ * Text input for chat messages
  */
 import { Screen, Textarea } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createTextarea, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createTextarea } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { STATUS_HEIGHT } from './status-bar';
 
 export const INPUT_HEIGHT = 3;
-export const EMOJI_BUTTON_WIDTH = 6;  // Width for emoji button ":)"
 
-export function createInputBox(screen: Screen): { inputBox: Textarea; emojiButton: any } {
-  const screenWidth = (screen as any).width || 80;
-
-  const inputBox = createTextarea({
+export function createInputBox(screen: Screen): Textarea {
+  return createTextarea({
     parent: screen,
     bottom: STATUS_HEIGHT,
     left: 0,
-    width: screenWidth - EMOJI_BUTTON_WIDTH,
+    width: '100%',
     height: INPUT_HEIGHT,
     label: ' Message ',
     border: { type: 'line' },
@@ -28,33 +25,4 @@ export function createInputBox(screen: Screen): { inputBox: Textarea; emojiButto
       border: { fg: 'yellow' },
     },
   });
-
-  const emojiButton = createButton({
-    parent: screen,
-    bottom: STATUS_HEIGHT + 1,  // +1 to align with input content (skip top border)
-    right: 0,  // Flush with right edge
-    width: EMOJI_BUTTON_WIDTH - 1,  // -1 to fit within emoji button space
-    height: 1,
-    content: ' :) ',
-    mouse: true,
-    clickable: true,
-    tags: true,
-    style: {
-      fg: 'yellow',
-      bg: 'black',
-      hover: {
-        fg: 'black',
-        bg: 'yellow',
-      },
-      focus: {
-        fg: 'black',
-        bg: 'yellow',
-      },
-    },
-  });
-
-  // Ensure button renders above other elements
-  emojiButton.setIndex(100);
-
-  return { inputBox, emojiButton };
 }

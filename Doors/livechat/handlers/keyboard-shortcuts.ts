@@ -45,7 +45,7 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: s
   s.key(['f1'], () => { sh(); });
   s.key(['f2'], () => { sv = !sv; ucl(); asm(sv ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)'); });
   s.key(['f3'], () => { ssb(sbt === 'channels' ? 'users' : 'channels'); asm(`Switched to ${sbt} view`); });
-  s.key(['C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
+  s.key(['f4', 'C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
 
   const fp = () => {
     const ps: any[] = [ib];

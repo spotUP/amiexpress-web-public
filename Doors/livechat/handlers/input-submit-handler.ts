@@ -47,12 +47,15 @@ export function createSubmitHandler(
   showFileSharing: () => void
 ) {
   return async (value: string) => {
+    console.log('[SUBMIT HANDLER] Called with value:', JSON.stringify(value));
     try {
       // Hide command suggestions on submit
       hideCommandSuggestions();
 
       const msg = value.trim();
+      console.log('[SUBMIT HANDLER] Trimmed message:', JSON.stringify(msg));
       if (!msg) {
+        console.log('[SUBMIT HANDLER] Empty message, returning');
         inputBox.clearValue();
         inputBox.focus();
         screen.render();
@@ -188,8 +191,11 @@ export function createSubmitHandler(
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;
           const processedMsg = replaceEmojis(msg);
+          console.log('[SUBMIT HANDLER] Emitting room:message:', { message: processedMsg, messageId, channel: state.currentChannel });
           socket.emit('room:message', { message: processedMsg, messageId });
+          console.log('[SUBMIT HANDLER] Adding to chat log');
           addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`);
+          console.log('[SUBMIT HANDLER] Message displayed in chat log');
 
           // Add to history with ID
           inputHistory.add(messageId, msg);
