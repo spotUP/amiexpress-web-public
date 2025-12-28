@@ -4,10 +4,13 @@
  * Supports optional overlay for semi-transparent dimming effect:
  *   overlay: true (uses default 0.5 opacity)
  *   overlayOpacity: 0.7 (custom opacity)
+ *
+ * Automatically stays centered in responsive layouts
  */
 
 import { Box } from './box';
 import { Overlay } from './overlay';
+import { makeModalResponsive } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
 
 export interface LoadingOptions extends ElementOptions {
@@ -26,6 +29,7 @@ export class Loading extends Box {
   private interval: number;
   private timer: any = null;
   private _overlay?: Overlay;
+  private _responsiveCleanup?: () => void;
 
   constructor(options: LoadingOptions = {}) {
     // If overlay is enabled, we'll reparent to the overlay later
@@ -115,6 +119,11 @@ export class Loading extends Box {
       this._overlay.show();
     }
 
+    // Enable responsive centering
+    if (!this._responsiveCleanup) {
+      this._responsiveCleanup = makeModalResponsive(this);
+    }
+
     this.show();
     this.setFront();
 
@@ -140,6 +149,7 @@ export class Loading extends Box {
     if (this._overlay) {
       this._overlay.hide();
     }
+    // Don't cleanup responsive listener on hide - keep it for next show
   }
 
   /**
@@ -194,6 +204,10 @@ export class Loading extends Box {
    */
   destroy(): void {
     this.stopSpinner();
+    if (this._responsiveCleanup) {
+      this._responsiveCleanup();
+      this._responsiveCleanup = undefined;
+    }
     if (this._overlay) {
       this._overlay.destroy();
     }

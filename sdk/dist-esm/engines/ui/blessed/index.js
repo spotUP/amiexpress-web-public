@@ -438,3 +438,6 @@ export default {
     iframe,
     video,
 };
+// Modal Helpers - Utilities for centering and managing modals
+export * as modalHelpers from './utils/modal-helpers';
+export { centerElement, makeModalResponsive, createModalBackdrop, showModal } from './utils/modal-helpers';

@@ -4,11 +4,14 @@
  * Supports optional overlay for semi-transparent dimming effect:
  *   overlay: true (uses default 0.5 opacity)
  *   overlayOpacity: 0.7 (custom opacity)
+ *
+ * Automatically stays centered in responsive layouts
  */
 
 import { Box } from './box';
 import { Button } from './button';
 import { Overlay } from './overlay';
+import { makeModalResponsive } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
 
 export interface MessageOptions extends ElementOptions {
@@ -22,6 +25,7 @@ export class Message extends Box {
   private messageText: Box;
   private okButton: Button;
   private _overlay?: Overlay;
+  private _responsiveCleanup?: () => void;
 
   constructor(options: MessageOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -137,6 +141,11 @@ export class Message extends Box {
       this._overlay.show();
     }
 
+    // Enable responsive centering
+    if (!this._responsiveCleanup) {
+      this._responsiveCleanup = makeModalResponsive(this);
+    }
+
     this.show();
     this.setFront();
     this.okButton.focus();
@@ -148,13 +157,25 @@ export class Message extends Box {
   }
 
   /**
-   * Override hide to also hide overlay
+   * Override hide to also hide overlay and cleanup responsive listener
    */
   hide(): void {
     super.hide();
     if (this._overlay) {
       this._overlay.hide();
     }
+    // Don't cleanup responsive listener on hide - keep it for next show
+  }
+
+  /**
+   * Override destroy to cleanup responsive listener
+   */
+  destroy(): void {
+    if (this._responsiveCleanup) {
+      this._responsiveCleanup();
+      this._responsiveCleanup = undefined;
+    }
+    super.destroy();
   }
 
   /**

@@ -266,6 +266,119 @@ function hideModal() {
 }
 ```
 
+### 1g. Responsive Modal Centering (Automatic)
+
+**All modal widgets automatically stay centered in responsive layouts.** When the terminal resizes (80x24 to 120x40, etc.), modals recalculate their center position dynamically.
+
+**Widgets with auto-centering:**
+- `Message` - Simple message dialogs
+- `Question` - Yes/No confirmation dialogs
+- `Prompt` - Text input dialogs
+- `Loading` - Loading spinners with overlay
+
+**How it works:**
+
+When you call `.display()`, `.ask()`, `.showInput()`, or `.load()`, the widget:
+1. Calculates center based on **current** screen dimensions (not hardcoded 80x25)
+2. Listens for screen resize events
+3. Recalculates center position when terminal size changes
+4. Cleans up listeners on destroy
+
+**Example - Message widget:**
+
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+const message = new blessed.Message({
+  parent: screen,
+  text: 'Connection lost!',
+  overlay: true,
+  overlayOpacity: 0.7,
+});
+
+// Shows centered in current terminal size
+// Stays centered if user resizes terminal
+message.display();
+
+// In 80x24 terminal  → position (20, 7)
+// In 120x40 terminal → position (40, 15)
+// In 160x50 terminal → position (60, 20)
+```
+
+**Example - Question widget:**
+
+```typescript
+const question = new blessed.Question({
+  parent: screen,
+  text: 'Try to reconnect?',
+  overlay: true,
+});
+
+question.ask('Continue?', (answer: boolean) => {
+  if (answer) {
+    reconnect();
+  } else {
+    exit();
+  }
+});
+// Auto-centers and stays centered on resize
+```
+
+**Custom modals - Manual centering:**
+
+For custom dialogs not using built-in widgets, use the modal helpers:
+
+```typescript
+import { makeModalResponsive, centerElement } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// Custom modal box
+const myModal = blessed.box({
+  parent: screen,
+  width: 50,
+  height: 15,
+  border: { type: 'line' },
+  label: ' My Dialog ',
+});
+
+// Enable responsive centering
+const cleanup = makeModalResponsive(myModal);
+
+// Show modal
+myModal.show();
+myModal.setFront();
+screen.render();
+
+// Later, when destroying modal
+cleanup();  // Remove resize listener
+myModal.destroy();
+```
+
+**Helper functions:**
+
+```typescript
+import { centerElement, makeModalResponsive, showModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// One-time center (doesn't track resizes)
+centerElement(myModal);
+
+// Enable auto-recentering on resize
+const cleanup = makeModalResponsive(myModal);
+
+// Complete modal management (backdrop + centering)
+const cleanup = showModal(myModal, {
+  backdrop: true,
+  backdropOpacity: 0.6,
+  onClose: () => console.log('Modal closed'),
+});
+```
+
+**Key points:**
+- Built-in modals (Message, Question, Prompt, Loading) handle this automatically
+- Modal size (width/height) is fixed, but **position** adjusts to stay centered
+- Works with any terminal size - not hardcoded to 80x25
+- Cleanup happens automatically on widget destroy
+- For custom modals, use `makeModalResponsive()` helper
+
 ### 2. Focus Border Effects
 
 To show visual focus feedback, track default border colors and change on focus/blur:
