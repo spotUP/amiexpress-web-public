@@ -193,11 +193,17 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   // ===== LIVE TYPING PREVIEW (Keystroke relaying) =====
 
   socket.on('chat:keystroke', (data: { channelId: string; userId: number; char: string }) => {
+    console.log('[BACKEND] Received chat:keystroke:', data, 'socketId:', socket.id);
     const session = getSessionBySocketId(socket.id);
-    if (!session || !session.currentRoomId) return;
+    console.log('[BACKEND] Session found:', !!session, 'currentRoomId:', session?.currentRoomId);
+    if (!session || !session.currentRoomId) {
+      console.log('[BACKEND] Skipping keystroke - no session or room');
+      return;
+    }
 
     // Broadcast keystroke to other users in the same room (not back to sender)
     const socketRoom = 'room:' + session.currentRoomId;
+    console.log('[BACKEND] Broadcasting to room:', socketRoom);
     socket.to(socketRoom).emit('chat:keystroke', {
       channelId: session.currentRoomId,
       userId: data.userId,

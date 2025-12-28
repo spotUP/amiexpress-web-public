@@ -259,7 +259,7 @@ const displayFlowLog = (...args: any[]) => {
   }
 };
 
-function isDisplayFlowState(subState?: LoggedOnSubState) {
+export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
@@ -415,7 +415,7 @@ function pauseDisplayFlow(socket: any, session: BBSSession, forcePrompt: boolean
 }
 
 // Dependency injection setters
-async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+export async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
   try {
     while (isDisplayFlowState(session.subState)) {
       displayFlowLog(

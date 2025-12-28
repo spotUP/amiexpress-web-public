@@ -177,6 +177,56 @@ function createDoorSocketWrapper(socket: any, session: BBSSession, bbsApi: any):
       return wrappedSocket;
     }
 
+    // Intercept chat:keystroke for live typing indicators
+    if (event === 'chat:keystroke') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting chat:keystroke:', data);
+
+      // Broadcast keystroke to other users in the same room (server-side)
+      if (session.currentRoomId) {
+        const socketRoom = 'room:' + session.currentRoomId;
+        socket.to(socketRoom).emit('chat:keystroke', {
+          channelId: session.currentRoomId,
+          userId: data.userId,
+          username: session.user?.username,
+          char: data.char
+        });
+      }
+      return wrappedSocket;
+    }
+
+    // Intercept chat:keystroke-submit
+    if (event === 'chat:keystroke-submit') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting chat:keystroke-submit:', data);
+
+      if (session.currentRoomId) {
+        const socketRoom = 'room:' + session.currentRoomId;
+        socket.to(socketRoom).emit('chat:keystroke-submit', {
+          channelId: session.currentRoomId,
+          userId: data.userId,
+          username: session.user?.username
+        });
+      }
+      return wrappedSocket;
+    }
+
+    // Intercept chat:keystroke-clear
+    if (event === 'chat:keystroke-clear') {
+      const data = args[0] || {};
+      console.log('[DoorSocket] Intercepting chat:keystroke-clear:', data);
+
+      if (session.currentRoomId) {
+        const socketRoom = 'room:' + session.currentRoomId;
+        socket.to(socketRoom).emit('chat:keystroke-clear', {
+          channelId: session.currentRoomId,
+          userId: data.userId,
+          username: session.user?.username
+        });
+      }
+      return wrappedSocket;
+    }
+
     // Pass through all other events to the real socket
     return socket.emit(event, ...args);
   };
@@ -1270,10 +1320,17 @@ export async function executeDoor(socket: any, session: BBSSession, door: Door) 
       doorSession.status = 'completed';
     }
 
-    // After door completes, return to menu (express.e behavior after doors)
-    // Set subState so PROCESS_COMMAND handler knows door is done
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // After door completes, check if we're in segment processing (~SP handling)
+    // If so, DON'T change state - let segment processing continue
+    // express.e:5455-5461 - ~SP causes pauses between segments, ~CC_ commands run within segments
+    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      console.log(`[executeDoor] Door ${door.name} completed during segment processing - continuing segments`);
+      // Don't change state - segment processing will continue after this returns
+    } else {
+      // Normal door completion - return to menu (express.e behavior after doors)
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+    }
   } catch (error: any) {
     console.error(`[executeDoor] CRITICAL ERROR in door ${door.name}:`, error);
     console.error(`[executeDoor] Stack trace:`, error.stack);
@@ -1327,6 +1384,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
   console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
   console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
   let wrappedSocket: any;
+
+  // Save original subState to check if we're in display flow (inline ~CC_ command)
+  // Door execution changes subState to DOOR_RUNNING, so we need to remember the original
+  const originalSubState = session.subState;
 
   try {
     // Build absolute path to door - handle both directory and file paths
@@ -1613,9 +1674,32 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     console.log(`[executeTypeScriptDoor] Sent door:status: stopped`);
 
     // Return to menu and pause before showing (only if user is logged in)
+    // CRITICAL: Don't show menu if we're in segment processing (~SP handling)
+    // or if we STARTED in a display flow state (inline ~CC_ command)
+    // express.e processSysCommand just runs the command and returns - no menu display
     session.menuPause = false;
-    if (session.state === BBSState.LOGGEDON && session.user) {
+
+    // Check for segment processing first - takes priority
+    // express.e:5455-5461 - ~CC_ commands run within segments, more segments follow
+    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment processing - continuing segments`);
+      // Don't change state or show menu - segment processing will continue
+      return;
+    }
+
+    const displayFlowStates = [
+      LoggedOnSubState?.DISPLAY_BULL,
+      LoggedOnSubState?.DISPLAY_NODE_BULL,
+      LoggedOnSubState?.CONF_SCAN,
+      LoggedOnSubState?.DISPLAY_CONF_BULL,
+      LoggedOnSubState?.DISPLAY_MENU,
+    ];
+    const wasInDisplayFlow = displayFlowStates.includes(originalSubState);
+    if (session.state === BBSState.LOGGEDON && session.user && !wasInDisplayFlow) {
       await displayMainMenu(socket, session);
+    } else if (wasInDisplayFlow) {
+      // Restore original subState for display flow to continue
+      session.subState = originalSubState;
     }
 
   } catch (error) {

@@ -407,7 +407,41 @@ async function handleRemainingStates(
   } else if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
     await handleProcessCommand(socket, session);
   } else {
-    // For other states, use the original handler logic
+    // Check if this is a display flow state - needs special handling
+    const displayFlowStates = new Set([
+      LoggedOnSubState.DISPLAY_BULL,
+      LoggedOnSubState.DISPLAY_NODE_BULL,
+      LoggedOnSubState.CONF_SCAN,
+      LoggedOnSubState.DISPLAY_CONF_BULL,
+      LoggedOnSubState.DISPLAY_MENU,
+    ]);
+
+    if (displayFlowStates.has(session.subState as LoggedOnSubState)) {
+      // Display flow states - handle pause/pagination here directly
+      // Don't delegate back to handleCommand to avoid infinite loops
+      console.log("[handleRemainingStates] Display flow state:", session.subState);
+
+      // If paginated screen is active, handle the keypress
+      if (session.paginatedScreen) {
+        const { handlePaginatedScreenInput } = require('../screen.handler');
+        const { isDisplayFlowState, advanceDisplayFlow } = require('../command.handler');
+        const handled = await handlePaginatedScreenInput(socket, session, data);
+        if (handled && !session.paginatedScreen) {
+          // Pagination finished, advance display flow
+          if (isDisplayFlowState(session.subState)) {
+            await advanceDisplayFlow(socket, session);
+          }
+        }
+        return;
+      }
+
+      // No paginated screen - just advance the display flow
+      const { advanceDisplayFlow } = require('../command.handler');
+      await advanceDisplayFlow(socket, session);
+      return;
+    }
+
+    // For other states, log but don't block
     console.log(
       "❌ Not in handled command input state, current subState:",
       session.subState,

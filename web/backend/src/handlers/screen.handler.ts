@@ -933,12 +933,13 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
 
   // Advanced File Display Codes (express.e:5490-5560)
   // ~SS_ - Show String / Display File (express.e:5490-5500)
-  // Format: ~SS_<filename>|| or ~2S<filename> (short form) - displays another screen file
-  // Note: || terminator is optional in some screen files
+  // Format: ~SS_<filename>| or ~SS_<filename>|| - displays another screen file
+  // express.e uses single | as mciterminator, some screens use || for compatibility
   screenDebug('[MCI DEBUG] Looking for ~SS_ codes in:', parsed.substring(0, 200));
   // Support both ~SS_ and ~2S (short form)
-  // Path stops at whitespace, tilde (next MCI code), pipe, or newline
-  const ssRegex = /~(?:SS_|2S)([^\s|~\r\n]+)(\|\|)?/g;
+  // Path stops at whitespace, tilde (next MCI code), or newline
+  // Terminator is | or || (optional, consumed by regex if present)
+  const ssRegex = /~(?:SS_|2S)([^\s|~\r\n]+)(?:\|{1,2})?/g;
   const filesToDisplay: string[] = [];
 
   // Keep provided extensions; only trim whitespace/terminators.
@@ -1006,8 +1007,9 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // ~SR_ - String Replace / Random File Display (express.e:5531-5560)
   // Format: ~<max>SR_<path>/<basename> - displays random file from numbered set (max optional, defaults to 99)
   // Example: ~SR_WORK:bbs/Screens/logoff/logoff displays 001.logoff.txt, 002.logoff.txt, etc.
-  // Note: Path stops at whitespace, tilde (next MCI code), pipe, or newline
-  const srRegex = /~(\d*)SR_([^\s|~\r\n]+)(\|\|)?/g;
+  // Note: Path stops at whitespace, tilde (next MCI code), or newline
+  // Terminator is | or || (optional, consumed by regex if present)
+  const srRegex = /~(\d*)SR_([^\s|~\r\n]+)(?:\|{1,2})?/g;
   let srMatch;
   while ((srMatch = srRegex.exec(parsed)) !== null) {
     const maxCountRaw = srMatch[1];
@@ -1106,9 +1108,15 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     while ((ccMatch = ccRegex.exec(parsed)) !== null) {
       const commandStr = ccMatch[1].trim();
       screenDebug('[MCI] ~CC_ executing command inline:', commandStr);
-      // Execute the command immediately (like express.e processSysCommand())
-      const { handleCommand } = require('./command-handler/core');
-      await handleCommand(socket, session, commandStr);
+      // Execute the command immediately (express.e:5555-5561 calls processSysCommand)
+      // processSysCommand (express.e:28258-28283) tries: runSysCommand -> runBbsCommand -> processInternalCommand
+      // NO display flow handling - just runs the command and returns
+      const { processCommand } = require('./command.handler');
+      // Parse command and params like express.e:28265-28271
+      const spacePos = commandStr.indexOf(' ');
+      const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
+      const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
+      await processCommand(socket, session, cmdCode, cmdParams);
     }
     // Remove ~CC_ codes from parsed content (they've been executed)
     parsed = parsed.replace(ccRegex, '');
@@ -1687,16 +1695,76 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     let parsed: string;
     let commands: any[] = [];
 
-    // Always parse MCI so ~SS_ and other codes work even in PETSCII screens
-    // Pass socket to enable inline mode (express.e outdata=NIL): execute ~SS_/~SR_/~CC_ immediately
-    const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
-    parsed = result.parsed;
-    commands = result.commands;
-    if (result.slowmo !== undefined) {
-      session.slowmo = result.slowmo;
-    }
-    if (result.slowmoCount !== undefined) {
-      session.slowmoCount = result.slowmoCount;
+    // === ~SP (Soft Pause) Segment Processing ===
+    // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
+    // Split content at ~SP boundaries and process one segment at a time
+    // Each segment contains content up to (but not including) the ~SP code
+    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+
+    // Check if raw content has ~SP codes (before parsing removes them)
+    // express.e:5455-5461 - ~SP causes immediate pause when followed by terminator
+    // Terminators: whitespace, | (mciterminator), . (SP.), or end of string
+    const hasSoftPauses = /~SP(?:\s|\||\.|$)/.test(content);
+
+    if (isFlowScreen && hasSoftPauses && !session.screenSegments) {
+      // Split content at ~SP boundaries
+      // express.e parses synchronously and calls doPause() at each ~SP
+      // We achieve the same by splitting into segments and processing with pauses between
+      const segments = content.split(/~SP(?:\s|\||\.)/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      screenDebug(`[displayScreen] ~SP segment processing: ${segments.length} segments for ${screenName}`);
+
+      if (segments.length > 1) {
+        // Store remaining segments for later processing
+        session.screenSegments = {
+          segments: segments.slice(1),  // Everything after first segment
+          currentIndex: 0,
+          screenName,
+          inlineMode: true,
+          eventName,
+          isFlowScreen: true
+        };
+
+        // Process only the first segment now
+        screenDebug(`[displayScreen] Processing segment 0/${segments.length}: ${segments[0].substring(0, 50)}...`);
+        const segmentResult = await parseMciCodes(segments[0], session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+        parsed = segmentResult.parsed;
+        commands = segmentResult.commands;
+        if (segmentResult.slowmo !== undefined) session.slowmo = segmentResult.slowmo;
+        if (segmentResult.slowmoCount !== undefined) session.slowmoCount = segmentResult.slowmoCount;
+
+        // DON'T set lastScreenHadPause here - let pauseDisplayFlow handle the pause
+        // to avoid double pause prompts. screenSegments is already set for subsequent segments.
+        // express.e:28556-28557: IF (displayScreen(SCREEN_BULL)) THEN doPause()
+        session.lastScreenHadPause = false;
+
+        // Continue to display this segment (no pause from displayScreen, pauseDisplayFlow will handle it)
+        // Fall through to normal display logic below
+      } else {
+        // Only one segment (or ~SP at end), process normally
+        const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+        parsed = result.parsed;
+        commands = result.commands;
+        if (result.slowmo !== undefined) session.slowmo = result.slowmo;
+        if (result.slowmoCount !== undefined) session.slowmoCount = result.slowmoCount;
+        session.lastScreenHadPause = result.hasPause;
+      }
+    } else {
+      // Normal processing (no ~SP segments or not a flow screen)
+      // Always parse MCI so ~SS_ and other codes work even in PETSCII screens
+      // Pass socket to enable inline mode (express.e outdata=NIL): execute ~SS_/~SR_/~CC_ immediately
+      const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+      parsed = result.parsed;
+      commands = result.commands;
+      if (result.slowmo !== undefined) {
+        session.slowmo = result.slowmo;
+      }
+      if (result.slowmoCount !== undefined) {
+        session.slowmoCount = result.slowmoCount;
+      }
+      session.lastScreenHadPause = result.hasPause;
     }
 
     // Log MCI parsing results
@@ -1706,7 +1774,6 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         commands: commands  // Commands are strings, not objects
       });
     }
-    session.lastScreenHadPause = result.hasPause;
 
     // Add ESC prefix to bare ANSI sequences only for ANSI paths
     if (!isPetscii) {
@@ -1738,7 +1805,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const pageHeight = session?.screenHeight || 25;
     const lines = parsed.split(/\r\n|\n/);
     const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
-    const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+    // Note: eventName defined earlier for ~SP segment processing
     const slowmoSpeed = session.slowmo || 0;
     let slowmoCount = session.slowmoCount || 0;
 
@@ -2189,6 +2256,17 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
       await runQueuedScreenCommands(socket, session);
     }
     if (paged.onComplete) paged.onComplete();
+    // Process all remaining screen segments without pausing
+    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      while (session.screenSegments.segments.length > 0) {
+        const segment = session.screenSegments.segments.shift()!;
+        const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+        let parsed = addAnsiEscapes(result.parsed);
+        parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+        socket.emit(session.screenSegments.eventName, parsed);
+      }
+      session.screenSegments = undefined;
+    }
     return true;
   }
 
@@ -2199,6 +2277,8 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
     session.queuedScreenCommands = [];
     session.pendingScreenCommand = undefined;
     session.screenCommandResolver = null;
+    // Also clear screen segments on abort
+    session.screenSegments = undefined;
     return true;
   }
 
@@ -2217,8 +2297,69 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
       await runQueuedScreenCommands(socket, session);
     }
     if (paged.onComplete) paged.onComplete();
+
+    // Check for remaining screen segments (~SP processing)
+    // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
+    if (session.screenSegments && session.screenSegments.segments.length > 0) {
+      await processNextScreenSegment(socket, session);
+      return true;
+    }
   }
 
+  return true;
+}
+
+/**
+ * Process the next screen segment after a ~SP pause is dismissed
+ * express.e:5455-5461 - ~SP pauses IMMEDIATELY, then continues processing
+ */
+export async function processNextScreenSegment(socket: any, session: BBSSession): Promise<boolean> {
+  const segState = session.screenSegments;
+  if (!segState || segState.segments.length === 0) {
+    return false;
+  }
+
+  const segment = segState.segments.shift()!;  // Get and remove first segment
+  const segmentNum = segState.currentIndex + 1;
+  segState.currentIndex = segmentNum;
+
+  screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segment.substring(0, 50)}...`);
+
+  // Parse and execute this segment's MCI codes
+  const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+
+  let parsed = result.parsed;
+  if (result.slowmo !== undefined) session.slowmo = result.slowmo;
+  if (result.slowmoCount !== undefined) session.slowmoCount = result.slowmoCount;
+
+  // Add ANSI escapes if needed
+  parsed = addAnsiEscapes(parsed);
+
+  // Normalize line endings
+  parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+  // Emit this segment's content
+  socket.emit(segState.eventName, parsed);
+
+  // If there are more segments, set up another pause
+  if (segState.segments.length > 0) {
+    session.paginatedScreen = {
+      lines: [''],  // No additional content, just hold for a key
+      nextIndex: 1,
+      pageSize: 1,
+      eventName: segState.eventName,
+      commands: [],
+    };
+    session.lastScreenHadPause = true;
+    socket.emit(segState.eventName, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+    return true;
+  }
+
+  // All segments processed, clean up
+  session.screenSegments = undefined;
+  session.lastScreenHadPause = false;
+
+  screenDebug(`[processNextScreenSegment] All segments processed for ${segState.screenName}`);
   return true;
 }
 

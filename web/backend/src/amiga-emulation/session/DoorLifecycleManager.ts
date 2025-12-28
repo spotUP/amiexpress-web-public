@@ -1387,9 +1387,10 @@ export class DoorLifecycleManager {
 
     // Get the AEDoorPort address
     // For XIM doors, port name is AEDoorPort{nodeId} (e.g., "AEDoorPort1")
-    // CRITICAL: Default to 1 to match port creation in AmigaDoorSession.ts line 437
+    // CRITICAL: Must match port creation in AmigaDoorSession.ts line 437
+    // which uses: nodeId ?? nodeNumber ?? 1
     // AmiExpress nodes are 1-indexed, not 0-indexed
-    const nodeId = this.config.bbsSession?.nodeNumber ?? 1;
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
     const portName = `AEDoorPort${nodeId}`;
 
     // Write port name to temporary memory for findPort
@@ -1485,7 +1486,8 @@ export class DoorLifecycleManager {
 
     // Get the DoorControl port address
     // For TIM doors, port name is DoorControl{nodeId} (e.g., "DoorControl1")
-    const nodeId = this.config.bbsSession?.nodeNumber || 1;
+    // Must match port creation - use nodeId ?? nodeNumber ?? 1
+    const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
     const portName = `DoorControl${nodeId}`;
 
     // Write port name to temporary memory for findPort

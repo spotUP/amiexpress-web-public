@@ -335,6 +335,16 @@ export interface BBSSession {
     commands?: string[];
     onComplete?: () => void;
   };
+  // Screen segment state for ~SP (soft pause) handling
+  // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
+  screenSegments?: {
+    segments: string[];        // Remaining screen content segments to process
+    currentIndex: number;      // Current segment index
+    screenName: string;        // Original screen name for context
+    inlineMode: boolean;       // Whether inline mode was active
+    eventName: 'ansi-output' | 'petscii-output';
+    isFlowScreen: boolean;     // Whether this is a display flow screen
+  };
   slowmo?: number; // Slow screen output speed (MCI ~SMO), 1-5 per express.e
   slowmoCount?: number; // Remaining byte budget before next slowmo delay
   modemEmulationEnabled?: boolean; // When true, throttle screen output to modem-like speeds
