@@ -122,6 +122,24 @@ export class DockablePanel extends Panel {
     if (this.screen) {
       this.bindScreenEvents();
     }
+
+    // Show resize handles on panel hover
+    this.on('mouseover', () => {
+      if (this.resizable && !this.panelState.minimized) {
+        for (const handle of this.resizeHandles.values()) {
+          handle.show();
+        }
+        if (this.screen) this.screen.render();
+      }
+    });
+
+    // Hide resize handles when mouse leaves
+    this.on('mouseout', () => {
+      for (const handle of this.resizeHandles.values()) {
+        handle.hide();
+      }
+      if (this.screen) this.screen.render();
+    });
   }
 
   /**
@@ -242,8 +260,9 @@ export class DockablePanel extends Panel {
       parent: this,
       top: 0,
       left: 0,
-      width: '100%',
+      width: '100%-2',  // Account for panel borders
       height: 1,
+      tags: true,
       style: {
         fg: 'white',
         bg: 'blue',
@@ -279,11 +298,12 @@ export class DockablePanel extends Panel {
         top: 0,
         width: 3,
         height: 1,
-        content: '_',
+        content: '[_]',
         style: {
-          fg: 'white',
+          fg: 'yellow',
           bg: 'blue',
           focus: {
+            fg: 'black',
             bg: 'cyan',
           },
         },
@@ -382,10 +402,11 @@ export class DockablePanel extends Panel {
         bottom: handleConfig.bottom,
         width: handleConfig.width,
         height: handleConfig.height,
-        content: handleConfig.content,
+        content: '',  // Empty by default, show on hover
+        hidden: true,  // Hide resize handles by default
         style: {
           fg: 'cyan',
-          bg: 'black',
+          bg: 'transparent',
           hover: {
             fg: 'yellow',
             bg: 'blue',
@@ -405,9 +426,11 @@ export class DockablePanel extends Panel {
 
       // Hover effect - manually change colors (blessed doesn't auto-apply style.hover)
       handle.on('mouseover', () => {
-        // Apply hover style
-        handle.style.fg = 'yellow';
-        handle.style.bg = 'blue';
+        // Apply hover style (with safety check)
+        if (handle.style) {
+          handle.style.fg = 'yellow';
+          handle.style.bg = 'blue';
+        }
         this.showResizeCursor(handleConfig.name);
 
         // Force render to show color change
@@ -417,9 +440,11 @@ export class DockablePanel extends Panel {
       });
 
       handle.on('mouseout', () => {
-        // Restore normal style
-        handle.style.fg = 'cyan';
-        handle.style.bg = 'black';
+        // Restore normal style (with safety check)
+        if (handle.style) {
+          handle.style.fg = 'cyan';
+          handle.style.bg = 'black';
+        }
         this.hideResizeCursor();
 
         // Force render to show color change
@@ -498,7 +523,7 @@ export class DockablePanel extends Panel {
     if (panel.style && panel.style.border) {
       panel.style.border.fg = 'yellow';
     }
-    if (this.titleBar) {
+    if (this.titleBar && (this.titleBar as any).style) {
       (this.titleBar as any).style.bg = 'cyan';
     }
 
@@ -558,7 +583,7 @@ export class DockablePanel extends Panel {
       const borderOptions = this.options.border as any;
       panel.style.border.fg = borderOptions?.fg || 'green';
     }
-    if (this.titleBar) {
+    if (this.titleBar && (this.titleBar as any).style) {
       (this.titleBar as any).style.bg = 'blue';
     }
 
@@ -588,7 +613,7 @@ export class DockablePanel extends Panel {
     if (panel.style && panel.style.border) {
       panel.style.border.fg = 'yellow';
     }
-    if (this.titleBar) {
+    if (this.titleBar && (this.titleBar as any).style) {
       (this.titleBar as any).style.bg = 'cyan';
     }
 
@@ -711,7 +736,7 @@ export class DockablePanel extends Panel {
       const borderOptions = this.options.border as any;
       panel.style.border.fg = borderOptions?.fg || 'green';
     }
-    if (this.titleBar) {
+    if (this.titleBar && (this.titleBar as any).style) {
       (this.titleBar as any).style.bg = 'blue';
     }
 

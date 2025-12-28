@@ -264,6 +264,9 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket)).catch((err) => {
     console.error('[SOCKET HANDLER ERROR] Failed to load preference-socket-handlers:', err);
   });
+  import('../handlers/network-monitor.handler').then(({ registerNetworkMonitorHandlers }) => registerNetworkMonitorHandlers(socket)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load network-monitor.handler:', err);
+  });
 }
 
 function logDoorDebug(message: string) {

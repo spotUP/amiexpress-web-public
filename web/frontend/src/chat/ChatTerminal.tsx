@@ -5,11 +5,12 @@
  * but connects with a chat-only flag that auto-launches LiveChat door.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
+import { Modal, ModalButtons, ModalButton } from '../components/Modal';
 import '@xterm/xterm/css/xterm.css';
 import './chat.css';
 
@@ -48,6 +49,9 @@ export default function ChatTerminal() {
   const loginState = useRef<'waiting' | 'username' | 'password' | 'loggedin'>('waiting');
   const username = useRef<string>('');
   const password = useRef<string>('');
+  const [showConnectionError, setShowConnectionError] = useState(false);
+  const [connectionErrorMessage, setConnectionErrorMessage] = useState('');
+  const reconnectAttempts = useRef<number>(0);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -185,6 +189,8 @@ export default function ChatTerminal() {
     socket.on('connect', () => {
       console.log('[ChatTerminal] Connected');
       loginState.current = 'waiting';
+      reconnectAttempts.current = 0;
+      setShowConnectionError(false);
       // Send terminal size on connect
       const { cols, rows } = term;
       socket.emit('terminal-size', { cols, rows });
@@ -193,11 +199,27 @@ export default function ChatTerminal() {
 
     socket.on('connect_error', (error) => {
       console.error('[ChatTerminal] Connection error:', error.message);
-      term.writeln('\r\n\x1b[31mConnection failed. Please try again.\x1b[0m');
+      reconnectAttempts.current++;
+
+      // Show modal instead of writing error to terminal repeatedly
+      if (reconnectAttempts.current >= 3) {
+        setConnectionErrorMessage(
+          `Connection to server failed after ${reconnectAttempts.current} attempts.\n\n` +
+          `Error: ${error.message}\n\n` +
+          `Please check that the server is running and try again.`
+        );
+        setShowConnectionError(true);
+        // Disable automatic reconnection
+        socket.io.opts.reconnection = false;
+      }
     });
 
-    socket.on('disconnect', () => {
-      console.log('[ChatTerminal] Disconnected');
+    socket.on('disconnect', (reason) => {
+      console.log('[ChatTerminal] Disconnected:', reason);
+      // Only show error modal if it wasn't a client-initiated disconnect
+      if (reason !== 'io client disconnect' && reconnectAttempts.current < 3) {
+        reconnectAttempts.current++;
+      }
     });
 
     // ANSI output from server (including LiveChat door output)
@@ -320,13 +342,49 @@ export default function ChatTerminal() {
     };
   }, []);
 
+  const handleRetry = () => {
+    setShowConnectionError(false);
+    reconnectAttempts.current = 0;
+    if (socketRef.current) {
+      // Re-enable reconnection and connect
+      socketRef.current.io.opts.reconnection = true;
+      socketRef.current.connect();
+    }
+  };
+
+  const handleCancel = () => {
+    setShowConnectionError(false);
+    if (terminalInstance.current) {
+      terminalInstance.current.writeln('\r\n\x1b[33mConnection cancelled by user.\x1b[0m');
+      terminalInstance.current.writeln('\x1b[33mPlease refresh the page to reconnect.\x1b[0m');
+    }
+  };
+
   return (
-    <div className="chat-terminal-container">
-      <div
-        ref={terminalRef}
-        className="chat-terminal-wrapper"
-        onClick={() => terminalInstance.current?.focus()}
-      />
-    </div>
+    <>
+      <div className="chat-terminal-container">
+        <div
+          ref={terminalRef}
+          className="chat-terminal-wrapper"
+          onClick={() => terminalInstance.current?.focus()}
+        />
+      </div>
+
+      <Modal
+        isOpen={showConnectionError}
+        title="Connection Error"
+        showCloseButton={false}
+      >
+        <p style={{ whiteSpace: 'pre-wrap' }}>{connectionErrorMessage}</p>
+        <ModalButtons>
+          <ModalButton onClick={handleRetry} variant="primary">
+            Retry
+          </ModalButton>
+          <ModalButton onClick={handleCancel} variant="secondary">
+            Cancel
+          </ModalButton>
+        </ModalButtons>
+      </Modal>
+    </>
   );
 }

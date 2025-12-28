@@ -931,7 +931,111 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Sends backspace character
   parsed = parsed.replace(mciRegex('h'), '\x08');
 
+  // === INLINE MODE: SEQUENTIAL MCI PROCESSING ===
+  // express.e:5768-5802 processMci() iterates through content sequentially:
+  // 1. Find next ~ character
+  // 2. Output text before it (aePuts2)
+  // 3. Call processMciCmd to handle the MCI code immediately
+  // 4. Continue from new position
+  // We must process MCI codes in EXACT DOCUMENT ORDER like express.e does.
+  if (inlineMode) {
+    const { processCommand } = require('./command.handler');
+
+    // Regex to find inline MCI codes that need immediate execution
+    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
+    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
+
+    let lastIndex = 0;
+    let match;
+
+    while ((match = inlineMciRegex.exec(parsed)) !== null) {
+      const fullMatch = match[0];
+      const code = match[1];
+
+      // express.e:5793-5794 - Output text before this MCI code
+      const textBefore = parsed.substring(lastIndex, match.index);
+      if (textBefore.length > 0) {
+        let toEmit = addAnsiEscapes(textBefore);
+        toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+        socket.emit('ansi-output', toEmit);
+        screenDebug('[MCI] Sequential: emitted text before ~' + code.substring(0, 10));
+      }
+
+      // Update position to after this match
+      lastIndex = match.index + fullMatch.length;
+
+      // Process the MCI code immediately (express.e:5799 processMciCmd)
+      if (code === 'f' || code === 'F') {
+        // express.e:5469-5471 - sendCLS()
+        socket.emit('ansi-output', '\x1b[2J\x1b[H');
+        screenDebug('[MCI] Sequential: ~f sendCLS()');
+      } else if (code.startsWith('CC_')) {
+        // express.e:5555-5563 - processSysCommand()
+        const commandStr = code.substring(3).replace(/\|+$/, '').trim();
+        screenDebug('[MCI] Sequential: ~CC_ processSysCommand:', commandStr);
+        const spacePos = commandStr.indexOf(' ');
+        const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
+        const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
+        await processCommand(socket, session, cmdCode, cmdParams);
+      } else if (code.startsWith('SS_') || code.startsWith('2S')) {
+        // express.e:5496-5504 - displayFile()
+        const prefix = code.startsWith('SS_') ? 3 : 2;
+        const filename = code.substring(prefix).replace(/\|+$/, '').trim();
+        screenDebug('[MCI] Sequential: ~SS_ displayFile:', filename);
+        await displayScreen(socket, session, filename, false);
+      } else if (code.includes('SR_')) {
+        // express.e:5533-5554 - display random file
+        const srMatch = code.match(/(\d*)SR_(.+)/);
+        if (srMatch) {
+          const maxCountRaw = srMatch[1];
+          let basePath = srMatch[2].replace(/\|+$/, '').trim();
+          screenDebug('[MCI] Sequential: ~SR_ random file:', basePath);
+
+          // Resolve Amiga assign paths
+          if (basePath.includes(':')) {
+            const { config } = require('../config');
+            const baseDir = config.getConfig().dataDir;
+            const colonIdx = basePath.indexOf(':');
+            const assign = basePath.substring(0, colonIdx).toUpperCase();
+            const subpath = basePath.substring(colonIdx + 1);
+
+            if (assign === 'WORK' || assign === 'BBS') {
+              let resolvedSubpath = subpath;
+              if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
+                resolvedSubpath = resolvedSubpath.substring(4);
+              }
+              basePath = path.join(baseDir, resolvedSubpath);
+            } else if (assign === 'SCREENS') {
+              basePath = path.join(baseDir, 'Screens', subpath);
+            }
+          }
+
+          const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+          const randomNum = Math.floor(Math.random() * maxCount) + 1;
+          const randomFile = formatNumberedFilename(basePath, randomNum);
+          screenDebug('[MCI] Sequential: ~SR_ selected:', randomFile);
+          await displayScreen(socket, session, randomFile, false);
+        }
+      }
+    }
+
+    // Output any remaining text after the last MCI code
+    if (lastIndex < parsed.length) {
+      const remaining = parsed.substring(lastIndex);
+      if (remaining.length > 0) {
+        let toEmit = addAnsiEscapes(remaining);
+        toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+        socket.emit('ansi-output', toEmit);
+        screenDebug('[MCI] Sequential: emitted remaining text');
+      }
+    }
+
+    // Clear parsed since we've already emitted everything
+    parsed = '';
+  }
+
   // Advanced File Display Codes (express.e:5490-5560)
+  // NOTE: In inline mode, these are already handled above in sequential processing
   // ~SS_ - Show String / Display File (express.e:5490-5500)
   // Format: ~SS_<filename>| or ~SS_<filename>|| - displays another screen file
   // express.e uses single | as mciterminator, some screens use || for compatibility
@@ -945,19 +1049,9 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Keep provided extensions; only trim whitespace/terminators.
   const normalizeScreenReference = (screenRef: string): string => screenRef.trim();
 
-  if (inlineMode) {
-    // Inline mode (express.e outdata=NIL): Display files immediately as we encounter them
-    let ssMatch;
-    while ((ssMatch = ssRegex.exec(parsed)) !== null) {
-      const filename = normalizeScreenReference(ssMatch[1].trim());
-      screenDebug('[MCI] ~SS_ displaying file inline:', filename);
-      // Display the file immediately (like express.e displayFile())
-      await displayScreen(socket, session, filename, false);
-    }
-    // Remove ~SS_ codes from parsed content (they've been displayed)
-    parsed = parsed.replace(ssRegex, '');
-  } else {
-    // String mode: Create placeholders for later replacement
+  // NOTE: Inline mode is fully handled in sequential processing above (parsed is empty)
+  // String mode: Create placeholders for later replacement
+  if (!inlineMode) {
     parsed = parsed.replace(ssRegex, (_match, ref) => {
       const filename = normalizeScreenReference(ref.trim());
       screenDebug('[MCI DEBUG] Found ~SS_ code referencing file:', filename);
@@ -1010,60 +1104,49 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Note: Path stops at whitespace, tilde (next MCI code), or newline
   // Terminator is | or || (optional, consumed by regex if present)
   const srRegex = /~(\d*)SR_([^\s|~\r\n]+)(?:\|{1,2})?/g;
-  let srMatch;
-  while ((srMatch = srRegex.exec(parsed)) !== null) {
-    const maxCountRaw = srMatch[1];
-    let basePath = srMatch[2].trim();
-    screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
-    // Resolve Amiga assign paths (WORK:, BBS:, etc.) to filesystem paths
-    // WORK: and BBS: both point to the BBS data directory
-    if (basePath.includes(':')) {
-      const { config } = require('../config');
-      const baseDir = config.getConfig().dataDir;
-      const colonIdx = basePath.indexOf(':');
-      const assign = basePath.substring(0, colonIdx).toUpperCase();
-      const subpath = basePath.substring(colonIdx + 1);
+  // NOTE: Inline mode is fully handled in sequential processing above (parsed is empty)
+  // String mode: Create placeholders for later replacement
+  if (!inlineMode) {
+    let srMatch;
+    while ((srMatch = srRegex.exec(parsed)) !== null) {
+      const maxCountRaw = srMatch[1];
+      let basePath = srMatch[2].trim();
+      screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
-      // WORK: and BBS: assigns point to BBS root, strip leading "bbs/" if present
-      if (assign === 'WORK' || assign === 'BBS') {
-        let resolvedSubpath = subpath;
-        // Strip leading "bbs/" since WORK:/BBS: already point to BBS root
-        if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
-          resolvedSubpath = resolvedSubpath.substring(4);
+      // Resolve Amiga assign paths
+      if (basePath.includes(':')) {
+        const { config } = require('../config');
+        const baseDir = config.getConfig().dataDir;
+        const colonIdx = basePath.indexOf(':');
+        const assign = basePath.substring(0, colonIdx).toUpperCase();
+        const subpath = basePath.substring(colonIdx + 1);
+
+        if (assign === 'WORK' || assign === 'BBS') {
+          let resolvedSubpath = subpath;
+          if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
+            resolvedSubpath = resolvedSubpath.substring(4);
+          }
+          basePath = path.join(baseDir, resolvedSubpath);
+          screenDebug('[MCI] ~SR_ resolved WORK:/BBS: path to:', basePath);
+        } else if (assign === 'SCREENS') {
+          basePath = path.join(baseDir, 'Screens', subpath);
+          screenDebug('[MCI] ~SR_ resolved SCREENS: path to:', basePath);
         }
-        basePath = path.join(baseDir, resolvedSubpath);
-        screenDebug('[MCI] ~SR_ resolved WORK:/BBS: path to:', basePath);
-      } else if (assign === 'SCREENS') {
-        basePath = path.join(baseDir, 'Screens', subpath);
-        screenDebug('[MCI] ~SR_ resolved SCREENS: path to:', basePath);
       }
-    }
 
-    // Optional numeric prefix sets the upper bound (default 99 like express.e used)
-    const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+      const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
+      const randomNum = Math.floor(Math.random() * maxCount) + 1;
+      const randomFile = formatNumberedFilename(basePath, randomNum);
 
-    // Pick a random number (1-maxCount) and format with 3-digit prefix before filename
-    const randomNum = Math.floor(Math.random() * maxCount) + 1;
-    const randomFile = formatNumberedFilename(basePath, randomNum);
+      screenDebug('[MCI] ~SR_ selected random file:', randomFile);
 
-    screenDebug('[MCI] ~SR_ selected random file:', randomFile);
-
-    if (inlineMode) {
-      // Inline mode: Display the random file immediately (like express.e displayFile())
-      await displayScreen(socket, session, randomFile, false);
-    } else {
       // String mode: Create placeholder for later replacement
       filesToDisplay.push(randomFile);
       const placeholder = `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
       console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
       parsed = parsed.replace(srMatch[0], placeholder);
     }
-  }
-
-  // Remove ~SR_ codes from parsed content if in inline mode (they've been displayed)
-  if (inlineMode) {
-    parsed = parsed.replace(srRegex, '');
   }
 
   // ~SP. - Stop Pause (express.e:5455-5461)
@@ -1092,7 +1175,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   });
 
   // ~F / ~f - Form feed / clear screen (common in legacy screens)
-  parsed = parsed.replace(/~[Ff]/g, '\x1b[2J\x1b[H');
+  // NOTE: In inline mode, ~f is handled in sequential processing above (express.e:5469-5471)
+  if (!inlineMode) {
+    parsed = parsed.replace(/~[Ff]/g, '\x1b[2J\x1b[H');
+  }
 
   // ~CC_ - Custom Command Execution (express.e:5555-5563)
   // Format: ~CC_<command>| or ~CC_<command>|| - executes a BBS command from the screen,
@@ -1100,27 +1186,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // so we accept either delimiter length like express.e did.
   // reference-board screens sometimes omit the pipe and just terminate with whitespace/~SP.
   // Accept either a pipe delimiter or whitespace/end of line.
+  // NOTE: In inline mode, ~CC_ is handled in sequential processing above (express.e:5555-5563)
   const ccRegex = /~CC_([^\s|~\r\n]+)(\|{1,2})?/g;
 
-  if (inlineMode) {
-    // Inline mode (express.e outdata=NIL): Execute commands immediately as we encounter them
-    let ccMatch;
-    while ((ccMatch = ccRegex.exec(parsed)) !== null) {
-      const commandStr = ccMatch[1].trim();
-      screenDebug('[MCI] ~CC_ executing command inline:', commandStr);
-      // Execute the command immediately (express.e:5555-5561 calls processSysCommand)
-      // processSysCommand (express.e:28258-28283) tries: runSysCommand -> runBbsCommand -> processInternalCommand
-      // NO display flow handling - just runs the command and returns
-      const { processCommand } = require('./command.handler');
-      // Parse command and params like express.e:28265-28271
-      const spacePos = commandStr.indexOf(' ');
-      const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
-      const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
-      await processCommand(socket, session, cmdCode, cmdParams);
-    }
-    // Remove ~CC_ codes from parsed content (they've been executed)
-    parsed = parsed.replace(ccRegex, '');
-  } else {
+  if (!inlineMode) {
     // String mode: Queue commands for later execution
     parsed = parsed.replace(ccRegex, (_fullMatch: string, commandStr: string) => {
       commandsToExecute.push(commandStr.trim());

@@ -95,7 +95,36 @@ COPY sdk/tools/preview/frontend ./
 RUN npm ci --ignore-scripts && npm run build
 
 # ============================================================================
-# Stage 6: Build Backend
+# Stage 6: Build TypeScript Doors
+# ============================================================================
+FROM node:18-alpine AS doors-builder
+
+WORKDIR /app
+
+# Copy SDK (TypeScript doors depend on it)
+COPY --from=sdk-builder /app/sdk ./sdk
+
+# Install build tools
+RUN apk add --no-cache bash findutils
+
+# Copy all TypeScript doors
+COPY Doors ./Doors
+
+# Build all TypeScript doors that have package.json
+RUN echo "[Build] Building TypeScript doors..." && \
+    find Doors -name "package.json" -type f | while read pkgfile; do \
+      doordir=$(dirname "$pkgfile"); \
+      echo "[Build] Building door: $doordir"; \
+      cd "/app/$doordir" && \
+      npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null && \
+      npm run build 2>&1 && \
+      echo "[Build] ✓ Built $doordir" || echo "[Build] ✗ Failed to build $doordir"; \
+      cd /app; \
+    done && \
+    echo "[Build] TypeScript doors build complete"
+
+# ============================================================================
+# Stage 7: Build Backend
 # ============================================================================
 FROM node:18-alpine AS backend-builder
 
@@ -109,7 +138,7 @@ COPY web/backend ./
 RUN npm run build
 
 # ============================================================================
-# Stage 7: Production Image
+# Stage 8: Production Image
 # ============================================================================
 FROM node:18-alpine
 
@@ -186,7 +215,11 @@ COPY Node3 /app/default-data/Node3
 
 # Copy Doors directly to /app/Doors (code expects them at project root, not data dir)
 # Note: amigafs module handles case-insensitive path resolution for AmigaOS compatibility
-COPY Doors /app/Doors
+# Copy built TypeScript doors (dist folders only for TS doors, full copy for 68K doors)
+COPY --from=doors-builder /app/Doors /app/Doors
+
+# Copy Libs directory (contains AROS fallback kickstart and libraries for 68K emulation)
+COPY Libs /app/Libs
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

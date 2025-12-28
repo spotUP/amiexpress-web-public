@@ -88,6 +88,22 @@ export type {
 export { NetworkEngine } from './engines/network/network-engine';
 export { AIEngine } from './engines/ai/ai-engine';
 export { InputEngine } from './engines/input/input-engine';
+
+// Media - Network Quality and Adaptive Quality Management
+export {
+  NetworkQualityMonitor,
+  AdaptiveQualityManager,
+  VIDEO_QUALITY_PROFILES,
+  AUDIO_QUALITY_PROFILES,
+} from './media';
+export type {
+  NetworkMetrics,
+  QualityRecommendation,
+  NetworkQualityOptions,
+  VideoQualityProfile,
+  AudioQualityProfile,
+  QualityChangeEvent,
+} from './media';
 export { CardEngine } from './engines/cards/card-engine';
 export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';

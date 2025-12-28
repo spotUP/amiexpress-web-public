@@ -226,6 +226,7 @@ sdk/
 ## Available Engines
 
 - **AudioEngine** - Web Audio with **65 procedural sounds** (Tone.js) - See [Sound Library Reference](./docs/SOUND_LIBRARY_REFERENCE.md)
+- **AudioStreamingEngine** - Real-time voice chat with Opus codec, VAD, multi-party support - See [Audio Streaming Guide](../Documentation/4-Door-Developers/AUDIO_STREAMING.md)
 - **TrackerEngine** - MOD/XM/S3M/IT tracker music player (libopenmpt) - 50+ formats with authentic playback
 - **CardEngine** - ASCII/ANSI playing cards, hands, and UNO (defaults to ASCII + ANSI)
 - **GraphicsEngine** - Sprites, particles, parallax scrolling
@@ -234,6 +235,7 @@ sdk/
 - **AIEngine** - Pathfinding, behaviors
 - **NetworkEngine** - Multiplayer support
 - **PokerEngine** - Texas Hold'em game state engine (pokertools)
+- **VideoEngine** - Real-time ASCII video streaming (webcam, files, screen sharing) - See [Video Streaming Guide](./docs/VIDEO_STREAMING.md)
 
 ## Available Components
 
@@ -253,8 +255,135 @@ npm run validate      # Validate door structure
 npm run preview       # Live preview environment
 ```
 
+## ASCII Video Streaming (NEW!)
+
+Stream real-time ASCII video to BBS clients with 16-color ANSI support:
+
+```typescript
+import { VideoDisplay } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/widgets/video-display';
+
+door.onStart(async (ctx) => {
+  // Create video display widget
+  const videoDisplay = new VideoDisplay({
+    parent: screen,
+    width: 40,
+    height: 20,
+    showStats: true
+  });
+
+  // Start streaming from webcam
+  const streamId = await ctx.video.startStream(
+    { type: 'webcam' },
+    { width: 38, height: 18, fps: 10, colored: true }
+  );
+
+  videoDisplay.setStream(streamId);
+
+  // Listen for frames
+  ctx.socket.on('ascii-video-frame', (frame) => {
+    videoDisplay.addFrame(frame);
+  });
+});
+```
+
+**Supported Sources:**
+- Webcam (platform-specific device capture)
+- Video files (MP4, AVI, etc.)
+- URL streams (HTTP, RTSP)
+- Screen capture (desktop sharing)
+- Image buffers (single frame)
+
+**Features:**
+- 16-color ANSI palette (per CLAUDE.md compliance)
+- 10-15 FPS streaming
+- Frame buffering for smooth playback
+- Multiple concurrent streams
+- FPS monitoring and statistics
+- Auto-cleanup on door close
+
+See [Video Streaming Guide](./docs/VIDEO_STREAMING.md) for complete API reference and examples.
+
+## Real-Time Audio Streaming (NEW!)
+
+Multi-party voice chat with real-time audio streaming, voice activity detection, and client-side processing:
+
+```typescript
+door.onStart(async (ctx) => {
+  if (!ctx.audio) {
+    console.log('Audio API not available');
+    return;
+  }
+
+  // Start streaming audio
+  const streamId = await ctx.audio.startStreaming({
+    codec: 'opus',
+    sampleRate: 48000,
+    bitrate: 32000,
+    echoCancellation: true,
+    noiseSuppression: true,
+  });
+
+  console.log(`Streaming: ${streamId}`);
+
+  // Listen for other speakers
+  ctx.socket.on('audio-stream-started', (data) => {
+    console.log(`${data.username} joined the chat`);
+  });
+
+  ctx.socket.on('audio-speaking-status', (data) => {
+    if (data.isSpeaking) {
+      console.log(`${data.username} is speaking (${Math.floor(data.audioLevel * 100)}%)`);
+    }
+  });
+
+  // Get audio levels for visualization
+  setInterval(() => {
+    const levels = ctx.audio.getAudioLevels();
+    console.log(`Input: ${Math.floor(levels.input * 100)}%`);
+  }, 50);
+});
+
+door.onClose(async (ctx) => {
+  // Cleanup
+  if (ctx.audio) {
+    await ctx.audio.stopStreaming();
+  }
+});
+```
+
+**Features:**
+- Opus codec (32kbps) or PCM
+- Voice Activity Detection (VAD) with speaking indicators
+- Multi-party support (10 concurrent speakers default)
+- Client-side audio processing (zero server CPU overhead)
+- Real-time audio level and waveform visualization
+- Echo cancellation, noise suppression, auto gain control
+- Low latency (<100ms typical)
+- Auto-cleanup on disconnect
+
+**API Methods:**
+- `startStreaming(options)` - Start streaming audio
+- `stopStreaming()` - Stop streaming
+- `setMuted(muted)` - Mute/unmute microphone
+- `setVolume(volume)` - Set playback volume (0.0-1.0)
+- `getAudioLevels()` - Get input/output levels and waveform data
+- `getActiveStreams()` - List all active speakers
+- `subscribe(userId)` / `unsubscribe(userId)` - Selective listening
+
+**Socket.IO Events:**
+- `audio-stream-started` - User joined voice chat
+- `audio-stream-stopped` - User left voice chat
+- `audio-speaking-status` - Speaking state changed (VAD)
+- `audio-chunk` - Audio data (handled automatically by SDK)
+
+See [Audio Streaming Guide](../Documentation/4-Door-Developers/AUDIO_STREAMING.md) and [API Reference](../Documentation/4-Door-Developers/AUDIO_API_REFERENCE.md) for complete documentation.
+
+**Example:** See `sdk/doors/voice-chat/` for a working multi-party voice chat implementation.
+
 ## Documentation
 
 See:
 - `sdk/docs/` for engine quick references and guides
 - `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` for door patterns, input handling, and troubleshooting
+- `Documentation/4-Door-Developers/AUDIO_STREAMING.md` for real-time voice chat API and examples
+- `sdk/docs/VIDEO_STREAMING.md` for ASCII video streaming API and examples

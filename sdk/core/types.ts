@@ -661,6 +661,12 @@ export interface DoorContext {
   /** Storage API */
   storage: StorageAPI;
 
+  /** Video API (optional - for ASCII video streaming) */
+  video?: VideoAPI;
+
+  /** Audio API (optional - for real-time voice chat) */
+  audio?: AudioAPI;
+
   /** BBS API (optional advanced features) */
   bbs?: BBSApi;
 
@@ -803,6 +809,88 @@ export interface BBSApi {
 }
 
 /**
+ * Video API - ASCII Video Streaming
+ *
+ * Provides real-time ASCII video streaming capabilities for doors.
+ * Converts video sources (webcam, files, URLs) to ASCII art with 16-color ANSI palette.
+ */
+export interface VideoAPI {
+  /**
+   * Start streaming from a video source
+   * @param source Video source configuration
+   * @param options Stream options (width, height, fps, colors)
+   * @returns Promise resolving to stream ID
+   */
+  startStream(source: VideoSource, options?: VideoStreamOptions): Promise<string>;
+
+  /**
+   * Stop an active stream
+   * @param streamId Stream identifier
+   */
+  stopStream(streamId: string): Promise<void>;
+
+  /**
+   * Subscribe to a stream (for viewers)
+   * @param streamId Stream identifier
+   */
+  subscribe(streamId: string): Promise<void>;
+
+  /**
+   * Unsubscribe from a stream
+   * @param streamId Stream identifier
+   */
+  unsubscribe(streamId: string): Promise<void>;
+
+  /**
+   * Get all active streams
+   * @returns Array of stream IDs
+   */
+  getStreams(): Promise<string[]>;
+
+  /**
+   * Pause a stream
+   * @param streamId Stream identifier
+   */
+  pauseStream(streamId: string): Promise<void>;
+
+  /**
+   * Resume a paused stream
+   * @param streamId Stream identifier
+   */
+  resumeStream(streamId: string): Promise<void>;
+}
+
+/**
+ * Video source types
+ */
+export type VideoSource =
+  | { type: 'webcam'; deviceId?: string }
+  | { type: 'file'; path: string }
+  | { type: 'url'; url: string }
+  | { type: 'screen'; displayId?: number }
+  | { type: 'buffer'; buffer: Buffer };
+
+/**
+ * Video stream options
+ */
+export interface VideoStreamOptions {
+  /** ASCII output width in characters (default: 80) */
+  width?: number;
+
+  /** ASCII output height in characters (default: 24) */
+  height?: number;
+
+  /** Target frames per second (default: 10, max: 15) */
+  fps?: number;
+
+  /** Use ANSI colors (default: true, 16 colors only) */
+  colored?: boolean;
+
+  /** Character set for ASCII conversion */
+  charSet?: 'blocks' | 'gradient' | 'simple';
+}
+
+/**
  * Door lifecycle hooks (SDK v2.0)
  */
 export type StartHandler = (ctx: DoorContext) => Promise<void> | void;
@@ -820,4 +908,120 @@ export interface RawDoorSession {
   user: User;
   bbs?: any;
   params?: string[];
+}
+
+/**
+ * Audio API - Real-Time Voice Chat
+ *
+ * Provides real-time audio streaming capabilities for doors.
+ * Uses Opus codec with Socket.IO transport for voice chat.
+ */
+export interface AudioAPI {
+  /**
+   * Start streaming audio from microphone
+   * @param options Stream configuration options
+   * @returns Promise resolving to stream ID
+   */
+  startStreaming(options?: AudioStreamOptions): Promise<string>;
+
+  /**
+   * Stop streaming audio
+   */
+  stopStreaming(): Promise<void>;
+
+  /**
+   * Get all active audio streams in room
+   * @returns Array of stream information
+   */
+  getActiveStreams(): AudioStreamInfo[];
+
+  /**
+   * Mute/unmute local microphone
+   * @param muted True to mute, false to unmute
+   */
+  setMuted(muted: boolean): void;
+
+  /**
+   * Set volume for audio playback
+   * @param volume Volume level (0.0 - 1.0)
+   */
+  setVolume(volume: number): void;
+
+  /**
+   * Get current audio levels for visualization
+   * @returns Current input/output levels
+   */
+  getAudioLevels(): AudioLevels;
+
+  /**
+   * Subscribe to someone's audio stream
+   * @param userId User ID to subscribe to
+   */
+  subscribe(userId: number | string): Promise<void>;
+
+  /**
+   * Unsubscribe from audio stream
+   * @param userId User ID to unsubscribe from
+   */
+  unsubscribe(userId: number | string): Promise<void>;
+}
+
+/**
+ * Audio stream configuration options
+ */
+export interface AudioStreamOptions {
+  /** Audio codec (default: 'opus') */
+  codec?: 'opus' | 'pcm';
+
+  /** Sample rate in Hz (default: 48000) */
+  sampleRate?: 48000 | 16000;
+
+  /** Bitrate in bps (default: 32000 = 32kbps) */
+  bitrate?: number;
+
+  /** Enable echo cancellation (default: true) */
+  echoCancellation?: boolean;
+
+  /** Enable noise suppression (default: true) */
+  noiseSuppression?: boolean;
+
+  /** Enable auto gain control (default: true) */
+  autoGainControl?: boolean;
+
+  /** Number of audio channels (default: 1 = mono) */
+  channelCount?: 1 | 2;
+
+  /** Enable ASCII waveform visualization (default: false) */
+  visualize?: boolean;
+}
+
+/**
+ * Information about an active audio stream
+ */
+export interface AudioStreamInfo {
+  /** User ID */
+  userId: number | string;
+
+  /** Username */
+  username: string;
+
+  /** Whether user is currently speaking (voice activity detection) */
+  isSpeaking: boolean;
+
+  /** Current audio level (0.0 - 1.0) */
+  audioLevel: number;
+}
+
+/**
+ * Audio levels for input/output monitoring
+ */
+export interface AudioLevels {
+  /** Microphone input level (0.0 - 1.0) */
+  input: number;
+
+  /** Speaker output level (0.0 - 1.0) */
+  output: number;
+
+  /** Waveform data for visualization (array of -1.0 to 1.0 samples) */
+  waveform?: number[];
 }
