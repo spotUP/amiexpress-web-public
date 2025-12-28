@@ -30,6 +30,78 @@ import { DebugLogger } from '../utils/debug-logger.util';
 import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
 
 /**
+ * Screen directory type - matches express.e:6544-6640
+ * Each screen type uses a specific base directory
+ */
+enum ScreenDirType {
+  NODE = 'node',      // nodeScreenDir - Node{X}/ or Node{X}/Screens/
+  CONF = 'conf',      // confScreenDir - Conf{X}/Screens/
+  GLOBAL = 'global',  // cmds.bbsLoc - global Screens/ directory
+}
+
+/**
+ * Map screen names to their directory type (express.e:6544-6640)
+ * This is a 1:1 port of express.e displayScreen() CASE statements
+ */
+const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
+  // nodeScreenDir screens (express.e:6546-6634)
+  'AWAITSCREEN': ScreenDirType.NODE,
+  'NODE_BULL': ScreenDirType.NODE,  // SCREEN_NODE_BULL uses nodeScreenDir + 'BULL'
+  'LOGOFF': ScreenDirType.NODE,
+  'LOGON': ScreenDirType.NODE,
+  'BBSTITLE': ScreenDirType.NODE,
+  'JOIN': ScreenDirType.NODE,
+  'JOINED': ScreenDirType.NODE,
+  'JOINCONF': ScreenDirType.NODE,
+  'JOINMSGBASE': ScreenDirType.NODE,
+  'NEWUSERPW': ScreenDirType.NODE,
+  'NONEWUSERS': ScreenDirType.NODE,
+  'GUESTLOGON': ScreenDirType.NODE,
+  'LOCKOUT0': ScreenDirType.NODE,
+  'LOCKOUT1': ScreenDirType.NODE,
+  'PRIVATE': ScreenDirType.NODE,
+
+  // confScreenDir screens (express.e:6557-6608)
+  'CONF_BULL': ScreenDirType.CONF,  // SCREEN_CONF_BULL uses confScreenDir + 'BULL'
+  'MENU': ScreenDirType.CONF,
+  'CONF_JOINMSGBASE': ScreenDirType.CONF,
+  'DOWNLOADMSG': ScreenDirType.CONF,
+  'FILEHELP': ScreenDirType.CONF,
+  'UPLOADMSG': ScreenDirType.CONF,
+  'NOUPLOADS': ScreenDirType.CONF,
+
+  // cmds.bbsLoc screens (express.e:6548-6550, 6637-6640)
+  'BULL': ScreenDirType.GLOBAL,  // SCREEN_BULL uses cmds.bbsLoc + 'BULL'
+  'ONENODE': ScreenDirType.GLOBAL,
+  'LOGON24': ScreenDirType.GLOBAL,
+};
+
+/**
+ * Get the actual screen file name for special screen types
+ * Some screens use different file names (e.g., NODE_BULL -> BULL, CONF_BULL -> BULL)
+ */
+function getScreenFileName(screenName: string): string {
+  const upper = screenName.toUpperCase();
+  // NODE_BULL and CONF_BULL both use 'BULL' as the file name
+  if (upper === 'NODE_BULL' || upper === 'CONF_BULL') {
+    return 'BULL';
+  }
+  // DOWNLOADMSG, UPLOADMSG -> DownloadMsg, UploadMsg
+  if (upper === 'DOWNLOADMSG') return 'DownloadMsg';
+  if (upper === 'UPLOADMSG') return 'UploadMsg';
+  return screenName;
+}
+
+/**
+ * Get screen directory type from screen name
+ * Returns the directory type for known screens, or null for unknown screens
+ */
+function getScreenDirType(screenName: string): ScreenDirType | null {
+  const upper = screenName.toUpperCase();
+  return SCREEN_DIR_MAP[upper] || null;
+}
+
+/**
  * SAUCE metadata structure (Standard Architecture for Universal Comment Extensions)
  * Used primarily by PC ANSI art to store metadata
  */
@@ -1349,7 +1421,14 @@ export function loadScreenFile(
   screenDebug(`[loadScreenFile] Terminal type: ${session?.terminalType || 'unknown'} (${session?.screenWidth}x${session?.screenHeight})`);
   screenDebug(`[loadScreenFile] PETSCII mode: ${session?.petsciiMode ? 'YES' : 'NO'}`);
   const userSecLevel = session?.user?.secLevel ?? 0;
-  const screenBaseNoExt = effectiveName.replace(/\.[^/.]+$/, ''); // strip extension for security search
+
+  // express.e:6551-6558 - Some screen types use different file names
+  // NODE_BULL and CONF_BULL both look for 'BULL' files in their respective directories
+  const actualFileName = getScreenFileName(screenName);
+  const screenBaseNoExt = actualFileName.replace(/\.[^/.]+$/, ''); // strip extension for security search
+  if (actualFileName !== screenName) {
+    screenDebug(`[loadScreenFile] Screen ${screenName} uses file name: ${actualFileName}`);
+  }
   const isAssignPath = effectiveName.includes(':');
   let isAbsolutePath = path.isAbsolute(effectiveName);
   const normalizedName = effectiveName.toLowerCase();
@@ -1392,28 +1471,68 @@ export function loadScreenFile(
 
   // Only populate default search locations when no explicit path/assign is given.
   if (!isAbsolutePath && !isAssignPath && !hasSlash) {
-    // Try conference-specific screen first (if provided)
-    // express.e uses confScreenDir which points to Conf directory
-    if (conferenceId) {
-      // Find the relative conference number (1-based position in conferences array)
-      const confIndex = conferences.findIndex(c => c.id === conferenceId);
-      if (confIndex !== -1) {
-        const relConfNum = confIndex + 1; // Convert to 1-based
-        const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
-        candidateDirs.forEach(candidate => {
-          searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
-        });
+    // express.e:6544-6640 - Each screen type uses a SPECIFIC directory, not a search order
+    // We determine the correct directory based on screen type for 1:1 compatibility
+    const screenDirType = getScreenDirType(screenName);
+
+    if (screenDirType) {
+      // Known screen type - use ONLY the correct directory per express.e
+      switch (screenDirType) {
+        case ScreenDirType.NODE:
+          // nodeScreenDir screens: Node{X}/ and Node{X}/Screens/
+          // express.e:6577 - StringF(screencheck,'\s\s',nodeScreenDir,'LOGON')
+          const nodeDir = path.join(baseDir, `Node${nodeId}`);
+          searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
+          searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
+          // Also check global Screens/ as fallback (reference-board uses this)
+          searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
+          break;
+
+        case ScreenDirType.CONF:
+          // confScreenDir screens: Conf{X}/Screens/
+          // express.e:6558 - StringF(screencheck,'\s\s',confScreenDir,'BULL')
+          if (conferenceId) {
+            const confIndex = conferences.findIndex(c => c.id === conferenceId);
+            if (confIndex !== -1) {
+              const relConfNum = confIndex + 1;
+              const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
+              candidateDirs.forEach(candidate => {
+                searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
+              });
+            }
+          }
+          break;
+
+        case ScreenDirType.GLOBAL:
+          // cmds.bbsLoc screens: global Screens/ directory
+          // express.e:6549 - StringF(screencheck,'\s\s',cmds.bbsLoc,'BULL')
+          searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
+          searchLocations.push({ dir: path.join(baseDir, 'Bulletins'), desc: 'Bulletins' });
+          break;
       }
+      screenDebug(`[loadScreenFile] Screen type ${screenName} uses ${screenDirType} directory`);
+    } else {
+      // Unknown screen type - use legacy search order for backwards compatibility
+      // Try conference-specific screen first (if provided)
+      if (conferenceId) {
+        const confIndex = conferences.findIndex(c => c.id === conferenceId);
+        if (confIndex !== -1) {
+          const relConfNum = confIndex + 1;
+          const candidateDirs = getConferenceScreensCandidates(baseDir, relConfNum);
+          candidateDirs.forEach(candidate => {
+            searchLocations.push({ dir: candidate.dir, desc: candidate.desc });
+          });
+        }
+      }
+
+      // Try node-specific screens
+      const nodeDir = path.join(baseDir, `Node${nodeId}`);
+      searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
+      searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
+
+      // Then try default BBS screens
+      searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
     }
-
-    // Try node-specific screens - express.e:6580 uses nodeScreenDir which is Node0/ itself
-    // Screens can be directly in Node0/ OR in Node0/Screens/ subdirectory
-    const nodeDir = path.join(baseDir, `Node${nodeId}`);
-    searchLocations.push({ dir: nodeDir, desc: `Node${nodeId}` });
-    searchLocations.push({ dir: path.join(nodeDir, 'Screens'), desc: `Node${nodeId}/Screens` });
-
-    // Then try default BBS screens
-    searchLocations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
   }
 
   // Possible filename variations (case-insensitive search will handle actual matching)
@@ -1482,13 +1601,15 @@ export function loadScreenFile(
       }
       return ['AWAITSCREEN.TXT', 'AWAITSCREEN.txt'];
     }
+    // Use actualFileName for mapped screen types (e.g., NODE_BULL -> BULL)
+    const fileToFind = actualFileName;
     if (session?.petsciiMode) {
-      return isC64Client ? addPetsciiVariants(`${screenName}_C64`) : addPetsciiVariants(screenName);
+      return isC64Client ? addPetsciiVariants(`${fileToFind}_C64`) : addPetsciiVariants(fileToFind);
     }
     if (session?.ripMode) {
-      return addRipVariants(screenName);
+      return addRipVariants(fileToFind);
     }
-    return addAnsiVariants(screenName);
+    return addAnsiVariants(fileToFind);
   })();
 
   // Try each location with case-insensitive matching

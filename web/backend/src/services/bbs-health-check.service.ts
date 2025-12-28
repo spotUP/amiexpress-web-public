@@ -255,11 +255,18 @@ export class BBSHealthCheckService {
   }
 
   /**
-   * Check screen files (express.e:31995 - nodeScreenDir)
+   * Check screen files (express.e:6544-6640 - screen directory mapping)
+   *
+   * Per express.e, screens use SPECIFIC directories:
+   * - nodeScreenDir: Node{X}/ or Node{X}/Screens/ for LOGON, BBSTITLE, LOGOFF, JOIN, etc.
+   * - confScreenDir: Conf{X}/Screens/ for MENU, CONF_BULL, DOWNLOADMSG, etc.
+   * - cmds.bbsLoc: global Screens/ for BULL, GOODBYE
    */
   private async checkScreens(): Promise<HealthCheckResult> {
     const issues: HealthIssue[] = [];
+    let checkedCount = 0;
 
+    // Check global Screens/ directory exists
     const screensDirPath = path.join(this.bbsRoot, 'Screens');
     if (!fs.existsSync(screensDirPath)) {
       issues.push({
@@ -270,41 +277,95 @@ export class BBSHealthCheckService {
         autoFixable: true,
         fixAction: 'Create Screens/ directory'
       });
-      return {
-        category: 'Screen Files',
-        passed: false,
-        issues,
-        checkedCount: 0,
-        errorCount: 1,
-        warningCount: 0
-      };
     }
 
-    // Check for critical screen files (express.e uses these)
-    const criticalScreens = [
-      'BBSTITLE',     // Main BBS title
-      'LOGON',        // Login screen
-      'MENU',         // Main menu
-      'GOODBYE'       // Logout screen
-    ];
+    // Helper to check for screen file with any extension
+    const screenExists = (dir: string, name: string): boolean => {
+      const extensions = ['.SEQ', '.TXT', '.RIP', '.seq', '.txt', '.rip'];
+      for (const ext of extensions) {
+        if (fs.existsSync(path.join(dir, `${name}${ext}`))) return true;
+      }
+      return false;
+    };
 
-    let foundScreens = 0;
-    for (const screen of criticalScreens) {
-      // Check for .SEQ or .TXT versions
-      const seqPath = path.join(screensDirPath, `${screen}.SEQ`);
-      const txtPath = path.join(screensDirPath, `${screen}.TXT`);
+    // =========================================================
+    // NODE SCREENS - must be in Node{X}/ or Node{X}/Screens/
+    // express.e:6546-6634 - nodeScreenDir screens
+    // =========================================================
+    const nodeScreens = ['BBSTITLE', 'LOGON', 'LOGOFF', 'JOIN', 'JOINED'];
+    const maxNodes = 4;
 
-      if (!fs.existsSync(seqPath) && !fs.existsSync(txtPath)) {
-        issues.push({
-          severity: 'warning',
-          category: 'Screens',
-          description: `${screen} screen missing (.SEQ or .TXT)`,
-          path: screensDirPath,
-          autoFixable: false,
-          fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Screens/`
-        });
-      } else {
-        foundScreens++;
+    for (let nodeNum = 0; nodeNum < maxNodes; nodeNum++) {
+      const nodeDir = path.join(this.bbsRoot, `Node${nodeNum}`);
+      const nodeScreensDir = path.join(nodeDir, 'Screens');
+
+      if (!fs.existsSync(nodeDir)) continue; // Node dir checked elsewhere
+
+      for (const screen of nodeScreens) {
+        checkedCount++;
+        // Check both Node{X}/ and Node{X}/Screens/
+        const inNodeRoot = screenExists(nodeDir, screen);
+        const inNodeScreens = fs.existsSync(nodeScreensDir) && screenExists(nodeScreensDir, screen);
+
+        if (!inNodeRoot && !inNodeScreens) {
+          // Only warn for Node0 (main node) - other nodes can inherit
+          if (nodeNum === 0) {
+            issues.push({
+              severity: 'info',
+              category: 'Screens',
+              description: `Node0: ${screen} screen missing - check Node0/ or Node0/Screens/`,
+              path: nodeScreensDir,
+              autoFixable: false,
+              fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Node0/Screens/`
+            });
+          }
+        }
+      }
+    }
+
+    // =========================================================
+    // CONF SCREENS - must be in Conf{X}/Screens/
+    // express.e:6557-6608 - confScreenDir screens
+    // =========================================================
+    const confScreens = ['MENU'];
+
+    // Check at least Conf1 has MENU
+    const conf1ScreensDir = path.join(this.bbsRoot, 'Conf1', 'Screens');
+    if (fs.existsSync(conf1ScreensDir)) {
+      for (const screen of confScreens) {
+        checkedCount++;
+        if (!screenExists(conf1ScreensDir, screen)) {
+          issues.push({
+            severity: 'warning',
+            category: 'Screens',
+            description: `Conf1: ${screen} screen missing (.SEQ or .TXT)`,
+            path: conf1ScreensDir,
+            autoFixable: false,
+            fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Conf1/Screens/`
+          });
+        }
+      }
+    }
+
+    // =========================================================
+    // GLOBAL SCREENS - in Screens/ directory
+    // express.e:6548-6550, 6637-6640 - cmds.bbsLoc screens
+    // =========================================================
+    const globalScreens = ['GOODBYE'];
+
+    if (fs.existsSync(screensDirPath)) {
+      for (const screen of globalScreens) {
+        checkedCount++;
+        if (!screenExists(screensDirPath, screen)) {
+          issues.push({
+            severity: 'info',
+            category: 'Screens',
+            description: `${screen} screen missing from global Screens/`,
+            path: screensDirPath,
+            autoFixable: false,
+            fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Screens/`
+          });
+        }
       }
     }
 
@@ -312,7 +373,7 @@ export class BBSHealthCheckService {
       category: 'Screen Files',
       passed: issues.filter(i => i.severity === 'error').length === 0,
       issues,
-      checkedCount: criticalScreens.length,
+      checkedCount,
       errorCount: issues.filter(i => i.severity === 'error').length,
       warningCount: issues.filter(i => i.severity === 'warning').length
     };
