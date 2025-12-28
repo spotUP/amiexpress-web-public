@@ -2177,7 +2177,7 @@ export class Element extends EventEmitter {
     const contentHeight = this._lines.length;
     const viewHeight = this.iheight;
 
-    // If content fits in view, still render track but no thumb scroll needed
+    // If no content or view, don't render scrollbar
     if (contentHeight <= 0 || viewHeight <= 0) return;
 
     const trackChar = typeof scrollbarOptions?.track === 'string'
@@ -2187,13 +2187,14 @@ export class Element extends EventEmitter {
       ? scrollbarOptions.thumb
       : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || '█';
 
-    // Always render scrollbar track (subtle/dim style)
-    for (let y = pos.yi + border; y < pos.yl - border; y++) {
-      (this.screen as any).fillRegion(trackAttr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
-    }
-
-    // Only render thumb if content overflows
+    // Only render scrollbar (track + thumb) if content overflows
     if (contentHeight > viewHeight) {
+      // Render scrollbar track (subtle/dim style)
+      for (let y = pos.yi + border; y < pos.yl - border; y++) {
+        (this.screen as any).fillRegion(trackAttr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
+      }
+
+      // Render scrollbar thumb
       const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
       const maxScroll = contentHeight - viewHeight;
       const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
