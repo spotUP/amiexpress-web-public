@@ -135,7 +135,6 @@ WORKDIR /app
 COPY --from=frontend-builder /app/web/frontend/dist ./web/frontend/dist
 COPY --from=config-builder /app/web/config-app/dist ./web/config-app/dist
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
-COPY --from=sdk-builder /app/sdk/doors ./sdk/doors
 COPY --from=sdk-preview-builder /app/sdk/tools/preview/frontend/dist ./sdk/tools/preview/frontend/dist
 COPY --from=terminal-builder /app/packages/terminal/dist ./packages/terminal/dist
 
