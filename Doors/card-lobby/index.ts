@@ -18,6 +18,7 @@ import blessed, {
   type MouseEvent,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
   CardEngine,
   PokerEngine,
@@ -82,6 +83,7 @@ import {
   mergeColumns,
   visibleWidth,
 } from './lib';
+import { UIManager, DialogManager, GameStateManager } from './managers';
 
 export const metadata = {
   name: 'Card Lobby',
@@ -95,58 +97,47 @@ class CardLobbyApp {
   private session: DoorSession;
   private screen!: Screen;
   private desktop!: Box;
-  private topBar!: Listbar;
-  private topInfoBar!: Box;
-  private statusBar!: Box;
-  private logWindow!: Log;
-  private lobbyWindow!: Box;
-  private tableWindow!: Box;
-  private lobbyList!: List;
-  private lobbyActions!: Listbar;
-  private tableActions!: Box;
-  private tableContent!: ScrollableText;
-  private flopPanel!: Box;
-  private flopContent!: Box;
-  private playersPanel!: Box;
-  private playersContent!: ScrollableText;
-  private handPanel!: Box;
-  private handContent!: Box;
-  private activityPanel!: Box;
-  private activityContent!: Log;
-  private actionButtons!: {
-    fold: Button;
-    check: Button;
-    call: Button;
-    raise: Button;
-    quit: Button;
-  };
-  private overlayShade!: Box;
+
+  // Managers
+  private uiManager!: UIManager;
+  private dialogManager!: DialogManager;
+  private gameStateManager!: GameStateManager;
+
+  // UI elements (now accessed via uiManager)
+  private get topBar() { return this.uiManager.topBar; }
+  private get topInfoBar() { return this.uiManager.topInfoBar; }
+  private get statusBar() { return this.uiManager.statusBar; }
+  private get logWindow() { return this.uiManager.logWindow; }
+  private get lobbyWindow() { return this.uiManager.lobbyWindow; }
+  private get tableWindow() { return this.uiManager.tableWindow; }
+  private get lobbyList() { return this.uiManager.lobbyList; }
+  private get lobbyActions() { return this.uiManager.lobbyActions; }
+  private get tableActions() { return this.uiManager.tableActions; }
+  private get tableContent() { return this.uiManager.tableContent; }
+  private get flopPanel() { return this.uiManager.flopPanel; }
+  private get flopContent() { return this.uiManager.flopContent; }
+  private get playersPanel() { return this.uiManager.playersPanel; }
+  private get playersContent() { return this.uiManager.playersContent; }
+  private get handPanel() { return this.uiManager.handPanel; }
+  private get handContent() { return this.uiManager.handContent; }
+  private get activityPanel() { return this.uiManager.activityPanel; }
+  private get activityContent() { return this.uiManager.activityContent; }
+  private get actionButtons() { return this.uiManager.actionButtons; }
+  private get overlayShade() { return this.uiManager.overlayShade; }
+  private get layout() { return this.uiManager.layout; }
+
   private viewMode: 'lobby' | 'table' = 'lobby';
-  private layout: {
-    width: number;
-    height: number;
-    topOffset: number;
-    statusHeight: number;
-    logHeight: number;
-    mainHeight: number;
-    tableHeight: number;
-    leftWidth: number;
-    rightWidth: number;
-  } | null = null;
   private autoDealInProgress = false;
-  private dealAnimationInProgress = false;
   private lastAnimatedHandStartedAt: number | null = null;
 
   private lobby: LobbyState | null = null;
   private profiles: Record<string, PlayerProfile> = {};
   private currentProfile: PlayerProfile | null = null;
   private lobbyFilters: LobbyFilters = { gameId: null, openSeatsOnly: false };
-  private leaderboardMode: LeaderboardMode = 'weekly';
   private notices: string[] = [];
   private refreshTimer: NodeJS.Timeout | null = null;
   private tableListMap: number[] = [];
   private selectedTableId: number | null = null;
-  private modalActive = false;
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -154,12 +145,38 @@ class CardLobbyApp {
 
   async run(): Promise<void> {
     this.setupScreen();
+
+    // Show loading screen while initializing
+    const loader = new DoorLoader(this.screen, {
+      overlay: true,
+      overlayOpacity: 0.6,
+      barColor: 'green',
+    });
+
+    loader.show('Initializing Card Lobby...');
+    this.screen.render();
+
+    await loader.delay(100);
+    loader.update(20, 'Loading player profiles...');
     await this.reloadState();
+
+    loader.update(50, 'Setting up game tables...');
     await this.writeBullHelpFile();
+
+    loader.update(70, 'Checking weekly bulletins...');
     await this.writeWeeklyBulletinIfNeeded();
+
+    loader.update(85, 'Saving state...');
     await this.persistState();
 
+    loader.update(95, 'Finalizing lobby...');
     this.updateAllPanels();
+
+    loader.update(100, 'Ready!');
+    await loader.delay(500);
+    loader.hide();
+    loader.destroy();
+
     this.lobbyList.focus();
     this.screen.render();
     this.startRefreshTimer();
@@ -294,693 +311,59 @@ class CardLobbyApp {
       },
     });
 
-    this.buildTopBar();
-    this.buildStatusBar();
-    this.buildWindows();
-    this.buildOverlay();
-  }
+    // Initialize managers
+    this.uiManager = new UIManager(this.screen, this.desktop);
+    this.dialogManager = new DialogManager(this.screen, this.uiManager.overlayShade);
+    this.gameStateManager = new GameStateManager();
 
-  private buildTopBar(): void {
-    const runAction = this.runAction.bind(this);
-    const focusLobby = this.focusLobby.bind(this);
-    const focusTable = this.focusTable.bind(this);
-    const showProfileWindow = this.showProfileWindow.bind(this);
-    const showLeaderboardWindow = this.showLeaderboardWindow.bind(this);
-    const showAchievementsWindow = this.showAchievementsWindow.bind(this);
-    const showBulletinsWindow = this.showBulletinsWindow.bind(this);
-    const exitDoor = this.exitDoor.bind(this);
-
-    this.topBar = blessed.listbar({
-      parent: this.desktop,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      hidden: true,
-      style: UI_THEME.topBar,
-      commands: {
-        Lobby: { callback: () => runAction(focusLobby) },
-        Table: { callback: () => runAction(focusTable) },
-        Profile: { callback: () => runAction(showProfileWindow) },
-        Leaders: { callback: () => runAction(showLeaderboardWindow) },
-        Achieve: { callback: () => runAction(showAchievementsWindow) },
-        Bulls: { callback: () => runAction(showBulletinsWindow) },
-        Quit: { callback: () => runAction(exitDoor) },
+    // Build UI via manager
+    this.uiManager.buildTopBar({
+      focusLobby: this.focusLobby.bind(this),
+      focusTable: this.focusTable.bind(this),
+      showProfileWindow: () => this.dialogManager.showProfileWindow(this.currentProfile),
+      showLeaderboardWindow: () => this.dialogManager.showLeaderboardWindow(this.profiles),
+      showAchievementsWindow: () => this.dialogManager.showAchievementsWindow(this.currentProfile),
+      showBulletinsWindow: () => this.dialogManager.showBulletinsWindow(this.session),
+      exitDoor: this.exitDoor.bind(this),
+      runAction: this.runAction.bind(this),
+    });
+    this.uiManager.buildStatusBar();
+    this.uiManager.buildWindows({
+      onLobbySelect: (index, tableListMap) => {
+        this.selectedTableId = tableListMap[index] ?? null;
+        this.updateTablePanel();
+        this.screen.render();
       },
+      createTableFlow: this.createTableFlow.bind(this),
+      joinSelectedTable: this.joinSelectedTable.bind(this),
+      observeSelectedTable: this.observeSelectedTable.bind(this),
+      toggleFilters: this.toggleFilters.bind(this),
+      manualRefresh: this.manualRefresh.bind(this),
+      runAction: this.runAction.bind(this),
     });
+    this.uiManager.buildOverlay();
 
-    this.topInfoBar = createBox({
-      parent: this.desktop,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      tags: true,
-      hidden: false,
-      style: { fg: 'white', bg: 'blue' },
-      content: ' Card Lobby ',
-    });
-  }
-
-  private buildStatusBar(): void {
-    this.statusBar = createBox({
-      parent: this.desktop,
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      tags: true,
-      style: UI_THEME.statusBar,
-      content: ' Loading Card Lobby... ',
-    });
-  }
-
-  private buildWindows(): void {
-    const runAction = this.runAction.bind(this);
-    const manualRefresh = this.manualRefresh.bind(this);
-
-    const height = (this.screen.height as number) || 24;
-    const width = (this.screen.width as number) || 80;
-    const topOffset = 1;
-    const statusHeight = 1;
-    const logHeight = 4;
-    const tableHeight = height - topOffset - statusHeight;
-    const mainHeight = tableHeight - logHeight;
-
-    const minLobbyWidth = 22;
-    const minTableWidth = 40;
-    let leftWidth = Math.floor(width * 0.35);
-    leftWidth = Math.max(minLobbyWidth, leftWidth);
-    leftWidth = Math.min(leftWidth, width - minTableWidth);
-    if (leftWidth < 10) {
-      leftWidth = Math.max(10, width - minTableWidth);
-    }
-    const rightWidth = Math.max(minTableWidth, width - leftWidth);
-    this.layout = {
-      width,
-      height,
-      topOffset,
-      statusHeight,
-      logHeight,
-      mainHeight,
-      tableHeight,
-      leftWidth,
-      rightWidth,
-    };
-
-    this.lobbyWindow = createBox({
-      parent: this.desktop,
-      top: topOffset,
-      left: 0,
-      width: leftWidth,
-      height: mainHeight,
-      label: ' Lobby ',
-      border: { type: 'ascii' },
-      style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
-    });
-
-    this.tableWindow = createBox({
-      parent: this.desktop,
-      top: topOffset,
-      left: leftWidth,
-      width: rightWidth,
-      height: mainHeight,
-      border: 'none',
-      style: { bg: UI_THEME.windowBg },
-    });
-
-    this.lobbyList = createList({
-      parent: this.lobbyWindow,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 2,
-      wrapItems: false,
-      keys: true,
-      mouse: true,
-      vi: true,
-      tags: true,
-      style: {
-        fg: 'white',
-        selected: { fg: 'black', bg: UI_THEME.highlightBg },
-      } as any,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: 'black' },
-        style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
-      } as any,
-      items: [],
-    });
-
-    this.lobbyList.on('select', (_: any, index: number) => {
-      this.selectedTableId = this.tableListMap[index] ?? null;
-      this.updateTablePanel();
-      this.screen.render();
-    });
-
-    this.lobbyActions = blessed.listbar({
-      parent: this.lobbyWindow,
-      bottom: 0,
-      left: 1,
-      right: 1,
-      height: 1,
-      itemPadding: 0,
-      itemGap: 1,
-      style: { fg: 'white', bg: 'black' },
-      items: {
-        Create: { callback: () => runAction(this.createTableFlow.bind(this)), keys: ['c'] },
-        Join: { callback: () => runAction(this.joinSelectedTable.bind(this)), keys: ['j'] },
-        Observe: { callback: () => runAction(this.observeSelectedTable.bind(this)), keys: ['o'] },
-        Filter: { callback: () => runAction(this.toggleFilters.bind(this)), keys: ['f'] },
-        Refresh: { callback: () => runAction(manualRefresh), keys: ['r'] },
-      },
-    });
-
-    this.tableContent = blessed.scrollabletext({
-      parent: this.tableWindow,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 1,
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      keys: true,
-      mouse: true,
-      style: {
-        fg: 'white',
-      },
-      content: 'Select a table to view details.',
-    });
-
-    this.tableActions = createBox({
-      parent: this.tableWindow,
-      top: 0,
-      left: 1,
-      right: 1,
-      height: 1,
-      style: { fg: 'white', bg: 'black' },
-      hidden: true,
-    });
-
-    this.actionButtons = {
-      fold: createButton({
-        parent: this.tableActions,
-        mouse: true,
-        keys: true,
-        shrink: false,
-        height: 1,
-        top: 0,
-        left: 0,
-        border: 'none',
-        padding: { left: 1, right: 1, top: 0, bottom: 0 },
-        content: 'FOLD',
-      }),
-      check: createButton({
-        parent: this.tableActions,
-        mouse: true,
-        keys: true,
-        shrink: false,
-        height: 1,
-        top: 0,
-        left: 0,
-        border: 'none',
-        padding: { left: 1, right: 1, top: 0, bottom: 0 },
-        content: 'CHECK',
-      }),
-      call: createButton({
-        parent: this.tableActions,
-        mouse: true,
-        keys: true,
-        shrink: false,
-        height: 1,
-        top: 0,
-        left: 0,
-        border: 'none',
-        padding: { left: 1, right: 1, top: 0, bottom: 0 },
-        content: 'CALL',
-      }),
-      raise: createButton({
-        parent: this.tableActions,
-        mouse: true,
-        keys: true,
-        shrink: false,
-        height: 1,
-        top: 0,
-        left: 0,
-        border: 'none',
-        padding: { left: 1, right: 1, top: 0, bottom: 0 },
-        content: 'RAISE',
-      }),
-      quit: createButton({
-        parent: this.tableActions,
-        mouse: true,
-        keys: true,
-        shrink: false,
-        height: 1,
-        top: 0,
-        left: 0,
-        border: 'none',
-        padding: { left: 1, right: 1, top: 0, bottom: 0 },
-        content: 'QUIT',
-      }),
-    };
-
-    this.registerActionButtonEvents();
-    this.logWindow = createLog({
-      parent: this.desktop,
-      bottom: statusHeight,
-      left: 0,
-      width: '100%',
-      height: logHeight,
-      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
-      label: ' Activity ',
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      style: { fg: 'white', border: UI_THEME.windowBorder, bg: 'black' },
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: 'black' },
-        style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
-      } as any,
-    });
-
-    this.buildTablePanels();
-    this.applyViewMode(this.viewMode);
-  }
-
-  private buildTablePanels(): void {
-    const panelStyle = { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg };
-    const contentStyle = { fg: 'white', bg: 'black' };
-    const scrollbarStyle = { fg: UI_THEME.accent, bg: UI_THEME.accent };
-
-    this.flopPanel = createBox({
-      parent: this.tableWindow,
-      top: 1,
-      left: 1,
-      width: 10,
-      height: 6,
-      label: ' FLOP ',
-      tags: true,
-      hidden: true,
-      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
-      style: panelStyle,
-    });
-
-    this.flopContent = createBox({
-      parent: this.flopPanel,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 1,
-      tags: true,
-      style: contentStyle,
-      content: '',
-    });
-
-    this.playersPanel = createBox({
-      parent: this.tableWindow,
-      top: 1,
-      left: 1,
-      width: 10,
-      height: 6,
-      label: ' PLAYERS ',
-      tags: true,
-      hidden: true,
-      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
-      style: panelStyle,
-    });
-
-    this.playersContent = blessed.scrollabletext({
-      parent: this.playersPanel,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 1,
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      keys: true,
-      mouse: true,
-      style: contentStyle,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: 'black' },
-        style: scrollbarStyle,
-      } as any,
-      content: '',
-    });
-
-    this.handPanel = createBox({
-      parent: this.tableWindow,
-      top: 1,
-      left: 1,
-      width: 10,
-      height: 6,
-      label: ' YOUR HAND ',
-      tags: true,
-      hidden: true,
-      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
-      style: panelStyle,
-    });
-
-    this.handContent = createBox({
-      parent: this.handPanel,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 1,
-      tags: true,
-      style: contentStyle,
-      content: '',
-    });
-
-    this.activityPanel = createBox({
-      parent: this.tableWindow,
-      top: 1,
-      left: 1,
-      width: 10,
-      height: 6,
-      label: ' ACTIVITY ',
-      tags: true,
-      hidden: true,
-      border: { type: 'ascii', labelStyle: { fg: 'yellow' } },
-      style: panelStyle,
-    });
-
-    this.activityContent = createLog({
-      parent: this.activityPanel,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: 1,
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      keys: true,
-      mouse: true,
-      wrap: true,
-      scrollOnInput: false,
-      scrollback: 200,
-      style: contentStyle,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: 'black' },
-        style: scrollbarStyle,
-      } as any,
-      content: '',
-    });
-
+    // Wire up button press handlers
     this.actionButtons.fold.on('press', () => this.triggerFold());
     this.actionButtons.check.on('press', () => this.triggerCheck());
     this.actionButtons.call.on('press', () => this.triggerCall());
     this.actionButtons.raise.on('press', () => this.triggerRaise());
     this.actionButtons.quit.on('press', () => this.triggerQuit());
-
-    this.layoutTablePanels();
   }
 
-  private layoutTablePanels(): void {
-    if (!this.layout) return;
-    const tableWidth = Number(this.tableWindow.width) || this.layout.width;
-    const tableHeight = Number(this.tableWindow.height) || this.layout.mainHeight;
-    const innerWidth = Math.max(20, tableWidth - 2);
-    const innerHeight = Math.max(6, tableHeight - 2);
-    const colGap = innerWidth >= 70 ? 2 : 1;
-    const minLeftWidth = 26;
-    const minRightWidth = 18;
-    let leftWidth = Math.floor((innerWidth - colGap) * 0.58);
-    leftWidth = Math.max(minLeftWidth, leftWidth);
-    leftWidth = Math.min(leftWidth, innerWidth - colGap - minRightWidth);
-    let rightWidth = innerWidth - leftWidth - colGap;
-    if (rightWidth < minRightWidth) {
-      rightWidth = Math.max(12, innerWidth - colGap - minLeftWidth);
-      leftWidth = Math.max(10, innerWidth - colGap - rightWidth);
-    }
-    const actionHeight = 1;
-    const rowGap = 1;
-    const usableHeight = Math.max(4, innerHeight - actionHeight - rowGap);
-    const minFullPanelHeight = 9;
-    let topHeight = Math.floor(usableHeight / 2) + (usableHeight % 2);
-    let bottomHeight = Math.max(4, usableHeight - topHeight);
-    if (usableHeight >= minFullPanelHeight) {
-      if (usableHeight >= minFullPanelHeight * 2) {
-        topHeight = Math.max(topHeight, minFullPanelHeight);
-        bottomHeight = Math.max(bottomHeight, minFullPanelHeight);
-        if (topHeight + bottomHeight > usableHeight) {
-          bottomHeight = Math.max(4, usableHeight - topHeight);
-        }
-      } else {
-        topHeight = minFullPanelHeight;
-        bottomHeight = Math.max(4, usableHeight - topHeight);
-      }
-    }
-
-    const top = 1;
-    const left = 1;
-    const rightStart = left + leftWidth + colGap;
-    const bottomTop = top + topHeight + rowGap;
-    const actionTop = top + innerHeight - actionHeight;
-
-    this.flopPanel.options.top = top;
-    this.flopPanel.options.left = left;
-    this.flopPanel.options.width = leftWidth;
-    this.flopPanel.options.height = topHeight;
-
-    this.playersPanel.options.top = top;
-    this.playersPanel.options.left = rightStart;
-    this.playersPanel.options.width = rightWidth;
-    this.playersPanel.options.height = topHeight;
-
-    this.handPanel.options.top = bottomTop;
-    this.handPanel.options.left = left;
-    this.handPanel.options.width = leftWidth;
-    this.handPanel.options.height = bottomHeight;
-
-    this.activityPanel.options.top = bottomTop;
-    this.activityPanel.options.left = rightStart;
-    this.activityPanel.options.width = rightWidth;
-    this.activityPanel.options.height = bottomHeight;
-
-    this.tableActions.options.top = actionTop;
-    this.tableActions.options.left = left;
-    this.tableActions.options.width = innerWidth;
-    this.tableActions.options.height = actionHeight;
-
-    this.layoutActionButtons();
-  }
-
-  private layoutActionButtons(): void {
-    const rawWidth = Number(this.tableActions.width);
-    const width = Number.isFinite(rawWidth) ? rawWidth : Number(this.tableActions.options.width) || 0;
-    const buttonHeight = 1;
-    const buttonTop = 0;
-    const gap = width >= 58 ? 2 : 1;
-    const order: Array<ActionButtonKey> = ACTION_BUTTON_ORDER;
-    const available = Math.max(0, width - gap * Math.max(0, order.length - 1));
-    const buttonWidth = Math.max(6, Math.floor(available / order.length));
-    const totalButtonsWidth = buttonWidth * order.length + gap * Math.max(0, order.length - 1);
-    let left = Math.max(0, Math.floor((width - totalButtonsWidth) / 2));
-
-    order.forEach((key) => {
-      const button = this.actionButtons[key];
-      button.options.top = buttonTop;
-      button.options.height = buttonHeight;
-      button.options.left = left;
-      button.options.width = buttonWidth;
-      button.setContent(this.formatButtonLabel(button.getContent(), buttonWidth));
-      left += buttonWidth + gap;
-    });
-  }
-
-  private applyActionButtonPalette(key: ActionButtonKey): void {
-    const palette = ACTION_BUTTON_STYLES[key];
-    const button = this.actionButtons[key];
-    button.setStyle({
-      ...palette.base,
-      hover: palette.hover,
-      focus: palette.focus,
-    });
-  }
-
-  private registerActionButtonEvents(): void {
-    ACTION_BUTTON_ORDER.forEach((key) => {
-      const palette = ACTION_BUTTON_STYLES[key];
-      const button = this.actionButtons[key];
-      button.on('mousedown', () => {
-        button.setStyle({
-          ...palette.active,
-          hover: palette.hover,
-          focus: palette.focus,
-        });
-      });
-      button.on('mouseup', () => {
-        button.setStyle({
-          ...palette.base,
-          hover: palette.hover,
-          focus: palette.focus,
-        });
-      });
-      button.on('mouseleave', () => {
-        button.setStyle({
-          ...palette.base,
-          hover: palette.hover,
-          focus: palette.focus,
-        });
-      });
-    });
-  }
-
-  private formatButtonLabel(label: string, width: number): string {
-    const clean = stripBlessedTags(String(label)).trim();
-    const text = ` ${clean} `;
-    if (text.length >= width) return text.slice(0, width);
-    const padLeft = Math.floor((width - text.length) / 2);
-    const padRight = width - text.length - padLeft;
-    return `${' '.repeat(padLeft)}${text}${' '.repeat(padRight)}`;
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
-  }
-
+  // Delegation methods
   private emitSfx(id: string, params?: Record<string, unknown>): void {
     if (!this.screen?.program) return;
     const payload = JSON.stringify({ id, params });
     this.screen.program.write(`\x1b]9999;sfx;${payload}\x07`);
   }
 
-  private renderBoardAndHand(
-    boardCards: ReturnType<typeof pokerCardsToCards>,
-    playerHand: ReturnType<typeof pokerCardsToCards>,
-    flopCardSize: string,
-    handCardSize: string,
-    hasLiveHand: boolean,
-  ): void {
-    if (boardCards.length > 0) {
-      this.flopContent.setContent(
-        renderCardLines(boardCards, { layout: 'flat-condensed', size: flopCardSize }).join('\n'),
-      );
-    } else {
-      this.flopContent.setContent('Board not dealt yet.');
-    }
-
-    if (playerHand.length > 0) {
-      this.handContent.setContent(
-        renderCardLines(playerHand, { layout: 'flat-condensed', size: handCardSize }).join('\n'),
-      );
-    } else {
-      this.handContent.setContent(hasLiveHand ? 'Waiting for cards...' : 'No hand on record.');
-    }
+  private get modalActive(): boolean {
+    return this.dialogManager.isModalActive();
   }
 
-  private async runDealAnimation(
-    boardCards: ReturnType<typeof pokerCardsToCards>,
-    playerHand: ReturnType<typeof pokerCardsToCards>,
-    flopCardSize: string,
-    handCardSize: string,
-  ): Promise<void> {
-    if (!this.screen || this.dealAnimationInProgress) return;
-    this.dealAnimationInProgress = true;
-
-    const drawDelay = 180;
-    const flipDelay = 220;
-    const phasePause = 350;
-
-    const renderMixedHand = (
-      cards: ReturnType<typeof pokerCardsToCards>,
-      flipped: number,
-      size: string,
-    ): void => {
-      if (cards.length === 0) return;
-      const framed = cards.map((card, index) => ({
-        ...card,
-        face: index < flipped ? 'front' as const : 'back' as const,
-      }));
-      this.flopContent.setContent(
-        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
-      );
-    };
-
-    const renderMixedPlayerHand = (
-      cards: ReturnType<typeof pokerCardsToCards>,
-      flipped: number,
-      size: string,
-    ): void => {
-      if (cards.length === 0) return;
-      const framed = cards.map((card, index) => ({
-        ...card,
-        face: index < flipped ? 'front' as const : 'back' as const,
-      }));
-      this.handContent.setContent(
-        renderCardLines(framed, { layout: 'flat-condensed', size }).join('\n'),
-      );
-    };
-
-    try {
-      if (boardCards.length > 0) {
-        for (let i = 1; i <= boardCards.length; i += 1) {
-          const partial = boardCards.slice(0, i);
-          this.flopContent.setContent(
-            renderCardLines(partial, { layout: 'flat-condensed', size: flopCardSize, face: 'back' }).join('\n'),
-          );
-          this.emitSfx('card-flap');
-          this.screen.render();
-          await this.sleep(drawDelay);
-        }
-
-        await this.sleep(phasePause);
-
-        for (let i = 1; i <= boardCards.length; i += 1) {
-          renderMixedHand(boardCards, i, flopCardSize);
-          this.emitSfx('card-flap');
-          this.screen.render();
-          await this.sleep(flipDelay);
-        }
-
-        await this.sleep(phasePause);
-      }
-
-      if (playerHand.length > 0) {
-        for (let i = 1; i <= playerHand.length; i += 1) {
-          const partial = playerHand.slice(0, i);
-          this.handContent.setContent(
-            renderCardLines(partial, { layout: 'flat-condensed', size: handCardSize, face: 'back' }).join('\n'),
-          );
-          this.emitSfx('card-flap');
-          this.screen.render();
-          await this.sleep(drawDelay);
-        }
-
-        await this.sleep(phasePause);
-
-        for (let i = 1; i <= playerHand.length; i += 1) {
-          renderMixedPlayerHand(playerHand, i, handCardSize);
-          this.emitSfx('card-flap');
-          this.screen.render();
-          await this.sleep(flipDelay);
-        }
-      }
-    } finally {
-      this.dealAnimationInProgress = false;
-    }
-  }
-
-  private buildOverlay(): void {
-    this.overlayShade = createBox({
-      parent: this.desktop,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      hidden: true,
-      style: {
-        bg: 'black',
-      },
-    });
+  private set modalActive(value: boolean) {
+    this.dialogManager.setModalActive(value);
   }
 
   private runAction(action: () => void | Promise<void>): void {
@@ -2232,709 +1615,83 @@ class CardLobbyApp {
     profile.stats.biggestPot = Math.max(profile.stats.biggestPot, pot);
   }
 
-  private async finalizeHoldemHand(
-    table: LobbyTable,
-    engine: PokerEngine,
-    beforeStacks: Record<string, number>,
-  ): Promise<void> {
-    if (!this.lobby || !this.currentProfile) return;
-
-    const pot = engine.state.pots.reduce((sum, potItem) => sum + potItem.amount, 0);
-    const lastHand: LastHandSummary = {
-      board: engine.state.board.slice(),
-      hands: {},
-      pot,
-      winners: (engine.state.winners ?? []).map((winner) => {
-        const seat = winner.seat;
-        const player = engine.state.players[seat];
-        return {
-          userId: player?.id ?? 'unknown',
-          username: player?.name ?? 'Unknown',
-          amount: winner.amount,
-        };
-      }),
-      playedAt: Date.now(),
-    };
-
-    engine.state.players.forEach((player) => {
-      if (!player?.hand) return;
-      lastHand.hands[player.id] = [...player.hand];
+  // Game state delegation methods
+  private async finalizeHoldemHand(table: LobbyTable, engine: PokerEngine, beforeStacks: Record<string, number>): Promise<void> {
+    await this.gameStateManager.finalizeHoldemHand(table, engine, beforeStacks, this.lobby, this.profiles, this.currentProfile, {
+      clearTableHand: this.clearTableHand.bind(this),
+      updateTableStatus: this.updateTableStatus.bind(this),
+      updateStatsAfterHand: this.updateStatsAfterHand.bind(this),
+      handleAchievementUnlocks: this.handleAchievementUnlocks.bind(this),
+      pushNotice: this.pushNotice.bind(this),
+      pushEvent: this.pushEvent.bind(this),
+      emitLiveChat: this.emitLiveChat.bind(this),
+      writeWeeklyBulletinIfNeeded: () => this.dialogManager.writeWeeklyBulletinIfNeeded(this.lobby, this.profiles, this.session),
+      persistState: this.persistState.bind(this),
     });
-
-    table.players = table.players.map((player) => {
-      if (player.role !== 'player') return player;
-      const enginePlayer = engine.state.players[player.seat];
-      if (!enginePlayer) return player;
-      return {
-        ...player,
-        stack: enginePlayer.stack,
-      };
-    });
-
-    table.lastHand = lastHand;
-    this.clearTableHand(table);
-    this.updateTableStatus(table);
-
-    table.players.forEach((player) => {
-      if (player.role !== 'player' || isBotPlayer(player)) return;
-      const profile = this.profiles[player.userId];
-      if (!profile) return;
-      if (beforeStacks[player.userId] === undefined) return;
-      const before = beforeStacks[player.userId] ?? player.stack;
-      const delta = player.stack - before;
-      this.updateStatsAfterHand(profile, delta, pot);
-      profile.wallet.chips += ACTIVITY_REWARD;
-      profile.wallet.lifetimeEarned += ACTIVITY_REWARD;
-      if (delta > 0) {
-        profile.wallet.chips += WIN_REWARD;
-        profile.wallet.lifetimeEarned += WIN_REWARD;
-      }
-      this.handleAchievementUnlocks(profile);
-    });
-
-    const currentDelta = (table.players.find((p) => p.userId === this.currentProfile?.userId)?.stack ?? 0) -
-      (beforeStacks[this.currentProfile.userId] ?? 0);
-    if (currentDelta > 0) {
-      this.pushNotice(`You won ${currentDelta} ${CHIP_NAME}.`);
-      this.emitLiveChat(`BIG WIN: ${this.currentProfile.username} won ${currentDelta} in ${table.gameName} (#${table.id})`);
-    }
-
-    this.pushEvent(`Hand played at table #${table.id} (${table.gameName} ${table.stakesLabel}).`);
-
-    await this.writeWeeklyBulletinIfNeeded();
-    await this.persistState();
   }
 
   private async startHoldemHand(table: LobbyTable): Promise<void> {
-    try {
-      await this.reloadState();
-      if (!this.lobby || !this.currentProfile) return;
-
-      const freshTable = this.findTableById(table.id);
-      if (!freshTable) {
-        this.pushNotice('Table not found.');
-        return;
-      }
-
-      if (freshTable.hand) {
-        this.pushNotice('Hand already in progress.');
-        return;
-      }
-
-      const rake = calculateRake(freshTable.bigBlind);
-      const engine = new PokerEngine({
-        smallBlind: freshTable.smallBlind,
-        bigBlind: freshTable.bigBlind,
-        maxPlayers: freshTable.maxPlayers,
-        rakePercent: rake.percent,
-        rakeCap: rake.cap,
-      }, { cardEngine });
-
-      const seatedPlayers = freshTable.players.filter((player) => player.role === 'player' && player.stack > 0);
-      if (seatedPlayers.length < freshTable.minPlayers) {
-        this.pushNotice('Not enough players to deal a hand.');
-        return;
-      }
-
-      seatedPlayers.forEach((player) => {
-        engine.sit(player.seat, player.userId, player.username, player.stack);
-      });
-
-      try {
-        engine.deal();
-      } catch (error) {
-        console.error('[CardLobby] Holdem deal failed:', error);
-        this.pushNotice('Failed to deal a hand.');
-        return;
-      }
-
-      const beforeStacks: Record<string, number> = {};
-      seatedPlayers.forEach((player) => {
-        if (!isBotPlayer(player)) {
-          beforeStacks[player.userId] = player.stack;
-        }
-      });
-      this.saveTableHand(freshTable, engine, beforeStacks, Date.now());
-      this.updateTableStatus(freshTable);
-      this.pushEvent(`Hand started at table #${freshTable.id} (${freshTable.gameName} ${freshTable.stakesLabel}).`);
-      await this.persistState();
-      await this.advanceHoldemHand(freshTable, engine, beforeStacks);
-    } catch (error) {
-      console.error('[CardLobby] Holdem hand setup failed:', error);
-      if (this.lobby) {
-        const freshTable = this.findTableById(table.id);
-        if (freshTable) {
-          this.clearTableHand(freshTable);
-          this.updateTableStatus(freshTable);
-          await this.persistState();
-        }
-      }
-      this.pushNotice('Hand failed to start.');
-    }
+    await this.gameStateManager.startHoldemHand(table, this.lobby, this.currentProfile, {
+      reloadState: this.reloadState.bind(this),
+      findTableById: this.findTableById.bind(this),
+      saveTableHand: this.saveTableHand.bind(this),
+      updateTableStatus: this.updateTableStatus.bind(this),
+      clearTableHand: this.clearTableHand.bind(this),
+      pushNotice: this.pushNotice.bind(this),
+      pushEvent: this.pushEvent.bind(this),
+      persistState: this.persistState.bind(this),
+      advanceHoldemHand: this.advanceHoldemHand.bind(this),
+    });
   }
 
-  private async advanceHoldemHand(
-    table: LobbyTable,
-    engineOverride?: PokerEngine,
-    beforeStacksOverride?: Record<string, number>,
-  ): Promise<void> {
-    if (!this.lobby || !this.currentProfile) return;
-
-    try {
-      const handState = engineOverride
-        ? { engine: engineOverride, beforeStacks: beforeStacksOverride ?? table.hand?.beforeStacks ?? {} }
-        : this.loadTableHand(table);
-      if (!handState) return;
-
-      let safety = 0;
-      while (!handState.engine.state.winners && safety < 400) {
-        const state = handState.engine.state;
-        const actionSeat = state.actionTo;
-        if (actionSeat === null || actionSeat === undefined) break;
-        const actor = state.players[actionSeat];
-        if (!actor) break;
-
-        if (!isBotId(actor.id)) {
-          this.saveTableHand(table, handState.engine, handState.beforeStacks);
-          await this.persistState();
-          this.updateTablePanel();
-          return;
-        }
-
-        await this.performBotAction(handState.engine, actionSeat, actor.id);
-        this.saveTableHand(table, handState.engine, handState.beforeStacks);
-        await this.persistState();
-        safety += 1;
-      }
-
-      if (!handState.engine.state.winners) {
-        this.saveTableHand(table, handState.engine, handState.beforeStacks);
-        await this.persistState();
-        this.updateTablePanel();
-        return;
-      }
-
-      await this.finalizeHoldemHand(table, handState.engine, handState.beforeStacks);
-      this.updateTablePanel();
-      void this.maybeAutoDeal(table);
-    } catch (error) {
-      console.error('[CardLobby] Holdem hand error:', error);
-      this.pushNotice('Hand error. Returning to lobby.');
-      this.updateTablePanel();
-    }
+  private async advanceHoldemHand(table: LobbyTable, engineOverride?: PokerEngine, beforeStacksOverride?: Record<string, number>): Promise<void> {
+    await this.gameStateManager.advanceHoldemHand(table, engineOverride, beforeStacksOverride, this.lobby, this.currentProfile, {
+      loadTableHand: this.loadTableHand.bind(this),
+      saveTableHand: this.saveTableHand.bind(this),
+      persistState: this.persistState.bind(this),
+      updateTablePanel: this.updateTablePanel.bind(this),
+      performBotAction: this.performBotAction.bind(this),
+      finalizeHoldemHand: this.finalizeHoldemHand.bind(this),
+      maybeAutoDeal: this.maybeAutoDeal.bind(this),
+      pushNotice: this.pushNotice.bind(this),
+    });
   }
 
   private async performBotAction(engine: PokerEngine, seat: number, playerId: string): Promise<void> {
-    const actorSeat = engine.state.players[seat];
-    if (!actorSeat) return;
-
-    const currentBet = getCurrentBet(engine);
-    const playerBet = getPlayerBet(engine, seat);
-    const toCall = Math.max(0, currentBet - playerBet);
-    const stack = actorSeat.stack;
-
-    const aggression = 0.35;
-    const random = Math.random();
-
-    try {
-      if (toCall === 0) {
-        if (random < aggression && stack > 0) {
-          const minBet = stack <= engine.state.bigBlind ? stack : engine.state.bigBlind;
-          const maxBet = stack;
-          const target = Math.min(maxBet, minBet + Math.floor(engine.state.bigBlind * (2 + Math.random() * 3)));
-          engine.act({ type: PokerAction.BET, playerId, amount: target });
-          this.pushEvent(`${actorSeat.name} bets ${target}`);
-        } else {
-          engine.act({ type: PokerAction.CHECK, playerId });
-          this.pushEvent(`${actorSeat.name} checks`);
-        }
-        return;
-      }
-
-      if (stack <= toCall) {
-        if (random < 0.2) {
-          engine.act({ type: PokerAction.FOLD, playerId });
-          this.pushEvent(`${actorSeat.name} folds`);
-        } else {
-          engine.act({ type: PokerAction.CALL, playerId });
-          this.pushEvent(`${actorSeat.name} calls ${toCall}`);
-        }
-        return;
-      }
-
-      if (random < 0.15 && toCall > engine.state.bigBlind * 2) {
-        engine.act({ type: PokerAction.FOLD, playerId });
-        this.pushEvent(`${actorSeat.name} folds`);
-        return;
-      }
-
-      if (random < aggression) {
-        const maxRaise = playerBet + stack;
-        const minRaise = Math.min(engine.state.minRaise, maxRaise);
-        const raiseLimit = Math.min(maxRaise, minRaise + engine.state.bigBlind * 4);
-        const raiseTo = minRaise + Math.floor(Math.random() * Math.max(1, raiseLimit - minRaise + 1));
-        engine.act({ type: PokerAction.RAISE, playerId, amount: raiseTo });
-        this.pushEvent(`${actorSeat.name} raises to ${raiseTo}`);
-        return;
-      }
-
-      engine.act({ type: PokerAction.CALL, playerId });
-      this.pushEvent(`${actorSeat.name} calls ${toCall}`);
-    } catch (error) {
-      try {
-        if (toCall === 0) {
-          engine.act({ type: PokerAction.CHECK, playerId });
-        } else {
-          engine.act({ type: PokerAction.CALL, playerId });
-        }
-      } catch {
-        engine.act({ type: PokerAction.FOLD, playerId });
-      }
-    }
+    await this.gameStateManager.performBotAction(engine, seat, playerId, this.pushEvent.bind(this));
   }
 
   private async handlePlayerAction(action: 'call' | 'bet' | 'fold'): Promise<void> {
-    if (!this.currentProfile || !this.lobby) return;
-    const tableId = this.currentProfile.currentTableId;
-    if (!tableId) return;
-
-    await this.reloadState();
-    const table = this.findTableById(tableId);
-    if (!table || !table.hand) {
-      this.pushNotice('No active hand to act on.');
-      return;
-    }
-
-    const handState = this.loadTableHand(table);
-    if (!handState) {
-      this.pushNotice('Failed to load hand state.');
-      return;
-    }
-
-    const engine = handState.engine;
-    const actionSeat = engine.state.actionTo;
-    if (actionSeat === null || actionSeat === undefined) {
-      this.pushNotice('Waiting for the next action.');
-      return;
-    }
-    const actor = engine.state.players[actionSeat];
-    if (!actor || actor.id !== this.currentProfile.userId) {
-      this.pushNotice('Waiting for the next player to act.');
-      return;
-    }
-
-    const currentBet = getCurrentBet(engine);
-    const playerBet = getPlayerBet(engine, actionSeat);
-    const toCall = Math.max(0, currentBet - playerBet);
-
-    if (action === 'fold') {
-      try {
-        engine.act({ type: PokerAction.FOLD, playerId: actor.id });
-      } catch (error) {
-        this.pushNotice('Action rejected.');
-        return;
-      }
-      this.saveTableHand(table, engine, handState.beforeStacks);
-      await this.persistState();
-      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
-      return;
-    }
-
-    if (action === 'call') {
-      try {
-        engine.act({ type: toCall === 0 ? PokerAction.CHECK : PokerAction.CALL, playerId: actor.id });
-      } catch (error) {
-        this.pushNotice('Action rejected.');
-        return;
-      }
-      this.saveTableHand(table, engine, handState.beforeStacks);
-      await this.persistState();
-      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
-      return;
-    }
-
-    if (action === 'bet') {
-      const stack = actor.stack;
-      if (stack <= 0) {
-        this.pushNotice('No chips left.');
-        return;
-      }
-
-      const maxAmount = playerBet + stack;
-      let minAmount = engine.state.bigBlind;
-      if (currentBet > 0) {
-        minAmount = engine.state.minRaise;
-      }
-      if (maxAmount < minAmount) {
-        minAmount = maxAmount;
-      }
-      const label = currentBet > 0 ? 'Raise to (min/max)' : 'Bet amount (min/max)';
-      const amountValue = await this.showPromptDialog(
-        'Bet/Raise',
-        `${label}: ${minAmount}-${maxAmount}`,
-        String(minAmount),
-      );
-      if (amountValue === null) return;
-
-      const amount = safeNumber(amountValue);
-      if (amount === null || amount < minAmount || amount > maxAmount) {
-        this.pushNotice(`Amount must be ${minAmount}-${maxAmount}.`);
-        return;
-      }
-
-      const actionType = currentBet > 0 ? PokerAction.RAISE : PokerAction.BET;
-      try {
-        engine.act({ type: actionType, playerId: actor.id, amount });
-      } catch (error) {
-        this.pushNotice('Action rejected.');
-        return;
-      }
-
-      this.saveTableHand(table, engine, handState.beforeStacks);
-      await this.persistState();
-      await this.advanceHoldemHand(table, engine, handState.beforeStacks);
-    }
-  }
-
-  private showProfileWindow(): void {
-    if (!this.currentProfile) return;
-    const stats = this.currentProfile.stats;
-    const lines = [
-      `Player: ${this.currentProfile.username}`,
-      '',
-      `Chips: ${this.currentProfile.wallet.chips}`,
-      `Lifetime Earned: ${this.currentProfile.wallet.lifetimeEarned}`,
-      `Hands: ${stats.handsPlayed}  Wins: ${stats.wins}  Losses: ${stats.losses}`,
-      `Net: ${formatChips(stats.net)}  Biggest Pot: ${stats.biggestPot}`,
-      `Best Streak: ${stats.bestWinStreak}`,
-    ];
-    this.showTextWindow('Player Profile', lines.join('\n'));
-  }
-
-  private showAchievementsWindow(): void {
-    if (!this.currentProfile) return;
-    const lines: string[] = [];
-    lines.push(`Unlocked: ${this.currentProfile.achievements.length}/${ACHIEVEMENTS.length}`);
-    lines.push('');
-    ACHIEVEMENTS.forEach((achievement) => {
-      const unlocked = this.currentProfile?.achievements.includes(achievement.id);
-      const status = unlocked ? '[X]' : '[ ]';
-      lines.push(`${status} ${achievement.name} - ${achievement.description}`);
-    });
-    this.showTextWindow('Achievements', lines.join('\n'));
-  }
-
-  private showLeaderboardWindow(): void {
-    const content = this.buildLeaderboardContent();
-    this.showTextWindow('Leaderboard', content, {
-      footer: 'Keys: 1 Daily  2 Weekly  3 All-Time',
-      onKey: (key) => {
-        if (key === '1') this.leaderboardMode = 'daily';
-        if (key === '2') this.leaderboardMode = 'weekly';
-        if (key === '3') this.leaderboardMode = 'all';
-        return this.buildLeaderboardContent();
-      },
+    await this.gameStateManager.handlePlayerAction(action, this.currentProfile, this.lobby, {
+      reloadState: this.reloadState.bind(this),
+      findTableById: this.findTableById.bind(this),
+      loadTableHand: this.loadTableHand.bind(this),
+      saveTableHand: this.saveTableHand.bind(this),
+      persistState: this.persistState.bind(this),
+      advanceHoldemHand: this.advanceHoldemHand.bind(this),
+      pushNotice: this.pushNotice.bind(this),
+      showPromptDialog: (title, text, value) => this.dialogManager.showPromptDialog(title, text, value),
     });
   }
 
-  private async showBulletinsWindow(): Promise<void> {
-    const entries = LOBBY_BULLETINS.map((entry) => `#${entry.number} ${entry.title}`);
-    const selection = await this.showListDialog('Bulletins', entries);
-    if (selection === null) return;
+  // Dialog delegation methods (called from setupScreen)
+  // These are accessed via this.dialogManager.methodName() in setupScreen
 
-    const entry = LOBBY_BULLETINS[selection];
-    if (!entry) return;
-
-    const content = await this.readBulletin(entry.number);
-    this.showTextWindow(`Bulletin #${entry.number}`, content || 'Bulletin not found.');
+  // Wrapper methods for backward compatibility
+  private showPromptDialog(title: string, text: string, value: string): Promise<string | null> {
+    return this.dialogManager.showPromptDialog(title, text, value);
   }
 
-  private buildLeaderboardContent(): string {
-    const modeLabel = this.leaderboardMode === 'all' ? 'ALL-TIME' : this.leaderboardMode.toUpperCase();
-    const rows = Object.values(this.profiles)
-      .map((profile) => {
-        const stats = this.leaderboardMode === 'daily'
-          ? profile.stats.daily
-          : this.leaderboardMode === 'weekly'
-            ? profile.stats.weekly
-            : { hands: profile.stats.handsPlayed, wins: profile.stats.wins, net: profile.stats.net };
-        return {
-          username: profile.username,
-          wins: stats.wins,
-          hands: stats.hands,
-          net: stats.net,
-        };
-      })
-      .filter((row) => row.hands > 0 || row.wins > 0)
-      .sort((a, b) => b.net - a.net)
-      .slice(0, 10);
-
-    const lines: string[] = [];
-    lines.push(`Mode: ${modeLabel}`);
-    lines.push('');
-    lines.push('RANK NAME           WINS  HANDS  NET');
-    lines.push('---- -------------- ----- ------ -----');
-
-    if (rows.length === 0) {
-      lines.push('No stats yet. Play a hand to get on the board.');
-    } else {
-      rows.forEach((row, index) => {
-        const line =
-          pad(String(index + 1), 4) +
-          ' ' +
-          pad(row.username, 14) +
-          ' ' +
-          pad(String(row.wins), 5) +
-          ' ' +
-          pad(String(row.hands), 6) +
-          ' ' +
-          pad(formatChips(row.net), 5);
-        lines.push(line);
-      });
-    }
-
-    return lines.join('\n');
+  private showYesNoDialog(title: string, text: string): Promise<boolean | null> {
+    return this.dialogManager.showYesNoDialog(title, text);
   }
 
-  private async readBulletin(number: number): Promise<string | null> {
-    if (!this.session.bbs?.readFile) return null;
-    const content = await this.session.bbs.readFile(`Bulletins/bull${number}.txt`);
-    if (!content) return null;
-    return content.replace(/\r\n/g, '\n');
+  private showListDialog(title: string, items: string[]): Promise<number | null> {
+    return this.dialogManager.showListDialog(title, items);
   }
 
-  private async writeBullHelpFile(): Promise<void> {
-    if (!this.session.bbs?.writeFile) return;
-    const content = buildBullHelpContent();
-    await this.session.bbs.writeFile('Bulletins/BullHelp.txt', content);
-  }
-
-  private async writeWeeklyBulletinIfNeeded(): Promise<void> {
-    if (!this.lobby) return;
-    const now = Date.now();
-    if (now - this.lobby.lastBulletinAt < WEEK_MS) return;
-
-    const content = buildWeeklyBulletin(this.lobby, this.profiles);
-    if (this.session.bbs?.writeFile) {
-      await this.session.bbs.writeFile(`Bulletins/bull${WEEKLY_BULLETIN_NUMBER}.txt`, content);
-      this.lobby.lastBulletinAt = now;
-    }
-  }
-
-  private showTextWindow(title: string, content: string, opts?: { footer?: string; onKey?: (key: string) => string | void }): void {
-    if (this.modalActive) return;
-    this.modalActive = true;
-
-    this.overlayShade.show();
-    const modal = createBox({
-      parent: this.overlayShade,
-      top: 'center',
-      left: 'center',
-      width: 70,
-      height: 18,
-      border: { type: 'ascii' },
-      label: ` ${title} `,
-      style: { border: UI_THEME.windowBorder, bg: 'black' },
-    });
-
-    const textBottom = opts?.footer ? 4 : 3;
-    const text = blessed.scrollabletext({
-      parent: modal,
-      top: 1,
-      left: 1,
-      right: 1,
-      bottom: textBottom,
-      tags: true,
-      scrollable: true,
-      alwaysScroll: true,
-      keys: true,
-      mouse: true,
-      content,
-      style: { fg: 'white' },
-    });
-
-    if (opts?.footer) {
-      createText({
-        parent: modal,
-        bottom: 3,
-        left: 1,
-        right: 1,
-        height: 1,
-        content: opts.footer,
-        style: { fg: UI_THEME.accent },
-      });
-    }
-
-    const backButton = createButton({
-      parent: modal,
-      bottom: 0,
-      right: 2,
-      width: 10,
-      height: 3,
-      content: '[Back]',
-      mouse: true,
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-    });
-
-    const cleanup = (): void => {
-      modal.destroy();
-      this.overlayShade.hide();
-      this.modalActive = false;
-      this.screen.render();
-    };
-
-    backButton.on('press', cleanup);
-    modal.key(['escape', 'q'], cleanup);
-    modal.key(['1', '2', '3'], (ch: string) => {
-      if (!opts?.onKey) return;
-      const next = opts.onKey(ch);
-      if (typeof next === 'string') {
-        text.setContent(next);
-        this.screen.render();
-      }
-    });
-
-    text.focus();
-    this.screen.render();
-  }
-
-  private async showListDialog(title: string, items: string[]): Promise<number | null> {
-    if (this.modalActive) return null;
-    this.modalActive = true;
-
-    this.overlayShade.show();
-
-    return new Promise((resolve) => {
-      const modal = createBox({
-        parent: this.overlayShade,
-        top: 'center',
-        left: 'center',
-        width: 60,
-        height: 16,
-        border: { type: 'ascii' },
-        label: ` ${title} `,
-        style: { border: UI_THEME.windowBorder, bg: 'black' },
-      });
-
-      const list = createList({
-        parent: modal,
-        top: 1,
-        left: 1,
-        right: 1,
-        bottom: 1,
-        items,
-        keys: true,
-        mouse: true,
-        vi: true,
-        style: {
-          fg: 'white',
-          selected: { fg: 'black', bg: UI_THEME.highlightBg },
-        } as any,
-      });
-
-      const cleanup = (value: number | null): void => {
-        modal.destroy();
-        this.overlayShade.hide();
-        this.modalActive = false;
-        this.screen.render();
-        resolve(value);
-      };
-
-      list.on('select', (_: any, index: number) => cleanup(index));
-      modal.key(['escape', 'q'], () => cleanup(null));
-      list.focus();
-      this.screen.render();
-    });
-  }
-
-  private async showPromptDialog(title: string, text: string, value: string): Promise<string | null> {
-    if (this.modalActive) return null;
-    this.modalActive = true;
-
-    return new Promise((resolve) => {
-      this.overlayShade.show();
-      const prompt = blessed.prompt({
-        parent: this.desktop,
-        title: ` ${title} `,
-        text,
-        value,
-        border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
-      });
-
-      const cleanup = (result: string | null): void => {
-        prompt.destroy();
-        this.overlayShade.hide();
-        this.modalActive = false;
-        this.screen.render();
-        resolve(result);
-      };
-
-      prompt.showInput(text, value, (err, result) => {
-        if (err) {
-          cleanup(null);
-          return;
-        }
-        cleanup(result ?? null);
-      });
-
-      this.screen.render();
-    });
-  }
-
-  private async showYesNoDialog(title: string, text: string): Promise<boolean | null> {
-    if (this.modalActive) return null;
-    this.modalActive = true;
-
-    return new Promise((resolve) => {
-      this.overlayShade.show();
-      const question = blessed.question({
-        parent: this.desktop,
-        title: ` ${title} `,
-        text,
-        border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
-      });
-
-      const cleanup = (value: boolean | null): void => {
-        question.destroy();
-        this.overlayShade.hide();
-        this.modalActive = false;
-        this.screen.render();
-        resolve(value);
-      };
-
-      question.once('answer', (answer: boolean) => cleanup(answer));
-      question.ask(text);
-      this.screen.render();
-    });
-  }
-
-  private async showMessageDialog(title: string, text: string): Promise<void> {
-    if (this.modalActive) return;
-    this.modalActive = true;
-
-    return new Promise((resolve) => {
-      this.overlayShade.show();
-      const message = blessed.message({
-        parent: this.desktop,
-        title: ` ${title} `,
-        text,
-        border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
-      });
-
-      const cleanup = (): void => {
-        message.destroy();
-        this.overlayShade.hide();
-        this.modalActive = false;
-        this.screen.render();
-        resolve();
-      };
-
-      message.display(text, cleanup);
-      this.screen.render();
-    });
+  private showMessageDialog(title: string, text: string): Promise<void> {
+    return this.dialogManager.showMessageDialog(title, text);
   }
 
   private startRefreshTimer(): void {

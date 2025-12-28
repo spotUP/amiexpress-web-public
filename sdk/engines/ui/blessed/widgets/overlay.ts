@@ -17,8 +17,8 @@ export class Overlay extends Box {
   private _overlayWidgetId: string;
 
   constructor(options: OverlayOptions = {}) {
-    // Extract style without bg - Overlay always uses transparent ANSI bg
-    // The CSS overlay provides the visual dimming effect
+    // Extract style without bg - Overlay uses no background for ANSI
+    // The CSS overlay provides the visual dimming effect for web clients
     const { bg: _ignoredBg, ...styleWithoutBg } = options.style || {};
 
     super({
@@ -32,9 +32,8 @@ export class Overlay extends Box {
       clickable: true,  // Enable click events
       style: {
         ...styleWithoutBg,
-        // Always use transparent ANSI background - CSS overlay provides dimming for web
-        // For telnet/SSH, background shows through (acceptable - modal dialog is on top)
-        bg: 'transparent',
+        // Don't set bg at all - blessed will not render a background then
+        // CSS overlay provides dimming for web, ANSI clients just see the modal on top
       },
     });
 

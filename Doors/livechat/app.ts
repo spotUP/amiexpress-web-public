@@ -17,6 +17,7 @@ import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { stripTags, cleanTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/helpers';
+import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 
 // Core state and services
 import { addMessage, setChannel, AppState } from './core/state';
@@ -139,6 +140,19 @@ export async function createApp(session: DoorSession) {
     };
   }
 
+  // ========== LOADING SCREEN ==========
+  const loader = new DoorLoader(screen, {
+    overlay: true,
+    overlayOpacity: 0.6,
+    barColor: 'cyan',
+  });
+
+  loader.show('Initializing LiveChat...');
+  screen.render();
+
+  await loader.delay(100);
+  loader.update(25, 'Creating chat interface...');
+
   // Layout constants for 80x24 terminal
   const SIDEBAR_WIDTH = 18;  // Single combined sidebar
 
@@ -160,6 +174,8 @@ export async function createApp(session: DoorSession) {
 
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
+
+  loader.update(50, 'Setting up features...');
 
   // ========== COMMAND AUTOCOMPLETE ==========
   const commandSuggestions = createList({
@@ -1040,11 +1056,15 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
+  loader.update(70, 'Connecting to chat server...');
+
   // ========== ROOM SOCKET HANDLERS ==========
   setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, currentRoomLabel, showMessageDialog, inputBox, screen);
 
   // ========== CHAT SOCKET HANDLERS ==========
   setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime);
+
+  loader.update(85, 'Initializing event handlers...');
 
   // ========== BBS EVENT HANDLERS ==========
   // Listen to BBS system events (login, logout, upload, download, door activity)
@@ -1341,6 +1361,13 @@ export async function createApp(session: DoorSession) {
       // Ensure command suggestions appear above everything else
       // (must be called after all other elements are created)
       commandSuggestions.setIndex(9999);
+
+      loader.update(95, 'Finalizing...');
+      await loader.delay(100);
+      loader.update(100, 'Ready!');
+      await loader.delay(500);
+      loader.hide();
+      loader.destroy();  // Completely remove loader and overlay from screen
 
       screen.render();
 
