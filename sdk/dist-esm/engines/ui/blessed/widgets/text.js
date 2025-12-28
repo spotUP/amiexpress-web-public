@@ -1,12 +1,1 @@
-/**
- * Text widget - Simple text display (no border by default)
- */
-import { Element } from '../core/element';
-export class Text extends Element {
-    constructor(options = {}) {
-        super({
-            ...options,
-            border: options.border !== undefined ? options.border : undefined,
-        });
-    }
-}
+import{Element}from"../core/element";export class Text extends Element{constructor(e={}){super({...e,border:void 0!==e.border?e.border:void 0})}}

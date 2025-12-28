@@ -5,8 +5,10 @@
   "scripts": {
     "postinstall": "node ./scripts/build-web-assets.cjs",
     "dev": "npx tsx src/index.ts",
-    "build": "npm install",
+    "build": "npm install && npx tsc --project tsconfig.build.json",
+    "build:dev": "npm install",
     "start": "npx tsx src/index.ts",
+    "start:dev": "npx tsx src/index.ts",
     "render-start": "npx tsx src/index.ts",
     "test": "jest --config dev-scripts/jest.config.ts --rootDir .",
     "test:watch": "jest --config dev-scripts/jest.config.ts --rootDir . --watch",
@@ -36,6 +38,7 @@
     "tsx": "^4.19.2",
     "tsyringe": "^4.10.0",
     "typescript": "^5.9.3",
+    "uuid": "^13.0.0",
     "web-push": "^3.6.7",
     "zmodem.js": "^0.1.10",
     "zod": "^3.23.8"
@@ -57,7 +60,9 @@
     "@types/ssh2": "^1.15.5",
     "@types/supertest": "^6.0.2",
     "@types/tar-stream": "^3.1.4",
+    "@types/uuid": "^10.0.0",
     "@types/web-push": "^3.6.4",
+    "esbuild": "^0.27.2",
     "jest": "^29.7.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.1.2"
