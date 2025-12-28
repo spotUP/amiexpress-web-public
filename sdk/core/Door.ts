@@ -19,8 +19,6 @@ import type {
 import { Output } from './Output';
 import { Input } from './Input';
 import { Storage } from './Storage';
-import { Video } from './Video';
-import { Audio } from './Audio';
 
 export class Door {
   private config: DoorConfig;
@@ -148,8 +146,6 @@ export class Door {
       doorName: this.config.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
       userId: user.id,
     });
-    const video = new Video(socket as any, user.id);
-    const audio = new Audio(socket as any, user.id);
 
     return {
       user,
@@ -157,24 +153,12 @@ export class Door {
       output,
       input,
       storage,
-      video,
-      audio,
       params,
       bbs,
       socket,
       bbsSession,
       close: () => {
         this.isRunning = false;
-
-        // Cleanup video streams
-        if (video) {
-          video.cleanup();
-        }
-
-        // Cleanup audio streams
-        if (audio) {
-          audio.cleanup();
-        }
 
         // Immediately clean up input handler to unblock the input loop
         if (bbsSession.doorInputHandler) {
