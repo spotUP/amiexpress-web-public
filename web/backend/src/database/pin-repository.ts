@@ -4,7 +4,7 @@
 import type Database from 'better-sqlite3';
 
 export class PinRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: any) {}
 
   private prepare(sql: string) {
     return this.db.prepare(sql);

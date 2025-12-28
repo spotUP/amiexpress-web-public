@@ -27,14 +27,61 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import type { Snapshot } from '@amiexpress/bbs-door-sdk';
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
-
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-}
+import {
+  type DoorSession,
+  type LobbyState,
+  type LobbyTable,
+  type LobbyFilters,
+  type PlayerProfile,
+  type TablePlayer,
+  type TableHandState,
+  type LastHandSummary,
+  type LeaderboardMode,
+  type GameDefinition,
+  type GameStake,
+  UI_THEME,
+  ACTION_BUTTON_STYLES,
+  ACTION_BUTTON_ORDER,
+  CHIP_NAME,
+  STARTING_CHIPS,
+  DAILY_BONUS,
+  DAILY_COOLDOWN_MS,
+  WEEK_MS,
+  ENTRY_FEE_RATE,
+  ACTIVITY_REWARD,
+  WIN_REWARD,
+  WEEKLY_BULLETIN_NUMBER,
+  REFRESH_INTERVAL_MS,
+  MAX_ACTIVITY_EVENTS,
+  GAME_CATALOG,
+  ACHIEVEMENTS,
+  LOBBY_BULLETINS,
+  LOBBY_KEY,
+  PROFILES_KEY,
+  PokerAction,
+  initLobbyState,
+  initProfile,
+  initStatsBucket,
+  safeNumber,
+  pad,
+  formatAge,
+  formatChips,
+  getGameById,
+  isBotPlayer,
+  isBotId,
+  buildBotId,
+  buildBotName,
+  calculateEntryFee,
+  calculateRake,
+  getCurrentBet,
+  getPlayerBet,
+  buildWeeklyBulletin,
+  buildBullHelpContent,
+  renderCardLines,
+  padColumn,
+  mergeColumns,
+  visibleWidth,
+} from './lib';
 
 export const metadata = {
   name: 'Card Lobby',
@@ -42,596 +89,6 @@ export const metadata = {
   description: 'Desktop-style card lobby with PokerEngine tables',
   author: 'AmiExpress Team',
   command: 'CARDLOBBY',
-};
-
-const CHIP_NAME = 'BBS Chips';
-const STARTING_CHIPS = 1000;
-const DAILY_BONUS = 200;
-const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const ENTRY_FEE_RATE = 0.02;
-const ACTIVITY_REWARD = 5;
-const WIN_REWARD = 10;
-const WEEKLY_BULLETIN_NUMBER = 20;
-const REFRESH_INTERVAL_MS = 5000;
-const MAX_ACTIVITY_EVENTS = 200;
-
-const BOT_NAMES = [
-  'Atlas',
-  'Nova',
-  'Pixel',
-  'Echo',
-  'Orion',
-  'Vega',
-  'Juno',
-  'Quark',
-  'Sable',
-  'Rogue',
-];
-
-const cardEngine = new CardEngine();
-const PokerAction = ActionType ?? {
-  SIT: 'SIT',
-  STAND: 'STAND',
-  ADD_CHIPS: 'ADD_CHIPS',
-  RESERVE_SEAT: 'RESERVE_SEAT',
-  DEAL: 'DEAL',
-  FOLD: 'FOLD',
-  CHECK: 'CHECK',
-  CALL: 'CALL',
-  BET: 'BET',
-  RAISE: 'RAISE',
-  SHOW: 'SHOW',
-  MUCK: 'MUCK',
-  TIMEOUT: 'TIMEOUT',
-  TIME_BANK: 'TIME_BANK',
-  UNCALLED_BET_RETURNED: 'UNCALLED_BET_RETURNED',
-  NEXT_BLIND_LEVEL: 'NEXT_BLIND_LEVEL',
-} as const;
-
-const ANSI_TAGS: Record<string, string> = {
-  '0': '{/}',
-  '30': '{black-fg}',
-  '31': '{red-fg}',
-  '32': '{green-fg}',
-  '33': '{yellow-fg}',
-  '34': '{blue-fg}',
-  '35': '{magenta-fg}',
-  '36': '{cyan-fg}',
-  '37': '{white-fg}',
-  '40': '{black-bg}',
-  '41': '{red-bg}',
-  '42': '{green-bg}',
-  '43': '{yellow-bg}',
-  '44': '{blue-bg}',
-  '45': '{magenta-bg}',
-  '46': '{cyan-bg}',
-  '47': '{white-bg}',
-};
-
-const ansiToBlessedTags = (value: string): string =>
-  value.replace(/\x1b\[([0-9;]+)m/g, (_match, codes) => {
-    const parts = String(codes).split(';');
-    return parts.map((code) => ANSI_TAGS[code] ?? '').join('');
-  });
-
-const stripBlessedTags = (value: string): string => value.replace(/\{[^}]*\}/g, '');
-const stripAnsiCodes = (value: string): string => value.replace(/\x1b\[[0-9;]*m/g, '');
-const visibleWidth = (value: string): number => stripAnsiCodes(stripBlessedTags(value)).length;
-const sliceVisible = (value: string, width: number): string => {
-  if (width <= 0) return '';
-  let visible = 0;
-  let i = 0;
-  let out = '';
-
-  while (i < value.length && visible < width) {
-    const ch = value[i];
-    if (ch === '\x1b' && value[i + 1] === '[') {
-      let end = i + 2;
-      while (end < value.length && !/[mK]/.test(value[end])) {
-        end += 1;
-      }
-      if (end < value.length) {
-        out += value.slice(i, end + 1);
-        i = end + 1;
-        continue;
-      }
-    }
-    if (ch === '{') {
-      const close = value.indexOf('}', i);
-      if (close !== -1) {
-        out += value.slice(i, close + 1);
-        i = close + 1;
-        continue;
-      }
-    }
-    out += ch;
-    i += 1;
-    visible += 1;
-  }
-
-  return out;
-};
-const appendReset = (value: string): string => {
-  let out = value;
-  if (/\{[^}]*\}/.test(value) && !/\{\/\}$/.test(value)) {
-    out += '{/}';
-  }
-  if (/\x1b\[[0-9;]*m/.test(value) && !/\x1b\[0m$/.test(value)) {
-    out += '\x1b[0m';
-  }
-  return out;
-};
-const padColumn = (value: string, width: number): string => {
-  const length = visibleWidth(value);
-  if (length >= width) {
-    return appendReset(sliceVisible(value, width));
-  }
-  return `${appendReset(value)}${' '.repeat(width - length)}`;
-};
-
-const mergeColumns = (left: string[], right: string[], leftWidth: number, rightWidth: number, gap: number): string[] => {
-  const rows = Math.max(left.length, right.length);
-  const spacer = ' '.repeat(gap);
-  const merged: string[] = [];
-  for (let i = 0; i < rows; i += 1) {
-    const leftLine = left[i] ?? '';
-    const rightLine = right[i] ?? '';
-    merged.push(`${padColumn(leftLine, leftWidth)}${spacer}${padColumn(rightLine, rightWidth)}`);
-  }
-  return merged;
-};
-
-const renderCardLines = (
-  cards: ReturnType<typeof pokerCardsToCards>,
-  options: { layout?: string; size?: string; face?: 'front' | 'back'; backStyle?: string },
-) => cardEngine.renderHandLines(cards, options as any).map(ansiToBlessedTags);
-
-const UI_THEME = {
-  topBar: { fg: 'gray', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
-  statusBar: { fg: 'white', bg: 'blue' },
-  windowBorder: { fg: 'cyan' },
-  windowBg: 'black',
-  accent: 'cyan',
-  highlightBg: 'lightcyan',
-  warning: 'yellow',
-  ok: 'green',
-  error: 'red',
-};
-
-type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
-type ButtonStyleSet = {
-  base: Colors;
-  hover: Colors;
-  focus: Colors;
-  active: Colors;
-};
-
-const ACTION_BUTTON_STYLES: Record<ActionButtonKey, ButtonStyleSet> = {
-  fold: {
-    base: { fg: 'white', bg: UI_THEME.error },
-    hover: { fg: 'white', bg: 'light-red' },
-    focus: { fg: 'white', bg: 'yellow' },
-    active: { fg: 'white', bg: 'red' },
-  },
-  check: {
-    base: { fg: 'black', bg: UI_THEME.ok },
-    hover: { fg: 'black', bg: 'light-green' },
-    focus: { fg: 'black', bg: 'green' },
-    active: { fg: 'black', bg: 'lime' },
-  },
-  call: {
-    base: { fg: 'black', bg: 'gray' },
-    hover: { fg: 'black', bg: 'white' },
-    focus: { fg: 'black', bg: 'white' },
-    active: { fg: 'black', bg: 'light-white' },
-  },
-  raise: {
-    base: { fg: 'white', bg: 'blue' },
-    hover: { fg: 'white', bg: 'light-blue' },
-    focus: { fg: 'white', bg: 'cyan' },
-    active: { fg: 'white', bg: 'blue' },
-  },
-  quit: {
-    base: { fg: 'white', bg: UI_THEME.error },
-    hover: { fg: 'white', bg: 'light-red' },
-    focus: { fg: 'white', bg: 'yellow' },
-    active: { fg: 'white', bg: 'red' },
-  },
-};
-
-const ACTION_BUTTON_ORDER: ActionButtonKey[] = ['fold', 'check', 'call', 'raise', 'quit'];
-
-const GAME_CATALOG: GameDefinition[] = [
-  {
-    id: 'holdem',
-    name: "Texas Hold'em",
-    description: 'No-limit Hold\'em using the SDK PokerEngine.',
-    minPlayers: 2,
-    maxPlayers: 6,
-    stakes: [
-      { label: '5/10', smallBlind: 5, bigBlind: 10, buyIn: 500 },
-      { label: '10/20', smallBlind: 10, bigBlind: 20, buyIn: 1000 },
-      { label: '25/50', smallBlind: 25, bigBlind: 50, buyIn: 2500 },
-    ],
-    enabled: true,
-  },
-  {
-    id: 'blackjack',
-    name: 'Blackjack',
-    description: 'Dealer showdown, coming soon.',
-    minPlayers: 1,
-    maxPlayers: 5,
-    stakes: [{ label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 }],
-    enabled: false,
-  },
-  {
-    id: 'uno',
-    name: 'UNO',
-    description: 'Classic UNO with ASCII cards, coming soon.',
-    minPlayers: 2,
-    maxPlayers: 4,
-    stakes: [{ label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 }],
-    enabled: false,
-  },
-];
-
-const ACHIEVEMENTS: AchievementDefinition[] = [
-  {
-    id: 'first_hand',
-    name: 'First Shuffle',
-    description: 'Play your first hand.',
-    reward: 25,
-  },
-  {
-    id: 'first_win',
-    name: 'First Win',
-    description: 'Win a hand.',
-    reward: 50,
-  },
-  {
-    id: 'hot_streak',
-    name: 'Hot Streak',
-    description: 'Win 3 hands in a row.',
-    reward: 100,
-  },
-  {
-    id: 'big_pot',
-    name: 'Big Pot',
-    description: 'Win a pot of 500+ chips.',
-    reward: 150,
-  },
-  {
-    id: 'grinder',
-    name: 'Grinder',
-    description: 'Play 25 hands.',
-    reward: 200,
-  },
-];
-
-const LOBBY_BULLETINS: BulletinEntry[] = [
-  {
-    number: WEEKLY_BULLETIN_NUMBER,
-    title: 'Card Lobby Weekly Leaders',
-    description: 'Top 10 chip winners from the lobby.',
-  },
-];
-
-const LOBBY_KEY = 'lobby';
-const PROFILES_KEY = 'profiles';
-
-interface Wallet {
-  chips: number;
-  lifetimeEarned: number;
-  lifetimeSpent: number;
-  lastDailyGrant: number;
-}
-
-interface StatBucket {
-  hands: number;
-  wins: number;
-  net: number;
-}
-
-interface PlayerStats {
-  handsPlayed: number;
-  wins: number;
-  losses: number;
-  net: number;
-  biggestPot: number;
-  winStreak: number;
-  bestWinStreak: number;
-  daily: StatBucket;
-  weekly: StatBucket;
-}
-
-interface PlayerProfile {
-  userId: string;
-  username: string;
-  wallet: Wallet;
-  stats: PlayerStats;
-  achievements: string[];
-  status: 'lobby' | 'table' | 'away';
-  currentTableId?: number;
-}
-
-interface TablePlayer {
-  userId: string;
-  username: string;
-  seat: number;
-  stack: number;
-  buyIn: number;
-  role: PlayerRole;
-  joinedAt: number;
-  isBot?: boolean;
-}
-
-interface TableObserver {
-  userId: string;
-  username: string;
-  joinedAt: number;
-}
-
-interface LastHandSummary {
-  board: string[];
-  hands: Record<string, string[]>;
-  pot: number;
-  winners: Array<{ userId: string; username: string; amount: number }>;
-  playedAt: number;
-}
-
-interface TableHandState {
-  snapshot: Snapshot;
-  beforeStacks: Record<string, number>;
-  startedAt: number;
-  updatedAt: number;
-}
-
-interface LobbyTable {
-  id: number;
-  gameId: string;
-  gameName: string;
-  stakesLabel: string;
-  smallBlind: number;
-  bigBlind: number;
-  buyIn: number;
-  entryFee: number;
-  minPlayers: number;
-  maxPlayers: number;
-  status: TableStatus;
-  createdAt: number;
-  updatedAt: number;
-  hostUserId: string;
-  autoStart: boolean;
-  isPrivate: boolean;
-  inviteCode?: string;
-  players: TablePlayer[];
-  observers: TableObserver[];
-  lastHand?: LastHandSummary;
-  hand?: TableHandState;
-}
-
-interface LobbyEvent {
-  message: string;
-  createdAt: number;
-}
-
-interface LobbyFilters {
-  gameId: string | null;
-  openSeatsOnly: boolean;
-}
-
-interface LobbyState {
-  tables: LobbyTable[];
-  lastTableId: number;
-  lastWeeklyReset: number;
-  lastDailyReset: number;
-  lastBulletinAt: number;
-  events: LobbyEvent[];
-}
-
-interface GameStake {
-  label: string;
-  smallBlind: number;
-  bigBlind: number;
-  buyIn: number;
-}
-
-interface GameDefinition {
-  id: string;
-  name: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  stakes: GameStake[];
-  enabled: boolean;
-}
-
-interface AchievementDefinition {
-  id: string;
-  name: string;
-  description: string;
-  reward: number;
-}
-
-interface BulletinEntry {
-  number: number;
-  title: string;
-  description: string;
-}
-
-type PlayerRole = 'player' | 'observer';
-type TableStatus = 'open' | 'in-progress';
-type LeaderboardMode = 'daily' | 'weekly' | 'all';
-
-
-const initLobbyState = (): LobbyState => ({
-  tables: [],
-  lastTableId: 0,
-  lastWeeklyReset: Date.now(),
-  lastDailyReset: Date.now(),
-  lastBulletinAt: 0,
-  events: [],
-});
-
-const initStatsBucket = (): StatBucket => ({
-  hands: 0,
-  wins: 0,
-  net: 0,
-});
-
-const initProfile = (session: DoorSession): PlayerProfile => ({
-  userId: String(session.user.id),
-  username: session.user.username,
-  wallet: {
-    chips: STARTING_CHIPS,
-    lifetimeEarned: STARTING_CHIPS,
-    lifetimeSpent: 0,
-    lastDailyGrant: 0,
-  },
-  stats: {
-    handsPlayed: 0,
-    wins: 0,
-    losses: 0,
-    net: 0,
-    biggestPot: 0,
-    winStreak: 0,
-    bestWinStreak: 0,
-    daily: initStatsBucket(),
-    weekly: initStatsBucket(),
-  },
-  achievements: [],
-  status: 'lobby',
-});
-
-const safeNumber = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const num = Number(trimmed);
-  if (!Number.isFinite(num)) return null;
-  return Math.floor(num);
-};
-
-const pad = (value: string, width: number): string => {
-  if (value.length >= width) return value.slice(0, width);
-  return value + ' '.repeat(width - value.length);
-};
-
-const formatAge = (timestamp: number): string => {
-  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-};
-
-const formatChips = (value: number): string => {
-  const sign = value >= 0 ? '+' : '-';
-  return `${sign}${Math.abs(value)}`;
-};
-
-const getGameById = (id: string): GameDefinition | undefined => {
-  return GAME_CATALOG.find((game) => game.id === id);
-};
-
-const isBotPlayer = (player: TablePlayer): boolean => {
-  return Boolean(player.isBot || player.userId.startsWith('cpu:'));
-};
-
-const isBotId = (playerId?: string | null): boolean => {
-  return Boolean(playerId && playerId.startsWith('cpu:'));
-};
-
-const buildBotId = (tableId: number, seat: number): string => {
-  return `cpu:${tableId}:${seat}`;
-};
-
-const buildBotName = (seat: number): string => {
-  const base = BOT_NAMES[seat % BOT_NAMES.length];
-  return `${base}-${seat + 1}`;
-};
-
-const calculateEntryFee = (buyIn: number): number => {
-  return Math.max(1, Math.floor(buyIn * ENTRY_FEE_RATE));
-};
-
-const calculateRake = (bigBlind: number): { percent: number; cap: number } => {
-  if (bigBlind >= 50) {
-    return { percent: 5, cap: 20 };
-  }
-  if (bigBlind >= 20) {
-    return { percent: 3, cap: 12 };
-  }
-  return { percent: 2, cap: 8 };
-};
-
-const getCurrentBet = (engine: PokerEngine): number => {
-  return Array.from(engine.state.currentBets.values()).reduce((max, value) => Math.max(max, value), 0);
-};
-
-const getPlayerBet = (engine: PokerEngine, seat: number): number => {
-  return engine.state.currentBets.get(seat) ?? 0;
-};
-
-const buildWeeklyBulletin = (state: LobbyState, data: Record<string, PlayerProfile>): string => {
-  const now = new Date();
-  const rows = Object.values(data)
-    .map((profile) => ({
-      username: profile.username,
-      wins: profile.stats.weekly.wins,
-      hands: profile.stats.weekly.hands,
-      net: profile.stats.weekly.net,
-    }))
-    .filter((row) => row.hands > 0 || row.wins > 0)
-    .sort((a, b) => b.net - a.net)
-    .slice(0, 10);
-
-  const lines: string[] = [];
-  lines.push('CARD LOBBY WEEKLY LEADERS');
-  lines.push('==============================');
-  lines.push(`Updated: ${now.toISOString().slice(0, 19).replace('T', ' ')}`);
-  lines.push('');
-  lines.push('RANK NAME           WINS  HANDS  NET');
-  lines.push('---- -------------- ----- ------ -----');
-
-  rows.forEach((row, index) => {
-    const line =
-      pad(String(index + 1), 4) +
-      ' ' +
-      pad(row.username, 14) +
-      ' ' +
-      pad(String(row.wins), 5) +
-      ' ' +
-      pad(String(row.hands), 6) +
-      ' ' +
-      pad(formatChips(row.net), 5);
-    lines.push(line);
-  });
-
-  if (rows.length === 0) {
-    lines.push('No hands played yet this week.');
-  }
-
-  lines.push('');
-  lines.push('Generated by Card Lobby');
-
-  return lines.join('\r\n') + '\r\n';
-};
-
-const buildBullHelpContent = (): string => {
-  const lines: string[] = [];
-  lines.push('CARD LOBBY BULLETINS');
-  lines.push('---------------------');
-  lines.push('');
-  LOBBY_BULLETINS.forEach((entry) => {
-    const number = `#${entry.number}`;
-    lines.push(`${pad(number, 5)} ${entry.title}`);
-    lines.push(`     ${entry.description}`);
-  });
-  lines.push('');
-  lines.push('Use the Card Lobby bulletin window to read bulletin numbers.');
-  return lines.join('\r\n') + '\r\n';
 };
 
 class CardLobbyApp {

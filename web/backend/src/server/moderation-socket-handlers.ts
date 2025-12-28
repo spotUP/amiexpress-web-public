@@ -20,7 +20,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
       // Find target socket and force disconnect
       const targetSocket = Array.from(io.sockets.sockets.values()).find(
         (s: any) => s.data.session?.user?.id === targetUserId
-      );
+      ) as Socket | undefined;
 
       if (targetSocket) {
         targetSocket.emit('chat:kicked', { reason, kickedBy: username });
@@ -54,7 +54,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
       // Kick if currently in room
       const targetSocket = Array.from(io.sockets.sockets.values()).find(
         (s: any) => s.data.session?.user?.id === targetUserId
-      );
+      ) as Socket | undefined;
 
       if (targetSocket) {
         targetSocket.emit('chat:banned', { reason, bannedBy: username, duration });
@@ -102,7 +102,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
       // Notify target user if online
       const targetSocket = Array.from(io.sockets.sockets.values()).find(
         (s: any) => s.data.session?.user?.id === targetUserId
-      );
+      ) as Socket | undefined;
 
       if (targetSocket) {
         targetSocket.emit('chat:muted', { mutedBy: username, duration });

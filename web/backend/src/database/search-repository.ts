@@ -13,7 +13,7 @@ export interface SearchFilters {
 }
 
 export class SearchRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: any) {}
 
   private prepare(sql: string) {
     return this.db.prepare(sql);
