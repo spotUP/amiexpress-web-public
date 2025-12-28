@@ -55,6 +55,10 @@
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"
     },
+    "./utils/DoorLoader": {
+      "types": "./dist/utils/DoorLoader.d.ts",
+      "default": "./dist/utils/DoorLoader.js"
+    },
     "./tools/runDoorSession": {
       "types": "./dist/tools/runDoorSession.d.ts",
       "default": "./dist/tools/runDoorSession.js"
