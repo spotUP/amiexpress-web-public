@@ -1467,35 +1467,12 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
 
     console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}`);
 
-    // Hot reload is ENABLED by default (no caching). Set DOOR_HOT_RELOAD=0 to disable.
-    // AmiExpress philosophy: Don't cache unless necessary (like slow door loading in doorman)
-    const hotReload = process.env.DOOR_HOT_RELOAD !== '0';
+    // Note: ESM modules cannot be hot reloaded in Node.js. Use file watcher to auto-restart server.
+    // See dev/scripts/watch-doors.ts for automatic restart on door changes.
+    const importPath = `file://${resolvedDoorPath}`;
+    console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
-    if (hotReload) {
-      // Clear module cache to ensure we get fresh code (critical for development)
-      // For CommonJS modules (require.cache)
-      if (require.cache[resolvedDoorPath]) {
-        delete require.cache[resolvedDoorPath];
-        console.log(`[executeTypeScriptDoor] Cleared CommonJS cache for: ${resolvedDoorPath}`);
-      }
-
-      // Also clear any related CommonJS modules in the door's directory (dependencies)
-      const doorDir = path.dirname(resolvedDoorPath);
-      Object.keys(require.cache).forEach(key => {
-        if (key.startsWith(doorDir)) {
-          delete require.cache[key];
-          console.log(`[executeTypeScriptDoor] Cleared related CommonJS module: ${key}`);
-        }
-      });
-    }
-
-    // For ESM modules (dynamic import), use query parameter to bust cache when hot reload is enabled.
-    const importPath = hotReload
-      ? `file://${resolvedDoorPath}?_=${Date.now()}`
-      : `file://${resolvedDoorPath}`;
-    console.log(`[executeTypeScriptDoor] Importing ${hotReload ? 'with cache buster' : 'from cache'}: ${importPath}`);
-
-    // Dynamically import the door module with cache busting
+    // Dynamically import the door module
     const doorModule = await import(importPath);
 
     // Check if this is a hybrid door using SDK's ServerDoor class
