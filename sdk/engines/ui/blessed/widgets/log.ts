@@ -67,14 +67,24 @@ export class Log extends Element {
     this.setContent(content);
     console.log('[Log.add] After setContent, _lines count:', (this as any)._lines?.length);
 
-    // Auto-scroll to bottom
-    if (this.scrollOnInput) {
-      const scrollHeight = this.getScrollHeight();
-      console.log('[Log.add] Auto-scrolling to bottom, scrollHeight:', scrollHeight);
-      this.setScroll(scrollHeight);
-    } else {
-      console.log('[Log.add] scrollOnInput is false, not auto-scrolling');
-    }
+    // ALWAYS scroll to bottom to show new content (regardless of scrollOnInput setting)
+    // Use multiple methods to ensure scroll happens
+    const scrollHeight = this.getScrollHeight();
+    const childBase = (this as any).childBase || 0;
+    const maxScroll = Math.max(0, scrollHeight - (this.height as number || 10));
+
+    console.log('[Log.add] Scroll info - height:', this.height, 'scrollHeight:', scrollHeight, 'childBase:', childBase, 'maxScroll:', maxScroll);
+
+    // Method 1: setScrollPerc to 100%
+    this.setScrollPerc(100);
+
+    // Method 2: setScroll to max
+    this.setScroll(maxScroll);
+
+    // Method 3: Set childBase directly (internal scroll position)
+    (this as any).childBase = maxScroll;
+
+    console.log('[Log.add] After scroll, childBase:', (this as any).childBase);
 
     this.emit('log', text);
   }

@@ -182,12 +182,13 @@ export async function createApp(session: DoorSession) {
     parent: screen,
     bottom: INPUT_HEIGHT + STATUS_HEIGHT,
     left: 0,
-    width: 80,  // Full screen width to fit command descriptions
+    width: '100%',  // Full screen width to fit command descriptions
     height: 10,
     label: ' Commands ',
     border: { type: 'line' },
     hidden: true,
     mouse: true,
+    clickable: true,
     keys: true,
     vi: true,
     style: {
@@ -201,11 +202,28 @@ export async function createApp(session: DoorSession) {
     },
   });
 
+  // Ghost text overlay for inline completion preview
+  const ghostText = createBox({
+    parent: screen,
+    bottom: INPUT_HEIGHT + STATUS_HEIGHT - 1,  // Align with input field content
+    left: 10,  // Will be dynamically positioned based on cursor
+    width: 70,
+    height: 1,
+    tags: true,
+    content: '',
+    style: {
+      fg: 'gray',
+      bg: 'black',
+    },
+  });
+  ghostText.hide();
+
   // Set high z-index to appear above other elements
   commandSuggestions.setIndex(1000);
 
   let commandSuggestionsVisible = false;
   let filteredCommands: SlashCommand[] = [];
+  let currentGhostCompletion = '';  // Track the current ghost text completion
 
   function showCommandSuggestions(input: string) {
     // Get all commands from registry
@@ -227,7 +245,9 @@ export async function createApp(session: DoorSession) {
 
     if (filteredCommands.length === 0) {
       commandSuggestions.hide();
+      ghostText.hide();
       commandSuggestionsVisible = false;
+      currentGhostCompletion = '';
       screen.render();
       return;
     }
@@ -246,13 +266,48 @@ export async function createApp(session: DoorSession) {
     commandSuggestions.select(0);
     commandSuggestions.show();
     commandSuggestionsVisible = true;
+
+    // Show ghost text for top match (Claude-style inline completion)
+    if (filteredCommands.length > 0 && searchTerm.length > 0) {
+      const topMatch = filteredCommands[0];
+      const topMatchName = topMatch.name.toLowerCase();
+
+      // Only show ghost text if top match starts with search term (exact prefix match)
+      if (topMatchName.startsWith(searchTerm)) {
+        // Calculate the remaining text that hasn't been typed
+        const typedPortion = searchTerm;
+        const remainingPortion = topMatchName.slice(searchTerm.length);
+
+        // Store the full completion for use when Tab/Enter is pressed
+        currentGhostCompletion = topMatch.name;
+
+        // Position ghost text after the typed characters
+        // Input format is "/{typed}" so position is at "/" (1 char) + typed length
+        const cursorOffset = 1 + typedPortion.length;
+        ghostText.position.left = cursorOffset;
+
+        // Build content: typed portion in white, remaining in gray
+        ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
+        ghostText.show();
+      } else {
+        // No exact prefix match - hide ghost text
+        ghostText.hide();
+        currentGhostCompletion = '';
+      }
+    } else {
+      ghostText.hide();
+      currentGhostCompletion = '';
+    }
+
     screen.render();
   }
 
   function hideCommandSuggestions() {
     if (commandSuggestionsVisible) {
       commandSuggestions.hide();
+      ghostText.hide();
       commandSuggestionsVisible = false;
+      currentGhostCompletion = '';
       screen.render();
     }
   }
@@ -357,6 +412,7 @@ export async function createApp(session: DoorSession) {
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
     mouse: true,
+    clickable: true,  // Enable click events
     keys: true,
     vi: true,
     scrollable: true,
@@ -492,6 +548,7 @@ export async function createApp(session: DoorSession) {
     label: ' Users ',
     border: { type: 'line' },
     mouse: true,
+    clickable: true,  // Enable click events
     keys: true,  // Enable arrow key navigation
     vi: true,    // j/k for up/down
     scrollable: true,
@@ -583,7 +640,7 @@ export async function createApp(session: DoorSession) {
     statusBar.position.width = width;
     inputBox.position.width = width;
     menuBar.position.width = width;
-    commandSuggestions.position.width = Math.min(80, width);
+    commandSuggestions.position.width = width;  // Full width for command suggestions
 
     if (breakpoint === 'small') {
       // Hide sidebar on small screens (< 80 cols)
@@ -1245,16 +1302,32 @@ export async function createApp(session: DoorSession) {
   inputBox.on('keypress', (ch: string, key: any) => {
     // Handle command autocomplete navigation when dropdown is visible
     if (commandSuggestionsVisible) {
-      if (key.name === 'down' || (key.name === 'tab' && !key.shift)) {
+      // Tab or Right arrow: accept ghost text completion (if available)
+      if ((key.name === 'tab' || key.name === 'right') && currentGhostCompletion) {
+        // Accept the ghost completion
+        inputBox.setValue(`/${currentGhostCompletion} `);
+        inputBox.focus();
+        hideCommandSuggestions();
+        screen.render();
+        return;
+      } else if (key.name === 'down') {
         commandSuggestions.down(1);
         screen.render();
         return;
-      } else if (key.name === 'up' || (key.name === 'tab' && key.shift)) {
+      } else if (key.name === 'up') {
         commandSuggestions.up(1);
         screen.render();
         return;
       } else if (key.name === 'enter' || key.name === 'return') {
-        selectCommandSuggestion();
+        // If ghost completion exists, accept it; otherwise select from dropdown
+        if (currentGhostCompletion) {
+          inputBox.setValue(`/${currentGhostCompletion} `);
+          inputBox.focus();
+          hideCommandSuggestions();
+          screen.render();
+        } else {
+          selectCommandSuggestion();
+        }
         return;
       } else if (key.name === 'escape') {
         hideCommandSuggestions();
