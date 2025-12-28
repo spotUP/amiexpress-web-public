@@ -12,8 +12,6 @@ export interface DoorSession {
   bbs: any;
   params: string[];
 }
-
-export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
 export type PlayerRole = 'player' | 'observer';
 export type TableStatus = 'open' | 'in-progress';
 export type LeaderboardMode = 'daily' | 'weekly' | 'all';

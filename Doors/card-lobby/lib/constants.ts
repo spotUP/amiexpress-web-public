@@ -4,8 +4,9 @@
  */
 
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
-import type { ActionButtonKey, GameDefinition, AchievementDefinition, BulletinEntry } from './types';
-import { ActionType } from '@amiexpress/bbs-door-sdk';
+import type { GameDefinition, AchievementDefinition, BulletinEntry } from './types';
+
+export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
 
 export const CHIP_NAME = 'BBS Chips';
 export const STARTING_CHIPS = 1000;
@@ -32,7 +33,7 @@ export const BOT_NAMES = [
   'Rogue',
 ];
 
-export const PokerAction = ActionType ?? {
+export const PokerAction = {
   SIT: 'SIT',
   STAND: 'STAND',
   ADD_CHIPS: 'ADD_CHIPS',

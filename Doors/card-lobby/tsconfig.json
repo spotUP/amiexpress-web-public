@@ -12,6 +12,6 @@
     "moduleResolution": "node",
     "types": ["node"]
   },
-  "include": ["index.ts", "server.ts"],
+  "include": ["index.ts", "server.ts", "managers/**/*.ts", "lib/**/*.ts"],
   "exclude": ["node_modules", "dist", "client.ts"]
 }
