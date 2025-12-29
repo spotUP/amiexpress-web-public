@@ -24,6 +24,7 @@ import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
+import { ximLogger } from '../utils/XIMLogger';
 
 export { XIMCommand } from './xim/types';
 
@@ -276,6 +277,17 @@ export class XIMProtocol {
       stringPtr: msg.stringPtr ? `0x${msg.stringPtr.toString(16)}` : null,
       nodeId: msg.nodeId,
       lineNumber: msg.lineNumber
+    });
+
+    // Log to structured JSON logger
+    ximLogger.log('debug', 'receive', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
+      type: humanName,
+      typeCode: msg.command,
+      param: msg.data,
+      data: msg.string || undefined,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      port: this.doorReplyPort ? `0x${this.doorReplyPort.toString(16)}` : undefined,
     });
 
     console.log(
@@ -1124,6 +1136,16 @@ export class XIMProtocol {
     ximDebugLogger.logMessage(msg.command, humanName, 'SEND', {
       msgAddr: `0x${msg.msgAddr.toString(16)}`,
       reply_data: data
+    });
+
+    // Log to structured JSON logger
+    ximLogger.log('debug', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
+      type: `${humanName}_REPLY`,
+      typeCode: msg.command,
+      param: data,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Reply to door request',
     });
 
     this.messageParser.writeData(msg.msgAddr, data);
