@@ -17,21 +17,31 @@ const door = new Door({
 const cards = new CardEngine();
 
 const drawHand = async (ctx: DoorContext): Promise<void> => {
-  const deck = cards.shuffleCards(cards.buildStandardDeck());
-  const hand = deck.slice(0, 5);
+  try {
+    const deck = cards.shuffleCards(cards.buildStandardDeck());
 
-  await ctx.output.clear();
-  await ctx.output.setForeground(AnsiColor.Cyan);
-  await ctx.output.writeLine('CardEngine Hand Demo');
-  await ctx.output.reset();
-  await ctx.output.writeLine('');
+    if (!deck || deck.length < 5) {
+      await ctx.output.writeLine('\r\n\x1b[31mError: Failed to create hand\x1b[0m\r\n');
+      return;
+    }
 
-  for (const line of cards.renderHandLines(hand, { layout: 'flat-condensed' })) {
-    await ctx.output.writeLine(line);
+    const hand = deck.slice(0, 5);
+
+    await ctx.output.clear();
+    await ctx.output.setForeground(AnsiColor.Cyan);
+    await ctx.output.writeLine('CardEngine Hand Demo');
+    await ctx.output.reset();
+    await ctx.output.writeLine('');
+
+    for (const line of cards.renderHandLines(hand, { layout: 'flat-condensed' })) {
+      await ctx.output.writeLine(line);
+    }
+
+    await ctx.output.writeLine('');
+    await ctx.output.writeLine('[R]edraw  [Q]uit');
+  } catch (error) {
+    await ctx.output.writeLine('\r\n\x1b[31mError rendering hand\x1b[0m\r\n');
   }
-
-  await ctx.output.writeLine('');
-  await ctx.output.writeLine('[R]edraw  [Q]uit');
 };
 
 door.onStart(async (ctx: DoorContext) => {
@@ -39,15 +49,33 @@ door.onStart(async (ctx: DoorContext) => {
 });
 
 door.onInput(async (ctx: DoorContext, key: KeyPress) => {
+  // Validate input
+  if (!key || !key.key || typeof key.key !== 'string') {
+    return;
+  }
+
   const k = key.key.toLowerCase();
 
   if (k === 'q') {
-    ctx.close();
+    // Exit door by clearing input handler - SDK will handle cleanup
+    if (ctx.bbsSession) {
+      ctx.bbsSession.doorInputHandler = null;
+    }
     return;
   }
 
   if (k === 'r') {
-    await drawHand(ctx);
+    try {
+      await drawHand(ctx);
+    } catch (error) {
+      await ctx.output.writeLine('\r\n\x1b[31mError: Failed to redraw\x1b[0m\r\n');
+    }
+    return;
+  }
+
+  // Provide feedback for invalid keys
+  if (k.length === 1 && k.match(/[a-z0-9]/)) {
+    await ctx.output.writeLine('\r\n\x1b[33mPress R to redraw, Q to quit\x1b[0m\r\n');
   }
 });
 

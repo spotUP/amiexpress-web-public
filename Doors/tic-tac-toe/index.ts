@@ -23,7 +23,10 @@ class TicTacToeGame {
       if (key === 'n' || key === 'N') {
         this.resetGame();
       } else if (key === 'q' || key === 'Q') {
-        this.ctx.close();  // Close the door and return to BBS
+        // Exit door by clearing input handler
+        if (this.ctx.bbsSession) {
+          this.ctx.bbsSession.doorInputHandler = null;
+        }
       }
       return;
     }
@@ -48,7 +51,10 @@ class TicTacToeGame {
         }
       }
     } else if (key === 'q' || key === 'Q') {
-      this.ctx.close();  // Close the door and return to BBS
+      // Exit door by clearing input handler
+      if (this.ctx.bbsSession) {
+        this.ctx.bbsSession.doorInputHandler = null;
+      }
     }
   }
 
@@ -181,7 +187,7 @@ const door = new Door({
   author: 'SDK v2.0 Team',
 });
 
-let game: TicTacToeGame;
+let game: TicTacToeGame | undefined;
 
 door.onStart(async (ctx: DoorContext) => {
   game = new TicTacToeGame();
@@ -190,6 +196,9 @@ door.onStart(async (ctx: DoorContext) => {
 });
 
 door.onInput(async (ctx: DoorContext, keyPress: KeyPress) => {
+  if (!game) {
+    return;
+  }
   game.handleInput(keyPress.key);
 });
 

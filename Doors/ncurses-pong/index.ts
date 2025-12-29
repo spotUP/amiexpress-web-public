@@ -33,11 +33,18 @@ export async function runDoor(session: DoorSession): Promise<void> {
   const door = new PongDoor();
   let inputHandlerInstalled = false;
 
+  // CRITICAL: Set inDoorManager flag so backend routes input to doorInputHandler
+  // Without this, socket-handlers.ts won't call the doorInputHandler!
+  session.bbsSession.inDoorManager = true;
+
   // Enable game mode for real-time input (required for ncurses games)
   // This makes the frontend send immediate key-down events instead of waiting for Enter
-  if (session.bbs?.enableGameMode) {
-    session.bbs.enableGameMode();
-    console.log('[ncurses-pong] Game mode enabled for real-time input');
+  try {
+    if (session.bbs?.enableGameMode) {
+      session.bbs.enableGameMode();
+    }
+  } catch (error) {
+    // Continue anyway - game might still work without game mode
   }
 
   // Parse escape sequences into key names
@@ -92,37 +99,56 @@ export async function runDoor(session: DoorSession): Promise<void> {
       on: (event: string, handler: (ch: any, key: any) => void) => {
         if (event === 'keypress') {
           if (session.bbsSession) {
-            session.doorInputHandler = (data: string) => {
-              console.log('[ncurses-pong] doorInputHandler called with:', JSON.stringify(data));
+            // CRITICAL: Set handler on bbsSession, not on the wrapper session
+            session.bbsSession.doorInputHandler = (data: string) => {
               const { ch, key } = parseKeyData(data);
-              console.log('[ncurses-pong] parseKeyData result:', { ch, keyName: key.name, sequence: JSON.stringify(key.sequence) });
               handler(ch, key);
             };
             inputHandlerInstalled = true;
-            console.log('[ncurses-pong] doorInputHandler installed on session.doorInputHandler');
           } else {
-            session.socket.on('data', (data: string) => {
+            // Store fallback listener for cleanup
+            const socketListener = (data: string) => {
               const { ch, key } = parseKeyData(data);
               handler(ch, key);
-            });
+            };
+            session.socket.on('data', socketListener);
+            // Save reference for cleanup
+            (session as any)._ncursesPongSocketListener = socketListener;
           }
         }
       }
     }
   };
 
-  console.log('[ncurses-pong] Starting door.onStart()');
   try {
     await door.onStart(context as any);
   } finally {
-    console.log('[ncurses-pong] door.onStart() completed, cleaning up');
+    // Clean up door manager flags
+    session.bbsSession.inDoorManager = false;
+
     // Remove socket listeners to prevent memory leaks
     if (session.socket) {
-      session.socket.removeAllListeners('data');
+      // Remove specific listener if it exists
+      const socketListener = (session as any)._ncursesPongSocketListener;
+      if (socketListener) {
+        session.socket.removeListener('data', socketListener);
+        delete (session as any)._ncursesPongSocketListener;
+      } else {
+        // Fallback to removing all data listeners
+        session.socket.removeAllListeners('data');
+      }
     }
-    if (inputHandlerInstalled && session.doorInputHandler) {
-      delete session.doorInputHandler;
-      console.log('[ncurses-pong] doorInputHandler cleaned up');
+    if (inputHandlerInstalled && session.bbsSession.doorInputHandler) {
+      delete session.bbsSession.doorInputHandler;
+    }
+
+    // Disable game mode
+    try {
+      if (session.bbs?.disableGameMode) {
+        session.bbs.disableGameMode();
+      }
+    } catch (error) {
+      // Silently handle cleanup errors
     }
   }
 }

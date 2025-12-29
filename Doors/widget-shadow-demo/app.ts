@@ -66,15 +66,21 @@ const lorem = 'Non eram nescius Brute cum quae summis ingeniis exquisitaque'
 export async function createApp(session: DoorSession) {
   const { bbs, bbsSession } = session;
 
-  // Create responsive screen with BBS output
-  const screen = new Screen({
-    smartCSR: true,
-    dockBorders: true,
-    fullUnicode: true,
-    title: 'Widget Shadow Demo',
-    output: (data: string) => bbs.write(data),
-    responsive: true,
-  });
+  let screen;
+  try {
+    // Create responsive screen with BBS output
+    screen = new Screen({
+      smartCSR: true,
+      dockBorders: true,
+      fullUnicode: true,
+      title: 'Widget Shadow Demo',
+      output: (data: string) => bbs.write(data),
+      responsive: true,
+    });
+  } catch (error) {
+    bbs.write('\r\n\x1b[31mError creating screen interface\x1b[0m\r\n');
+    throw error;
+  }
 
   // Connect input from BBS to screen
   if (bbsSession) {
@@ -86,8 +92,12 @@ export async function createApp(session: DoorSession) {
 
   // Enable mouse for dragging
   screen.enableMouse();
-  if (bbs?.enableMouseEvents) {
-    bbs.enableMouseEvents();
+  if (bbs && typeof bbs.enableMouseEvents === 'function') {
+    try {
+      bbs.enableMouseEvents();
+    } catch (error) {
+      // Silently handle if mouse events fail to enable
+    }
   }
 
   // Light blue background with lorem ipsum text (EXACT from neo-blessed)
@@ -101,7 +111,6 @@ export async function createApp(session: DoorSession) {
     style: {
       bg: 'lightblue',
     },
-    content: 'Foo',
   });
 
   // Yellow "under" box - now as dockable panel
@@ -171,25 +180,55 @@ export async function createApp(session: DoorSession) {
     content: '{green-bg}{red-fg}{bold} --Drag Me-- {/}',
   });
 
-  // Arrow key movement - now moves the panel
+  // Helper to safely get/set position with bounds checking
+  const getSafePosition = (panel: any, prop: string): number => {
+    const val = panel[prop];
+    return typeof val === 'number' ? val : 0;
+  };
+
+  const getScreenBounds = () => ({
+    maxX: (screen.width || 80) - 10,
+    maxY: (screen.height || 24) - 5,
+  });
+
+  let renderPending = false;
+  const scheduleRender = () => {
+    if (!renderPending && !screen.destroyed) {
+      renderPending = true;
+      setImmediate(() => {
+        if (!screen.destroyed) {
+          screen.render();
+        }
+        renderPending = false;
+      });
+    }
+  };
+
+  // Arrow key movement - now moves the panel with bounds checking
   overPanel.key('left', function() {
-    (overPanel as any).left = Math.max(0, ((overPanel as any).left || 0) - 2);
-    screen.render();
+    const current = getSafePosition(overPanel, 'left');
+    (overPanel as any).left = Math.max(0, current - 2);
+    scheduleRender();
   });
 
   overPanel.key('up', function() {
-    (overPanel as any).top = Math.max(0, ((overPanel as any).top || 0) - 1);
-    screen.render();
+    const current = getSafePosition(overPanel, 'top');
+    (overPanel as any).top = Math.max(0, current - 1);
+    scheduleRender();
   });
 
   overPanel.key('right', function() {
-    (overPanel as any).left = ((overPanel as any).left || 0) + 2;
-    screen.render();
+    const bounds = getScreenBounds();
+    const current = getSafePosition(overPanel, 'left');
+    (overPanel as any).left = Math.min(bounds.maxX, current + 2);
+    scheduleRender();
   });
 
   overPanel.key('down', function() {
-    (overPanel as any).top = ((overPanel as any).top || 0) + 1;
-    screen.render();
+    const bounds = getScreenBounds();
+    const current = getSafePosition(overPanel, 'top');
+    (overPanel as any).top = Math.min(bounds.maxY, current + 1);
+    scheduleRender();
   });
 
   // Focus the draggable panel
@@ -203,20 +242,37 @@ export async function createApp(session: DoorSession) {
   // Set content AFTER creating boxes (EXACT from neo-blessed)
   bg.setContent(lorem);
 
-  // Handle screen destroy to exit door
-  screen.on('destroy', () => {
-    // Cleanup
-    if (bbs?.disableMouseEvents) {
-      bbs.disableMouseEvents();
-    }
-  });
+  // Store previous input handler to restore on cleanup
+  const previousHandler = bbsSession?.doorInputHandler;
 
   // Initial render
   screen.render();
 
   // Return a promise that resolves when the door exits
+  // Consolidate all cleanup into a single destroy handler
   return new Promise<void>((resolve) => {
-    screen.on('destroy', () => {
+    screen.once('destroy', () => {
+      try {
+        // Cleanup panels
+        if (underPanel) {
+          underPanel.destroy?.();
+        }
+        if (overPanel) {
+          overPanel.destroy?.();
+        }
+
+        // Disable mouse events
+        if (bbs?.disableMouseEvents) {
+          bbs.disableMouseEvents();
+        }
+
+        // Restore previous input handler
+        if (bbsSession) {
+          bbsSession.doorInputHandler = previousHandler;
+        }
+      } catch (error) {
+        // Silently handle cleanup errors
+      }
       resolve();
     });
   });

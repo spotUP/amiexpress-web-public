@@ -38,20 +38,22 @@ class BBSDashboard {
   private systemPanel!: DockablePanel;
   private statsPanel!: DockablePanel;
   private nodesPanel!: DockablePanel;
-  private systemText: any;
+  private systemText: any;  // TODO: Type as Box when SDK types are exported
   private statsText: any;
   private nodesText: any;
   private statusText: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private exitResolve: (() => void) | null = null;
+  private resizeHandler: ((width: number, height: number) => void) | null = null;
+  private hasExited = false;
 
   private stats: BBSStats = {
-    totalUsers: 1547,
-    activeUsers: 4,
-    totalMessages: 34521,
-    totalFiles: 8934,
-    totalCalls: 125673,
-    systemUptime: 864000
+    totalUsers: 0,
+    activeUsers: 0,
+    totalMessages: 0,
+    totalFiles: 0,
+    totalCalls: 0,
+    systemUptime: 0
   };
 
   setContext(ctx: DoorContext): void {
@@ -60,13 +62,23 @@ class BBSDashboard {
 
   async start(): Promise<void> {
     this.createUI();
-    this.renderDashboard();
+
+    // Fetch initial data
+    await this.fetchBBSStats();
+
+    await this.renderDashboard();
     this.startAutoRefresh();
 
     // Wait for exit
     await new Promise<void>((resolve) => {
-      this.exitResolve = resolve;
-      this.screen.on('destroy', () => resolve());
+      const resolver = () => {
+        if (!this.hasExited) {
+          this.hasExited = true;
+          resolve();
+        }
+      };
+      this.exitResolve = resolver;
+      this.screen.once('destroy', resolver);
     });
   }
 
@@ -190,7 +202,7 @@ class BBSDashboard {
     });
 
     // Responsive breakpoint handling
-    this.screen.responsiveLayout.onResize((width, height) => {
+    this.resizeHandler = (width, height) => {
       const breakpoint = this.screen.responsiveLayout.getBreakpoint();
 
       if (breakpoint === 'small') {
@@ -219,26 +231,39 @@ class BBSDashboard {
         this.nodesPanel.options.height = '50%';
       }
 
-      this.renderDashboard();
-    });
+      if (this.screen && !this.screen.destroyed) {
+        // Don't await here to avoid blocking resize handler
+        this.renderDashboard().catch(() => {
+          // Silently handle render errors during resize
+        });
+      }
+    };
+    this.screen.responsiveLayout.onResize(this.resizeHandler);
 
     // Key handlers
     this.screen.key(['q', 'Q', 'escape'], () => {
       this.cleanup();
-      this.ctx.close();
     });
 
-    this.screen.key(['r', 'R', 'space'], () => {
-      this.renderDashboard();
+    this.screen.key(['r', 'R', 'space'], async () => {
+      await this.renderDashboard();
     });
   }
 
-  private renderDashboard(): void {
+  private async renderDashboard(): Promise<void> {
+    // Guard against rendering to destroyed screen
+    if (!this.screen || this.screen.destroyed) {
+      return;
+    }
+
+    // Fetch system stats
+    const sysStats = await this.fetchSystemStats();
+
     // Render System Resources Panel
     const systemLines: string[] = [];
-    const cpuUsage = Math.floor(Math.random() * 40) + 20;
-    const memUsage = Math.floor(Math.random() * 30) + 50;
-    const diskUsage = 67;
+    const cpuUsage = sysStats.cpu;
+    const memUsage = sysStats.memory;
+    const diskUsage = sysStats.disk;
 
     systemLines.push('');
     systemLines.push(`CPU Usage:  ${cpuUsage}%  ${this.makeProgressBar(cpuUsage, 20, 'cyan')}`);
@@ -272,12 +297,8 @@ class BBSDashboard {
     nodesLines.push(`{bold}  Node    User              Status      Location{/bold}`);
     nodesLines.push('{cyan-fg}' + '─'.repeat(60) + '{/cyan-fg}');
 
-    const nodes: NodeInfo[] = [
-      { id: 1, user: 'CyberPunk', status: 'Active', location: 'Reading Mail' },
-      { id: 2, user: 'HackerOne', status: 'Active', location: 'Playing Door' },
-      { id: 3, user: '', status: 'Idle', location: 'Login Screen' },
-      { id: 4, user: 'BBSMaster', status: 'Active', location: 'File Area' }
-    ];
+    // Fetch real node status
+    const nodes = await this.fetchNodeStatus();
 
     for (const node of nodes) {
       const userName = node.user || 'Waiting';
@@ -301,7 +322,10 @@ class BBSDashboard {
   }
 
   private padRight(text: string, width: number): string {
-    return text.length >= width ? text.substring(0, width) : text + ' '.repeat(width - text.length);
+    if (width <= 0) return text;
+    return text.length >= width
+      ? text.substring(0, width)
+      : text + ' '.repeat(Math.max(0, width - text.length));
   }
 
   private formatUptime(seconds: number): string {
@@ -311,25 +335,164 @@ class BBSDashboard {
     return `${days}d ${hours}h ${mins}m`;
   }
 
+  /**
+   * Fetch real BBS statistics from the system
+   */
+  private async fetchBBSStats(): Promise<void> {
+    try {
+      // Attempt to get real stats from BBS API
+      const bbsApi = this.ctx.bbs as any;
+      if (bbsApi && typeof bbsApi.getStats === 'function') {
+        const stats = await bbsApi.getStats();
+        if (stats) {
+          this.stats.totalUsers = stats.totalUsers || this.stats.totalUsers;
+          this.stats.activeUsers = stats.activeUsers || this.stats.activeUsers;
+          this.stats.totalMessages = stats.totalMessages || this.stats.totalMessages;
+          this.stats.totalFiles = stats.totalFiles || this.stats.totalFiles;
+          this.stats.totalCalls = stats.totalCalls || this.stats.totalCalls;
+          this.stats.systemUptime = stats.systemUptime || this.stats.systemUptime;
+        }
+      } else {
+        // Fallback: Use ctx.user as a data point
+        if (this.ctx.user) {
+          const userAny = this.ctx.user as any;
+          this.stats.totalUsers = userAny.totalUsers || 1;
+          this.stats.activeUsers = 1; // At least current user
+        }
+      }
+    } catch (error) {
+      // Silently fall back to default values on error
+    }
+  }
+
+  /**
+   * Fetch real node status from BBS
+   */
+  private async fetchNodeStatus(): Promise<NodeInfo[]> {
+    try {
+      const bbsApi = this.ctx.bbs as any;
+      if (bbsApi && typeof bbsApi.getNodeStatus === 'function') {
+        const nodes = await bbsApi.getNodeStatus();
+        if (Array.isArray(nodes)) {
+          return nodes.map((node: any) => ({
+            id: node.id || node.nodeId || 0,
+            user: node.user || node.username || '',
+            status: node.status || 'Idle',
+            location: node.location || node.activity || 'Unknown'
+          }));
+        }
+      }
+    } catch (error) {
+      // Fall through to fallback
+    }
+
+    // Fallback: Return current node only
+    return [{
+      id: this.ctx.nodeId || 1,
+      user: this.ctx.user?.username || 'SysOp',
+      status: 'Active',
+      location: 'Dashboard'
+    }];
+  }
+
+  /**
+   * Get system resource usage (CPU, Memory, Disk)
+   */
+  private async fetchSystemStats(): Promise<{ cpu: number; memory: number; disk: number }> {
+    try {
+      const bbsApi = this.ctx.bbs as any;
+      if (bbsApi && typeof bbsApi.getSystemStats === 'function') {
+        const sysStats = await bbsApi.getSystemStats();
+        if (sysStats) {
+          return {
+            cpu: sysStats.cpuUsage || 0,
+            memory: sysStats.memoryUsage || 0,
+            disk: sysStats.diskUsage || 0
+          };
+        }
+      }
+    } catch (error) {
+      // Fall through to fallback
+    }
+
+    // Fallback: Use reasonable demo values
+    return {
+      cpu: Math.floor(Math.random() * 40) + 20,   // 20-60%
+      memory: Math.floor(Math.random() * 30) + 50, // 50-80%
+      disk: 67
+    };
+  }
+
+  private validateStats(): void {
+    // Ensure active users doesn't exceed total users
+    this.stats.activeUsers = Math.min(this.stats.activeUsers, this.stats.totalUsers);
+
+    // Cap unbounded growth to prevent overflow
+    if (this.stats.totalMessages > 999999) {
+      this.stats.totalMessages = 999999;
+    }
+    if (this.stats.totalFiles > 999999) {
+      this.stats.totalFiles = 999999;
+    }
+  }
+
   private startAutoRefresh(): void {
-    this.updateInterval = setInterval(() => {
-      // Update some stats randomly
-      this.stats.activeUsers = Math.floor(Math.random() * 8) + 1;
-      this.stats.totalMessages += Math.floor(Math.random() * 3);
-      this.stats.totalFiles += Math.floor(Math.random() * 2);
+    this.updateInterval = setInterval(async () => {
+      // Fetch fresh stats from BBS
+      await this.fetchBBSStats();
+
+      // Increment uptime (3 seconds per refresh)
       this.stats.systemUptime += 3;
-      this.renderDashboard();
+
+      this.validateStats();
+
+      if (this.screen && !this.screen.destroyed) {
+        await this.renderDashboard();
+      }
     }, 3000);
   }
 
   private cleanup(): void {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = null;
+    try {
+      // Clear auto-refresh interval
+      if (this.updateInterval) {
+        clearInterval(this.updateInterval);
+        this.updateInterval = null;
+      }
+
+      // Remove resize handler
+      if (this.resizeHandler && this.screen?.responsiveLayout) {
+        // Note: blessed may not have offResize, but attempt to clean up
+        if (typeof (this.screen.responsiveLayout as any).offResize === 'function') {
+          (this.screen.responsiveLayout as any).offResize(this.resizeHandler);
+        }
+        this.resizeHandler = null;
+      }
+
+      // Remove key handlers
+      if (this.screen) {
+        this.screen.removeAllListeners('keypress');
+      }
+
+      // Destroy panels
+      if (this.systemPanel) {
+        this.systemPanel.destroy?.();
+      }
+      if (this.statsPanel) {
+        this.statsPanel.destroy?.();
+      }
+      if (this.nodesPanel) {
+        this.nodesPanel.destroy?.();
+      }
+
+      // Destroy screen
+      if (this.screen && !this.screen.destroyed) {
+        this.screen.destroy();
+      }
+    } catch (error) {
+      // Silently handle cleanup errors to ensure exit promise resolves
     }
-    if (this.screen) {
-      this.screen.destroy();
-    }
+
     // Resolve the exit promise to allow door to complete
     if (this.exitResolve) {
       this.exitResolve();
@@ -360,7 +523,6 @@ door.onClose(async (ctx: DoorContext) => {
 
 door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
-  console.error('Dashboard error:', error);
 });
 
 export default door;

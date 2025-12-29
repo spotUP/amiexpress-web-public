@@ -377,7 +377,6 @@ export async function createApp(session: DoorSession) {
     const cleanup = () => {
       if (!resolved) {
         resolved = true;
-        console.log('[Door Manager] Cleanup called');
         try {
           // Remove all event listeners to prevent memory leaks
           if (screen) {
@@ -392,7 +391,7 @@ export async function createApp(session: DoorSession) {
             screen.destroy();
           }
         } catch (err) {
-          console.error('[Door Manager] Error destroying screen:', err);
+          // Silently handle cleanup errors
         }
         resolve();
       }
@@ -403,7 +402,6 @@ export async function createApp(session: DoorSession) {
     // Also cleanup if socket disconnects
     if (session.socket) {
       session.socket.once('disconnect', () => {
-        console.log('[Door Manager] Socket disconnected, cleaning up');
         cleanup();
       });
     }

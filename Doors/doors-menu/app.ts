@@ -63,16 +63,12 @@ function formatType(type: string): string {
 }
 
 export async function createApp(session: DoorSession) {
-  console.log('[Doors Menu] createApp called');
   const { bbs, user } = session;
   const username = user?.username || 'Guest';
   const userLevel = user?.secLevel || 0;
-  console.log('[Doors Menu] User:', username, 'Level:', userLevel);
 
   // Fetch available doors from BBS API
-  console.log('[Doors Menu] Fetching available doors...');
   const doors = await fetchAvailableDoors(bbs, userLevel);
-  console.log('[Doors Menu] Fetch complete, doors count:', doors.length);
 
   if (doors.length === 0) {
     bbs.write('\r\n\x1b[36mNo doors are currently available.\x1b[0m\r\n');
@@ -112,7 +108,6 @@ export async function createApp(session: DoorSession) {
   }
 
   // Create screen
-  console.log('[Doors Menu] Creating blessed screen...');
   let screen;
   try {
     screen = blessed.screen({
@@ -122,28 +117,20 @@ export async function createApp(session: DoorSession) {
       title: 'Door Games & Utilities',
       output: (data: string) => bbs.write(data),
     });
-    console.log('[Doors Menu] Blessed screen created successfully');
   } catch (error) {
-    console.error('[Doors Menu] Error creating blessed screen:', error);
     bbs.write('\r\n\x1b[31mError creating door interface\x1b[0m\r\n');
     throw error;
   }
 
   // Connect input
-  console.log('[Doors Menu] Setting up input handler...');
-  console.log('[Doors Menu] session.bbsSession exists:', !!session.bbsSession);
   if (session.bbsSession) {
-    console.log('[Doors Menu] Setting doorInputHandler on bbsSession');
     session.bbsSession.doorInputHandler = (data: string) => {
       screen._handleData(data);
+      return true;
     };
-    console.log('[Doors Menu] Input handler set, verifying:', typeof session.bbsSession.doorInputHandler);
-  } else {
-    console.error('[Doors Menu] ERROR: session.bbsSession is null/undefined!');
   }
 
   // Create header
-  console.log('[Doors Menu] Creating UI elements...');
   const header = createBox({
     parent: screen,
     top: 0,
@@ -186,9 +173,7 @@ export async function createApp(session: DoorSession) {
   });
 
   doorList.setItems(doorItems);
-  console.log('[Doors Menu] Door list populated with', doorItems.length, 'items');
   doorList.focus();
-  console.log('[Doors Menu] Door list focused');
 
   // Create footer
   const footer = createBox({
@@ -242,13 +227,20 @@ export async function createApp(session: DoorSession) {
     const cleanup = () => {
       if (!resolved) {
         resolved = true;
-        console.log('[Doors Menu] Cleanup called');
         try {
+          // Remove event listeners
+          if (doorList) {
+            doorList.removeAllListeners('select');
+          }
+          if (screen) {
+            screen.removeAllListeners('destroy');
+            screen.removeAllListeners('keypress');
+          }
           if (!screen.destroyed) {
             screen.destroy();
           }
         } catch (err) {
-          console.error('[Doors Menu] Error destroying screen:', err);
+          // Silently handle cleanup errors
         }
         resolve();
       }
@@ -259,7 +251,6 @@ export async function createApp(session: DoorSession) {
     // Also cleanup if socket disconnects
     if (session.socket) {
       session.socket.once('disconnect', () => {
-        console.log('[Doors Menu] Socket disconnected, cleaning up');
         cleanup();
       });
     }
@@ -270,14 +261,9 @@ export async function createApp(session: DoorSession) {
  * Fetch available doors from BBS API
  */
 async function fetchAvailableDoors(bbs: any, userLevel: number): Promise<DoorInfo[]> {
-  console.log('[Doors Menu] fetchAvailableDoors called, userLevel:', userLevel);
-  console.log('[Doors Menu] bbs.getDoorList exists:', !!bbs.getDoorList);
-
   // Use BBS API to get door list
   if (bbs.getDoorList) {
-    console.log('[Doors Menu] Calling bbs.getDoorList()...');
     const allDoors = await bbs.getDoorList();
-    console.log('[Doors Menu] Got', allDoors.length, 'doors from getDoorList');
     const filtered = allDoors.filter((door: any) =>
       door.enabled &&
       userLevel >= (door.accessLevel || 0)
@@ -290,11 +276,9 @@ async function fetchAvailableDoors(bbs: any, userLevel: number): Promise<DoorInf
       size: door.size || 0,
       accessLevel: door.accessLevel || 0
     }));
-    console.log('[Doors Menu] Returning', filtered.length, 'filtered doors');
     return filtered;
   }
 
   // Fallback: return empty array if BBS API not available
-  console.log('[Doors Menu] bbs.getDoorList not available, returning empty array');
   return [];
 }
