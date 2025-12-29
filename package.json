@@ -5,7 +5,11 @@
     "door:create": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/create-door-skeleton.ts",
     "door:doctor:strict": "DOCTOR_RUN=1 DOCTOR_COMPILE_PY=1 npx ts-node -P dev/scripts/tsconfig.json dev/scripts/door-doctor.ts",
     "door:harness": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/run-door-harness.ts",
-    "door:ci": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/sync-fixture-doors.ts && npm run door:doctor:strict && npm run door:harness -- py-hello && npm run door:harness -- rexx-hello"
+    "door:ci": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/sync-fixture-doors.ts && npm run door:doctor:strict && npm run door:harness -- py-hello && npm run door:harness -- rexx-hello",
+    "xim:view": "npx tsx dev/scripts/xim-viewer.ts",
+    "xim:decode": "npx tsx dev/scripts/xim-decode.ts",
+    "xim:live": "npx tsx dev/scripts/xim-viewer.ts --live",
+    "xim:errors": "npx tsx dev/scripts/xim-viewer.ts --errors"
   },
   "dependencies": {
     "axios": "^1.13.2",

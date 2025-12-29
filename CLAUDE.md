@@ -104,9 +104,17 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **ALWAYS check logs BEFORE implementing** for 68K door issues.
 
-**Files:** `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log` (per-door), `logs/xim-debug.log` (XIM_DEBUG=1), `logs/backend.log`, `logs/frontend.log`
+**Files:** `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log` (per-door), `logs/xim-debug.json` (XIM_DEBUG_JSON=1), `logs/backend.log`, `logs/frontend.log`
 
 **Find:** `ls -t logs/door-68k-{NAME}* | head -3` (recent), `ls -lS logs/door-68k-{NAME}* | head -3` (largest), `grep -i "error\|fail" logs/door-68k-*`
+
+**XIM Debugging:** Use structured tools, not grep:
+- `npm run xim:live` - Real-time message viewer
+- `npm run xim:view -- --door WHO` - Filter by door
+- `npm run xim:errors` - Show only errors
+- `npm run xim:decode -- "<hex>"` - Decode messages
+
+See `Documentation/4-Door-Developers/XIM_DEBUGGING_GUIDE.md` for complete guide.
 
 **Check after EVERY change.** Document in `Documentation/6-Progress/{NAME}_DEBUG_SESSION.md`: hypothesis → action → result → next.
 
