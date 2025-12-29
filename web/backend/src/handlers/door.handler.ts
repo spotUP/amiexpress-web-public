@@ -608,9 +608,13 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
         lineCount: 0,
         confAccess: confAccess,
         userSlotNumber: userSlotNumber,
-        diskUserStats: diskUserStats
+        diskUserStats: diskUserStats,
+        // Pass currentConference for doors like AquaScan that scan the current conference
+        currentConference: (session as any).currentConference || 1,
+        conferenceId: (session as any).currentConference || session.conferenceId || 1
       }
     } as any);
+    console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).currentConference || 1}`);
 
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
@@ -2193,12 +2197,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
 
     console.log(`[executeAmigaDoor] door.args=${JSON.stringify(door.args)} door.parameters=${JSON.stringify(door.parameters)}`);
 
-    // Add ARGS from .info file (e.g., ARGS=NEWSCAN for AquaScan)
+    // NOTE: ARGS from .info file (e.g., ARGS=NEWSCAN) is for DOORUSE mode lookup, NOT command-line args!
+    // AquaScan uses FindToolType("DOORUSE.<cmd>") to determine mode (NEWSCAN/FILESCAN/REVSCAN/CONFSCAN)
+    // express.e:28102 just passes runtime params: runSysCommand('N','S U') - no NEWSCAN in args
+    // So we do NOT add door.args to command line - only runtime parameters
     if (door.args) {
-      doorArgs.push(...door.args.split(' ').filter((a: string) => a));
-      console.log(`[executeAmigaDoor] Added ARGS from .info: ${JSON.stringify(door.args.split(' '))} -> doorArgs=${JSON.stringify(doorArgs)}`);
-    } else {
-      console.log(`[executeAmigaDoor] No ARGS in door.args`);
+      console.log(`[executeAmigaDoor] door.args="${door.args}" (used for DOORUSE lookup, NOT command-line)`);
     }
 
     // Add any additional arguments from door.passParameters (from .info file)
@@ -2309,7 +2313,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
       LOCATION: session.user?.location || 'Unknown',
       TIMELIMIT: String(session.timeRemaining || 999),
       TIMEUSED: String(Math.floor((Date.now() - (session.loginTime || Date.now())) / 1000)),
-      CONFERENCE: String(session.currentConf || 1),
+      CONFERENCE: String((session as any).currentConference || session.currentConf || 1),
       REALNAME: session.user?.realname || session.user?.username || 'Unknown',
       SECSTATUS: String(session.user?.secStatus || 0),
       PHONENUMBER: session.user?.phone || '000-000-0000',

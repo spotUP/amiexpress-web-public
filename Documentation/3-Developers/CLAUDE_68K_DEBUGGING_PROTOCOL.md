@@ -12,12 +12,13 @@ This document tells YOU (Claude) exactly how to debug 68K doors. Follow this pro
 
 **ALWAYS** start with the XIM debugging tools.
 
-### Step 1: Enable Logging
+### Step 1: Start Servers (XIM Logging Auto-Enabled)
 
 ```bash
-export XIM_DEBUG_JSON=1
 ./dev/scripts/start-servers.sh
 ```
+
+**Note:** XIM logging is now **enabled by default**. No need to set `XIM_DEBUG_JSON=1` manually.
 
 ### Step 2: Start Live Viewer
 

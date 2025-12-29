@@ -1188,14 +1188,18 @@ export class DoorMessageHandler {
 
       // System commands
       case XIMCommand.EXPRESS_VERSION:
-        // express.e:3808-3810: Express version (getExpressMajorVer)
-        // Returns mimicVersion if set, otherwise formatted version string
-        // AquaScan expects "FR" for FidoNet Read mode compatibility
-        console.log(`[DoorMessageHandler]   EXPRESS_VERSION`);
-        this.writeStringToMessage(msgAddr, "FR");
-        // Set data=1 for success (FIXED: use DoorConstants.MESSAGE_DATA_OFFSET, not hardcoded 24)
-        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
-        console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Written "FR" to string, data=1`);
+        // express.e:3808-3810: Returns the command used to invoke the door
+        // AquaScan uses this to look up DOORUSE.<cmd>=NEWSCAN/FILESCAN/etc in its .info file
+        // e.g., if invoked with "N" command, returns "N" so door checks DOORUSE.N=NEWSCAN
+        {
+          const doorCmd = (this.config.bbsSession as any)?.doorCommand ||
+                          this.config.doorId?.toUpperCase() ||
+                          'N';
+          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Returning door command "${doorCmd}"`);
+          this.writeStringToMessage(msgAddr, doorCmd);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
+          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Written "${doorCmd}" to string, data=1`);
+        }
         break;
 
       case XIMCommand.RAWARROW:

@@ -131,9 +131,8 @@ Environment:
 
   async run() {
     if (!fs.existsSync(this.logFile)) {
-      console.error(`[ERROR] Log file not found: ${this.logFile}`);
-      console.error('Make sure XIM_DEBUG_JSON=1 is set when running the backend.');
-      process.exit(1);
+      await this.handleMissingLogFile();
+      return;
     }
 
     this.printHeader();
@@ -146,6 +145,52 @@ Environment:
 
     if (this.showStats) {
       this.printStats();
+    }
+  }
+
+  private async handleMissingLogFile() {
+    console.log('\x1b[1;33m╔═══════════════════════════════════════════════════════════════╗\x1b[0m');
+    console.log('\x1b[1;33m║              XIM Debug Logging Not Enabled                    ║\x1b[0m');
+    console.log('\x1b[1;33m╚═══════════════════════════════════════════════════════════════╝\x1b[0m\n');
+
+    console.log(`\x1b[0;37mLog file not found: ${this.logFile}\x1b[0m\n`);
+
+    // Check if backend is running
+    const backendRunning = await this.checkBackendRunning();
+
+    if (backendRunning) {
+      console.log('\x1b[1;31m[!]\x1b[0m Backend is running but XIM logging is NOT enabled.\n');
+      console.log('\x1b[1;37mTo enable XIM logging:\x1b[0m\n');
+      console.log('  1. Stop the backend:');
+      console.log('     \x1b[0;36m./dev/scripts/kill-servers.sh\x1b[0m\n');
+      console.log('  2. Start with XIM logging enabled:');
+      console.log('     \x1b[0;36mXIM_DEBUG_JSON=1 ./dev/scripts/start-servers.sh\x1b[0m\n');
+      console.log('  3. Run this command again:');
+      console.log('     \x1b[0;36mnpm run xim:live\x1b[0m\n');
+    } else {
+      console.log('\x1b[1;33m[!]\x1b[0m Backend is not running.\n');
+      console.log('\x1b[1;37mTo start with XIM logging:\x1b[0m\n');
+      console.log('  \x1b[0;36mXIM_DEBUG_JSON=1 ./dev/scripts/start-servers.sh\x1b[0m\n');
+      console.log('Then run this command again:\n');
+      console.log('  \x1b[0;36mnpm run xim:live\x1b[0m\n');
+    }
+
+    console.log('\x1b[0;37mAlternatively, add to your shell profile:\x1b[0m');
+    console.log('  \x1b[0;36mexport XIM_DEBUG_JSON=1\x1b[0m\n');
+
+    process.exit(1);
+  }
+
+  private async checkBackendRunning(): Promise<boolean> {
+    try {
+      const { exec } = require('child_process');
+      return new Promise((resolve) => {
+        exec('lsof -ti:3001', (error: any, stdout: string) => {
+          resolve(stdout.trim().length > 0);
+        });
+      });
+    } catch (err) {
+      return false;
     }
   }
 

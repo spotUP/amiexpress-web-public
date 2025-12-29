@@ -4,14 +4,13 @@ Complete guide to debugging XIM protocol doors using structured logging and visu
 
 ## Quick Start
 
-### 1. Enable Structured Logging
+### 1. Start Servers (Logging Auto-Enabled)
 
 ```bash
-export XIM_DEBUG_JSON=1
 ./dev/scripts/start-servers.sh
 ```
 
-This enables structured JSON logging to `logs/xim-debug.json`.
+**XIM logging is now enabled by default** - structured JSON logging automatically writes to `logs/xim-debug.json`.
 
 ### 2. View Messages in Real-Time
 

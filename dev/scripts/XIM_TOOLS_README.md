@@ -5,13 +5,14 @@ Comprehensive debugging toolkit for XIM protocol 68K door development.
 ## Quick Start
 
 ```bash
-# Enable structured logging
-export XIM_DEBUG_JSON=1
+# Start servers (XIM logging auto-enabled)
 ./dev/scripts/start-servers.sh
 
 # In another terminal - start live viewer
 npm run xim:live
 ```
+
+**Note:** XIM logging is now **enabled by default** - no need to set `XIM_DEBUG_JSON=1` manually!
 
 ## Complete Toolkit (8 Tools)
 

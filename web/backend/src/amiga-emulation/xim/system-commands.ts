@@ -115,18 +115,100 @@ export class XIMSystemCommandsHandler {
   private populateBBSInfoPostRegister(msg: XIMMessage): void {
     console.log('[BBSInfo] Post-register population starting...');
 
-    // Try to find the DIFace address - it may be in msg.data or we need to search
-    // The library creates a DIFace structure and the door passes it in Register
+    // Try to find the DIFace address using known structure relationships
+    // The DIFace structure layout:
+    //   0x00: dif_AEPort (pointer to AEDoorPort)
+    //   0x04: dif_MsgPort (pointer to door's reply port)
+    //   0x08: dif_Message (pointer to embedded jhMessage)
+    //   0x46: jhMessage structure (embedded, DIFACE_MSG_OFFSET)
+    //
+    // Since jhMessage is embedded at DIFace+0x46, we can calculate:
+    // DIFace = msg.address - 0x46
+    const DIFACE_MSG_OFFSET = 0x46;
     let difaceAddr = msg.data;
 
-    // If data looks invalid, try to find DIFace via known patterns
+    // First try: Calculate from message address (most reliable)
+    // The message address points to the jhMessage within the DIFace
+    if ((!difaceAddr || difaceAddr < 0x100 || difaceAddr > 0xFFFFFF) && msg.msgAddr > 0x100) {
+      const calculatedDIFace = msg.msgAddr - DIFACE_MSG_OFFSET;
+      console.log(`[BBSInfo] Calculating DIFace from message address: 0x${msg.msgAddr.toString(16)} - 0x46 = 0x${calculatedDIFace.toString(16)}`);
+
+      // Verify the calculated address looks valid
+      if (calculatedDIFace > 0x100 && calculatedDIFace < 0xFFFFFF) {
+        // Check if this looks like a DIFace by verifying the message pointer at offset 0x08
+        try {
+          const storedMsgPtr = this.emulator.readMemory32(calculatedDIFace + 0x08);
+          const storedReplyPort = this.emulator.readMemory32(calculatedDIFace + 0x04);
+          const storedAEPort = this.emulator.readMemory32(calculatedDIFace + 0x00);
+
+          console.log(`[BBSInfo] Verifying calculated DIFace at 0x${calculatedDIFace.toString(16)}:`);
+          console.log(`[BBSInfo]   dif_AEPort (0x00): 0x${storedAEPort.toString(16)}`);
+          console.log(`[BBSInfo]   dif_MsgPort (0x04): 0x${storedReplyPort.toString(16)}`);
+          console.log(`[BBSInfo]   dif_Message (0x08): 0x${storedMsgPtr.toString(16)}`);
+
+          // The message pointer at offset 0x08 should equal the message address
+          // OR be very close (within the DIFace structure)
+          if (storedMsgPtr === msg.msgAddr ||
+              (storedMsgPtr > calculatedDIFace && storedMsgPtr < calculatedDIFace + 0x300)) {
+            console.log(`[BBSInfo] DIFace verified! Message pointer matches.`);
+            difaceAddr = calculatedDIFace;
+          } else if (storedReplyPort === msg.replyPort && storedAEPort >= 0xa0000 && storedAEPort < 0xa2000) {
+            console.log(`[BBSInfo] DIFace verified via reply port and AEPort match.`);
+            difaceAddr = calculatedDIFace;
+          } else {
+            console.log(`[BBSInfo] Calculated DIFace verification failed, trying search...`);
+          }
+        } catch (e) {
+          console.log(`[BBSInfo] Could not read from calculated DIFace address`);
+        }
+      }
+    }
+
+    // Fallback: Search memory for DIFace using reply port
     if (!difaceAddr || difaceAddr < 0x100 || difaceAddr > 0xFFFFFF) {
-      console.log('[BBSInfo] Invalid DIFace address in msg.data, searching...');
-      // The DIFace is typically allocated around 0x10000-0x20000 range
-      // We can search for the signature or use the reply port to find it
-      // For now, skip if we can't find a valid address
-      console.warn('[BBSInfo] Could not find valid DIFace address, skipping BBSInfo population');
-      return;
+      console.log('[BBSInfo] Searching for DIFace via reply port...');
+
+      const replyPort = msg.replyPort;
+      if (replyPort && replyPort > 0x100) {
+        console.log(`[BBSInfo] Searching for DIFace with replyPort=0x${replyPort.toString(16)}`);
+
+        // Search memory for structures where offset 0x04 = replyPort
+        const searchRanges = [
+          { start: 0x100000, end: 0x150000 },  // Primary allocation area
+          { start: 0x150000, end: 0x200000 },  // Extended area
+          { start: 0x10000, end: 0x30000 },    // Lower memory
+        ];
+
+        for (const range of searchRanges) {
+          for (let addr = range.start; addr < range.end; addr += 4) {
+            try {
+              const storedPort = this.emulator.readMemory32(addr + 0x04);
+              if (storedPort === replyPort) {
+                const aePort = this.emulator.readMemory32(addr + 0x00);
+                const msgPtr = this.emulator.readMemory32(addr + 0x08);
+
+                if (aePort >= 0xa0000 && aePort < 0xa2000 &&
+                    msgPtr > addr && msgPtr < addr + 0x300) {
+                  console.log(`[BBSInfo] Found DIFace at 0x${addr.toString(16)}`);
+                  console.log(`[BBSInfo]   dif_AEPort: 0x${aePort.toString(16)}`);
+                  console.log(`[BBSInfo]   dif_MsgPort: 0x${storedPort.toString(16)}`);
+                  console.log(`[BBSInfo]   dif_Message: 0x${msgPtr.toString(16)}`);
+                  difaceAddr = addr;
+                  break;
+                }
+              }
+            } catch {
+              // Skip unreadable memory
+            }
+          }
+          if (difaceAddr > 0x100) break;
+        }
+      }
+
+      if (!difaceAddr || difaceAddr < 0x100) {
+        console.warn('[BBSInfo] Could not find valid DIFace address, skipping BBSInfo population');
+        return;
+      }
     }
 
     console.log(`[BBSInfo] DIFace address: 0x${difaceAddr.toString(16)}`);

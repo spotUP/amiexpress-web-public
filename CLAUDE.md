@@ -106,9 +106,8 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **REQUIRED workflow for ALL 68K door debugging:**
 
-1. **Enable logging:**
+1. **Start servers (XIM logging auto-enabled):**
    ```bash
-   export XIM_DEBUG_JSON=1
    ./dev/scripts/start-servers.sh
    ```
 
@@ -116,6 +115,8 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
    ```bash
    npm run xim:live
    ```
+
+**Note:** XIM logging is now **enabled by default** in start-servers.sh.
 
 3. **Reproduce issue** - Watch messages in real-time
 

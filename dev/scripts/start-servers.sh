@@ -432,16 +432,19 @@ if [ "$WATCH_DOORS" = true ]; then
   # WATCH MODE: Use file watcher for auto-restart on door changes
   printf "%b\n" "${GREEN}[WATCH MODE]${RESET}"
   printf "%b\n" "   ${CYAN}Door file watcher will auto-restart backend when doors change${RESET}"
-  (cd "$REPO_ROOT" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
+  printf "%b\n" "   ${CYAN}XIM protocol debugging enabled (logs/xim-debug.json)${RESET}"
+  (cd "$REPO_ROOT" && XIM_DEBUG_JSON=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
   BACKEND_PID=$!
 else
   # NORMAL MODE: Direct backend start (no auto-restart)
+  printf "%b\n" "${GREEN}[OK]${RESET}"
+  printf "%b\n" "   ${CYAN}XIM protocol debugging enabled (logs/xim-debug.json)${RESET}"
   if [ "$DEBUG_MODE" = true ]; then
     # DEBUG MODE: Show all logs and save to file
-    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && XIM_DEBUG_JSON=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG"; echo "BACKEND_DONE") &
   else
     # NORMAL MODE: Show filtered messages but save full logs to file
-    (cd "$REPO_ROOT/web/backend" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|[WEB]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
+    (cd "$REPO_ROOT/web/backend" && XIM_DEBUG_JSON=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx --no-cache src/index.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|[WEB]|Database initialized|Error|Warning)"; echo "BACKEND_DONE") &
   fi
   BACKEND_PID=$!
 fi

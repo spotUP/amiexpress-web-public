@@ -289,10 +289,11 @@ async function countNewMessages(
 
 /**
  * Scan all conferences for new mail and files
- * Simplified version that delegates to AquaScan door for all scanning
+ * 1:1 port from express.e:28066-28150 confScan()
  *
- * express.e:28066-28150 confScan() calls runSysCommand('N','S U') for file scanning
- * We let AquaScan handle both mail and file scanning to avoid duplicate output
+ * express.e loops through each conference, joins it, then calls runSysCommand('N','S U')
+ * for file scanning. AquaScan scans only the CURRENT conference, so we must set
+ * currentConf before each call.
  *
  * @param socket - Socket.io socket
  * @param session - BBS session
@@ -303,23 +304,68 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     return 0; // RESULT_SUCCESS
   }
 
+  const { runSysCommand } = require('../command-execution.handler');
+
   // express.e:28071 - setEnvStat(ENV_SCANNING)
-  console.log('[ENV] Scanning conferences for mail and files (via AquaScan door)');
+  session.currentStat = 9; // ENV_SCANNING
+  console.log('[confScan] Starting conference scan (express.e:28066-28150)');
 
-  // Let AquaScan door handle all scanning output and logic
-  // express.e:28101-28102 - runSysCommand('N','S U')
-  try {
-    const { runSysCommand } = require('../command-execution.handler');
+  // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
+  socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
 
-    // Run AquaScan with S (silent conferences already scanned) and U (unattended/batch mode)
-    // This will scan all conferences the user has access to
-    console.log('[confScan] Delegating to AquaScan door (N S U)');
-    await runSysCommand(socket, session, 'N', 'S U');
-    console.log('[confScan] AquaScan door completed');
-  } catch (err) {
-    console.error('[confScan] AquaScan door failed:', err);
-    // Continue even if door fails - don't block login
+  // express.e:28086-28114 - FOR conf:=1 TO cmds.numConf
+  const numConf = _conferences?.length || 1;
+  let mystat = 0; // RESULT_SUCCESS
+
+  for (let conf = 1; conf <= numConf; conf++) {
+    // express.e:28087 - IF (checkConfAccess(conf))
+    const confAccess = session.confAccess || '';
+    const hasAccess = confAccess.length === 0 || (confAccess.length >= conf && confAccess[conf - 1] !== '-');
+
+    if (!hasAccess) {
+      console.log(`[confScan] Skipping conference ${conf} - no access`);
+      continue;
+    }
+
+    // express.e:28089 - fscan:=checkFileConfScan(conf)
+    // For now, assume file scanning is enabled for all conferences
+    const fscan = true;
+
+    console.log(`[confScan] Scanning conference ${conf}/${numConf}`);
+
+    // express.e:28099-28104 - Run file scan for this conference
+    if (fscan) {
+      try {
+        // express.e:28100 - newFilesPauseFlag:=TRUE
+        session.newFilesPauseFlag = true;
+
+        // express.e:28101 - currentConf:=conf
+        // NOTE: Use currentConference (not currentConf) to match GlobalStructures.ts
+        session.currentConference = conf;
+        console.log(`[confScan] Set currentConference=${conf}, calling AquaScan (N S U)`);
+
+        // express.e:28102 - runSysCommand('N','S U')
+        await runSysCommand(socket, session, 'N', 'S U');
+
+        // express.e:28103 - currentConf:=0
+        session.currentConference = 0;
+
+        // express.e:28104 - newFilesPauseFlag:=FALSE
+        session.newFilesPauseFlag = false;
+
+        console.log(`[confScan] Conference ${conf} scan completed`);
+      } catch (err) {
+        console.error(`[confScan] Conference ${conf} scan failed:`, err);
+        // express.e:28106 - mystat:=RESULT_SUCCESS (continue on error)
+        mystat = 0;
+      }
+    }
+
+    // express.e:28109 - EXIT mystat=RESULT_FAILURE
+    if (mystat === -1) break;
   }
+
+  console.log('[confScan] All conferences scanned');
 
   // express.e:28149 - ENDPROC RESULT_SUCCESS
   return 0; // RESULT_SUCCESS

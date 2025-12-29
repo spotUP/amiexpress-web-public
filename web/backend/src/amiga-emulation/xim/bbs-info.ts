@@ -188,7 +188,8 @@ export class XIMBBSInfoHandler {
       case XIMCommand.BB_CONFLOCAL:
         {
           // Return Amiga-style path like "BBS:Conf1/" (door expects this format)
-          const confId = (this.bbsSession as any)?.currentConf || this.bbsSession?.conferenceId || 1;
+          // Check both currentConference (GlobalStructures) and currentConf (legacy)
+          const confId = (this.bbsSession as any)?.currentConference ?? (this.bbsSession as any)?.currentConf ?? this.bbsSession?.conferenceId ?? 1;
           value = `BBS:Conf${confId}/`;
           console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
         }
@@ -202,12 +203,16 @@ export class XIMBBSInfoHandler {
 
       case XIMCommand.BB_CONFNUM:
         {
+          // Check both currentConference (GlobalStructures) and currentConf (legacy)
+          // Returns 0-based conference number
           const confNum =
-            (this.bbsSession as any)?.currentConf !== undefined
-              ? (this.bbsSession as any).currentConf - 1
-              : (this.bbsSession?.conferenceId || 1) - 1;
+            (this.bbsSession as any)?.currentConference !== undefined
+              ? (this.bbsSession as any).currentConference - 1
+              : (this.bbsSession as any)?.currentConf !== undefined
+                ? (this.bbsSession as any).currentConf - 1
+                : (this.bbsSession?.conferenceId || 1) - 1;
           value = confNum.toString();
-          console.log(`[XIMBBSInfo] BB_CONFNUM: ${value}`);
+          console.log(`[XIMBBSInfo] BB_CONFNUM: ${value} (currentConference=${(this.bbsSession as any)?.currentConference})`);
           break;
         }
 
