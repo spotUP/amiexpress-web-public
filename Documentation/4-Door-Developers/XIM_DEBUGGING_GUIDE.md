@@ -43,7 +43,7 @@ npm run xim:decode -- --type JH_INIT --param 123
 
 ## Tools Overview
 
-### XIM Log Viewer (`npm run xim:view`)
+### 1. XIM Log Viewer (`npm run xim:view`)
 
 Real-time visualization of all XIM protocol messages with color-coding and filtering.
 
@@ -74,7 +74,7 @@ npm run xim:view -- --last 50       # Last N messages
 [12:45:03.456] ⚠ TIMEOUT      | WHO           | N1 | No response for 1444ms
 ```
 
-### XIM Message Decoder (`npm run xim:decode`)
+### 2. XIM Message Decoder (`npm run xim:decode`)
 
 Decode and encode XIM protocol messages.
 
@@ -102,6 +102,152 @@ npm run xim:decode -- "00000001 00000000 00000017 48656c6c6f"
 ```bash
 npm run xim:decode -- --type JH_SM --data "Test message"
 ```
+
+### 3. XIM Protocol Validator (`npm run xim:validate`)
+
+Validates XIM protocol compliance and detects common issues.
+
+**Features:**
+- Message structure validation
+- Protocol sequence checking
+- Timing analysis
+- Session completeness verification
+- Suggests fixes for detected issues
+
+**Options:**
+```bash
+npm run xim:validate              # Validate all doors
+npm run xim:validate -- --door WHO  # Validate specific door
+npm run xim:validate -- --strict   # Strict mode (fail on warnings)
+npm run xim:validate -- --fix      # Show fix suggestions
+```
+
+**Common Issues Detected:**
+- Malformed message structure
+- Invalid message sequences
+- Response timeouts
+- Incomplete sessions
+- Protocol violations
+
+### 4. XIM Door State Monitor (`npm run xim:monitor`)
+
+Real-time monitoring dashboard showing all active door sessions.
+
+**Features:**
+- Live state tracking (initializing, running, waiting, error, terminated)
+- Message counters (sent/received)
+- Activity timestamps
+- Error/warning indicators
+- Auto-refresh display
+
+**Options:**
+```bash
+npm run xim:monitor                 # Monitor with 2s refresh
+npm run xim:monitor -- --refresh 1  # Faster 1s refresh
+```
+
+**Example Output:**
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                   XIM Door State Monitor                       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+  DOOR              NODE  STATE          UPTIME    MSGS    LAST ACTIVITY
+  ─────────────────────────────────────────────────────────────────────
+  WHO                 N1   ● running      1m 23s   15↑/12↓  2s ago
+      ← JH_SM
+  RTOP                N2   ◐ waiting      3m 45s   42↑/38↓  8s ago
+      → JH_HK
+```
+
+### 5. XIM Message Replay Tool (`npm run xim:replay`)
+
+Send test XIM messages to doors for debugging.
+
+**Features:**
+- Send individual messages
+- Replay message sequences from file
+- Interactive mode for manual testing
+- Message creation and encoding
+
+**Options:**
+```bash
+# Send single message
+npm run xim:replay -- --type JH_HK --param 65 --data "A" --door WHO
+
+# Replay sequence from JSON file
+npm run xim:replay -- --sequence test-sequence.json
+
+# Interactive mode
+npm run xim:replay -- --interactive
+```
+
+**Sequence File Format:**
+```json
+{
+  "door": "WHO",
+  "node": 1,
+  "description": "Test WHO door startup",
+  "messages": [
+    { "type": "JH_INIT", "param": 1, "delay": 0 },
+    { "type": "JH_HK", "param": 13, "data": "\r", "delay": 1000 }
+  ]
+}
+```
+
+### 6. XIM Message Flow Visualizer (`npm run xim:flow`)
+
+Generate visual diagrams of XIM message sequences.
+
+**Features:**
+- ASCII art sequence diagrams
+- Mermaid diagram format export
+- Chronological message flow
+- Direction indicators (backend ↔ door)
+
+**Options:**
+```bash
+npm run xim:flow                    # ASCII diagram
+npm run xim:flow -- --door WHO      # Specific door only
+npm run xim:flow -- --format mermaid  # Mermaid format
+npm run xim:flow -- --last 30       # Last 30 messages
+```
+
+**Example Output:**
+```
+  BACKEND                                  DOOR
+  ───────────────────────────────────────────────────────
+
+  12:45:01.234 JH_INIT (1)
+           ────────────────────────────→
+
+  12:45:01.456                     JH_SM "Welcome"
+           ←────────────────────────────
+```
+
+### 7. XIM Access Tracer (`npm run xim:trace`)
+
+Trace file, library, and memory access from doors.
+
+**Features:**
+- File access tracking
+- Library call tracing
+- Memory operation monitoring
+- Access pattern summary
+- Frequency analysis
+
+**Options:**
+```bash
+npm run xim:trace                        # Trace all access types
+npm run xim:trace -- --door WHO --type file  # File access for WHO
+npm run xim:trace -- --type library      # Library access only
+npm run xim:trace -- --summary           # Summary only
+```
+
+**Output:**
+- File operations: Open, Read, Write, Close, Lock, Examine
+- Library operations: OpenLibrary, CloseLibrary, FindPort, CreatePort
+- Memory operations: AllocMem, FreeMem, CopyMem, Read32, Write32
 
 ---
 

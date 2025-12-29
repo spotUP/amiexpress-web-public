@@ -100,25 +100,68 @@ See: `Documentation/4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md`
 
 Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu bars, mouse support, focus management. Reserve footer 3+ rows. Avoid 90's text menus unless requested.
 
-### 8. CHECK LOGS FIRST
+### 8. MANDATORY XIM DEBUGGING PROTOCOL
 
-**ALWAYS check logs BEFORE implementing** for 68K door issues.
+**🔴 CRITICAL: NEVER debug 68K doors without XIM tools 🔴**
 
-**Files:** `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log` (per-door), `logs/xim-debug.json` (XIM_DEBUG_JSON=1), `logs/backend.log`, `logs/frontend.log`
+**REQUIRED workflow for ALL 68K door debugging:**
 
-**Find:** `ls -t logs/door-68k-{NAME}* | head -3` (recent), `ls -lS logs/door-68k-{NAME}* | head -3` (largest), `grep -i "error\|fail" logs/door-68k-*`
+1. **Enable logging:**
+   ```bash
+   export XIM_DEBUG_JSON=1
+   ./dev/scripts/start-servers.sh
+   ```
 
-**XIM Debugging:** Use structured tools, not grep:
-- `npm run xim:live` - Real-time message viewer
-- `npm run xim:view -- --door WHO` - Filter by door
-- `npm run xim:errors` - Show only errors
-- `npm run xim:decode -- "<hex>"` - Decode messages
+2. **Start live viewer:**
+   ```bash
+   npm run xim:live
+   ```
 
-See `Documentation/4-Door-Developers/XIM_DEBUGGING_GUIDE.md` for complete guide.
+3. **Reproduce issue** - Watch messages in real-time
 
-**Check after EVERY change.** Document in `Documentation/6-Progress/{NAME}_DEBUG_SESSION.md`: hypothesis → action → result → next.
+4. **Analyze with appropriate tool:**
+   - `npm run xim:validate` - Check protocol compliance
+   - `npm run xim:monitor` - Watch door state
+   - `npm run xim:flow` - Visualize message sequence
+   - `npm run xim:trace` - Track file/library/memory access
 
-**DO NOT ask user to check** - check yourself and report.
+**DO NOT:**
+- ❌ Guess what's wrong
+- ❌ Start with code reading
+- ❌ Grep logs manually
+- ❌ Ask user what's happening
+- ❌ Implement without observing actual behavior
+
+**DO:**
+- ✅ Use `npm run xim:live` FIRST
+- ✅ See actual message flow
+- ✅ Identify exact failure point
+- ✅ Validate protocol with `npm run xim:validate`
+- ✅ Decode unknown messages with `npm run xim:decode`
+- ✅ Visualize flow with `npm run xim:flow`
+
+**Complete XIM Debugging Toolkit:**
+- ✅ `xim:view/xim:live` - View messages (real-time or historical)
+- ✅ `xim:decode` - Decode/encode XIM messages
+- ✅ `xim:validate` - Validate protocol compliance
+- ✅ `xim:monitor` - Real-time door state monitoring
+- ✅ `xim:replay` - Send test messages to doors
+- ✅ `xim:flow` - Generate message flow diagrams
+- ✅ `xim:trace` - Trace file/library/memory access
+- ✅ `xim:errors` - Show errors only
+
+**Documentation:**
+- **YOU MUST READ:** `Documentation/3-Developers/CLAUDE_68K_DEBUGGING_PROTOCOL.md`
+- **User Guide:** `Documentation/4-Door-Developers/XIM_DEBUGGING_GUIDE.md`
+
+**Other Logs (check AFTER XIM analysis):**
+- `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log` - Per-door detailed logs
+- `logs/backend.log` - Backend operations
+- `logs/frontend.log` - Frontend errors
+
+**Check after EVERY change.** Document in `Documentation/6-Progress/{NAME}_DEBUG_SESSION.md`: hypothesis → tool used → observations → action → result → next.
+
+**DO NOT ask user to check** - use tools yourself and report findings.
 
 ### 9. NO BACKGROUND PROCESSES
 
