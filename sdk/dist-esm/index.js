@@ -1,0 +1,68 @@
+// ESM wrapper for CJS SDK exports
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const sdk = require('../dist/index.js');
+
+// Re-export all named exports
+export const CoreDoor = sdk.CoreDoor;
+export const Door = sdk.Door;
+export const ServerDoor = sdk.ServerDoor;
+export const ClientDoor = sdk.ClientDoor;
+export const Output = sdk.Output;
+export const Input = sdk.Input;
+export const Storage = sdk.Storage;
+export const AnsiColor = sdk.AnsiColor;
+export const getTerminalDimensions = sdk.getTerminalDimensions;
+export const BBS_CONSTANTS = sdk.BBS_CONSTANTS;
+export const GraphicsEngine = sdk.GraphicsEngine;
+export const BrailleCanvas = sdk.BrailleCanvas;
+export const BrailleVUMeter = sdk.BrailleVUMeter;
+export const BrailleWaveform = sdk.BrailleWaveform;
+export const BrailleSpectrum = sdk.BrailleSpectrum;
+export const PhysicsEngine = sdk.PhysicsEngine;
+export const AudioEngine = sdk.AudioEngine;
+export const TrackerEngine = sdk.TrackerEngine;
+export const InterpolationFilter = sdk.InterpolationFilter;
+export const PlaybackState = sdk.PlaybackState;
+export const NetworkEngine = sdk.NetworkEngine;
+export const AIEngine = sdk.AIEngine;
+export const InputEngine = sdk.InputEngine;
+export const NetworkQualityMonitor = sdk.NetworkQualityMonitor;
+export const AdaptiveQualityManager = sdk.AdaptiveQualityManager;
+export const VIDEO_QUALITY_PROFILES = sdk.VIDEO_QUALITY_PROFILES;
+export const AUDIO_QUALITY_PROFILES = sdk.AUDIO_QUALITY_PROFILES;
+export const CardEngine = sdk.CardEngine;
+export const PokerEngine = sdk.PokerEngine;
+export const TacticalCombatEngine = sdk.TacticalCombatEngine;
+export const UIEngine = sdk.UIEngine;
+export const UIHelpers = sdk.UIHelpers;
+export const ActionType = sdk.ActionType;
+export const auditChipConservation = sdk.auditChipConservation;
+export const calculateTotalChips = sdk.calculateTotalChips;
+export const createPublicView = sdk.createPublicView;
+export const createSnapshot = sdk.createSnapshot;
+export const exportHandHistory = sdk.exportHandHistory;
+export const exportMultipleHands = sdk.exportMultipleHands;
+export const getHandHistory = sdk.getHandHistory;
+export const normalizePokerCardString = sdk.normalizePokerCardString;
+export const pokerCardToCard = sdk.pokerCardToCard;
+export const pokerCardsToCards = sdk.pokerCardsToCards;
+export const restoreFromSnapshot = sdk.restoreFromSnapshot;
+export const blessed = sdk.blessed;
+export const Blessed = sdk.Blessed;
+export const MenuSystem = sdk.MenuSystem;
+export const HUDBuilder = sdk.HUDBuilder;
+export const LevelManager = sdk.LevelManager;
+export const SaveManager = sdk.SaveManager;
+export const InventorySystem = sdk.InventorySystem;
+export const DialogueSystem = sdk.DialogueSystem;
+export const QuestSystem = sdk.QuestSystem;
+export const ClassSystem = sdk.ClassSystem;
+export const ReleasePacker = sdk.ReleasePacker;
+export const DebugOverlay = sdk.DebugOverlay;
+export const runDoorWithSession = sdk.runDoorWithSession;
+export const SDK_VERSION = sdk.SDK_VERSION;
+export const quickStart = sdk.quickStart;
+
+// Default export
+export default sdk;
