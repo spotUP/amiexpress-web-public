@@ -695,6 +695,19 @@ export class ExecLibrary {
 
     // Try real native library first if enabled
     if (this.useNativeLibraries && this.libraryLoader) {
+      // CRITICAL: Skip LibraryLoader for AEDoor.library if already loaded by fallback
+      // The fallback loader creates JMP table at specific address; reloading breaks it
+      const existingCheck = this.libraries.get(name) || this.libraries.get(name.toLowerCase());
+      if (existingCheck && name.toLowerCase() === 'aedoor.library') {
+        console.log(`[ExecLibrary] AEDoor.library already loaded at 0x${existingCheck.address.toString(16)} - using existing (has JMP table)`);
+        existingCheck.openCount = (existingCheck.openCount || 0) + 1;
+        this.writeLibraryToMemory(existingCheck);
+        if (this.onLibraryOpened) {
+          this.onLibraryOpened(name, existingCheck.address);
+        }
+        return { success: true, address: existingCheck.address, isNative: true };
+      }
+
       const realLibrary = this.libraryLoader.loadLibrary(name, minVersion);
       if (realLibrary) {
         console.log(
@@ -1972,6 +1985,48 @@ export class ExecLibrary {
 
           console.log(`[ExecLibrary] CRITICAL: Set lib+0x22 = ExecBase 0x${execBaseAddr.toString(16)}`);
           console.log(`[ExecLibrary] CRITICAL: Set lib+0x26 = dos.library 0x${(dosBase || 0).toString(16)}`);
+
+          // CRITICAL: Create JMP table at negative offsets for library function calls
+          // When a door does JSR -42(A6), it jumps to base-42 which must have a JMP instruction
+          const codeStart = 0x20;  // From HUNK analysis
+          const baseAddr = loadedLib.baseAddress;
+          const aedoorJmpTable: Array<{ lvo: number; fileOffset: number; name: string }> = [
+            { lvo: -6,   fileOffset: 0x100, name: "Open" },
+            { lvo: -12,  fileOffset: 0x10E, name: "Close" },
+            { lvo: -18,  fileOffset: 0x124, name: "Expunge" },
+            { lvo: -24,  fileOffset: 0x16C, name: "Reserved" },
+            { lvo: -30,  fileOffset: 0x3F0, name: "CreateComm" },
+            { lvo: -36,  fileOffset: 0x278, name: "DeleteComm" },
+            { lvo: -42,  fileOffset: 0x388, name: "SendCmd" },
+            { lvo: -48,  fileOffset: 0x38E, name: "SendStrCmd" },
+            { lvo: -54,  fileOffset: 0x394, name: "SendDataCmd" },
+            { lvo: -60,  fileOffset: 0x39A, name: "SendStrDataCmd" },
+            { lvo: -66,  fileOffset: 0x3A0, name: "GetData" },
+            { lvo: -72,  fileOffset: 0x3A6, name: "GetString" },
+            { lvo: -78,  fileOffset: 0x338, name: "Prompt" },
+            { lvo: -84,  fileOffset: 0x350, name: "WriteStr" },
+            { lvo: -90,  fileOffset: 0x350, name: "ShowGFile" },
+            { lvo: -96,  fileOffset: 0x350, name: "ShowFile" },
+            { lvo: -102, fileOffset: 0x394, name: "SetDT" },
+            { lvo: -108, fileOffset: 0x38E, name: "GetDT" },
+            { lvo: -114, fileOffset: 0x3A6, name: "GetStr" },
+            { lvo: -120, fileOffset: 0x3C0, name: "CopyStr" },
+            { lvo: -126, fileOffset: 0x3D6, name: "HotKey" },
+            { lvo: -132, fileOffset: 0x3FE, name: "PreCreateComm" },
+            { lvo: -138, fileOffset: 0x278, name: "PostDeleteComm" },
+          ];
+
+          console.log(`[ExecLibrary] Creating JMP table for AEDoor.library at 0x${baseAddr.toString(16)}:`);
+          for (const func of aedoorJmpTable) {
+            const targetAddr = baseAddr + (func.fileOffset - codeStart);
+            const jmpAddr = baseAddr + func.lvo;  // Negative offset from base
+
+            // Write JMP.L instruction (0x4EF9) followed by target address
+            this.emulator.writeMemory16(jmpAddr, 0x4EF9);
+            this.emulator.writeMemory32(jmpAddr + 2, targetAddr);
+
+            console.log(`[ExecLibrary]   LVO ${func.lvo} (${func.name}): JMP at 0x${jmpAddr.toString(16)} -> 0x${targetAddr.toString(16)}`);
+          }
 
           console.log(`[ExecLibrary] AEDoor.library registered in library list`);
           console.log(`[ExecLibrary] ============================================`);
@@ -3853,7 +3908,7 @@ export class ExecLibrary {
    * Message ports are used for IPC. Doors create a reply port to receive
    * responses from the BBS.
    */
-  createMsgPort(ownerTask?: Task): number {
+  createMsgPort(ownerTask?: Task, forceSigBit?: number): number {
     const owner = ownerTask || this.currentTask;
     console.log("[ExecLibrary] CreateMsgPort() called");
     console.log(
@@ -3889,12 +3944,20 @@ export class ExecLibrary {
     this.emulator.writeMemory(portAddr + 14, 0x02); // PA_SIGNAL
 
     // mp_SigBit (1 byte at offset 15)
-    let signalBit = this.AllocSignal(-1);
-    if (signalBit < 0) {
-      console.warn(
-        "[ExecLibrary]   WARNING: No free signals available, falling back to bit 1"
-      );
-      signalBit = 1;
+    // If forceSigBit is provided (e.g., 12 for AEDoorPort), use that instead of allocating
+    // This is needed because doors hardcode expected signal bits (e.g., bit 12 for AEDoorPort)
+    let signalBit: number;
+    if (forceSigBit !== undefined && forceSigBit >= 0 && forceSigBit <= 31) {
+      signalBit = forceSigBit;
+      console.log(`[ExecLibrary]   Using forced sigBit=${signalBit} (0x${(1 << signalBit).toString(16)})`);
+    } else {
+      signalBit = this.AllocSignal(-1);
+      if (signalBit < 0) {
+        console.warn(
+          "[ExecLibrary]   WARNING: No free signals available, falling back to bit 1"
+        );
+        signalBit = 1;
+      }
     }
     this.emulator.writeMemory(portAddr + 15, signalBit);
 
@@ -4158,11 +4221,12 @@ export class ExecLibrary {
    * @param name - Port name (e.g., "AEDoorPort0")
    * @returns Port address
    */
-  createPublicPort(name: string, ownerTask?: Task): number {
+  createPublicPort(name: string, ownerTask?: Task, forceSigBit?: number): number {
     console.log(`[ExecLibrary] Creating public port: "${name}"`);
 
     // Create port using standard CreateMsgPort
-    const portAddr = this.createMsgPort(ownerTask);
+    // Pass forceSigBit if specified (e.g., 12 for AEDoorPort to match door expectations)
+    const portAddr = this.createMsgPort(ownerTask, forceSigBit);
 
     // Write name to port structure (ln_Name at offset 10) and registry entry
     const nameAddr = this.allocMem(name.length + 1, 0);
@@ -4185,12 +4249,48 @@ export class ExecLibrary {
     return portAddr;
   }
 
-  ensurePublicPort(name: string): number {
+  ensurePublicPort(name: string, forceSigBit?: number): number {
     const existing = this.publicPorts.get(name.toLowerCase());
     if (existing !== undefined) {
       return existing;
     }
-    return this.createPublicPort(name);
+    return this.createPublicPort(name, undefined, forceSigBit);
+  }
+
+  /**
+   * Create AEDoorPort for XIM door communication.
+   *
+   * CRITICAL: This port MUST be owned by the BBS task (not the door task).
+   * When a door calls PutMsg(AEDoorPort, msg), we signal the port owner.
+   * If the door owns the port, it signals ITSELF and Wait() returns immediately
+   * with the wrong signal, causing the door to take the wrong code path.
+   *
+   * Also uses sigBit=12 because doors hardcode this in their Wait() mask (0x11000).
+   *
+   * @param name - Port name (e.g., "AEDoorPort1")
+   * @returns Port address
+   */
+  createAEDoorPort(name: string): number {
+    const existing = this.publicPorts.get(name.toLowerCase());
+    if (existing !== undefined) {
+      console.log(`[ExecLibrary] AEDoorPort "${name}" already exists at 0x${existing.toString(16)}`);
+      return existing;
+    }
+
+    // CRITICAL: Use sigBit=12 because doors hardcode 0x1000 in [a5+0x14]
+    // and Wait for 0x11000 = bit 16 (reply) | bit 12 (AEDoorPort)
+    const AEDOORPORT_SIGBIT = 12;
+
+    // CRITICAL: Use BBS task as owner, NOT the door task
+    // This prevents door from signaling itself when it sends to AEDoorPort
+    const portAddr = this.createPublicPort(name, this.bbsTask, AEDOORPORT_SIGBIT);
+
+    console.log(
+      `[ExecLibrary] Created AEDoorPort "${name}" at 0x${portAddr.toString(16)} ` +
+      `(sigBit=${AEDOORPORT_SIGBIT}, owner=BBS Task 0x${this.bbsTask.address.toString(16)})`
+    );
+
+    return portAddr;
   }
 
   /**
@@ -4686,10 +4786,9 @@ export class ExecLibrary {
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
 
-    // CRITICAL FIX: Native AEDoor.library doors poll AEDoorPort instead of their reply port!
-    // After enabling non-stop text, doors enter a busy-poll loop on AEDoorPort expecting replies.
-    // Also queue the reply on AEDoorPort so polling doors can receive it.
-    // Find AEDoorPort for this node (try common naming patterns)
+    // ALSO put the reply on AEDoorPort for doors that poll there.
+    // Some doors (like AquaScan) poll AEDoorPort after ENVSTAT expecting to find replies.
+    // The BBS's GetMsg uses skipReplies=true so it will skip these NT_REPLYMSG messages.
     for (const [portAddr, port] of this.messagePorts.entries()) {
       const portName = port.name?.toLowerCase() || '';
       if (portName.startsWith('aedoorport') && portAddr !== replyPortAddr) {
@@ -4698,13 +4797,13 @@ export class ExecLibrary {
         );
         // Track this as a reply we sent (so skipReplies in getMsg can identify it)
         this.repliedMessages.add(msgAddr);
-        // Queue reply on AEDoorPort for doors that poll there instead of reply port
+        // Queue reply on AEDoorPort for doors that poll there
         this.putMsg(portAddr, msgAddr, { suppressDoorCallback: true });
         break;
       }
     }
 
-    console.log(`[ExecLibrary] Reply sent`);
+    console.log(`[ExecLibrary] Reply sent to port 0x${replyPortAddr.toString(16)}`);
   }
 
   /**
@@ -4716,24 +4815,24 @@ export class ExecLibrary {
     const mn_ReplyPort = this.emulator.readMemory32(msgAddr + 14);
     const mn_Length = this.emulator.readMemory16(msgAddr + 18);
 
-    // AEDoor message extension
-    const command = this.emulator.readMemory32(msgAddr + 20);
-    const data = this.emulator.readMemory32(msgAddr + 24);
+    // jhMessage structure: Message(20) + String[200](0x14) + Data(0xDC) + Command(0xE0)
+    const command = this.emulator.readMemory32(msgAddr + 0xE0);  // Command at offset 224
+    const data = this.emulator.readMemory32(msgAddr + 0xDC);     // Data at offset 220
 
-    // Read string (first 32 bytes)
+    // Read string at offset 20 (0x14) - first 32 bytes
     let str = "";
     for (let i = 0; i < 32; i++) {
-      const ch = this.emulator.readMemory(msgAddr + 28 + i);
+      const ch = this.emulator.readMemory(msgAddr + 0x14 + i);
       if (ch === 0) break;
       str += String.fromCharCode(ch);
     }
 
-    console.log(`[ExecLibrary] AEDoor Message dump:`);
+    console.log(`[ExecLibrary] AEDoor Message dump (jhMessage):`);
     console.log(`  mn_ReplyPort: 0x${mn_ReplyPort.toString(16)}`);
     console.log(`  mn_Length: ${mn_Length}`);
-    console.log(`  command: ${command}`);
-    console.log(`  data: ${data}`);
-    console.log(`  string: "${str}"`);
+    console.log(`  Command (0xE0): ${command}`);
+    console.log(`  Data (0xDC): ${data}`);
+    console.log(`  String (0x14): "${str}"`);
   }
 
   /**
@@ -4931,16 +5030,24 @@ export class ExecLibrary {
       )}, signals=0x${signals.toString(16)})`
     );
 
-    // In single-task emulation, always signal the currentTask (the door).
-    // The taskAddr parameter might differ from currentTask.address when:
-    // - BBS JavaScript code signals via a port's sigTask (which was set when door created the port)
-    // - The door's task address changed or wasn't properly tracked
-    // We log a note but proceed with signaling - refusing to signal would leave the door stuck in Wait().
+    // CRITICAL FIX: In single-task emulation, only signal currentTask (the door) if:
+    // 1. taskAddr is 0 (meaning "current task")
+    // 2. taskAddr matches currentTask.address (explicitly targeting the door)
+    //
+    // If taskAddr is different (e.g., BBS task 0x88000 for AEDoorPort), do NOT signal
+    // the door. The BBS task is JavaScript code - doorMessageCallback handles it.
+    //
+    // Bug was: Door calls PutMsg(AEDoorPort) -> AEDoorPort.sigTask = BBS task (0x88000)
+    // -> Signal(0x88000) was setting door's sigRecvd to 0x1000 -> Wait() returned
+    // immediately with 0x1000 -> door thought AEDoorPort had message -> wrong code path
     if (taskAddr !== 0 && taskAddr !== this.currentTask.address) {
       console.log(
-        `[ExecLibrary]   Note: taskAddr=0x${taskAddr.toString(16)} != currentTask=0x${this.currentTask.address.toString(16)}, but proceeding with signal to currentTask (single-task emulation)`
+        `[ExecLibrary]   Signal to non-door task 0x${taskAddr.toString(16)} (BBS task) - skipping door signal`
       );
-      // Continue - don't return! The door needs this signal to wake from Wait()
+      console.log(
+        `[ExecLibrary]   (Door task is 0x${this.currentTask.address.toString(16)}, BBS-side handlers will process)`
+      );
+      return; // Don't signal the door when target is BBS task
     }
 
     console.log(

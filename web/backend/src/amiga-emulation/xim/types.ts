@@ -377,6 +377,7 @@ export interface XIMState {
   prvCommand?: string;
   chainCommand?: string;
   logonType?: number;
+  doorCommand?: string;
 }
 
 /**

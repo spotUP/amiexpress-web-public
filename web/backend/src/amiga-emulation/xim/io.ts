@@ -20,6 +20,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
+import { ximLogger } from '../../utils/XIMLogger';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -1308,6 +1309,24 @@ export class XIMIOHandler {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);
     }
     this.messageParser.writeData(msg.msgAddr, data);
+    // CRITICAL: Always set strPtr before replying - doors dereference it
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+
+    // Log outgoing reply to XIM structured logger
+    const humanName = this.messageParser.getCommandName(msg.command);
+    ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
+      type: `${humanName}_REPLY`,
+      typeCode: msg.command,
+      param: data,
+      data: stringValue,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Reply to door I/O request',
+    });
+
     this.execLibrary.replyMsg(msg.msgAddr);
 
     console.log('[XIMIOHandler] Reply sent via ReplyMsg');

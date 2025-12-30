@@ -5238,9 +5238,10 @@ export class DosLibrary {
     }
 
     // Allocate memory (use high memory area for DOS objects)
-    // We'll use a simple bump allocator starting at 0x200000
+    // We'll use a simple bump allocator starting at 0x160000
+    // NOTE: Libraries use 0x200000+, so we use 0x160000 to avoid collision
     if (!this.dosObjectAllocBase) {
-      this.dosObjectAllocBase = 0x200000;
+      this.dosObjectAllocBase = 0x160000;
     }
 
     const addr = this.dosObjectAllocBase;

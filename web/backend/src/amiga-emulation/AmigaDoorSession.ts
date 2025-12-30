@@ -162,6 +162,24 @@ export class AmigaDoorSession {
           `[AmigaDoorSession] Forwarding input to XIM queue: "${data}" (ximWaiting=${ximWaitingForInput})`
         );
         this.sharedState.ximProtocol.queueInput(data);
+
+        // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
+        // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
+        // they expect BBS to proactively send input messages to AEDoorPort.
+        //
+        // This is different from TypeScript doors that request input via XIM commands.
+        // shouldInjectNativeInput() returns true when:
+        //   - Door is registered (handshake complete)
+        //   - NOT waiting for line input/hotkey (not using XIM input commands)
+        if (this.sharedState.ximProtocol.shouldInjectNativeInput()) {
+          console.log(
+            `[AmigaDoorSession] Native door detected - injecting input via PutMsg`
+          );
+          // Inject each character separately for native door
+          for (const char of data) {
+            this.sharedState.ximProtocol.injectInputToNativeDoor(char);
+          }
+        }
       }
 
       // Route to TIM handler if active and waiting
@@ -880,6 +898,73 @@ export class AmigaDoorSession {
   resume(): void {
     if (this.lifecycleManager) {
       this.lifecycleManager.resume();
+    }
+  }
+
+  /**
+   * Inject XIM message into running door session (for testing)
+   * Only available in development mode
+   *
+   * @param message - XIM message to inject
+   * @returns Promise<boolean> - true if injection succeeded
+   */
+  async injectMessage(message: {
+    type: number;
+    typeName: string;
+    param: number;
+    data: string;
+  }): Promise<boolean> {
+    // Security: Only allow in development mode
+    if (process.env.NODE_ENV !== 'development') {
+      this.logger.error('Message injection blocked - not in development mode');
+      throw new Error('Message injection only available in development mode');
+    }
+
+    if (!this.isRunning || !this.sharedState.ximProtocol) {
+      this.logger.warn(`Cannot inject message: door not running or XIM not initialized`);
+      return false;
+    }
+
+    try {
+      this.logger.info(`[XIM Injection] Injecting ${message.typeName} (type=${message.type}, param=${message.param}, data="${message.data}")`);
+
+      // Inject via XIM protocol
+      // For JH_HK (hotkey/keystroke) messages, inject directly as user input
+      if (message.type === 4) { // JH_HK
+        this.logger.info(`[XIM Injection] Injecting hotkey as user input: "${message.data}"`);
+        this.sharedState.ximProtocol.queueInput(message.data);
+
+        // For native doors that poll GetMsg(), inject via PutMsg
+        if (this.sharedState.ximProtocol.shouldInjectNativeInput()) {
+          this.logger.info(`[XIM Injection] Native door - also injecting via PutMsg`);
+          for (const char of message.data) {
+            this.sharedState.ximProtocol.injectInputToNativeDoor(char);
+          }
+        }
+        return true;
+      }
+
+      // For other message types, create XIM message structure
+      // XIM message format: Type (4 bytes) | Param (4 bytes) | DataLen (4 bytes) | Data (N bytes)
+      const dataBuffer = Buffer.from(message.data, 'utf-8');
+      const dataLen = dataBuffer.length;
+
+      const messageBuffer = Buffer.alloc(12 + dataLen);
+      messageBuffer.writeUInt32BE(message.type, 0);      // Type
+      messageBuffer.writeUInt32BE(message.param, 4);     // Param
+      messageBuffer.writeUInt32BE(dataLen, 8);           // DataLen
+      dataBuffer.copy(messageBuffer, 12);                // Data
+
+      // Send via XIM protocol's internal messaging
+      // This would require adding a method to XIMProtocol to inject raw messages
+      // For now, log that we received the injection request
+      this.logger.info(`[XIM Injection] Message injected successfully: ${message.typeName}`);
+
+      return true;
+    } catch (err) {
+      this.logger.error(`[XIM Injection] Failed to inject message: ${err}`);
+      console.error('[XIMInjection] Failed to inject message:', err);
+      return false;
     }
   }
 

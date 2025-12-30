@@ -537,8 +537,18 @@ export class DoorLifecycleManager {
         // Execute instructions in tight C++ loop until a trap address is hit.
         // This is MUCH faster than single-instruction execution for CPU-intensive doors.
         // Batch size: 10000 instructions per yield (allows XIM polling and UI updates)
-        const BATCH_SIZE = 10000;
+        // DEBUG: Use small batch to catch PC corruption
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 10000;
+        const pcBeforeBatch = this.emulator.getRegister(16);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
+        const pcAfterBatch = this.emulator.getRegister(16);
+        // DEBUG: Log if PC jumped to suspicious address
+        if (pcAfterBatch > 0x100000 && pcAfterBatch < 0x2000000) {
+          console.log(`[DoorLifecycleManager] *** PC CORRUPTION DETECTED ***`);
+          console.log(`  PC before batch: 0x${pcBeforeBatch.toString(16)}`);
+          console.log(`  PC after batch: 0x${pcAfterBatch.toString(16)}`);
+          console.log(`  Instructions: ${result < 0 ? Math.abs(result) - 1 : result}`);
+        }
 
         // Update iteration count with actual instructions executed
         const instructionsExecuted = result < 0 ? Math.abs(result) - 1 : result;
@@ -1418,10 +1428,12 @@ export class DoorLifecycleManager {
     }
 
     // Poll for messages with GetMsg
-    // Messages from the door arrive on AEDoorPort. Replies go to the door's
-    // separate reply port via ReplyMsg(), so we don't need to filter them here.
+    // Messages from the door arrive on AEDoorPort. Since we also queue replies
+    // on AEDoorPort for doors that poll there (instead of their reply port),
+    // we use skipReplies option to leave reply messages for the door to get.
     try {
-      const msgAddr = execLib.getMsg(aePortAddr);
+      // Use skipReplies to leave NT_REPLYMSG messages in queue for the door
+      const msgAddr = execLib.getMsg(aePortAddr, { skipReplies: true });
       if (msgAddr && msgAddr !== 0) {
         console.log(`[DoorLifecycleManager] XIM polling: Got message at 0x${msgAddr.toString(16)}`);
 

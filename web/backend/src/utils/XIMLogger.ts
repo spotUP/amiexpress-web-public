@@ -53,9 +53,13 @@ export class XIMLogger {
   private constructor() {
     this.enabled = process.env.XIM_DEBUG === '1';
     this.jsonEnabled = process.env.XIM_DEBUG_JSON === '1';
-    this.logFile = process.env.XIM_LOG_FILE || 'logs/xim-debug.json';
+
+    // Use BBS_DATA_DIR or project root for log file path
+    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../..');
+    this.logFile = process.env.XIM_LOG_FILE || path.join(bbsRoot, 'logs', 'xim-debug.json');
 
     if (this.jsonEnabled) {
+      console.log(`[XIMLogger] JSON logging enabled, writing to: ${this.logFile}`);
       this.initLogStream();
     }
   }
@@ -138,6 +142,9 @@ export class XIMLogger {
     // Write to JSON log
     if (this.jsonEnabled && this.logStream) {
       this.logStream.write(JSON.stringify(entry) + '\n');
+    } else if (message.type !== 'LOG_START' && message.type !== 'LOG_END') {
+      // Debug: log why XIM messages aren't being written
+      console.log(`[XIMLogger] NOT writing to JSON: jsonEnabled=${this.jsonEnabled} logStream=${!!this.logStream} type=${message.type}`);
     }
 
     // Write to console (human-readable)

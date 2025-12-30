@@ -708,10 +708,14 @@ export class LibraryManager {
     // Real Amiga BBS creates these ports at startup, not dynamically
     // XIM doors' CreateComm searches for AEDoorPort{nodeId} immediately
     // Note: amigaNodeId already declared above from nodeId (line 376)
+    //
+    // Use dedicated createAEDoorPort() method which:
+    // 1. Uses sigBit=12 because doors hardcode 0x1000 in [a5+0x14]
+    // 2. Sets BBS task as owner (not door task) to prevent self-signaling
     const aedoorPortName = `AEDoorPort${amigaNodeId}`;
-    const aedoorPortAddr = this.execLibrary.ensurePublicPort(aedoorPortName);
+    const aedoorPortAddr = this.execLibrary.createAEDoorPort(aedoorPortName);
     console.log(
-      `[LibraryManager] Ensured ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
+      `[LibraryManager] Created ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
     );
 
     // Set up BBS API dispatcher for SIM doors (0x790 calling convention)

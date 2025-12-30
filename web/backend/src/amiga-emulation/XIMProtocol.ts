@@ -218,6 +218,114 @@ export class XIMProtocol {
   }
 
   /**
+   * Inject input directly to AEDoorPort for native 68K doors that poll GetMsg.
+   * Native AEDoor.library doors don't send JH_HK commands - they poll GetMsg
+   * waiting for BBS to proactively send JH_HK messages.
+   *
+   * This creates a JH_HK message and calls PutMsg to queue it on AEDoorPort.
+   * The door's next GetMsg() call will receive the keystroke.
+   */
+  injectInputToNativeDoor(keyChar: string): void {
+    if (!this.state.registered) {
+      console.log('[XIMProtocol] Cannot inject input - door not registered');
+      return;
+    }
+
+    if (this.doorPort === 0) {
+      console.log('[XIMProtocol] Cannot inject input - no door port address');
+      return;
+    }
+
+    console.log(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
+
+    // Allocate memory for jhMessage structure
+    const MEMF_PUBLIC_CLEAR = 0x10001;
+    const msgSize = DoorConstants.MESSAGE_TOTAL_LENGTH; // 0x108 = 264 bytes
+    const msgAddr = this.execLibrary.allocMem(msgSize, MEMF_PUBLIC_CLEAR);
+
+    if (msgAddr === 0) {
+      console.error('[XIMProtocol] Failed to allocate message for input injection');
+      return;
+    }
+
+    console.log(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
+
+    // Set up Exec message header (mn_Node + mn_ReplyPort + mn_Length)
+    // Message header: offsets 0-19
+    this.emulator.writeMemory(msgAddr + 8, 5);  // ln_Type = NT_MESSAGE
+    this.emulator.writeMemory(msgAddr + 9, 0);  // ln_Pri = 0
+
+    // mn_ReplyPort at offset 14 - use door's reply port so it can reply
+    // If we don't have the door's reply port, use the AEDoorPort (door will see it's from BBS)
+    const replyPort = this.doorReplyPort || this.doorPort;
+    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET, replyPort);
+
+    // mn_Length at offset 18
+    this.emulator.writeMemory16(msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET, msgSize);
+
+    // Set jhMessage fields
+    // Command = JH_HK (6) at offset 0xE0
+    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, XIMCommand.JH_HK);
+
+    // Data = key code at offset 0xDC
+    const keyCode = keyChar.charCodeAt(0);
+    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, keyCode);
+
+    // Write key character to string buffer at offset 0x14
+    this.emulator.writeMemory(msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, keyCode);
+    this.emulator.writeMemory(msgAddr + DoorConstants.MESSAGE_STRING_OFFSET + 1, 0); // null terminator
+
+    // StringPtr at offset 0x100 - point to embedded string buffer
+    const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET, stringAddr);
+
+    // NodeId at offset 0xE4
+    const nodeId = this.bbsSession?.nodeId ?? 1;
+    this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_NODE_OFFSET, nodeId);
+
+    // Log the injection
+    ximLogger.log('debug', 'send', this.doorCommand || 'UNKNOWN', nodeId, {
+      type: 'JH_HK',
+      typeCode: XIMCommand.JH_HK,
+      param: keyCode,
+      data: keyChar,
+    }, {
+      msgAddr: `0x${msgAddr.toString(16)}`,
+      message: 'Injected input to native door via PutMsg',
+    });
+
+    // Send the message to AEDoorPort via PutMsg
+    console.log(`[XIMProtocol] Calling PutMsg(0x${this.doorPort.toString(16)}, 0x${msgAddr.toString(16)})`);
+    this.execLibrary.putMsg(this.doorPort, msgAddr, { suppressDoorCallback: true });
+
+    console.log(`[XIMProtocol] Input injected successfully`);
+  }
+
+  /**
+   * Check if native door input injection should be used.
+   * Returns true if door is registered but NOT waiting for XIM input commands.
+   * This indicates the door is polling GetMsg natively.
+   */
+  shouldInjectNativeInput(): boolean {
+    const isRegistered = this.state.registered;
+    const isWaiting = this.ioHandler.isWaitingForLineInput();
+    const result = isRegistered && !isWaiting;
+
+    console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} result=${result}`);
+
+    // Must be registered
+    if (!isRegistered) {
+      return false;
+    }
+    // If waiting for line input/hotkey via XIM commands, don't inject
+    if (isWaiting) {
+      return false;
+    }
+    // Door is registered but not waiting for XIM input - likely polling GetMsg natively
+    return true;
+  }
+
+  /**
    * Update key state for simultaneous input (from keys:state event)
    * Called from AmigaDoorSession when 'keys:state' event received
    */
@@ -317,6 +425,15 @@ export class XIMProtocol {
     if (isAedoorInit || isAedoorStat) {
       const label = isAedoorInit ? 'JH_INIT' : 'JH_STAT';
       console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (replying as-is)`);
+      // Log outgoing reply to XIM structured logger
+      ximLogger.log('debug', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
+        type: `${label}_REPLY`,
+        typeCode: msg.command,
+        param: 0,
+      }, {
+        msgAddr: `0x${msg.msgAddr.toString(16)}`,
+        message: 'AEDoor handshake reply',
+      });
       this.execLibrary.replyMsg(msg.msgAddr);
       return;
     }
@@ -379,6 +496,15 @@ export class XIMProtocol {
     if (!this.state.registered) {
       console.warn('[XIMProtocol] Ignoring command before JH_REGISTER handshake');
       this.messageParser.writeData(msg.msgAddr, 0);
+      // Log outgoing reply to XIM structured logger
+      ximLogger.log('warn', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
+        type: `${humanName}_REJECTED`,
+        typeCode: msg.command,
+        param: 0,
+      }, {
+        msgAddr: `0x${msg.msgAddr.toString(16)}`,
+        message: 'Rejected: door not registered',
+      });
       this.execLibrary.replyMsg(msg.msgAddr);
       return;
     }
@@ -386,6 +512,15 @@ export class XIMProtocol {
     if (this.state.shuttingDown && msg.command !== XIMCommand.JH_SHUTDOWN) {
       console.warn('[XIMProtocol] Door requested commands after shutdown, replying with 0');
       this.messageParser.writeData(msg.msgAddr, 0);
+      // Log outgoing reply to XIM structured logger
+      ximLogger.log('warn', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
+        type: `${humanName}_REJECTED`,
+        typeCode: msg.command,
+        param: 0,
+      }, {
+        msgAddr: `0x${msg.msgAddr.toString(16)}`,
+        message: 'Rejected: door shutting down',
+      });
       this.execLibrary.replyMsg(msg.msgAddr);
       return;
     }

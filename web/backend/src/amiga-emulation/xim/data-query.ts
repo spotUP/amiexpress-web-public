@@ -13,6 +13,7 @@ import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
+import { ximLogger } from '../../utils/XIMLogger';
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
@@ -959,6 +960,18 @@ export class XIMDataQueryHandler {
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
     this.messageParser.writeData(msg.msgAddr, data);
+
+    // Log outgoing reply to XIM structured logger
+    const humanName = this.messageParser.getCommandName(msg.command);
+    ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
+      type: `${humanName}_REPLY`,
+      typeCode: msg.command,
+      param: data,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Reply to door data query',
+    });
+
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 }

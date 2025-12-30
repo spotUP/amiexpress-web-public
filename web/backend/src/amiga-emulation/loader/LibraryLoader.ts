@@ -190,6 +190,14 @@ export class LibraryLoader {
       // Apply relocations
       this.applyRelocations(hunkFile, baseAddress);
 
+      // Store ExecBase pointer at library+0x22 for native code that uses it
+      // Native AEDoor.library code does: movea.l 0x22(a6), a6 to load ExecBase
+      // then calls Exec functions via jsr -$16e(a6) (PutMsg) etc.
+      const EXECBASE_OFFSET = 0x22;  // 34 decimal
+      const execBase = 0x80000;  // ExecBase address in our memory map
+      this.emulator.writeMemory32(baseAddress + EXECBASE_OFFSET, execBase);
+      console.log(`[LibraryLoader] Stored ExecBase (0x${execBase.toString(16)}) at library+0x${EXECBASE_OFFSET.toString(16)}`);
+
       // Parse jump table from first code segment
       const jumpTable = this.parseJumpTable(baseAddress, codeSegments[0]);
 

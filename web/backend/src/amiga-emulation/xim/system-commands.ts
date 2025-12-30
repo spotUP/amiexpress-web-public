@@ -16,6 +16,7 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { DoorConstants } from '../DoorTypes';
 import { ZmodemTransferManager, TransferDirection, TransferTransport } from '../../services/zmodem-transfer.service';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
+import { ximLogger } from '../../utils/XIMLogger';
 
 export class XIMSystemCommandsHandler {
   private emulator: MoiraEmulator;
@@ -89,6 +90,15 @@ export class XIMSystemCommandsHandler {
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
+    // CRITICAL FIX: Set strPtr before replying!
+    // Phantasm (AmiExpress coder) confirmed: doors dereference msg->strptr and if it's NULL
+    // they stay stuck in their init loop. Bulls bug was exactly this - strPtr was 0.
+    // Must set strPtr to msg+StringOffset (pointing to embedded string buffer).
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+
     // Use standard ReplyMsg to send reply to the door's mn_ReplyPort.
     // The door's reply port (e.g., 0xa0500) is separate from the AEDoorPort
     // where we receive incoming commands. This prevents race conditions where
@@ -96,6 +106,17 @@ export class XIMSystemCommandsHandler {
     //
     // express.e line 4368 shows: ReplyMsg(msg) is called after processing XIM messages.
     // This is the correct AmigaOS pattern - reply goes to message's mn_ReplyPort field.
+
+    // Log outgoing reply to XIM structured logger
+    ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
+      type: 'JH_REGISTER_REPLY',
+      typeCode: XIMCommand.JH_REGISTER,
+      param: lineLen,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Door registration acknowledged',
+    });
+
     this.execLibrary.replyMsg(msg.msgAddr);
     console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
 
@@ -238,27 +259,22 @@ export class XIMSystemCommandsHandler {
       console.log(`[BBSInfo] Wrote location "${location}" to 0x${locPtr.toString(16)}`);
     }
 
-    // Also populate other BBSInfo fields at known offsets
-    // BBSInfo is at DIFace + 0x46
-    const bbsInfoAddr = difaceAddr + 0x46;
-    this.writeCString(bbsInfoAddr + 0x120, bbsName, 40); // BBS name at +0x120
-    this.writeCString(bbsInfoAddr + 0x150, this.getFormattedDate(), 19); // Date at +0x150
-    this.writeCString(bbsInfoAddr + 0x170, this.getFormattedTime(), 19); // Time at +0x170
+    // DISABLED: These writes were corrupting the message structure!
+    // The native AEDoor.library uses different structure offsets than we assumed.
+    // Message is at DIFace + 0x164, not 0x46. Writing to DIFace + 0x46 + offsets
+    // was overwriting the message header including the reply port field.
+    //
+    // The native library handles BBSInfo population via XIM commands (DT_NAME, etc.)
+    // so we don't need to pre-populate these fields.
+    //
+    // Previously:
+    //   bbsInfoAddr = difaceAddr + 0x46 = 0x100056
+    //   Wrote BBS name at 0x100056 + 0x120 = 0x100176
+    //   But message is at 0x100174, so this overwrote message+2
+    //   "AmiExpress-Web" wrote "eb\0\0" at message+14 (reply port offset)
+    //   Corrupted reply port from 0xa0300 to 0x65620000
 
-    console.log(`[BBSInfo] Wrote BBS name "${bbsName}"`);
-    console.log(`[BBSInfo] Wrote date "${this.getFormattedDate()}"`);
-    console.log(`[BBSInfo] Wrote time "${this.getFormattedTime()}"`);
-
-    // Read back verification
-    if (userPtr > 0x100) {
-      const verifyUser = this.readCString(userPtr, 198);
-      console.log(`[BBSInfo] Verify user: "${verifyUser}"`);
-    }
-    if (locPtr > 0x100) {
-      const verifyLoc = this.readCString(locPtr, 60);
-      console.log(`[BBSInfo] Verify location: "${verifyLoc}"`);
-    }
-
+    console.log('[BBSInfo] Skipping BBSInfo field writes (native library handles via XIM commands)');
     console.log('[BBSInfo] Post-register population complete');
   }
 
@@ -403,8 +419,7 @@ export class XIMSystemCommandsHandler {
     console.log(`  Message: "${message}"`);
 
     // Ack with Data=1 per express.e behavior
-    this.messageParser.writeData(msg.msgAddr, 1);
-    this.execLibrary.replyMsg(msg.msgAddr);
+    this.reply(msg, 1);
   }
 
   /**
@@ -617,6 +632,24 @@ export class XIMSystemCommandsHandler {
     if (writeDataField) {
       this.messageParser.writeData(msg.msgAddr, data);
     }
+    // CRITICAL: Always set strPtr before replying - doors dereference it
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
+    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+
+    // Log outgoing reply to XIM structured logger
+    const humanName = this.messageParser.getCommandName(msg.command);
+    ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
+      type: `${humanName}_REPLY`,
+      typeCode: msg.command,
+      param: data,
+      data: stringValue,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Reply to door request',
+    });
+
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 

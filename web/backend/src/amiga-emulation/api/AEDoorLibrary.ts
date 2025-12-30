@@ -37,9 +37,11 @@ const DIFACE_NODE_STATE_OFFSET = 0xE4;
 const DIFACE_REPLY_NAME_OFFSET = 0x0c;
 const DIFACE_DATA_PTR_OFFSET = 0x1c;
 const DIFACE_STRING_PTR_OFFSET = 0x20;
-const MESSAGE_STRING_OFFSET = 28;
-const MESSAGE_DATA_OFFSET = 24;
-const MESSAGE_COMMAND_OFFSET = 20;
+// jhMessage structure offsets (from DoorHeader.h):
+// Message(20) + String[200](offset 20/0x14) + Data(offset 220/0xDC) + Command(offset 224/0xE0)
+const MESSAGE_STRING_OFFSET = 0x14;   // 20 - start of String[200] buffer
+const MESSAGE_DATA_OFFSET = 0xDC;     // 220 - int Data field
+const MESSAGE_COMMAND_OFFSET = 0xE0;  // 224 - int Command field
 const MESSAGE_REPLY_PORT_OFFSET = 14;
 const MESSAGE_LENGTH_OFFSET = 18;
 const MESSAGE_LENGTH = 0x100;
@@ -253,10 +255,9 @@ export class AEDoorLibrary {
     // return correct values instead of garbage
     this.populateBBSInfo(difaceAddr);
 
-    // Immediately post the initial AEDoor-style message so doors that expect
-    // a startup notification (e.g., XIM doors) see traffic on their reply port
-    // without needing an explicit host nudge.
-    this.sendInitialReadyMessage(state);
+    // NOTE: Do NOT send unsolicited startup messages here!
+    // XIM doors expect REPLIES to messages they send, not unsolicited messages.
+    // The door will send JH_REGISTER and wait for the reply.
 
     return difaceAddr;
   }
@@ -1134,14 +1135,9 @@ export class AEDoorLibrary {
     this.emulator.setRegister(0, difaceAddr);
     this.emulator.setRegister(9, difaceAddr); // A1
 
-    // Send status message (command 2)
-    if (difaceAddr !== 0) {
-      const state = this.interfaces.get(difaceAddr);
-      if (state) {
-        this.sendJHMessage(state, 2, 0, ""); // JH_STAT message
-        console.log(`[AEDoorLibrary] InitAndSendStatus: sent status message`);
-      }
-    }
+    // NOTE: Do NOT send unsolicited messages to the door's reply port.
+    // XIM doors expect REPLIES to their messages, not unsolicited notifications.
+    // The door will send JH_REGISTER and other commands, then wait for replies.
 
     return difaceAddr;
   }
@@ -1175,18 +1171,19 @@ export class AEDoorLibrary {
     // mn_Length (2 bytes) = msgSize
     this.emulator.writeMemory16(msgAddr + 18, msgSize);
 
-    // === AEDoor Message Extension (starts at offset 20) ===
-    // command = specified command
-    this.emulator.writeMemory32(msgAddr + 20, command);
-    // data = specified data
-    this.emulator.writeMemory32(msgAddr + 24, data);
-    // string data = specified string
+    // === AEDoor Message Extension (jhMessage fields) ===
+    // jhMessage structure: Message(20) + String[200](0x14) + Data(0xDC) + Command(0xE0)
+    // command = specified command at offset 224 (0xE0)
+    this.emulator.writeMemory32(msgAddr + MESSAGE_COMMAND_OFFSET, command);
+    // data = specified data at offset 220 (0xDC)
+    this.emulator.writeMemory32(msgAddr + MESSAGE_DATA_OFFSET, data);
+    // string data = specified string at offset 20 (0x14)
     if (strData) {
-      for (let i = 0; i < strData.length && i < 200; i++) {
-        this.emulator.writeMemory(msgAddr + 28 + i, strData.charCodeAt(i));
+      for (let i = 0; i < strData.length && i < MESSAGE_STRING_CAPACITY; i++) {
+        this.emulator.writeMemory(msgAddr + MESSAGE_STRING_OFFSET + i, strData.charCodeAt(i));
       }
     }
-    this.emulator.writeMemory(msgAddr + 28 + (strData ? strData.length : 0), 0); // null terminator
+    this.emulator.writeMemory(msgAddr + MESSAGE_STRING_OFFSET + (strData ? strData.length : 0), 0); // null terminator
 
     // Put message in door's reply port to trigger GetMsg() return
     this.execLibrary.putMsg(state.replyPortAddr, msgAddr);

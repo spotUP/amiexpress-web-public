@@ -17,6 +17,7 @@ import { DoorConstants } from '../DoorTypes';
 import { callersLogManager } from '../../services/CallersLogManager';
 import { startSysopPage } from '../../handlers/chat/chat.handler';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
+import { ximLogger } from '../../utils/XIMLogger';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -774,6 +775,18 @@ export class XIMBBSInfoHandler {
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
     this.messageParser.writeData(msg.msgAddr, data);
+
+    // Log outgoing reply to XIM structured logger
+    const humanName = this.messageParser.getCommandName(msg.command);
+    ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
+      type: `${humanName}_REPLY`,
+      typeCode: msg.command,
+      param: data,
+    }, {
+      msgAddr: `0x${msg.msgAddr.toString(16)}`,
+      message: 'Reply to door BBS info query',
+    });
+
     this.execLibrary.replyMsg(msg.msgAddr);
   }
 }

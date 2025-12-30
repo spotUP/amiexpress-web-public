@@ -142,7 +142,12 @@ export class AmigaDosEnvironment {
     );
 
     // Create the port through ExecLibrary using the correct method
-    const portAddr = (this.execLibrary as any).createPublicPort(portName);
+    // CRITICAL: Use sigBit=12 for AEDoorPort because doors hardcode this expectation!
+    // Doors like AquaScan store 0x1000 (bit 12) at [a5+0x14] and Wait for 0x11000
+    // which is bit 16 (reply port) | bit 12 (AEDoorPort). If we use a different
+    // sigBit, the door's signal check fails and it enters a polling loop.
+    const AEDOORPORT_SIGBIT = 12;
+    const portAddr = (this.execLibrary as any).createPublicPort(portName, undefined, AEDOORPORT_SIGBIT);
 
     if (!portAddr || portAddr === 0) {
       console.error(`[AmigaDosEnvironment] Failed to create ${portName}!`);
