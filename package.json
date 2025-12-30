@@ -15,7 +15,12 @@
     "xim:replay": "npx tsx dev/scripts/xim-replay.ts",
     "xim:flow": "npx tsx dev/scripts/xim-flow.ts",
     "xim:trace": "npx tsx dev/scripts/xim-trace.ts",
-    "xim:debug": "npx tsx dev/scripts/xim-debug.ts"
+    "xim:analyze": "npx tsx dev/scripts/xim-analyzer.ts",
+    "xim:diff": "npx tsx dev/scripts/xim-diff.ts",
+    "xim:debug": "npx tsx dev/scripts/xim-debug.ts",
+    "xim:replay:real": "npx tsx dev/scripts/xim-replay-real.ts",
+    "xim:record": "npx tsx dev/scripts/xim-record.ts",
+    "xim:perf": "npx tsx dev/scripts/xim-perf.ts"
   },
   "dependencies": {
     "axios": "^1.13.2",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "chokidar": "^3.6.0",
+    "puppeteer": "^24.34.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

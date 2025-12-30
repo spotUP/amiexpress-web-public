@@ -51,6 +51,10 @@
       "types": "./dist/engines/ui/blessed/contrib/index.d.ts",
       "default": "./dist/engines/ui/blessed/contrib/index.js"
     },
+    "./engines/ui/blessed/utils/animations": {
+      "types": "./dist/engines/ui/blessed/utils/animations/index.d.ts",
+      "default": "./dist/engines/ui/blessed/utils/animations/index.js"
+    },
     "./utils/blessed-helpers": {
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"

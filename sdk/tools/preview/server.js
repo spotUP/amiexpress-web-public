@@ -1588,24 +1588,43 @@ app.get('/api/doors/:doorId/file_id_diz', (req, res) => {
     const dizPath = path.join(doorPath, 'FILE_ID.DIZ');
 
     if (!fs.existsSync(dizPath)) {
-      // Generate default FILE_ID.DIZ template
+      // Load template from sdk/templates/FILE_ID.DIZ
       const pkgPath = path.join(doorPath, 'package.json');
       let pkg = {};
       if (fs.existsSync(pkgPath)) {
         pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       }
 
-      const centerText = (text, width = 45) => {
-        const padding = Math.max(0, Math.floor((width - text.length) / 2));
-        return ' '.repeat(padding) + text;
-      };
-
       const name = pkg.name || doorId;
       const version = pkg.version || '1.0.0';
       const title = `${name} v${version}`;
 
-      const template = `${centerText(title)}
-${centerText('─'.repeat(Math.min(title.length, 45)))}
+      // Center title within 40 chars (width of placeholder)
+      const centerText = (text, width = 40) => {
+        const totalPadding = width - text.length;
+        const leftPad = Math.max(0, Math.ceil(totalPadding / 2));
+        const rightPad = Math.max(0, totalPadding - leftPad);
+        return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+      };
+
+      // Try to load the template file
+      const templatePath = path.join(__dirname, '..', '..', 'templates', 'FILE_ID.DIZ');
+      let template;
+
+      if (fs.existsSync(templatePath)) {
+        // Load template and replace placeholder with centered title
+        template = fs.readFileSync(templatePath, 'utf8');
+        const centeredTitle = centerText(title, 40);
+        template = template.replace(/\*{40}/, centeredTitle);
+      } else {
+        // Fallback to simple template if file doesn't exist
+        const simpleCenter = (text, width = 45) => {
+          const padding = Math.max(0, Math.floor((width - text.length) / 2));
+          return ' '.repeat(padding) + text;
+        };
+
+        template = `${simpleCenter(title)}
+${simpleCenter('─'.repeat(Math.min(title.length, 45)))}
 
 ${pkg.description || 'BBS Door Game'}
 
@@ -1614,6 +1633,7 @@ Category: ${pkg.category || 'BBS Door'}
 Released: ${new Date().toISOString().split('T')[0]}
 
 Made with AmiExpress SDK`;
+      }
 
       return res.json({
         exists: false,

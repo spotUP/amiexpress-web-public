@@ -483,35 +483,67 @@ export class ReleasePacker {
    * Generate and write FILE_ID.DIZ
    *
    * FILE_ID.DIZ is a BBS standard file description
-   * Max 10 lines, 45 characters wide
+   * Uses template from sdk/templates/FILE_ID.DIZ if available
    */
   private writeFileIdDiz(outputDir: string): void {
-    const lines: string[] = [];
-
-    // Title line (centered)
     const title = `${this.config.name} v${this.config.version}`;
-    lines.push(this.centerText(title, 45));
 
-    // Separator
-    lines.push(this.centerText('─'.repeat(title.length), 45));
+    // Center title within 40 chars (width of placeholder)
+    const centerTitle = (text: string, width: number = 40): string => {
+      const totalPadding = width - text.length;
+      const leftPad = Math.max(0, Math.ceil(totalPadding / 2));
+      const rightPad = Math.max(0, totalPadding - leftPad);
+      return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    };
 
-    // Description (word-wrapped to 45 chars)
-    const descLines = this.wordWrap(this.config.description, 45);
-    lines.push(...descLines);
+    // Try to load template from sdk/templates/FILE_ID.DIZ
+    const templatePaths = [
+      path.join(process.cwd(), 'templates', 'FILE_ID.DIZ'),
+      path.join(process.cwd(), '..', 'templates', 'FILE_ID.DIZ'),
+      path.join(__dirname, '..', '..', 'templates', 'FILE_ID.DIZ'),
+    ];
 
-    lines.push(''); // Empty line
+    let content: string | null = null;
 
-    // Author
-    lines.push(`By: ${this.config.author}`);
+    for (const templatePath of templatePaths) {
+      if (fs.existsSync(templatePath)) {
+        // Load template and replace placeholder with centered title
+        content = fs.readFileSync(templatePath, 'utf8');
+        const centeredTitle = centerTitle(title, 40);
+        content = content.replace(/\*{40}/, centeredTitle);
+        break;
+      }
+    }
 
-    // Category
-    lines.push(`Category: ${this.config.category}`);
+    // Fallback to simple template if no template file found
+    if (!content) {
+      const lines: string[] = [];
 
-    // Release date
-    const date = new Date().toISOString().split('T')[0];
-    lines.push(`Released: ${date}`);
+      // Title line (centered)
+      lines.push(this.centerText(title, 45));
 
-    const content = lines.join('\r\n');
+      // Separator
+      lines.push(this.centerText('─'.repeat(title.length), 45));
+
+      // Description (word-wrapped to 45 chars)
+      const descLines = this.wordWrap(this.config.description, 45);
+      lines.push(...descLines);
+
+      lines.push(''); // Empty line
+
+      // Author
+      lines.push(`By: ${this.config.author}`);
+
+      // Category
+      lines.push(`Category: ${this.config.category}`);
+
+      // Release date
+      const date = new Date().toISOString().split('T')[0];
+      lines.push(`Released: ${date}`);
+
+      content = lines.join('\r\n');
+    }
+
     fs.writeFileSync(path.join(outputDir, 'FILE_ID.DIZ'), content);
   }
 

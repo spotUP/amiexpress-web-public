@@ -5,12 +5,11 @@
  * but connects with a chat-only flag that auto-launches LiveChat door.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
-import { Modal, ModalButtons, ModalButton } from '../components/Modal';
 import '@xterm/xterm/css/xterm.css';
 import './chat.css';
 
@@ -46,12 +45,6 @@ export default function ChatTerminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const loginState = useRef<'waiting' | 'username' | 'password' | 'loggedin'>('waiting');
-  const username = useRef<string>('');
-  const password = useRef<string>('');
-  const [showConnectionError, setShowConnectionError] = useState(false);
-  const [connectionErrorMessage, setConnectionErrorMessage] = useState('');
-  const reconnectAttempts = useRef<number>(0);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -69,6 +62,7 @@ export default function ChatTerminal() {
 
     term.open(terminalRef.current);
     terminalInstance.current = term;
+    console.log('[ChatTerminal] Terminal opened and instance stored');
 
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
@@ -79,7 +73,8 @@ export default function ChatTerminal() {
     term.loadAddon(fitAddon);
 
     // Terminal mode: 'fixed' = 80 cols (for ANSI art), 'wide' = responsive width
-    let terminalMode: 'fixed' | 'wide' = 'fixed';
+    // Default to 'wide' for standalone chat page - full responsive width
+    let terminalMode: 'fixed' | 'wide' = 'wide';
 
     // Fit terminal to container, respecting mode
     const fitTerminal = () => {
@@ -188,9 +183,6 @@ export default function ChatTerminal() {
 
     socket.on('connect', () => {
       console.log('[ChatTerminal] Connected');
-      loginState.current = 'waiting';
-      reconnectAttempts.current = 0;
-      setShowConnectionError(false);
       // Send terminal size on connect
       const { cols, rows } = term;
       socket.emit('terminal-size', { cols, rows });
@@ -199,65 +191,17 @@ export default function ChatTerminal() {
 
     socket.on('connect_error', (error) => {
       console.error('[ChatTerminal] Connection error:', error.message);
-      reconnectAttempts.current++;
-
-      // Show modal instead of writing error to terminal repeatedly
-      if (reconnectAttempts.current >= 3) {
-        setConnectionErrorMessage(
-          `Connection to server failed after ${reconnectAttempts.current} attempts.\n\n` +
-          `Error: ${error.message}\n\n` +
-          `Please check that the server is running and try again.`
-        );
-        setShowConnectionError(true);
-        // Disable automatic reconnection
-        socket.io.opts.reconnection = false;
-      }
+      // Connection errors are now handled by blessed modals on the door side
     });
 
     socket.on('disconnect', (reason) => {
       console.log('[ChatTerminal] Disconnected:', reason);
-      // Only show error modal if it wasn't a client-initiated disconnect
-      if (reason !== 'io client disconnect' && reconnectAttempts.current < 3) {
-        reconnectAttempts.current++;
-      }
+      // Disconnection is now handled by blessed modals on the door side
     });
 
     // ANSI output from server (including LiveChat door output)
     socket.on('ansi-output', (data: string) => {
       term.write(data);
-    });
-
-    // Login prompts
-    socket.on('prompt-login', () => {
-      loginState.current = 'username';
-      username.current = '';
-      password.current = '';
-    });
-
-    socket.on('prompt-password', () => {
-      loginState.current = 'password';
-      password.current = '';
-      term.write('Password: ');
-    });
-
-    socket.on('login-success', () => {
-      console.log('[ChatTerminal] Login successful');
-      loginState.current = 'loggedin';
-      // Backend will auto-launch LiveChat door for chatOnly sessions
-    });
-
-    socket.on('login-failed', (reason: string) => {
-      console.log('[ChatTerminal] Login failed:', reason);
-      loginState.current = 'username';
-      username.current = '';
-      password.current = '';
-    });
-
-    socket.on('user-not-found', (data: { username: string; prompt: string }) => {
-      term.write('\x1b[33m' + data.prompt + '\x1b[0m');
-      // For chat, just retry login - no new user registration
-      loginState.current = 'username';
-      username.current = '';
     });
 
     // Terminal resize
@@ -277,49 +221,14 @@ export default function ChatTerminal() {
       fitTerminal(); // Re-fit with new mode
     });
 
-    // Keyboard input handling
-    term.onKey(({ key }) => {
-      if (!socket.connected) return;
-
-      if (loginState.current === 'username') {
-        if (key === '\r' || key === '\n') {
-          socket.emit('check-username', { username: username.current });
-          term.write('\r\n');
-        } else if (key === '\x7f' || key === '\b') {
-          if (username.current.length > 0) {
-            username.current = username.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          username.current += key;
-          term.write(key);
-        }
-        return;
-      }
-
-      if (loginState.current === 'password') {
-        if (key === '\r' || key === '\n') {
-          socket.emit('login', { username: username.current, password: password.current });
-          term.write('\r\n');
-        } else if (key === '\x7f' || key === '\b') {
-          if (password.current.length > 0) {
-            password.current = password.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          password.current += key;
-          term.write('*');
-        }
-        return;
-      }
-    });
-
-    // Send input to backend (for door/commands after login)
+    // Send ALL input to backend - door handles everything (including login via blessed modal)
     term.onData((data: string) => {
-      if (!socket.connected) return;
-      if (loginState.current === 'username' || loginState.current === 'password') {
+      console.log('[ChatTerminal] onData fired:', JSON.stringify(data), 'charCode:', data.charCodeAt(0));
+      if (!socket.connected) {
+        console.log('[ChatTerminal] Socket not connected, ignoring input');
         return;
       }
+      console.log('[ChatTerminal] Emitting command event to backend');
       socket.emit('command', data);
     });
 
@@ -342,49 +251,13 @@ export default function ChatTerminal() {
     };
   }, []);
 
-  const handleRetry = () => {
-    setShowConnectionError(false);
-    reconnectAttempts.current = 0;
-    if (socketRef.current) {
-      // Re-enable reconnection and connect
-      socketRef.current.io.opts.reconnection = true;
-      socketRef.current.connect();
-    }
-  };
-
-  const handleCancel = () => {
-    setShowConnectionError(false);
-    if (terminalInstance.current) {
-      terminalInstance.current.writeln('\r\n\x1b[33mConnection cancelled by user.\x1b[0m');
-      terminalInstance.current.writeln('\x1b[33mPlease refresh the page to reconnect.\x1b[0m');
-    }
-  };
-
   return (
-    <>
-      <div className="chat-terminal-container">
-        <div
-          ref={terminalRef}
-          className="chat-terminal-wrapper"
-          onClick={() => terminalInstance.current?.focus()}
-        />
-      </div>
-
-      <Modal
-        isOpen={showConnectionError}
-        title="Connection Error"
-        showCloseButton={false}
-      >
-        <p style={{ whiteSpace: 'pre-wrap' }}>{connectionErrorMessage}</p>
-        <ModalButtons>
-          <ModalButton onClick={handleRetry} variant="primary">
-            Retry
-          </ModalButton>
-          <ModalButton onClick={handleCancel} variant="secondary">
-            Cancel
-          </ModalButton>
-        </ModalButtons>
-      </Modal>
-    </>
+    <div className="chat-terminal-container">
+      <div
+        ref={terminalRef}
+        className="chat-terminal-wrapper"
+        onClick={() => terminalInstance.current?.focus()}
+      />
+    </div>
   );
 }

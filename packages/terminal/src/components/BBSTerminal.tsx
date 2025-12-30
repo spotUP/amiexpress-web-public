@@ -1728,6 +1728,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
   };
 
+  // Prevent browser context menu when door is active (allows app to use right-click)
+  const handleContextMenu = (event: React.MouseEvent) => {
+    if (doorActive.current || gameMode.current) {
+      event.preventDefault();
+    }
+  };
+
   // Handle RIP canvas click to send commands back to BBS
   const handleRipCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = ripCanvasRef.current;
@@ -1761,6 +1768,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { mouseButtonDown.current = false; }}
         onWheel={handleWheel}
+        onContextMenu={handleContextMenu}
         tabIndex={0}
         style={{
           overflow: 'hidden',
