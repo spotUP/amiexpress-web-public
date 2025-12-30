@@ -55,6 +55,9 @@ export class Textbox extends Element {
   private _onKeypress(ch: any, key: KeyEvent): void {
     if (!this.focused) return;
 
+    // Ignore Tab - it's handled by screen for focus navigation
+    if (key.name === 'tab') return;
+
     // Character input - only insert printable characters (ASCII 32-126)
     // This includes space (32) through tilde (126)
     if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
@@ -322,6 +325,9 @@ export class Textarea extends Element {
 
   private _onKeypress(ch: any, key: KeyEvent): void {
     if (!this.focused) return;
+
+    // Ignore Tab - it's handled by screen for focus navigation
+    if (key.name === 'tab') return;
 
     // Character input - printable characters
     if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
