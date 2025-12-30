@@ -13,11 +13,12 @@ This guide documents best practices for building robust, production-ready BBS do
 3. [Race Condition Prevention](#race-condition-prevention)
 4. [Type Safety](#type-safety)
 5. [Input Handling](#input-handling)
-6. [Error Handling](#error-handling)
-7. [Performance Optimization](#performance-optimization)
-8. [Validation & Safety](#validation--safety)
-9. [Common Pitfalls](#common-pitfalls)
-10. [Migration Checklist](#migration-checklist)
+6. [Focus, Keyboard Navigation & Widget Selection](#focus-keyboard-navigation--widget-selection)
+7. [Error Handling](#error-handling)
+8. [Performance Optimization](#performance-optimization)
+9. [Validation & Safety](#validation--safety)
+10. [Common Pitfalls](#common-pitfalls)
+11. [Migration Checklist](#migration-checklist)
 
 ---
 
@@ -408,6 +409,212 @@ screen.on('destroy', () => {
 
 ---
 
+## Focus, Keyboard Navigation & Widget Selection
+
+### Problem: Input Not Reaching Screen
+
+**BAD:**
+```typescript
+// Using emit('data') just emits raw data without parsing
+bbsSession.doorInputHandler = (data: string) => {
+  screen.program.emit('data', data);  // WRONG! Doesn't parse input
+  return true;
+};
+```
+
+**GOOD:**
+```typescript
+// Use _handleData() to parse input and emit keypress events
+bbsSession.doorInputHandler = (data: string) => {
+  screen.program._handleData(data);  // Parses input and emits 'keypress' events
+  return true;
+};
+```
+
+### Problem: Accessing Focused Element
+
+**BAD:**
+```typescript
+// screen.focused property does NOT exist!
+const focused = screen.focused;  // Returns undefined!
+
+if (screen.focused === myInput) {  // Always false!
+  // ...
+}
+```
+
+**GOOD:**
+```typescript
+// Use getFocused() method instead
+const focused = screen.getFocused();
+
+if (screen.getFocused() === myInput) {
+  // This works correctly
+}
+```
+
+### Problem: Tab Key Handlers on Elements Never Fire
+
+**BAD:**
+```typescript
+// Tab handlers on elements never fire because Screen intercepts Tab first
+usernameInput.key(['tab'], () => {
+  passwordInput.focus();  // NEVER CALLED!
+});
+```
+
+**GOOD:**
+```typescript
+// Tab handlers MUST be at screen level
+screen.key(['tab'], () => {
+  const focused = screen.getFocused();
+
+  if (focused === usernameInput) {
+    passwordInput.focus();
+  } else if (focused === passwordInput) {
+    loginButton.focus();
+  }
+
+  screen.render();
+  return false;  // Prevent default Tab handling
+});
+```
+
+### Problem: Using Textarea for Single-Line Inputs
+
+**BAD:**
+```typescript
+// Textarea is multi-line - Enter inserts newline!
+const usernameInput = createTextarea({
+  parent: modal,
+  // ...
+});
+
+// When user presses Enter, it inserts a newline instead of submitting!
+```
+
+**GOOD:**
+```typescript
+// Use createTextbox for single-line inputs
+// Enter triggers 'submit' event instead of inserting newline
+const usernameInput = createTextbox({
+  parent: modal,
+  // ...
+});
+
+// Handle Enter with screen-level key handler
+screen.key(['enter'], () => {
+  if (screen.getFocused() === usernameInput) {
+    passwordInput.focus();
+  } else if (screen.getFocused() === passwordInput) {
+    handleLogin();
+  }
+  return false;
+});
+```
+
+### Widget Selection Guide
+
+| Widget | Use Case | Enter Key Behavior |
+|--------|----------|-------------------|
+| `createTextbox()` | Single-line input (username, password, search) | Emits 'submit' event |
+| `createTextarea()` | Multi-line input (message composition) | Inserts newline |
+| `createButton()` | Clickable button | Emits 'press' event |
+
+### Focus Styles
+
+Focus/hover/disabled styles are automatically applied when rendering. Define them in the widget options:
+
+```typescript
+const loginButton = createButton({
+  content: 'Login',
+  style: {
+    fg: 'white',
+    bg: 'green',
+    focus: { fg: 'black', bg: 'cyan' },   // Applied when focused
+    hover: { fg: 'black', bg: 'cyan' },   // Applied when hovered
+    disabled: { fg: 'gray', bg: 'black' } // Applied when disabled
+  },
+});
+```
+
+### Complete Login Modal Pattern
+
+```typescript
+import { Screen, Box, Textbox, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createTextbox, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+class LoginModal {
+  private screen: Screen;
+  private usernameInput: Textbox;
+  private passwordInput: Textbox;
+  private loginButton: Button;
+
+  constructor(screen: Screen) {
+    this.screen = screen;
+
+    // Create single-line inputs with createTextbox (NOT createTextarea!)
+    this.usernameInput = createTextbox({
+      parent: this.modalBox,
+      // ...
+    });
+
+    this.passwordInput = createTextbox({
+      parent: this.modalBox,
+      secret: true,  // Mask password input
+      // ...
+    });
+
+    this.loginButton = createButton({
+      parent: this.modalBox,
+      content: 'Login',
+      style: {
+        fg: 'white',
+        bg: 'green',
+        focus: { fg: 'black', bg: 'cyan' },
+        hover: { fg: 'black', bg: 'cyan' },
+      },
+    });
+
+    // Tab navigation MUST be at screen level
+    this.screen.key(['tab'], () => {
+      const focused = this.screen.getFocused();
+
+      if (focused === this.usernameInput) {
+        this.passwordInput.focus();
+      } else if (focused === this.passwordInput) {
+        this.loginButton.focus();
+      } else if (focused === this.loginButton) {
+        this.usernameInput.focus();
+      }
+
+      this.screen.render();
+      return false;
+    });
+
+    // Enter key handling at screen level
+    this.screen.key(['enter'], () => {
+      const focused = this.screen.getFocused();
+
+      if (focused === this.usernameInput) {
+        this.passwordInput.focus();
+        return false;
+      } else if (focused === this.passwordInput || focused === this.loginButton) {
+        this.handleSubmit();
+        return false;
+      }
+    });
+
+    // Button press handler
+    this.loginButton.on('press', () => {
+      this.handleSubmit();
+    });
+  }
+}
+```
+
+---
+
 ## Error Handling
 
 ### Problem: Console.log in Production
@@ -637,6 +844,22 @@ Use flags like `actionInProgress` or `gameExited` to prevent overlapping operati
 
 Check for: empty arrays, null values, disconnected sockets, destroyed screens.
 
+### 9. Using screen.focused Instead of getFocused()
+
+The Screen class does NOT have a `.focused` property - use `screen.getFocused()` method.
+
+### 10. Tab Handlers on Elements
+
+Tab key handlers on elements never fire because Screen intercepts Tab first. Put Tab handlers at screen level.
+
+### 11. Using Textarea for Single-Line Inputs
+
+Use `createTextbox()` for single-line inputs (Enter submits). Use `createTextarea()` for multi-line (Enter inserts newline).
+
+### 12. Using emit('data') Instead of _handleData()
+
+Use `screen.program._handleData(data)` to parse input and emit keypress events. `emit('data', data)` just emits raw data without parsing.
+
 ---
 
 ## Migration Checklist
@@ -671,6 +894,14 @@ Use this checklist when reviewing or migrating a neo-blessed door:
 - [ ] Input handler returns boolean value
 - [ ] Input handler cleared in cleanup
 - [ ] Screen destroy handler clears input handler
+- [ ] Uses `_handleData()` not `emit('data')` for input routing
+
+### Focus & Keyboard Navigation
+- [ ] Uses `screen.getFocused()` not `screen.focused`
+- [ ] Tab handlers are at screen level (not on individual elements)
+- [ ] Uses `createTextbox()` for single-line inputs
+- [ ] Uses `createTextarea()` for multi-line inputs
+- [ ] Focus/hover styles defined in widget options
 
 ### Error Handling
 - [ ] NO `console.log` statements
@@ -814,5 +1045,5 @@ Based on fixes across 5 production doors:
 
 ---
 
-**Last Updated:** 2025-12-29
-**Based On:** 52 fixes across 5 production doors
+**Last Updated:** 2025-12-30
+**Based On:** 52+ fixes across 5 production doors, plus focus/input routing fixes from livechat modal debugging

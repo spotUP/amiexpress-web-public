@@ -372,6 +372,84 @@ socket.on('room:created', (data: any) => {
 });
 ```
 
+### 9. Tab Key Handlers
+
+**CRITICAL:** Tab key handlers on elements NEVER fire because Screen intercepts Tab first.
+Always put Tab handlers at screen level:
+
+```typescript
+// WRONG - Tab handlers on elements never fire
+usernameInput.key(['tab'], () => {
+  passwordInput.focus();  // NEVER CALLED!
+});
+
+// CORRECT - Tab handlers at screen level
+screen.key(['tab'], () => {
+  const focused = screen.getFocused();
+
+  if (focused === usernameInput) {
+    passwordInput.focus();
+  } else if (focused === passwordInput) {
+    loginButton.focus();
+  } else if (focused === loginButton) {
+    usernameInput.focus();
+  }
+
+  screen.render();
+  return false;  // Prevent default Tab handling
+});
+```
+
+### 10. Textbox vs Textarea
+
+Use the correct input widget for your use case:
+
+| Helper | Widget | Enter Key Behavior | Use Case |
+|--------|--------|-------------------|----------|
+| `createTextbox()` | Textbox | Emits 'submit' event | Single-line: username, password, search |
+| `createTextarea()` | Textarea | Inserts newline | Multi-line: message composition |
+
+```typescript
+// Single-line input - Enter submits
+const usernameInput = createTextbox({
+  parent: modal,
+  top: 2,
+  left: 2,
+  width: 30,
+  height: 1,
+});
+
+// Multi-line input - Enter inserts newline (use Shift+Tab to submit)
+const messageInput = createTextarea({
+  parent: modal,
+  top: 2,
+  left: 2,
+  width: 60,
+  height: 10,
+});
+```
+
+### 11. Focus/Hover/Disabled Styles
+
+Define state-specific styles in widget options. The Screen automatically applies them during rendering:
+
+```typescript
+const button = createButton({
+  content: 'Submit',
+  style: {
+    fg: 'white',
+    bg: 'green',
+    focus: { fg: 'black', bg: 'cyan' },    // Applied when button has focus
+    hover: { fg: 'black', bg: 'cyan' },    // Applied when mouse hovers
+    disabled: { fg: 'gray', bg: 'black' }, // Applied when element.disabled = true
+  },
+});
+
+// Disable a widget
+button.disabled = true;
+screen.render();  // Will now show disabled style
+```
+
 ## Widget Reference
 
 ### Core Widgets
@@ -381,9 +459,10 @@ socket.on('room:created', (data: any) => {
 | Box | Container | border, label, style, content |
 | Text | Static text | tags, content |
 | List | Selectable list | items, keys, vi, mouse, selected style |
-| Button | Clickable button | mouse, style (bg, hover, focus) |
+| Button | Clickable button | mouse, style (bg, hover, focus, disabled) |
 | Form | Form container | keys, submit event |
-| Textbox | Text input | inputOnFocus, mouse, border |
+| Textbox | Single-line input (Enter=submit) | inputOnFocus, mouse, border, secret |
+| Textarea | Multi-line input (Enter=newline) | scrollable, mouse, border |
 
 ### Dialog Widgets
 
