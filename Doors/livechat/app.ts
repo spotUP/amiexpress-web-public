@@ -433,12 +433,13 @@ export async function createApp(session: DoorSession) {
     }));
 
     // Build channel list with text and voice channels
-    channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name, type: 'text' as const }));
+    // CRITICAL: channelItems must be built in SAME order as items for index matching
+    channelItems = [];
     const items: string[] = [];
 
     // Add TEXT CHANNELS header
     items.push('{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}');
-    channelItems.push({ id: '', name: '', type: 'header' as const }); // Placeholder for header
+    channelItems.push({ id: '', name: '', type: 'header' as const });
 
     // Add text channels
     channelsToShow.forEach(ch => {
@@ -527,9 +528,8 @@ export async function createApp(session: DoorSession) {
     }
   }
 
-  // Handle channel selection with Enter key
-  // NOTE: Blessed emits 'select item' on Enter, NOT on arrow keys or clicks
-  channelList.on('select item', (_item: any, index: number) => {
+  // Handle channel selection - shared logic for both click and Enter
+  function handleChannelSelect(index: number) {
     const channel = channelItems[index];
 
     // Skip headers and spacers
@@ -548,12 +548,21 @@ export async function createApp(session: DoorSession) {
       socket.emit('room:join', { roomName: channel.name });
     }
 
-    // Return focus to input after pressing Enter
+    // Return focus to input after selection
     inputBox.focus();
+  }
+
+  // Handle channel selection with Enter key (emits 'select item')
+  channelList.on('select item', (_item: any, index: number) => {
+    handleChannelSelect(index);
+  });
+
+  // Handle channel selection with click (emits 'select')
+  channelList.on('select', (_item: any, index: number) => {
+    handleChannelSelect(index);
   });
 
   // Navigation keys just move selection, don't auto-join
-  // User must press Enter to actually join
   channelList.key(['up', 'down', 'home', 'end', 'pageup', 'pagedown'], () => {
     screen.render();
   });
@@ -561,13 +570,6 @@ export async function createApp(session: DoorSession) {
   // Escape from channel list returns to input
   channelList.key(['escape'], () => {
     inputBox.focus();
-    screen.render();
-  });
-
-  // Click handler just focuses the list and updates selection
-  // User must press Enter or double-click to join
-  channelList.on('click', () => {
-    channelList.focus();
     screen.render();
   });
 
