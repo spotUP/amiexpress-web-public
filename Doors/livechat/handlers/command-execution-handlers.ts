@@ -19,11 +19,24 @@ export function handleCommandActions(
   getPinnedMessages: any,
   screen: any,
   inputBox: any,
-  cleanup: () => void
+  cleanup: () => void,
+  showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void
 ) {
-  // Quit
+  // Quit - show confirmation dialog
   if (r.action === 'quit') {
-    cleanup();
+    if (showConfirm) {
+      showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {
+        if (confirmed) {
+          cleanup();
+        } else {
+          inputBox.focus();
+          screen.render();
+        }
+      });
+    } else {
+      // Fallback if no confirm function provided
+      cleanup();
+    }
     return { handled: true };
   }
 

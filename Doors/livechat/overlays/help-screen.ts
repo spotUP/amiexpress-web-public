@@ -103,6 +103,21 @@ export function createHelpScreen(
     // Update dimensions to current screen size (percentage widths only calculated at construction)
     helpOverlay.position.width = screen.width;
     helpOverlay.position.height = screen.height;
+    helpOverlay.position.top = 0;
+    helpOverlay.position.left = 0;
+
+    // Invalidate coordinate cache for this element and all children
+    // Required because we modified position directly instead of using setters
+    const invalidateCache = (element: any) => {
+      element._coordsCacheValid = false;
+      if (element.children) {
+        for (const child of element.children) {
+          invalidateCache(child);
+        }
+      }
+    };
+    invalidateCache(helpOverlay);
+
     helpOverlay.show();
     helpOverlay.setFront();
     helpContent.focus();

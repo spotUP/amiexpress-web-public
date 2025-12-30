@@ -105,7 +105,7 @@ export class LoginModal {
       style: {
         fg: 'white',
         bg: 'blue',
-        focus: { fg: 'white', bg: 'cyan' },
+        focus: { fg: 'white', bg: 'lightblue' },
       },
     });
 
@@ -134,7 +134,7 @@ export class LoginModal {
       style: {
         fg: 'white',
         bg: 'blue',
-        focus: { fg: 'white', bg: 'cyan' },
+        focus: { fg: 'white', bg: 'lightblue' },
       },
     });
 
@@ -150,8 +150,8 @@ export class LoginModal {
       style: {
         fg: 'white',
         bg: 'green',
-        focus: { fg: 'black', bg: 'cyan' },
-        hover: { fg: 'black', bg: 'cyan' },
+        focus: { fg: 'white', bg: 'lightblue' },
+        hover: { fg: 'white', bg: 'lightblue' },
       },
     });
 

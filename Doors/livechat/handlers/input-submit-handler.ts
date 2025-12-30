@@ -45,7 +45,8 @@ export function createSubmitHandler(
   updateStatusBar: () => void,
   updateUserTable: () => void,
   showFileSharing: () => void,
-  updateTypingPreview: () => void
+  updateTypingPreview: () => void,
+  clearChatLog: () => void
 ) {
   return async (value: string) => {
     try {
@@ -73,10 +74,11 @@ export function createSubmitHandler(
       // Clear typing indicator (for others and self)
       socketEmitter.keystrokeSubmit(state.currentChannel, userId);
 
-      // Clear own typing buffer (the preview will be replaced by the formatted message)
+      // Clear own typing buffer and preview BEFORE adding message
+      // This ensures appendLineToLog doesn't re-add our preview
       if (state.typingBuffers && state.typingBuffers.has(userId)) {
         state.typingBuffers.delete(userId);
-        // Don't call updateTypingPreview() here - let the preview be replaced by the message
+        updateTypingPreview();  // Sync typingPreviewLines with typingBuffers
       }
 
       if (msg.startsWith('/')) {
@@ -144,7 +146,7 @@ export function createSubmitHandler(
         }
 
         if (cmdName === 'clear' || cmdName === 'cls') {
-          chatLog.setContent('');
+          clearChatLog();
         }
 
         if (cmdName === 'settings') {
@@ -196,7 +198,13 @@ export function createSubmitHandler(
           const messageId = `${userId}-${Date.now()}`;
           const processedMsg = replaceEmojis(msg);
           socket.emit('room:message', { message: processedMsg, messageId });
-          // Don't add local echo - the preview IS the message, just remove the cursor
+
+          // Add local echo immediately (server skips echoing own messages back)
+          const time = formatTime(new Date());
+          const color = getUserColor(username);
+          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`);
+
+          // Clear typing preview
           updateTypingPreview();
 
           // Add to history with ID

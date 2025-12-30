@@ -37,10 +37,10 @@ import { CommandHandler } from './handlers/command';
 // UI components
 import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
-import { createMenuBar, MENU_HEIGHT } from './ui/menu-bar';
+import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
-import { createChatLog, updateChatHeader as updateChatHeaderFn, addBBSEvent, TYPING_HEIGHT } from './ui/chat-log';
+import { createChatLog, updateChatHeader as updateChatHeaderFn, TYPING_HEIGHT } from './ui/chat-log';
 import { createDisconnectionModal } from './ui/disconnection-modal';
 
 // Overlays
@@ -89,6 +89,12 @@ import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine
 import { EmojiPicker } from './ui/emoji-picker';
 import { createEmojiCommand, createEmojiListCommand, createCustomEmojiCommand } from './commands/emoji';
 
+// Format picker for text formatting
+import { FormatPicker } from './ui/format-picker';
+
+// Animation system
+import { createAnimationManager, hasAnimationTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/utils/animations';
+
 // Event filtering
 import { createEventsCommand } from './commands/events';
 
@@ -106,6 +112,17 @@ interface DoorSession {
   bbsSession: any;
   bbs: any;
   params: string[];
+}
+
+// Helper to invalidate coordinate cache after direct position modification
+function invalidateCache(element: any) {
+  if (!element) return;
+  element._coordsCacheValid = false;
+  if (element.children) {
+    for (const child of element.children) {
+      invalidateCache(child);
+    }
+  }
 }
 
 export async function createApp(session: DoorSession) {
@@ -170,6 +187,9 @@ export async function createApp(session: DoorSession) {
   // Chat log fills from sidebar to right edge
   const { panel: chatPanel, log: chatLog } = createChatLog(screen, SIDEBAR_WIDTH);
 
+  // Connect animation manager to chat log (done later after animationManager is created)
+  // We'll use a deferred connection pattern
+
   // ========== STATUS BAR (at very bottom) ==========
   const statusBar = createStatusBar(screen);
 
@@ -181,6 +201,20 @@ export async function createApp(session: DoorSession) {
 
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
+
+  // ========== FORMAT PICKER ==========
+  const formatPicker = new FormatPicker(screen);
+
+  // ========== ANIMATION MANAGER ==========
+  const animationManager = createAnimationManager({ fps: 10 });
+
+  // Connect animation manager to chat log
+  animationManager.connect({
+    getLineContent: (idx: number) => chatLog.getLine(idx),
+    setLineContent: (idx: number, content: string) => (chatLog as any).setLine?.(idx, content),
+    render: () => screen.render(),
+    getVisibleRange: () => (chatLog as any).getVisibleRange?.() || { start: 0, end: 100 },
+  });
 
   // Wire up emoji button to show emoji picker
   emojiButton.on('press', () => {
@@ -379,7 +413,7 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' {inverse}[Ch]{/inverse} Us ', // Tabs integrated into label
+    label: ' [Ch] Us ', // Tabs: [active] inactive
     border: { type: 'line' },
     style: {
       fg: 'white',
@@ -583,7 +617,7 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' Ch {inverse}[Us]{/inverse} ', // Tabs integrated into label
+    label: ' Ch [Us] ', // Tabs: inactive [active]
     border: { type: 'line' },
     mouse: true,
     clickable: true,  // Enable click events
@@ -618,7 +652,7 @@ export async function createApp(session: DoorSession) {
 
     userList.setItems(items);
     // Keep tabs in label
-    userList.setLabel(` Ch {inverse}[Us]{/inverse} (${onlineUsers.size}) `);
+    userList.setLabel(` Ch [Us] (${onlineUsers.size}) `);
   }
 
   // Function to switch sidebar tabs
@@ -691,7 +725,7 @@ export async function createApp(session: DoorSession) {
     statusBar.position.width = width;
     inputBox.position.width = width - EMOJI_BUTTON_WIDTH;  // Leave space for emoji button
     emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
-    menuBar.position.width = width;
+    menuBar.element.position.width = width;
     commandSuggestions.position.width = width;  // Full width for command suggestions
 
     if (breakpoint === 'small') {
@@ -722,6 +756,18 @@ export async function createApp(session: DoorSession) {
       typingBar.position.left = SIDEBAR_WIDTH;
       typingBar.position.width = chatWidth;
     }
+
+    // Invalidate coordinate cache for all modified elements
+    invalidateCache(statusBar);
+    invalidateCache(inputBox);
+    invalidateCache(emojiButton);
+    invalidateCache(menuBar.element);
+    invalidateCache(commandSuggestions);
+    invalidateCache(chatPanel);
+    invalidateCache(chatLog);
+    invalidateCache(typingBar);
+    invalidateCache(channelList);
+    invalidateCache(userList);
 
     screen.render();
   });
@@ -817,7 +863,8 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       bg: 'green',
-      focus: { bg: 'cyan' },
+      focus: { fg: 'white', bg: 'lightblue' },
+      hover: { fg: 'white', bg: 'lightblue' },
     },
   });
 
@@ -970,8 +1017,68 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Chat log click to focus and show context menu
-  chatLog.on('click', (data: any) => {
+  // Helper to get position for format picker based on selection
+  const getSelectionPosition = (selection: any) => {
+    // Position relative to input box and selection start
+    const inputLeft = (inputBox as any).aleft || 0;
+    const inputTop = (inputBox as any).atop || 0;
+    return {
+      x: inputLeft + 1 + (selection.start || 0),  // +1 for border
+      y: inputTop,  // Top of input box, dialog will appear above
+    };
+  };
+
+  // Auto-show format picker when text is selected (keyboard or mouse)
+  inputBox.on('select', (selection: any) => {
+    if (selection && selection.text && !formatPicker.isVisible()) {
+      formatPicker.show(
+        screen,
+        (format: any) => {
+          // Wrap selected text with format
+          const wrappedText = format.wrap(selection.text);
+          (inputBox as any).replaceSelection?.(wrappedText);
+          inputBox.focus();
+          screen.render();
+        },
+        () => {
+          inputBox.focus();
+          screen.render();
+        },
+        getSelectionPosition(selection)
+      );
+    }
+  });
+
+  // Input box right-click to show format picker (when text is selected)
+  inputBox.on('rightclick', () => {
+    const selection = (inputBox as any).getSelection?.();
+    if (selection && selection.text) {
+      formatPicker.show(
+        screen,
+        (format: any) => {
+          // Wrap selected text with format
+          const wrappedText = format.wrap(selection.text);
+          (inputBox as any).replaceSelection?.(wrappedText);
+          inputBox.focus();
+          screen.render();
+        },
+        () => {
+          inputBox.focus();
+          screen.render();
+        },
+        getSelectionPosition(selection)
+      );
+    }
+  });
+
+  // Chat log left-click to focus
+  chatLog.on('click', () => {
+    chatLog.focus();
+    screen.render();
+  });
+
+  // Chat log right-click to show context menu
+  chatLog.on('rightclick', (data: any) => {
     chatLog.focus();
 
     // Don't show context menu if clicking near the edges (resize handle area)
@@ -995,8 +1102,14 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // User list click to show context menu
-  userList.on('click', (event: any) => {
+  // User list left-click to focus
+  userList.on('click', () => {
+    userList.focus();
+    screen.render();
+  });
+
+  // User list right-click to show context menu
+  userList.on('rightclick', (event: any) => {
     userList.focus();
     const selected = (userList as any).selected;
     const items = (userList as any).items || [];
@@ -1013,8 +1126,25 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Channel list click to focus and show channel context menu
-  channelList.on('click', (event: any) => {
+  // Channel list left-click to select and join channel
+  channelList.on('click', (mouse: any) => {
+    channelList.focus();
+
+    // Calculate item index from click position
+    const listTop = (channelList as any).atop || 0;
+    const borderOffset = 1; // Top border
+    const scrollOffset = (channelList as any).childBase || 0;
+    const clickedRow = (mouse?.y || 0) - listTop - borderOffset + scrollOffset;
+
+    if (clickedRow >= 0 && clickedRow < channelItems.length) {
+      channelList.select(clickedRow);
+      handleChannelSelect(clickedRow);
+    }
+    screen.render();
+  });
+
+  // Channel list right-click to show context menu
+  channelList.on('rightclick', (event: any) => {
     channelList.focus();
     const selected = (channelList as any).selected;
     if (selected !== undefined && channelItems[selected]) {
@@ -1061,33 +1191,34 @@ export async function createApp(session: DoorSession) {
   const typingPreviewLines = new Map<number, string>();
   let typingPreviewLineCount = 0;
 
-  // Helper function to append a line to the log while preserving typing previews
-  function appendLineToLog(line: string) {
-    // Get current log lines and remove typing preview lines
-    // CRITICAL: Use current Map size, not cached count to avoid desync (Issue #2)
-    const currentPreviewCount = typingPreviewLines.size;
-    const logLines = chatLog.getLines();
+  // Track logical chat messages separately (getLines returns wrapped lines which breaks our logic)
+  const chatMessages: string[] = [];
 
-    // Validate slice bounds to prevent duplication (Issue #25)
-    const sliceEnd = Math.max(0, Math.min(logLines.length, logLines.length - currentPreviewCount));
-    const contentLines = logLines.slice(0, sliceEnd);
-
-    // Add the new message
-    contentLines.push(line);
-
-    // Re-add typing preview lines at the end
+  // Helper function to rebuild chat content from logical messages + previews
+  function rebuildChatContent() {
     const previewLines = Array.from(typingPreviewLines.values());
-    const fullContent = [...contentLines, ...previewLines].join('\n');
+    const fullContent = [...chatMessages, ...previewLines].join('\n');
 
-    // Update content in one operation
     chatLog.setContent(fullContent);
     typingPreviewLineCount = previewLines.length;
 
-    // Auto-scroll to bottom if user was already at bottom
-    const currentScroll = chatLog.getScrollPerc();
-    if (currentScroll >= 95) {
-      chatLog.setScrollPerc(100);
+    // Auto-scroll to bottom
+    chatLog.setScrollPerc(100);
+  }
+
+  // Helper function to append a line to the log while preserving typing previews
+  function appendLineToLog(line: string) {
+    // Add to our logical message list
+    chatMessages.push(line);
+
+    // Register animated lines with animation manager
+    const lineIndex = chatMessages.length - 1;
+    if (hasAnimationTags(line)) {
+      animationManager.registerLine(lineIndex, line);
     }
+
+    // Rebuild content with all messages + previews
+    rebuildChatContent();
   }
 
   function updateTypingPreview() {
@@ -1133,41 +1264,20 @@ export async function createApp(session: DoorSession) {
 
     // Display current typing previews in the chat log (inline after last message)
     if (hasChanges) {
-      // Save current scroll position
-      const currentScroll = chatLog.getScrollPerc();
-      const wasAtBottom = currentScroll >= 95; // User was at or near bottom
-
-      // Get current log content and remove previous typing preview lines
-      const logLines = chatLog.getLines();
-      const contentLines = logLines.slice(0, logLines.length - typingPreviewLineCount);
-
-      // Build complete content with typing previews
-      const lines = Array.from(typingPreviewLines.values());
-      const fullContent = [...contentLines, ...lines].join('\n');
-
-      // Update content in one operation to minimize jumping
-      chatLog.setContent(fullContent);
-      typingPreviewLineCount = lines.length;
-
-      // Restore scroll position
-      if (wasAtBottom) {
-        chatLog.setScrollPerc(100);
-      } else {
-        chatLog.setScrollPerc(currentScroll);
-      }
-
+      // Rebuild content from our tracked messages + updated previews
+      rebuildChatContent();
       screen.render();
     }
   }
 
-  // Events and activity now go to chat log
+  // Events and activity now go to chat log (use appendLineToLog for proper tracking)
   function updateEventsFeed(event: string) {
-    chatLog.log(`{gray-fg}[EVENT] ${event}{/gray-fg}`);
+    appendLineToLog(`{gray-fg}[EVENT] ${event}{/gray-fg}`);
     screen.render();
   }
 
   function addActivity(activity: string) {
-    chatLog.log(`{yellow-fg}[${formatTime(new Date())}] ${activity}{/yellow-fg}`);
+    appendLineToLog(`{yellow-fg}[${formatTime(new Date())}] ${activity}{/yellow-fg}`);
     screen.render();
   }
 
@@ -1294,7 +1404,8 @@ export async function createApp(session: DoorSession) {
   const bbsEventHandler = new BBSEventHandler(socket);
   bbsEventHandler.onEvent((event) => {
     const formattedEvent = bbsEventHandler.formatEvent(event);
-    addBBSEvent(chatLog, formattedEvent);
+    // Use appendLineToLog instead of chatLog.add() to maintain chatMessages consistency
+    appendLineToLog(formattedEvent);
     screen.render();
   });
   bbsEventHandler.listen();
@@ -1456,7 +1567,8 @@ export async function createApp(session: DoorSession) {
     getPinnedMessages,
     screen,
     inputBox,
-    cleanup
+    cleanup,
+    showConfirm  // Pass showConfirm for quit confirmation
   );
 
   inputBox.on('submit', createSubmitHandler(
@@ -1496,7 +1608,14 @@ export async function createApp(session: DoorSession) {
     updateStatusBar,
     updateUserTable,
     showFileSharing,
-    updateTypingPreview
+    updateTypingPreview,
+    () => {
+      // Clear chat log - both the tracked messages and the display
+      chatMessages.length = 0;
+      typingPreviewLines.clear();
+      typingPreviewLineCount = 0;
+      chatLog.setContent('');
+    }
   ));
 
   // Live typing indicator and command autocomplete
@@ -1583,6 +1702,106 @@ export async function createApp(session: DoorSession) {
   const getSidebarTab = () => sidebarTab;
   const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar);
 
+  // F5 / Ctrl+Shift+F: Format picker (requires text selection)
+  const showFormatPicker = () => {
+    if (formatPicker.isVisible()) return;
+    const selection = (inputBox as any).getSelection?.();
+    if (selection && selection.text) {
+      formatPicker.show(
+        screen,
+        (format: any) => {
+          const wrappedText = format.wrap(selection.text);
+          (inputBox as any).replaceSelection?.(wrappedText);
+          inputBox.focus();
+          screen.render();
+        },
+        () => {
+          inputBox.focus();
+          screen.render();
+        },
+        getSelectionPosition(selection)
+      );
+    } else {
+      addSystemMessage('Select text first (Shift+Arrow keys), then press F5 for formatting');
+      inputBox.focus();
+    }
+  };
+  screen.key(['f5'], showFormatPicker);
+
+  // ========== MENU BAR CLICK HANDLERS ==========
+  menuBar.setHandlers({
+    onHelp: () => showHelp(),
+    onList: () => {
+      // Toggle sidebar visibility (same as F2)
+      if (sidebarTab === 'channels') {
+        channelList.toggle();
+      } else {
+        userList.toggle();
+      }
+      screen.render();
+    },
+    onChTab: () => {
+      // Switch between channels and users tab (same as F3)
+      switchSidebarTab(sidebarTab === 'channels' ? 'users' : 'channels');
+    },
+    onEmoji: () => {
+      // Show emoji picker (same as F4)
+      if (!emojiPicker.isVisible()) {
+        emojiPicker.show(
+          screen,
+          (emoji: any) => {
+            const currentText = inputBox.getValue();
+            inputBox.setValue(currentText + emoji.code + ' ');
+            inputBox.focus();
+            screen.render();
+          },
+          () => {
+            inputBox.focus();
+            screen.render();
+          }
+        );
+      }
+    },
+    onFiles: () => showFileSharing(),
+    onPins: () => {
+      getPinnedMessages(socket, state.currentChannel);
+      screen.render();
+    },
+    onSearch: () => {
+      // Open search overlay (same as Ctrl+F)
+      if (currentSearchOverlayRef.current) currentSearchOverlayRef.current.destroy();
+      currentSearchOverlayRef.current = createSearchOverlay(
+        screen,
+        (query: string, filters: any) => {
+          if (query && query.length >= 2) {
+            searchMessages(socket, query, {
+              roomId: state.currentChannel,
+              ...filters
+            });
+          } else {
+            addSystemMessage('Search query must be at least 2 characters');
+          }
+        },
+        () => {
+          if (currentSearchOverlayRef.current) {
+            currentSearchOverlayRef.current.destroy();
+            currentSearchOverlayRef.current = null;
+          }
+          inputBox.focus();
+        }
+      );
+      screen.render();
+    },
+    onSettings: () => showSettingsOverlay(),
+    onQuit: () => {
+      showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {
+        if (confirmed) {
+          cleanup();
+        }
+      });
+    },
+  });
+
   // Additional keyboard shortcuts
   // Ctrl+F: Open search overlay
   screen.key(['C-f'], () => {
@@ -1665,6 +1884,12 @@ export async function createApp(session: DoorSession) {
     // Cleanup voice channel
     voiceChannel.destroy();
 
+    // Cleanup animation manager
+    animationManager.destroy();
+
+    // Cleanup format picker
+    formatPicker.destroy();
+
     // Remove moderation event listeners
     socket.removeAllListeners('chat:kicked');
     socket.removeAllListeners('chat:banned');
@@ -1731,6 +1956,9 @@ export async function createApp(session: DoorSession) {
       await loader.delay(500);
       loader.hide();
       loader.destroy();  // Completely remove loader and overlay from screen
+
+      // Start animation manager for animated text effects
+      animationManager.start();
 
       // Force initial layout calculation to ensure full-width elements are properly sized
       // Emit a resize event to trigger the responsive layout manager

@@ -3,8 +3,9 @@
  * Three-panel interface: Categories | Emojis | Preview
  */
 
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box, List, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { EMOJIS, getEmojisByCategory, getCategories, Emoji } from '../utils/emojis';
 
 export class EmojiPicker {
@@ -48,7 +49,7 @@ export class EmojiPicker {
     this.overlay = createBox({
       parent: screen,
       bottom: 5,  // Above status bar and input
-      left: screenWidth - 42,  // Position from left to stay anchored
+      right: 2,   // Position from right edge (more reliable than calculating left)
       width: 40,  // Compact width for 2 panels only
       height: 18,  // Compact height
       label: ' Emoji Picker [Tab | Enter] ',
@@ -66,33 +67,28 @@ export class EmojiPicker {
       zIndex: 1000,
     });
 
-    // Close button [X] in top-right corner
-    this.closeButton = createButton({
+    // Close button [X] in top-right corner - use blessed.box for borderless button
+    this.closeButton = blessed.box({
       parent: this.overlay,
       top: 0,
       right: 1,
       width: 3,
       height: 1,
-      content: 'X',
-      align: 'center',
+      content: '[X]',
       mouse: true,
       clickable: true,
       style: {
         fg: 'red',
         bg: 'black',
-        focus: {
-          fg: 'black',
-          bg: 'red'
-        },
         hover: {
-          fg: 'black',
+          fg: 'white',
           bg: 'red'
         }
       },
-    });
+    }) as unknown as Button;
 
     // Close on button click
-    this.closeButton.on('press', () => {
+    this.closeButton.on('click', () => {
       if (this.onCancel) {
         this.onCancel();
       }
@@ -100,12 +96,13 @@ export class EmojiPicker {
     });
 
     // Category list (left panel)
+    // Height: overlay is 18, minus 2 for border, minus 1 for close button row = 15
     this.categoryList = createList({
       parent: this.overlay,
-      top: 0,
+      top: 1,  // Below close button row
       left: 0,
       width: 12,
-      height: '100%',
+      height: 15,  // Explicit height (18 - 2 border - 1 close row)
       label: ' Category ',
       border: { type: 'line', fg: 'green' },
       mouse: true,
@@ -115,17 +112,20 @@ export class EmojiPicker {
         fg: 'white',
         bg: 'black',
         selected: { fg: 'black', bg: 'green' },
-      },
+        item: {
+          hover: { fg: 'black', bg: 'green' },
+        },
+      } as any,
       items: ['Emotions', 'Actions', 'Symbols', 'Special'],
     });
 
     // Emoji list (right panel - full width)
     this.emojiList = createList({
       parent: this.overlay,
-      top: 0,
+      top: 1,  // Below close button row
       left: 12,
-      width: 28,  // Wider since no preview panel
-      height: '100%',
+      width: 26,  // Adjusted width
+      height: 15,  // Explicit height (18 - 2 border - 1 close row)
       label: ' Emojis ',
       border: { type: 'line', fg: 'cyan' },
       mouse: true,
@@ -139,8 +139,11 @@ export class EmojiPicker {
       style: {
         fg: 'white',
         bg: 'black',
-        selected: { fg: 'black', bg: 'cyan' }
-      },
+        selected: { fg: 'black', bg: 'cyan' },
+        item: {
+          hover: { fg: 'black', bg: 'cyan' },
+        },
+      } as any,
     });
 
     // Setup event handlers

@@ -1,3 +1,13 @@
+// Helper to invalidate coordinate cache after direct position modification
+function invalidateCache(element: any) {
+  element._coordsCacheValid = false;
+  if (element.children) {
+    for (const child of element.children) {
+      invalidateCache(child);
+    }
+  }
+}
+
 export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: () => string, chl: any, ul: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any) {
   let sv = true;
 
@@ -12,15 +22,21 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
     (dc as any).position.left = lo;
     (dc as any).position.width = wd;
 
+    // Invalidate coordinate cache for modified elements
+    invalidateCache(cl);
+    invalidateCache(dc);
+
     // Update chat log width inside the panel (panel width minus 2 for borders)
     if (chatLog) {
       (chatLog as any).position.width = wd - 2;
+      invalidateCache(chatLog);
     }
 
     // Update typing bar
     if (typingBar) {
       (typingBar as any).position.left = lo;
       (typingBar as any).position.width = wd;
+      invalidateCache(typingBar);
     }
 
     if (sv) {

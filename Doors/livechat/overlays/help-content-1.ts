@@ -22,11 +22,16 @@ export const HELP_PART_1 = `{bold}{cyan-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS
 {cyan-fg}Window Controls:{/cyan-fg}
   F2            Toggle sidebar visibility
   F3            Switch sidebar tab (Channels/Users)
-  F5            Create/join drawing channel
+  F4 / Ctrl+E   Open emoji picker
+  F5            Format selected text (colors/effects)
   F6            File sharing browser
-  F7            Show pinned messages
   Tab           Cycle focus between panels
   Ctrl+C/Q      Quit (with confirmation)
+
+{cyan-fg}Text Formatting:{/cyan-fg}
+  Shift+Arrow   Select text in input box
+  F5            Open format picker (with text selected)
+  Right-click   Open format picker (with text selected)
 
 {cyan-fg}Voice Channels:{/cyan-fg}
   Click [V]         Join/leave voice channel

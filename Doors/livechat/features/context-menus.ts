@@ -143,5 +143,24 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
 
   cm.key(['escape'], hcm);
 
+  // Close context menu when clicking outside of it
+  s.on('mouse', (data: any) => {
+    if (data.action === 'mousedown' && !cm.hidden) {
+      // Get context menu bounds
+      const menuLeft = (cm as any).left || 0;
+      const menuTop = (cm as any).top || 0;
+      const menuWidth = (cm as any).width || 22;
+      const menuHeight = (cm as any).height || 6;
+
+      // Check if click is outside the menu
+      const isOutside = data.x < menuLeft || data.x >= menuLeft + menuWidth ||
+                        data.y < menuTop || data.y >= menuTop + menuHeight;
+
+      if (isOutside) {
+        hcm();
+      }
+    }
+  });
+
   return { contextMenu: cm, showContextMenu: scm, hideContextMenu: hcm };
 }

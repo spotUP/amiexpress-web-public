@@ -96,8 +96,8 @@ export class DisconnectionModal {
       style: {
         fg: 'white',
         bg: 'green',
-        focus: { fg: 'black', bg: 'cyan' },
-        hover: { fg: 'black', bg: 'cyan' },
+        focus: { fg: 'white', bg: 'lightblue' },
+        hover: { fg: 'white', bg: 'lightblue' },
       },
     });
 
@@ -115,8 +115,8 @@ export class DisconnectionModal {
       style: {
         fg: 'white',
         bg: 'red',
-        focus: { fg: 'black', bg: 'cyan' },
-        hover: { fg: 'black', bg: 'cyan' },
+        focus: { fg: 'white', bg: 'lightblue' },
+        hover: { fg: 'white', bg: 'lightblue' },
       },
     });
 

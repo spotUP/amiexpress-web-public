@@ -70,111 +70,118 @@ export class VoiceControlBar {
 
   private createUI(parent: any) {
     // Bottom control bar container (Discord-style: bottom left corner)
+    // Position above status bar (height 1) and input box (height 3)
     this.container = blessed.box({
       parent,
-      bottom: 0,
+      bottom: 4,  // Above status bar (1) and input box (3)
       left: 0,
-      width: 40,
+      width: 42,
       height: 3,
+      tags: true,
       style: {
         fg: 'white',
-        bg: '#2f3136', // Discord dark gray
+        bg: 'black',
         border: {
-          fg: 'cyan',
+          fg: 'green',
         },
       },
       border: {
         type: 'line',
       },
+      label: ' Voice ',
       hidden: true,
     });
+
+    // Set high z-index to appear above other elements
+    (this.container as any).zi = 9999;
 
     // User status with speaking indicator
     this.statusBox = blessed.box({
       parent: this.container,
       top: 0,
       left: 1,
-      width: 15,
+      width: 14,
       height: 1,
-      content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 10)}`,
+      tags: true,
+      content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 8)}`,
       style: {
         fg: 'white',
-        bg: 'transparent',
+        bg: 'black',
       },
     });
 
-    // Mute button
-    this.muteButton = blessed.button({
+    // Mute button [M] - shows mic status
+    this.muteButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 17,
+      left: 15,
       width: 5,
       height: 1,
-      content: '[M]',
+      tags: true,
+      content: '{green-fg}[M]{/green-fg}',
+      mouse: true,
+      clickable: true,
       style: {
         fg: 'green',
-        bg: 'transparent',
-        focus: {
-          fg: 'cyan',
-        },
+        bg: 'black',
         hover: {
-          fg: 'cyan',
+          fg: 'white',
+          bg: 'green',
         },
       },
-      mouse: true,
-    });
+    }) as any;
 
-    this.muteButton.on('press', () => {
+    this.muteButton.on('click', () => {
       this.toggleMute();
     });
 
-    // Video button
-    this.videoButton = blessed.button({
+    // Video button [V] - shows camera status
+    this.videoButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 23,
+      left: 21,
       width: 5,
       height: 1,
-      content: '[V]',
+      tags: true,
+      content: '{gray-fg}[V]{/gray-fg}',
+      mouse: true,
+      clickable: true,
       style: {
         fg: 'gray',
-        bg: 'transparent',
-        focus: {
-          fg: 'cyan',
-        },
+        bg: 'black',
         hover: {
-          fg: 'cyan',
+          fg: 'white',
+          bg: 'cyan',
         },
       },
-      mouse: true,
-    });
+    }) as any;
 
-    this.videoButton.on('press', () => {
+    this.videoButton.on('click', () => {
       this.toggleVideo();
     });
 
-    // Disconnect button
-    this.disconnectButton = blessed.button({
+    // Disconnect button [X] Leave
+    this.disconnectButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 29,
-      width: 9,
+      left: 27,
+      width: 12,
       height: 1,
-      content: '[X] Leave',
+      tags: true,
+      content: '{red-fg}[X] Leave{/red-fg}',
+      mouse: true,
+      clickable: true,
       style: {
         fg: 'red',
-        bg: 'transparent',
-        focus: {
-          fg: 'bright-red',
-        },
+        bg: 'black',
         hover: {
-          fg: 'bright-red',
+          fg: 'white',
+          bg: 'red',
         },
       },
-      mouse: true,
-    });
+    }) as any;
 
-    this.disconnectButton.on('press', () => {
+    this.disconnectButton.on('click', () => {
       this.disconnect();
     });
   }
@@ -190,18 +197,19 @@ export class VoiceControlBar {
   }
 
   private toggleMute() {
-    if (!this.ctx?.audio) return;
-
-    this.isMuted = !this.isMuted;
-    this.ctx.audio.setMuted(this.isMuted);
-
-    // Update button color
-    if (this.isMuted) {
-      this.muteButton.style.fg = 'red';
-      this.muteButton.setContent('[M]');
+    if (!this.ctx?.audio) {
+      // Toggle local state even without audio API
+      this.isMuted = !this.isMuted;
     } else {
-      this.muteButton.style.fg = 'green';
-      this.muteButton.setContent('[M]');
+      this.isMuted = !this.isMuted;
+      this.ctx.audio.setMuted(this.isMuted);
+    }
+
+    // Update button with colored tags
+    if (this.isMuted) {
+      this.muteButton.setContent('{red-fg}[M]{/red-fg}');
+    } else {
+      this.muteButton.setContent('{green-fg}[M]{/green-fg}');
     }
 
     // Notify server
@@ -213,13 +221,11 @@ export class VoiceControlBar {
   private toggleVideo() {
     this.hasVideo = !this.hasVideo;
 
-    // Update button color
+    // Update button with colored tags
     if (this.hasVideo) {
-      this.videoButton.style.fg = 'green';
-      this.videoButton.setContent('[V]');
+      this.videoButton.setContent('{green-fg}[V]{/green-fg}');
     } else {
-      this.videoButton.style.fg = 'gray';
-      this.videoButton.setContent('[V]');
+      this.videoButton.setContent('{gray-fg}[V]{/gray-fg}');
     }
 
     // Call callback to update video grid
@@ -245,9 +251,9 @@ export class VoiceControlBar {
 
     // Discord-style: green ring when speaking
     if (this.isSpeaking) {
-      this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 10)}`);
+      this.statusBox.setContent(`{green-fg}[*]{/green-fg} ${this.username.substring(0, 8)}`);
     } else {
-      this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 10)}`);
+      this.statusBox.setContent(`{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 8)}`);
     }
 
     this.screen.render();
@@ -255,6 +261,7 @@ export class VoiceControlBar {
 
   public show() {
     this.container.show();
+    this.container.setFront();  // Bring to front of other elements
     this.screen.render();
   }
 
@@ -469,89 +476,111 @@ export class EnhancedVoiceChannel {
     }
 
     try {
-      // Join voice channel on server
-      this.socket.emit('voice:join-channel', { channelId }, async (response: any) => {
-        if (response.success) {
-          this.currentVoiceChannel = channelId;
+      // Helper to complete the join (called on success or timeout)
+      const completeJoin = async (participants?: any[]) => {
+        this.currentVoiceChannel = channelId;
 
-          // Create control bar
-          if (!this.controlBar) {
-            this.controlBar = new VoiceControlBar({
-              parent: this.screen,
-              screen: this.screen,
-              socket: this.socket,
-              ctx: this.ctx,
-              username: this.username,
-              onDisconnect: () => {
-                this.leaveVoiceChannel();
-              },
-              onVideoToggle: () => {
-                this.toggleVideo();
-              },
-            });
-          }
-
-          // Create video grid
-          if (!this.videoGrid) {
-            // Use chatPanel as parent if available, otherwise use screen
-            const gridParent = this.chatPanel || this.screen;
-
-            this.videoGrid = new VideoGrid({
-              parent: gridParent,
-              screen: this.screen,
-              left: 0,
-              top: 0,
-              width: '100%',
-              height: '100%',
-              currentUserId: this.userId,
-              currentUsername: this.username,
-            });
-
-            // Start hidden until someone enables video
-            this.videoGrid.hide();
-          }
-
-          // Add current user to video grid
-          this.videoGrid.addParticipant({
-            userId: this.userId,
+        // Create control bar
+        if (!this.controlBar) {
+          this.controlBar = new VoiceControlBar({
+            parent: this.screen,
+            screen: this.screen,
+            socket: this.socket,
+            ctx: this.ctx,
             username: this.username,
-            socketId: '',
-            isMuted: false,
-            hasVideo: false,
-            hasScreenShare: false,
-            isSpeaking: false,
-            audioLevel: 0,
+            onDisconnect: () => {
+              this.leaveVoiceChannel();
+            },
+            onVideoToggle: () => {
+              this.toggleVideo();
+            },
+          });
+        }
+
+        // Create video grid
+        if (!this.videoGrid) {
+          // Use chatPanel as parent if available, otherwise use screen
+          const gridParent = this.chatPanel || this.screen;
+
+          this.videoGrid = new VideoGrid({
+            parent: gridParent,
+            screen: this.screen,
+            left: 0,
+            top: 0,
+            width: '100%',
+            height: '100%',
+            currentUserId: this.userId,
+            currentUsername: this.username,
           });
 
-          // Add existing participants from response
-          if (response.participants) {
-            for (const p of response.participants) {
-              if (p.userId !== this.userId) {
-                this.videoGrid.addParticipant({
-                  userId: p.userId,
-                  username: p.username,
-                  socketId: '',
-                  isMuted: p.isMuted || false,
-                  hasVideo: p.hasVideo || false,
-                  hasScreenShare: p.hasScreenShare || false,
-                  isSpeaking: false,
-                  audioLevel: 0,
-                });
-              }
+          // Start hidden until someone enables video
+          this.videoGrid.hide();
+        }
+
+        // Add current user to video grid
+        this.videoGrid.addParticipant({
+          userId: this.userId,
+          username: this.username,
+          socketId: '',
+          isMuted: false,
+          hasVideo: false,
+          hasScreenShare: false,
+          isSpeaking: false,
+          audioLevel: 0,
+        });
+
+        // Add existing participants if provided
+        if (participants) {
+          for (const p of participants) {
+            if (p.userId !== this.userId) {
+              this.videoGrid.addParticipant({
+                userId: p.userId,
+                username: p.username,
+                socketId: '',
+                isMuted: p.isMuted || false,
+                hasVideo: p.hasVideo || false,
+                hasScreenShare: p.hasScreenShare || false,
+                isSpeaking: false,
+                audioLevel: 0,
+              });
             }
           }
+        }
 
-          // Start audio streaming
-          await this.startAudioStreaming();
+        // Start audio streaming
+        await this.startAudioStreaming();
 
-          // Show control bar
-          this.controlBar.show();
+        // Show control bar
+        this.controlBar.show();
 
-          if (this.onJoinVoiceCallback) {
-            this.onJoinVoiceCallback(channelId);
-          }
+        if (this.onJoinVoiceCallback) {
+          this.onJoinVoiceCallback(channelId);
+        }
+      };
+
+      // Track if callback was received
+      let callbackReceived = false;
+
+      // Join voice channel on server with timeout fallback
+      this.socket.emit('voice:join-channel', { channelId }, async (response: any) => {
+        callbackReceived = true;
+        if (response && response.success) {
+          await completeJoin(response.participants);
+        } else {
+          // Server responded but denied - still show UI for demo/testing
+          console.warn('Voice channel join denied by server, using local mode');
+          await completeJoin();
         }
       });
+
+      // Timeout: If server doesn't respond in 2 seconds, proceed anyway (local/demo mode)
+      setTimeout(async () => {
+        if (!callbackReceived) {
+          console.warn('Voice channel server timeout, using local mode');
+          await completeJoin();
+        }
+      }, 2000);
+
     } catch (error: any) {
       console.error('Failed to join voice channel:', error);
     }
