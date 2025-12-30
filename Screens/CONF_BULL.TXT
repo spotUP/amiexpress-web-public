@@ -1,0 +1,11 @@
+[34m------------------------------------------------------------------------------[0m
+[33m                       CONFERENCE BULLETIN[0m
+[34m------------------------------------------------------------------------------[0m
+
+[32mWelcome to this conference![0m
+
+This is the default conference bulletin. Each conference can have its own
+bulletin file in Conf#/Screens/CONF_BULL.TXT to display conference-specific
+information to users.
+
+[34m------------------------------------------------------------------------------[0m

@@ -1,1 +1,15 @@
-Placeholder screen BULL.TXT
+[36m==============================================================================[0m
+[33m                         SYSTEM BULLETIN[0m
+[36m==============================================================================[0m
+
+[32mWelcome to AmiExpress Web BBS![0m
+
+This is the system-wide bulletin board. The sysop can post important
+announcements and news here that all users will see upon login.
+
+[33mRecent Updates:[0m
+[37m- AmiExpress Web is running the latest build
+- Conference scanning is now fully operational
+- 68K door emulation supports 68020 instructions[0m
+
+[36m==============================================================================[0m
