@@ -313,6 +313,10 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
   socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
 
+  // Suppress menu prompts during conference scan - doors complete but we don't want
+  // to show menu after each one, only after the entire scan finishes
+  session.inConfScan = true;
+
   // express.e:28086-28114 - FOR conf:=1 TO cmds.numConf
   const numConf = _conferences?.length || 1;
   let mystat = 0; // RESULT_SUCCESS
@@ -366,6 +370,9 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   }
 
   console.log('[confScan] All conferences scanned');
+
+  // Clear the confScan flag - menu prompts can resume now
+  session.inConfScan = false;
 
   // express.e:28149 - ENDPROC RESULT_SUCCESS
   return 0; // RESULT_SUCCESS

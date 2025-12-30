@@ -22,6 +22,23 @@ import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
  * forceMenuDisplay bypasses expert-mode suppression (used by ? command).
  */
 export async function displayMainMenu(socket: any, session: BBSSession, forceMenuDisplay: boolean = false) {
+  // Skip during conference scan - doors complete after each conference but we only
+  // want to show the menu once after the entire scan finishes
+  if ((session as any).inConfScan && !forceMenuDisplay) {
+    console.log('[menu] displayMainMenu SKIPPED (in confScan)');
+    return;
+  }
+
+  // Debounce: prevent duplicate menu displays within 500ms
+  // This handles race conditions between door completion and display flow advancement
+  const now = Date.now();
+  const lastMenuTime = (session as any)._lastMainMenuTime || 0;
+  if (now - lastMenuTime < 500 && !forceMenuDisplay) {
+    console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - lastMenuTime, 'ms ago)');
+    return;
+  }
+  (session as any)._lastMainMenuTime = now;
+
   const processOlmMessageQueue = getProcessOlmMessageQueue();
   const SCREEN_MENU = getScreenMenu();
   const relConfNumber = session.relConfNum || 1;
@@ -99,6 +116,23 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
  * Shows BBS name, conference info, and time remaining
  */
 export function displayMenuPrompt(socket: any, session: BBSSession) {
+  // Skip during conference scan - doors complete after each conference but we only
+  // want to show the menu prompt once after the entire scan finishes
+  if ((session as any).inConfScan) {
+    console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
+    return;
+  }
+
+  // Debounce: prevent duplicate prompts within 500ms
+  // This handles race conditions between door completion and display flow advancement
+  const now = Date.now();
+  const lastPromptTime = (session as any)._lastMenuPromptTime || 0;
+  if (now - lastPromptTime < 500) {
+    console.log('[menu] displayMenuPrompt SKIPPED (debounce - last prompt was', now - lastPromptTime, 'ms ago)');
+    return;
+  }
+  (session as any)._lastMenuPromptTime = now;
+
   console.log('[menu] displayMenuPrompt called');
 
   const config = getConfig();
