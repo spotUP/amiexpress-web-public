@@ -999,7 +999,18 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
           const userBaud = user.baud || 0;
           session.modemBps = userBaud;
           session.modemEmulationEnabled = userBaud > 0;
+
+          // Install modem speed emulator (wraps socket.emit for throttled output)
+          const { getModemEmulator } = require('../utils/modem-emulator.util');
+          const modemEmulator = getModemEmulator(socket);
+          modemEmulator.install();
+          if (userBaud > 0) {
+            modemEmulator.enable(userBaud);
+            console.log(`[LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.username}`);
+          }
+
           // Install ANSI filter to strip codes for ANSI-disabled terminals
+          // Note: This must be installed AFTER modem emulator so ANSI filter runs first
           if (!(socket as any)._ansiFilterInstalled) {
             const originalEmit = socket.emit.bind(socket);
             socket.emit = ((event: string, ...args: any[]) => {

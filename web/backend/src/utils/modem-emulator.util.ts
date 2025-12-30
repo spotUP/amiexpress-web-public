@@ -1,0 +1,241 @@
+/**
+ * Modem Speed Emulator
+ *
+ * Throttles terminal output to simulate classic modem speeds.
+ * Queues output and sends it at the configured baud rate.
+ */
+
+import { Socket } from 'socket.io';
+
+export interface ModemEmulatorOptions {
+  bps: number;  // Bits per second (1200, 2400, 9600, etc.)
+}
+
+export class ModemEmulator {
+  private socket: Socket;
+  private bps: number = 0;
+  private bytesPerSecond: number = 0;
+  private queue: string[] = [];
+  private processing: boolean = false;
+  private enabled: boolean = false;
+  private directEmit: (event: string, ...args: any[]) => boolean;  // The raw socket emit, bypassing all wrappers
+  private startTime: bigint = BigInt(0);
+  private bytesSent: number = 0;
+
+  constructor(socket: Socket) {
+    this.socket = socket;
+    // Store the TRUE original emit before any wrappers
+    this.directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
+    if (!(socket as any)._directEmit) {
+      (socket as any)._directEmit = this.directEmit;
+    }
+  }
+
+  /**
+   * Enable modem emulation at specified baud rate
+   */
+  enable(bps: number): void {
+    this.bps = bps;
+    // 10 bits per byte (1 start + 8 data + 1 stop)
+    this.bytesPerSecond = Math.max(1, Math.floor(bps / 10));
+    this.enabled = bps > 0;
+    this.startTime = process.hrtime.bigint();
+    this.bytesSent = 0;
+
+    console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.enabled}, bytesPerSecond=${this.bytesPerSecond}`);
+  }
+
+  /**
+   * Disable modem emulation (full speed)
+   */
+  disable(): void {
+    this.enabled = false;
+    this.bps = 0;
+    this.bytesPerSecond = 0;
+    // Flush any remaining queue immediately
+    this.flushImmediate();
+  }
+
+  /**
+   * Check if emulation is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Get current baud rate
+   */
+  getBps(): number {
+    return this.bps;
+  }
+
+  /**
+   * Queue data for throttled output
+   */
+  write(data: string): void {
+    if (!this.enabled) {
+      // No throttling - send immediately
+      this.directEmit('ansi-output', data);
+      return;
+    }
+
+    // Queue the data
+    this.queue.push(data);
+
+    // Start processing if not already
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Flush queue immediately (for disable/cleanup)
+   */
+  private flushImmediate(): void {
+    while (this.queue.length > 0) {
+      const data = this.queue.shift()!;
+      this.directEmit('ansi-output', data);
+    }
+  }
+
+  /**
+   * Process queue with throttling
+   */
+  private async processQueue(): Promise<void> {
+    if (this.processing) return;
+    this.processing = true;
+
+    while (this.queue.length > 0 && this.enabled) {
+      const data = this.queue.shift()!;
+      await this.sendThrottled(data);
+    }
+
+    this.processing = false;
+  }
+
+  /**
+   * Send data with modem-speed throttling
+   */
+  private async sendThrottled(payload: string): Promise<void> {
+    if (!this.enabled || this.bytesPerSecond <= 0) {
+      this.directEmit('ansi-output', payload);
+      return;
+    }
+
+    // Tokenize ANSI so we never split escape sequences
+    const tokens = this.tokenizeAnsi(payload);
+
+    for (const tok of tokens) {
+      const buf = Buffer.from(tok, 'utf-8');
+      const isEscape = tok.startsWith('\x1b');
+
+      if (isEscape) {
+        // Send ANSI escape sequences immediately (they're control codes)
+        this.directEmit('ansi-output', tok);
+        continue;
+      }
+
+      // Send visible characters with throttling
+      let offset = 0;
+      while (offset < buf.length) {
+        const now = process.hrtime.bigint();
+        const elapsedMs = Number(now - this.startTime) / 1_000_000;
+        const allowedBytes = Math.floor(this.bytesPerSecond * (elapsedMs / 1000));
+        const available = Math.max(0, allowedBytes - this.bytesSent);
+
+        if (available <= 0) {
+          // Wait a bit for more budget
+          await this.sleep(5);
+          continue;
+        }
+
+        // Send a chunk (up to available budget, max 64 chars at a time for smoother output)
+        const chunkSize = Math.min(available, buf.length - offset, 64);
+        const chunk = buf.slice(offset, offset + chunkSize).toString('utf-8');
+        this.directEmit('ansi-output', chunk);
+        offset += chunkSize;
+        this.bytesSent += chunkSize;
+      }
+    }
+  }
+
+  /**
+   * Tokenize string to separate ANSI escape sequences
+   */
+  private tokenizeAnsi(payload: string): string[] {
+    const tokens: string[] = [];
+    const ansiRegex = /\x1b\[[0-9;?]*[A-Za-z]/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = ansiRegex.exec(payload)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push(payload.slice(lastIndex, match.index));
+      }
+      tokens.push(match[0]);
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < payload.length) {
+      tokens.push(payload.slice(lastIndex));
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Install modem emulator as socket.emit wrapper
+   * This intercepts all ansi-output events and throttles them
+   */
+  install(): void {
+    const self = this;
+
+    // Only wrap if not already wrapped
+    if ((this.socket as any)._modemEmulatorInstalled) {
+      console.log(`[ModemEmulator] install() skipped - already installed`);
+      return;
+    }
+
+    console.log(`[ModemEmulator] install() - wrapping socket.emit`);
+
+    // We use directEmit which was stored at construction time
+    // This ensures we always send to the real socket
+    this.socket.emit = ((event: string, ...args: any[]) => {
+      if (event === 'ansi-output' && self.enabled && args.length > 0) {
+        const data = args[0];
+        if (typeof data === 'string') {
+          // Log first intercept to confirm it's working (don't spam logs)
+          if (!self.processing) {
+            console.log(`[ModemEmulator] Intercepting ansi-output (${data.length} bytes), throttling at ${self.bps} bps`);
+          }
+          self.write(data);
+          return true;
+        }
+      }
+      return self.directEmit(event, ...args);
+    }) as any;
+
+    (this.socket as any)._modemEmulatorInstalled = true;
+    (this.socket as any)._modemEmulator = this;
+    console.log(`[ModemEmulator] install() complete`);
+  }
+}
+
+/**
+ * Get or create ModemEmulator for a socket
+ */
+export function getModemEmulator(socket: Socket): ModemEmulator {
+  if ((socket as any)._modemEmulator) {
+    return (socket as any)._modemEmulator;
+  }
+  const emulator = new ModemEmulator(socket);
+  return emulator;
+}

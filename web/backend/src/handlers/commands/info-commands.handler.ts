@@ -1117,6 +1117,19 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
   await db.updateUser(session.user.id, { baud: bps });
   session.user.baud = bps;
 
+  // Update modem emulator with new baud rate
+  const { getModemEmulator } = require('../../utils/modem-emulator.util');
+  const modemEmulator = getModemEmulator(socket);
+  // Ensure modem emulator is installed (might not be if user started with baud=0)
+  modemEmulator.install();
+  if (bps > 0) {
+    modemEmulator.enable(bps);
+    console.log(`[W Command] Modem emulation set to ${bps} bps`);
+  } else {
+    modemEmulator.disable();
+    console.log(`[W Command] Modem emulation disabled (full speed)`);
+  }
+
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }

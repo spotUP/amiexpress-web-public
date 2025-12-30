@@ -215,7 +215,9 @@ function detectEncoding(buffer: Buffer, filePath: string, sauceInfo: SauceInfo):
     }
 
     // CP437 box-drawing and block characters (very common in PC ANSI)
-    if (byte >= 0xB3 && byte <= 0xDA) {
+    // Exclude ISO-8859-1 fractions: 0xBC (¼), 0xBD (½), 0xBE (¾)
+    // These are commonly used in Amiga ANSI art as decorative characters
+    if (byte >= 0xB3 && byte <= 0xDA && byte !== 0xBC && byte !== 0xBD && byte !== 0xBE) {
       cp437Score += 3; // Strong indicator
     }
     // CP437 shading characters
@@ -225,6 +227,12 @@ function detectEncoding(buffer: Buffer, filePath: string, sauceInfo: SauceInfo):
     // CP437 block elements
     if (byte >= 0xDB && byte <= 0xDF) {
       cp437Score += 3;
+    }
+
+    // ISO-8859-1 fraction characters (common in Amiga ANSI art)
+    // 0xBC = ¼, 0xBD = ½, 0xBE = ¾
+    if (byte === 0xBC || byte === 0xBD || byte === 0xBE) {
+      latin1Score += 3; // Strong indicator for ISO-8859-1
     }
 
     // ISO-8859-1 accented letters (common in European text)
@@ -2215,7 +2223,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Skip auto-pagination for flow screens; rely on explicit ~SP/pauses instead.
     const allowPagination = !isFlowScreen && slowmoSpeed === 0;
 
-    if (slowmoSpeed !== 0) {
+    // Skip slowmo if wipe animation is active - wipes handle their own timing
+    if (slowmoSpeed !== 0 && !hasWipeAnimation) {
       await emitSlowmoFrame(parsed);
 
       if (session.lastScreenHadPause) {
@@ -2240,7 +2249,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       return true;
     }
 
-  if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight) {
+  // Skip pagination if wipe animation is active - wipes handle their own display
+  if (allowPagination && !session.lastScreenHadPause && lines.length > pageHeight && !hasWipeAnimation) {
     session.paginatedScreen = {
       lines,
       nextIndex: pageSize,
@@ -2259,12 +2269,20 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Screen Wipe Animation Playback
     // If a wipe animation is detected, generate and send frames instead of direct output
     if (hasWipeAnimation && wipeResult.wipeType) {
+      console.log(`[WIPE] Starting wipe animation: ${wipeResult.wipeType}`);
       screenDebug(`[displayScreen] Playing wipe animation: ${wipeResult.wipeType}`);
 
       // Generate animation frames
       const wipeFrames = getWipeFrames(wipeResult.wipeType, parsed);
+      console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
+
+      // Get direct socket emit (bypasses modem emulator wrapper if installed)
+      // This ensures wipe animation controls its own timing without modem interference
+      const directSocketEmit = (socket as any)._directEmit || socket.emit.bind(socket);
 
       // Play each frame with timing
+      // IMPORTANT: We emit directly to socket (bypass modem emulator) and use
+      // setImmediate to yield to event loop, allowing socket buffer to flush
       for (let i = 0; i < wipeFrames.length; i++) {
         const frame = wipeFrames[i];
         const isLastFrame = i === wipeFrames.length - 1;
@@ -2275,15 +2293,20 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
           frame.content +    // Wipe frame content (includes clear/positioning)
           (isLastFrame ? '\x1b[0m' + SHOW_CURSOR : ''); // Reset and show cursor on last frame
 
-        // Emit frame
-        await emitWithModem(frameContent);
+        // Emit frame directly (bypass modem emulator)
+        directSocketEmit(eventName, frameContent);
 
-        // Delay before next frame (skip delay on last frame)
+        // Yield to event loop to flush socket buffer before waiting
+        await new Promise(resolve => setImmediate(resolve));
+
+        // Delay before next frame (minimum 50ms for visibility)
         if (!isLastFrame) {
-          await new Promise(resolve => setTimeout(resolve, frame.delay));
+          const delayMs = Math.max(50, frame.delay);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
 
+      console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
       screenDebug(`[displayScreen] Wipe animation complete: ${wipeFrames.length} frames`);
     } else if (!inlineEmitted) {
       // Normal display: Double-buffered display
