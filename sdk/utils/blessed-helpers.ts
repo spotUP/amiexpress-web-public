@@ -45,7 +45,7 @@ import type { Screen } from '../engines/ui/blessed/core/screen';
 import type { Box } from '../engines/ui/blessed/widgets/box';
 import type { List } from '../engines/ui/blessed/widgets/list';
 import type { Text } from '../engines/ui/blessed/widgets/text';
-import type { Textarea } from '../engines/ui/blessed/widgets/textbox';
+import type { Textbox, Textarea } from '../engines/ui/blessed/widgets/textbox';
 import type { Button } from '../engines/ui/blessed/widgets/button';
 import type { Table } from '../engines/ui/blessed/widgets/table';
 import type { Log } from '../engines/ui/blessed/widgets/log';
@@ -281,7 +281,10 @@ export function createList(options?: ListOptions): List {
 
   return blessed.list({
     ...processedOptions,
-    tags: true,  // FORCED AFTER spread - cannot be overridden
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard navigation (arrow keys, vi keys)
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
   });
 }
 
@@ -303,7 +306,38 @@ export function createText(options?: ElementOptions): Text {
 }
 
 /**
- * Create a blessed textarea with tags ALWAYS enabled
+ * Create a blessed textbox (single-line input) with tags ALWAYS enabled
+ *
+ * Use this for single-line input fields like username, password, search boxes.
+ * Enter key triggers 'submit' event instead of inserting newline.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
+ */
+export function createTextbox(options?: TextboxOptions): Textbox {
+  const processedOptions = processElementOptions(options, 'createTextbox');
+
+  const textbox = blessed.textbox({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard focus for input fields
+    clickable: true,   // Enable mouse click to focus
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+  });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(textbox, options);
+
+  return textbox;
+}
+
+/**
+ * Create a blessed textarea (multi-line input) with tags ALWAYS enabled
+ *
+ * Use this for multi-line text areas like message composition.
+ * Enter key inserts newline. Use Shift+Tab to submit.
  *
  * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
  *
@@ -316,7 +350,11 @@ export function createTextarea(options?: TextboxOptions): Textarea {
 
   const textarea = blessed.textarea({
     ...processedOptions,
-    tags: true,  // FORCED AFTER spread - cannot be overridden
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard focus for input fields
+    clickable: true,   // Enable mouse click to focus
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
   });
 
   // Auto-handle percentage widths/heights on screen resize
@@ -361,7 +399,10 @@ export function createTable(options?: TableOptions): Table {
 
   return blessed.table({
     ...processedOptions,
-    tags: true,  // FORCED AFTER spread - cannot be overridden
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard navigation through table cells
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
   });
 }
 
@@ -376,10 +417,27 @@ export function createTable(options?: TableOptions): Table {
 export function createButton(options?: ButtonOptions): Button {
   const processedOptions = processElementOptions(options, 'createButton');
 
-  return blessed.button({
+  const button = blessed.button({
     ...processedOptions,
-    tags: true,  // FORCED AFTER spread - cannot be overridden
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Ensure buttons can receive keyboard focus
+    clickable: true,   // Ensure buttons respond to clicks
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
   });
+
+  // Debug: Log when button receives events
+  button.on('click', () => {
+    console.log('[createButton] Button received click event');
+  });
+  button.on('press', () => {
+    console.log('[createButton] Button received press event');
+  });
+  button.on('mouse', (event: any) => {
+    console.log('[createButton] Button received mouse event:', event.action, event.button);
+  });
+
+  return button;
 }
 
 /**
