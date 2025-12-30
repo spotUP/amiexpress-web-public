@@ -105,6 +105,7 @@ export class ExecLibrary {
 
   // Message port tracking
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
+  private repliedMessages: Set<number> = new Set(); // track messages we've replied to via ReplyMsg
   private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
   private nextPortAddress: number = 0x0a0000; // Start at 640KB (between Task and library stubs)
 
@@ -246,6 +247,23 @@ export class ExecLibrary {
     console.log(
       `[ExecLibrary] ExecBase at 0x${this.execBase.address.toString(16)}`
     );
+  }
+
+  /**
+   * File-based debug logging for visibility (writes to backend.log directly)
+   * This bypasses console.log filtering issues
+   */
+  private logExecDebug(message: string): void {
+    try {
+      // Use BBS_DATA_DIR or fallback to known path
+      const bbsRoot = process.env.BBS_DATA_DIR || '~/Code/amiexpress-web';
+      const logFile = path.join(bbsRoot, "logs", "backend.log");
+      const line = `[ExecDebug] ${new Date().toISOString()} ${message}\n`;
+      fs.appendFileSync(logFile, line, { encoding: "utf8" });
+    } catch (e) {
+      // Log error to console as fallback
+      console.error(`[ExecDebug] Failed to write log: ${e}`);
+    }
   }
 
   /**
@@ -4277,6 +4295,15 @@ export class ExecLibrary {
       return;
     }
 
+    // If door is sending a message (not suppressed), clear from repliedMessages
+    // This handles when door reuses a message buffer for a new command
+    if (!suppressDoorCallback && this.repliedMessages.has(msgAddr)) {
+      console.log(
+        `[ExecLibrary][PutMsg] Door reusing replied message 0x${msgAddr.toString(16)} - clearing from repliedMessages`
+      );
+      this.repliedMessages.delete(msgAddr);
+    }
+
     console.log(
       `[ExecLibrary][PutMsg] port=0x${portAddr.toString(
         16
@@ -4376,25 +4403,60 @@ export class ExecLibrary {
    *   D0 = Message pointer (0 if no messages)
    *
    * Removes and returns the first message from the port's queue.
+   *
+   * Options:
+   *   skipReplies: If true, skip NT_REPLYMSG messages (leave them for door to get)
    */
-  getMsg(portAddr: number): number {
+  getMsg(portAddr: number, options?: { skipReplies?: boolean }): number {
+    // File-based debug logging
+    this.logExecDebug(`GetMsg called: port=0x${portAddr.toString(16)} skipReplies=${options?.skipReplies || false}`);
     console.log(`[ExecLibrary] >>> GetMsg(port=0x${portAddr.toString(16)})`);
 
     const port = this.messagePorts.get(portAddr);
     if (!port) {
+      this.logExecDebug(`GetMsg: Port NOT FOUND 0x${portAddr.toString(16)}`);
       console.error(
         `[ExecLibrary]   Port not found: 0x${portAddr.toString(16)}`
       );
       return 0;
     }
 
+    this.logExecDebug(`GetMsg: port="${port.name}" has ${port.messages.length} messages`);
+
     // Check if port has messages
     if (port.messages.length === 0) {
+      this.logExecDebug(`GetMsg: No messages, returning 0`);
       console.log(`[ExecLibrary]   No messages in port`);
       return 0;
     }
 
-    // Dequeue first message
+    // If skipReplies option is set, only return messages WE didn't put there via ReplyMsg
+    // We track replied messages in repliedMessages set
+    if (options?.skipReplies) {
+      for (let i = 0; i < port.messages.length; i++) {
+        const msgAddr = port.messages[i];
+        // Check if this message was placed by our ReplyMsg (tracked in repliedMessages)
+        if (!this.repliedMessages.has(msgAddr)) {
+          // This is a new message from the door, not a reply we sent
+          port.messages.splice(i, 1);
+          console.log(
+            `[ExecLibrary]   Returning door message at 0x${msgAddr.toString(16)} (skipped ${i} replies), ${
+              port.messages.length
+            } remaining`
+          );
+          this.protectReturnedMessage(msgAddr, `GetMsg port=0x${portAddr.toString(16)}`);
+          if (port.messages.length === 0) {
+            port.signaled = false;
+          }
+          return msgAddr;
+        }
+      }
+      // All messages are our replies, return 0
+      console.log(`[ExecLibrary]   No door messages in port (${port.messages.length} replies waiting for door)`);
+      return 0;
+    }
+
+    // Dequeue first message (normal behavior)
     const msgAddr = port.messages.shift()!;
     console.log(
       `[ExecLibrary]   Returning message at 0x${msgAddr.toString(16)}, ${
@@ -4573,10 +4635,14 @@ export class ExecLibrary {
    *   A1 = Message address
    */
   replyMsg(msgAddr: number): void {
+    // File-based debug logging for visibility
+    this.logExecDebug(`ReplyMsg called: msg=0x${msgAddr.toString(16)}`);
+
     // Read reply port from message header
     const replyPortAddr = this.emulator.readMemory32(msgAddr + 14);
 
     if (replyPortAddr === 0) {
+      this.logExecDebug(`ReplyMsg: No reply port in message`);
       console.log(
         `[ExecLibrary] ReplyMsg: No reply port in message 0x${msgAddr.toString(
           16
@@ -4585,7 +4651,10 @@ export class ExecLibrary {
       return;
     }
 
+    this.logExecDebug(`ReplyMsg: replyPort=0x${replyPortAddr.toString(16)}`);
+
     if (!this.messagePorts.get(replyPortAddr)) {
+      this.logExecDebug(`ReplyMsg: Auto-registering reply port`);
       console.log(
         `[ExecLibrary] ReplyMsg: Auto-registering reply port 0x${replyPortAddr.toString(
           16
@@ -4616,6 +4685,24 @@ export class ExecLibrary {
 
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
+
+    // CRITICAL FIX: Native AEDoor.library doors poll AEDoorPort instead of their reply port!
+    // After enabling non-stop text, doors enter a busy-poll loop on AEDoorPort expecting replies.
+    // Also queue the reply on AEDoorPort so polling doors can receive it.
+    // Find AEDoorPort for this node (try common naming patterns)
+    for (const [portAddr, port] of this.messagePorts.entries()) {
+      const portName = port.name?.toLowerCase() || '';
+      if (portName.startsWith('aedoorport') && portAddr !== replyPortAddr) {
+        console.log(
+          `[ExecLibrary][ReplyMsg] Also queuing reply on AEDoorPort 0x${portAddr.toString(16)} for polling doors`
+        );
+        // Track this as a reply we sent (so skipReplies in getMsg can identify it)
+        this.repliedMessages.add(msgAddr);
+        // Queue reply on AEDoorPort for doors that poll there instead of reply port
+        this.putMsg(portAddr, msgAddr, { suppressDoorCallback: true });
+        break;
+      }
+    }
 
     console.log(`[ExecLibrary] Reply sent`);
   }
@@ -4758,7 +4845,9 @@ export class ExecLibrary {
     const mask = signalMask >>> 0;
 
     // Check if any requested signals are already received
+    console.log(`[ExecLibrary]   Wait: checking sigRecvd=0x${this.currentTask.sigRecvd.toString(16)} & mask=0x${mask.toString(16)}`);
     const receivedSignals = this.currentTask.sigRecvd & mask;
+    console.log(`[ExecLibrary]   Wait: receivedSignals=0x${receivedSignals.toString(16)}`);
 
     if (receivedSignals !== 0) {
       // Signals already present - return immediately
@@ -4842,15 +4931,16 @@ export class ExecLibrary {
       )}, signals=0x${signals.toString(16)})`
     );
 
-    // If task is NULL (0), signal current task
-    // For now, we only support signaling the current task (the door)
+    // In single-task emulation, always signal the currentTask (the door).
+    // The taskAddr parameter might differ from currentTask.address when:
+    // - BBS JavaScript code signals via a port's sigTask (which was set when door created the port)
+    // - The door's task address changed or wasn't properly tracked
+    // We log a note but proceed with signaling - refusing to signal would leave the door stuck in Wait().
     if (taskAddr !== 0 && taskAddr !== this.currentTask.address) {
-      console.warn(
-        `[ExecLibrary]   WARNING: Cannot signal task 0x${taskAddr.toString(
-          16
-        )} (not current task)`
+      console.log(
+        `[ExecLibrary]   Note: taskAddr=0x${taskAddr.toString(16)} != currentTask=0x${this.currentTask.address.toString(16)}, but proceeding with signal to currentTask (single-task emulation)`
       );
-      return;
+      // Continue - don't return! The door needs this signal to wake from Wait()
     }
 
     console.log(
@@ -4868,11 +4958,13 @@ export class ExecLibrary {
     );
 
     // 1. OR signals into task's tc_SigRecvd field
+    const oldSigRecvd = this.currentTask.sigRecvd;
     this.currentTask.sigRecvd |= signals;
     console.log(
-      `[ExecLibrary]   New sigRecvd: 0x${this.currentTask.sigRecvd.toString(
-        16
-      )}`
+      `[ExecLibrary]   sigRecvd: 0x${oldSigRecvd.toString(16)} -> 0x${this.currentTask.sigRecvd.toString(16)}`
+    );
+    console.log(
+      `[ExecLibrary]   currentTask.sigWait: 0x${this.currentTask.sigWait.toString(16)}, isWaiting: ${this.currentTask.isWaiting}`
     );
 
     // 2. Check if task is waiting (sigWait != 0 means TS_WAIT)
@@ -4897,6 +4989,17 @@ export class ExecLibrary {
         // Wake the task if it's blocked in Wait()
         if (this.currentTask.isWaiting) {
           this.currentTask.isWaiting = false;
+
+          // CRITICAL FIX: Set D0 to the matched signals so Wait() effectively returns them
+          // Without this, Wait() returns 0 to the door because it already returned before
+          // Signal() was called. The door needs to see the signals that woke it up.
+          this.emulator.setRegister(0, matchedSignals);
+          console.log(`[ExecLibrary]   *** Setting D0=0x${matchedSignals.toString(16)} for Wait() return ***`);
+
+          // Clear the matched signals from sigRecvd (like Wait() does when it returns)
+          this.currentTask.sigRecvd &= ~matchedSignals;
+          console.log(`[ExecLibrary]   Cleared signals, sigRecvd now: 0x${this.currentTask.sigRecvd.toString(16)}`);
+
           this.emulator.resume(); // RESUME emulator execution
         }
 

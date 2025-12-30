@@ -5,6 +5,20 @@
 
 import { LibraryVector } from "./types";
 import { ExecLibrary } from "../ExecLibrary";
+import * as fs from "fs";
+import * as path from "path";
+
+// File-based debug logging for trap handlers
+function logTrap(message: string): void {
+  try {
+    const bbsRoot = process.env.BBS_DATA_DIR || '~/Code/amiexpress-web';
+    const logFile = path.join(bbsRoot, "logs", "backend.log");
+    const line = `[TrapDebug] ${new Date().toISOString()} ${message}\n`;
+    fs.appendFileSync(logFile, line, { encoding: "utf8" });
+  } catch (e) {
+    console.error(`[TrapDebug] Failed to write log: ${e}`);
+  }
+}
 
 export const EXEC_VECTORS: LibraryVector[] = [
   {
@@ -193,12 +207,27 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const portAddr = emu.getRegister(8); // A0
       const portName = portAddr ? lib.getPortName(portAddr) : "";
+      logTrap(`GetMsg TRAP HIT! port=0x${portAddr.toString(16)} name=${portName}`);
       console.log(
         `[ExecLibrary][Trap][GetMsg] port=0x${portAddr.toString(
           16
         )} name=${portName}`
       );
-      return lib.getMsg(portAddr);
+      const result = lib.getMsg(portAddr);
+      logTrap(`GetMsg returning 0x${result.toString(16)}`);
+
+      // Debug: dump reply message contents when door receives a message
+      if (result !== 0) {
+        const msgType = emu.readMemory(result + 8); // ln_Type
+        const command = emu.readMemory32(result + 20); // XIM command
+        const data = emu.readMemory32(result + 24); // XIM data
+        console.log(`[ExecLibrary][GetMsg] Door received message:`);
+        console.log(`  ln_Type=${msgType} (6=NT_REPLYMSG)`);
+        console.log(`  command=${command}`);
+        console.log(`  data=${data}`);
+      }
+
+      return result;
     },
   },
   {
@@ -206,7 +235,10 @@ export const EXEC_VECTORS: LibraryVector[] = [
     name: "Wait",
     handler: (emu, lib: ExecLibrary) => {
       const signalMask = emu.getRegister(0); // D0
-      return lib.wait(signalMask);
+      console.log(`[ExecLibrary][Trap][Wait] signalMask=0x${signalMask.toString(16)}`);
+      const result = lib.wait(signalMask);
+      console.log(`[ExecLibrary][Trap][Wait] returned 0x${result.toString(16)}`);
+      return result;
     },
   },
   {
