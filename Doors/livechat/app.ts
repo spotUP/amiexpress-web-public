@@ -384,9 +384,12 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       border: { fg: 'cyan' },
-      selected: { fg: 'white', bg: 'blue' },
-      hover: { fg: 'yellow', bg: 'blue' },
-      item: { hover: { fg: 'yellow', bg: 'blue' } },
+      // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
+      // Use 'item.hover' and 'item.selected' for per-item styling
+      item: {
+        hover: { fg: 'yellow', bg: 'blue' },
+        selected: { fg: 'white', bg: 'blue' },
+      },
     } as any,
     tags: true,  // CRITICAL: Enable tag parsing for colored channel names
     mouse: true,
@@ -593,9 +596,12 @@ export async function createApp(session: DoorSession) {
     style: {
       fg: 'white',
       border: { fg: 'magenta' },
-      selected: { fg: 'black', bg: 'magenta' },
-      hover: { fg: 'yellow', bg: 'magenta' },
-      item: { hover: { fg: 'yellow', bg: 'magenta' } },
+      // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
+      // Use 'item.hover' and 'item.selected' for per-item styling
+      item: {
+        hover: { fg: 'yellow', bg: 'magenta' },
+        selected: { fg: 'black', bg: 'magenta' },
+      },
     } as any,
   });
 

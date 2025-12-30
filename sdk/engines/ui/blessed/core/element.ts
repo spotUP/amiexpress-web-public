@@ -2382,7 +2382,7 @@ export class Element extends EventEmitter {
       style = { ...style, ...disabledStyle };
     } else if (this.focused && focusStyle) {
       style = { ...style, ...focusStyle };
-    } else if ((this as any)._isHovered && hoverStyle) {
+    } else if (this._hovered && hoverStyle) {
       style = { ...style, ...hoverStyle };
     }
     const attr = this.sattr(style);
@@ -2438,7 +2438,7 @@ export class Element extends EventEmitter {
     } else if (this.focused && (this.options.style as any)?.focus) {
       // Apply focus style when element is focused
       style = { ...style, ...(this.options.style as any).focus };
-    } else if ((this as any)._isHovered && (this.options.style as any)?.hover) {
+    } else if (this._hovered && (this.options.style as any)?.hover) {
       // Apply hover style when element is hovered
       style = { ...style, ...(this.options.style as any).hover };
     }

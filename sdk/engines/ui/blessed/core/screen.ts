@@ -774,7 +774,7 @@ export class Screen extends Element {
       style = { ...style, ...disabledStyle };
     } else if (element.focused && focusStyle) {
       style = { ...style, ...focusStyle };
-    } else if ((element as any)._isHovered && hoverStyle) {
+    } else if ((element as any)._hovered && hoverStyle) {
       style = { ...style, ...hoverStyle };
     }
     const baseAttr = this.styleToAttr(style);

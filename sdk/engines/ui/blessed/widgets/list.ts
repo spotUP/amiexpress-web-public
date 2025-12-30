@@ -149,17 +149,32 @@ export class List extends Element {
     this.itemLineCount = [];
 
     this.items.forEach((item, index) => {
-      const marker = index === this.selected ? '> ' : '  ';
-      const isHovered = index === this._hoveredItem && index !== this.selected;
+      const isSelected = index === this.selected;
+      const isHovered = index === this._hoveredItem && !isSelected;
+      const marker = isSelected ? '> ' : '  ';
       const start = newLines.length;
 
-      // Apply hover style if this item is hovered (but not selected)
+      // Get item styles
+      const itemSelectedStyle = (this.options.style as any)?.item?.selected;
       const itemHoverStyle = (this.options.style as any)?.item?.hover;
+
+      // Apply selected or hover style via blessed tags
       let itemText = item;
-      if (isHovered && itemHoverStyle) {
-        // Build proper blessed tags for hover style
-        let openTags = '';
-        let closeTags = '';
+      let openTags = '';
+      let closeTags = '';
+
+      if (isSelected && itemSelectedStyle) {
+        // Apply selected style to selected item
+        if (itemSelectedStyle.fg) {
+          openTags += `{${itemSelectedStyle.fg}-fg}`;
+          closeTags = `{/${itemSelectedStyle.fg}-fg}` + closeTags;
+        }
+        if (itemSelectedStyle.bg) {
+          openTags += `{${itemSelectedStyle.bg}-bg}`;
+          closeTags = `{/${itemSelectedStyle.bg}-bg}` + closeTags;
+        }
+      } else if (isHovered && itemHoverStyle) {
+        // Apply hover style to hovered item (but not selected)
         if (itemHoverStyle.fg) {
           openTags += `{${itemHoverStyle.fg}-fg}`;
           closeTags = `{/${itemHoverStyle.fg}-fg}` + closeTags;
@@ -168,9 +183,10 @@ export class List extends Element {
           openTags += `{${itemHoverStyle.bg}-bg}`;
           closeTags = `{/${itemHoverStyle.bg}-bg}` + closeTags;
         }
-        if (openTags) {
-          itemText = `${openTags}${item}${closeTags}`;
-        }
+      }
+
+      if (openTags) {
+        itemText = `${openTags}${item}${closeTags}`;
       }
 
       if (this.wrapItemsEnabled) {
