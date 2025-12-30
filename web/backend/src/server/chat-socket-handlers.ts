@@ -20,8 +20,50 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
 
   // Debug: Log ALL events on this socket
   socket.onAny((eventName, ...args) => {
-    if (eventName.startsWith('room:') || eventName.startsWith('chat:')) {
+    if (eventName.startsWith('room:') || eventName.startsWith('chat:') || eventName.startsWith('chat-only')) {
       console.log('[CHAT DEBUG] Socket received event:', eventName, JSON.stringify(args));
+    }
+  });
+
+  console.log('[CHAT DEBUG] Registering chat-only-login-submit handler for socket:', socket.id);
+
+  // ===== CHAT-ONLY LOGIN HANDLER =====
+
+  socket.on('chat-only-login-submit', async (credentials: { username: string; password: string }) => {
+    console.log('[CHAT-ONLY-LOGIN] Received login attempt for:', credentials.username);
+
+    try {
+      // Import authentication utilities
+      const { checkPassword } = await import('../utils/PasswordUtil');
+
+      // Find user by username (case-insensitive)
+      const user = db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)').get(credentials.username);
+
+      if (!user) {
+        console.log('[CHAT-ONLY-LOGIN] User not found:', credentials.username);
+        socket.emit('chat-only-login-error', 'Invalid username or password');
+        return;
+      }
+
+      // Verify password
+      const passwordValid = checkPassword(credentials.password, user.password);
+
+      if (!passwordValid) {
+        console.log('[CHAT-ONLY-LOGIN] Invalid password for user:', credentials.username);
+        socket.emit('chat-only-login-error', 'Invalid username or password');
+        return;
+      }
+
+      // Success - send user data back
+      console.log('[CHAT-ONLY-LOGIN] Login successful for:', credentials.username);
+      socket.emit('chat-only-login-success', {
+        username: user.username,
+        secLevel: user.secLevel,
+        id: user.id
+      });
+    } catch (error) {
+      console.error('[CHAT-ONLY-LOGIN] Error during login:', error);
+      socket.emit('chat-only-login-error', 'Login failed - server error');
     }
   });
 

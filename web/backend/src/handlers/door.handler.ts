@@ -364,6 +364,7 @@ export interface Door {
   internal?: string;
   args?: string;
   toolTypes?: Record<string, string>;
+  category?: string;  // Door category from CATEGORY= tooltype (e.g., "Games/Arcade", "Utilities")
 }
 
 interface DoorSession {
@@ -629,12 +630,23 @@ async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) 
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
+        console.log(`[doorInputHandler] Received input: "${data}" hasXIM=${!!shared.ximProtocol}`);
         logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
         // IMPORTANT: Check if XIM is waiting for input BEFORE queueing
         // This prevents double-delivery when XIM completes a hotkey/line input
         const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
         if (shared.ximProtocol) {
           shared.ximProtocol.queueInput(data);
+
+          // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
+          // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
+          // they expect BBS to proactively send input messages to AEDoorPort.
+          if (shared.ximProtocol.shouldInjectNativeInput?.()) {
+            console.log(`[launchAmigaDoor] Native door detected - injecting input via PutMsg`);
+            for (const char of data) {
+              shared.ximProtocol.injectInputToNativeDoor(char);
+            }
+          }
         }
         if (shared.dosLibrary && !ximWaitingForInput) {
           shared.dosLibrary.queueInput(data);
@@ -2391,6 +2403,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
+    console.log(`[executeAmigaDoor] Set session.inDoorManager=true, nodeId=${session.nodeId}, socketId=${socket.id}`);
 
     // DO NOT enable game mode for 68K doors - they use normal character input via door:input
     // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
@@ -2401,6 +2414,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
+        console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" hasXIM=${!!shared.ximProtocol}`);
         logDoorDebug(
           `KEY door=${door.command || door.id || 'UNK'} data=${JSON.stringify(
             data
@@ -2411,6 +2425,16 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
         const ximWaitingForInput = shared.ximProtocol?.isWaitingForLineInput?.() ?? false;
         if (shared.ximProtocol) {
           shared.ximProtocol.queueInput(data);
+
+          // CRITICAL: For native 68K doors that poll GetMsg(AEDoorPort), we need to
+          // inject JH_HK messages via PutMsg. These doors don't send JH_HK XIM commands -
+          // they expect BBS to proactively send input messages to AEDoorPort.
+          if (shared.ximProtocol.shouldInjectNativeInput?.()) {
+            console.log(`[executeAmigaDoor] Native door detected - injecting input via PutMsg`);
+            for (const char of data) {
+              shared.ximProtocol.injectInputToNativeDoor(char);
+            }
+          }
         }
         if (shared.dosLibrary && !ximWaitingForInput) {
           shared.dosLibrary.queueInput(data);
@@ -2421,11 +2445,15 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     };
     // Persist session state so socket-handlers sees the door flags/handler
     try {
-      const { setSession, userSessions } = require('../server/session-manager');
+      const { setSession, userSessions, getSession } = require('../server/session-manager');
+      console.log(`[executeAmigaDoor] Before setSession: inDoorManager=${session.inDoorManager}, handler=${!!session.doorInputHandler}`);
       setSession(socket.id, session);
       if ((session as any).user?.id) {
         userSessions.set((session as any).user.id, session);
       }
+      // Verify session was stored correctly
+      const verifySession = getSession(socket.id);
+      console.log(`[executeAmigaDoor] After setSession: verify inDoorManager=${verifySession?.inDoorManager}, handler=${!!verifySession?.doorInputHandler}`);
     } catch (err) {
       console.error('[executeAmigaDoor] Unable to persist session for door input:', err);
     }
@@ -3291,7 +3319,8 @@ export async function initializeDoors() {
       passParameters: cmdDef.passParameters,
       internal: cmdDef.internal,
       args: cmdDef.args,
-      toolTypes: cmdDef.toolTypes
+      toolTypes: cmdDef.toolTypes,
+      category: cmdDef.toolTypes?.['CATEGORY'] || undefined
     };
 
     bbsCmdDoors.push(door);

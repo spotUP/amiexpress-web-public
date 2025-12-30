@@ -969,16 +969,16 @@ io.on('connection', async (socket) => {
     return;
   }
 
-  // CHAT-ONLY MODE: Skip all BBS screens and show simple login
+  // CHAT-ONLY MODE: Skip all BBS screens and launch livechat directly
   const chatOnly = socket.handshake?.query?.chatOnly === 'true';
   if (chatOnly) {
-    console.log('[ChatOnly] Minimal login mode - skipping BBS screens');
+    console.log('[ChatOnly] Launching livechat door directly (door will handle login)');
 
     // Create minimal session for chat
     const sessionStart = Date.now();
     const session: BBSSession = {
-      state: BBSState.LOGON,
-      subState: undefined,
+      state: BBSState.LOGGEDON,  // Set to LOGGEDON so door can run (door will handle auth)
+      subState: LoggedOnSubState.DOOR_RUNNING,
       screenWidth: 80,  // Will be updated by terminal-size event
       screenHeight: 24,
       currentConf: 1,
@@ -1026,11 +1026,22 @@ io.on('connection', async (socket) => {
     // Register socket handlers
     registerSocketHandlers(io, socket, chatState);
 
-    // Show simple login prompt
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-    socket.emit('ansi-output', '\x1b[36mLiveChat Login\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', 'Username: ');
-    socket.emit('prompt-login');
+    // Set up login handler for authentication
+    const { setupChatOnlyLoginHandler } = require('./handlers/chat-only-login.handler');
+    setupChatOnlyLoginHandler(socket, session);
+
+    // Launch LiveChat door immediately - it will show login modal and handle auth
+    const { executeDoor } = require('./handlers/door.handler');
+    const liveChatDoor = {
+      id: 'livechat',
+      name: 'LiveChat',
+      command: 'livechat',
+      type: 'typescript',
+      path: 'Doors/livechat',
+    };
+
+    console.log('[ChatOnly] Executing LiveChat door');
+    await executeDoor(socket, session, liveChatDoor);
 
     return;
   }

@@ -960,6 +960,7 @@ export class BBSApi {
     size: number;
     accessLevel: number;
     enabled: boolean;
+    category?: string;
   }>> {
     const { getDoors } = await import('../handlers/door.handler');
     const allDoors = getDoors();
@@ -973,7 +974,8 @@ export class BBSApi {
       doorType: door.type,
       size: door.size || 0,
       accessLevel: door.accessLevel || 0,
-      enabled: door.enabled !== false // Default to enabled if not specified
+      enabled: door.enabled !== false, // Default to enabled if not specified
+      category: door.category || undefined
     }));
   }
 }

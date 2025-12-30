@@ -267,6 +267,19 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   import('../handlers/network-monitor.handler').then(({ registerNetworkMonitorHandlers }) => registerNetworkMonitorHandlers(socket)).catch((err) => {
     console.error('[SOCKET HANDLER ERROR] Failed to load network-monitor.handler:', err);
   });
+  import('../handlers/voice-channel.handler').then(({ registerVoiceChannelHandlers }) => registerVoiceChannelHandlers(socket, io, sessions)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load voice-channel.handler:', err);
+  });
+
+  // XIM injection handlers - disabled until type errors fixed
+  // import('../handlers/debug/xim-injection.handler').then(({ registerXIMInjectionHandlers }) => {
+  //   const session = getSession(socket.id);
+  //   if (session) {
+  //     registerXIMInjectionHandlers(socket, session, { sessions });
+  //   }
+  // }).catch((err) => {
+  //   console.error('[SOCKET HANDLER ERROR] Failed to load xim-injection.handler:', err);
+  // });
 }
 
 function logDoorDebug(message: string) {
@@ -314,6 +327,13 @@ async function initializeSession(socket: Socket) {
  */
 function registerCommandHandler(socket: Socket) {
   console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
+  console.error('[SOCKET-DEBUG] Registering command handler for socket:', socket.id);
+
+  // TEST: Register a simple ping handler to verify socket events work AT ALL
+  socket.on('ping-test', (data: any) => {
+    console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
+    socket.emit('pong-test', { received: data });
+  });
 
   const markDoorInput = (session: BBSSession, data: string): boolean => {
     const now = Date.now();
@@ -490,6 +510,7 @@ function registerCommandHandler(socket: Socket) {
   });
 
   socket.on('command', (data: string) => {
+    console.error('[COMMAND-HANDLER-ENTRY] COMMAND EVENT FIRED!', socket.id);
     console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
     console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
 
@@ -567,6 +588,8 @@ function registerCommandHandler(socket: Socket) {
     // If a door is active, call the door's input handler
     console.log('[socket-handlers] ===== COMMAND EVENT HANDLER =====');
     console.log('[socket-handlers] Received data:', JSON.stringify(data));
+    console.log('[socket-handlers] socketId:', socket.id);
+    console.log('[socket-handlers] session nodeId:', session.nodeId);
     console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
     console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
     console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
