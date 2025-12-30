@@ -63,13 +63,14 @@ export async function createApp(session: DoorSession) {
   const testResults: TestResult[] = [];
   let currentDemo: string | null = null;
   const intervals: NodeJS.Timeout[] = [];
+  const timeouts: NodeJS.Timeout[] = [];
 
   // ========== CREATE SCREEN ==========
   const screen = blessed.screen({
     smartCSR: true,
     fullUnicode: true,
     title: `Neo-Blessed Showcase ${BUILD_VERSION}`,
-    output: (data: string) => bbs.write(data),
+    output: (data: string) => bbs?.write(data),
   });
 
   if (session.bbsSession) {
@@ -213,6 +214,8 @@ export async function createApp(session: DoorSession) {
   function clearDemo() {
     intervals.forEach(i => clearInterval(i));
     intervals.length = 0;
+    timeouts.forEach(t => clearTimeout(t));
+    timeouts.length = 0;
     const children = [...demoBox.children];
     for (const child of children) child.detach();
   }
@@ -235,6 +238,12 @@ export async function createApp(session: DoorSession) {
   function addInterval(fn: () => void, ms: number) {
     const id = setInterval(fn, ms);
     intervals.push(id);
+    return id;
+  }
+
+  function addTimeout(fn: () => void, ms: number) {
+    const id = setTimeout(fn, ms);
+    timeouts.push(id);
     return id;
   }
 
@@ -583,7 +592,7 @@ export async function createApp(session: DoorSession) {
     });
     lBtn.on('press', () => {
       loadingDialog.load('Loading...');
-      setTimeout(() => {
+      addTimeout(() => {
         loadingDialog.stop();
         setStatus('Loading complete');
         addResult('Loading', 'pass', 'Spinner works');
@@ -949,13 +958,12 @@ export async function createApp(session: DoorSession) {
     });
 
     // Animate at 4 fps
-    const animInterval = setInterval(() => {
+    addInterval(() => {
+      if (currentDemo !== 'video') return;
       frameIndex = (frameIndex + 1) % frames.length;
       videoBox.setContent(frames[frameIndex].join('\n'));
       screen.render();
     }, 250);
-
-    intervals.push(animInterval);
 
     blessed.box({
       parent: demoBox,
@@ -2049,12 +2057,17 @@ End of sample markdown.`;
   function cleanup() {
     currentDemo = null;
     intervals.forEach(i => clearInterval(i));
+    intervals.length = 0;
+    timeouts.forEach(t => clearTimeout(t));
+    timeouts.length = 0;
     screen.disableMouse();
     if (session.bbsSession) delete session.bbsSession.doorInputHandler;
     loader.destroy();  // Clean up loader
     screen.destroy();
-    bbs.write('\x1b[2J\x1b[H');
-    bbs.writeLine('\x1b[33mThanks for testing Neo-Blessed Showcase!\x1b[0m');
+    if (bbs) {
+      bbs.write('\x1b[2J\x1b[H');
+      bbs.writeLine('\x1b[33mThanks for testing Neo-Blessed Showcase!\x1b[0m');
+    }
   }
 
   loader.update(95, 'Finalizing...');
@@ -2067,7 +2080,7 @@ End of sample markdown.`;
   // ========== MAIN ==========
   return {
     async run() {
-      bbs.write('\x1b[2J\x1b[H');
+      if (bbs) bbs.write('\x1b[2J\x1b[H');
       menuList.focus();
       screen.render();
       await new Promise<void>((resolve) => screen.on('destroy', resolve));

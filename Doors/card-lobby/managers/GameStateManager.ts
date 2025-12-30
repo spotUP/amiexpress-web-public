@@ -168,8 +168,7 @@ export class GameStateManager {
       try {
         engine.deal();
       } catch (error) {
-        console.error('[CardLobby] Holdem deal failed:', error);
-        callbacks.pushNotice('Failed to deal a hand.');
+        callbacks.pushNotice(`Failed to deal a hand: ${error instanceof Error ? error.message : 'Unknown error'}`);
         return;
       }
 
@@ -185,7 +184,6 @@ export class GameStateManager {
       await callbacks.persistState();
       await callbacks.advanceHoldemHand(freshTable, engine, beforeStacks);
     } catch (error) {
-      console.error('[CardLobby] Holdem hand setup failed:', error);
       if (lobby) {
         const freshTable = callbacks.findTableById(table.id);
         if (freshTable) {
@@ -194,7 +192,7 @@ export class GameStateManager {
           await callbacks.persistState();
         }
       }
-      callbacks.pushNotice('Hand failed to start.');
+      callbacks.pushNotice(`Hand failed to start: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -244,6 +242,17 @@ export class GameStateManager {
         safety += 1;
       }
 
+      // Check if safety limit was reached
+      if (safety >= 400 && !handState.engine.state.winners) {
+        callbacks.pushNotice('Hand stalled after 400 bot actions. Canceling hand.');
+        // Cancel the hand and return chips to players
+        table.hand = undefined;
+        table.updatedAt = Date.now();
+        await callbacks.persistState();
+        callbacks.updateTablePanel();
+        return;
+      }
+
       if (!handState.engine.state.winners) {
         callbacks.saveTableHand(table, handState.engine, handState.beforeStacks);
         await callbacks.persistState();
@@ -255,8 +264,7 @@ export class GameStateManager {
       callbacks.updateTablePanel();
       void callbacks.maybeAutoDeal(table);
     } catch (error) {
-      console.error('[CardLobby] Holdem hand error:', error);
-      callbacks.pushNotice('Hand error. Returning to lobby.');
+      callbacks.pushNotice(`Hand error: ${error instanceof Error ? error.message : 'Unknown error'}. Returning to lobby.`);
       callbacks.updateTablePanel();
     }
   }

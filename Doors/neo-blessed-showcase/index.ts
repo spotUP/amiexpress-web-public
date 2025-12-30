@@ -37,7 +37,6 @@ door.onClose(async (ctx: DoorContext) => {
 
 door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
-  console.error('Showcase error:', error);
 });
 
 export default door;

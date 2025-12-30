@@ -13,7 +13,8 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { KeyEvent } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createText, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 // ===== Game Types =====
@@ -152,10 +153,12 @@ class FireEmblemGame {
   private screen!: Screen;
   private mapPanel!: DockablePanel;
   private statusPanel!: DockablePanel;
-  private mapContent: any;
-  private statusContent: any;
+  private mapContent!: Box;
+  private statusContent!: Box;
   private state!: GameState;
   private exitResolve: (() => void) | null = null;
+  private enemyPhaseTimeout: NodeJS.Timeout | null = null;
+  private gameExited = false;
 
   setContext(ctx: DoorContext): void {
     this.ctx = ctx;
@@ -178,10 +181,14 @@ class FireEmblemGame {
       // Wait for game to complete
       await new Promise<void>((resolve) => {
         this.exitResolve = resolve;
-        this.screen.on('destroy', () => resolve());
+        this.screen.once('destroy', () => {
+          if (!this.gameExited) {
+            this.gameExited = true;
+            resolve();
+          }
+        });
       });
     } catch (error) {
-      console.error('[Fire Emblem] Error in start():', error);
       this.cleanup();
       throw error; // Re-throw to be caught by onError handler
     }
@@ -217,7 +224,7 @@ class FireEmblemGame {
     });
 
     // Handle intro key press
-    const introHandler = (_ch: any, key: any) => {
+    const introHandler = (_ch: string, key: KeyEvent) => {
       if (key.name === 'space') {
         intro.destroy();
         this.screen.unkey(['space', 'q'], introHandler);
@@ -234,6 +241,14 @@ class FireEmblemGame {
   }
 
   private initializeChapter(): void {
+    // Validate unit data arrays
+    if (PLAYER_UNITS.length < 3) {
+      throw new Error(`Expected at least 3 player units, got ${PLAYER_UNITS.length}`);
+    }
+    if (ENEMY_UNITS.length < 2) {
+      throw new Error(`Expected at least 2 enemy units, got ${ENEMY_UNITS.length}`);
+    }
+
     // Place player units
     const playerUnits: Unit[] = [
       { ...PLAYER_UNITS[0], x: 2, y: 8 },
@@ -403,7 +418,19 @@ class FireEmblemGame {
     if (this.state.phase === 'player' && !this.state.gameOver) {
       this.state.phase = 'enemy';
       this.render();
-      setTimeout(() => this.performEnemyPhase(), 1000);
+
+      // Clear any existing timeout
+      if (this.enemyPhaseTimeout) {
+        clearTimeout(this.enemyPhaseTimeout);
+      }
+
+      // Track the timeout for cleanup
+      this.enemyPhaseTimeout = setTimeout(() => {
+        this.enemyPhaseTimeout = null;
+        if (!this.gameExited) {
+          this.performEnemyPhase();
+        }
+      }, 1000);
     }
   }
 
@@ -411,6 +438,15 @@ class FireEmblemGame {
     // Simple AI: move towards player units and attack if in range
     const enemies = this.state.units.filter(u => u.team === 'enemy');
     const players = this.state.units.filter(u => u.team === 'player');
+
+    // Guard clause - if no players left, game is over
+    if (players.length === 0) {
+      this.state.turn++;
+      this.state.phase = 'player';
+      this.checkGameOver();
+      this.render();
+      return;
+    }
 
     for (const enemy of enemies) {
       // Find nearest player
@@ -553,12 +589,23 @@ class FireEmblemGame {
   }
 
   private cleanup(): void {
+    // Prevent double cleanup
+    if (this.gameExited) return;
+    this.gameExited = true;
+
+    // Clear pending enemy phase timer
+    if (this.enemyPhaseTimeout) {
+      clearTimeout(this.enemyPhaseTimeout);
+      this.enemyPhaseTimeout = null;
+    }
+
     // Remove event listeners to prevent memory leaks
     if (this.screen) {
       this.screen.removeAllListeners('destroy');
       this.screen.removeAllListeners('keypress');
       this.screen.destroy();
     }
+
     // Resolve the exit promise to allow door to complete
     if (this.exitResolve) {
       this.exitResolve();
@@ -589,7 +636,6 @@ door.onClose(async (ctx: DoorContext) => {
 
 door.onError(async (ctx: DoorContext, error: Error) => {
   ctx.output.writeLine(`\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
-  console.error('Fire Emblem error:', error);
 });
 
 export default door;

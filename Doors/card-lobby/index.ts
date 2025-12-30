@@ -126,9 +126,28 @@ class CardLobbyApp {
   private get overlayShade() { return this.uiManager.overlayShade; }
   private get layout() { return this.uiManager.layout; }
 
+  // Animation state and methods (delegated to UIManager)
+  private get dealAnimationInProgress() { return this.uiManager.getDealAnimationInProgress(); }
+  private runDealAnimation(boardCards: any[], playerHand: any[], flopCardSize: string, handCardSize: string) {
+    return this.uiManager.runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize);
+  }
+  private renderBoardAndHand(boardCards: any[], playerHand: any[], flopCardSize: string, handCardSize: string, hasActiveHand: boolean) {
+    return this.uiManager.renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasActiveHand);
+  }
+  private layoutTablePanels() {
+    return this.uiManager.layoutTablePanels();
+  }
+  private layoutActionButtons() {
+    return this.uiManager.layoutActionButtons();
+  }
+  private applyActionButtonPalette(action: string) {
+    return this.uiManager.applyActionButtonPalette(action);
+  }
+
   private viewMode: 'lobby' | 'table' = 'lobby';
   private autoDealInProgress = false;
   private lastAnimatedHandStartedAt: number | null = null;
+  private actionInProgress = false;
 
   private lobby: LobbyState | null = null;
   private profiles: Record<string, PlayerProfile> = {};
@@ -367,13 +386,20 @@ class CardLobbyApp {
   }
 
   private runAction(action: () => void | Promise<void>): void {
+    if (this.actionInProgress) {
+      this.pushNotice('Please wait for current action to complete.');
+      return;
+    }
+
+    this.actionInProgress = true;
     void (async () => {
       try {
         await action();
       } catch (error) {
-        console.error('[CardLobby] Action failed:', error);
-        this.pushNotice('Action failed. Please try again.');
+        this.pushNotice(`Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         this.screen.render();
+      } finally {
+        this.actionInProgress = false;
       }
     })();
   }
@@ -488,7 +514,7 @@ class CardLobbyApp {
       const engine = PokerEngine.restore(table.hand.snapshot) as PokerEngine;
       return { engine, beforeStacks: table.hand.beforeStacks ?? {} };
     } catch (error) {
-      console.error('[CardLobby] Failed to restore hand snapshot:', error);
+      this.pushNotice(`Failed to restore hand: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return null;
     }
   }

@@ -54,6 +54,10 @@ export class UIManager {
     this.desktop = desktop;
   }
 
+  getDealAnimationInProgress(): boolean {
+    return this.dealAnimationInProgress;
+  }
+
   buildTopBar(callbacks: {
     focusLobby: () => void;
     focusTable: () => void;
