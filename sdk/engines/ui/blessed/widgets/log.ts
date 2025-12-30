@@ -51,11 +51,8 @@ export class Log extends Element {
   }
 
   add(text: string): void {
-    console.log('[Log.add] Adding text:', text.substring(0, 100));
     const lines = this.getLines();
-    console.log('[Log.add] Current lines count:', lines.length);
     lines.push(text);
-    console.log('[Log.add] After push, lines count:', lines.length);
 
     // Enforce scrollback limit
     while (lines.length > this.scrollback) {
@@ -63,17 +60,12 @@ export class Log extends Element {
     }
 
     const content = lines.join('\n');
-    console.log('[Log.add] Setting content, length:', content.length);
     this.setContent(content);
-    console.log('[Log.add] After setContent, _lines count:', (this as any)._lines?.length);
 
     // ALWAYS scroll to bottom to show new content (regardless of scrollOnInput setting)
     // Use multiple methods to ensure scroll happens
     const scrollHeight = this.getScrollHeight();
-    const childBase = (this as any).childBase || 0;
     const maxScroll = Math.max(0, scrollHeight - (this.height as number || 10));
-
-    console.log('[Log.add] Scroll info - height:', this.height, 'scrollHeight:', scrollHeight, 'childBase:', childBase, 'maxScroll:', maxScroll);
 
     // Method 1: setScrollPerc to 100%
     this.setScrollPerc(100);
@@ -84,12 +76,41 @@ export class Log extends Element {
     // Method 3: Set childBase directly (internal scroll position)
     (this as any).childBase = maxScroll;
 
-    console.log('[Log.add] After scroll, childBase:', (this as any).childBase);
-
     this.emit('log', text);
   }
 
   clear(): void {
     this.setContent('');
+  }
+
+  /**
+   * Set content of a specific line by index (for animations)
+   * Uses the inherited getLines() from Element
+   */
+  setLine(index: number, content: string): void {
+    const lines = this.getLines();
+    if (index >= 0 && index < lines.length) {
+      lines[index] = content;
+      this.setContent(lines.join('\n'));
+    }
+  }
+
+  /**
+   * Get the number of lines
+   */
+  getLineCount(): number {
+    return this.getLines().length;
+  }
+
+  /**
+   * Get visible range of lines
+   */
+  getVisibleRange(): { start: number; end: number } {
+    const childBase = (this as any).childBase || 0;
+    const height = (this.height as number) || 10;
+    return {
+      start: childBase,
+      end: childBase + height,
+    };
   }
 }

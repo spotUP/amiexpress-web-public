@@ -1025,8 +1025,9 @@ export class Program extends EventEmitter {
     // Enable mouse button tracking
     this.write('\x1b[?1000h');
 
-    // Enable mouse motion tracking
-    this.write('\x1b[?1002h');
+    // Enable any-event mouse tracking (hover without button press)
+    // 1002h = motion only with button held, 1003h = all motion
+    this.write('\x1b[?1003h');
 
     // Enable SGR mouse mode (better encoding)
     this.write('\x1b[?1006h');
@@ -1040,7 +1041,7 @@ export class Program extends EventEmitter {
     this._mouseEnabled = false;
 
     this.write('\x1b[?1006l');
-    this.write('\x1b[?1002l');
+    this.write('\x1b[?1003l');
     this.write('\x1b[?1000l');
   }
 
@@ -1330,12 +1331,16 @@ export class Program extends EventEmitter {
           }
 
           // Check for modifiers
+          // xterm modifier encoding: 1=none, 2=shift, 3=alt, 4=shift+alt, 5=ctrl, etc.
+          // Formula: modifier = 1 + (shift?1:0) + (alt?2:0) + (ctrl?4:0)
+          // To decode: (mod - 1) & bitmask
           if (params.length > 1) {
             const mod = params[1];
-            if (mod) {
-              key.shift = !!(mod & 1);
-              key.meta = !!(mod & 2);
-              key.ctrl = !!(mod & 4);
+            if (mod && mod > 1) {
+              const decoded = mod - 1;
+              key.shift = !!(decoded & 1);
+              key.meta = !!(decoded & 2);
+              key.ctrl = !!(decoded & 4);
             }
           }
 
@@ -1371,24 +1376,18 @@ export class Program extends EventEmitter {
     if (data.startsWith('{') && data.includes('"type"')) {
       try {
         const json = JSON.parse(data);
-        console.log('[Program] Parsed JSON event:', json, 'mouseEnabled:', this._mouseEnabled);
         if (json.type && this._mouseEnabled) {
           const mouseEvent = this.parseJsonMouseEvent(json);
-          console.log('[Program] Parsed mouse event:', mouseEvent);
           if (mouseEvent) {
             this._lastMouseEvent = mouseEvent;
             for (const handler of this.mouseHandlers) {
               handler(mouseEvent);
             }
-            console.log('[Program] Emitting mouse event:', mouseEvent.action);
             this.emit('mouse', mouseEvent);
             return;
           }
-        } else if (json.type) {
-          console.log('[Program] Mouse not enabled, ignoring event');
         }
       } catch (e) {
-        console.log('[Program] JSON parse error:', e);
         // Not valid JSON, continue with normal parsing
       }
     }

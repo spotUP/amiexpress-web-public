@@ -144,6 +144,7 @@ export interface ListOptions extends ElementOptions {
     interactive?: boolean;
     keys?: boolean;
     vi?: boolean;
+    track?: boolean;
     wrapItems?: boolean;
     style?: ElementOptions['style'] & {
         selected?: Colors;

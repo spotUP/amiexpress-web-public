@@ -70,6 +70,9 @@ export class Screen extends Element {
   // Global keyboard shortcuts
   public keyBindings: KeyBindings = new KeyBindings();
 
+  // Browser context menu handler (stored for cleanup)
+  private _contextMenuHandler: ((e: Event) => void) | null = null;
+
   // Responsive layout manager
   public responsiveLayout: ResponsiveLayoutManager;
 
@@ -149,6 +152,34 @@ export class Screen extends Element {
     // Setup event routing from program to screen/elements
     this.setupKeyRouting();
     this.setupMouseRouting();
+
+    // In browser environment, prevent browser context menu to allow app to use right-click
+    this.setupBrowserContextMenu();
+  }
+
+  /**
+   * Setup browser context menu prevention
+   * This allows SDK doors to use right-click without the browser menu appearing
+   */
+  private setupBrowserContextMenu(): void {
+    // Only setup in browser environment
+    // Use typeof check to avoid TypeScript errors in Node.js compilation
+    const win = typeof globalThis !== 'undefined' ? (globalThis as any).window : undefined;
+    const doc = typeof globalThis !== 'undefined' ? (globalThis as any).document : undefined;
+
+    if (!win || !doc) {
+      return;
+    }
+
+    // Create handler that prevents the browser context menu
+    this._contextMenuHandler = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
+    // Add to document to catch all context menu events
+    doc.addEventListener('contextmenu', this._contextMenuHandler, true);
   }
 
   // ============================================================================
@@ -210,13 +241,11 @@ export class Screen extends Element {
 
     // Route event to elements (from top to bottom in z-order)
     // Use slice().reverse() to avoid mutating the elements array
+    // Note: We no longer stop propagation on the first clickable element.
+    // This allows parent elements (like panels) to receive click events when
+    // their children are clicked, enabling proper panel activation.
     for (const element of elements.slice().reverse()) {
       element.onMouse(event);
-
-      // Stop propagation if event was handled
-      if (event.action === 'mousedown' && element.options.clickable) {
-        break;
-      }
     }
   }
 
@@ -648,6 +677,10 @@ export class Screen extends Element {
       this.write('\x1b[H');   // Move cursor to home
     }
 
+    // Mark entire screen as dirty since we're clearing the entire buffer
+    // This ensures that when elements move, their old positions get updated too
+    this._markDirty(0, 0, this.width - 1, this.height - 1);
+
     // Clear buffer with default attribute
     // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
     // Original neo-blessed uses 0x1ff which results in NO background ANSI code,
@@ -720,6 +753,11 @@ export class Screen extends Element {
   private _renderShadow(pos: any): void {
     const { xi, xl, yi, yl } = pos;
 
+    // Mark shadow area as dirty so _diff() outputs the changes
+    // Shadow extends 2 chars right and 1 row down
+    this._markDirty(xl, yi + 1, xl + 1, yl);
+    this._markDirty(xi + 1, yl, xl - 1, yl);
+
     // Right shadow (exactly from blessed)
     let y = Math.max(yi + 1, 0);
     for (; y < yl + 1; y++) {
@@ -760,6 +798,10 @@ export class Screen extends Element {
     const startX = pos.xi + border + padLeft;
     const maxY = pos.yl - border - padBottom;
     const maxX = pos.xl - border - padRight;
+
+    // Mark element content area as dirty so _diff() outputs the changes
+    // This is critical for scrolling to work - content changes need to be in dirty region
+    this._markDirty(startX, startY, maxX - 1, maxY - 1);
 
     // BBS Constraint: Enforce 80-column width limit (unless responsive mode)
     const bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
@@ -935,6 +977,9 @@ export class Screen extends Element {
     const borderType = typeof border === 'string' ? border : (border as any)?.type || 'line';
 
     if (borderType === 'none') return;
+
+    // Mark border area as dirty so _diff() outputs the changes
+    this._markDirty(pos.xi, pos.yi, pos.xl - 1, pos.yl - 1);
 
     const borderChars: Record<string, { tl: string; tr: string; bl: string; br: string; h: string; v: string }> = {
       line: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
@@ -2098,6 +2143,15 @@ export class Screen extends Element {
     if (this._renderTimer) {
       clearTimeout(this._renderTimer);
       this._renderTimer = null;
+    }
+
+    // Remove browser context menu handler
+    if (this._contextMenuHandler) {
+      const doc = typeof globalThis !== 'undefined' ? (globalThis as any).document : undefined;
+      if (doc) {
+        doc.removeEventListener('contextmenu', this._contextMenuHandler, true);
+      }
+      this._contextMenuHandler = null;
     }
 
     this.write(cursor.show);

@@ -11,11 +11,17 @@ export class Textbox extends Element {
   private viewOffset: number = 0; // Horizontal scroll offset for long text
   private secret: boolean = false;
   private censor: boolean = false;
+  // Text selection state
+  private selectionStart: number = -1;  // -1 = no selection
+  private selectionEnd: number = -1;
+  private isDragging: boolean = false;
+  private selectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: TextboxOptions = {}) {
     super({
       focusable: true,
       clickable: true,
+      mouse: true,  // Enable mouse events for drag selection
       keys: true,
       ...options,
       tags: true,  // Enable tag parsing for cursor display (forced, cannot be overridden)
@@ -46,10 +52,69 @@ export class Textbox extends Element {
       this._updateContent();  // Hide cursor when unfocused
     });
 
-    // Click to focus
-    this.on('click', () => {
+    // Click to focus and position cursor (but not if we just finished a drag selection)
+    this.on('click', (event: any) => {
       this.focus();
+      // Only reposition cursor if we don't have an active selection
+      // (click fires after mouseup, so don't clear a just-made selection)
+      if (!this.hasSelection() && event && typeof event.x === 'number') {
+        const clickPos = this._getCharPosFromClick(event.x);
+        this.cursorPos = clickPos;
+        this._updateContent();
+      }
     });
+
+    // Mouse selection via drag
+    this.on('mousedown', (event: any) => {
+      if (event && typeof event.x === 'number') {
+        this.isDragging = true;
+        const clickPos = this._getCharPosFromClick(event.x);
+        this.selectionStart = clickPos;
+        this.selectionEnd = clickPos;
+        this.cursorPos = clickPos;
+        this._updateContent();
+      }
+    });
+
+    this.on('mousemove', (event: any) => {
+      if (this.isDragging && event && typeof event.x === 'number') {
+        const dragPos = this._getCharPosFromClick(event.x);
+        this.selectionEnd = dragPos;
+        this.cursorPos = dragPos;
+        this._updateContent();
+      }
+    });
+
+    this.on('mouseup', () => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        // Normalize selection so start <= end
+        if (this.selectionStart > this.selectionEnd) {
+          [this.selectionStart, this.selectionEnd] = [this.selectionEnd, this.selectionStart];
+        }
+        // Clear selection if it's empty (start == end)
+        if (this.selectionStart === this.selectionEnd) {
+          this.clearSelection();
+        } else {
+          // Emit select event when mouse selection is complete
+          this.emit('select', this.getSelection());
+        }
+        this._updateContent();
+      }
+    });
+  }
+
+  /**
+   * Convert click x-coordinate to character position in value
+   */
+  private _getCharPosFromClick(clickX: number): number {
+    // Calculate position relative to element's inner area
+    const elementLeft = this.aleft + (this.ileft || 0);
+    const relativeX = clickX - elementLeft;
+    // Add viewOffset to get actual position in value
+    const pos = this.viewOffset + relativeX;
+    // Clamp to valid range
+    return Math.max(0, Math.min(pos, this.value.length));
   }
 
   private _onKeypress(ch: any, key: KeyEvent): void {
@@ -58,11 +123,19 @@ export class Textbox extends Element {
     // Ignore Tab - it's handled by screen for focus navigation
     if (key.name === 'tab') return;
 
-    // Character input - only insert printable characters (ASCII 32-126)
-    // This includes space (32) through tilde (126)
-    if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
+    // Ctrl+A to select all
+    if (key.ctrl && key.name === 'a') {
+      this.selectAll();
+      return;
+    }
+
+    // Character input - insert printable characters (including Unicode)
+    // Accept any character that isn't a control character (< 32) except for extended Unicode
+    if (ch && ch.length >= 1 && !key.ctrl && !key.meta) {
       const charCode = ch.charCodeAt(0);
-      if (charCode >= 32 && charCode < 127) {
+      // Allow: space (32) and above, including all Unicode characters (>= 128)
+      // Block: control characters (0-31) and DEL (127)
+      if (charCode >= 32 && charCode !== 127) {
         this.insertChar(ch);
         return;
       }
@@ -79,19 +152,39 @@ export class Textbox extends Element {
         break;
 
       case 'left':
-        this.cursorLeft();
+        if (key.shift) {
+          this._extendSelection(-1);
+        } else {
+          this.clearSelection();
+          this.cursorLeft();
+        }
         break;
 
       case 'right':
-        this.cursorRight();
+        if (key.shift) {
+          this._extendSelection(1);
+        } else {
+          this.clearSelection();
+          this.cursorRight();
+        }
         break;
 
       case 'home':
-        this.cursorHome();
+        if (key.shift) {
+          this._selectTo(0);
+        } else {
+          this.clearSelection();
+          this.cursorHome();
+        }
         break;
 
       case 'end':
-        this.cursorEnd();
+        if (key.shift) {
+          this._selectTo(this.value.length);
+        } else {
+          this.clearSelection();
+          this.cursorEnd();
+        }
         break;
 
       case 'enter':
@@ -99,9 +192,58 @@ export class Textbox extends Element {
         break;
 
       case 'escape':
+        this.clearSelection();
         this.cancel();
         break;
     }
+  }
+
+  /**
+   * Emit select event after a debounce delay (for keyboard selection)
+   */
+  private _emitSelectDebounced(): void {
+    if (this.selectDebounceTimer) {
+      clearTimeout(this.selectDebounceTimer);
+    }
+    this.selectDebounceTimer = setTimeout(() => {
+      this.selectDebounceTimer = null;
+      if (this.hasSelection()) {
+        this.emit('select', this.getSelection());
+      }
+    }, 500); // 500ms delay
+  }
+
+  /**
+   * Extend selection by delta positions (-1 = left, 1 = right)
+   */
+  private _extendSelection(delta: number): void {
+    // Start selection at cursor if not already selecting
+    if (this.selectionStart === -1) {
+      this.selectionStart = this.cursorPos;
+      this.selectionEnd = this.cursorPos;
+    }
+
+    // Move cursor and extend selection
+    const newPos = Math.max(0, Math.min(this.cursorPos + delta, this.value.length));
+    this.cursorPos = newPos;
+    this.selectionEnd = newPos;
+    this._updateContent();
+    // Emit select event after debounce delay
+    this._emitSelectDebounced();
+  }
+
+  /**
+   * Select from current selection start to target position
+   */
+  private _selectTo(pos: number): void {
+    if (this.selectionStart === -1) {
+      this.selectionStart = this.cursorPos;
+    }
+    this.cursorPos = pos;
+    this.selectionEnd = pos;
+    this._updateContent();
+    // Emit select event after debounce delay
+    this._emitSelectDebounced();
   }
 
   /**
@@ -134,6 +276,14 @@ export class Textbox extends Element {
     this.viewOffset = Math.max(0, this.viewOffset);
   }
 
+  /**
+   * Escape blessed tag characters so they display literally
+   */
+  private _escapeForDisplay(text: string): string {
+    // Replace { with {open} and } with {close} so blessed doesn't interpret them as tags
+    return text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
+  }
+
   private _updateContent(): void {
     this._ensureCursorVisible();
 
@@ -150,14 +300,42 @@ export class Textbox extends Element {
     let display: string;
 
     if (this.focused) {
-      // Show cursor as inverse video at cursor position
-      const cursorPosInView = this.cursorPos - this.viewOffset;
-      const beforeCursor = visibleText.slice(0, cursorPosInView);
-      const atCursor = visibleText[cursorPosInView] || ' ';  // Space if at end
-      const afterCursor = visibleText.slice(cursorPosInView + 1);
-      display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+      // Check if there's a selection
+      if (this.hasSelection()) {
+        // Get normalized selection bounds
+        const selStart = Math.min(this.selectionStart, this.selectionEnd);
+        const selEnd = Math.max(this.selectionStart, this.selectionEnd);
+
+        // Convert to visible range
+        const visStart = Math.max(0, selStart - this.viewOffset);
+        const visEnd = Math.min(visibleText.length, selEnd - this.viewOffset);
+
+        if (visEnd > visStart && visStart < visibleText.length) {
+          // Render selection with inverse video
+          // Escape user content so {} chars don't break blessed tags
+          const before = this._escapeForDisplay(visibleText.slice(0, visStart));
+          const selected = this._escapeForDisplay(visibleText.slice(visStart, visEnd));
+          const after = this._escapeForDisplay(visibleText.slice(visEnd));
+          display = `${before}{inverse}${selected}{/inverse}${after}`;
+        } else {
+          // Selection not visible, show cursor
+          const cursorPosInView = this.cursorPos - this.viewOffset;
+          const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+          const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
+          const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+          display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+        }
+      } else {
+        // No selection, show cursor as inverse video at cursor position
+        const cursorPosInView = this.cursorPos - this.viewOffset;
+        const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+        const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');  // Space if at end
+        const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+        display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+      }
     } else {
-      display = visibleText;
+      // Not focused - still escape to display literal braces
+      display = this._escapeForDisplay(visibleText);
     }
 
     this.setContent(display);
@@ -169,6 +347,11 @@ export class Textbox extends Element {
   }
 
   insertChar(ch: string): void {
+    // If there's a selection, replace it
+    if (this.hasSelection()) {
+      this.replaceSelection(ch);
+      return;
+    }
     this.value = this.value.slice(0, this.cursorPos) + ch + this.value.slice(this.cursorPos);
     this.cursorPos++;
     this._updateContent();
@@ -176,6 +359,11 @@ export class Textbox extends Element {
   }
 
   deleteChar(): void {
+    // If there's a selection, delete it
+    if (this.hasSelection()) {
+      this.replaceSelection('');
+      return;
+    }
     if (this.cursorPos > 0) {
       this.value = this.value.slice(0, this.cursorPos - 1) + this.value.slice(this.cursorPos);
       this.cursorPos--;
@@ -185,11 +373,76 @@ export class Textbox extends Element {
   }
 
   deleteCharForward(): void {
+    // If there's a selection, delete it
+    if (this.hasSelection()) {
+      this.replaceSelection('');
+      return;
+    }
     if (this.cursorPos < this.value.length) {
       this.value = this.value.slice(0, this.cursorPos) + this.value.slice(this.cursorPos + 1);
       this._updateContent();
       this.emit('change', this.value);
     }
+  }
+
+  /**
+   * Check if there is an active text selection
+   */
+  hasSelection(): boolean {
+    return this.selectionStart !== -1 &&
+           this.selectionEnd !== -1 &&
+           this.selectionStart !== this.selectionEnd;
+  }
+
+  /**
+   * Get the current selection info
+   */
+  getSelection(): { start: number; end: number; text: string } | null {
+    if (!this.hasSelection()) {
+      return null;
+    }
+    const start = Math.min(this.selectionStart, this.selectionEnd);
+    const end = Math.max(this.selectionStart, this.selectionEnd);
+    return {
+      start,
+      end,
+      text: this.value.slice(start, end),
+    };
+  }
+
+  /**
+   * Replace the current selection with new text
+   */
+  replaceSelection(text: string): void {
+    if (!this.hasSelection()) {
+      return;
+    }
+    const start = Math.min(this.selectionStart, this.selectionEnd);
+    const end = Math.max(this.selectionStart, this.selectionEnd);
+    this.value = this.value.slice(0, start) + text + this.value.slice(end);
+    this.cursorPos = start + text.length;
+    this.clearSelection();
+    this._updateContent();
+    this.emit('change', this.value);
+  }
+
+  /**
+   * Clear the current selection
+   */
+  clearSelection(): void {
+    this.selectionStart = -1;
+    this.selectionEnd = -1;
+    this.isDragging = false;
+  }
+
+  /**
+   * Select all text
+   */
+  selectAll(): void {
+    this.selectionStart = 0;
+    this.selectionEnd = this.value.length;
+    this.cursorPos = this.value.length;
+    this._updateContent();
   }
 
   cursorLeft(): void {
@@ -262,6 +515,11 @@ export class Textarea extends Element {
   value: string = '';
   private cursorPos: number = 0;  // Position in flat string
   private viewOffsetY: number = 0;  // Vertical scroll offset (line number)
+  // Text selection state
+  private selectionStart: number = -1;  // -1 = no selection
+  private selectionEnd: number = -1;
+  private isDragging: boolean = false;
+  private selectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: TextboxOptions = {}) {
     super({
@@ -299,8 +557,55 @@ export class Textarea extends Element {
       this._updateContent();
     });
 
-    this.on('click', () => {
+    // Click to focus and position cursor
+    this.on('click', (event: any) => {
       this.focus();
+      // Only reposition cursor if we don't have an active selection
+      // (click fires after mouseup, so don't clear a just-made selection)
+      if (!this.hasSelection() && event && typeof event.x === 'number' && typeof event.y === 'number') {
+        const clickPos = this._getCharPosFromClick(event.x, event.y);
+        this.cursorPos = clickPos;
+        this._updateContent();
+      }
+    });
+
+    // Mouse selection via drag
+    this.on('mousedown', (event: any) => {
+      if (event && typeof event.x === 'number' && typeof event.y === 'number') {
+        this.isDragging = true;
+        const clickPos = this._getCharPosFromClick(event.x, event.y);
+        this.selectionStart = clickPos;
+        this.selectionEnd = clickPos;
+        this.cursorPos = clickPos;
+        this._updateContent();
+      }
+    });
+
+    this.on('mousemove', (event: any) => {
+      if (this.isDragging && event && typeof event.x === 'number' && typeof event.y === 'number') {
+        const dragPos = this._getCharPosFromClick(event.x, event.y);
+        this.selectionEnd = dragPos;
+        this.cursorPos = dragPos;
+        this._updateContent();
+      }
+    });
+
+    this.on('mouseup', () => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        // Normalize selection so start <= end
+        if (this.selectionStart > this.selectionEnd) {
+          [this.selectionStart, this.selectionEnd] = [this.selectionEnd, this.selectionStart];
+        }
+        // Clear selection if it's empty (start == end)
+        if (this.selectionStart === this.selectionEnd) {
+          this.clearSelection();
+        } else {
+          // Emit select event when mouse selection is complete
+          this.emit('select', this.getSelection());
+        }
+        this._updateContent();
+      }
     });
 
     // Mouse wheel scrolling
@@ -326,13 +631,21 @@ export class Textarea extends Element {
   private _onKeypress(ch: any, key: KeyEvent): void {
     if (!this.focused) return;
 
-    // Ignore Tab - it's handled by screen for focus navigation
-    if (key.name === 'tab') return;
+    // Ignore Tab (except Shift+Tab) - handled by screen for focus navigation
+    if (key.name === 'tab' && !key.shift) return;
 
-    // Character input - printable characters
-    if (ch && ch.length === 1 && !key.ctrl && !key.meta) {
+    // Ctrl+A to select all
+    if (key.ctrl && key.name === 'a') {
+      this.selectAll();
+      return;
+    }
+
+    // Character input - printable characters (including Unicode)
+    if (ch && ch.length >= 1 && !key.ctrl && !key.meta) {
       const charCode = ch.charCodeAt(0);
-      if (charCode >= 32 && charCode < 127) {
+      // Allow: space (32) and above, including all Unicode characters (>= 128)
+      // Block: control characters (0-31) and DEL (127)
+      if (charCode >= 32 && charCode !== 127) {
         this.insertChar(ch);
         return;
       }
@@ -348,27 +661,57 @@ export class Textarea extends Element {
         break;
 
       case 'left':
-        this.cursorLeft();
+        if (key.shift) {
+          this._extendSelection(-1);
+        } else {
+          this.clearSelection();
+          this.cursorLeft();
+        }
         break;
 
       case 'right':
-        this.cursorRight();
+        if (key.shift) {
+          this._extendSelection(1);
+        } else {
+          this.clearSelection();
+          this.cursorRight();
+        }
         break;
 
       case 'up':
-        this.cursorUp();
+        if (key.shift) {
+          this._extendSelectionVertical(-1);
+        } else {
+          this.clearSelection();
+          this.cursorUp();
+        }
         break;
 
       case 'down':
-        this.cursorDown();
+        if (key.shift) {
+          this._extendSelectionVertical(1);
+        } else {
+          this.clearSelection();
+          this.cursorDown();
+        }
         break;
 
       case 'home':
-        this.cursorHome();
+        if (key.shift) {
+          this._selectTo(0);
+        } else {
+          this.clearSelection();
+          this.cursorHome();
+        }
         break;
 
       case 'end':
-        this.cursorEnd();
+        if (key.shift) {
+          this._selectTo(this.value.length);
+        } else {
+          this.clearSelection();
+          this.cursorEnd();
+        }
         break;
 
       case 'enter':
@@ -377,6 +720,7 @@ export class Textarea extends Element {
         break;
 
       case 'escape':
+        this.clearSelection();
         this.cancel();
         break;
 
@@ -389,6 +733,99 @@ export class Textarea extends Element {
         }
         break;
     }
+  }
+
+  /**
+   * Emit select event after a debounce delay (for keyboard selection)
+   */
+  private _emitSelectDebounced(): void {
+    if (this.selectDebounceTimer) {
+      clearTimeout(this.selectDebounceTimer);
+    }
+    this.selectDebounceTimer = setTimeout(() => {
+      this.selectDebounceTimer = null;
+      if (this.hasSelection()) {
+        this.emit('select', this.getSelection());
+      }
+    }, 500); // 500ms delay
+  }
+
+  /**
+   * Extend selection by delta positions (-1 = left, 1 = right)
+   */
+  private _extendSelection(delta: number): void {
+    // Start selection at cursor if not already selecting
+    if (this.selectionStart === -1) {
+      this.selectionStart = this.cursorPos;
+      this.selectionEnd = this.cursorPos;
+    }
+
+    // Move cursor and extend selection
+    const newPos = Math.max(0, Math.min(this.cursorPos + delta, this.value.length));
+    this.cursorPos = newPos;
+    this.selectionEnd = newPos;
+    this._updateContent();
+    // Emit select event after debounce delay
+    this._emitSelectDebounced();
+  }
+
+  /**
+   * Extend selection vertically by moving cursor up/down
+   */
+  private _extendSelectionVertical(lineDelta: number): void {
+    // Start selection at cursor if not already selecting
+    if (this.selectionStart === -1) {
+      this.selectionStart = this.cursorPos;
+      this.selectionEnd = this.cursorPos;
+    }
+
+    // Move cursor vertically
+    if (lineDelta < 0) {
+      this.cursorUp();
+    } else {
+      this.cursorDown();
+    }
+    this.selectionEnd = this.cursorPos;
+    this._updateContent();
+    // Emit select event after debounce delay
+    this._emitSelectDebounced();
+  }
+
+  /**
+   * Select from current selection start to target position
+   */
+  private _selectTo(pos: number): void {
+    if (this.selectionStart === -1) {
+      this.selectionStart = this.cursorPos;
+    }
+
+    this.cursorPos = pos;
+    this.selectionEnd = pos;
+    this._updateContent();
+    // Emit select event after debounce delay
+    this._emitSelectDebounced();
+  }
+
+  /**
+   * Convert click coordinates to character position in value
+   */
+  private _getCharPosFromClick(clickX: number, clickY: number): number {
+    const elementLeft = this.aleft + (this.ileft || 0);
+    const elementTop = this.atop + (this.itop || 0);
+    const relativeX = clickX - elementLeft;
+    const relativeY = clickY - elementTop + this.viewOffsetY;
+
+    const lines = this._getLines();
+    const lineIndex = Math.max(0, Math.min(relativeY, lines.length - 1));
+
+    // Calculate position in value string
+    let pos = 0;
+    for (let i = 0; i < lineIndex; i++) {
+      pos += lines[i].length + 1; // +1 for newline
+    }
+    pos += Math.max(0, Math.min(relativeX, lines[lineIndex]?.length || 0));
+
+    return Math.max(0, Math.min(pos, this.value.length));
   }
 
   private _getLines(): string[] {
@@ -422,6 +859,14 @@ export class Textarea extends Element {
     this.viewOffsetY = Math.max(0, this.viewOffsetY);
   }
 
+  /**
+   * Escape blessed tag characters so they display literally
+   */
+  private _escapeForDisplay(text: string): string {
+    // Replace { with {open} and } with {close} so blessed doesn't interpret them as tags
+    return text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
+  }
+
   private _updateContent(): void {
     this._ensureCursorVisible();
 
@@ -430,23 +875,56 @@ export class Textarea extends Element {
     const visibleLines = lines.slice(this.viewOffsetY, this.viewOffsetY + visibleHeight);
     const { line: cursorLine, col: cursorCol } = this._getCursorLineCol();
 
+    // Calculate selection range in terms of start/end positions
+    const hasSelection = this.hasSelection();
+    const selStart = hasSelection ? Math.min(this.selectionStart, this.selectionEnd) : -1;
+    const selEnd = hasSelection ? Math.max(this.selectionStart, this.selectionEnd) : -1;
+
     let display = '';
+    let charPos = 0; // Track position in full value string
+
+    // Calculate starting position for visible area
+    for (let i = 0; i < this.viewOffsetY && i < lines.length; i++) {
+      charPos += lines[i].length + 1; // +1 for newline
+    }
+
     for (let i = 0; i < visibleLines.length; i++) {
       const lineIndex = this.viewOffsetY + i;
-      let lineText = visibleLines[i];
+      const lineText = visibleLines[i];
+      let lineDisplay = '';
 
-      if (this.focused && lineIndex === cursorLine) {
-        // Show cursor on this line
-        const beforeCursor = lineText.slice(0, cursorCol);
-        const atCursor = lineText[cursorCol] || ' ';
-        const afterCursor = lineText.slice(cursorCol + 1);
-        lineText = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+      for (let col = 0; col < lineText.length; col++) {
+        const pos = charPos + col;
+        const ch = lineText[col];
+        const isSelected = hasSelection && pos >= selStart && pos < selEnd;
+        const isCursor = this.focused && !hasSelection && lineIndex === cursorLine && col === cursorCol;
+
+        // Escape character so {} don't break blessed tags
+        const escapedCh = this._escapeForDisplay(ch);
+
+        if (isSelected || isCursor) {
+          lineDisplay += `{inverse}${escapedCh}{/inverse}`;
+        } else {
+          lineDisplay += escapedCh;
+        }
       }
 
-      display += lineText;
+      // Show cursor at end of line if applicable
+      if (this.focused && !hasSelection && lineIndex === cursorLine && cursorCol >= lineText.length) {
+        lineDisplay += '{inverse} {/inverse}';
+      }
+
+      // If selection extends to end of line (before newline), show inverse on the space
+      if (hasSelection && charPos + lineText.length >= selStart && charPos + lineText.length < selEnd) {
+        // Selection continues to next line - no extra visual needed
+      }
+
+      display += lineDisplay;
       if (i < visibleLines.length - 1) {
         display += '\n';
       }
+
+      charPos += lineText.length + 1; // +1 for newline
     }
 
     this.setContent(display);
@@ -456,6 +934,11 @@ export class Textarea extends Element {
   }
 
   insertChar(ch: string): void {
+    // If there's a selection, replace it
+    if (this.hasSelection()) {
+      this.replaceSelection(ch);
+      return;
+    }
     this.value = this.value.slice(0, this.cursorPos) + ch + this.value.slice(this.cursorPos);
     this.cursorPos += ch.length;
     this._updateContent();
@@ -463,6 +946,11 @@ export class Textarea extends Element {
   }
 
   deleteChar(): void {
+    // If there's a selection, delete it
+    if (this.hasSelection()) {
+      this.replaceSelection('');
+      return;
+    }
     if (this.cursorPos > 0) {
       this.value = this.value.slice(0, this.cursorPos - 1) + this.value.slice(this.cursorPos);
       this.cursorPos--;
@@ -472,6 +960,11 @@ export class Textarea extends Element {
   }
 
   deleteCharForward(): void {
+    // If there's a selection, delete it
+    if (this.hasSelection()) {
+      this.replaceSelection('');
+      return;
+    }
     if (this.cursorPos < this.value.length) {
       this.value = this.value.slice(0, this.cursorPos) + this.value.slice(this.cursorPos + 1);
       this._updateContent();
@@ -576,5 +1069,64 @@ export class Textarea extends Element {
 
   readInput(): void {
     this.emit('readInput');
+  }
+
+  /**
+   * Check if there is an active text selection
+   */
+  hasSelection(): boolean {
+    return this.selectionStart !== -1 &&
+           this.selectionEnd !== -1 &&
+           this.selectionStart !== this.selectionEnd;
+  }
+
+  /**
+   * Get the current selection info
+   */
+  getSelection(): { start: number; end: number; text: string } | null {
+    if (!this.hasSelection()) {
+      return null;
+    }
+    const start = Math.min(this.selectionStart, this.selectionEnd);
+    const end = Math.max(this.selectionStart, this.selectionEnd);
+    return {
+      start,
+      end,
+      text: this.value.slice(start, end)
+    };
+  }
+
+  /**
+   * Replace the current selection with new text
+   */
+  replaceSelection(text: string): void {
+    if (!this.hasSelection()) {
+      return;
+    }
+    const start = Math.min(this.selectionStart, this.selectionEnd);
+    const end = Math.max(this.selectionStart, this.selectionEnd);
+    this.value = this.value.slice(0, start) + text + this.value.slice(end);
+    this.cursorPos = start + text.length;
+    this.clearSelection();
+    this._updateContent();
+    this.emit('change', this.value);
+  }
+
+  /**
+   * Clear the current selection
+   */
+  clearSelection(): void {
+    this.selectionStart = -1;
+    this.selectionEnd = -1;
+  }
+
+  /**
+   * Select all text
+   */
+  selectAll(): void {
+    this.selectionStart = 0;
+    this.selectionEnd = this.value.length;
+    this.cursorPos = this.value.length;
+    this._updateContent();
   }
 }

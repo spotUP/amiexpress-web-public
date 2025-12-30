@@ -1931,6 +1931,8 @@ export class Element extends EventEmitter {
         this.emit('mousedown', event);
         if (event.button === 'left') {
           this.emit('click', event);
+        } else if (event.button === 'right') {
+          this.emit('rightclick', event);
         }
       }
     } else if (event.action === 'mouseup') {

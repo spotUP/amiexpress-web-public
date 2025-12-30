@@ -131,15 +131,16 @@ set focused(el: Element | null) // => this.focusPush(el)
 
 ## Testing Checklist
 
-- [ ] Buffer format matches neo-blessed
-- [ ] Static text rendering works
-- [ ] Colored text renders correctly
-- [ ] Scrollable boxes work
+- [x] Buffer format matches neo-blessed (`[attr, char][][]`)
+- [x] Static text rendering works
+- [x] Colored text renders correctly
+- [x] Scrollable boxes work (fixed 2024-12-30: dirty region marking)
+- [x] Element dragging works (fixed 2024-12-30: full screen dirty on render)
 - [ ] Line insert/delete works
-- [ ] Tab navigation (focusNext/Prev)
-- [ ] Mouse clicks work
-- [ ] Hover events work
-- [ ] Resize handling works
+- [x] Tab navigation (focusNext/Prev)
+- [x] Mouse clicks work
+- [x] Hover events work
+- [x] Resize handling works (fixed 2024-12-30: cache invalidation)
 - [ ] All neo-blessed examples run
 
 ## Dependencies to Add

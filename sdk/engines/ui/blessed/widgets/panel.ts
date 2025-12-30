@@ -25,6 +25,8 @@ export class Panel extends Box {
       border: options.border || { type: 'line', fg: 'blue' },
       focusable: true,
       keys: true,
+      mouse: true,
+      clickable: true,  // Enable click events for panel activation
       style: {
         fg: 'white',
         bg: 'black',
@@ -42,6 +44,11 @@ export class Panel extends Box {
     if (options.title) {
       this.options.label = ` ${options.title} `;
     }
+
+    // Focus panel when clicked anywhere on it (including when children are clicked)
+    this.on('click', () => {
+      this.focus();
+    });
 
     // Track active state based on child focus
     if (this.screen) {

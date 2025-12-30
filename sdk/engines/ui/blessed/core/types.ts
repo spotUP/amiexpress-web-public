@@ -221,6 +221,7 @@ export interface ListOptions extends ElementOptions {
   interactive?: boolean;
   keys?: boolean;
   vi?: boolean;
+  track?: boolean;  // Enable mouse hover tracking for list items
   wrapItems?: boolean;
   style?: ElementOptions['style'] & {
     selected?: Colors;

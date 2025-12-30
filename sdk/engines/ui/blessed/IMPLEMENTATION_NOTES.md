@@ -230,6 +230,41 @@ If browser support becomes critical, unblessed packages are available:
 
 **Current Recommendation:** Stick with AmiExpress implementation unless browser features justify the migration cost.
 
+## Changelog
+
+### 2024-12-30: Rendering & Coordinate Cache Fixes
+
+**Screen Rendering (`screen.ts`):**
+- Fixed dirty region handling - now marks entire screen as dirty at start of each render
+- This ensures that when elements move (drag, resize), both old and new positions are updated
+- Added `_markDirty()` calls in `_renderContent`, `_renderBorder`, and `_renderShadow`
+- Fixes: scrolling content not updating, dragged panels leaving content behind
+
+**Coordinate Cache:**
+- When modifying `element.position.*` properties directly (not via setters), the coordinate cache must be invalidated manually
+- Pattern: After setting `element.position.width = value`, call `element._coordsCacheValid = false`
+- For elements with children, recursively invalidate all descendants:
+  ```typescript
+  function invalidateCache(element: any) {
+    element._coordsCacheValid = false;
+    if (element.children) {
+      for (const child of element.children) {
+        invalidateCache(child);
+      }
+    }
+  }
+  ```
+
+**Affected Use Cases:**
+- Showing hidden overlays/dialogs with updated dimensions
+- Resizing elements during terminal resize events
+- Toggling sidebar visibility (F2)
+- Any runtime position/size changes via direct property assignment
+
+**DockablePanel (`dockable-panel.ts`):**
+- Already calls `invalidateChildrenCache()` during drag/resize operations
+- No changes needed, but the screen-level dirty region fix was required for proper rendering
+
 ## Maintenance
 
 **Owner:** AmiExpress Team

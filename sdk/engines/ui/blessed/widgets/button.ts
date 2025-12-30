@@ -10,12 +10,12 @@ export class Button extends Element {
     const baseStyle = options.style ?? {};
     const focusStyle = {
       fg: 'white',
-      bg: 'blue',
+      bg: 'lightblue',
       ...(baseStyle.focus ?? {}),
     };
     const hoverStyle = {
       fg: 'white',
-      bg: 'blue',
+      bg: 'lightblue',
       ...(baseStyle.hover ?? {}),
     };
 

@@ -45,24 +45,17 @@ export class Overlay extends Box {
 
     // Auto-focus when shown - also emit web transparency event and trap focus
     this.on('show', () => {
-      console.log('[Overlay] SHOW event triggered!');
-      console.log('[Overlay] About to trap focus...');
       if (this.screen) {
         (this.screen as any).trapFocus(this);
       }
-      console.log('[Overlay] Focus trapped, about to emit OSC...');
       this._emitOverlayWidgetEvent(true);
-      console.log('[Overlay] OSC emitted, about to render...');
       if (this.screen) {
         this.screen.render();
       }
-      console.log('[Overlay] SHOW handler complete');
     });
 
     // Emit hide event for web transparency and release focus trap
     this.on('hide', () => {
-      console.log('[Overlay] HIDE event triggered!');
-      console.trace('[Overlay] Stack trace for hide:');
       if (this.screen) {
         (this.screen as any).releaseFocusTrap();
       }
@@ -71,7 +64,6 @@ export class Overlay extends Box {
 
     // Default escape handler to hide overlay
     this.key(['escape'], () => {
-      console.log('[Overlay] ESCAPE key pressed! Hiding overlay...');
       this.hide();
       this.emit('cancel');
       if (this.screen) {
@@ -97,7 +89,6 @@ export class Overlay extends Box {
    */
   private _emitOverlayWidgetEvent(show: boolean): void {
     if (!this.screen) {
-      console.log('[Overlay] No screen, cannot emit event');
       return;
     }
 
@@ -129,9 +120,6 @@ export class Overlay extends Box {
       height: pos.height,
     });
     const osc = `\x1b]9999;overlay;${data}\x07`;
-    console.log('[Overlay] Emitting OSC sequence:', show ? 'SHOW' : 'HIDE', 'opacity:', this._overlayOpacity, 'pos:', pos, 'id:', this._overlayWidgetId);
-    console.log('[Overlay] OSC data:', data);
-    console.log('[Overlay] OSC hex:', Array.from(osc).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' '));
     // Use OSC (Operating System Command) format that won't display as text
     // Write directly through the screen's program which handles output
     this.screen.program.write(osc);
