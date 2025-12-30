@@ -1,0 +1,17 @@
+{
+  "door": "WHO",
+  "description": "Stress test - rapid keystroke injection",
+  "messages": [
+    { "type": "JH_HK", "param": 13, "data": "\r", "delay": 0 },
+    { "type": "JH_HK", "param": 65, "data": "A", "delay": 10 },
+    { "type": "JH_HK", "param": 66, "data": "B", "delay": 10 },
+    { "type": "JH_HK", "param": 67, "data": "C", "delay": 10 },
+    { "type": "JH_HK", "param": 68, "data": "D", "delay": 10 },
+    { "type": "JH_HK", "param": 69, "data": "E", "delay": 10 },
+    { "type": "JH_HK", "param": 70, "data": "F", "delay": 10 },
+    { "type": "JH_HK", "param": 71, "data": "G", "delay": 10 },
+    { "type": "JH_HK", "param": 72, "data": "H", "delay": 10 },
+    { "type": "JH_HK", "param": 13, "data": "\r", "delay": 100 },
+    { "type": "JH_HK", "param": 81, "data": "Q", "delay": 500 }
+  ]
+}

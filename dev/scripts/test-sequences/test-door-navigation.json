@@ -1,0 +1,33 @@
+{
+  "door": "WHO",
+  "description": "Test door navigation and menu options",
+  "messages": [
+    {
+      "type": "JH_HK",
+      "param": 13,
+      "data": "\r",
+      "delay": 0
+    },
+    {
+      "type": "JH_HK",
+      "param": 72,
+      "data": "H",
+      "delay": 500,
+      "comment": "Press H for help"
+    },
+    {
+      "type": "JH_HK",
+      "param": 13,
+      "data": "\r",
+      "delay": 1000,
+      "comment": "Press Enter after help"
+    },
+    {
+      "type": "JH_HK",
+      "param": 81,
+      "data": "Q",
+      "delay": 500,
+      "comment": "Press Q to quit"
+    }
+  ]
+}

@@ -26,6 +26,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
+import { XIMAnalyzer, DetectedIssue } from './xim-analyzer';
 
 interface DebugSession {
   door: string;
@@ -33,18 +34,12 @@ interface DebugSession {
   endTime?: Date;
   logFile: string;
   messages: any[];
-  issues: Issue[];
+  issues: DetectedIssue[];
   status: 'initializing' | 'running' | 'completed' | 'error';
 }
 
-interface Issue {
-  severity: 'critical' | 'warning' | 'info';
-  title: string;
-  confidence: number;
-  evidence: string[];
-  suggestedFix: string;
-  code?: string;
-}
+// Use DetectedIssue from xim-analyzer (same interface)
+type Issue = DetectedIssue;
 
 class XIMDebugger {
   private door: string;
@@ -220,114 +215,9 @@ class XIMDebugger {
   }
 
   private async analyzeSession() {
-    // Run basic analysis
-    this.detectCommonIssues();
-  }
-
-  private detectCommonIssues() {
-    const messages = this.session.messages;
-
-    if (messages.length === 0) {
-      this.session.issues.push({
-        severity: 'critical',
-        title: 'No XIM messages detected',
-        confidence: 100,
-        evidence: [
-          'No messages found in XIM log for this door',
-          'Door may not be using XIM protocol',
-          'Or XIM logging not enabled'
-        ],
-        suggestedFix: 'Verify door is an XIM door and XIM_DEBUG_JSON=1 is set',
-      });
-      return;
-    }
-
-    // Check for JH_INIT
-    const hasInit = messages.some(m => m.message?.type === 'JH_INIT');
-    if (!hasInit) {
-      this.session.issues.push({
-        severity: 'critical',
-        title: 'No JH_INIT message received',
-        confidence: 95,
-        evidence: [
-          'Door never received initialization message',
-          'Backend may have failed to send JH_INIT',
-          'Or door crashed before receiving it'
-        ],
-        suggestedFix: 'Check backend logs for door startup errors',
-      });
-    }
-
-    // Check for response timeout pattern
-    const sentMessages = messages.filter(m => m.direction === 'send');
-    const receivedMessages = messages.filter(m => m.direction === 'receive');
-
-    if (sentMessages.length > receivedMessages.length + 5) {
-      this.session.issues.push({
-        severity: 'warning',
-        title: 'Door not responding to messages',
-        confidence: 80,
-        evidence: [
-          `Backend sent ${sentMessages.length} messages`,
-          `Door responded ${receivedMessages.length} times`,
-          'Possible GetMsg() loop or door hang'
-        ],
-        suggestedFix: 'Check if door is stuck in GetMsg() waiting for messages',
-        code: 'Verify message loop has timeout handling',
-      });
-    }
-
-    // Check for protocol violations
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      // JH_SM before JH_INIT
-      if (i < 2 && msg.message?.type === 'JH_SM' && msg.direction === 'receive') {
-        const initBefore = messages.slice(0, i).some(m => m.message?.type === 'JH_INIT');
-        if (!initBefore) {
-          this.session.issues.push({
-            severity: 'critical',
-            title: 'Protocol violation: JH_SM before JH_INIT',
-            confidence: 100,
-            evidence: [
-              `Door sent JH_SM at position ${i}`,
-              'JH_INIT not yet received',
-              'Protocol requires JH_INIT first'
-            ],
-            suggestedFix: 'Add state check to wait for JH_INIT before sending messages',
-            code: 'if (!initialized) return; // Wait for JH_INIT',
-          });
-          break;
-        }
-      }
-    }
-
-    // Check for very short session (crash)
-    const duration = this.session.endTime
-      ? this.session.endTime.getTime() - this.session.startTime.getTime()
-      : 0;
-
-    if (duration > 0 && duration < 2000 && messages.length < 10) {
-      this.session.issues.push({
-        severity: 'critical',
-        title: 'Door crashed or exited immediately',
-        confidence: 90,
-        evidence: [
-          `Session lasted only ${duration}ms`,
-          `Only ${messages.length} messages exchanged`,
-          'Possible crash or immediate exit'
-        ],
-        suggestedFix: 'Check door logs for crash/error messages',
-      });
-    }
-
-    // Sort by severity and confidence
-    this.session.issues.sort((a, b) => {
-      const severityOrder = { critical: 0, warning: 1, info: 2 };
-      const severityDiff = severityOrder[a.severity] - severityOrder[b.severity];
-      if (severityDiff !== 0) return severityDiff;
-      return b.confidence - a.confidence;
-    });
+    // Use advanced pattern analyzer (10+ patterns with confidence scoring)
+    const analyzer = new XIMAnalyzer();
+    this.session.issues = await analyzer.analyze(this.logFile, this.door);
   }
 
   private async generateReport(): Promise<string> {

@@ -1,0 +1,464 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-12-29",
+  "issues": [
+    {
+      "id": "GETMSG_TIMEOUT",
+      "title": "GetMsg() infinite loop - missing timeout",
+      "severity": "critical",
+      "pattern": "GETMSG_LOOP",
+      "symptoms": [
+        "Door hangs after receiving message",
+        "Backend sends message but door never responds",
+        "No new XIM messages after initial JH_INIT",
+        "Door process stays alive but unresponsive"
+      ],
+      "rootCause": "Door calls GetMsg() in blocking mode without timeout or signal handling. If no message arrives, door hangs forever.",
+      "solution": "Add timeout using Wait() with signal mask to allow breaking out of GetMsg() loop",
+      "codeExample": {
+        "before": "// WRONG - blocks forever\nXIMMessage *msg = (XIMMessage *)GetMsg(replyPort);",
+        "after": "// CORRECT - timeout handling\nULONG signals = Wait(SIGBREAKF_CTRL_C | (1L << replyPort->mp_SigBit));\n\nif (signals & SIGBREAKF_CTRL_C) {\n    // User pressed Ctrl+C\n    break;\n}\n\nif (signals & (1L << replyPort->mp_SigBit)) {\n    XIMMessage *msg = (XIMMessage *)GetMsg(replyPort);\n    // Process message\n}"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#message-loop-timeout",
+        "NDK Autodocs: exec.library/Wait"
+      ],
+      "affectedDoors": ["WHO", "RTW", "MultiTop"],
+      "confidence": 95
+    },
+    {
+      "id": "PROTOCOL_VIOLATION_INIT",
+      "title": "JH_SM sent before JH_INIT received",
+      "severity": "critical",
+      "pattern": "PROTOCOL_VIOLATION",
+      "symptoms": [
+        "Backend rejects early messages",
+        "Door appears to send output but nothing displays",
+        "XIM log shows JH_SM at position 0 or 1"
+      ],
+      "rootCause": "Door sends messages before receiving JH_INIT from backend. XIM protocol requires JH_INIT first.",
+      "solution": "Add initialization state check. Wait for JH_INIT before sending any messages.",
+      "codeExample": {
+        "before": "// WRONG - sends immediately\nvoid doorMain() {\n    sendMessage(\"Hello\");  // Too early!\n    // ...\n}",
+        "after": "// CORRECT - wait for init\nBOOL initialized = FALSE;\n\nvoid messageHandler(XIMMessage *msg) {\n    if (msg->type == JH_INIT) {\n        initialized = TRUE;\n        // Process init data\n    }\n}\n\nvoid sendText(char *text) {\n    if (!initialized) return;  // Don't send yet\n    sendMessage(text);\n}"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#initialization-sequence"
+      ],
+      "affectedDoors": ["Bulls", "QuickNew"],
+      "confidence": 100
+    },
+    {
+      "id": "MEMORY_LEAK_ALLOC",
+      "title": "Memory leak - AllocMem without FreeMem",
+      "severity": "warning",
+      "pattern": "MEMORY_LEAK",
+      "symptoms": [
+        "Memory usage grows over time",
+        "Door crashes after running for extended period",
+        "System becomes sluggish",
+        "Multiple AllocMem calls in logs with no corresponding FreeMem"
+      ],
+      "rootCause": "Door allocates memory but never frees it. Each door invocation leaks memory.",
+      "solution": "Implement cleanup routine that frees all allocated memory. Call on exit and error paths.",
+      "codeExample": {
+        "before": "// WRONG - memory leaked\nchar *buffer = AllocMem(1024, MEMF_CLEAR);\nif (!buffer) return;\n// Use buffer...\n// Exit without FreeMem!",
+        "after": "// CORRECT - always free\nchar *buffer = AllocMem(1024, MEMF_CLEAR);\nif (!buffer) return;\n\n// Use buffer...\n\n// Cleanup\nif (buffer) {\n    FreeMem(buffer, 1024);\n    buffer = NULL;\n}"
+      },
+      "references": [
+        "MEMORY_MANAGEMENT.md#cleanup",
+        "NDK Autodocs: exec.library/FreeMem"
+      ],
+      "affectedDoors": ["AquaScan", "5D-User"],
+      "confidence": 75
+    },
+    {
+      "id": "SLOW_RESPONSE",
+      "title": "Slow keystroke response (>2000ms)",
+      "severity": "warning",
+      "pattern": "SLOW_RESPONSE",
+      "symptoms": [
+        "Keys feel sluggish",
+        "Delay between keypress and response",
+        "Multiple seconds between JH_HK and next JH_SM"
+      ],
+      "rootCause": "Door performs blocking I/O or expensive computation in keystroke handler",
+      "solution": "Optimize keystroke handler. Move slow operations (file I/O, database queries) to background or async.",
+      "codeExample": {
+        "before": "// WRONG - blocks on I/O\nvoid handleKey(char key) {\n    char *data = ReadFile(fh, 1024);  // SLOW!\n    ProcessKey(key, data);\n}",
+        "after": "// CORRECT - fast path\nvoid handleKey(char key) {\n    ProcessKey(key);  // Fast\n}\n\nvoid processCommand() {\n    if (needsData) {\n        char *data = ReadFile(fh, 1024);  // Only when needed\n        UseData(data);\n    }\n}"
+      },
+      "references": [
+        "PERFORMANCE.md#response-times"
+      ],
+      "affectedDoors": ["RTOP", "What"],
+      "confidence": 85
+    },
+    {
+      "id": "RAPID_FIRE_LOOP",
+      "title": "Rapid-fire message loop (>100 msgs/sec)",
+      "severity": "warning",
+      "pattern": "RAPID_FIRE",
+      "symptoms": [
+        ">100 messages in <1 second",
+        "CPU usage spikes",
+        "Backend becomes unresponsive",
+        "Repeated identical messages"
+      ],
+      "rootCause": "Infinite loop sending messages without delay or exit condition",
+      "solution": "Add loop exit condition or delay between messages",
+      "codeExample": {
+        "before": "// WRONG - infinite loop\nwhile (TRUE) {\n    sendMessage(\"Status\");\n    // No delay!\n}",
+        "after": "// CORRECT - delay or condition\nwhile (running) {\n    sendMessage(\"Status\");\n    Delay(50);  // 1 second delay\n    \n    // Or check condition\n    if (userInput == 'Q') running = FALSE;\n}"
+      },
+      "references": [
+        "PERFORMANCE.md#message-throttling",
+        "NDK Autodocs: dos.library/Delay"
+      ],
+      "affectedDoors": ["StatusDoor"],
+      "confidence": 90
+    },
+    {
+      "id": "DOOR_CRASH_STARTUP",
+      "title": "Door crashes immediately on startup",
+      "severity": "critical",
+      "pattern": "CRASH",
+      "symptoms": [
+        "Session lasts <2 seconds",
+        "<10 messages exchanged",
+        "Door process terminates immediately",
+        "Illegal instruction or segfault in logs"
+      ],
+      "rootCause": "Startup crash due to: null pointer dereference, illegal instruction, missing library, or corrupt binary",
+      "solution": "Check door logs for crash details. Verify library dependencies. Test with vamos for reference.",
+      "codeExample": {
+        "before": "// WRONG - no null check\nstruct DoorData *data = getDoorData();\ndata->field = 123;  // CRASH if getDoorData() returned NULL",
+        "after": "// CORRECT - null check\nstruct DoorData *data = getDoorData();\nif (!data) {\n    sendMessage(\"Error: Failed to initialize\");\n    return ERROR;\n}\ndata->field = 123;  // Safe"
+      },
+      "references": [
+        "DEBUGGING.md#crash-analysis",
+        "logs/door-68k-{NAME}-*.log"
+      ],
+      "affectedDoors": ["Various"],
+      "confidence": 90
+    },
+    {
+      "id": "BUFFER_OVERRUN",
+      "title": "Buffer overrun - data length mismatch",
+      "severity": "critical",
+      "pattern": "BUFFER_OVERRUN",
+      "symptoms": [
+        "Declared dataLen doesn't match actual data",
+        "Corrupt or truncated messages",
+        "Backend logs show length mismatch",
+        "Possible memory corruption"
+      ],
+      "rootCause": "Door miscalculates buffer length. Common when mixing strlen() with fixed buffers or forgetting null terminator.",
+      "solution": "Always use actual data length. Double-check string length calculations.",
+      "codeExample": {
+        "before": "// WRONG - off by one\nchar buffer[100];\nstrcpy(buffer, text);\nmsg.dataLen = sizeof(buffer);  // WRONG! Uses buffer size not content",
+        "after": "// CORRECT - actual length\nchar buffer[100];\nstrcpy(buffer, text);\nmsg.dataLen = strlen(buffer);  // Actual string length\nCopyMem(buffer, msg.data, msg.dataLen);"
+      },
+      "references": [
+        "MEMORY_MANAGEMENT.md#buffer-safety"
+      ],
+      "affectedDoors": ["Custom doors"],
+      "confidence": 95
+    },
+    {
+      "id": "MISSING_INIT",
+      "title": "No JH_INIT message received",
+      "severity": "critical",
+      "pattern": "NO_INIT",
+      "symptoms": [
+        "Door never receives JH_INIT",
+        "Backend logs show \"failed to send JH_INIT\"",
+        "Reply port creation failed"
+      ],
+      "rootCause": "Backend failed to send JH_INIT. Usually due to: reply port not created, door not registered, or crash before message sent.",
+      "solution": "Check backend logs for door startup errors. Verify reply port creation. Ensure door registered with backend.",
+      "codeExample": {
+        "before": "// Check backend for:\n// - Reply port creation\n// - Door registration\n// - Message sending",
+        "after": "// Backend should:\n// 1. Create reply port\n// 2. Register door\n// 3. Send JH_INIT\n// 4. Log success/failure"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#initialization",
+        "logs/backend.log"
+      ],
+      "affectedDoors": ["Any door"],
+      "confidence": 95
+    },
+    {
+      "id": "NO_RESPONSE",
+      "title": "Door not responding to messages",
+      "severity": "warning",
+      "pattern": "NO_RESPONSE",
+      "symptoms": [
+        "Backend sends many messages",
+        "Door sends few or no responses",
+        "Large gap between sent and received counts"
+      ],
+      "rootCause": "Door message handler not processing all message types, or GetMsg() loop has logic error",
+      "solution": "Ensure message loop handles all message types. Add default case to log unknown types.",
+      "codeExample": {
+        "before": "// WRONG - only handles JH_INIT\nswitch (msg->type) {\n    case JH_INIT:\n        handleInit(msg);\n        break;\n    // Missing other types!\n}",
+        "after": "// CORRECT - handle all types\nswitch (msg->type) {\n    case JH_INIT: handleInit(msg); break;\n    case JH_HK: handleKey(msg); break;\n    case JH_STAT: handleStat(msg); break;\n    case JH_TERMINATE: handleTerminate(msg); break;\n    default:\n        logUnknown(msg->type);\n        break;\n}"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#message-handling"
+      ],
+      "affectedDoors": ["Incomplete doors"],
+      "confidence": 80
+    },
+    {
+      "id": "INCOMPLETE_SESSION",
+      "title": "No JH_TERMINATE - door exited abruptly",
+      "severity": "info",
+      "pattern": "INCOMPLETE",
+      "symptoms": [
+        "Session started (JH_INIT received)",
+        "No JH_TERMINATE before exit",
+        "Door closed without cleanup"
+      ],
+      "rootCause": "Door exited without waiting for JH_TERMINATE. User may have killed process or door crashed.",
+      "solution": "Wait for JH_TERMINATE in main loop. Handle Ctrl+C gracefully.",
+      "codeExample": {
+        "before": "// WRONG - exits immediately\nvoid handleQuit() {\n    exit(0);  // No cleanup!\n}",
+        "after": "// CORRECT - wait for terminate\nBOOL running = TRUE;\n\nvoid handleQuit() {\n    running = FALSE;  // Signal exit\n}\n\nwhile (running) {\n    msg = GetMsg(replyPort);\n    if (msg && msg->type == JH_TERMINATE) {\n        running = FALSE;\n    }\n}\n\n// Clean up here\ncleanup();"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#graceful-shutdown"
+      ],
+      "affectedDoors": ["Any door"],
+      "confidence": 70
+    },
+    {
+      "id": "LIBRARY_NOT_FOUND",
+      "title": "Required library not found",
+      "severity": "critical",
+      "pattern": "CRASH",
+      "symptoms": [
+        "Door crashes on OpenLibrary()",
+        "Logs show \"library not found\"",
+        "Immediate exit after startup"
+      ],
+      "rootCause": "Door tries to open library that doesn't exist or isn't in library path",
+      "solution": "Check library name spelling. Verify library exists in Libs/ directory. Check LibraryManager logs.",
+      "codeExample": {
+        "before": "// WRONG - no error check\nDOSBase = OpenLibrary(\"dos.library\", 0);\nWrite(Output(), \"Hello\", 5);  // CRASH if OpenLibrary failed",
+        "after": "// CORRECT - check for NULL\nDOSBase = OpenLibrary(\"dos.library\", 0);\nif (!DOSBase) {\n    // Can't even print error without dos.library!\n    return ERROR;\n}\n// Now safe to use DOS functions"
+      },
+      "references": [
+        "NDK Autodocs: exec.library/OpenLibrary",
+        "logs/backend.log - LibraryManager"
+      ],
+      "affectedDoors": ["Doors using non-standard libraries"],
+      "confidence": 90
+    },
+    {
+      "id": "NULL_POINTER_DEREF",
+      "title": "Null pointer dereference",
+      "severity": "critical",
+      "pattern": "CRASH",
+      "symptoms": [
+        "Illegal instruction error",
+        "Segmentation fault",
+        "Access to address 0x00000000",
+        "Crash when accessing struct field"
+      ],
+      "rootCause": "Code dereferences NULL pointer without checking",
+      "solution": "Always check pointers before dereferencing. Add NULL checks after allocations and function calls.",
+      "codeExample": {
+        "before": "// WRONG\nstruct File *fh = Open(filename, MODE_OLDFILE);\nRead(fh, buffer, 100);  // CRASH if Open() returned NULL",
+        "after": "// CORRECT\nstruct File *fh = Open(filename, MODE_OLDFILE);\nif (!fh) {\n    sendMessage(\"Error: File not found\");\n    return ERROR;\n}\nRead(fh, buffer, 100);  // Safe\nClose(fh);"
+      },
+      "references": [
+        "DEBUGGING.md#null-pointer-crashes"
+      ],
+      "affectedDoors": ["Any door"],
+      "confidence": 95
+    },
+    {
+      "id": "STACK_OVERFLOW",
+      "title": "Stack overflow - too much recursion or local vars",
+      "severity": "critical",
+      "pattern": "CRASH",
+      "symptoms": [
+        "Crash in deeply nested function",
+        "Large local arrays or buffers",
+        "Recursive function calls",
+        "Stack corruption"
+      ],
+      "rootCause": "Function uses too much stack space or recursion depth is excessive",
+      "solution": "Use heap allocation for large buffers. Limit recursion depth. Reduce local variable size.",
+      "codeExample": {
+        "before": "// WRONG - large stack buffer\nvoid processData() {\n    char buffer[100000];  // 100KB on stack!\n    // ...\n}",
+        "after": "// CORRECT - heap allocation\nvoid processData() {\n    char *buffer = AllocMem(100000, MEMF_CLEAR);\n    if (!buffer) return;\n    // Use buffer...\n    FreeMem(buffer, 100000);\n}"
+      },
+      "references": [
+        "MEMORY_MANAGEMENT.md#stack-vs-heap"
+      ],
+      "affectedDoors": ["Doors with large data structures"],
+      "confidence": 85
+    },
+    {
+      "id": "FILE_NOT_FOUND",
+      "title": "Required file not found",
+      "severity": "warning",
+      "pattern": "NO_RESPONSE",
+      "symptoms": [
+        "Door tries to open file but fails",
+        "Blank screen or missing content",
+        "Logs show \"file not found\"",
+        "Open() returns NULL"
+      ],
+      "rootCause": "Door expects file that doesn't exist. Path may be wrong or file not copied to BBS.",
+      "solution": "Check file path case-sensitivity. Verify file exists. Use AmigaFS for path resolution.",
+      "codeExample": {
+        "before": "// WRONG - assumes file exists\nstruct File *fh = Open(\"Data/scores.txt\", MODE_OLDFILE);\nRead(fh, buffer, 100);  // CRASH if NULL",
+        "after": "// CORRECT - check existence\nstruct File *fh = Open(\"Data/scores.txt\", MODE_OLDFILE);\nif (!fh) {\n    sendMessage(\"Scores file not found - creating new\");\n    fh = Open(\"Data/scores.txt\", MODE_NEWFILE);\n}\nif (fh) {\n    Read(fh, buffer, 100);\n    Close(fh);\n}"
+      },
+      "references": [
+        "AMIGAFS_MIGRATION.md",
+        "NDK Autodocs: dos.library/Open"
+      ],
+      "affectedDoors": ["Doors with data files"],
+      "confidence": 80
+    },
+    {
+      "id": "ENDIAN_MISMATCH",
+      "title": "Endianness issue - reading multi-byte values",
+      "severity": "warning",
+      "pattern": "BUFFER_OVERRUN",
+      "symptoms": [
+        "Numbers appear wrong (e.g., 256 instead of 1)",
+        "Message parameters have unexpected values",
+        "Data corruption in multi-byte fields"
+      ],
+      "rootCause": "Amiga 68K is big-endian. Reading little-endian data produces wrong values.",
+      "solution": "Use big-endian reads for all multi-byte values. XIM protocol is big-endian.",
+      "codeExample": {
+        "before": "// WRONG - assumes little-endian\nULONG value = *(ULONG*)buffer;  // May be wrong endian",
+        "after": "// CORRECT - explicit big-endian\nULONG value = (buffer[0] << 24) | \n              (buffer[1] << 16) | \n              (buffer[2] << 8)  | \n              buffer[3];"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#message-format"
+      ],
+      "affectedDoors": ["Doors parsing binary data"],
+      "confidence": 75
+    },
+    {
+      "id": "STRING_NOT_TERMINATED",
+      "title": "String not null-terminated",
+      "severity": "warning",
+      "pattern": "BUFFER_OVERRUN",
+      "symptoms": [
+        "Garbage characters after string",
+        "String extends beyond expected length",
+        "Random characters appear in output"
+      ],
+      "rootCause": "Buffer copied without null terminator. strlen() reads past end of buffer.",
+      "solution": "Always null-terminate strings. Use strncpy() with explicit null.",
+      "codeExample": {
+        "before": "// WRONG - may not be terminated\nchar buffer[100];\nCopyMem(source, buffer, 100);  // No null terminator!",
+        "after": "// CORRECT - ensure termination\nchar buffer[100];\nCopyMem(source, buffer, 99);  // Leave room\nbuffer[99] = '\\0';  // Null terminate"
+      },
+      "references": [
+        "MEMORY_MANAGEMENT.md#string-handling"
+      ],
+      "affectedDoors": ["Any door handling strings"],
+      "confidence": 80
+    },
+    {
+      "id": "WRONG_NODE_NUMBER",
+      "title": "Using wrong node number",
+      "severity": "warning",
+      "pattern": "PROTOCOL_VIOLATION",
+      "symptoms": [
+        "Messages go to wrong node",
+        "Multiple doors interfere with each other",
+        "User sees output from different node"
+      ],
+      "rootCause": "Door hardcoded node number or didn't read it from JH_INIT",
+      "solution": "Read node number from JH_INIT message. Store globally and use for all messages.",
+      "codeExample": {
+        "before": "// WRONG - hardcoded\nULONG nodeNum = 1;  // What if running on node 2?",
+        "after": "// CORRECT - from JH_INIT\nULONG nodeNum = 0;\n\nvoid handleInit(XIMMessage *msg) {\n    nodeNum = msg->param;  // Read from JH_INIT\n    // Now use nodeNum for all operations\n}"
+      },
+      "references": [
+        "XIM_PROTOCOL.md#initialization-sequence"
+      ],
+      "affectedDoors": ["Multi-node setups"],
+      "confidence": 85
+    },
+    {
+      "id": "RESOURCE_LEAK",
+      "title": "Resource leak - file/library not closed",
+      "severity": "warning",
+      "pattern": "MEMORY_LEAK",
+      "symptoms": [
+        "File handles exhausted",
+        "Library count grows",
+        "System resources depleted over time"
+      ],
+      "rootCause": "Door opens files/libraries but doesn't close them on all code paths",
+      "solution": "Close all resources on exit and error paths. Use cleanup function.",
+      "codeExample": {
+        "before": "// WRONG - leaks on error\nfh = Open(file, MODE_OLDFILE);\nif (error) return;  // Leaked fh!\nClose(fh);",
+        "after": "// CORRECT - cleanup function\nvoid cleanup() {\n    if (fh) Close(fh);\n    if (DOSBase) CloseLibrary(DOSBase);\n}\n\nfh = Open(file, MODE_OLDFILE);\nif (error) {\n    cleanup();\n    return;\n}\nClose(fh);\ncleanup();"
+      },
+      "references": [
+        "MEMORY_MANAGEMENT.md#resource-cleanup"
+      ],
+      "affectedDoors": ["Any door using resources"],
+      "confidence": 80
+    },
+    {
+      "id": "RACE_CONDITION",
+      "title": "Race condition - shared data access",
+      "severity": "warning",
+      "pattern": "PROTOCOL_VIOLATION",
+      "symptoms": [
+        "Intermittent crashes",
+        "Data corruption",
+        "Behavior changes between runs",
+        "Works sometimes, fails others"
+      ],
+      "rootCause": "Multiple code paths access shared data without synchronization",
+      "solution": "Use semaphores or forbid/permit to protect critical sections",
+      "codeExample": {
+        "before": "// WRONG - no synchronization\nglobalCounter++;  // Race if called from multiple places",
+        "after": "// CORRECT - protected\nForbid();\nglobalCounter++;\nPermit();\n\n// Or use semaphore\nObtainSemaphore(&dataSemaphore);\nglobalCounter++;\nReleaseSemaphore(&dataSemaphore);"
+      },
+      "references": [
+        "NDK Autodocs: exec.library/Forbid",
+        "NDK Autodocs: exec.library/ObtainSemaphore"
+      ],
+      "affectedDoors": ["Multi-threaded doors"],
+      "confidence": 70
+    },
+    {
+      "id": "ANSI_PARSING_ERROR",
+      "title": "ANSI escape sequence malformed",
+      "severity": "info",
+      "pattern": "BUFFER_OVERRUN",
+      "symptoms": [
+        "Color codes appear as text",
+        "Cursor positioning doesn't work",
+        "Terminal displays escape codes literally"
+      ],
+      "rootCause": "ANSI escape sequence has wrong format or missing terminator",
+      "solution": "Follow ANSI standard. Test sequences. Use AnsiUtil helper.",
+      "codeExample": {
+        "before": "// WRONG - missing 'm'\nsendMessage(\"\\x1b[31Text\");  // Should be \\x1b[31m",
+        "after": "// CORRECT - complete sequence\nsendMessage(\"\\x1b[31mRed Text\\x1b[0m\");  // Proper ANSI"
+      },
+      "references": [
+        "ANSI_CODES.md",
+        "utils/AnsiUtil.ts"
+      ],
+      "affectedDoors": ["Doors with color output"],
+      "confidence": 85
+    }
+  ]
+}
