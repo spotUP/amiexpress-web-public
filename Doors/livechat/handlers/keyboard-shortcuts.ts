@@ -1,4 +1,4 @@
-export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: string, chl: any, ul: any, stb: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any) {
+export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: () => string, chl: any, ul: any, ep: any, sh: () => void, ssb: (t: string) => void, asm: (m: string) => void, sfs: () => void, sso: () => void, scon: (t: string, cb: (c: boolean) => void) => void, cu: () => void, SW: number, chatLog?: any, typingBar?: any) {
   let sv = true;
 
   function ucl() {
@@ -24,8 +24,9 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: s
     }
 
     if (sv) {
-      stb.show();
-      if (sbt === 'channels') {
+      // Get current sidebar tab value
+      const currentTab = sbt();
+      if (currentTab === 'channels') {
         chl.show();
         ul.hide();
       } else {
@@ -33,7 +34,6 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: s
         ul.show();
       }
     } else {
-      stb.hide();
       chl.hide();
       ul.hide();
     }
@@ -44,12 +44,12 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: s
   s.key(['pagedown'], () => { cl.scroll(10); s.render(); });
   s.key(['f1'], () => { sh(); });
   s.key(['f2'], () => { sv = !sv; ucl(); asm(sv ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)'); });
-  s.key(['f3'], () => { ssb(sbt === 'channels' ? 'users' : 'channels'); asm(`Switched to ${sbt} view`); });
+  s.key(['f3'], () => { const currentTab = sbt(); ssb(currentTab === 'channels' ? 'users' : 'channels'); asm(`Switched to ${currentTab === 'channels' ? 'users' : 'channels'} view`); });
   s.key(['f4', 'C-e'], () => { if (!ep.isVisible()) ep.show(s, (e: any) => { const c = ib.getValue(); ib.setValue(c + e.code + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
 
   const fp = () => {
     const ps: any[] = [ib];
-    if (sv) ps.push(sbt === 'channels' ? chl : ul);
+    if (sv) ps.push(sbt() === 'channels' ? chl : ul);
     ps.push(cl);
     return ps;
   };

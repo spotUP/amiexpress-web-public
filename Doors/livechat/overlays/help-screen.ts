@@ -48,9 +48,13 @@ export function createHelpScreen(
     tags: true,
     mouse: true,
     scrollable: true,
+    alwaysScroll: true,
     focusable: true,
     ch: ' ',
-    scrollbar: { ch: ' ' },
+    scrollbar: {
+      ch: '█',
+      style: { fg: 'cyan' }
+    },
     style: { fg: 'white', bg: 'black' },
     content: HELP_PART_1 + HELP_PART_2 + HELP_PART_3,
   });

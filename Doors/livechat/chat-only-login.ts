@@ -54,13 +54,10 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     // Set up input handler to route input to blessed screen
     // Note: inDoorManager flag is set in index.ts runDoor()
     bbsSession.doorInputHandler = (data: string) => {
-      console.log('[ChatOnlyLogin] doorInputHandler called, data:', JSON.stringify(data));
       if (screen.program) {
         // Call _handleData to parse input and emit keypress events
         // Don't use emit('data') - that just emits raw data without parsing
         screen.program._handleData(data);
-      } else {
-        console.log('[ChatOnlyLogin] ERROR: screen.program does not exist!');
       }
       return true;
     };
@@ -84,11 +81,12 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
           }
 
           // Clean up and resolve
+          // NOTE: Don't delete doorInputHandler here - createApp will set its own handler
+          // and deleting here can cause a race condition where it deletes the new handler
           loginModal.hide();
           loginModal.destroy();
           if (disconnectionModal) disconnectionModal.destroy();
           screen.destroy();
-          delete bbsSession.doorInputHandler;
 
           resolve(true);
         } else {

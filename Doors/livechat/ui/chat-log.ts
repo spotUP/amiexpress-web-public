@@ -27,7 +27,7 @@ export function createChatLog(
     top: MENU_HEIGHT,
     left: sidebarWidth,
     width: screenWidth - sidebarWidth,
-    height: screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT - TYPING_HEIGHT,
+    height: screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT,  // Removed TYPING_HEIGHT since typing bar is hidden
     dockPosition: 'float',
     showMinimizeButton: true,
     resizable: true,
@@ -36,7 +36,14 @@ export function createChatLog(
     minHeight: 10,
     zIndex: 1,  // Lower z-index so it doesn't overlap fixed UI (input, status, typing)
     border: { type: 'line', fg: 'green' },
-    style: { border: { fg: 'green' } },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      focus: {
+        fg: 'white',
+        bg: 'black'
+      }
+    },
   });
 
   // Explicitly set position after creation (DockablePanel may override initial values)
@@ -46,26 +53,28 @@ export function createChatLog(
   // Create log inside the panel
   // Calculate dimensions to fill panel interior (avoiding borders and title bar)
   const panelWidth = screenWidth - sidebarWidth;
-  const panelHeight = screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT - TYPING_HEIGHT;
+  const panelHeight = screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;  // Removed TYPING_HEIGHT since typing bar is hidden
 
-  // Log dimensions: panel size minus borders (2 cols/rows for left+right, top+bottom)
+  // Log dimensions: fill panel content area completely
+  // Account for: title bar (1 line) + top border (1 line) + bottom border (1 line) + minimize button row (0, in title)
   const logWidth = panelWidth - 2;  // -2 for left and right borders
-  const logHeight = panelHeight - 2;  // -2 for title bar and bottom border
+  const logHeight = panelHeight - 2;  // -2 for title bar + bottom border
 
   const chatLog = createLog({
     parent: chatPanel,
-    top: 1,      // Below title bar
-    left: 1,     // Right of left border
+    top: 0,      // Align to top of content area (title bar is outside)
+    left: 0,     // Align to left of content area (border is outside)
     width: logWidth,
     height: logHeight,
     label: '',
-    border: { type: 'none' },
+    border: { type: 'none' },  // No border - panel has the border
     mouse: true,
     scrollable: true,
     alwaysScroll: true,
     scrollOnInput: true,
     scrollbar: {
-      ch: '█'
+      ch: '█',
+      style: { fg: 'cyan' }
     },
     scrollback: 500,
     style: {

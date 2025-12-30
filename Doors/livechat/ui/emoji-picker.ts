@@ -3,37 +3,100 @@
  * Three-panel interface: Categories | Emojis | Preview
  */
 
-import type { Screen, Box, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import type { Screen, Box, List, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createBox, createList, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { EMOJIS, getEmojisByCategory, getCategories, Emoji } from '../utils/emojis';
 
 export class EmojiPicker {
+  private modalBackground: Box;
   private overlay: Box;
+  private closeButton: Button;
   private categoryList: List;
   private emojiList: List;
-  private previewBox: Box;
   private currentCategory: Emoji['category'] = 'emotions';
   private onSelect: ((emoji: Emoji) => void) | null = null;
   private onCancel: (() => void) | null = null;
 
   constructor(screen: Screen) {
-    // Create overlay container
+    // Create overlay container - positioned near bottom-right
+    const screenWidth = (screen as any).width || 80;
+    const screenHeight = (screen as any).height || 24;
+
+    // Modal background - clicking it closes the dialog
+    this.modalBackground = createBox({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      hidden: true,
+      clickable: true,
+      mouse: true,
+      style: {
+        bg: 'black',
+        transparent: true,
+      },
+      // @ts-ignore - zIndex exists but not in types
+      zIndex: 999,
+    });
+
+    // Close dialog when clicking background
+    this.modalBackground.on('click', () => {
+      this.hide();
+    });
+
     this.overlay = createBox({
       parent: screen,
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 20,
-      label: ' Emoji Picker [Tab: Switch | Enter: Select | ESC: Close] ',
-      border: { type: 'line' },
+      bottom: 5,  // Above status bar and input
+      left: screenWidth - 42,  // Position from left to stay anchored
+      width: 40,  // Compact width for 2 panels only
+      height: 18,  // Compact height
+      label: ' Emoji Picker [Tab | Enter] ',
+      border: { type: 'line', fg: 'cyan' },
       shadow: true,
       hidden: true,
       mouse: true,
+      keys: true,
+      clickable: true,
       style: {
         fg: 'white',
         bg: 'black',
-        border: { fg: 'cyan' },
       },
+      // @ts-ignore - zIndex exists but not in types
+      zIndex: 1000,
+    });
+
+    // Close button [X] in top-right corner
+    this.closeButton = createButton({
+      parent: this.overlay,
+      top: 0,
+      right: 1,
+      width: 3,
+      height: 1,
+      content: 'X',
+      align: 'center',
+      mouse: true,
+      clickable: true,
+      style: {
+        fg: 'red',
+        bg: 'black',
+        focus: {
+          fg: 'black',
+          bg: 'red'
+        },
+        hover: {
+          fg: 'black',
+          bg: 'red'
+        }
+      },
+    });
+
+    // Close on button click
+    this.closeButton.on('press', () => {
+      if (this.onCancel) {
+        this.onCancel();
+      }
+      this.hide();
     });
 
     // Category list (left panel)
@@ -41,59 +104,42 @@ export class EmojiPicker {
       parent: this.overlay,
       top: 0,
       left: 0,
-      width: 15,
-      height: '100%-2',
+      width: 12,
+      height: '100%',
       label: ' Category ',
-      border: { type: 'line' },
+      border: { type: 'line', fg: 'green' },
       mouse: true,
       vi: true,
       keys: true,
       style: {
         fg: 'white',
         bg: 'black',
-        border: { fg: 'green' },
         selected: { fg: 'black', bg: 'green' },
       },
       items: ['Emotions', 'Actions', 'Symbols', 'Special'],
     });
 
-    // Emoji list (center panel)
+    // Emoji list (right panel - full width)
     this.emojiList = createList({
       parent: this.overlay,
       top: 0,
-      left: 15,
-      width: 25,
-      height: '100%-2',
+      left: 12,
+      width: 28,  // Wider since no preview panel
+      height: '100%',
       label: ' Emojis ',
-      border: { type: 'line' },
+      border: { type: 'line', fg: 'cyan' },
       mouse: true,
       vi: true,
       keys: true,
+      clickable: true,
+      interactive: true,
       scrollbar: {
         ch: ' ',
       },
       style: {
         fg: 'white',
         bg: 'black',
-        border: { fg: 'cyan' },
-        selected: { fg: 'black', bg: 'cyan' },
-      },
-    });
-
-    // Preview box (right panel)
-    this.previewBox = createBox({
-      parent: this.overlay,
-      top: 0,
-      left: 40,
-      width: 20,
-      height: '100%-2',
-      label: ' Preview ',
-      border: { type: 'line' },
-      content: '',
-      style: {
-        fg: 'white',
-        bg: 'black',
-        border: { fg: 'yellow' },
+        selected: { fg: 'black', bg: 'cyan' }
       },
     });
 
@@ -119,7 +165,7 @@ export class EmojiPicker {
       this.emojiList.focus();
     });
 
-    // Emoji selection
+    // Emoji selection (on Enter key or click)
     this.emojiList.on('select', () => {
       const selected = (this.emojiList as any).selected;
       const emojis = getEmojisByCategory(this.currentCategory);
@@ -132,13 +178,20 @@ export class EmojiPicker {
       }
     });
 
-    // Emoji hover for preview
-    this.emojiList.on('select item', (item: any, index: number) => {
+    // Also handle Enter key explicitly
+    this.emojiList.key(['enter', 'return'], () => {
+      const selected = (this.emojiList as any).selected;
       const emojis = getEmojisByCategory(this.currentCategory);
-      if (emojis[index]) {
-        this.updatePreview(emojis[index]);
+      if (selected !== undefined && emojis[selected]) {
+        const emoji = emojis[selected];
+        if (this.onSelect) {
+          this.onSelect(emoji);
+        }
+        this.hide();
       }
     });
+
+    // Emoji hover - no preview needed
 
     // Tab to switch focus
     this.overlay.key(['tab'], () => {
@@ -171,61 +224,35 @@ export class EmojiPicker {
 
     this.emojiList.key(['up', 'k'], () => {
       this.emojiList.up(1);
-      const selected = (this.emojiList as any).selected;
-      const emojis = getEmojisByCategory(this.currentCategory);
-      if (selected !== undefined && emojis[selected]) {
-        this.updatePreview(emojis[selected]);
-      }
       this.overlay.screen.render();
     });
 
     this.emojiList.key(['down', 'j'], () => {
       this.emojiList.down(1);
-      const selected = (this.emojiList as any).selected;
-      const emojis = getEmojisByCategory(this.currentCategory);
-      if (selected !== undefined && emojis[selected]) {
-        this.updatePreview(emojis[selected]);
-      }
       this.overlay.screen.render();
     });
   }
 
   private loadCategory(category: Emoji['category']) {
     const emojis = getEmojisByCategory(category);
-    const items = emojis.map(e => `${e.display}  ${e.code}`);
+    // Show only ASCII codes, no Unicode emoji characters
+    const items = emojis.map(e => `${e.code}  ${e.keywords[0] || ''}`);
     this.emojiList.setItems(items);
-    if (emojis.length > 0) {
-      this.updatePreview(emojis[0]);
-    }
-    this.overlay.screen.render();
-  }
-
-  private updatePreview(emoji: Emoji) {
-    const content = [
-      '',
-      `{center}{bold}${emoji.display}{/bold}{/center}`,
-      '',
-      `{cyan-fg}Code:{/cyan-fg}`,
-      `${emoji.code}`,
-      '',
-      `{cyan-fg}Keywords:{/cyan-fg}`,
-      emoji.keywords.join(', '),
-      '',
-    ].join('\n');
-
-    this.previewBox.setContent(content);
     this.overlay.screen.render();
   }
 
   show(screen: any, onSelect: (emoji: Emoji) => void, onCancel: () => void) {
     this.onSelect = onSelect;
     this.onCancel = onCancel;
+    this.modalBackground.show();  // Show background first
     this.overlay.show();
-    this.categoryList.focus();
+    this.emojiList.focus();  // Focus emoji list directly for immediate selection
+    this.emojiList.select(0);  // Select first emoji
     screen.render();
   }
 
   hide() {
+    this.modalBackground.hide();
     this.overlay.hide();
     this.overlay.screen.render();
   }
@@ -235,6 +262,8 @@ export class EmojiPicker {
   }
 
   destroy() {
+    this.modalBackground.destroy();
+    this.closeButton.destroy();
     this.overlay.destroy();
   }
 }

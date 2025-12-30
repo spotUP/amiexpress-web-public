@@ -48,15 +48,12 @@ export function createSubmitHandler(
   updateTypingPreview: () => void
 ) {
   return async (value: string) => {
-    console.log('[SUBMIT HANDLER] Called with value:', JSON.stringify(value));
     try {
       // Hide command suggestions on submit
       hideCommandSuggestions();
 
       const msg = value.trim();
-      console.log('[SUBMIT HANDLER] Trimmed message:', JSON.stringify(msg));
       if (!msg) {
-        console.log('[SUBMIT HANDLER] Empty message, returning');
         inputBox.clearValue();
         inputBox.focus();
         screen.render();
@@ -76,10 +73,10 @@ export function createSubmitHandler(
       // Clear typing indicator (for others and self)
       socketEmitter.keystrokeSubmit(state.currentChannel, userId);
 
-      // Clear own typing buffer and update display
+      // Clear own typing buffer (the preview will be replaced by the formatted message)
       if (state.typingBuffers && state.typingBuffers.has(userId)) {
         state.typingBuffers.delete(userId);
-        updateTypingPreview(); // Remove typing preview from screen
+        // Don't call updateTypingPreview() here - let the preview be replaced by the message
       }
 
       if (msg.startsWith('/')) {
@@ -198,11 +195,9 @@ export function createSubmitHandler(
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;
           const processedMsg = replaceEmojis(msg);
-          console.log('[SUBMIT HANDLER] Emitting room:message:', { message: processedMsg, messageId, channel: state.currentChannel });
           socket.emit('room:message', { message: processedMsg, messageId });
-          console.log('[SUBMIT HANDLER] Adding to chat log');
-          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`);
-          console.log('[SUBMIT HANDLER] Message displayed in chat log');
+          // Don't add local echo - the preview IS the message, just remove the cursor
+          updateTypingPreview();
 
           // Add to history with ID
           inputHistory.add(messageId, msg);

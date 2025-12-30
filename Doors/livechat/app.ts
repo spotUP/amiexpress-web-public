@@ -39,8 +39,9 @@ import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT } from './ui/menu-bar';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
-import { createInputBox, INPUT_HEIGHT } from './ui/input-box';
+import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
 import { createChatLog, updateChatHeader as updateChatHeaderFn, addBBSEvent, TYPING_HEIGHT } from './ui/chat-log';
+import { createDisconnectionModal } from './ui/disconnection-modal';
 
 // Overlays
 import { createHelpScreen } from './overlays/help-screen';
@@ -53,6 +54,7 @@ import { createInputHistory } from './features/input-history';
 import { createFileSharing } from './features/file-sharing';
 import { createDrawingCanvas } from './features/drawing-canvas';
 import { createContextMenus } from './features/context-menus';
+import { createEnhancedVoiceChannel } from './features/voice-channel-ux';
 
 // Handlers
 import { setupRoomHandlers } from './handlers/room-socket-handlers';
@@ -64,6 +66,7 @@ import { createThreadView } from './ui/thread-view';
 import { setupPinListeners, pinMessage, unpinMessage, getPinnedMessages, cleanupPinListeners } from './handlers/pin-handlers';
 import { createPinnedPanel } from './ui/pinned-panel';
 import { pinCmd, unpinCmd, pinnedCmd } from './commands/pin';
+import { replyCmd, threadCmd, editCmd } from './commands/msg-thread';
 import { setupSearchListeners, searchMessages, cleanupSearchListeners } from './handlers/search-handlers';
 import { createSearchOverlay } from './ui/search-overlay';
 import { searchCmd } from './commands/search';
@@ -106,7 +109,6 @@ interface DoorSession {
 }
 
 export async function createApp(session: DoorSession) {
-  console.log('[LiveChat DEBUG] createApp called - LiveChat 3.0 with updated UI');
   const { bbs, socket } = session;
   bbs.enableWideMode?.();
 
@@ -129,6 +131,8 @@ export async function createApp(session: DoorSession) {
   let showHelpFn: (() => void) | null = null;  // Will be set later after showHelp is defined
 
   if (session.bbsSession) {
+    // CRITICAL: Set BOTH flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
+    session.bbsSession.inDoorManager = true;
     session.bbsSession.doorInputHandler = (data: string) => {
       // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
       if (data === '\x1bOP' || data === '\x1b[11~') {
@@ -172,8 +176,30 @@ export async function createApp(session: DoorSession) {
   // ========== INPUT BOX (above status bar) ==========
   const inputBox = createInputBox(screen);
 
+  // ========== EMOJI BUTTON (next to input box) ==========
+  const emojiButton = createEmojiButton(screen);
+
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
+
+  // Wire up emoji button to show emoji picker
+  emojiButton.on('press', () => {
+    if (!emojiPicker.isVisible()) {
+      emojiPicker.show(
+        screen,
+        (emoji: any) => {
+          const currentText = inputBox.getValue();
+          inputBox.setValue(currentText + emoji.code + ' ');
+          inputBox.focus();
+          screen.render();
+        },
+        () => {
+          inputBox.focus();
+          screen.render();
+        }
+      );
+    }
+  });
 
   loader.update(50, 'Setting up features...');
 
@@ -346,64 +372,14 @@ export async function createApp(session: DoorSession) {
 
   const inputHistory = createInputHistory(screen, inputBox);
 
-  // ========== SIDEBAR TAB BAR ==========
-  const sidebarTabs = createBox({
-    parent: screen,
-    top: MENU_HEIGHT,
-    left: 0,
-    width: SIDEBAR_WIDTH,
-    height: 1,
-    tags: true,
-    mouse: true,  // Enable mouse support for tab clicking
-    ch: ' ',  // Fill character for background
-    style: {
-      fg: 'white',
-      bg: 'blue',  // Blue background like menu bar
-    },
-  });
-
-  function updateSidebarTabs() {
-    const chTab = sidebarTab === 'channels' ? '{inverse}[Ch]{/inverse}' : ' Ch ';
-    const usTab = sidebarTab === 'users' ? '{inverse}[Us]{/inverse}' : ' Us ';
-    sidebarTabs.setContent(` ${chTab} ${usTab}`);
-  }
-
-  // Direct click handler for sidebar tabs
-  sidebarTabs.on('click', (event: any) => {
-    // Determine which tab was clicked based on x position
-    const pos = sidebarTabs._getCoords?.();
-    if (pos && event.x !== undefined) {
-      const relativeX = event.x - pos.xi;
-      // Ch tab is roughly 0-8, Us tab is roughly 9-17
-      const newTab = relativeX < 9 ? 'channels' : 'users';
-      if (newTab !== sidebarTab) {
-        switchSidebarTab(newTab);
-      }
-      // Keep focus on input for better UX
-      inputBox.focus();
-    }
-  });
-
-  // Also handle mousedown for more responsive tab clicking
-  sidebarTabs.on('mousedown', (event: any) => {
-    const pos = sidebarTabs._getCoords?.();
-    if (pos && event.x !== undefined) {
-      const relativeX = event.x - pos.xi;
-      const newTab: 'channels' | 'users' = relativeX < 9 ? 'channels' : 'users';
-      if (newTab !== sidebarTab) {
-        switchSidebarTab(newTab);
-      }
-    }
-  });
-
   // ========== CHANNEL LIST (Left Sidebar) ==========
   const channelList = createList({
     parent: screen,
-    top: MENU_HEIGHT + 1,  // Below tab bar
+    top: MENU_HEIGHT,  // Start right below menu
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' Channels ',
+    label: ' {inverse}[Ch]{/inverse} Us ', // Tabs integrated into label
     border: { type: 'line' },
     style: {
       fg: 'white',
@@ -433,7 +409,7 @@ export async function createApp(session: DoorSession) {
   ];
 
   // Track channel data for selection handling
-  let channelItems: Array<{ id: string; name: string }> = [];
+  let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' }> = [];
 
   function isCurrentChannel(targetId?: string, targetName?: string): boolean {
     if (!state.currentChannel) return false;
@@ -456,10 +432,16 @@ export async function createApp(session: DoorSession) {
       unreadCount: 0,
     }));
 
-    // Build simple list items (no # prefix, no tree structure)
-    // Active channel = white, unread = green, inactive = grey
-    channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name }));
-    const items = channelsToShow.map(ch => {
+    // Build channel list with text and voice channels
+    channelItems = channelsToShow.map(ch => ({ id: ch.id, name: ch.name, type: 'text' as const }));
+    const items: string[] = [];
+
+    // Add TEXT CHANNELS header
+    items.push('{cyan-fg}{bold}TEXT CHANNELS{/bold}{/cyan-fg}');
+    channelItems.push({ id: '', name: '', type: 'header' as const }); // Placeholder for header
+
+    // Add text channels
+    channelsToShow.forEach(ch => {
       const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
       const isActive = isCurrentChannel(ch.id, ch.name);
       const hasUnread = ch.unreadCount && ch.unreadCount > 0;
@@ -477,8 +459,35 @@ export async function createApp(session: DoorSession) {
         endColor = '{/gray-fg}';
       }
 
-      return color + ch.name + unread + endColor;
+      items.push(color + '# ' + ch.name + unread + endColor);
+      channelItems.push({ id: ch.id, name: ch.name, type: 'text' as const });
     });
+
+    // Add spacer
+    items.push('');
+    channelItems.push({ id: '', name: '', type: 'spacer' as const });
+
+    // Add VOICE CHANNELS header
+    items.push('{cyan-fg}{bold}VOICE CHANNELS{/bold}{/cyan-fg}');
+    channelItems.push({ id: '', name: '', type: 'header' as const });
+
+    // Add voice channels
+    const voiceChannels = voiceChannel.getVoiceChannels();
+    if (voiceChannels.length === 0) {
+      // Add default voice channel if none exist
+      const isInVoice = voiceChannel.isInVoiceChannel();
+      const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : '{gray-fg}[V]{/gray-fg}';
+      items.push(icon + ' General {gray-fg}(0){/gray-fg}');
+      channelItems.push({ id: 'voice-general', name: 'General', type: 'voice' as const });
+    } else {
+      voiceChannels.forEach(vc => {
+        const count = vc.participants.length;
+        const isInVoice = voiceChannel.getCurrentVoiceChannel() === vc.id;
+        const icon = isInVoice ? '{green-fg}[V]{/green-fg}' : count > 0 ? '{cyan-fg}[V]{/cyan-fg}' : '{gray-fg}[V]{/gray-fg}';
+        items.push(icon + ' ' + vc.name + ' {gray-fg}(' + count + '){/gray-fg}');
+        channelItems.push({ id: 'voice-' + vc.id, name: vc.name, type: 'voice' as const });
+      });
+    }
 
     channelList.setItems(items);
 
@@ -500,30 +509,53 @@ export async function createApp(session: DoorSession) {
     if (index !== lastSelectedChannelIndex && index >= 0 && index < channelItems.length) {
       lastSelectedChannelIndex = index;
       const channel = channelItems[index];
-    if (channel && !isCurrentChannel(channel.id, channel.name)) {
-      if (state.currentChannel) socket.emit('room:leave');
-      socket.emit('room:join', { roomName: channel.name });
-    }
-  }
-  }
 
-  // Handle channel selection with Enter (also focus input after)
-  channelList.on('select', (_item: any, index: number) => {
-    const channel = channelItems[index];
-    if (channel) {
-      if (!isCurrentChannel(channel.id, channel.name)) {
+      // Skip headers and spacers
+      if (!channel || channel.type === 'header' || channel.type === 'spacer') {
+        return;
+      }
+
+      if (channel.type === 'voice') {
+        // Join voice channel
+        const channelId = channel.id.replace('voice-', '');
+        voiceChannel.joinVoiceChannel(channelId);
+      } else if (!isCurrentChannel(channel.id, channel.name)) {
+        // Join text channel
         if (state.currentChannel) socket.emit('room:leave');
         socket.emit('room:join', { roomName: channel.name });
       }
-      // Return focus to input after pressing Enter
-      inputBox.focus();
     }
+  }
+
+  // Handle channel selection with Enter key
+  // NOTE: Blessed emits 'select item' on Enter, NOT on arrow keys or clicks
+  channelList.on('select item', (_item: any, index: number) => {
+    const channel = channelItems[index];
+
+    // Skip headers and spacers
+    if (!channel || channel.type === 'header' || channel.type === 'spacer') {
+      return;
+    }
+
+    if (channel.type === 'voice') {
+      // Join voice channel
+      const channelId = channel.id.replace('voice-', '');
+      voiceChannel.joinVoiceChannel(channelId);
+      addSystemMessage(`Joining voice channel: ${channel.name}`);
+    } else if (!isCurrentChannel(channel.id, channel.name)) {
+      // Join text channel
+      if (state.currentChannel) socket.emit('room:leave');
+      socket.emit('room:join', { roomName: channel.name });
+    }
+
+    // Return focus to input after pressing Enter
+    inputBox.focus();
   });
 
-  // Auto-join on navigation keys (up/down/home/end/pageup/pagedown)
+  // Navigation keys just move selection, don't auto-join
+  // User must press Enter to actually join
   channelList.key(['up', 'down', 'home', 'end', 'pageup', 'pagedown'], () => {
-    // Defer to next tick so the selection has updated
-    setTimeout(joinSelectedChannel, 0);
+    screen.render();
   });
 
   // Escape from channel list returns to input
@@ -532,25 +564,25 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // Direct click handler for channelList - ensures focus on click and joins
+  // Click handler just focuses the list and updates selection
+  // User must press Enter or double-click to join
   channelList.on('click', () => {
     channelList.focus();
-    // Defer join to next tick so selection is updated
-    setTimeout(joinSelectedChannel, 0);
     screen.render();
   });
 
   // ========== USER LIST (Left Sidebar - same position as channels) ==========
   const userList = createList({
     parent: screen,
-    top: MENU_HEIGHT + 1,  // Below tab bar
+    top: MENU_HEIGHT,  // Start right below menu
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' Users ',
+    label: ' Ch {inverse}[Us]{/inverse} ', // Tabs integrated into label
     border: { type: 'line' },
     mouse: true,
     clickable: true,  // Enable click events
+    interactive: true,  // Enable interactive selection
     keys: true,  // Enable arrow key navigation
     vi: true,    // j/k for up/down
     scrollable: true,
@@ -577,13 +609,13 @@ export async function createApp(session: DoorSession) {
     }
 
     userList.setItems(items);
-    userList.setLabel(` Users (${onlineUsers.size}) `);
+    // Keep tabs in label
+    userList.setLabel(` Ch {inverse}[Us]{/inverse} (${onlineUsers.size}) `);
   }
 
   // Function to switch sidebar tabs
   function switchSidebarTab(tab: 'channels' | 'users') {
     sidebarTab = tab;
-    updateSidebarTabs();
     if (tab === 'channels') {
       userList.hide();
       channelList.show();
@@ -634,17 +666,23 @@ export async function createApp(session: DoorSession) {
   // Handle terminal resize and adjust layout for different screen sizes
   // NOTE: Must update element.position (not element.options) because _getCoords() reads from position
   screen.responsiveLayout.onResize((width, height) => {
-    console.log(`[LiveChat] Responsive layout resize: ${width}x${height}`);
+    // Validate dimensions are positive numbers to prevent crashes
+    if (!width || !height || width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
+      console.error(`[LiveChat] Invalid resize dimensions: ${width}x${height}, ignoring`);
+      return;
+    }
+
     const breakpoint = screen.responsiveLayout.getBreakpoint();
 
     // Update chat panel dimensions based on new screen size
     // Use position properties, not options (options are only read at construction)
     const chatWidth = width - SIDEBAR_WIDTH;
-    const chatHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT - TYPING_HEIGHT;
+    const chatHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;  // Removed TYPING_HEIGHT since typing bar is hidden
 
     // Update full-width elements (percentage widths need recalculation on resize)
     statusBar.position.width = width;
-    inputBox.position.width = width;
+    inputBox.position.width = width - EMOJI_BUTTON_WIDTH;  // Leave space for emoji button
+    emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
     menuBar.position.width = width;
     commandSuggestions.position.width = width;  // Full width for command suggestions
 
@@ -652,7 +690,6 @@ export async function createApp(session: DoorSession) {
       // Hide sidebar on small screens (< 80 cols)
       channelList.hide();
       userList.hide();
-      sidebarTabs.hide();
       chatPanel.position.left = 0;
       chatPanel.position.width = width;
       chatPanel.position.height = chatHeight;
@@ -663,7 +700,6 @@ export async function createApp(session: DoorSession) {
       typingBar.position.width = width;
     } else {
       // Show sidebar on medium/large screens
-      sidebarTabs.show();
       if (sidebarTab === 'channels') {
         channelList.show();
       } else {
@@ -689,6 +725,10 @@ export async function createApp(session: DoorSession) {
     }
     if (initialRoomId && channelId === initialRoomId && initialRoomName) {
       return initialRoomName;
+    }
+    // Validate state.channels exists before calling .find()
+    if (!state || !state.channels || !Array.isArray(state.channels)) {
+      return channelId;
     }
     const match = state.channels.find(ch => ch.id === channelId || ch.name === channelId);
     if (match) return match.name;
@@ -896,14 +936,25 @@ export async function createApp(session: DoorSession) {
   // ========== CONTEXT MENUS ==========
   const { contextMenu, showContextMenu, hideContextMenu } = createContextMenus(screen, inputBox, showUserProfile, showDMPrompt, addSystemMessage, socket);
 
+  // ========== VOICE CHANNEL (Discord-style UX) ==========
+  const voiceChannel = createEnhancedVoiceChannel({
+    channelList,
+    screen,
+    socket,
+    ctx: session as any, // Pass session as ctx for audio API access
+    userId,
+    username,
+    chatPanel, // Pass chat panel so video grid renders in correct location
+    onJoinVoice: (channelId: string) => {
+      addSystemMessage(`Joined voice channel`);
+    },
+    onLeaveVoice: () => {
+      addSystemMessage(`Left voice channel`);
+    },
+  });
+
   // ========== MOUSE HANDLING & SCROLL WHEEL ==========
   // Using built-in blessed widget click events instead of custom screen-level handler
-
-  // Sidebar tabs click handling
-  sidebarTabs.on('click', (data: any) => {
-    const relativeX = data.x - (sidebarTabs as any).aleft;
-    switchSidebarTab(relativeX < 7 ? 'channels' : 'users');
-  });
 
   // Input box click to focus
   inputBox.on('click', () => {
@@ -936,41 +987,32 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // User list click to focus and show user context menu
-  userList.on('click', (data: any) => {
-    console.log('[USER LIST CLICK] Event fired, data:', data);
+  // User list click to show context menu
+  userList.on('click', (event: any) => {
     userList.focus();
     const selected = (userList as any).selected;
     const items = (userList as any).items || [];
-    console.log('[USER LIST CLICK] Selected:', selected, 'Items:', items);
     if (selected !== undefined && items[selected]) {
       const text = typeof items[selected] === 'string' ? items[selected] : (items[selected] as any)?.content || '';
-      console.log('[USER LIST CLICK] Text:', JSON.stringify(text));
       const match = text.match(/^.\s+(\S+)/);
-      console.log('[USER LIST CLICK] Match:', match);
-      if (match && match[1]) {
-        // Use mouse coordinates from click event, fallback to 0,0
-        const x = data?.x || 0;
-        const y = data?.y || 0;
-        console.log('[USER LIST CLICK] Showing context menu for user:', match[1], 'at', x, y);
+      if (match && match[1] && match[1] !== username) {
+        // Use screen-absolute coordinates from click event
+        const x = event.x || 0;
+        const y = event.y || 0;
         showContextMenu(x, y, 'user', match[1]);
-      } else {
-        console.log('[USER LIST CLICK] No match found for text:', text);
       }
-    } else {
-      console.log('[USER LIST CLICK] No item selected or items empty');
     }
     screen.render();
   });
 
   // Channel list click to focus and show channel context menu
-  channelList.on('click', (data: any) => {
+  channelList.on('click', (event: any) => {
     channelList.focus();
     const selected = (channelList as any).selected;
     if (selected !== undefined && channelItems[selected]) {
-      // Use mouse coordinates from click event, fallback to 0,0
-      const x = data?.x || 0;
-      const y = data?.y || 0;
+      // Use screen-absolute coordinates from click event
+      const x = event.x || 0;
+      const y = event.y || 0;
       showContextMenu(x, y, 'channel', channelItems[selected].name);
     }
     screen.render();
@@ -987,21 +1029,14 @@ export async function createApp(session: DoorSession) {
   // ========== HELPER FUNCTIONS ==========
 
   function addChatMessage(line: string, applyMarkdown = true) {
-    console.log('[addChatMessage] Called with line:', line.substring(0, 100));
-    console.log('[addChatMessage] applyMarkdown:', applyMarkdown);
     const parsed = applyMarkdown ? parseContent(line) : line;
-    console.log('[addChatMessage] After parsing:', parsed.substring(0, 100));
     const highlighted = highlightMentions(parsed, username);
-    console.log('[addChatMessage] After highlighting:', highlighted.substring(0, 100));
-    console.log('[addChatMessage] Calling chatLog.log()...');
-    chatLog.log(highlighted);
-    console.log('[addChatMessage] Calling screen.render()...');
+    appendLineToLog(highlighted);
     screen.render();
-    console.log('[addChatMessage] Done');
   }
 
   function addSystemMessage(msg: string) {
-    chatLog.log(`{gray-fg}*** ${msg} ***{/gray-fg}`);
+    appendLineToLog(`{gray-fg}*** ${msg} ***{/gray-fg}`);
     screen.render();
   }
 
@@ -1010,13 +1045,42 @@ export async function createApp(session: DoorSession) {
     const color = getUserColor(from);
     const parsed = parseContent(content);
     const highlighted = highlightMentions(parsed, username);
-    chatLog.log(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
+    appendLineToLog(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
     screen.render();
   }
 
   // Track the typing preview content
   const typingPreviewLines = new Map<number, string>();
   let typingPreviewLineCount = 0;
+
+  // Helper function to append a line to the log while preserving typing previews
+  function appendLineToLog(line: string) {
+    // Get current log lines and remove typing preview lines
+    // CRITICAL: Use current Map size, not cached count to avoid desync (Issue #2)
+    const currentPreviewCount = typingPreviewLines.size;
+    const logLines = chatLog.getLines();
+
+    // Validate slice bounds to prevent duplication (Issue #25)
+    const sliceEnd = Math.max(0, Math.min(logLines.length, logLines.length - currentPreviewCount));
+    const contentLines = logLines.slice(0, sliceEnd);
+
+    // Add the new message
+    contentLines.push(line);
+
+    // Re-add typing preview lines at the end
+    const previewLines = Array.from(typingPreviewLines.values());
+    const fullContent = [...contentLines, ...previewLines].join('\n');
+
+    // Update content in one operation
+    chatLog.setContent(fullContent);
+    typingPreviewLineCount = previewLines.length;
+
+    // Auto-scroll to bottom if user was already at bottom
+    const currentScroll = chatLog.getScrollPerc();
+    if (currentScroll >= 95) {
+      chatLog.setScrollPerc(100);
+    }
+  }
 
   function updateTypingPreview() {
     const now = Date.now();
@@ -1035,7 +1099,9 @@ export async function createApp(session: DoorSession) {
 
       if (buf.buffer.length > 0) {
         const color = getUserColor(buf.username);
-        const line = `{gray-fg}${buf.username}: ${buf.buffer}█{/gray-fg}`;
+        const time = formatTime(new Date());
+        // Format preview like a real message, not grey
+        const line = `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
 
         // Only update if content changed
         if (typingPreviewLines.get(userId) !== line) {
@@ -1101,6 +1167,11 @@ export async function createApp(session: DoorSession) {
   registry.register(pinCmd);
   registry.register(unpinCmd);
   registry.register(pinnedCmd);
+
+  // ========== REGISTER THREAD COMMANDS ==========
+  registry.register(replyCmd);
+  registry.register(threadCmd);
+  registry.register(editCmd);
 
   // ========== REGISTER SEARCH COMMAND ==========
   registry.register(searchCmd);
@@ -1184,7 +1255,17 @@ export async function createApp(session: DoorSession) {
   loader.update(70, 'Connecting to chat server...');
 
   // ========== ROOM SOCKET HANDLERS ==========
-  setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, currentRoomLabel, showMessageDialog, inputBox, screen);
+  // Setter function for currentRoomLabel to prevent stale references
+  const setCurrentRoomLabel = (value: string) => { currentRoomLabel = value; };
+  setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, setCurrentRoomLabel, showMessageDialog, inputBox, screen);
+
+  // Clear typing preview lines when switching channels
+  // setupRoomHandlers already clears state.typingBuffers via setChannel,
+  // but typingPreviewLines is a separate Map that also needs clearing
+  socket.on('room:joined', () => {
+    typingPreviewLines.clear();
+    typingPreviewLineCount = 0;
+  });
 
   // ========== CHAT SOCKET HANDLERS ==========
   setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime);
@@ -1277,57 +1358,52 @@ export async function createApp(session: DoorSession) {
 
   // ========== CONNECTION ERROR HANDLING ==========
 
-  let disconnectDialog: any = null;
   let reconnectAttempts = 0;
+  let userCancelled = false;  // Track if user clicked cancel
   const MAX_RECONNECT_ATTEMPTS = 3;
 
-  function showConnectionErrorDialog(errorMessage: string) {
-    // Don't show multiple dialogs
-    if (disconnectDialog) return;
-
-    disconnectDialog = new Question({
-      parent: screen,
-      title: ' Connection Error ',
-      text: `{red-fg}Lost connection to server{/red-fg}\n\n${errorMessage}\n\nAttempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`,
-      width: 50,
-      height: 12,
-      overlay: true,
-      overlayOpacity: 0.7,
-      style: {
-        bg: 'black',
-        fg: 'white',
-      },
-    });
-
-    disconnectDialog.ask('Try to reconnect?', (answer: boolean) => {
-      disconnectDialog.destroy();
-      disconnectDialog = null;
-
-      if (answer) {
-        // User chose "Yes" - attempt reconnect
-        reconnectAttempts++;
-        if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
-          addSystemMessage('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
-          // The socket will automatically try to reconnect via socket.io
-          setTimeout(() => {
-            if (!socket.connected) {
-              showConnectionErrorDialog('Reconnection failed');
-            }
-          }, 3000);
-        } else {
-          addSystemMessage('{red-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/red-fg}');
-          setTimeout(() => cleanup(), 2000);
-        }
+  // Create disconnection modal (will be shown when needed)
+  const disconnectionModal = createDisconnectionModal({
+    screen,
+    onRetry: () => {
+      reconnectAttempts++;
+      if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
+        addSystemMessage('{yellow-fg}Attempting to reconnect...{/yellow-fg}');
+        // The socket will automatically try to reconnect via socket.io
+        setTimeout(() => {
+          if (!socket.connected) {
+            disconnectionModal.showError(
+              `{red-fg}Lost connection to server{/red-fg}\n\n` +
+              `Reconnection failed\n\n` +
+              `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`
+            );
+          }
+        }, 3000);
       } else {
-        // User chose "No" or "Cancel" - exit gracefully
-        addSystemMessage('{yellow-fg}Disconnected by user. Exiting...{/yellow-fg}');
-        setTimeout(() => cleanup(), 1000);
+        addSystemMessage('{red-fg}Maximum reconnection attempts reached. Please restart LiveChat.{/red-fg}');
+        disconnectionModal.hide();
+        setTimeout(() => cleanup(), 2000);
       }
-    });
+    },
+    onCancel: () => {
+      // User chose "Cancel" - exit gracefully without message
+      userCancelled = true;
+      cleanup();
+    },
+  });
+
+  function showConnectionErrorDialog(errorMessage: string) {
+    // Don't show multiple dialogs or if user already cancelled
+    if (userCancelled) return;
+
+    disconnectionModal.showError(
+      `{red-fg}Lost connection to server{/red-fg}\n\n` +
+      `${errorMessage}\n\n` +
+      `Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`
+    );
   }
 
   socket.on('disconnect', (reason: string) => {
-    console.log('[LiveChat] Socket disconnected:', reason);
     if (reason !== 'io client disconnect') {
       // Server initiated disconnect or connection lost
       showConnectionErrorDialog(`Disconnected: ${reason}`);
@@ -1340,12 +1416,8 @@ export async function createApp(session: DoorSession) {
   });
 
   socket.on('connect', () => {
-    console.log('[LiveChat] Socket reconnected');
     reconnectAttempts = 0;
-    if (disconnectDialog) {
-      disconnectDialog.destroy();
-      disconnectDialog = null;
-    }
+    disconnectionModal.hide();
     addSystemMessage('{green-fg}Reconnected to server!{/green-fg}');
   });
 
@@ -1425,13 +1497,11 @@ export async function createApp(session: DoorSession) {
           selectCommandSuggestion();
         }
         return;
-      } else {
-        // Regular message - submit it
-        // Prevent the default newline insertion by calling submit directly
-        const value = inputBox.getValue();
-        inputBox.emit('submit', value);
-        return;
       }
+      // For regular messages, let the natural 'submit' event handler process it
+      // DON'T manually emit submit here - it causes double submission
+      // The blessed input widget will emit 'submit' naturally on enter
+      return;
     }
 
     // Handle command autocomplete navigation when dropdown is visible
@@ -1492,7 +1562,42 @@ export async function createApp(session: DoorSession) {
       switchSidebarTab(t);
     }
   };
-  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, sidebarTab, channelList, userList, sidebarTabs, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar);
+  // Getter function for current sidebar tab value (prevents stale references)
+  const getSidebarTab = () => sidebarTab;
+  const { updateChatLayout } = setupKeyboardShortcuts(screen, chatPanel, drawingCanvas, inputBox, getSidebarTab, channelList, userList, emojiPicker, showHelp, switchSidebarTabWrapper, addSystemMessage, showFileSharing, showSettingsOverlay, showConfirm, cleanup, SIDEBAR_WIDTH, chatLog, typingBar);
+
+  // Additional keyboard shortcuts
+  // Ctrl+F: Open search overlay
+  screen.key(['C-f'], () => {
+    if (currentSearchOverlayRef.current) currentSearchOverlayRef.current.destroy();
+    currentSearchOverlayRef.current = createSearchOverlay(
+      screen,
+      (query: string, filters: any) => {
+        if (query && query.length >= 2) {
+          searchMessages(socket, query, {
+            roomId: state.currentChannel,
+            ...filters
+          });
+        } else {
+          addSystemMessage('Search query must be at least 2 characters');
+        }
+      },
+      () => {
+        if (currentSearchOverlayRef.current) {
+          currentSearchOverlayRef.current.destroy();
+          currentSearchOverlayRef.current = null;
+        }
+        inputBox.focus();
+      }
+    );
+    screen.render();
+  });
+
+  // F7: Show pinned messages
+  screen.key(['f7'], () => {
+    getPinnedMessages(socket, state.currentChannel);
+    screen.render();
+  });
 
   // Escape key: close dialogs and return focus to input
   // Note: Drawing canvas handles its own escape key for exiting drawing mode
@@ -1540,6 +1645,9 @@ export async function createApp(session: DoorSession) {
     // Stop listening to search events
     cleanupSearchListeners(socket);
 
+    // Cleanup voice channel
+    voiceChannel.destroy();
+
     // Remove moderation event listeners
     socket.removeAllListeners('chat:kicked');
     socket.removeAllListeners('chat:banned');
@@ -1560,6 +1668,12 @@ export async function createApp(session: DoorSession) {
     socket.removeAllListeners('room:list');
     socket.removeAllListeners('room:kicked');
     socket.removeAllListeners('room:error');
+    socket.removeAllListeners('room:created');
+    socket.removeAllListeners('room:user-joined');
+    socket.removeAllListeners('room:user-left');
+    socket.removeAllListeners('disconnect');
+    socket.removeAllListeners('connect');
+    socket.removeAllListeners('connect_error');
 
     // Disable mouse and clean up input handler
     screen.disableMouse();
@@ -1586,7 +1700,6 @@ export async function createApp(session: DoorSession) {
       bbs.write('\x1b[2J\x1b[H');  // Clear screen and home cursor
 
       // Initial UI setup
-      updateSidebarTabs();
       updateChannelList();
       updateUserTable();
       updateStatusBar();

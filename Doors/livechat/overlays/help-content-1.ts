@@ -24,8 +24,18 @@ export const HELP_PART_1 = `{bold}{cyan-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS
   F3            Switch sidebar tab (Channels/Users)
   F5            Create/join drawing channel
   F6            File sharing browser
+  F7            Show pinned messages
   Tab           Cycle focus between panels
   Ctrl+C/Q      Quit (with confirmation)
+
+{cyan-fg}Voice Channels:{/cyan-fg}
+  Click [V]         Join/leave voice channel
+  /voice join <ch>  Join voice channel
+  /voice leave      Leave voice channel
+  /voice mute       Mute microphone
+  /voice unmute     Unmute microphone
+  /deafen           Mute audio output
+  /undeafen         Unmute audio output
 
 {bold}{green-fg}--- COMMANDS ---{/green-fg}{/bold}
 

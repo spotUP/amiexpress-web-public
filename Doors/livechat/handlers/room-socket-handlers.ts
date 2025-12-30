@@ -1,4 +1,4 @@
-export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: number, un: string, nid: number, ps: any, ucl: () => void, uut: () => void, usb: () => void, asm: (m: string) => void, aa: (a: string) => void, aud: any, hl: () => void, sc: (s: any, c: string) => void, crl: string, smd: (t: string, cb?: () => void) => void, ib: any, s: any) {
+export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: number, un: string, nid: number, ps: any, ucl: () => void, uut: () => void, usb: () => void, asm: (m: string) => void, aa: (a: string) => void, aud: any, hl: () => void, sc: (s: any, c: string) => void, setCrl: (value: string) => void, smd: (t: string, cb?: () => void) => void, ib: any, s: any) {
   sock.on('room:list', (d: any) => {
     const rs = Array.isArray(d?.rooms) ? d.rooms : [];
     if (rs.length > 0) {
@@ -21,9 +21,8 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
   });
 
   sock.on('room:joined', (d: any) => {
-    console.log('[LiveChat DEBUG] room:joined received:', JSON.stringify(d));
     sc(st, d.roomId || d.roomName);
-    crl = d.roomName || crl;
+    setCrl(d.roomName || '');
     if (d.members && Array.isArray(d.members)) {
       ou.clear();
       // Find current user in members list to get their UUID
@@ -48,7 +47,7 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
     aud.onNotification();
   });
 
-  sock.on('room:left', (d: any) => { sc(st, ''); crl = ''; ucl(); usb(); asm(`Left ${d.roomName}`); });
+  sock.on('room:left', (d: any) => { sc(st, ''); setCrl(''); ucl(); usb(); asm(`Left ${d.roomName}`); });
 
   sock.on('room:created', (d: any) => {
     st.channels.push({ id: d.roomId, name: d.roomName, displayName: '#' + d.roomName, topic: d.topic || '', type: d.isPublic ? 'public' : 'private', createdBy: un, createdAt: new Date(), memberCount: 1, unreadCount: 0 });
@@ -85,7 +84,7 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
   sock.on('room:kicked', (d: any) => {
     smd(`{red-fg}You were kicked from ${d.roomName}{/red-fg}\n\nReason: ${d.reason || 'No reason given'}\nBy: ${d.kickedBy}`, () => { ib.focus(); });
     st.currentChannel = '';
-    crl = '';
+    setCrl('');
     usb();
     aud.onError();
   });
