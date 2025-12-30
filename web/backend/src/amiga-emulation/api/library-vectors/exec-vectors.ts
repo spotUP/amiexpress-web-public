@@ -217,14 +217,23 @@ export const EXEC_VECTORS: LibraryVector[] = [
       logTrap(`GetMsg returning 0x${result.toString(16)}`);
 
       // Debug: dump reply message contents when door receives a message
+      // jhMessage structure: Message(20) + String[200](20) + Data(220) + Command(224)
       if (result !== 0) {
         const msgType = emu.readMemory(result + 8); // ln_Type
-        const command = emu.readMemory32(result + 20); // XIM command
-        const data = emu.readMemory32(result + 24); // XIM data
+        const command = emu.readMemory32(result + 0xE0); // Command at offset 224
+        const data = emu.readMemory32(result + 0xDC); // Data at offset 220
+        const strStart = result + 0x14; // String at offset 20
+        let str = '';
+        for (let i = 0; i < 32; i++) {
+          const ch = emu.readMemory(strStart + i);
+          if (ch === 0) break;
+          str += String.fromCharCode(ch);
+        }
         console.log(`[ExecLibrary][GetMsg] Door received message:`);
         console.log(`  ln_Type=${msgType} (6=NT_REPLYMSG)`);
-        console.log(`  command=${command}`);
-        console.log(`  data=${data}`);
+        console.log(`  Command=${command} (at 0xE0)`);
+        console.log(`  Data=${data} (at 0xDC)`);
+        console.log(`  String="${str}" (at 0x14)`);
       }
 
       return result;
