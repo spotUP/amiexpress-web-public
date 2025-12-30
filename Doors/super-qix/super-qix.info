@@ -1,0 +1,9 @@
+NAME=Super Qix
+COMMAND=SUPERQIX
+TYPE=TS
+RUNTIME=hybrid
+ACCESS=0
+DESCRIPTION=Classic 1987 Taito arcade game - claim territory, avoid the Qix!
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+CATEGORY=Games/Arcade

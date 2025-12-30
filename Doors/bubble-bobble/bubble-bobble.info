@@ -1,0 +1,6 @@
+NAME=Bubble Bobble
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+DESCRIPTION=Classic 1986 Taito bubble-blowing platformer
+CATEGORY=Games/Arcade
+RUNTIME=hybrid

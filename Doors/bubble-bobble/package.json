@@ -1,0 +1,28 @@
+{
+  "name": "bubble-bobble-door",
+  "version": "1.0.0",
+  "description": "Bubble Bobble - 1986 Taito arcade platformer",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./server.ts"
+  },
+  "scripts": {
+    "build": "tsc && esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
+    "build:server": "tsc",
+    "build:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "esbuild": "^0.19.0"
+  }
+}

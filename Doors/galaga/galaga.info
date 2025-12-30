@@ -1,0 +1,10 @@
+NAME=Galaga
+COMMAND=GALAGA
+PATH=Doors/galaga
+TYPE=TS
+RUNTIME=hybrid
+ACCESS=0
+DESCRIPTION=Classic 1981 Namco space shooter - destroy alien formations and rescue your captured fighter!
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+CATEGORY=Games/Arcade

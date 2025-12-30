@@ -1,0 +1,6 @@
+NAME=Pipe Dream
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+DESCRIPTION=Classic 1989 LucasArts pipe-connecting puzzle game
+CATEGORY=Games/Puzzle
+RUNTIME=hybrid

@@ -1,0 +1,10 @@
+NAME=Frogger
+COMMAND=FROGGER
+PATH=Doors/frogger
+TYPE=TS
+RUNTIME=hybrid
+ACCESS=0
+DESCRIPTION=Classic 1981 Konami arcade game - help the frog cross the road and river!
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+CATEGORY=Games/Arcade

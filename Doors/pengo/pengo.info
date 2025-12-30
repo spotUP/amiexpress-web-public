@@ -1,0 +1,10 @@
+NAME=Pengo
+COMMAND=PENGO
+PATH=Doors/pengo
+TYPE=TS
+RUNTIME=hybrid
+ACCESS=0
+DESCRIPTION=Classic 1982 Sega puzzle game - push ice blocks to crush the Sno-Bees!
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+CATEGORY=Games/Arcade
