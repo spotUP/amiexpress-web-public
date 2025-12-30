@@ -525,6 +525,20 @@ export class DoorLifecycleManager {
           const trapHandled = await this.checkAndHandleLibraryTrap(pc);
           if (trapHandled) {
             await this.handleTrapExecution(pc);
+
+            // === STEP 4B: Check if WaitPort returned 0 (no messages) ===
+            // Doors like Bulls/FR use tight WaitPort loops and need immediate XIM polling.
+            // Without this, messages queue up but never get processed because XIM polling
+            // only happens every 10000 instructions (after batch execution).
+            // AquaScan uses Wait() which pauses, so it doesn't need this - it polls during pause.
+            if (
+              this.config.doorType === "XIM" &&
+              this.libraryManager?.execLibrary?.getNeedsXIMPoll()
+            ) {
+              await this.pollXIMMessages();
+              this.libraryManager.execLibrary.clearNeedsXIMPoll();
+            }
+
             continue;
           }
           // Check for ILLEGAL instruction if trap wasn't handled by library

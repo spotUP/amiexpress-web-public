@@ -142,6 +142,10 @@ export class ExecLibrary {
     | ((portAddr: number, msgAddr: number) => void)
     | null = null;
 
+  // Flag set when WaitPort returns 0 (no messages) - signals execution loop to poll XIM
+  // This fixes doors that use tight WaitPort loops (Bulls, FR) vs Wait() (AquaScan)
+  private needsXIMPoll: boolean = false;
+
   // Door init callback - called when door calls CreatePort (initialization complete)
   private doorInitCallback: (() => void) | null = null;
   private doorPortAddr: number = 0;
@@ -296,6 +300,21 @@ export class ExecLibrary {
     callback: (portAddr: number, msgAddr: number) => void
   ): void {
     this.doorMessageCallback = callback;
+  }
+
+  /**
+   * Check if XIM polling is needed (WaitPort returned 0)
+   * Used by execution loop to trigger immediate XIM polling for doors in tight WaitPort loops
+   */
+  getNeedsXIMPoll(): boolean {
+    return this.needsXIMPoll;
+  }
+
+  /**
+   * Clear the XIM poll flag after polling is done
+   */
+  clearNeedsXIMPoll(): void {
+    this.needsXIMPoll = false;
   }
 
   recordWaitPortReturn(returnAddr: number): void {
@@ -2543,6 +2562,21 @@ export class ExecLibrary {
         this.emulator.writeMemory32(portAddr + 16, sigTask);
       }
 
+      // CRITICAL FIX 2025-12-30: Door reply ports MUST have sigTask = door task
+      // The native AEDoor.library may set sigTask to BBS task (0x88000) when creating
+      // the reply port, but Signal() only signals the door task (0x90000).
+      // Without this fix, the door never wakes up from Wait() after ReplyMsg.
+      const nameLower = name.toLowerCase();
+      const isDoorReplyPort = nameLower.startsWith("doorreplyport") ||
+                              nameLower.startsWith("aedoorrp");
+      if (isDoorReplyPort && sigTask !== this.currentTask.address) {
+        console.log(
+          `[ExecLibrary]   FIXING door reply port sigTask: 0x${sigTask.toString(16)} -> 0x${this.currentTask.address.toString(16)}`
+        );
+        sigTask = this.currentTask.address;
+        this.emulator.writeMemory32(portAddr + 16, sigTask);
+      }
+
       // Empty message list
       this.emulator.writeMemory32(portAddr + 20, portAddr + 24); // lh_Head -> Tail
       this.emulator.writeMemory32(portAddr + 24, 0); // lh_Tail
@@ -3871,7 +3905,43 @@ export class ExecLibrary {
     // CRITICAL: Also add to message ports registry (for PutMsg/GetMsg/WaitPort)
     // Read port structure fields
     const sigBit = this.emulator.readMemory(portAddr + 15); // mp_SigBit
-    const sigTask = this.emulator.readMemory32(portAddr + 16); // mp_SigTask
+    let sigTask = this.emulator.readMemory32(portAddr + 16); // mp_SigTask
+
+    // CRITICAL FIX 2025-12-30: Door reply ports MUST have sigTask = door task
+    // The native AEDoor.library may set sigTask to BBS task (0x88000) when creating
+    // the reply port, but Signal() only signals the door task (0x90000).
+    // Without this fix, the door never wakes up from Wait() after ReplyMsg.
+    const nameLower = name.toLowerCase();
+    const isDoorReplyPort =
+      nameLower.startsWith("doorreplyport") ||
+      nameLower.startsWith("aedoorrp");
+    if (isDoorReplyPort) {
+      // Fix sigTask if needed
+      if (sigTask !== this.currentTask.address) {
+        console.log(
+          `[ExecLibrary]   FIXING door reply port sigTask: 0x${sigTask.toString(16)} -> 0x${this.currentTask.address.toString(16)}`
+        );
+        sigTask = this.currentTask.address;
+        // Also fix in memory so native code sees the correct value
+        this.emulator.writeMemory32(portAddr + 16, sigTask);
+      }
+
+      // CRITICAL FIX: Ensure PA_SIGNAL flag is set for door reply ports
+      // Without this flag, putMsg won't signal the door when replies arrive.
+      // The native AEDoor.library may create ports without PA_SIGNAL.
+      const PA_SIGNAL = 0x02;
+      const currentFlags = this.emulator.readMemory(portAddr + 14);
+      if ((currentFlags & PA_SIGNAL) === 0) {
+        console.log(
+          `[ExecLibrary]   FIXING door reply port flags: adding PA_SIGNAL (0x${currentFlags.toString(16)} -> 0x${(currentFlags | PA_SIGNAL).toString(16)})`
+        );
+        this.emulator.writeMemory(portAddr + 14, currentFlags | PA_SIGNAL);
+      }
+    }
+
+    console.log(
+      `[ExecLibrary]   Port sigTask: 0x${sigTask.toString(16)}, sigBit: ${sigBit}`
+    );
 
     const port = {
       address: portAddr,
@@ -3913,6 +3983,9 @@ export class ExecLibrary {
     console.log("[ExecLibrary] CreateMsgPort() called");
     console.log(
       `[ExecLibrary]   Owner task: 0x${owner.address.toString(16)} (${owner.name})`
+    );
+    console.log(
+      `[ExecLibrary]   DEBUG: ownerTask passed=${ownerTask ? 'yes' : 'no'}, this.currentTask.address=0x${this.currentTask.address.toString(16)}, this.bbsTask.address=0x${this.bbsTask.address.toString(16)}`
     );
     console.log(
       `[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(
@@ -4618,9 +4691,10 @@ export class ExecLibrary {
     // Check if port has messages
     if (port.messages.length === 0) {
       // No message - would block on real Amiga, we return 0
-      if (port.messages.length === 0) {
-        return 0;
-      }
+      // Set flag to trigger XIM polling in execution loop - this is critical for doors
+      // that use tight WaitPort loops (Bulls, FR) vs Wait() which pauses (AquaScan)
+      this.needsXIMPoll = true;
+      return 0;
     }
 
     // MESSAGE FOUND! Return the head message without removing it.

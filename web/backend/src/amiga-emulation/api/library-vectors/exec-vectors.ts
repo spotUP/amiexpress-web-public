@@ -340,6 +340,16 @@ export const EXEC_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -114, // LVO -114 (0xFF8E) - amiga.lib CreatePort
+    name: "CreatePort",
+    handler: (emu, lib: ExecLibrary) => {
+      const nameAddr = emu.getRegister(8); // A0 = name pointer
+      const priority = emu.getRegister(0); // D0 = priority
+      console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
+      return lib.createPort(nameAddr, priority);
+    },
+  },
+  {
     offset: -666, // LVO -666 (0xFFFFFD66)
     name: "CreateMsgPort",
     handler: (emu, lib: ExecLibrary) => {

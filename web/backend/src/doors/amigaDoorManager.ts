@@ -365,12 +365,17 @@ export class AmigaDoorManager {
         console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
         console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
 
-        // Get file size if executable exists
+        // Get file/directory size if path exists
         let fileSize = 0;
         if (executableExists) {
           try {
             const stats = amigafs.statSync(metadata.resolvedPath);
-            fileSize = stats.size;
+            if (stats.isDirectory()) {
+              // For directories (TypeScript doors), calculate total size
+              fileSize = this.calculateDirectorySize(metadata.resolvedPath);
+            } else {
+              fileSize = stats.size;
+            }
           } catch (err) {
             console.log(`[scanInstalledDoors] Could not get file size: ${err}`);
           }
@@ -1332,6 +1337,34 @@ export class AmigaDoorManager {
   }
 
   /**
+   * Calculate total size of a directory (for TypeScript doors)
+   */
+  private calculateDirectorySize(dirPath: string): number {
+    let totalSize = 0;
+    try {
+      const files = amigafs.readdirSync(dirPath);
+      for (const file of files) {
+        // Skip node_modules and .git to avoid huge sizes
+        if (file === 'node_modules' || file === '.git') continue;
+        const filePath = path.join(dirPath, file);
+        try {
+          const stats = amigafs.statSync(filePath);
+          if (stats.isDirectory()) {
+            totalSize += this.calculateDirectorySize(filePath);
+          } else {
+            totalSize += stats.size;
+          }
+        } catch {
+          // Ignore individual file errors
+        }
+      }
+    } catch {
+      // Ignore directory read errors
+    }
+    return totalSize;
+  }
+
+  /**
    * Cleanup temporary directory
    */
   private cleanup(dir: string): void {
@@ -1398,13 +1431,15 @@ export class AmigaDoorManager {
   }
 
   /**
-   * Delete TypeScript door (removes entire door directory)
-   * @param doorName - The door name (directory name in backend/doors/)
+   * Delete TypeScript door (removes door directory AND .info files)
+   * @param doorName - The door name (directory name in Doors/)
    * @returns Result object with success status and message
    */
   async deleteTypeScriptDoor(doorName: string): Promise<{ success: boolean; message: string }> {
     try {
       const doorPath = path.join(this.bbsRoot, 'Doors', doorName);
+      const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
+      const deletedFiles: string[] = [];
 
       // Check if door exists
       if (!amigafs.existsSync(doorPath)) {
@@ -1423,13 +1458,89 @@ export class AmigaDoorManager {
         };
       }
 
+      // Try to get the command name from package.json or door's .info file
+      let commandName: string | null = null;
+
+      // Check package.json for bbsCommand
+      const pkgPath = path.join(doorPath, 'package.json');
+      if (amigafs.existsSync(pkgPath)) {
+        try {
+          const pkgContent = amigafs.readFileSync(pkgPath, 'utf8') as string;
+          const pkg = JSON.parse(pkgContent);
+          if (pkg.bbsCommand) {
+            commandName = pkg.bbsCommand.toUpperCase();
+          }
+        } catch (e) {
+          // Ignore parse errors
+        }
+      }
+
+      // Check door's own .info file for CMDNAME
+      const doorInfoPath = path.join(doorPath, `${doorName}.info`);
+      if (!commandName && amigafs.existsSync(doorInfoPath)) {
+        try {
+          const infoContent = amigafs.readFileSync(doorInfoPath, 'utf8') as string;
+          const cmdMatch = infoContent.match(/^CMDNAME=(.+)$/mi);
+          if (cmdMatch) {
+            commandName = cmdMatch[1].trim().toUpperCase();
+          }
+        } catch (e) {
+          // Ignore read errors
+        }
+      }
+
+      // Fallback to doorName as command
+      if (!commandName) {
+        commandName = doorName.toUpperCase();
+      }
+
+      // Delete .info file from Commands/BBSCmd/ (case-insensitive search)
+      if (amigafs.existsSync(commandsPath)) {
+        try {
+          const files = amigafs.readdirSync(commandsPath);
+          for (const file of files) {
+            const lowerFile = file.toLowerCase();
+            const lowerCmd = commandName.toLowerCase();
+            if (lowerFile === `${lowerCmd}.info`) {
+              const infoPath = path.join(commandsPath, file);
+              amigafs.unlinkSync(infoPath);
+              deletedFiles.push(infoPath);
+              console.log(`Deleted command file: ${infoPath}`);
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
+        }
+      }
+
+      // Also check SysCmd
+      const sysCmdPath = path.join(this.bbsRoot, 'Commands', 'SysCmd');
+      if (amigafs.existsSync(sysCmdPath)) {
+        try {
+          const files = amigafs.readdirSync(sysCmdPath);
+          for (const file of files) {
+            const lowerFile = file.toLowerCase();
+            const lowerCmd = commandName.toLowerCase();
+            if (lowerFile === `${lowerCmd}.info`) {
+              const infoPath = path.join(sysCmdPath, file);
+              amigafs.unlinkSync(infoPath);
+              deletedFiles.push(infoPath);
+              console.log(`Deleted command file: ${infoPath}`);
+            }
+          }
+        } catch (e) {
+          console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
+        }
+      }
+
       // Delete door directory
       amigafs.rmSync(doorPath, { recursive: true, force: true });
+      deletedFiles.push(doorPath);
       console.log(`Deleted TypeScript door: ${doorPath}`);
 
       return {
         success: true,
-        message: `TypeScript door '${doorName}' deleted successfully`
+        message: `Door '${doorName}' deleted successfully (${deletedFiles.length} items removed)`
       };
     } catch (error) {
       console.error('TypeScript door deletion error:', error);

@@ -981,6 +981,15 @@ export class XIMIOHandler {
     // as "[36m" instead of actual colored text.
     let converted = fullText.replace(/\x9b/g, '\x1b[');
 
+    // Convert bare ANSI sequences (without ESC prefix) to proper ANSI
+    // Some Amiga doors output bare "[32m" sequences without ESC prefix,
+    // relying on Amiga console.device's ability to accept these directly.
+    // For proper terminal output, we need to add the ESC prefix.
+    // Pattern: [ followed by optional params (digits/semicolons/?) and command letter
+    // Examples: [32m -> ESC[32m, [0m -> ESC[0m, [2J -> ESC[2J, [1;33m -> ESC[1;33m
+    // Only convert if not already preceded by ESC
+    converted = converted.replace(/(?<!\x1b)\[(\d*(?:;\d*)*[?]?[A-Za-z])/g, '\x1b[$1');
+
     // Check for incomplete ANSI escape sequence at end of text
     // CSI format: ESC [ (params) (letter) where letter terminates the sequence
     // If we end mid-sequence, buffer it for the next message

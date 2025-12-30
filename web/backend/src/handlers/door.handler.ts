@@ -345,6 +345,7 @@ export interface Door {
   accessLevel: number;
   enabled: boolean;
   type: string;
+  size?: number;  // File/directory size in bytes
   conferenceId?: number;
   parameters?: string[];
   mciText?: string;  // For MCI type doors (express.e:4293-4297)
@@ -804,12 +805,15 @@ export async function displayDoorMenu(socket: any, session: BBSSession, params: 
   // Calculate size for TypeScript doors based on their path
   const availableDoors = filteredDoors.map(door => {
     let doorSize = 0;
-    if (door.path) {
+    const doorPath = door.path || (door as any).location;
+    if (doorPath) {
       try {
         // Try to find the door path
         const bbsRoot = config.get('dataDir');
         const possiblePaths = [
-          path.join(bbsRoot, door.path),
+          path.join(bbsRoot, doorPath),
+          path.join(bbsRoot, 'Doors', door.id),
+          path.join(bbsRoot, 'Doors', door.command?.toLowerCase() || door.id),
           path.join(bbsRoot, 'doors', door.id, 'index.ts'),
           path.join(bbsRoot, 'doors', door.id, 'dist', 'index.js'),
           path.join(process.cwd(), 'src', 'doors', door.id, 'index.ts')
@@ -3221,6 +3225,9 @@ async function executeARexxDoor(socket: any, session: BBSSession, door: Door, do
       writeFile: (filename: string, content: string) => bbsApi.writeFile(filename, content),
       fileExists: (filename: string) => bbsApi.fileExists(filename),
       listFiles: (directory: string, pattern?: string) => bbsApi.listFiles(directory, pattern),
+      // Amiga .info file functions (proper binary parsing)
+      readInfoFile: (filename: string) => bbsApi.readInfoFile(filename),
+      writeInfoFile: (filename: string, tooltypes: Array<{ key: string; value: string; commented?: boolean }>) => bbsApi.writeInfoFile(filename, tooltypes),
 
       // Message functions
       sendMessage: (toUsername: string, subject: string, body: string) => bbsApi.sendMessage(toUsername, subject, body),
@@ -3278,6 +3285,45 @@ export async function reloadDoors() {
 export async function initializeDoors() {
   // Import commandCache to access loaded BBSCMD commands
   const { commandCache } = await import('./command-execution.handler');
+  const bbsBaseDir = require('../config').config.get('dataDir');
+
+  // Helper to calculate directory size (skips node_modules/.git)
+  const calculateDirSize = (dirPath: string): number => {
+    let totalSize = 0;
+    try {
+      const files = amigafs.readdirSync(dirPath);
+      for (const file of files) {
+        // Skip node_modules and .git but include dist (compiled code)
+        if (file === 'node_modules' || file === '.git') continue;
+        const filePath = path.join(dirPath, file);
+        try {
+          const stats = amigafs.statSync(filePath);
+          if (stats.isDirectory()) {
+            totalSize += calculateDirSize(filePath);
+          } else {
+            totalSize += stats.size;
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    return totalSize;
+  };
+
+  // Helper to get door size from path
+  const getDoorSize = (doorPath: string): number => {
+    if (!doorPath) return 0;
+    // Resolve path relative to BBS base dir
+    const fullPath = path.isAbsolute(doorPath) ? doorPath : path.join(bbsBaseDir, doorPath);
+    try {
+      const stats = amigafs.statSync(fullPath);
+      if (stats.isDirectory()) {
+        return calculateDirSize(fullPath);
+      }
+      return stats.size;
+    } catch {
+      return 0;
+    }
+  };
 
   // Convert CommandDefinition objects from BBSCMD to Door objects
   const bbsCmdDoors: Door[] = [];
@@ -3303,6 +3349,7 @@ export async function initializeDoors() {
       accessLevel: cmdDef.access || 0,      // ACCESS= level
       enabled: true,
       type: doorType,                       // TYPE= (XIM, AIM, TS  typescript, etc.)
+      size: getDoorSize(cmdDef.location),   // Calculate file/directory size
       parameters: [],
       stack: cmdDef.stack,
       priority: cmdDef.priority,

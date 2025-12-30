@@ -655,6 +655,76 @@ export class BBSApi {
   }
 
   /**
+   * Read and parse Amiga .info file (tooltypes)
+   * Returns array of key/value pairs extracted from the binary .info file
+   *
+   * @param filename Path to .info file relative to BBS root or absolute
+   * @returns Array of tooltype entries, or null if error
+   */
+  async readInfoFile(filename: string): Promise<Array<{ key: string; value: string; commented: boolean }> | null> {
+    try {
+      const config = require('../config').config;
+      const bbsRoot = config.get('dataDir');
+      const fullPath = path.isAbsolute(filename)
+        ? filename
+        : path.join(bbsRoot, filename);
+
+      // Use the proper .info file parser that handles binary format
+      const { parseInfoFile } = require('../utils/info-file.util');
+      const infoFile = parseInfoFile(fullPath);
+
+      // Return tooltypes in a simplified format
+      return infoFile.tooltypes.map((tt: any) => ({
+        key: tt.key,
+        value: tt.value,
+        commented: tt.commented
+      }));
+    } catch (error) {
+      console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Write/update Amiga .info file tooltypes
+   * Preserves binary header and icon data, only updates tooltypes
+   *
+   * @param filename Path to .info file relative to BBS root or absolute
+   * @param tooltypes Array of tooltype entries to write
+   * @returns true if successful, false on error
+   */
+  async writeInfoFile(filename: string, tooltypes: Array<{ key: string; value: string; commented?: boolean }>): Promise<boolean> {
+    try {
+      const config = require('../config').config;
+      const bbsRoot = config.get('dataDir');
+      const fullPath = path.isAbsolute(filename)
+        ? filename
+        : path.join(bbsRoot, filename);
+
+      // Use the proper .info file parser and writer
+      const { parseInfoFile, writeInfoFile } = require('../utils/info-file.util');
+
+      // Parse existing file to preserve header and icon data
+      const infoFile = parseInfoFile(fullPath);
+
+      // Update tooltypes
+      infoFile.tooltypes = tooltypes.map((tt: any) => ({
+        key: tt.key.toUpperCase(),
+        value: tt.value,
+        commented: tt.commented || false,
+        originalLine: `${tt.commented ? '!' : ''}${tt.key.toUpperCase()}=${tt.value}`
+      }));
+
+      // Write back to file
+      writeInfoFile(infoFile);
+      return true;
+    } catch (error) {
+      console.error(`[BBSApi] Error writing .info file ${filename}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * List files in directory
    * Equivalent to DOS ExAll()
    */
@@ -975,8 +1045,50 @@ export class BBSApi {
       size: door.size || 0,
       accessLevel: door.accessLevel || 0,
       enabled: door.enabled !== false, // Default to enabled if not specified
-      category: door.category || undefined
+      category: door.category || undefined,
+      location: door.path || ''
     }));
+  }
+
+  /**
+   * Delete a door completely (directory + .info files)
+   * Used by door manager for uninstalling doors
+   * @param identifier - Door name (directory name for TS doors) or command name (for Amiga doors)
+   * @param isTypeScriptDoor - Set to true if this is a TypeScript/SDK door
+   * @returns Result object with success status and message
+   */
+  async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string }> {
+    console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
+
+    // Check if user has sysop access
+    if (this.session.user && this.session.user.secLevel < 250) {
+      console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.user?.secLevel}`);
+      return {
+        success: false,
+        message: 'Access denied: SysOp access required to delete doors'
+      };
+    }
+
+    try {
+      const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
+      const manager = getAmigaDoorManager();
+      console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
+      const result = await manager.deleteDoor(identifier, isTypeScriptDoor);
+      console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
+
+      if (result.success) {
+        // Refresh door cache so the deleted door is removed from listings
+        await refreshDoorCache();
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[BBSApi.deleteDoor] Error:', error);
+      return {
+        success: false,
+        message: `Delete failed: ${(error as Error).message}`
+      };
+    }
   }
 }
 

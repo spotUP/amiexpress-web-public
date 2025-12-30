@@ -546,8 +546,10 @@ function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Ar
 }
 
 // Screens that should start with a full clear (express.e shows a blank frame first)
+// NOTE: BBSTITLE is intentionally NOT in this list - express.e clears screen at START
+// of processLogon (line 29477), then displays BBSTITLE without clearing (line 29552),
+// and login prompts appear below with just a newline (line 29571).
 const SCREENS_REQUIRE_CLEAR = new Set([
-  'BBSTITLE',
   'LOGON',
   'BULL',
   'NODE_BULL',
@@ -2288,18 +2290,29 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // Build complete frame buffer before sending
       // This prevents tearing and visible redraws by sending everything atomically
       // express.e:6845 - Always reset colors after displaying a file with aePuts('[0m')
-      const frameBuffer =
-        (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
-        HIDE_CURSOR +      // Hide cursor
-        '\x1b[H' +         // Move cursor to home (1,1)
-        parsed +           // Screen content
-        '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
-        SHOW_CURSOR;       // Show cursor
 
-      // Send entire frame in one atomic operation
-      // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
-      screenDebug(`[displayScreen] Emitting ${eventName} event`);
-      await emitWithModem(frameBuffer);
+      // Skip display entirely if content is empty (e.g., empty BBSTITLE.TXT)
+      // This prevents cursor-to-HOME from disrupting prior display (like FRONTEND)
+      // express.e behavior: empty screen files display nothing, cursor stays where it was
+      const trimmedContent = parsed.replace(/[\x1b\x9b]\[[0-9;]*[A-Za-z]/g, '').trim();
+      if (trimmedContent.length === 0 && !shouldClear) {
+        screenDebug(`[displayScreen] Empty content for ${screenName}, skipping display`);
+        // Just reset colors to prevent bleed, don't move cursor
+        socket.emit(eventName, '\x1b[0m');
+      } else {
+        const frameBuffer =
+          (shouldClear ? '\x1b[2J\x1b[H' : '') + // Clear screen + home cursor when required
+          HIDE_CURSOR +      // Hide cursor
+          '\x1b[H' +         // Move cursor to home (1,1)
+          parsed +           // Screen content
+          '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
+          SHOW_CURSOR;       // Show cursor
+
+        // Send entire frame in one atomic operation
+        // Use 'petscii-output' event for PETSCII content (triggers PetMe64 font)
+        screenDebug(`[displayScreen] Emitting ${eventName} event`);
+        await emitWithModem(frameBuffer);
+      }
     } else {
       // Content was already emitted inline by parseMciCodes (express.e inline mode)
       // Just emit color reset to prevent bleed, don't overwrite with frame buffer

@@ -1216,6 +1216,240 @@ class MyDoorClass {
 
 ---
 
+## List Widgets & DockablePanel
+
+### Problem: List Inside DockablePanel Has Wrong Position
+
+**BAD:**
+```typescript
+// List starts at top:0, overlapping with DockablePanel's title bar
+const doorPanel = new DockablePanel({
+  parent: screen,
+  title: ' Installed Doors ',
+  // ...
+});
+
+const doorList = createList({
+  parent: doorPanel,
+  top: 0,       // WRONG! Overlaps with title bar
+  left: 1,      // WRONG! Causes horizontal offset
+  height: '100%-2',  // WRONG! Doesn't account for title bar
+});
+```
+
+**GOOD:**
+```typescript
+// Account for DockablePanel's internal title bar (2 rows)
+const doorPanel = new DockablePanel({
+  parent: screen,
+  title: ' Installed Doors ',
+  // ...
+});
+
+const doorList = createList({
+  parent: doorPanel,
+  top: 2,       // Start below title bar (title bar is ~2 rows)
+  left: 0,      // No horizontal offset
+  width: '100%-2',   // Account for left/right borders
+  height: '100%-2',  // Account for borders only (top:2 already handles title bar)
+});
+```
+
+### Problem: Key Repeat Doesn't Work (Can't Hold Arrow Keys)
+
+**BAD:**
+```typescript
+// Debouncing BLOCKS rapid key events - user can't hold down arrow keys
+let updateTimeout: NodeJS.Timeout | null = null;
+doorList.on('select item', () => {
+  if (updateTimeout) clearTimeout(updateTimeout);
+  updateTimeout = setTimeout(() => {
+    updateInfoPanel();  // Only fires after user stops pressing keys!
+  }, 50);
+  screen.render();
+});
+```
+
+**GOOD:**
+```typescript
+// Rate limiting allows rapid key events through while limiting expensive updates
+let lastInfoUpdate = 0;
+const INFO_UPDATE_INTERVAL = 100; // Update expensive operations at most every 100ms
+
+doorList.on('select item', () => {
+  const now = Date.now();
+  // Rate limit expensive operations (info panel updates)
+  if (now - lastInfoUpdate > INFO_UPDATE_INTERVAL) {
+    lastInfoUpdate = now;
+    updateInfoPanel();  // Only called every 100ms max
+  }
+  screen.render();  // Always render immediately for smooth scrolling
+});
+```
+
+**Key Difference:**
+- **Debouncing** waits until events STOP, then fires once (bad for key repeat)
+- **Rate limiting** fires immediately, then ignores for N ms (good for key repeat)
+
+### Problem: List Has No Scrollbar or Mouse Wheel Support
+
+**BAD:**
+```typescript
+const mainList = createList({
+  parent: screen,
+  keys: true,
+  vi: true,
+  mouse: true,  // Only enables click, NOT wheel
+});
+// No scrollbar visible, mouse wheel doesn't work
+```
+
+**GOOD:**
+```typescript
+const mainList = createList({
+  parent: screen,
+  keys: true,
+  vi: true,
+  mouse: true,
+  scrollable: true,      // Enable scrolling
+  alwaysScroll: true,    // Always show scrollbar
+  scrollbar: {
+    ch: ' ',             // Scrollbar character
+    style: { bg: 'blue' } // Scrollbar style
+  },
+  tags: true,            // Enable color tags in items
+});
+
+// Add mouse wheel support manually
+mainList.on('wheeldown', () => {
+  mainList.down(3);      // Scroll down 3 items at a time
+  screen.render();
+});
+
+mainList.on('wheelup', () => {
+  mainList.up(3);        // Scroll up 3 items at a time
+  screen.render();
+});
+
+// Ensure screen renders on selection change for smooth keyboard navigation
+mainList.on('select item', () => {
+  screen.render();
+});
+```
+
+### Problem: List Layout Breaks with Panel Heights
+
+**BAD:**
+```typescript
+// Percentage heights cause overlap between panels
+const doorPanel = new DockablePanel({
+  top: 3,
+  height: '70%',   // 70% of total = overlaps with info panel
+});
+
+const infoPanel = new DockablePanel({
+  bottom: 3,
+  height: '27%',   // Doesn't account for doorPanel position
+});
+```
+
+**GOOD:**
+```typescript
+// Use explicit calculations: header(3) + doorPanel + infoPanel(7) + footer(3) = 100%
+const doorPanel = new DockablePanel({
+  top: 3,
+  height: '100%-13',  // Total minus header(3), infoPanel(7), footer(3)
+});
+
+const infoPanel = new DockablePanel({
+  bottom: 3,
+  height: 7,          // Fixed height for predictable layout
+});
+```
+
+### Complete List Widget Pattern
+
+```typescript
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// Create panel with proper layout calculation
+const panel = new DockablePanel({
+  parent: screen,
+  title: ' My List ',
+  top: 3,
+  left: 0,
+  width: '100%',
+  height: '100%-10',  // Account for header, footer, other panels
+  border: { type: 'line', fg: 'cyan' },
+});
+
+// Create list inside panel with correct positioning
+const list = createList({
+  parent: panel,
+  top: 2,              // Below DockablePanel title bar
+  left: 0,             // No offset
+  width: '100%-2',     // Account for borders
+  height: '100%-4',    // Account for title bar + borders
+  keys: true,
+  vi: true,
+  mouse: true,
+  scrollable: true,
+  alwaysScroll: true,
+  scrollbar: {
+    ch: ' ',
+    style: { bg: 'blue' }
+  },
+  style: {
+    selected: { bg: 'blue', fg: 'white', bold: true },
+    item: { fg: 'white' }
+  },
+  tags: true,
+});
+
+// Rate-limited updates for smooth key repeat
+let lastUpdate = 0;
+const UPDATE_INTERVAL = 100;
+
+list.on('select item', () => {
+  const now = Date.now();
+  if (now - lastUpdate > UPDATE_INTERVAL) {
+    lastUpdate = now;
+    updateDetails();  // Expensive operation, rate limited
+  }
+  screen.render();    // Always render for smooth scrolling
+});
+
+// Mouse wheel support
+list.on('wheeldown', () => {
+  list.down(3);
+  screen.render();
+});
+
+list.on('wheelup', () => {
+  list.up(3);
+  screen.render();
+});
+```
+
+### DockablePanel Quick Reference
+
+| Component | Height Consumed |
+|-----------|-----------------|
+| Border (top) | 1 row |
+| Title bar | 1 row |
+| Content area | Variable |
+| Border (bottom) | 1 row |
+| **Total overhead** | **~3-4 rows** |
+
+**Child positioning inside DockablePanel:**
+- `top: 2` - Start below title bar
+- `left: 0` - Align with content area
+- `height: '100%-4'` - Leave room for title bar (2) + borders (2)
+- `width: '100%-2'` - Leave room for left/right borders
+
+---
+
 ## Summary Statistics
 
 Based on fixes across 5+ production doors:

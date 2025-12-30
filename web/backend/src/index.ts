@@ -1084,6 +1084,11 @@ io.on('connection', async (socket) => {
   });
 
   // ===== /X NATIVE TELNET CONNECTION SEQUENCE (reference-board-style) =====
+  // Small delay to ensure socket is ready to receive data (fixes race condition after rebuilds)
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  console.log(`[Connection] Starting welcome sequence for node ${nodeSession.nodeId}`);
+
   // Simulate classic AmiExpress telnet connection messages
   socket.emit('ansi-output', '\r\n/X Native Telnet:  Searching for free node...\r\n');
   socket.emit('ansi-output', `/X Native Telnet:  Successful connection to node ${nodeSession.nodeId}\r\n`);
@@ -1201,6 +1206,8 @@ io.on('connection', async (socket) => {
   // express.e:29527-29528 - ANSI prompt (unless FORCE_ANSI tooltype is set)
   // "ANSI, RIP or No graphics (A/r/n)?"
   socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+
+  console.log(`[Connection] Welcome sequence complete for node ${nodeSession.nodeId}, waiting for ANSI response`);
 
   // Set state to wait for ANSI response
   session.subState = LoggedOnSubState.ANSI_PROMPT;

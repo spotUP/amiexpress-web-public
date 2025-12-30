@@ -241,7 +241,7 @@ export async function createApp(session: DoorSession) {
     left: 0,
     width: '100%',
     height: 1,
-    content: '{yellow-fg}>{/yellow-fg} All Doors',
+    content: '{cyan-fg}Location:{/cyan-fg} All Doors',
     style: {
       fg: 'cyan',
       bg: 'black'
@@ -258,6 +258,14 @@ export async function createApp(session: DoorSession) {
     keys: true,
     vi: true,
     mouse: true,
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: ' ',
+      style: {
+        bg: 'blue'
+      }
+    },
     style: {
       selected: {
         bg: 'blue',
@@ -266,7 +274,24 @@ export async function createApp(session: DoorSession) {
       item: {
         fg: 'white'
       }
-    }
+    },
+    tags: true,
+  });
+
+  // Mouse wheel scrolling support
+  mainList.on('wheeldown', () => {
+    mainList.down(3);
+    screen.render();
+  });
+
+  mainList.on('wheelup', () => {
+    mainList.up(3);
+    screen.render();
+  });
+
+  // Ensure smooth scrolling with held keys
+  mainList.on('select item', () => {
+    screen.render();
   });
 
   // Create footer
@@ -288,12 +313,12 @@ export async function createApp(session: DoorSession) {
    * Update breadcrumb display
    */
   function updateBreadcrumb() {
-    const parts = ['{yellow-fg}>{/yellow-fg} All Doors'];
+    const parts = ['{cyan-fg}Location:{/cyan-fg} All Doors'];
     for (const part of currentPath) {
       parts.push(` {gray-fg}/{/gray-fg} ${part}`);
     }
-    if (viewMode === 'doors' && currentPath.length > 0) {
-      parts.push(' {cyan-fg}(doors){/cyan-fg}');
+    if (viewMode === 'doors') {
+      parts.push(' {yellow-fg}(viewing doors){/yellow-fg}');
     }
     breadcrumb.setContent(parts.join(''));
   }

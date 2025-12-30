@@ -255,8 +255,9 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     return null;
   }
 
-  // Extract command name from filename (remove .info extension)
-  const name = path.basename(filePath, '.info').toUpperCase();
+  // Extract command name from filename (remove .info extension, case-insensitive)
+  const baseName = path.basename(filePath);
+  const name = baseName.replace(/\.info$/i, '').toUpperCase();
 
   // Preserve all tooltypes for downstream consumers (uppercased keys)
   const toolTypeObject = Object.fromEntries(tooltypes.entries());
