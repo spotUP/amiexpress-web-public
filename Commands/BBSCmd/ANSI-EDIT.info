@@ -5,3 +5,4 @@ DESCRIPTION=ANSI Screen Editor Door for AmiExpress-Web
 ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
+CATEGORY=Utilities

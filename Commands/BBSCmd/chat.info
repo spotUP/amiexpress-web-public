@@ -5,3 +5,4 @@ DESCRIPTION=Multi-user chat (alias for LIVECHAT)
 ACCESS=10
 MULTINODE=YES
 PRIORITY=SAME
+CATEGORY=Communication

@@ -5,3 +5,4 @@ DESCRIPTION=Interactive door selection menu
 ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
+CATEGORY=Navigation

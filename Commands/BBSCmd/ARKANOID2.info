@@ -6,3 +6,4 @@ DESCRIPTION=Arkanoid with Web Audio sounds and music
 ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
+CATEGORY=Games/Arcade
