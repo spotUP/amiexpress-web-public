@@ -12,22 +12,73 @@ This document tells YOU (Claude) exactly how to debug 68K doors. Follow this pro
 
 **ALWAYS** start with the XIM debugging tools.
 
-### Step 1: Start Servers (XIM Logging Auto-Enabled)
+---
+
+## PRIMARY WORKFLOW: Smart Debugger (Use This First)
+
+**For 90% of debugging tasks, use the automated smart debugger:**
+
+### Step 1: Start Servers
 
 ```bash
 ./dev/scripts/start-servers.sh
 ```
 
-**Note:** XIM logging is now **enabled by default**. No need to set `XIM_DEBUG_JSON=1` manually.
+**Note:** XIM logging is **enabled by default**.
 
-### Step 2: Start Live Viewer
+### Step 2: Run Smart Debugger
 
-In a second terminal (or ask user to run):
+In another terminal:
+```bash
+npm run xim:debug -- DOORNAME
+```
+
+Replace `DOORNAME` with the actual door (e.g., `WHO`, `RTW`, `MultiTop`).
+
+### Step 3: Run the Door
+
+When prompted by the debugger, run the door. The debugger will:
+- Monitor all XIM messages automatically
+- Detect common issues with 10 pattern matchers
+- Generate comprehensive report with:
+  - Issues found (with confidence scores 0-100%)
+  - Evidence for each issue
+  - Suggested fixes
+  - Code examples
+  - Full message log reference
+
+### Step 4: Review Report
+
+The debugger saves a report to `logs/reports/xim-debug-DOORNAME-{timestamp}.md`.
+
+Review the top 3 issues shown in the summary. Each includes:
+- Severity (critical/warning/info)
+- Confidence score (how certain we are)
+- Evidence (what was observed)
+- Suggested fix (what to do)
+- Code example (how to implement)
+
+**This approach:**
+- ✅ Zero manual steps
+- ✅ Automatic pattern detection
+- ✅ Confidence-scored issues
+- ✅ Code examples for fixes
+- ✅ Comprehensive reporting
+
+---
+
+## ALTERNATIVE: Manual Step-by-Step Workflow
+
+**Use this when you need fine control or want to learn the message flow in detail:**
+
+### Step 1: Start Live Viewer
+
+In a second terminal:
 ```bash
 npm run xim:live
 ```
 
-### Step 3: Reproduce the Issue
+### Step 2: Reproduce the Issue
 
 Run the door and watch the live viewer. You will SEE:
 - Every message sent/received
@@ -35,7 +86,33 @@ Run the door and watch the live viewer. You will SEE:
 - Data content
 - Errors and warnings
 
-### Step 4: Analyze the Message Flow
+### Step 3: Analyze with Pattern Matcher
+
+After door completes:
+```bash
+npm run xim:analyze -- --door DOORNAME --verbose
+```
+
+This runs 10 automated pattern matchers:
+1. GetMsg() infinite loop (95% confidence)
+2. Protocol violations (100% confidence)
+3. Memory leaks (75% confidence)
+4. Slow response times (85% confidence)
+5. Rapid-fire loops (90% confidence)
+6. Door crashes (90% confidence)
+7. Buffer overruns (95% confidence)
+8. Missing JH_INIT (95% confidence)
+9. No response pattern (80% confidence)
+10. Incomplete sessions (70% confidence)
+
+### Step 4: Use Specific Tools as Needed
+
+- **Validate protocol:** `npm run xim:validate -- --door DOORNAME`
+- **Visualize flow:** `npm run xim:flow -- --door DOORNAME`
+- **Monitor state:** `npm run xim:monitor`
+- **Trace access:** `npm run xim:trace -- --door DOORNAME`
+
+### Step 5: Analyze the Message Flow Manually
 
 Look for:
 - **Missing messages**: Door expects JH_INIT but never receives it
@@ -282,7 +359,133 @@ npm run xim:monitor -- --refresh 1
 - Track message counts
 - Identify stuck or hung doors
 
-### 5. Replaying Messages (`npm run xim:replay`)
+### 5. Real Message Injection (`npm run xim:replay:real`)
+
+**IMPORTANT:** This tool injects REAL messages into RUNNING door sessions. Development mode only.
+
+```bash
+# List active door sessions
+npm run xim:replay:real -- --list
+
+# Send single keystroke to running door
+npm run xim:replay:real -- --type JH_HK --param 81 --data "Q" --door WHO
+
+# Replay sequence to running door
+npm run xim:replay:real -- --sequence test-sequences/test-who-door.json
+
+# Interactive mode
+npm run xim:replay:real -- --interactive
+```
+
+**Use this to:**
+- Automated door testing
+- Regression testing
+- Fuzzing for edge cases
+- Reproduce user input sequences
+- CI/CD integration
+
+**Requirements:**
+- Backend must be running
+- NODE_ENV=development (security: dev mode only)
+- Door must be actively running on a node
+
+### 6. Recording Sessions (`npm run xim:record`)
+
+**Capture live sessions with precise timing for replay:**
+
+```bash
+# Record WHO door until stopped (Ctrl+C)
+npm run xim:record -- --door WHO
+
+# Record for 60 seconds
+npm run xim:record -- --door WHO --duration 60
+
+# Record to specific file
+npm run xim:record -- --door WHO --output recordings/WHO-baseline.json
+
+# Record all doors (separate files)
+npm run xim:record -- --all
+```
+
+**Use this to:**
+- Capture bug reproduction steps
+- Build regression test library
+- Record real user interaction patterns
+- Create performance baselines
+- Save working sessions for comparison
+
+**Workflow:**
+1. Start recording with `xim:record`
+2. Use door normally (browser/terminal)
+3. Press Ctrl+C to stop and save
+4. Replay with `xim:replay:real --sequence recordings/{file}.json`
+
+**Recording format:**
+- JSON compatible with `xim:replay:real`
+- Precise timing (millisecond accuracy)
+- Session metadata (door, duration, message count)
+- Human-readable comments
+- Stored in: `dev/scripts/test-sequences/recordings/`
+
+### 7. Performance Profiler (`npm run xim:perf`)
+
+**Analyze door performance and identify bottlenecks:**
+
+```bash
+# Profile all doors
+npm run xim:perf
+
+# Profile specific door
+npm run xim:perf -- --door WHO
+
+# Compare two versions (baseline vs current)
+npm run xim:perf -- --baseline recordings/WHO-v1.json --current recordings/WHO-v2.json
+
+# Generate detailed markdown report
+npm run xim:perf -- --door WHO --report performance-report.md
+
+# JSON output for CI/CD
+npm run xim:perf -- --door WHO --json > performance.json
+```
+
+**Use this to:**
+- Identify performance bottlenecks
+- Measure door execution time
+- Track message throughput
+- Find slow operations
+- Compare performance before/after optimizations
+- Establish performance baselines
+
+**Metrics tracked:**
+- Total execution time
+- Message throughput (messages/second)
+- Average/max/min response times
+- Slowest operations (top 10)
+- Time distribution by message type
+- Performance comparison (baseline vs current)
+
+**Output example:**
+```
+Performance Summary:
+  Door: WHO
+  Total Duration: 12.45s
+  Messages: 156
+  Throughput: 12.53 msg/sec
+
+Response Times:
+  Average: 78.23ms
+  Maximum: 245.67ms
+  Minimum: 12.34ms
+
+Top 10 Slowest Operations:
+  1. JH_GNS - 245.67ms
+  2. JH_SM - 189.23ms
+  3. JH_HK - 134.56ms
+```
+
+### 8. Old Replay Tool (`npm run xim:replay`)
+
+**NOTE:** Use `xim:replay:real` for automated testing. This tool is for manual testing only.
 
 ```bash
 # Send single message
@@ -295,12 +498,7 @@ npm run xim:replay -- --sequence test-sequence.json
 npm run xim:replay -- --interactive
 ```
 
-**Use this to:**
-- Test door responses without manual interaction
-- Reproduce specific message sequences
-- Validate message handling
-
-### 6. Visualizing Flow (`npm run xim:flow`)
+### 9. Visualizing Flow (`npm run xim:flow`)
 
 ```bash
 # ASCII diagram
@@ -322,7 +520,7 @@ npm run xim:flow -- --last 30
 - Identify missing or out-of-order messages
 - Generate diagrams for documentation
 
-### 7. Tracing Access (`npm run xim:trace`)
+### 10. Tracing Access (`npm run xim:trace`)
 
 ```bash
 # Trace all access types
@@ -347,7 +545,7 @@ npm run xim:trace -- --summary
 - Watch memory access (AllocMem, FreeMem)
 - Identify access patterns
 
-### 8. Querying JSON Logs (jq)
+### 10. Querying JSON Logs (jq)
 
 ```bash
 # All JH_INIT messages

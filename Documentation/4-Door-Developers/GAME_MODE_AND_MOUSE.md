@@ -75,7 +75,8 @@ const screen = blessed.screen({
   output: (data: string) => bbs.write(data),
 });
 
-// Set up input handler
+// CRITICAL: Set BOTH flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
+session.bbsSession.inDoorManager = true;  // Required for input to reach your door
 session.bbsSession.doorInputHandler = (data: string) => {
   screen._handleData(data);
 };

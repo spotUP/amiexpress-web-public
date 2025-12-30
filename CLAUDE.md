@@ -104,11 +104,31 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **🔴 CRITICAL: NEVER debug 68K doors without XIM tools 🔴**
 
-**REQUIRED workflow for ALL 68K door debugging:**
+**PRIMARY WORKFLOW (Use this for 90% of debugging):**
 
 1. **Start servers (XIM logging auto-enabled):**
    ```bash
    ./dev/scripts/start-servers.sh
+   ```
+
+2. **Run smart debugger (in another terminal):**
+   ```bash
+   npm run xim:debug -- DOORNAME
+   ```
+
+3. **Run the door when prompted** - Debugger monitors automatically
+
+4. **Review auto-generated report** - Issues + confidence scores + fixes + code examples
+
+**Benefits:** Zero manual steps, 10 automated pattern matchers, comprehensive reporting
+
+---
+
+**ALTERNATIVE: Manual workflow (when you need control):**
+
+1. **Start servers:**
+   ```bash
+   ./dev/scripts/start-servers.sh  # XIM logging auto-enabled
    ```
 
 2. **Start live viewer:**
@@ -116,11 +136,14 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
    npm run xim:live
    ```
 
-**Note:** XIM logging is now **enabled by default** in start-servers.sh.
-
 3. **Reproduce issue** - Watch messages in real-time
 
-4. **Analyze with appropriate tool:**
+4. **Analyze with pattern matcher:**
+   ```bash
+   npm run xim:analyze -- --door DOORNAME --verbose
+   ```
+
+5. **Use specific tools as needed:**
    - `npm run xim:validate` - Check protocol compliance
    - `npm run xim:monitor` - Watch door state
    - `npm run xim:flow` - Visualize message sequence
@@ -141,7 +164,13 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 - ✅ Decode unknown messages with `npm run xim:decode`
 - ✅ Visualize flow with `npm run xim:flow`
 
-**Complete XIM Debugging Toolkit:**
+**Complete XIM Debugging Toolkit (14 tools):**
+- ✅ **`xim:debug`** - **PRIMARY TOOL** - Smart orchestrator with auto-analysis
+- ✅ **`xim:analyze`** - Pattern-based issue detection (10 patterns, confidence scoring)
+- ✅ **`xim:diff`** - Session comparison for regression testing
+- ✅ **`xim:replay:real`** - Real message injection for automated testing (dev mode only)
+- ✅ **`xim:record`** - Record live sessions with timing for replay
+- ✅ **`xim:perf`** - Performance profiling and bottleneck analysis
 - ✅ `xim:view/xim:live` - View messages (real-time or historical)
 - ✅ `xim:decode` - Decode/encode XIM messages
 - ✅ `xim:validate` - Validate protocol compliance
@@ -207,6 +236,36 @@ amigafs.existsSync('/Doors/file');
 **Why:** 16KB → 40-50K tokens. 2KB → 5-10K tokens. Saves 30-40K (20-25% budget).
 
 Check: `wc -c handoff.md` <5000. Archive details to `Documentation/`.
+
+### 14. FIX ROOT CAUSES - NO WORKAROUNDS
+
+**Workarounds are the ABSOLUTE LAST RESORT.** Fixing the SDK/BBS is the RIGHT approach and should ALWAYS be your first choice.
+
+**NEVER implement workarounds in doors when the issue is in the SDK or BBS core.**
+
+**Examples:**
+- ❌ **WRONG**: Door uses a Box styled as a button because blessed Buttons don't focus
+- ✅ **CORRECT**: Fix `createButton()` in SDK to ensure all buttons are focusable
+
+**Why this is critical:**
+- Workarounds hide bugs - problems persist for ALL doors/users
+- SDK bugs compound - every door reimplements the same workaround
+- Technical debt accumulates - maintenance nightmare
+- Breaks DRY principle - fix once in SDK, not in 100 doors
+
+**Workflow:**
+1. Identify issue (e.g., buttons not focusable)
+2. **First check: Is this an SDK/BBS bug?**
+3. If YES → Fix in `sdk/` or `web/backend/` core
+4. If NO → Fix in the door
+5. Workarounds ONLY if core fix is truly impossible
+
+**When workarounds are acceptable:**
+- External library limitations we can't control
+- Intentional express.e quirks we must preserve
+- Temporary bridge until proper solution exists (document with TODO + issue link)
+
+**Remember:** Good engineering = fix root causes. Workarounds = technical debt.
 
 ---
 

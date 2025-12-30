@@ -39,6 +39,61 @@ These features work automatically on all neo-blessed widgets:
 
 ---
 
+## Default Focusability by Widget Type
+
+As of SDK 2.0, interactive widgets are **focusable by default**. You no longer need to manually set `focusable: true` for these widget types:
+
+### Always Focusable (SDK Enforced)
+
+These widgets are ALWAYS focusable, keyboard-enabled, and mouse-enabled:
+
+- **Button** (`createButton`) - Can receive focus via Tab, activated with Enter/Space
+- **List** (`createList`) - Can receive focus via Tab, navigate with arrow keys/vi keys
+- **Textarea** (`createTextarea`) - Can receive focus via Tab, input fields need keyboard access
+- **Table** (`createTable`) - Can receive focus via Tab, navigate cells with arrow keys
+
+The SDK helpers force these properties AFTER the spread operator, so you cannot override them:
+
+```typescript
+// These are ALL enforced by the SDK:
+focusable: true,   // Element can receive keyboard focus
+keys: true,        // Element responds to keyboard input
+mouse: true,       // Element responds to mouse events
+```
+
+### Conditionally Focusable
+
+These widgets are NOT focusable by default, but can be made focusable when needed:
+
+- **Box** (`createBox`) - Static container by default, but can be made focusable for clickable panels
+- **Text** (`createText`) - Static label by default, not interactive
+- **Log** (`createLog`) - Scrollable output by default, but you may want to make it focusable
+
+To make these focusable, explicitly set the property:
+
+```typescript
+const clickablePanel = createBox({
+  parent: screen,
+  focusable: true,  // Now receives focus when tabbing
+  border: { type: 'line' },
+  content: 'Click me!',
+});
+```
+
+### Why This Design?
+
+**Interactive widgets = focusable by default**
+- Buttons, lists, inputs, tables are ALWAYS interactive
+- User expects Tab to navigate through all interactive elements
+- No manual configuration needed
+
+**Container widgets = not focusable by default**
+- Boxes, text labels are usually just layout/display
+- Making every box focusable would clutter Tab navigation
+- Explicitly opt-in when you need a focusable container
+
+---
+
 ## Tab Navigation
 
 Tab navigation works out of the box for all focusable elements.

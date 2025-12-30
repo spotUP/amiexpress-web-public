@@ -15,6 +15,80 @@
 
 ## Common Errors and Solutions
 
+### Problem: Door Receives No Input / Keys Not Working
+
+**Symptoms**:
+- Door displays output correctly
+- User presses keys but nothing happens
+- No console logs showing input received
+- `doorInputHandler` never gets called
+
+**Root Cause**: Missing `inDoorManager` flag. The backend requires **BOTH** flags to route input:
+
+```typescript
+// Backend check in socket-handlers.ts (line ~355):
+if (session.inDoorManager && session.doorInputHandler) {
+  session.doorInputHandler(data);  // Only called if BOTH are true
+}
+```
+
+**Solution**: Set **BOTH** flags on `bbsSession`:
+
+```typescript
+export async function runDoor(doorSession: any): Promise<void> {
+  const { socket, bbsSession, user } = doorSession;
+
+  // CRITICAL: Set BOTH flags for input routing
+  bbsSession.inDoorManager = true;  // ← REQUIRED! Often forgotten
+  bbsSession.doorInputHandler = (data: string) => {
+    console.log('Input received:', data);
+    // Handle input here
+  };
+
+  try {
+    // Your door logic here
+  } finally {
+    // CRITICAL: Clean up BOTH flags when door exits
+    bbsSession.inDoorManager = false;
+    bbsSession.doorInputHandler = null;
+  }
+}
+```
+
+**Common Mistakes**:
+
+❌ **WRONG**: Setting handler on wrapper session instead of bbsSession:
+```typescript
+const { socket, bbsSession } = doorSession;
+doorSession.doorInputHandler = (data) => { ... };  // WRONG OBJECT!
+bbsSession.inDoorManager = true;
+// Input won't work - handler is on wrong object
+```
+
+❌ **WRONG**: Setting only the handler, forgetting `inDoorManager`:
+```typescript
+bbsSession.doorInputHandler = (data) => { ... };  // ← Handler set
+// Missing: bbsSession.inDoorManager = true;       ← Flag missing!
+// Input won't work - backend requires BOTH
+```
+
+✅ **CORRECT**: Both flags on bbsSession:
+```typescript
+bbsSession.inDoorManager = true;                    // ← Flag set
+bbsSession.doorInputHandler = (data) => { ... };    // ← Handler set
+// Input works! Both flags are set on the correct object
+```
+
+**Why This Design?**
+
+The dual-flag system prevents accidental input routing:
+- `inDoorManager` = "A door is currently active"
+- `doorInputHandler` = "Here's how to handle the input"
+
+Without both flags, the BBS doesn't know whether input should go to the door or to normal BBS command processing.
+
+---
+
 ### Error: "Invalid TypeScript door: Must export Door instance or runDoor() function"
 
 **Cause**: The door's main file doesn't export the required pattern.

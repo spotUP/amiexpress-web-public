@@ -14,11 +14,12 @@ This guide documents best practices for building robust, production-ready BBS do
 4. [Type Safety](#type-safety)
 5. [Input Handling](#input-handling)
 6. [Focus, Keyboard Navigation & Widget Selection](#focus-keyboard-navigation--widget-selection)
-7. [Error Handling](#error-handling)
-8. [Performance Optimization](#performance-optimization)
-9. [Validation & Safety](#validation--safety)
-10. [Common Pitfalls](#common-pitfalls)
-11. [Migration Checklist](#migration-checklist)
+7. [Mouse, Hover & Styling](#mouse-hover--styling)
+8. [Error Handling](#error-handling)
+9. [Performance Optimization](#performance-optimization)
+10. [Validation & Safety](#validation--safety)
+11. [Common Pitfalls](#common-pitfalls)
+12. [Migration Checklist](#migration-checklist)
 
 ---
 
@@ -615,6 +616,177 @@ class LoginModal {
 
 ---
 
+## Mouse, Hover & Styling
+
+### Problem: Hover Effects Only Work While Clicking
+
+**BAD:**
+```typescript
+// Default mouse mode 1002h only reports motion with button pressed
+// Hover effects won't work until user clicks and drags!
+```
+
+**GOOD:**
+```typescript
+// In program.ts enableMouse(), use 1003h for any-event tracking
+enableMouse(): void {
+  this.write('\x1b[?1000h');  // Basic mouse support
+  this.write('\x1b[?1003h');  // ANY-EVENT tracking (motion without button)
+  this.write('\x1b[?1006h');  // SGR extended mode
+}
+
+disableMouse(): void {
+  this.write('\x1b[?1006l');
+  this.write('\x1b[?1003l');  // Match 1003h
+  this.write('\x1b[?1000l');
+}
+```
+
+**Mouse Modes:**
+- `1002h` - Button-event tracking: only reports motion while button is pressed
+- `1003h` - Any-event tracking: reports ALL mouse motion (required for hover)
+
+### Problem: Inline Button Content Not Visible
+
+**BAD:**
+```typescript
+// Button class has default border: 'line' and padding: { left: 1, right: 1 }
+// With height: 1, there's no room for content!
+const minimizeBtn = new Button({
+  parent: titleBar,
+  width: 3,
+  height: 1,
+  content: '[_]',  // NOT VISIBLE! Border and padding consume all space
+});
+```
+
+**GOOD:**
+```typescript
+// Disable border and padding for inline 1-height buttons
+const minimizeBtn = new Button({
+  parent: titleBar,
+  width: 3,
+  height: 1,
+  content: '[_]',
+  border: false,  // No border for inline button
+  padding: 0,     // No padding - content fills the space
+  style: {
+    fg: 'yellow',
+    bg: 'blue',
+    hover: { fg: 'black', bg: 'cyan' },
+  },
+});
+```
+
+### Problem: Labels Don't Parse Blessed Tags
+
+**BAD:**
+```typescript
+// Tags in label property are NOT parsed - shown as literal text!
+const channelList = createList({
+  label: ' {inverse}[Ch]{/inverse} Us ',  // Shows literal "{inverse}[Ch]{/inverse} Us"
+  tags: true,  // Only applies to content, NOT label!
+});
+```
+
+**GOOD:**
+```typescript
+// Use plain text in labels - no tag parsing available
+const channelList = createList({
+  label: ' [Ch] Us ',  // Use brackets or other ASCII for emphasis
+  tags: true,  // Still useful for content
+});
+```
+
+### Problem: Widget-Level Hover vs Item-Level Hover
+
+**BAD:**
+```typescript
+// style.hover applies to the ENTIRE widget, not individual items!
+const userList = createList({
+  style: {
+    hover: { fg: 'yellow', bg: 'blue' },  // Highlights entire list on hover!
+  },
+});
+```
+
+**GOOD:**
+```typescript
+// Use style.item.hover for per-item hover styling in lists
+const userList = createList({
+  style: {
+    fg: 'white',
+    bg: 'black',
+    selected: { fg: 'black', bg: 'cyan' },  // Currently selected item
+    item: {
+      hover: { fg: 'yellow', bg: 'blue' },  // Individual item hover
+    },
+  } as any,  // Type assertion needed for item.hover
+});
+```
+
+### Problem: Height 100% Inside Bordered Container
+
+**BAD:**
+```typescript
+// height: '100%' doesn't account for parent's border
+const innerList = createList({
+  parent: borderedContainer,  // Has border: 'line'
+  height: '100%',  // Extends beyond container bounds!
+});
+```
+
+**GOOD:**
+```typescript
+// Use bottom: 0 to stretch while respecting container bounds
+const innerList = createList({
+  parent: borderedContainer,
+  top: 1,      // Start below header row
+  bottom: 0,   // Stretch to container bottom (respects border)
+});
+```
+
+### Problem: Child Elements Don't Move With Parent
+
+**BAD:**
+```typescript
+// Direct position updates don't invalidate coordinate cache
+panel.position.left = newX;
+panel.position.top = newY;
+screen.render();  // Children still render at old positions!
+```
+
+**GOOD:**
+```typescript
+// Invalidate coordinate cache after direct position updates
+panel.position.left = newX;
+panel.position.top = newY;
+
+// Recursively invalidate cache for all descendants
+const invalidateCache = (element: any) => {
+  element._coordsCacheValid = false;
+  if (element.children) {
+    for (const child of element.children) {
+      invalidateCache(child);
+    }
+  }
+};
+invalidateCache(panel);
+
+screen.render();  // Now children render at correct positions
+```
+
+### Hover Style Summary
+
+| Widget Type | Property | Effect |
+|-------------|----------|--------|
+| Box/Button | `style.hover` | Highlights entire widget on hover |
+| List | `style.hover` | Highlights entire list (usually wrong) |
+| List | `style.item.hover` | Highlights individual item on hover |
+| List | `style.selected` | Highlights currently selected item |
+
+---
+
 ## Error Handling
 
 ### Problem: Console.log in Production
@@ -860,6 +1032,30 @@ Use `createTextbox()` for single-line inputs (Enter submits). Use `createTextare
 
 Use `screen.program._handleData(data)` to parse input and emit keypress events. `emit('data', data)` just emits raw data without parsing.
 
+### 13. Hover Not Working Without Mouse Button Pressed
+
+Mouse mode `1002h` only reports motion with button pressed. Use `1003h` for any-event tracking (hover without clicking).
+
+### 14. Inline Button Content Not Visible
+
+Button class has default `border: 'line'` and `padding`. For 1-height inline buttons, set `border: false` and `padding: 0`.
+
+### 15. Tags in Labels Not Parsed
+
+The `label` property doesn't parse blessed tags like `{inverse}`. Use plain ASCII for label formatting.
+
+### 16. Widget Hover vs Item Hover in Lists
+
+`style.hover` highlights the entire list widget. Use `style.item.hover` for per-item hover effects.
+
+### 17. Height 100% Overflows Bordered Container
+
+`height: '100%'` doesn't account for border. Use `bottom: 0` to stretch while respecting container bounds.
+
+### 18. Children Don't Move When Parent Position Changes
+
+Direct `position.*` updates don't invalidate coordinate cache. Recursively set `_coordsCacheValid = false` on all descendants.
+
 ---
 
 ## Migration Checklist
@@ -902,6 +1098,14 @@ Use this checklist when reviewing or migrating a neo-blessed door:
 - [ ] Uses `createTextbox()` for single-line inputs
 - [ ] Uses `createTextarea()` for multi-line inputs
 - [ ] Focus/hover styles defined in widget options
+
+### Mouse, Hover & Styling
+- [ ] Program uses mouse mode `1003h` for hover without button press
+- [ ] Inline 1-height buttons use `border: false` and `padding: 0`
+- [ ] Labels use plain ASCII (no blessed tags - they won't parse)
+- [ ] Lists use `style.item.hover` for per-item hover effects
+- [ ] Nested elements use `bottom: 0` instead of `height: '100%'`
+- [ ] Direct position updates invalidate `_coordsCacheValid` on descendants
 
 ### Error Handling
 - [ ] NO `console.log` statements
@@ -1014,14 +1218,15 @@ class MyDoorClass {
 
 ## Summary Statistics
 
-Based on fixes across 5 production doors:
+Based on fixes across 5+ production doors:
 
-- **52 total fixes**
+- **58+ total fixes**
 - **39 console.log statements removed**
 - **15 memory leak fixes** (timers, event listeners)
 - **8 race condition fixes**
 - **12 type safety improvements**
 - **9 validation fixes**
+- **6 mouse/hover fixes** (new)
 
 **Common issue breakdown:**
 - Console.log pollution: 75% of doors
@@ -1029,6 +1234,7 @@ Based on fixes across 5 production doors:
 - Event listener leaks: 80% of doors
 - Unsafe array access: 40% of doors
 - Race conditions: 40% of doors
+- Hover styling issues: 50% of doors (new)
 
 ---
 
@@ -1042,8 +1248,9 @@ Based on fixes across 5 production doors:
   - `fire-emblem-v2` - Tactical game with timers
   - `doors-menu` - Clean list-based interface
   - `door-manager` - Admin panel example
+  - `livechat` - Desktop-style chat with panels, hover effects
 
 ---
 
 **Last Updated:** 2025-12-30
-**Based On:** 52+ fixes across 5 production doors, plus focus/input routing fixes from livechat modal debugging
+**Based On:** 58+ fixes across 5+ production doors, including focus/input routing, mouse hover modes, coordinate cache invalidation, and inline button styling from livechat development

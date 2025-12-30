@@ -156,6 +156,10 @@ export async function runDoor(doorSession: any): Promise<void> {
   // IMPORTANT: Use bbsSession, not session!
   const { socket, bbsSession, user } = doorSession;
 
+  // CRITICAL: Set both inDoorManager flag AND doorInputHandler on bbsSession
+  // The backend requires BOTH flags to route input to your door
+  bbsSession.inDoorManager = true;
+
   // Clear screen and show welcome
   socket.emit('ansi-output', '\x1b[2J\x1b[H');  // Clear screen
   socket.emit('ansi-output', '\x1b[36mWelcome to My Door!\x1b[0m\r\n');
@@ -169,7 +173,8 @@ export async function runDoor(doorSession: any): Promise<void> {
     const key = data.toLowerCase();
 
     if (key === 'q') {
-      // Cleanup before closing
+      // Cleanup before closing - clear BOTH flags
+      bbsSession.inDoorManager = false;
       bbsSession.doorInputHandler = null;
       socket.emit('ansi-output', '\r\n\x1b[32mGoodbye!\x1b[0m\r\n');
       socket.emit('door:close');
@@ -181,6 +186,8 @@ export async function runDoor(doorSession: any): Promise<void> {
   // Wait for door to close
   await new Promise<void>((resolve) => {
     const cleanup = () => {
+      // CRITICAL: Clean up BOTH flags when door exits
+      bbsSession.inDoorManager = false;
       bbsSession.doorInputHandler = null;
       resolve();
     };
