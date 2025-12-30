@@ -293,6 +293,7 @@ export interface BBSSession {
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
   doorKeyStateHandler?: ((data: { key: string; pressed: boolean; keyState: Record<string, boolean> }) => void) | null; // Door key state handler for simultaneous key input
   doorReconnectHandler?: (() => void) | null; // Door reconnect handler to force redraw after socket reconnect
+  pendingDoorCommands?: string[]; // Commands queued by doors to run after exit
   socket?: any; // Active socket instance (used for reconnect-safe output)
   socketId?: string; // Active socket id for this session
   bbsApi?: any; // Active BBS API instance for doors (used to rebind socket on reconnect)

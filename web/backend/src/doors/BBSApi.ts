@@ -18,6 +18,7 @@ import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
 import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
+import { LoggedOnSubState } from '../constants/bbs-states';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 
 export interface BBSUser {
@@ -1014,6 +1015,31 @@ export class BBSApi {
    */
   onUserLeft(callback: (data: { userId: number; username: string }) => void): void {
     this.bindSocketEvent('room:user-left', callback);
+  }
+
+  /**
+   * Execute a BBS command (same path as user-typed commands)
+   * If a door is active, queue the command to run after the door exits.
+   */
+  async executeCommand(command: string, params?: string | string[]): Promise<void> {
+    const trimmed = (command || '').trim();
+    if (!trimmed) return;
+
+    const paramText = Array.isArray(params) ? params.join(' ') : (params || '').trim();
+    const commandLine = paramText ? `${trimmed} ${paramText}` : trimmed;
+
+    if (this.session.inDoorManager) {
+      if (!this.session.pendingDoorCommands) {
+        this.session.pendingDoorCommands = [];
+      }
+      this.session.pendingDoorCommands.push(commandLine);
+      console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${commandLine}`);
+      return;
+    }
+
+    const { handleCommand } = require('../handlers/command.handler');
+    this.session.subState = LoggedOnSubState.READ_COMMAND;
+    await handleCommand(this.socket, this.session, commandLine);
   }
 
   /**

@@ -1678,6 +1678,20 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     // express.e processSysCommand just runs the command and returns - no menu display
     session.menuPause = false;
 
+    if (session.pendingDoorCommands && session.pendingDoorCommands.length > 0) {
+      const { handleCommand } = require('./command.handler');
+      const queuedCommands = session.pendingDoorCommands.slice();
+      session.pendingDoorCommands = undefined;
+
+      for (const queued of queuedCommands) {
+        const commandLine = (queued || '').trim();
+        if (!commandLine) continue;
+        session.subState = LoggedOnSubState.READ_COMMAND;
+        await handleCommand(socket, session, commandLine);
+      }
+      return;
+    }
+
     // Check for segment processing first - takes priority
     // express.e:5455-5461 - ~CC_ commands run within segments, more segments follow
     if (session.screenSegments && session.screenSegments.segments.length > 0) {

@@ -424,7 +424,7 @@ export class XIMIOHandler {
     console.log('[XIMIOHandler] JH_PM: Prompt message with line input');
     if (prompt.length > 0) {
       console.log(`[XIMIOHandler] JH_PM: Prompt: "${prompt}"`);
-      this.socket.emit('ansi-output', prompt);
+      this.emitText(prompt, false, false, false, msg);
     }
 
     console.log(
@@ -505,7 +505,7 @@ export class XIMIOHandler {
     // Express.e (line 3438): aePuts(msg.string) - display prompt before reading input
     if (prompt.length > 0) {
       console.log(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
-      this.socket.emit('output', prompt);
+      this.emitText(prompt, false, false, false, msg);
     }
 
     if (this.inputQueue.length > 0) {
