@@ -440,7 +440,11 @@ public:
                                 hposCounter(0),
                                 ciaTimerA(0),
                                 ciaTimerB(0) {
-        cpuModel = Model::M68020;  // Upgraded from M68000 for better performance
+        // CRITICAL: Must call setModel() to create the jump table for 68020 instructions!
+        // Just setting cpuModel field doesn't work - the instruction handlers are built
+        // based on the model passed to createJumpTable() during setModel().
+        // This enables 68020+ instructions like EXTB.L (opcode 0x49C0) used by doors.
+        setModel(Model::M68020);
 
         // Allocate FAST RAM from requested memSize (after 2MB chip, before ROM)
         size_t fastSize = 0;
