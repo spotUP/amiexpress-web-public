@@ -1086,6 +1086,15 @@ export async function createApp(session: DoorSession) {
     const now = Date.now();
     let hasChanges = false;
 
+    // Clean up entries in typingPreviewLines that are no longer in typingBuffers
+    // This handles the case when a user submits a message (their buffer is deleted)
+    for (const visibleUserId of typingPreviewLines.keys()) {
+      if (!state.typingBuffers.has(visibleUserId)) {
+        typingPreviewLines.delete(visibleUserId);
+        hasChanges = true;
+      }
+    }
+
     // Update typing preview content for each user
     for (const [userId, buf] of state.typingBuffers) {
       if (now - buf.lastUpdate > 5000) {
