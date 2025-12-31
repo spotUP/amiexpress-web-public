@@ -139,11 +139,14 @@ export class PongDoor {
 
     while (!end) {
       // Original C: usleep(4000) - 4000 microseconds = 4ms
-      await napms(4);
+      // BBS Optimization: 33ms = ~30fps, much better for network/CPU
+      await napms(33);
 
       // Original C: if (++cont%16==0)
+      // Adjust game logic to match new tick rate (was 16 ticks @ 4ms = 64ms)
+      // With 33ms ticks, we update every 2 ticks (~66ms)
       cont++;
-      if (cont % 16 === 0) {
+      if (cont % 2 === 0) {
         // Ball vertical bounce
         if (b.y === scrY - 1 || b.y === 1) {
           b.movver = !b.movver;
@@ -186,7 +189,7 @@ export class PongDoor {
 
       // Debug: Log input for diagnosis
       if (ch !== ERR) {
-        console.log("[PONG] Input received:", JSON.stringify(ch));
+        console.log("[PONG] getch() returned:", JSON.stringify(ch), "type:", typeof ch);
       }
 
       // Handle object return from SDK (e.g. { keyCode: 32, key: ... })
@@ -201,7 +204,9 @@ export class PongDoor {
         else if (ch === "escape") ch = 0x1b;
         else if (ch.length === 1) ch = ch.charCodeAt(0);
       }
+
       if (ch !== ERR) {
+        console.log("[PONG] Final processed ch:", ch, "type:", typeof ch);
         switch (ch) {
           case KEY_DOWN:
             b1.y++;
@@ -244,9 +249,11 @@ export class PongDoor {
       mvprintw(b.y, b.x, "o");
       for (let i = -1; i < 2; i++) {
         mvprintw(b1.y + i, b1.x, "|");
-        mvprintw(b2.y + i, b2.x, "|");
+        mvprintw(b2.y + i, b2.y + i < scrY ? b2.x : b2.x, "|"); // Fix potential out of bounds
       }
       attroff(COLOR_PAIR(1));
+
+      refresh(); // CRITICAL FIX: Send the updated buffer to the terminal!
     }
 
     endwin();

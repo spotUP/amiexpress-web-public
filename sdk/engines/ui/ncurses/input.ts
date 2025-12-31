@@ -205,10 +205,13 @@ export function translateKey(
   key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean; sequence?: string }
 ): number {
   const sequence = key.sequence ?? key.name ?? ch;
+  console.log(`[ncurses] translateKey input: ch=${JSON.stringify(ch)} key=${JSON.stringify(key)} sequence=${JSON.stringify(sequence)}`);
 
   // Check for special keys by name
   if (key.name && keyNameToCode[key.name]) {
-    return keyNameToCode[key.name];
+    const code = keyNameToCode[key.name];
+    console.log(`[ncurses] translateKey found by name: ${key.name} -> ${code}`);
+    return code;
   }
 
   // Handle specific key names
@@ -373,21 +376,27 @@ function parseEscapeSequence(sequence: string): string | null {
 export async function getch(): Promise<number> {
   // Check ungetch buffer first
   if (inputBuffer.length > 0) {
-    return inputBuffer.pop()!;
+    const ch = inputBuffer.pop()!;
+    console.log(`[ncurses] getch() from inputBuffer: ${ch}`);
+    return ch;
   }
 
   // Check queued keys
   if (pendingKeys.length > 0) {
-    return pendingKeys.shift()!;
+    const ch = pendingKeys.shift()!;
+    console.log(`[ncurses] getch() from pendingKeys: ${ch}`);
+    return ch;
   }
 
   // If no input callback, return ERR
   if (!inputCallback) {
+    console.log(`[ncurses] getch() failed: no inputCallback`);
     return ERR;
   }
 
   // If nodelay mode, check immediately without waiting
   if (nodelayModeEnabled) {
+    console.log(`[ncurses] getch() ERR: nodelayModeEnabled`);
     return ERR;
   }
 

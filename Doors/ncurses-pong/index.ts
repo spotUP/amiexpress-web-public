@@ -102,6 +102,7 @@ export async function runDoor(session: DoorSession): Promise<void> {
             // CRITICAL: Set handler on bbsSession, not on the wrapper session
             session.bbsSession.doorInputHandler = (data: string) => {
               const { ch, key } = parseKeyData(data);
+              console.log(`[PONG] Routing input: "${data}" -> ch: ${JSON.stringify(ch)}, key: ${JSON.stringify(key)}`);
               handler(ch, key);
             };
             inputHandlerInstalled = true;
