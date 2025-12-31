@@ -3,7 +3,6 @@
   "version": "2.0.0",
   "description": "State-of-the-art ANSI/ASCII art editor with full Moebius feature parity",
   "main": "index.ts",
-  "type": "module",
   "author": "AmiExpress-Web",
   "license": "MIT",
   "scripts": {

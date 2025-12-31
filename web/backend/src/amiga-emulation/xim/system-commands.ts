@@ -71,12 +71,10 @@ export class XIMSystemCommandsHandler {
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
     this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? regNodeId);
     this.messageParser.writeLineNumber(msg.msgAddr, 0);
-    // Ensure length is sane; otherwise echo the message back untouched.
-    const parsed = this.messageParser.parseMessage(msg.msgAddr);
-    if (this.emulator.readMemory16(msg.msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET) === 0) {
-      this.emulator.writeMemory16(msg.msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET, DoorConstants.MESSAGE_TOTAL_LENGTH);
-    }
     const parsedFinal = this.messageParser.parseMessage(msg.msgAddr);
+    if (!parsedFinal.messageLength) {
+      console.warn('[XIMSystem][RegisterReply] mn_Length is 0; optional fields disabled');
+    }
     console.log(
       `[XIMSystem][RegisterReply] cmd=${parsedFinal.command} data=${parsedFinal.data} node=${parsedFinal.nodeId} strPtr=0x${(parsedFinal as any).stringPtr?.toString(
         16
@@ -90,10 +88,7 @@ export class XIMSystemCommandsHandler {
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // CRITICAL FIX: Set strPtr before replying!
-    // Phantasm (AmiExpress coder) confirmed: doors dereference msg->strptr and if it's NULL
-    // they stay stuck in their init loop. Bulls bug was exactly this - strPtr was 0.
-    // Must set strPtr to msg+StringOffset (pointing to embedded string buffer).
+    // Set strPtr/fillers when the fields exist in the message layout.
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
@@ -332,7 +327,7 @@ export class XIMSystemCommandsHandler {
 
     this.state.shuttingDown = true;
     this.state.registered = false;
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
 
     console.log('[XIMSystem] Door completed execution');
   }
@@ -351,7 +346,7 @@ export class XIMSystemCommandsHandler {
     console.log(`[XIMSystem] RAWARROW: Toggle raw arrow mode -> ${this.state.rawArrow ? 'ON (raw)' : 'OFF (convert)'}`);
 
     // Ack
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -369,7 +364,7 @@ export class XIMSystemCommandsHandler {
     // Verify it was set
     console.log(`[XIMSystem] RETURNCOMMAND verify: state.returnCommand="${this.state.returnCommand}"`);
 
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -380,7 +375,7 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] CHAIN: Door requesting chain to another door');
 
     this.state.chainCommand = this.getMessageString(msg);
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -405,7 +400,8 @@ export class XIMSystemCommandsHandler {
       }
     }
 
-    this.reply(msg, 1);
+    // express.e leaves msg.data unchanged for ENVSTAT responses.
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -632,7 +628,7 @@ export class XIMSystemCommandsHandler {
     if (writeDataField) {
       this.messageParser.writeData(msg.msgAddr, data);
     }
-    // CRITICAL: Always set strPtr before replying - doors dereference it
+    // Set strPtr before replying when the field exists - some doors dereference it.
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);

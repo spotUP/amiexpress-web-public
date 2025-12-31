@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Interactive door selection menu with arrow key navigation",
   "main": "index.ts",
-  "type": "module",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

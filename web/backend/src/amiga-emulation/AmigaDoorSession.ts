@@ -100,6 +100,12 @@ export class AmigaDoorSession {
       assigns: config.assigns || {},
       env: normalizedEnv,
     };
+    if (this.config.bbsSession && this.config.mimicVer) {
+      const session: any = this.config.bbsSession;
+      if (!session.mimicVer) {
+        session.mimicVer = this.config.mimicVer;
+      }
+    }
     if (!this.config.doorId) {
       const fromSession = this.config.bbsSession?.doorCommand;
       if (fromSession) {

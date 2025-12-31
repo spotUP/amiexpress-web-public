@@ -1,0 +1,11 @@
+MENUNAME=Voice Chat
+CMDNAME=voicechat
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Multi-party voice chat with audio streaming
+CATEGORY=Communication
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

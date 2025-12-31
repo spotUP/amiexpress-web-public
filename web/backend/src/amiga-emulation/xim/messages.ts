@@ -42,6 +42,9 @@ export class XIMMessageParser {
     //
     // Correct approach: Read directly from canonical offsets only.
 
+    const messageLength = this.emulator.readMemory16(
+      msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET
+    );
     const replyPort = this.emulator.readMemory32(
       msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET
     );
@@ -51,11 +54,46 @@ export class XIMMessageParser {
     const lineNumber = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_LINE_OFFSET);
     const signal = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SIGNAL_OFFSET);
     const task = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_TASK_OFFSET);
-    const semaphore = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET);
-    const filler1 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET);
-    const filler2 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET);
-    const stringPtr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET);
-    const filler3 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET);
+    const hasSemaphore = this.hasFieldLength(
+      messageLength,
+      DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
+      4
+    );
+    const hasFiller1 = this.hasFieldLength(
+      messageLength,
+      DoorConstants.MESSAGE_FILLER1_OFFSET,
+      4
+    );
+    const hasFiller2 = this.hasFieldLength(
+      messageLength,
+      DoorConstants.MESSAGE_FILLER2_OFFSET,
+      4
+    );
+    const hasStringPtr = this.hasFieldLength(
+      messageLength,
+      DoorConstants.MESSAGE_STRING_PTR_OFFSET,
+      4
+    );
+    const hasFiller3 = this.hasFieldLength(
+      messageLength,
+      DoorConstants.MESSAGE_FILLER3_OFFSET,
+      4
+    );
+    const semaphore = hasSemaphore
+      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET)
+      : undefined;
+    const filler1 = hasFiller1
+      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET)
+      : undefined;
+    const filler2 = hasFiller2
+      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET)
+      : undefined;
+    const stringPtr = hasStringPtr
+      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET)
+      : undefined;
+    const filler3 = hasFiller3
+      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET)
+      : undefined;
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
     // Read the string (200 bytes starting at offset 24)
@@ -66,14 +104,15 @@ export class XIMMessageParser {
 
     console.log("[XIMMessageParser] Parsed jhMessage:");
     console.log(`  Address: 0x${msgAddr.toString(16)}`);
+    console.log(`  Length: ${messageLength}`);
     console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
     console.log(`  Command: ${command} (${this.getCommandName(command)})`);
     console.log(`  Data: ${data} (0x${data.toString(16)})`);
     console.log(`  Node: ${nodeId}, Line: ${lineNumber}`);
     console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
-    console.log(`  Semi: 0x${semaphore.toString(16)}`);
-    console.log(`  Filler1: 0x${filler1.toString(16)}, Filler2: 0x${filler2.toString(16)}`);
-    console.log(`  StrPtr: 0x${stringPtr.toString(16)}, Filler3: 0x${filler3.toString(16)}`);
+    console.log(`  Semi: ${this.formatHex(semaphore)}`);
+    console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
+    console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
     console.log(`  String: "${messageString}"`);
 
     return {
@@ -81,6 +120,7 @@ export class XIMMessageParser {
       command,
       data,
       replyPort,
+      messageLength,
       stringAddr,
       nodeId,
       lineNumber,
@@ -177,31 +217,39 @@ export class XIMMessageParser {
    * Write semaphore/filler pointers
    */
   writeSemaphore(msgAddr: number, value: number): void {
-    this.writeWithBias(
-      msgAddr,
-      DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
-      value
-    );
+    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_SEMAPHORE_OFFSET, 4)) {
+      return;
+    }
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_SEMAPHORE_OFFSET, value);
   }
 
   writeFiller1(msgAddr: number, value: number): void {
+    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER1_OFFSET, 4)) {
+      return;
+    }
     this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER1_OFFSET, value);
   }
 
   writeFiller2(msgAddr: number, value: number): void {
+    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER2_OFFSET, 4)) {
+      return;
+    }
     this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER2_OFFSET, value);
   }
 
   writeFiller3(msgAddr: number, value: number): void {
+    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER3_OFFSET, 4)) {
+      return;
+    }
     this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER3_OFFSET, value);
   }
 
-  writeStringPointer(msgAddr: number, value: number): void {
-    this.writeWithBias(
-      msgAddr,
-      DoorConstants.MESSAGE_STRING_PTR_OFFSET,
-      value
-    );
+  writeStringPointer(msgAddr: number, value: number): boolean {
+    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_STRING_PTR_OFFSET, 4)) {
+      return false;
+    }
+    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_STRING_PTR_OFFSET, value);
+    return true;
   }
 
   /**
@@ -505,5 +553,30 @@ export class XIMMessageParser {
 
     // Biased write removed - was causing MESSAGE_TASK_OFFSET corruption
     // Previous code wrote to msgAddr + offset + 0x14, overwriting critical fields
+  }
+
+  private getMessageLength(msgAddr: number): number {
+    return this.emulator.readMemory16(
+      msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET
+    );
+  }
+
+  private hasField(msgAddr: number, offset: number, size: number): boolean {
+    const length = this.getMessageLength(msgAddr);
+    return this.hasFieldLength(length, offset, size);
+  }
+
+  private hasFieldLength(messageLength: number, offset: number, size: number): boolean {
+    if (!messageLength) {
+      return false;
+    }
+    return offset + size <= messageLength;
+  }
+
+  private formatHex(value?: number): string {
+    if (value === undefined) {
+      return 'n/a';
+    }
+    return `0x${value.toString(16)}`;
   }
 }

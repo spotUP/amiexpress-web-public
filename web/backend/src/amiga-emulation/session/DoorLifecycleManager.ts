@@ -339,12 +339,11 @@ export class DoorLifecycleManager {
       }
 
       // Auto-detection fallback
-      // Default: 10x for batch, 4x for interactive (most doors benefit from speed)
+      // Default: 100x for all doors (tested and verified to work)
       // Doors that need slower speed can set OVERCLOCK=-1 or OVERCLOCK=1 in .info
       if (overclockFactor === undefined) {
-        const isBatchMode = this.lifecycleConfig.disableInputWaitExtension || !this.socket;
-        overclockFactor = isBatchMode ? 10 : 4;  // 4x for interactive, 10x for batch
-        overclockSource = `auto-detection (${isBatchMode ? 'batch' : 'interactive'} mode)`;
+        overclockFactor = 100;  // 100x default - all tested doors work at this speed
+        overclockSource = `auto-detection (default 100x)`;
       }
 
       // Apply overclocking
@@ -1398,6 +1397,13 @@ export class DoorLifecycleManager {
       if (this.pollCount === 1) {
         console.log(`[DoorLifecycleManager] XIM polling DISABLED: doorType=${this.config.doorType}`);
       }
+      return;
+    }
+
+    // CRITICAL: Skip polling if we're already waiting for user input
+    // This prevents processing duplicate JH_PM/JH_HK/JH_LI messages while waiting
+    // The door may have sent multiple messages during batch execution before we paused
+    if (this.ximProtocol?.isWaitingForLineInput()) {
       return;
     }
 

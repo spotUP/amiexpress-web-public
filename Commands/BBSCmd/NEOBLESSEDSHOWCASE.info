@@ -1,0 +1,8 @@
+BBSCMD=NEOBLESSEDSHOWCASE
+TYPE=TS
+LOCATION=Doors/neo-blessed-showcase
+DESCRIPTION=Neo-Blessed UI Showcase - demo of UI widgets
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Utilities/Demo

@@ -596,6 +596,10 @@ export class XIMProtocol {
       const cmdName = this.doorCommand || '';
       console.log(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
 
+      // Always populate embedded buffer for doors without StringPtr.
+      this.messageParser.writeMessageString(msg.msgAddr, cmdName);
+
+      let pointerSet = false;
       // Refresh the string in fixed memory (in case it was overwritten)
       if (this.doorCommandAddr > 0 && cmdName) {
         for (let i = 0; i < cmdName.length; i++) {
@@ -603,16 +607,21 @@ export class XIMProtocol {
         }
         this.emulator.writeMemory(this.doorCommandAddr + cmdName.length, 0);
 
-        // Set StringPtr to fixed memory location
-        this.messageParser.writeStringPointer(msg.msgAddr, this.doorCommandAddr);
-        const stringContent = this.emulator.readString(this.doorCommandAddr, cmdName.length + 1);
-        console.log(`[XIMProtocol]   StringPtr=0x${this.doorCommandAddr.toString(16)} (fixed) -> "${stringContent}"`);
-      } else {
-        // Fallback: write to embedded buffer
-        this.messageParser.writeMessageString(msg.msgAddr, cmdName);
+        // Set StringPtr to fixed memory location (if field exists)
+        pointerSet = this.messageParser.writeStringPointer(msg.msgAddr, this.doorCommandAddr);
+        if (pointerSet) {
+          const stringContent = this.emulator.readString(this.doorCommandAddr, cmdName.length + 1);
+          console.log(`[XIMProtocol]   StringPtr=0x${this.doorCommandAddr.toString(16)} (fixed) -> "${stringContent}"`);
+        }
+      }
+
+      if (!pointerSet) {
         const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-        this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-        console.log(`[XIMProtocol]   StringPtr=0x${stringAddr.toString(16)} (message buffer)`);
+        if (this.messageParser.writeStringPointer(msg.msgAddr, stringAddr)) {
+          console.log(`[XIMProtocol]   StringPtr=0x${stringAddr.toString(16)} (message buffer)`);
+        } else {
+          console.log('[XIMProtocol]   StringPtr not available; using embedded buffer');
+        }
       }
 
       this.sendReply(msg, cmdName.length);
@@ -658,11 +667,13 @@ export class XIMProtocol {
       // Write string to embedded buffer
       this.messageParser.writeMessageString(msg.msgAddr, tooltypeValue);
 
-      // Write pointer to the embedded string buffer
+      // Write pointer to the embedded string buffer (if field exists)
       const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-      this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-
-      console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr=0x${stringAddr.toString(16)}`);
+      if (this.messageParser.writeStringPointer(msg.msgAddr, stringAddr)) {
+        console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr=0x${stringAddr.toString(16)}`);
+      } else {
+        console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not available`);
+      }
 
       this.messageParser.writeData(msg.msgAddr, found);
       this.sendReply(msg, found);

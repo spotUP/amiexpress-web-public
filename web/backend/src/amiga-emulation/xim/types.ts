@@ -307,6 +307,7 @@ export interface XIMMessage {
   command: number;      // XIM command code
   data: number;         // Data value
   replyPort: number;    // Door's reply port address
+  messageLength?: number; // mn_Length from Exec message header (bytes)
   stringAddr?: number;  // Address of string data (if any)
   string?: string;      // String content (jhMessage.string field)
   nodeId?: number;

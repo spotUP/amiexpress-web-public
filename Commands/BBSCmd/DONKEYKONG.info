@@ -1,0 +1,8 @@
+BBSCMD=DONKEYKONG
+TYPE=TS
+LOCATION=Doors/donkey-kong
+DESCRIPTION=Classic Donkey Kong arcade game - rescue the princess
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Arcade

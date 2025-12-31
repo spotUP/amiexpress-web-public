@@ -1,0 +1,11 @@
+MENUNAME=Fire Emblem
+CMDNAME=fireemblem
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Fire Emblem: Emblem of Valor - Tactical RPG with neo-blessed UI
+CATEGORY=Games
+VERSION=2.0.0
+AUTHOR=AmiExpress SDK
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

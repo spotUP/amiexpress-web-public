@@ -3361,6 +3361,31 @@ export class DosLibrary {
   }
 
   /**
+   * Cli - Get current CLI structure (V36+)
+   * Returns: D0 = BPTR to CommandLineInterface (0 if none)
+   */
+  Cli(): void {
+    const execBase = this.emulator.readMemory32(4);
+    if (execBase === 0) {
+      console.warn("[dos.library] Cli(): ExecBase missing");
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    const thisTask = this.emulator.readMemory32(execBase + 0x114); // ExecBase->ThisTask
+    if (thisTask === 0) {
+      console.warn("[dos.library] Cli(): ThisTask missing");
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
+    const prCliOffset = 0xac; // struct Process.pr_CLI
+    const cliBptr = this.emulator.readMemory32(thisTask + prCliOffset);
+    console.log(`[dos.library] Cli() -> 0x${cliBptr.toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, cliBptr);
+  }
+
+  /**
    * GetArgStr - Get pointer to argument string (V36+)
    * Returns: D0 = pointer to argument string (NULL-terminated)
    *
@@ -5479,6 +5504,9 @@ export class DosLibrary {
         return true;
 
       // CLI functions (V36+) - CORRECTED LVO OFFSETS
+      case -492: // Cli (returns BPTR)
+        this.Cli();
+        return true;
       case -456: // SetFileSize - P2 (V36+) - CORRECT
         this.SetFileSize();
         return true;

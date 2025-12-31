@@ -1,0 +1,8 @@
+BBSCMD=PENGO
+TYPE=TS
+LOCATION=Doors/pengo
+DESCRIPTION=Classic Pengo arcade game - push ice blocks to crush enemies
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Arcade

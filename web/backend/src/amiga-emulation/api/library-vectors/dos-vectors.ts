@@ -407,6 +407,14 @@ export const DOS_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -492,
+    name: "Cli",
+    handler: (emu, lib: DosLibrary) => {
+      lib.Cli();
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -516,
     name: "FGetC_516",
     handler: (emu, lib: DosLibrary) => {

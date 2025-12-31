@@ -1,0 +1,8 @@
+BBSCMD=FROGGER
+TYPE=TS
+LOCATION=Doors/frogger
+DESCRIPTION=Classic Frogger arcade game - cross the road and river
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Arcade

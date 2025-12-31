@@ -1686,8 +1686,10 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       for (const queued of queuedCommands) {
         const commandLine = (queued || '').trim();
         if (!commandLine) continue;
-        session.subState = LoggedOnSubState.READ_COMMAND;
-        await handleCommand(socket, session, commandLine);
+        // Execute queued command as if it was entered (bypass line buffering).
+        session.commandText = commandLine.toUpperCase();
+        session.subState = LoggedOnSubState.PROCESS_COMMAND;
+        await handleCommand(socket, session, '');
       }
       return;
     }

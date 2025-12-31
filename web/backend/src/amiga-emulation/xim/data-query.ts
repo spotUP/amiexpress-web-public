@@ -53,7 +53,8 @@ export class XIMDataQueryHandler {
 
     const isRead = msg.data !== 0;
     const user = this.bbsSession?.user;
-    let replyData = 1;
+    // express.e preserves msg.data unless a command explicitly overrides it.
+    let replyData = typeof msg.data === 'number' ? msg.data : 0;
 
     switch (msg.command) {
       case XIMCommand.DT_NAME:
@@ -954,8 +955,7 @@ export class XIMDataQueryHandler {
    */
   private reply(msg: XIMMessage, data: number): void {
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    // Always reset string pointers to the embedded buffer so doors
-    // don't read stale pointers from prior messages.
+    // Reset string pointers to the embedded buffer when present to avoid stale pointers.
     this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller2(msg.msgAddr, stringAddr);

@@ -110,6 +110,7 @@ async function runDoor(opts: RunnerOptions) {
         };
   })();
 
+  const rawParams = (opts.args || []).join(' ').trim();
   const session = {
     nodeId: opts.nodeId,
     nodeNumber: opts.nodeId,
@@ -118,6 +119,9 @@ async function runDoor(opts: RunnerOptions) {
     timeRemaining,
     doorCommand: opts.doorId || path.basename(opts.execPath),
     doorName: opts.doorId || path.basename(opts.execPath),
+    currentCommand: opts.doorId || path.basename(opts.execPath),
+    commandParams: rawParams,
+    doorParams: rawParams,
     dataDir,
     bbsRoot,
     user,

@@ -1,0 +1,11 @@
+MENUNAME=Grandmaster Chess
+CMDNAME=grandmaster
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Grandmaster Chess - Play chess against AI or other players
+CATEGORY=Games
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

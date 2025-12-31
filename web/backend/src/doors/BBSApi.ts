@@ -1038,8 +1038,10 @@ export class BBSApi {
     }
 
     const { handleCommand } = require('../handlers/command.handler');
-    this.session.subState = LoggedOnSubState.READ_COMMAND;
-    await handleCommand(this.socket, this.session, commandLine);
+    // Bypass READ_COMMAND's line buffering and execute like an entered command.
+    this.session.commandText = commandLine.toUpperCase();
+    this.session.subState = LoggedOnSubState.PROCESS_COMMAND;
+    await handleCommand(this.socket, this.session, '');
   }
 
   /**

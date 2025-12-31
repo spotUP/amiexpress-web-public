@@ -1,0 +1,8 @@
+BBSCMD=PIPEDREAM
+TYPE=TS
+LOCATION=Doors/pipe-dream
+DESCRIPTION=Pipe Dream puzzle game - connect the pipes before the flood
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Puzzle

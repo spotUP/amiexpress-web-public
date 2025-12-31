@@ -1,0 +1,8 @@
+BBSCMD=PUZZLEBOBBLE
+TYPE=TS
+LOCATION=Doors/puzzle-bobble
+DESCRIPTION=Puzzle Bobble (Bust-a-Move) - match colored bubbles
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Arcade

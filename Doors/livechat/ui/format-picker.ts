@@ -310,11 +310,17 @@ export class FormatPicker {
         top = screenHeight - overlayHeight - 1;
       }
 
-      (this.overlay as any).left = left;
-      (this.overlay as any).top = top;
+      const overlay = this.overlay as any;
+      overlay.options.left = left;
+      overlay.options.top = top;
+      overlay.position.left = left;
+      overlay.position.top = top;
       // Clear the fixed positioning
-      (this.overlay as any).bottom = undefined;
-      (this.overlay as any).right = undefined;
+      overlay.options.bottom = undefined;
+      overlay.options.right = undefined;
+      overlay.position.bottom = undefined;
+      overlay.position.right = undefined;
+      overlay._coordsCacheValid = false;
     }
 
     this.modalBackground.show();

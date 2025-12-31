@@ -1,0 +1,358 @@
+/**
+ * XIM Message Injection Handler
+ *
+ * Socket.IO event handlers for injecting XIM messages into running door sessions.
+ * DEVELOPMENT MODE ONLY - enables automated testing and debugging.
+ *
+ * Security:
+ * - Only enabled when NODE_ENV === 'development'
+ * - Validates all message types and parameters
+ * - Requires active door session to inject
+ * - All injections logged to xim-debug.json
+ *
+ * Socket.IO Events:
+ * - xim:inject - Inject single message
+ * - xim:inject:sequence - Inject sequence of messages
+ * - xim:sessions - List active door sessions
+ */
+
+import { Socket } from 'socket.io';
+import { BBSSession } from '../../index';
+import { sessions as sessionMap } from '../../server/session-manager';
+import { logger } from '../../utils/logger.util';
+
+// XIM message type constants
+export const XIM_MESSAGE_TYPES: Record<string, number> = {
+  JH_INIT: 0,
+  JH_SM: 1,
+  JH_STAT: 2,
+  JH_TERMINATE: 3,
+  JH_HK: 4,
+  JH_GNS: 5,
+  JH_PROMPT: 6,
+  JH_MORE: 7,
+  JH_REQUEST: 8,
+  JH_IGNORE: 9,
+  JH_SMPTR: 10,
+};
+
+// XIM message type name lookup
+const XIM_TYPE_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(XIM_MESSAGE_TYPES).map(([k, v]) => [v, k])
+);
+
+// Injection request interface
+export interface XIMInjectionRequest {
+  door: string;
+  node?: number;
+  messageType: string;
+  param?: number;
+  data?: string;
+}
+
+// Injection response interface
+export interface XIMInjectionResponse {
+  success: boolean;
+  error?: string;
+  messagesSent?: number;
+  doorState?: string;
+}
+
+// State interface (minimal for type safety)
+interface BBSState {
+  sessions: Map<number, BBSSession>;
+}
+
+/**
+ * Validate injection request
+ */
+function validateInjectionRequest(request: XIMInjectionRequest): { valid: boolean; error?: string } {
+  if (!request.door || typeof request.door !== 'string') {
+    return { valid: false, error: 'Missing or invalid door name' };
+  }
+
+  if (!request.messageType || typeof request.messageType !== 'string') {
+    return { valid: false, error: 'Missing or invalid message type' };
+  }
+
+  // Validate message type exists
+  if (!(request.messageType in XIM_MESSAGE_TYPES)) {
+    return {
+      valid: false,
+      error: `Invalid message type: ${request.messageType}. Valid types: ${Object.keys(XIM_MESSAGE_TYPES).join(', ')}`,
+    };
+  }
+
+  // Validate param if provided
+  if (request.param !== undefined) {
+    if (typeof request.param !== 'number' || request.param < 0 || request.param > 0xffffffff) {
+      return { valid: false, error: 'Invalid param: must be 0-4294967295' };
+    }
+  }
+
+  // Validate data if provided
+  if (request.data !== undefined) {
+    if (typeof request.data !== 'string') {
+      return { valid: false, error: 'Invalid data: must be string' };
+    }
+    if (request.data.length > 10000) {
+      return { valid: false, error: 'Data too large: max 10KB' };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Find target door session
+ */
+function findTargetSession(
+  request: XIMInjectionRequest,
+  currentSession: BBSSession,
+  state: BBSState
+): BBSSession | null {
+  const doorNameUpper = request.door.toUpperCase();
+
+  // If node specified, look for that specific node
+  if (request.node !== undefined) {
+    const session = state.sessions.get(request.node);
+    if (!session) {
+      return null;
+    }
+
+    // Check if door matches
+    const activeDoor = (session as any).activeDoor || session.doorCommand;
+    if (activeDoor && activeDoor.toUpperCase() === doorNameUpper) {
+      return session;
+    }
+    return null;
+  }
+
+  // Otherwise, find first session running this door
+  for (const [nodeNum, session] of state.sessions) {
+    const activeDoor = (session as any).activeDoor || session.doorCommand;
+    if (activeDoor && activeDoor.toUpperCase() === doorNameUpper) {
+      return session;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Inject message into door session
+ */
+async function injectMessage(
+  session: BBSSession,
+  messageType: string,
+  param: number,
+  data: string
+): Promise<XIMInjectionResponse> {
+  try {
+    // Get door session
+    const doorSession = (session as any).doorSession;
+    if (!doorSession) {
+      return { success: false, error: 'Door session not active' };
+    }
+
+    // Check if door session supports message injection
+    if (typeof doorSession.injectMessage !== 'function') {
+      return { success: false, error: 'Door session does not support message injection' };
+    }
+
+    // Get message type code
+    const typeCode = XIM_MESSAGE_TYPES[messageType];
+    if (typeCode === undefined) {
+      return { success: false, error: `Unknown message type: ${messageType}` };
+    }
+
+    // Inject message
+    const result = await doorSession.injectMessage({
+      type: typeCode,
+      typeName: messageType,
+      param: param || 0,
+      data: data || '',
+    });
+
+    if (!result) {
+      return { success: false, error: 'Injection failed (returned false)' };
+    }
+
+    return {
+      success: true,
+      messagesSent: 1,
+      doorState: doorSession.isDoorRunning ? doorSession.isDoorRunning() : 'unknown',
+    };
+  } catch (error: any) {
+    logger.error('[XIMInjection] Error injecting message:', error);
+    return {
+      success: false,
+      error: error.message || 'Unknown error during injection',
+    };
+  }
+}
+
+/**
+ * Register XIM injection handlers on socket
+ *
+ * SECURITY: Only registers handlers in development mode
+ */
+export function registerXIMInjectionHandlers(
+  socket: Socket,
+  session: BBSSession,
+  state: BBSState
+): void {
+  // CRITICAL: Only enable in development mode
+  if (process.env.NODE_ENV !== 'development') {
+    logger.debug('[XIMInjection] Injection disabled - not in development mode');
+    return;
+  }
+
+  logger.info('[XIMInjection] Registering injection handlers (development mode)');
+
+  /**
+   * xim:inject - Inject single message
+   */
+  socket.on('xim:inject', async (request: XIMInjectionRequest, callback) => {
+    logger.debug('[XIMInjection] Received injection request:', {
+      door: request.door,
+      node: request.node,
+      messageType: request.messageType,
+    });
+
+    // Validate request
+    const validation = validateInjectionRequest(request);
+    if (!validation.valid) {
+      logger.warn('[XIMInjection] Invalid request:', validation.error);
+      callback({ success: false, error: validation.error });
+      return;
+    }
+
+    // Find target session
+    const targetSession = findTargetSession(request, session, state);
+    if (!targetSession || !(targetSession as any).doorSession) {
+      const error = `No active session found for door: ${request.door}${request.node ? ` (node ${request.node})` : ''}`;
+      logger.warn('[XIMInjection]', error);
+      callback({ success: false, error });
+      return;
+    }
+
+    // Inject message
+    const result = await injectMessage(
+      targetSession,
+      request.messageType,
+      request.param || 0,
+      request.data || ''
+    );
+
+    logger.info('[XIMInjection] Injection result:', result);
+    callback(result);
+  });
+
+  /**
+   * xim:inject:sequence - Inject sequence of messages
+   */
+  socket.on('xim:inject:sequence', async (sequence: XIMInjectionRequest[], callback) => {
+    logger.debug('[XIMInjection] Received sequence injection request:', {
+      messageCount: sequence.length,
+    });
+
+    if (!Array.isArray(sequence)) {
+      callback({ success: false, error: 'Sequence must be an array' });
+      return;
+    }
+
+    if (sequence.length === 0) {
+      callback({ success: false, error: 'Sequence cannot be empty' });
+      return;
+    }
+
+    if (sequence.length > 1000) {
+      callback({ success: false, error: 'Sequence too large (max 1000 messages)' });
+      return;
+    }
+
+    const results: XIMInjectionResponse[] = [];
+
+    for (let i = 0; i < sequence.length; i++) {
+      const request = sequence[i];
+
+      // Validate request
+      const validation = validateInjectionRequest(request);
+      if (!validation.valid) {
+        results.push({ success: false, error: validation.error });
+        continue;
+      }
+
+      // Find target session
+      const targetSession = findTargetSession(request, session, state);
+      if (!targetSession || !(targetSession as any).doorSession) {
+        results.push({
+          success: false,
+          error: `No active session found for door: ${request.door}`,
+        });
+        continue;
+      }
+
+      // Inject message
+      const result = await injectMessage(
+        targetSession,
+        request.messageType,
+        request.param || 0,
+        request.data || ''
+      );
+      results.push(result);
+
+      // Apply delay if specified
+      const delay = (request as any).delay;
+      if (delay && delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    logger.info('[XIMInjection] Sequence complete:', {
+      total: results.length,
+      success: successCount,
+      failed: results.length - successCount,
+    });
+
+    callback({
+      success: successCount === results.length,
+      error: successCount === 0 ? 'All injections failed' : undefined,
+      results,
+    });
+  });
+
+  /**
+   * xim:sessions - List active door sessions
+   */
+  socket.on('xim:sessions', (callback) => {
+    logger.debug('[XIMInjection] Listing active sessions');
+
+    const activeSessions: any[] = [];
+
+    state.sessions.forEach((sess, nodeNum) => {
+      const doorSession = (sess as any).doorSession;
+      const activeDoor = (sess as any).activeDoor || sess.doorCommand;
+
+      if (doorSession && activeDoor) {
+        const startTime = (sess as any).doorStartTime || Date.now();
+        activeSessions.push({
+          node: nodeNum,
+          door: activeDoor,
+          state: doorSession.isDoorRunning ? doorSession.isDoorRunning() : 'unknown',
+          uptime: Date.now() - startTime,
+        });
+      }
+    });
+
+    logger.debug('[XIMInjection] Found active sessions:', {
+      count: activeSessions.length,
+    });
+
+    callback({ sessions: activeSessions });
+  });
+
+  logger.info('[XIMInjection] Injection handlers registered successfully');
+}

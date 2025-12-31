@@ -280,6 +280,11 @@ async function runCommand(
   // express.e:4750-4807 - Execute the door/command
   console.log(`  Executing ${commandDef.type} door: ${commandDef.location}`);
 
+  // Cache command + params for XIM BB_MAINLINE replies (express.e:3794-3800).
+  session.currentCommand = cmdUpper;
+  session.commandParams = params || '';
+  session.doorParams = params || '';
+
   // Set environment status (express.e:4710)
   // For file scan commands (FR, F, N, CS, SCAN, NSU), set ENV_FILES (8)
   // This is critical for doors like AquaScan to know the BBS context

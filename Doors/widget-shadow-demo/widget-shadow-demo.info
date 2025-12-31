@@ -1,0 +1,11 @@
+MENUNAME=Widget Shadow Demo
+CMDNAME=shadowdemo
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Demonstration of widget shadow effects
+CATEGORY=Utilities
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

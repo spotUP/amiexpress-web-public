@@ -110,7 +110,7 @@ export class XIMBBSInfoHandler {
 
     this.messageParser.writeMessageString(msg.msgAddr, bbsName.slice(0, 41));
 
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -135,13 +135,13 @@ export class XIMBBSInfoHandler {
    * From E sources (express.e:3808-3810)
    */
   handleExpressVersion(msg: XIMMessage): void {
-    const version = 'v5.6';
+    const version = this.getExpressMajorVersion();
 
     console.log(`[XIMBBSInfo] EXPRESS_VERSION: "${version}"`);
 
     this.messageParser.writeMessageString(msg.msgAddr, version);
 
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -385,7 +385,7 @@ export class XIMBBSInfoHandler {
 
     this.state.nonStopText = enable;
     this.state.lineCount = 0;
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -409,7 +409,7 @@ export class XIMBBSInfoHandler {
       }
     }
 
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -462,7 +462,44 @@ export class XIMBBSInfoHandler {
     console.log(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
     console.log(`  Command line: "${mainLine}"`);
 
-    this.reply(msg, 1);
+    this.reply(msg, msg.data ?? 0);
+  }
+
+  private getExpressMajorVersion(): string {
+    const session: any = this.bbsSession || {};
+    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer.trim() : '';
+    if (mimicVer.length > 0) {
+      return mimicVer;
+    }
+
+    // express.e uses the core expressVer string; avoid using web/app versions here.
+    const raw =
+      (typeof session.expressVer === 'string' ? session.expressVer : '');
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) {
+      return 'v5.3';
+    }
+
+    const normalized = trimmed.startsWith('v') || trimmed.startsWith('V')
+      ? trimmed.slice(1)
+      : trimmed;
+    const dotIndex = normalized.indexOf('.');
+    if (dotIndex >= 0) {
+      const majorStr = normalized.slice(0, dotIndex);
+      const minorStr = normalized.slice(dotIndex + 1);
+      const major = parseInt(majorStr, 10);
+      const minor = parseInt(minorStr, 10);
+      if (Number.isFinite(major) && Number.isFinite(minor)) {
+        return `v${major}.${minor}`;
+      }
+    }
+
+    const major = parseInt(normalized, 10);
+    if (Number.isFinite(major)) {
+      return `v${major}`;
+    }
+
+    return 'v5.3';
   }
 
   /**
@@ -769,8 +806,7 @@ export class XIMBBSInfoHandler {
    */
   private reply(msg: XIMMessage, data: number): void {
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    // Always reset string pointers to the embedded buffer so doors
-    // don't read stale pointers from prior messages.
+    // Reset string pointers to the embedded buffer when present to avoid stale pointers.
     this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller2(msg.msgAddr, stringAddr);

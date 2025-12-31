@@ -1,0 +1,8 @@
+BBSCMD=JOUST
+TYPE=TS
+LOCATION=Doors/joust
+DESCRIPTION=Classic Joust arcade game - joust on flying ostriches
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Games/Arcade

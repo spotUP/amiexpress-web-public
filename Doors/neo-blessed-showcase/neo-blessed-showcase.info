@@ -1,0 +1,11 @@
+MENUNAME=Neo-Blessed Demo
+CMDNAME=neodemo
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Showcase of neo-blessed UI widgets
+CATEGORY=Utilities
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

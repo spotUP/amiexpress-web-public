@@ -257,11 +257,12 @@ export class XIMIOHandler {
       `[XIMIOHandler] Completing line input with: "${result}"`
     );
 
-    // Ensure stringPtr points to embedded buffer if missing
+    // Ensure stringPtr points to embedded buffer if the field exists
     if (!msg.stringPtr) {
       const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-      this.messageParser.writeStringPointer(msg.msgAddr, strPtr);
-      msg.stringPtr = strPtr;
+      if (this.messageParser.writeStringPointer(msg.msgAddr, strPtr)) {
+        msg.stringPtr = strPtr;
+      }
     }
 
     // Write into embedded buffer
@@ -1318,7 +1319,7 @@ export class XIMIOHandler {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);
     }
     this.messageParser.writeData(msg.msgAddr, data);
-    // CRITICAL: Always set strPtr before replying - doors dereference it
+    // Set strPtr before replying when the field exists - some doors dereference it.
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
     this.messageParser.writeFiller1(msg.msgAddr, stringAddr);

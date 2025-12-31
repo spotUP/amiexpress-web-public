@@ -1,0 +1,11 @@
+MENUNAME=LiveChat
+CMDNAME=livechat
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Real-time multi-user chat with neo-blessed UI
+CATEGORY=Communication
+VERSION=2.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1
