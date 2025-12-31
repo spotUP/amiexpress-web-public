@@ -14,17 +14,22 @@ import * as path from "path";
  * - axobjects.e:70-81 - userKeys struct
  * - axobjects.e:83-135 - userMisc struct
  * - express.e:8045-8075 - Read/write user.data, user.keys, user.misc
+ * 
+ * NOTE: 68K alignment requires padding after odd-length byte arrays to ensure
+ * word (2-byte) alignment for subsequent INT/LONG fields.
+ * Data is stored in Big Endian format (Amiga native).
  */
 
 /**
  * User struct from axobjects.e:11-68
- * Total size: Calculated based on field types
+ * Total size: 232 bytes (aligned)
  */
 export interface UserStruct {
   name: string; // 31 bytes - ARRAY OF CHAR
   pass: string; // 9 bytes - ARRAY OF CHAR
   location: string; // 30 bytes - ARRAY OF CHAR
   phoneNumber: string; // 13 bytes - ARRAY OF CHAR
+  // PADDING: 1 byte
   slotNumber: number; // 2 bytes - INT
   secStatus: number; // 2 bytes - INT
   secBoard: number; // 2 bytes - INT
@@ -60,6 +65,7 @@ export interface UserStruct {
   dailyBytesLimit: number; // 4 bytes - LONG
   dailyBytesDld: number; // 4 bytes - LONG
   expert: number; // 1 byte - CHAR
+  // PADDING: 1 byte
   chatRemain: number; // 4 bytes - LONG
   chatLimit: number; // 4 bytes - LONG
   creditDays: number; // 4 bytes - LONG
@@ -80,12 +86,14 @@ export interface UserStruct {
 
 /**
  * UserKeys struct from axobjects.e:70-81
- * Total size: Calculated based on field types
+ * Total size: 56 bytes (aligned)
  */
 export interface UserKeysStruct {
   userName: string; // 31 bytes - ARRAY OF CHAR
+  // PADDING: 1 byte
   number: number; // 4 bytes - LONG
   newUser: number; // 1 byte - CHAR
+  // PADDING: 1 byte
   oldUpCPS: number; // 2 bytes - INT
   oldDnCPS: number; // 2 bytes - INT
   userFlags: number; // 2 bytes - INT
@@ -97,7 +105,7 @@ export interface UserKeysStruct {
 
 /**
  * UserMisc struct from axobjects.e:83-135
- * Total size: Calculated based on field types
+ * Total size: 248 bytes (aligned)
  */
 export interface UserMiscStruct {
   internetName: string; // 10 bytes - ARRAY OF CHAR
@@ -120,9 +128,9 @@ export interface UserMiscStruct {
 
 export class UserDatabaseManager {
   // Struct sizes calculated from field types
-  private readonly USER_SIZE = 239; // user struct size (from original Amiga format)
-  private readonly USERKEYS_SIZE = 54; // userKeys struct size
-  private readonly USERMISC_SIZE = 228; // userMisc struct size
+  private readonly USER_SIZE = 232; // user struct size (aligned)
+  private readonly USERKEYS_SIZE = 56; // userKeys struct size (aligned)
+  private readonly USERMISC_SIZE = 248; // userMisc struct size (aligned)
 
   private bbsRoot: string;
   private userDataPath: string;
@@ -177,8 +185,11 @@ export class UserDatabaseManager {
 
     // phoneNumber[13]: ARRAY OF CHAR
     offset = this.writeString(buffer, offset, user.phoneNumber, 13);
+    
+    // PADDING: 1 byte
+    buffer.writeUInt8(0, offset++);
 
-    // INTs (2 bytes each, little-endian)
+    // INTs (2 bytes each, big-endian)
     offset = this.writeInt16(buffer, offset, user.slotNumber);
     offset = this.writeInt16(buffer, offset, user.secStatus);
     offset = this.writeInt16(buffer, offset, user.secBoard);
@@ -186,7 +197,7 @@ export class UserDatabaseManager {
     offset = this.writeInt16(buffer, offset, user.secBulletin);
     offset = this.writeInt16(buffer, offset, user.messagesPosted);
 
-    // LONGs (4 bytes each, little-endian)
+    // LONGs (4 bytes each, big-endian)
     offset = this.writeInt32(buffer, offset, user.newSinceDate);
     offset = this.writeInt32(buffer, offset, user.pwdHash);
     offset = this.writeInt32(buffer, offset, user.confRead2);
@@ -232,6 +243,9 @@ export class UserDatabaseManager {
     // CHARs
     buffer.writeUInt8(user.expert, offset);
     offset += 1;
+    
+    // PADDING: 1 byte
+    buffer.writeUInt8(0, offset++);
 
     // LONGs
     offset = this.writeInt32(buffer, offset, user.chatRemain);
@@ -379,18 +393,18 @@ export class UserDatabaseManager {
   }
 
   /**
-   * Helper: Write INT16 (little-endian)
+   * Helper: Write INT16 (big-endian)
    */
   private writeInt16(buffer: Buffer, offset: number, value: number): number {
-    buffer.writeInt16LE(value, offset);
+    buffer.writeInt16BE(value, offset);
     return offset + 2;
   }
 
   /**
-   * Helper: Write INT32 (little-endian)
+   * Helper: Write INT32 (big-endian)
    */
   private writeInt32(buffer: Buffer, offset: number, value: number): number {
-    buffer.writeInt32LE(value, offset);
+    buffer.writeInt32BE(value, offset);
     return offset + 4;
   }
 
@@ -525,12 +539,9 @@ export class UserDatabaseManager {
     }
 
     // conferenceAccess offset in user struct:
-    // name(31) + pass(9) + location(30) + phoneNumber(13) + slotNumber(2) +
-    // secStatus(2) + secBoard(2) + secLibrary(2) + secBulletin(2) + messagesPosted(2) +
-    // newSinceDate(4) + pwdHash(4) + confRead2(4) + confRead3(4) + zoomType(2) +
-    // unknown(2) + unknown2(2) + unknown3(2) + xferProtocol(2) + filler2(2) +
-    // lcFiles(2) + badFiles(2) + accountDate(4) + screenType(2) + editorType(2) = 135
-    const CONF_ACCESS_OFFSET = 135;
+    // name(31) + pass(9) + location(30) + phoneNumber(13) + PAD(1) + 
+    // slotNumber(2) + ... + editorType(2) = 136
+    const CONF_ACCESS_OFFSET = 136;
     const CONF_ACCESS_SIZE = 10;
 
     const userOffset = slotNumber * this.USER_SIZE;
@@ -570,7 +581,7 @@ export class UserDatabaseManager {
       return false;
     }
 
-    const CONF_ACCESS_OFFSET = 135;
+    const CONF_ACCESS_OFFSET = 136;
     const CONF_ACCESS_SIZE = 10;
 
     const userOffset = slotNumber * this.USER_SIZE;
@@ -710,20 +721,21 @@ export class UserDatabaseManager {
   // ========================================
   // Disk-based user stat offsets (for 68K door compatibility)
   // ========================================
-  private static readonly MESSAGES_POSTED_OFFSET = 93; // INT (2 bytes)
-  private static readonly UPLOADS_OFFSET = 145; // INT (2 bytes)
-  private static readonly DOWNLOADS_OFFSET = 147; // INT (2 bytes)
-  private static readonly TIMES_CALLED_OFFSET = 151; // INT (2 bytes)
-  private static readonly TIME_LAST_ON_OFFSET = 153; // LONG (4 bytes)
-  private static readonly TIME_USED_OFFSET = 157; // LONG (4 bytes)
-  private static readonly TIME_LIMIT_OFFSET = 161; // LONG (4 bytes)
-  private static readonly TIME_TOTAL_OFFSET = 165; // LONG (4 bytes)
-  private static readonly BYTES_DOWNLOAD_OFFSET = 169; // LONG (4 bytes)
-  private static readonly BYTES_UPLOAD_OFFSET = 173; // LONG (4 bytes)
-  private static readonly DAILY_BYTES_LIMIT_OFFSET = 177; // LONG (4 bytes)
-  private static readonly DAILY_BYTES_DLD_OFFSET = 181; // LONG (4 bytes)
-  private static readonly EXPERT_OFFSET = 185; // CHAR (1 byte)
-  private static readonly LINE_LENGTH_OFFSET = 133; // screenType INT (2 bytes) - used for line length
+  // ALL OFFSETS SHIFTED +1 due to padding after phoneNumber
+  private static readonly MESSAGES_POSTED_OFFSET = 94; // INT (2 bytes)
+  private static readonly UPLOADS_OFFSET = 146; // INT (2 bytes)
+  private static readonly DOWNLOADS_OFFSET = 148; // INT (2 bytes)
+  private static readonly TIMES_CALLED_OFFSET = 152; // INT (2 bytes)
+  private static readonly TIME_LAST_ON_OFFSET = 154; // LONG (4 bytes)
+  private static readonly TIME_USED_OFFSET = 158; // LONG (4 bytes)
+  private static readonly TIME_LIMIT_OFFSET = 162; // LONG (4 bytes)
+  private static readonly TIME_TOTAL_OFFSET = 166; // LONG (4 bytes)
+  private static readonly BYTES_DOWNLOAD_OFFSET = 170; // LONG (4 bytes)
+  private static readonly BYTES_UPLOAD_OFFSET = 174; // LONG (4 bytes)
+  private static readonly DAILY_BYTES_LIMIT_OFFSET = 178; // LONG (4 bytes)
+  private static readonly DAILY_BYTES_DLD_OFFSET = 182; // LONG (4 bytes)
+  private static readonly EXPERT_OFFSET = 186; // CHAR (1 byte)
+  private static readonly LINE_LENGTH_OFFSET = 134; // screenType INT (2 bytes) - used for line length
 
   /**
    * Read user statistics from user.data disk file
@@ -758,7 +770,7 @@ export class UserDatabaseManager {
 
       return {
         messagesPosted:
-          buffer.readUInt16LE(UserDatabaseManager.MESSAGES_POSTED_OFFSET - 0) >
+          buffer.readUInt16BE(UserDatabaseManager.MESSAGES_POSTED_OFFSET - 0) >
           200
             ? 0
             : this.readInt16At(
@@ -826,13 +838,13 @@ export class UserDatabaseManager {
   private readInt16At(fd: number, offset: number): number {
     const buf = Buffer.alloc(2);
     fs.readSync(fd, buf, 0, 2, offset);
-    return buf.readUInt16LE(0);
+    return buf.readUInt16BE(0);
   }
 
   private readInt32At(fd: number, offset: number): number {
     const buf = Buffer.alloc(4);
     fs.readSync(fd, buf, 0, 4, offset);
-    return buf.readUInt32LE(0);
+    return buf.readUInt32BE(0);
   }
 
   private readByteAt(fd: number, offset: number): number {
@@ -927,9 +939,9 @@ export class UserDatabaseManager {
       if (size === 1) {
         buffer.writeUInt8(value, 0);
       } else if (size === 2) {
-        buffer.writeUInt16LE(value, 0);
+        buffer.writeUInt16BE(value, 0);
       } else {
-        buffer.writeUInt32LE(value, 0);
+        buffer.writeUInt32BE(value, 0);
       }
 
       fs.writeSync(fd, buffer, 0, size, userOffset + offset);

@@ -19,6 +19,7 @@ import { DoorMessageHandler } from "./session/DoorMessageHandler.js";
 import { TIMDoorMessageHandler } from "./session/TIMDoorMessageHandler.js";
 import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
+import { parseInfoFile } from "../utils/amiga-command-parser.util";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -49,6 +50,16 @@ export class AmigaDoorSession {
   private lifecycleManager: DoorLifecycleManager | null = null;
   private messageHandler: DoorMessageHandler | null = null;
   private timHandler: TIMDoorMessageHandler | null = null;
+
+  // Socket handler references for cleanup
+  private onDoorInput?: (data: string) => void;
+  private onKeysState?: (data: {
+    key: string;
+    pressed: boolean;
+    keyState: Record<string, boolean>;
+  }) => void;
+  private onSocketDisconnect?: () => void;
+  private onDoorTerminate?: () => void;
 
   // Port tracking for cleanup (express.e:4527 - deletePort if we created it)
   private createdDoorPort = false;
@@ -141,7 +152,7 @@ export class AmigaDoorSession {
     );
 
     // Handle user input (keystrokes)
-    this.socket.on("door:input", (data: string) => {
+    this.onDoorInput = (data: string) => {
       console.log(
         `[AmigaDoorSession] 🎹 door:input event received: "${data}" isRunning=${this.isRunning}`
       );
@@ -208,50 +219,51 @@ export class AmigaDoorSession {
           `[AmigaDoorSession] Skipping DOS queue - input was consumed by protocol handler`
         );
       }
-    });
+    };
+    this.socket.on("door:input", this.onDoorInput);
 
     // Handle simultaneous key state updates (for games that need multiple keys at once)
-    this.socket.on(
-      "keys:state",
-      (data: {
-        key: string;
-        pressed: boolean;
-        keyState: Record<string, boolean>;
-      }) => {
-        console.log(
-          `[AmigaDoorSession] 🎮 keys:state event received: ${data.key} = ${data.pressed}`
-        );
+    this.onKeysState = (data: {
+      key: string;
+      pressed: boolean;
+      keyState: Record<string, boolean>;
+    }) => {
+      console.log(
+        `[AmigaDoorSession] 🎮 keys:state event received: ${data.key} = ${data.pressed}`
+      );
 
-        if (this.isRunning && this.sharedState.ximProtocol) {
-          // Update XIM protocol with key state
-          this.sharedState.ximProtocol.updateKeyState(data);
-        } else {
-          console.log(
-            `[AmigaDoorSession] ❌ Key state update ignored: isRunning=${
-              this.isRunning
-            } hasXIM=${!!this.sharedState.ximProtocol}`
-          );
-        }
+      if (this.isRunning && this.sharedState.ximProtocol) {
+        // Update XIM protocol with key state
+        this.sharedState.ximProtocol.updateKeyState(data);
+      } else {
+        console.log(
+          `[AmigaDoorSession] ❌ Key state update ignored: isRunning=${
+            this.isRunning
+          } hasXIM=${!!this.sharedState.ximProtocol}`
+        );
       }
-    );
+    };
+    this.socket.on("keys:state", this.onKeysState);
 
     // Handle disconnection
-    this.socket.on("disconnect", () => {
+    this.onSocketDisconnect = () => {
       console.log("[AmigaDoorSession] Socket disconnected, terminating door");
       if (this.sharedState.ximProtocol) {
         this.sharedState.ximProtocol.markCarrierDropped();
       }
       this.terminate();
-    });
+    };
+    this.socket.on("disconnect", this.onSocketDisconnect);
 
     // Handle explicit termination request
-    this.socket.on("door:terminate", () => {
+    this.onDoorTerminate = () => {
       console.log("[AmigaDoorSession] Termination requested by user");
       if (this.sharedState.ximProtocol) {
         this.sharedState.ximProtocol.markCarrierDropped();
       }
       this.terminate();
-    });
+    };
+    this.socket.on("door:terminate", this.onDoorTerminate);
   }
 
   /**
@@ -285,6 +297,35 @@ export class AmigaDoorSession {
       console.log("[AmigaDoorSession] Loading Kickstart ROM...");
       this.sharedState.kickstartRom = new KickstartRom();
       this.sharedState.kickstartRom.dumpInfo();
+
+      // Load door tooltypes from .info file if available
+      // Try full path first (e.g. Doors/aquascan/AquaScan.020.info)
+      let infoPath = `${this.config.executablePath}.info`;
+      let tooltypes = parseInfoFile(infoPath);
+      
+      // If not found, try base name (e.g. Doors/aquascan/AquaScan.info)
+      if (tooltypes.size === 0) {
+        const parsedPath = path.parse(this.config.executablePath);
+        const baseName = parsedPath.name.split('.')[0];
+        const fallbackInfoPath = path.join(parsedPath.dir, `${baseName}.info`);
+        console.log(`[AmigaDoorSession] Tooltypes not found at ${infoPath}, trying fallback: ${fallbackInfoPath}`);
+        tooltypes = parseInfoFile(fallbackInfoPath);
+        if (tooltypes.size > 0) {
+          infoPath = fallbackInfoPath;
+        }
+      }
+
+      if (tooltypes.size > 0) {
+        console.log(`[AmigaDoorSession] Loaded ${tooltypes.size} tooltypes from ${infoPath}`);
+        this.config.toolTypes = { ...this.config.toolTypes, ...Object.fromEntries(tooltypes) };
+        
+        // Update doorType if specified in tooltypes
+        const typeTooltype = tooltypes.get('TYPE');
+        if (typeTooltype) {
+          console.log(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeTooltype}`);
+          this.config.doorType = typeTooltype.toUpperCase();
+        }
+      }
 
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
@@ -750,14 +791,20 @@ export class AmigaDoorSession {
 
     // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
     const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
-    const cliArgsRaw =
-      this.config.args && this.config.args.length > 0 ? this.config.args : [];
-    const cliArgs =
-      cliArgsRaw.length > 0
-        ? isXimDoor
-          ? [nodeId.toString(), ...cliArgsRaw]
-          : cliArgsRaw
-        : [nodeId.toString()];
+    const cliArgsRaw = Array.isArray(this.config.args) ? this.config.args : [];
+    let cliArgs: string[] = [];
+    if (isXimDoor) {
+      if (cliArgsRaw.length > 0) {
+        console.log(
+          `[AmigaDoorSession] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
+        );
+      }
+      cliArgs = [nodeId.toString()];
+    } else if (cliArgsRaw.length > 0) {
+      cliArgs = cliArgsRaw;
+    } else {
+      cliArgs = [nodeId.toString()];
+    }
     const argStringPlain =
       cliArgs.join(" ").trim() || nodeId.toString();
     for (let i = 0; i < argStringPlain.length; i++) {
@@ -797,6 +844,7 @@ export class AmigaDoorSession {
     this.logger.info("Terminating session...");
 
     this.isRunning = false;
+    this.removeSocketHandlers();
 
     // Clear global session pointer if we set it
     try {
@@ -849,6 +897,28 @@ export class AmigaDoorSession {
     this.messageHandler = null;
 
     console.log("[AmigaDoorSession] Refactored door session terminated");
+  }
+
+  private removeSocketHandlers(): void {
+    if (!this.socket) {
+      return;
+    }
+    if (this.onDoorInput) {
+      this.socket.off("door:input", this.onDoorInput);
+      this.onDoorInput = undefined;
+    }
+    if (this.onKeysState) {
+      this.socket.off("keys:state", this.onKeysState);
+      this.onKeysState = undefined;
+    }
+    if (this.onSocketDisconnect) {
+      this.socket.off("disconnect", this.onSocketDisconnect);
+      this.onSocketDisconnect = undefined;
+    }
+    if (this.onDoorTerminate) {
+      this.socket.off("door:terminate", this.onDoorTerminate);
+      this.onDoorTerminate = undefined;
+    }
   }
 
   /**

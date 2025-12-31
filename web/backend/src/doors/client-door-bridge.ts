@@ -54,6 +54,7 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 export class ClientDoorBridge {
   private sessions: Map<string, ClientDoorSession> = new Map();
   private nextSessionId: number = 1;
+  private sessionEndResolvers: Map<string, Array<() => void>> = new Map();
 
   /**
    * Parse keyboard input and convert escape sequences to friendly key names
@@ -506,6 +507,31 @@ export class ClientDoorBridge {
     session.bbsSession.menuPause = true;
 
     console.log(`[ClientDoorBridge] Session ${sessionId} ended`);
+
+    // Resolve any waiters after cleanup is complete
+    const resolvers = this.sessionEndResolvers.get(sessionId);
+    if (resolvers && resolvers.length > 0) {
+      for (const resolve of resolvers) {
+        resolve();
+      }
+    }
+    this.sessionEndResolvers.delete(sessionId);
+  }
+
+  /**
+   * Wait for a client door session to end.
+   */
+  waitForSessionEnd(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session || !session.active) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const resolvers = this.sessionEndResolvers.get(sessionId) || [];
+      resolvers.push(resolve);
+      this.sessionEndResolvers.set(sessionId, resolvers);
+    });
   }
 
   /**

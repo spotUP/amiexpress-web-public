@@ -121,7 +121,7 @@ export class DoorLoader {
       (s: any) => s.type.toUpperCase() === "DATA"
     );
     const dataBase = dataSegment ? dataSegment.address : 0;
-    this.stackSizeBytes = Math.max(4096, this.config.stack || 8192);
+    this.stackSizeBytes = Math.max(4096, this.config.stack || 32768);
     // Place stack AFTER last segment (like vamos does), not at hardcoded address
     // This prevents startup code from zeroing our stack/exit trap
     // For CODE+DATA programs: after DATA. For CODE-only: after CODE.
@@ -148,16 +148,26 @@ export class DoorLoader {
     // CRITICAL: Default to 1, not 0, to match AEDoorPort naming convention
     const nodeId = this.config.bbsSession?.nodeId || 1;
     const doorType = (this.config.doorType || "").toUpperCase();
-    // AmiExpress uses SystemTagList("door node"), so CLI command name stays as the program name.
-    // The node number is passed via the argument string.
-    const progName = path.basename(this.config.executablePath);
+    // AmiExpress uses SystemTagList("door node").
+    // However, if we know the command alias (doorId from doorCommand), we should use that
+    // as the program name so doors like AquaScan can detect which command invoked them.
+    // Otherwise fallback to executable basename.
+    const sessionCommand = this.config.bbsSession?.doorCommand;
+    const progName = (sessionCommand && typeof sessionCommand === 'string')
+      ? sessionCommand.toUpperCase()
+      : path.basename(this.config.executablePath);
     let customArgs: string[] = [];
-    if (this.config.args && this.config.args.length > 0) {
-      // For XIM doors, prepend node number when explicit args are provided (matches ReadArgs templates like "NODE/N/A")
-      customArgs =
-        doorType === "XIM"
-          ? [nodeId.toString(), ...this.config.args]
-          : this.config.args;
+    const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
+    if (doorType === "XIM") {
+      // express.e runDoor builds "cmd node" for XIM doors (no params on CLI).
+      if (configArgs.length > 0) {
+        console.log(
+          `[DoorLoader] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
+        );
+      }
+      customArgs = [nodeId.toString()];
+    } else if (configArgs.length > 0) {
+      customArgs = configArgs;
     } else {
       // Default CLI: pass node number to both XIM and non-XIM doors (matches express.e tooling)
       customArgs = [nodeId.toString()];
@@ -401,6 +411,14 @@ export class DoorLoader {
       console.warn(`[DoorLoader] Segment types: ${hunkFile.segments.map((s: any) => s.type).join(', ')}`);
 
       if (codeSegment) {
+        // SAS/C small data model uses A4 relative to the start of the DATA segment (or embedded data)
+        // For single-hunk programs, A4 usually points to the start of the hunk + 32KB (0x7FFE)
+        // or the end of the code if data is appended.
+        // Let's try pointing A4 to the code segment itself, which is a common convention for
+        // single-hunk executables that have data merged into the code segment.
+        a4Value = codeSegment.address + 0x7FFE;
+        console.log(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${a4Value.toString(16)}`);
+
         // Allocate BSS after CODE segment
         // SAS/C programs typically need 64KB-128KB for BSS (globals, static data, heap)
         const bssSize = 0x20000; // 128KB - generous allocation for safety
@@ -411,10 +429,6 @@ export class DoorLoader {
         for (let i = 0; i < bssSize; i++) {
           this.emulator.writeMemory(bssBase + i, 0);
         }
-
-        // Set A4 to BSS base + 0x7FFE (SAS/C small data model)
-        a4Value = bssBase + 0x7FFE;
-        console.log(`[DoorLoader] Synthetic BSS: base=0x${bssBase.toString(16)}, A4=0x${a4Value.toString(16)} (base+0x7FFE)`);
       } else {
         console.error(`[DoorLoader] ERROR: No CODE segment found! Cannot allocate BSS.`);
         a4Value = 0;

@@ -357,15 +357,13 @@ export class LibraryManager {
     this.registerLibrariesFromDisk(path.join(this.bbsRoot, "Libs"));
     this.registerLibrariesFromDisk(path.join(this.bbsRoot, "System", "Libs"));
 
-    const doorType = this.config.doorType || "SIM";
+    // Normalize and update doorType in config to ensure consistency throughout initialization
+    const doorType = (this.config.doorType || "SIM").toUpperCase();
     const nodeId = this.config.bbsSession?.nodeId || 0;
 
     console.log(`[LibraryManager] Door type: ${doorType}`);
 
-    // CRITICAL FIX: XIM doors check for AEDoorPort{n} first (express.e:4317), then AEServer.{n}
-    // Real AmiExpress BBS creates ports named "AEServer.1", "AEServer.2", etc. as primary
-    // but doors check both naming conventions for compatibility
-    // SIM/SUP/TIM/IIM doors use DoorControl{n} as primary
+    // CRITICAL: isSIMType must be calculated using the final normalized doorType
     const isSIMType = doorType === "SIM" || doorType === "SUP" || doorType === "TIM" || doorType === "IIM";
     const basePortName = isSIMType ? "DoorControl" : "AEServer";
 
@@ -718,8 +716,15 @@ export class LibraryManager {
       `[LibraryManager] Created ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
     );
 
+    // Re-evaluate isSIMType based on potentially overridden config.doorType
+    const currentDoorType = (this.config.doorType || "SIM").toUpperCase();
+    const currentIsSIM = currentDoorType === "SIM" || currentDoorType === "SUP" || currentDoorType === "TIM" || currentDoorType === "IIM";
+
     // Set up BBS API dispatcher for SIM doors (0x790 calling convention)
-    if (isSIMType) {
+    // CRITICAL: ONLY enable for doors that use this older API (SIM/SUP/TIM/IIM).
+    // XIM/AIM doors check 0x790 and misinterpret our trap address as a frame pointer,
+    // leading to register corruption (A5) and crashes.
+    if (currentIsSIM && currentDoorType !== "XIM" && currentDoorType !== "AIM") {
       console.log("[LibraryManager] Setting up BBS API dispatcher for SIM door...");
 
       // Initialize low-memory region (parameter blocks at 0x794, 0x79c)

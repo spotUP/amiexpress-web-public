@@ -406,8 +406,8 @@ The report includes:
 const doorName = args[0];
 
 // Run debugger
-const debugger = new XIMDebugger(doorName);
-debugger.run().catch((err) => {
+const ximDebugger = new XIMDebugger(doorName);
+ximDebugger.run().catch((err) => {
   console.error('\x1b[1;31m[ERROR]\x1b[0m', err.message);
   process.exit(1);
 });

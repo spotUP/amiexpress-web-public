@@ -112,7 +112,7 @@ export class XIMAnalyzer {
       }
     });
 
-    // Pattern 2: Protocol Violation - JH_SM before JH_INIT
+    // Pattern 2: Protocol Violation - JH_SM before JH_REGISTER
     this.patterns.push({
       name: 'Protocol Violation',
       detect: (messages: XIMLogEntry[]) => {
@@ -120,27 +120,27 @@ export class XIMAnalyzer {
           const msg = messages[i];
 
           if (msg.message.type === 'JH_SM' && msg.direction === 'receive') {
-            // Check if JH_INIT came before this
-            const initBefore = messages.slice(0, i).some(m =>
-              m.message.type === 'JH_INIT' && m.direction === 'send'
+            // Check if JH_REGISTER came before this (AmiExpress XIM handshake)
+            const registerBefore = messages.slice(0, i).some(m =>
+              m.message.type === 'JH_REGISTER' && m.direction === 'receive'
             );
 
-            if (!initBefore) {
+            if (!registerBefore) {
               return {
                 pattern: 'PROTOCOL_VIOLATION',
                 severity: 'critical',
-                title: 'Protocol violation: JH_SM before JH_INIT',
+                title: 'Protocol violation: JH_SM before JH_REGISTER',
                 confidence: 100,
                 evidence: [
                   `Door sent JH_SM at position ${i} (${msg.timestamp})`,
-                  'JH_INIT not yet received from backend',
-                  'XIM protocol requires JH_INIT to be first message',
+                  'JH_REGISTER not yet received by backend',
+                  'AmiExpress XIM expects registration before output',
                   'Backend may reject early messages'
                 ],
-                suggestedFix: 'Add initialization state check before sending any messages',
-                code: `BOOL initialized = FALSE;\n\n// In message handler:\nif (msg->type == JH_INIT) {\n    initialized = TRUE;\n}\n\n// Before sending:\nif (!initialized) return; // Wait for JH_INIT`,
+                suggestedFix: 'Register with the BBS before sending output',
+                code: `BOOL registered = FALSE;\n\n// In message handler:\nif (msg->type == JH_REGISTER) {\n    registered = TRUE;\n}\n\n// Before sending:\nif (!registered) return; // Wait for JH_REGISTER`,
                 relatedMessages: [i],
-                documentation: 'XIM_PROTOCOL.md#initialization-sequence'
+                documentation: 'REAL_AMIGA_XIM_SEQUENCES.md#rtw-who-door---xim-startup-sequence'
               };
             }
           }
@@ -314,7 +314,7 @@ export class XIMAnalyzer {
 
         // Very short session with few messages
         if (duration < 2000 && messages.length < 10) {
-          const hasInit = messages.some(m => m.message.type === 'JH_INIT');
+          const hasRegister = messages.some(m => m.message.type === 'JH_REGISTER' && m.direction === 'receive');
           const lastMsg = messages[messages.length - 1];
 
           return {
@@ -325,7 +325,7 @@ export class XIMAnalyzer {
             evidence: [
               `Session lasted only ${duration}ms`,
               `Only ${messages.length} messages exchanged`,
-              hasInit ? 'Received JH_INIT but crashed shortly after' : 'Never received JH_INIT',
+              hasRegister ? 'Registered but crashed shortly after' : 'Never sent JH_REGISTER',
               `Last message: ${lastMsg.message.type} at ${lastMsg.timestamp}`
             ],
             suggestedFix: 'Check door logs for crash dump, illegal instruction, or startup errors',
@@ -382,26 +382,26 @@ export class XIMAnalyzer {
       }
     });
 
-    // Pattern 8: Missing JH_INIT
+    // Pattern 8: Missing JH_REGISTER
     this.patterns.push({
-      name: 'Missing Init',
+      name: 'Missing Register',
       detect: (messages: XIMLogEntry[]) => {
-        const hasInit = messages.some(m => m.message.type === 'JH_INIT' && m.direction === 'send');
+        const hasRegister = messages.some(m => m.message.type === 'JH_REGISTER' && m.direction === 'receive');
 
-        if (!hasInit && messages.length > 0) {
+        if (!hasRegister && messages.length > 0) {
           return {
-            pattern: 'NO_INIT',
+            pattern: 'NO_REGISTER',
             severity: 'critical',
-            title: 'No JH_INIT message received',
+            title: 'No JH_REGISTER message received',
             confidence: 95,
             evidence: [
-              'Door never received JH_INIT from backend',
+              'Door never sent JH_REGISTER to backend',
               `Session has ${messages.length} messages`,
-              'Backend failed to send initialization',
-              'Or door crashed before receiving it'
+              'Door did not complete registration handshake',
+              'Door may have crashed before registering'
             ],
-            suggestedFix: 'Check backend logs for door startup errors, verify reply port creation',
-            documentation: 'XIM_PROTOCOL.md#initialization'
+            suggestedFix: 'Check door startup and ensure JH_REGISTER is sent before other commands',
+            documentation: 'REAL_AMIGA_XIM_SEQUENCES.md#rtw-who-door---xim-startup-sequence'
           };
         }
 
@@ -429,7 +429,7 @@ export class XIMAnalyzer {
               'Door may be stuck or ignoring messages'
             ],
             suggestedFix: 'Verify message loop processes all message types, check for GetMsg() hang',
-            code: `// Handle all message types:\nswitch (msg->type) {\n    case JH_INIT: /* ... */ break;\n    case JH_HK: /* ... */ break;\n    case JH_STAT: /* ... */ break;\n    case JH_TERMINATE: /* ... */ break;\n    default: /* Log unknown */ break;\n}`,
+            code: `// Handle all message types:\nswitch (msg->type) {\n    case JH_REGISTER: /* ... */ break;\n    case JH_SM: /* ... */ break;\n    case JH_HK: /* ... */ break;\n    case JH_TERMINATE: /* ... */ break;\n    default: /* Log unknown */ break;\n}`,
             documentation: 'XIM_PROTOCOL.md#message-handling'
           };
         }
@@ -445,9 +445,9 @@ export class XIMAnalyzer {
         if (messages.length === 0) return null;
 
         const hasTerminate = messages.some(m => m.message.type === 'JH_TERMINATE');
-        const hasInit = messages.some(m => m.message.type === 'JH_INIT');
+        const hasRegister = messages.some(m => m.message.type === 'JH_REGISTER' && m.direction === 'receive');
 
-        if (hasInit && !hasTerminate && messages.length > 5) {
+        if (hasRegister && !hasTerminate && messages.length > 5) {
           // Check if session seems "done" (no new messages recently)
           const lastTime = new Date(messages[messages.length - 1].timestamp).getTime();
           const now = Date.now();
@@ -459,7 +459,7 @@ export class XIMAnalyzer {
               title: 'Incomplete session - no JH_TERMINATE received',
               confidence: 70,
               evidence: [
-                'Session started (JH_INIT received)',
+                'Session started (JH_REGISTER received)',
                 'But never properly terminated (no JH_TERMINATE)',
                 `Last message: ${messages[messages.length - 1].message.type}`,
                 'Door may have exited abruptly'

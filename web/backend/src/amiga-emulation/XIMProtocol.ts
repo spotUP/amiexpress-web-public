@@ -126,6 +126,7 @@ export class XIMProtocol {
       prvCommand: undefined,
       chainCommand: undefined,
       logonType: this.bbsSession?.logonType,
+      doorCommand: this.doorCommand || undefined,
       _debugId: stateDebugId,  // Debug: track state object identity
       // CRITICAL: Pass XIM port address so handlers can send replies back
       ximPortAddr: doorPort,
