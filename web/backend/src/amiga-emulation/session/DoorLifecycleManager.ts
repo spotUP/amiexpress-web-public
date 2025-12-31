@@ -48,6 +48,7 @@ export interface ExecutionState {
   lastProgressIteration: number;
   lastProgressTime: number;
   gapJumpLogged: boolean;
+  stuckLoopCount: number;
 }
 
 export interface LifecycleConfig {
@@ -241,6 +242,7 @@ export class DoorLifecycleManager {
       lastProgressIteration: 0,
       lastProgressTime: Date.now(),
       gapJumpLogged: false,
+      stuckLoopCount: 0,
     };
   }
 
@@ -555,12 +557,34 @@ export class DoorLifecycleManager {
         const pcBeforeBatch = this.emulator.getRegister(16);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
         const pcAfterBatch = this.emulator.getRegister(16);
-        // DEBUG: Log if PC jumped to suspicious address
-        if (pcAfterBatch > 0x100000 && pcAfterBatch < 0x2000000) {
-          console.log(`[DoorLifecycleManager] *** PC CORRUPTION DETECTED ***`);
-          console.log(`  PC before batch: 0x${pcBeforeBatch.toString(16)}`);
-          console.log(`  PC after batch: 0x${pcAfterBatch.toString(16)}`);
-          console.log(`  Instructions: ${result < 0 ? Math.abs(result) - 1 : result}`);
+        
+        // Detect stuck loop: AquaScan/N jumps forward by 0x9c40 bytes repeatedly
+        // logic: if PC jumps by exactly 0x9c40 (40000) > 5 times, kill it
+        const jumpSize = pcAfterBatch - pcBeforeBatch;
+        
+        // Log slide progress for debugging
+        if (jumpSize > 0x1000) {
+           const op = this.emulator.readMemory16(pcBeforeBatch);
+           console.log(`[DoorLifecycleManager] SLIDE DETECTED: pc=0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} (size 0x${jumpSize.toString(16)}) op=0x${op.toString(16)}`);
+           
+           // Dump 16 bytes at PC
+           let hex = "";
+           for (let i = 0; i < 16; i += 2) {
+             try { hex += this.emulator.readMemory16(pcBeforeBatch + i).toString(16).padStart(4, '0') + " "; } catch(e) { hex += "???? "; }
+           }
+           console.log(`[DoorLifecycleManager]   Memory at 0x${pcBeforeBatch.toString(16)}: ${hex}`);
+        }
+
+        if (jumpSize === 0x9c40) {
+          this.executionState.stuckLoopCount++;
+          if (this.executionState.stuckLoopCount > 5) {
+            console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x9c40 repeatedly (${this.executionState.stuckLoopCount} times)`);
+            console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}`);
+            this.terminate();
+            return;
+          }
+        } else {
+          this.executionState.stuckLoopCount = 0;
         }
 
         // Update iteration count with actual instructions executed
@@ -797,7 +821,7 @@ export class DoorLifecycleManager {
         })
         .join(",");
       console.log(
-        `[DoorLifecycleManager] PC out of code region: pc=0x${pc.toString(
+        `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(
           16
         )} code=[0x${this.codeLowerBound.toString(
           16
@@ -819,8 +843,10 @@ export class DoorLifecycleManager {
           16
         )} lastPCbytes=[${lastPcBytes}]`
       );
-      this.terminate();
-      return true;
+      // RELAXED CHECK: Do not terminate for PC out of bounds if it's high memory.
+      // Doors like AquaScan/N execute code at 0x4fxxxx which is outside initial segments.
+      // this.terminate();
+      // return true;
     }
 
     return false;

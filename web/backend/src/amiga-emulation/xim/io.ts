@@ -521,11 +521,11 @@ export class XIMIOHandler {
       return;
     }
 
-    // No input available - pause emulator and wait for user input
-    console.log('[XIMIOHandler] JH_HK: No input available, pausing emulator');
-    this.waitingForHotkey = true;
-    this.hotkeyMessage = msg;
-    this.emulator.pause();
+    // No input available - return -1 (timeout) immediately instead of pausing
+    // This allows doors to continue their main loop and prevents deadlocks
+    console.log('[XIMIOHandler] JH_HK: No input available, returning -1 (timeout)');
+    this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
+    this.reply(msg, -1, '');
   }
 
   /**

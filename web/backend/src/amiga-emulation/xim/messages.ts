@@ -178,9 +178,10 @@ export class XIMMessageParser {
    * Write to the embedded message string (msg->String)
    */
   writeMessageString(msgAddr: number, value: string): void {
+    const paddedValue = value.padEnd(DoorConstants.MESSAGE_STRING_CAPACITY - 1, ' ');
     this.writeString(
       msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
-      value,
+      paddedValue,
       DoorConstants.MESSAGE_STRING_CAPACITY
     );
   }

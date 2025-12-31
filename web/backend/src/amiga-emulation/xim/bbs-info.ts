@@ -141,7 +141,8 @@ export class XIMBBSInfoHandler {
 
     this.messageParser.writeMessageString(msg.msgAddr, version);
 
-    this.reply(msg, msg.data ?? 0);
+    // express.e sets msg.data:=0 (line 3810) regardless of input
+    this.reply(msg, 0);
   }
 
   /**
@@ -477,7 +478,7 @@ export class XIMBBSInfoHandler {
       (typeof session.expressVer === 'string' ? session.expressVer : '');
     const trimmed = raw.trim();
     if (trimmed.length === 0) {
-      return 'v5.3';
+      return '5';
     }
 
     const normalized = trimmed.startsWith('v') || trimmed.startsWith('V')
@@ -486,20 +487,15 @@ export class XIMBBSInfoHandler {
     const dotIndex = normalized.indexOf('.');
     if (dotIndex >= 0) {
       const majorStr = normalized.slice(0, dotIndex);
-      const minorStr = normalized.slice(dotIndex + 1);
-      const major = parseInt(majorStr, 10);
-      const minor = parseInt(minorStr, 10);
-      if (Number.isFinite(major) && Number.isFinite(minor)) {
-        return `v${major}.${minor}`;
-      }
+      return majorStr;
     }
 
     const major = parseInt(normalized, 10);
     if (Number.isFinite(major)) {
-      return `v${major}`;
+      return `${major}`;
     }
 
-    return 'v5.3';
+    return '5';
   }
 
   /**
