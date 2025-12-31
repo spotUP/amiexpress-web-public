@@ -1,15 +1,29 @@
-/**
- * Frogger - Client Entry Point (Browser with Audio)
- * 1981 Konami arcade game port for AmiExpress BBS
- */
+import { ClientDoor, AudioEngine } from "@amiexpress/bbs-door-sdk/client";
 
-// Client bundle for hybrid door mode
-// This file is bundled and served to browser clients
-// Provides audio support via Tone.js AudioEngine
+const door = new ClientDoor({
+  name: "Frogger",
+  version: "1.0.0",
+  author: "AmiExpress BBS",
+  runtime: "hybrid",
+  hybrid: true,
+});
 
-export { rpcHandlers } from './server';
-export { default } from './index';
+const audio = new AudioEngine();
 
-// Note: In full hybrid mode, this would import AudioEngine
-// and provide sound effects. For now, uses the same logic
-// as the fallback server door.
+door.on("audio", async (data: any) => {
+  try {
+    if (data && data.action === "play" && data.name) {
+      await audio.init();
+      audio.playSound(
+        data.name,
+        data.options || { frequency: 440, duration: 0.1 }
+      );
+    } else if (data && data.action === "stop") {
+      audio.stopMusic();
+    }
+  } catch (err) {
+    console.error("Audio error:", err);
+  }
+});
+
+export default door;

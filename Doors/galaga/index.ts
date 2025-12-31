@@ -3,11 +3,11 @@
  * 1981 Namco space shooter arcade game port
  */
 
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { GalagaGame } from './game/galaga-game';
-import { rpcHandlers } from './server';
-import { GalagaData, InputKey } from './game/types';
+import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
+import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { GalagaGame } from "./game/galaga-game";
+import { rpcHandlers } from "./server";
+import { GalagaData, InputKey } from "./game/types";
 import {
   SCREEN_WIDTH,
   GAME_AREA_WIDTH,
@@ -16,13 +16,13 @@ import {
   STARTING_LIVES,
   MENU_OPTIONS,
   DEFAULT_HIGHSCORES,
-} from './game/constants';
+} from "./game/constants";
 
 export { rpcHandlers };
 
 function createInitialGameData(): GalagaData {
   return {
-    state: 'menu',
+    state: "menu",
     score: 0,
     lives: STARTING_LIVES,
     stage: 1,
@@ -62,7 +62,7 @@ function createInitialGameData(): GalagaData {
 
     highscores: [...DEFAULT_HIGHSCORES],
     menuSelection: 0,
-    playerName: '',
+    playerName: "",
 
     lastUpdateTime: Date.now(),
     frameCount: 0,
@@ -71,9 +71,9 @@ function createInitialGameData(): GalagaData {
 }
 
 const door = new Door({
-  name: 'Galaga',
-  version: '1.0.0',
-  author: 'AmiExpress BBS',
+  name: "Galaga",
+  version: "1.0.0",
+  author: "AmiExpress BBS",
 });
 
 let gameData: GalagaData;
@@ -84,22 +84,23 @@ let footerBox: ReturnType<typeof blessed.box>;
 let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let game: GalagaGame | null = null;
+let doorContext: any; // Will be set on start
 
 function initScreen(): void {
   screen = blessed.screen({
     smartCSR: true,
     dockBorders: true,
-    title: 'Galaga',
+    title: "Galaga",
     fullUnicode: false,
-    output: (data: string) => door.write(data),
+    output: (data: string) => doorContext?.output.write(data),
     input: null as any,
-  });
+  } as any);
 
   hudBox = blessed.box({
     parent: screen,
     top: 0,
     left: 0,
-    width: '100%',
+    width: "100%",
     height: 1,
     tags: true,
     content: formatHUD(),
@@ -112,110 +113,115 @@ function initScreen(): void {
     width: GAME_AREA_WIDTH,
     height: GAME_AREA_HEIGHT,
     tags: true,
-    style: { bg: 'black' },
+    style: { bg: "black" },
   });
 
   footerBox = blessed.box({
     parent: screen,
     bottom: 0,
     left: 0,
-    width: '100%',
+    width: "100%",
     height: 3,
     tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 'gray' } },
-    content: '{gray-fg}Left/Right: Move | Space: Fire | P: Pause | Q: Quit{/}',
+    border: { type: "line" },
+    style: { border: { fg: "gray" } },
+    content: "{gray-fg}Left/Right: Move | Space: Fire | P: Pause | Q: Quit{/}",
   });
 }
 
 function formatHUD(): string {
-  const scoreStr = gameData.score.toString().padStart(8, '0');
-  const livesStr = '*'.repeat(Math.max(0, gameData.lives));
-  const accuracy = gameData.shotsFired > 0
-    ? Math.floor((gameData.shotsHit / gameData.shotsFired) * 100)
-    : 0;
+  const scoreStr = gameData.score.toString().padStart(8, "0");
+  const livesStr = "*".repeat(Math.max(0, gameData.lives));
+  const accuracy =
+    gameData.shotsFired > 0
+      ? Math.floor((gameData.shotsHit / gameData.shotsFired) * 100)
+      : 0;
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}STAGE: ${gameData.stage}{/}  {red-fg}LIVES: ${livesStr}{/}  {white-fg}HIT: ${accuracy}%{/}`;
 }
 
 function showMenu(): void {
-  gameData.state = 'menu';
+  gameData.state = "menu";
   gameData.menuSelection = 0;
-  gameArea.setContent('');
+  gameArea.setContent("");
 
   if (menuBox) menuBox.destroy();
 
   const menuContent = [
-    '{cyan-fg}',
-    '   ____       _                   ',
-    '  / ___| __ _| | __ _  __ _  __ _ ',
-    ' | |  _ / _` | |/ _` |/ _` |/ _` |',
-    ' | |_| | (_| | | (_| | (_| | (_| |',
-    '  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|',
-    '                      |___/       ',
-    '{/}',
-    '',
-    '{white-fg}Classic 1981 Namco Space Shooter{/}',
-    '',
+    "{cyan-fg}",
+    "   ____       _                   ",
+    "  / ___| __ _| | __ _  __ _  __ _ ",
+    " | |  _ / _` | |/ _` |/ _` |/ _` |",
+    " | |_| | (_| | | (_| | (_| | (_| |",
+    "  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|",
+    "                      |___/       ",
+    "{/}",
+    "",
+    "{white-fg}Classic 1981 Namco Space Shooter{/}",
+    "",
   ];
 
   MENU_OPTIONS.forEach((option, index) => {
     const selected = index === gameData.menuSelection;
-    const prefix = selected ? '> ' : '  ';
-    const color = selected ? 'yellow' : 'white';
+    const prefix = selected ? "> " : "  ";
+    const color = selected ? "yellow" : "white";
     menuContent.push(`{${color}-fg}${prefix}${option}{/}`);
   });
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 45,
     height: menuContent.length + 2,
     tags: true,
-    border: { type: 'line' },
-    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
-    content: menuContent.join('\n'),
+    border: { type: "line" },
+    style: { fg: "white", bg: "black", border: { fg: "cyan" } },
+    content: menuContent.join("\n"),
   });
 
   screen.render();
 }
 
 async function showHighscores(): Promise<void> {
-  gameData.state = 'highscores';
+  gameData.state = "highscores";
 
   try {
     gameData.highscores = await rpcHandlers.getHighscores();
-  } catch { /* use cached */ }
+  } catch {
+    /* use cached */
+  }
 
   const content = [
-    '{yellow-fg}HIGH SCORES{/}',
-    '',
-    '{white-fg}RANK  NAME   SCORE     STAGE{/}',
-    '{gray-fg}----  ----  --------   -----{/}',
+    "{yellow-fg}HIGH SCORES{/}",
+    "",
+    "{white-fg}RANK  NAME   SCORE     STAGE{/}",
+    "{gray-fg}----  ----  --------   -----{/}",
   ];
 
   gameData.highscores.slice(0, 10).forEach((score, index) => {
-    const rank = (index + 1).toString().padStart(2, ' ');
-    const name = score.name.padEnd(4, ' ');
-    const scoreStr = score.score.toString().padStart(8, ' ');
-    const stage = score.stage.toString().padStart(2, ' ');
-    content.push(`{cyan-fg}${rank}.{/}   {white-fg}${name}{/}  {yellow-fg}${scoreStr}{/}   {green-fg}${stage}{/}`);
+    const rank = (index + 1).toString().padStart(2, " ");
+    const name = score.name.padEnd(4, " ");
+    const scoreStr = score.score.toString().padStart(8, " ");
+    const stage = score.stage.toString().padStart(2, " ");
+    content.push(
+      `{cyan-fg}${rank}.{/}   {white-fg}${name}{/}  {yellow-fg}${scoreStr}{/}   {green-fg}${stage}{/}`
+    );
   });
 
-  content.push('', '{gray-fg}Press any key to return{/}');
+  content.push("", "{gray-fg}Press any key to return{/}");
 
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 40,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 'yellow' } },
-    content: content.join('\n'),
+    border: { type: "line" },
+    style: { border: { fg: "yellow" } },
+    content: content.join("\n"),
   });
 
   screen.render();
@@ -223,49 +229,49 @@ async function showHighscores(): Promise<void> {
 
 function showHelp(): void {
   const content = [
-    '{yellow-fg}HOW TO PLAY{/}',
-    '',
-    '{cyan-fg}OBJECTIVE:{/}',
-    'Destroy all aliens in each stage.',
-    'Avoid enemy fire and collisions!',
-    '',
-    '{green-fg}SPECIAL:{/}',
-    'Boss Galagas can capture your ship.',
-    'Destroy the boss to rescue it and',
-    'get a DUAL FIGHTER with double firepower!',
-    '',
-    '{magenta-fg}CHALLENGING STAGES:{/}',
-    'Every 3rd stage has bonus enemies.',
-    'They cannot shoot - destroy them all!',
-    '',
-    '{white-fg}CONTROLS:{/}',
-    'Left/Right - Move ship',
-    'Space      - Fire',
-    'P          - Pause',
-    'Q          - Quit',
-    '',
-    '{gray-fg}Press any key to return{/}',
+    "{yellow-fg}HOW TO PLAY{/}",
+    "",
+    "{cyan-fg}OBJECTIVE:{/}",
+    "Destroy all aliens in each stage.",
+    "Avoid enemy fire and collisions!",
+    "",
+    "{green-fg}SPECIAL:{/}",
+    "Boss Galagas can capture your ship.",
+    "Destroy the boss to rescue it and",
+    "get a DUAL FIGHTER with double firepower!",
+    "",
+    "{magenta-fg}CHALLENGING STAGES:{/}",
+    "Every 3rd stage has bonus enemies.",
+    "They cannot shoot - destroy them all!",
+    "",
+    "{white-fg}CONTROLS:{/}",
+    "Left/Right - Move ship",
+    "Space      - Fire",
+    "P          - Pause",
+    "Q          - Quit",
+    "",
+    "{gray-fg}Press any key to return{/}",
   ];
 
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 45,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 'cyan' } },
-    content: content.join('\n'),
+    border: { type: "line" },
+    style: { border: { fg: "cyan" } },
+    content: content.join("\n"),
   });
 
   screen.render();
 }
 
 function startGame(): void {
-  gameData.state = 'playing';
+  gameData.state = "playing";
   gameData.score = 0;
   gameData.lives = STARTING_LIVES;
   gameData.stage = 1;
@@ -288,7 +294,7 @@ function startGame(): void {
   if (gameLoop) clearInterval(gameLoop);
 
   gameLoop = setInterval(() => {
-    if (gameData.state === 'playing') {
+    if (gameData.state === "playing") {
       game?.update();
     }
   }, GAME_TICK_MS);
@@ -298,22 +304,22 @@ function handleInput(key: string): void {
   const inputKey = normalizeKey(key);
 
   switch (gameData.state) {
-    case 'menu':
+    case "menu":
       handleMenuInput(inputKey);
       break;
-    case 'highscores':
+    case "highscores":
       showMenu();
       break;
-    case 'playing':
+    case "playing":
       handleGameInput(inputKey);
       break;
-    case 'paused':
+    case "paused":
       handlePausedInput(inputKey);
       break;
-    case 'gameover':
+    case "gameover":
       handleGameOverInput(inputKey);
       break;
-    case 'enterName':
+    case "enterName":
       handleNameEntryInput(inputKey);
       break;
     default:
@@ -322,63 +328,75 @@ function handleInput(key: string): void {
 }
 
 function normalizeKey(key: string): InputKey {
-  if (key === '\x1b[A' || key === 'w' || key === 'W') return 'up';
-  if (key === '\x1b[B' || key === 's' || key === 'S') return 'down';
-  if (key === '\x1b[C' || key === 'd' || key === 'D') return 'right';
-  if (key === '\x1b[D' || key === 'a' || key === 'A') return 'left';
-  if (key === ' ') return 'fire';
-  if (key === '\r' || key === '\n') return 'enter';
-  if (key === '\x1b' || key === '\x1b\x1b') return 'escape';
-  if (key === '\x7f' || key === '\b') return 'backspace';
+  if (key === "\x1b[A" || key === "w" || key === "W") return "up";
+  if (key === "\x1b[B" || key === "s" || key === "S") return "down";
+  if (key === "\x1b[C" || key === "d" || key === "D") return "right";
+  if (key === "\x1b[D" || key === "a" || key === "A") return "left";
+  if (key === " ") return "fire";
+  if (key === "\r" || key === "\n") return "enter";
+  if (key === "\x1b" || key === "\x1b\x1b") return "escape";
+  if (key === "\x7f" || key === "\b") return "backspace";
   return key.toLowerCase();
 }
 
 function handleMenuInput(key: InputKey): void {
   switch (key) {
-    case 'up':
+    case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
       showMenu();
       break;
-    case 'down':
-      gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+    case "down":
+      gameData.menuSelection = Math.min(
+        MENU_OPTIONS.length - 1,
+        gameData.menuSelection + 1
+      );
       showMenu();
       break;
-    case 'enter':
-    case 'fire':
+    case "enter":
+    case "fire":
       switch (gameData.menuSelection) {
-        case 0: startGame(); break;
-        case 1: showHighscores(); break;
-        case 2: showHelp(); break;
-        case 3: cleanup(); door.exit(); break;
+        case 0:
+          startGame();
+          break;
+        case 1:
+          showHighscores();
+          break;
+        case 2:
+          showHelp();
+          break;
+        case 3:
+          cleanup();
+          doorContext?.close();
+          break;
       }
       break;
-    case 'q':
-    case 'escape':
+    case "q":
+    case "escape":
       cleanup();
-      door.exit();
+      doorContext?.close();
       break;
   }
 }
 
 function handleGameInput(key: InputKey): void {
   switch (key) {
-    case 'left':
-      game?.handleKeyDown('left');
-      setTimeout(() => game?.handleKeyUp('left'), 100);
+    case "left":
+      game?.handleKeyDown("left");
+      setTimeout(() => game?.handleKeyUp("left"), 100);
       break;
-    case 'right':
-      game?.handleKeyDown('right');
-      setTimeout(() => game?.handleKeyUp('right'), 100);
+    case "right":
+      game?.handleKeyDown("right");
+      setTimeout(() => game?.handleKeyUp("right"), 100);
       break;
-    case 'fire':
-      game?.handleKeyDown('fire');
+    case "fire":
+      game?.handleKeyDown("fire");
       break;
-    case 'p':
+    case "p":
       showPauseScreen();
       break;
-    case 'q':
-    case 'escape':
-      gameData.state = 'menu';
+    case "q":
+    case "escape":
+      gameData.state = "menu";
       if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -389,85 +407,92 @@ function handleGameInput(key: InputKey): void {
 }
 
 function showPauseScreen(): void {
-  gameData.state = 'paused';
+  gameData.state = "paused";
 
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 30,
     height: 6,
     tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 'yellow' }, bg: 'black' },
-    content: '{yellow-fg}PAUSED{/}\n\n{white-fg}Press P to resume{/}',
+    border: { type: "line" },
+    style: { border: { fg: "yellow" }, bg: "black" },
+    content: "{yellow-fg}PAUSED{/}\n\n{white-fg}Press P to resume{/}",
   });
 
   screen.render();
 }
 
 function handlePausedInput(key: InputKey): void {
-  if (key === 'p') {
-    if (menuBox) { menuBox.destroy(); menuBox = null; }
-    gameData.state = 'playing';
+  if (key === "p") {
+    if (menuBox) {
+      menuBox.destroy();
+      menuBox = null;
+    }
+    gameData.state = "playing";
     game?.render();
-  } else if (key === 'q' || key === 'escape') {
-    gameData.state = 'menu';
-    if (gameLoop) { clearInterval(gameLoop); gameLoop = null; }
+  } else if (key === "q" || key === "escape") {
+    gameData.state = "menu";
+    if (gameLoop) {
+      clearInterval(gameLoop);
+      gameLoop = null;
+    }
     showMenu();
   }
 }
 
 function handleGameOverInput(key: InputKey): void {
-  if (key === 'enter' || key === 'fire') {
-    const lowestScore = gameData.highscores[gameData.highscores.length - 1]?.score || 0;
+  if (key === "enter" || key === "fire") {
+    const lowestScore =
+      gameData.highscores[gameData.highscores.length - 1]?.score || 0;
     if (gameData.score > lowestScore || gameData.highscores.length < 10) {
-      gameData.state = 'enterName';
-      gameData.playerName = '';
+      gameData.state = "enterName";
+      gameData.playerName = "";
       showNameEntry();
     } else {
       showMenu();
     }
-  } else if (key === 'q' || key === 'escape') {
+  } else if (key === "q" || key === "escape") {
     showMenu();
   }
 }
 
 function showNameEntry(): void {
   const content = [
-    '{yellow-fg}NEW HIGH SCORE!{/}',
-    '',
+    "{yellow-fg}NEW HIGH SCORE!{/}",
+    "",
     `{white-fg}Score: {yellow-fg}${gameData.score}{/}`,
     `{white-fg}Stage: {cyan-fg}${gameData.stage}{/}`,
-    '',
-    '{cyan-fg}Enter your initials:{/}',
-    '',
-    `{white-fg}[ ${gameData.playerName.padEnd(3, '_')} ]{/}`,
-    '',
-    '{gray-fg}Press ENTER when done{/}',
+    "",
+    "{cyan-fg}Enter your initials:{/}",
+    "",
+    `{white-fg}[ ${gameData.playerName.padEnd(3, "_")} ]{/}`,
+    "",
+    "{gray-fg}Press ENTER when done{/}",
   ];
 
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 35,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 'yellow' }, bg: 'black' },
-    content: content.join('\n'),
+    border: { type: "line" },
+    style: { border: { fg: "yellow" }, bg: "black" },
+    content: content.join("\n"),
   });
 
   screen.render();
 }
 
 async function handleNameEntryInput(key: InputKey): Promise<void> {
-  if (key === 'enter') {
+  if (key === "enter") {
     if (gameData.playerName.length > 0) {
       try {
         await rpcHandlers.saveHighscore({
@@ -475,17 +500,23 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
           score: gameData.score,
           stage: gameData.stage,
         });
-      } catch { /* continue */ }
+      } catch {
+        /* continue */
+      }
       showMenu();
     }
-  } else if (key === 'backspace') {
+  } else if (key === "backspace") {
     if (gameData.playerName.length > 0) {
       gameData.playerName = gameData.playerName.slice(0, -1);
       showNameEntry();
     }
-  } else if (key === 'escape') {
+  } else if (key === "escape") {
     showMenu();
-  } else if (typeof key === 'string' && key.length === 1 && /[A-Za-z0-9]/.test(key)) {
+  } else if (
+    typeof key === "string" &&
+    key.length === 1 &&
+    /[A-Za-z0-9]/.test(key)
+  ) {
     if (gameData.playerName.length < 3) {
       gameData.playerName += key.toUpperCase();
       showNameEntry();
@@ -493,10 +524,16 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
   }
 }
 
+let keepAlive: ReturnType<typeof setInterval> | null = null;
+
 function cleanup(): void {
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
+  }
+  if (keepAlive) {
+    clearInterval(keepAlive);
+    keepAlive = null;
   }
   if (screen) {
     screen.removeAllListeners();
@@ -504,27 +541,33 @@ function cleanup(): void {
   }
 }
 
-door.onStart(async () => {
+door.onStart(async (ctx: any) => {
+  doorContext = ctx;
   gameData = createInitialGameData();
+
+  // Prevent event loop from emptying (since we have no stdin)
+  keepAlive = setInterval(() => {}, 60000);
 
   try {
     gameData.highscores = await rpcHandlers.getHighscores();
-  } catch { /* use defaults */ }
+  } catch {
+    /* use defaults */
+  }
 
   initScreen();
   showMenu();
 });
 
-door.onInput((data: string) => {
-  handleInput(data);
+door.onInput((ctx: any, key: any) => {
+  handleInput(key.raw || key.key || key);
 });
 
 door.onClose(() => {
   cleanup();
 });
 
-door.onError((error: Error) => {
-  console.error('[Galaga] Error:', error);
+door.onError((ctx: any, error: Error) => {
+  console.error("[Galaga] Error:", error);
   cleanup();
 });
 

@@ -5,29 +5,30 @@
 
 // Game states
 export type GameState =
-  | 'menu'
-  | 'playing'
-  | 'dying'
-  | 'levelComplete'
-  | 'gameover'
-  | 'highscores'
-  | 'enterName';
+  | "menu"
+  | "playing"
+  | "dying"
+  | "levelComplete"
+  | "gameover"
+  | "highscores"
+  | "enterName"
+  | "paused";
 
 // Direction for frog movement
-export type Direction = 'up' | 'down' | 'left' | 'right';
+export type Direction = "up" | "down" | "left" | "right";
 
 // Lane types
 export type LaneType =
-  | 'safe'      // Starting area, median
-  | 'road'      // Cars and trucks
-  | 'water'     // Logs and turtles
-  | 'home';     // Goal areas
+  | "safe" // Starting area, median
+  | "road" // Cars and trucks
+  | "water" // Logs and turtles
+  | "home"; // Goal areas
 
 // Vehicle types on road
-export type VehicleType = 'car' | 'truck' | 'racecar';
+export type VehicleType = "car" | "truck" | "racecar";
 
 // River object types
-export type RiverObjectType = 'log' | 'turtle' | 'alligator' | 'snake';
+export type RiverObjectType = "log" | "turtle" | "alligator" | "snake";
 
 // Position
 export interface Position {
@@ -41,11 +42,11 @@ export interface Frog {
   y: number;
   direction: Direction;
   isJumping: boolean;
-  jumpProgress: number;  // 0-1 for animation
+  jumpProgress: number; // 0-1 for animation
   isDead: boolean;
-  deathType: 'car' | 'water' | 'timeout' | 'edge' | null;
+  deathType: "car" | "water" | "timeout" | "edge" | null;
   deathFrame: number;
-  onObject: RiverObject | null;  // Riding on log/turtle
+  onObject: RiverObject | null; // Riding on log/turtle
 }
 
 // Vehicle entity
@@ -56,7 +57,7 @@ export interface Vehicle {
   y: number;
   lane: number;
   width: number;
-  speed: number;  // Negative = moving left
+  speed: number; // Negative = moving left
 }
 
 // River object (logs, turtles, etc.)
@@ -67,8 +68,8 @@ export interface RiverObject {
   y: number;
   lane: number;
   width: number;
-  speed: number;  // Negative = moving left
-  isDiving?: boolean;  // For turtles
+  speed: number; // Negative = moving left
+  isDiving?: boolean; // For turtles
   diveTimer?: number;
 }
 
@@ -76,8 +77,8 @@ export interface RiverObject {
 export interface HomeSlot {
   x: number;
   occupied: boolean;
-  hasFly: boolean;     // Bonus fly
-  hasAlligator: boolean;  // Danger
+  hasFly: boolean; // Bonus fly
+  hasAlligator: boolean; // Danger
 }
 
 // Lane configuration
@@ -85,7 +86,7 @@ export interface Lane {
   type: LaneType;
   y: number;
   objects: (Vehicle | RiverObject)[];
-  direction: 1 | -1;  // 1 = right, -1 = left
+  direction: 1 | -1; // 1 = right, -1 = left
   speed: number;
 }
 
@@ -104,7 +105,7 @@ export interface FroggerData {
   score: number;
   lives: number;
   level: number;
-  timeRemaining: number;  // Seconds
+  timeRemaining: number; // Seconds
 
   // Player
   frog: Frog;
@@ -119,8 +120,8 @@ export interface FroggerData {
   riverObjectIdCounter: number;
 
   // Bonuses
-  flyTimer: number;        // When to spawn bonus fly
-  alligatorTimer: number;  // When to spawn alligator in home
+  flyTimer: number; // When to spawn bonus fly
+  alligatorTimer: number; // When to spawn alligator in home
 
   // Meta
   highscores: HighScore[];
@@ -134,10 +135,16 @@ export interface FroggerData {
 
 // Input types
 export type InputKey =
-  | 'up' | 'down' | 'left' | 'right'
-  | 'space' | 'enter' | 'escape'
-  | 'p' | 'q'
-  | 'backspace'
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "space"
+  | "enter"
+  | "escape"
+  | "p"
+  | "q"
+  | "backspace"
   | string;
 
 // Level configuration
@@ -152,18 +159,22 @@ export interface LevelConfig {
 
 // Sound effects
 export type SoundEffect =
-  | 'hop'
-  | 'splash'
-  | 'squash'
-  | 'home'
-  | 'levelComplete'
-  | 'timeWarning'
-  | 'gameOver'
-  | 'bonusFly'
-  | 'extraLife';
+  | "hop"
+  | "splash"
+  | "squash"
+  | "home"
+  | "levelComplete"
+  | "timeWarning"
+  | "gameOver"
+  | "bonusFly"
+  | "extraLife";
 
 // RPC methods
 export interface RPCMethods {
   getHighscores: () => Promise<HighScore[]>;
-  saveHighscore: (params: { name: string; score: number; level: number }) => Promise<void>;
+  saveHighscore: (params: {
+    name: string;
+    score: number;
+    level: number;
+  }) => Promise<void>;
 }

@@ -7,16 +7,11 @@
  * 2. The server entry point for hybrid door mode
  */
 
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { QixEngine } from './game/qix-engine';
-import { rpcHandlers } from './server';
-import {
-  SuperQixData,
-  GameState,
-  InputKey,
-  Direction
-} from './game/types';
+import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
+import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { QixEngine } from "./game/qix-engine";
+import { rpcHandlers } from "./server";
+import { SuperQixData, GameState, InputKey, Direction } from "./game/types";
 import {
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
@@ -26,8 +21,8 @@ import {
   COLORS,
   DEFAULT_HIGHSCORES,
   FIELD_WIDTH,
-  FIELD_HEIGHT
-} from './game/constants';
+  FIELD_HEIGHT,
+} from "./game/constants";
 
 // Export RPC handlers for hybrid mode
 export { rpcHandlers };
@@ -37,7 +32,7 @@ export { rpcHandlers };
  */
 function createInitialGameData(): SuperQixData {
   return {
-    state: 'menu',
+    state: "menu",
     score: 0,
     lives: STARTING_LIVES,
     level: 1,
@@ -56,7 +51,7 @@ function createInitialGameData(): SuperQixData {
       drawSpeed: null,
       hasShield: false,
       speedBoost: false,
-      speedBoostTimer: 0
+      speedBoostTimer: 0,
     },
 
     currentStix: null,
@@ -70,14 +65,14 @@ function createInitialGameData(): SuperQixData {
     powerUps: [],
     powerUpIdCounter: 0,
     collectedLetters: [],
-    levelWord: '',
+    levelWord: "",
     activeEffects: [],
 
     borderPath: [],
 
     highscores: [...DEFAULT_HIGHSCORES],
     menuSelection: 0,
-    playerName: '',
+    playerName: "",
     playerNameCursor: 0,
 
     lastUpdateTime: Date.now(),
@@ -86,7 +81,7 @@ function createInitialGameData(): SuperQixData {
     stopTimer: 0,
 
     transitionTimer: 0,
-    transitionMessage: ''
+    transitionMessage: "",
   };
 }
 
@@ -94,9 +89,9 @@ function createInitialGameData(): SuperQixData {
  * Main door entry point
  */
 const door = new Door({
-  name: 'Super Qix',
-  version: '1.0.0',
-  author: 'AmiExpress BBS'
+  name: "Super Qix",
+  version: "1.0.0",
+  author: "AmiExpress BBS",
 });
 
 let gameData: SuperQixData;
@@ -108,7 +103,8 @@ let menuBox: ReturnType<typeof blessed.box> | null = null;
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let engine: QixEngine | null = null;
 let isDrawKeyHeld: boolean = false;
-let currentDrawSpeed: 'fast' | 'slow' | null = null;
+let currentDrawSpeed: "fast" | "slow" | null = null;
+let doorContext: any; // Will be set on start
 
 /**
  * Initialize neo-blessed screen
@@ -117,21 +113,21 @@ function initScreen(): void {
   screen = blessed.screen({
     smartCSR: true,
     dockBorders: true,
-    title: 'Super Qix',
+    title: "Super Qix",
     fullUnicode: false,
-    output: (data: string) => door.write(data),
-    input: null as any
-  });
+    output: (data: string) => doorContext?.output.write(data),
+    input: null as any,
+  } as any);
 
   // HUD at top
   hudBox = blessed.box({
     parent: screen,
     top: 0,
     left: 0,
-    width: '100%',
+    width: "100%",
     height: 1,
     tags: true,
-    content: formatHUD()
+    content: formatHUD(),
   });
 
   // Main game area
@@ -139,12 +135,12 @@ function initScreen(): void {
     parent: screen,
     top: 1,
     left: 0,
-    width: '100%',
+    width: "100%",
     height: SCREEN_HEIGHT - 4,
     tags: true,
     style: {
-      bg: 'black'
-    }
+      bg: "black",
+    },
   });
 
   // Footer with controls
@@ -152,14 +148,15 @@ function initScreen(): void {
     parent: screen,
     bottom: 0,
     left: 0,
-    width: '100%',
+    width: "100%",
     height: 3,
     tags: true,
-    border: { type: 'line' },
+    border: { type: "line" },
     style: {
-      border: { fg: 'gray' }
+      border: { fg: "gray" },
     },
-    content: '{gray-fg}Arrows: Move | Z: Slow Draw | X: Fast Draw | P: Pause | Q: Quit{/}'
+    content:
+      "{gray-fg}Arrows: Move | Z: Slow Draw | X: Fast Draw | P: Pause | Q: Quit{/}",
   });
 }
 
@@ -167,9 +164,11 @@ function initScreen(): void {
  * Format HUD display
  */
 function formatHUD(): string {
-  const scoreStr = gameData.score.toString().padStart(8, '0');
-  const livesStr = '*'.repeat(gameData.lives);
-  const percentStr = Math.floor(gameData.claimedPercent).toString().padStart(2, ' ');
+  const scoreStr = gameData.score.toString().padStart(8, "0");
+  const livesStr = "*".repeat(gameData.lives);
+  const percentStr = Math.floor(gameData.claimedPercent)
+    .toString()
+    .padStart(2, " ");
   return `{yellow-fg}SCORE: ${scoreStr}{/}  {cyan-fg}LVL: ${gameData.level}{/}  {green-fg}CLAIMED: ${percentStr}%{/}  {red-fg}LIVES: ${livesStr}{/}`;
 }
 
@@ -177,11 +176,11 @@ function formatHUD(): string {
  * Show main menu
  */
 function showMenu(): void {
-  gameData.state = 'menu';
+  gameData.state = "menu";
   gameData.menuSelection = 0;
 
   if (gameArea) {
-    gameArea.setContent('');
+    gameArea.setContent("");
   }
 
   if (menuBox) {
@@ -189,46 +188,45 @@ function showMenu(): void {
   }
 
   const menuContent = [
-    '{magenta-fg}',
-    '   ____  _   _ ____  _____ ____  ',
-    '  / ___|| | | |  _ \\| ____|  _ \\ ',
-    '  \\___ \\| | | | |_) |  _| | |_) |',
-    '   ___) | |_| |  __/| |___|  _ < ',
-    '  |____/ \\___/|_|   |_____|_| \\_\\',
-    '         ___  _____  __',
-    '        / _ \\|_ _\\ \\/ /',
-    '       | | | || | \\  / ',
-    '       | |_| || | /  \\ ',
-    '        \\__\\_\\___/_/\\_\\',
-    '{/}',
-    '',
-    '{white-fg}Classic 1987 Taito Arcade Game{/}',
-    ''
+    "{magenta-fg}",
+    "   ____  _   _ ____  _____ ____  ",
+    "  / ___|| | | |  _ \\| ____|  _ \\ ",
+    "  \\___ \\| | | | |_) |  _| | |_) |",
+    "   ___) | |_| |  __/| |___|  _ < ",
+    "  |____/ \\___/|_|   |_____|_| \\_\\",
+    "         ___  _____  __",
+    "        / _ \\|_ _\\ \\/ /",
+    "       | | | || | \\  / ",
+    "       | |_| || | /  \\ ",
+    "        \\__\\_\\___/_/\\_\\",
+    "{/}",
+    "",
+    "{white-fg}Classic 1987 Taito Arcade Game{/}",
+    "",
   ];
 
   MENU_OPTIONS.forEach((option, index) => {
     const selected = index === gameData.menuSelection;
-    const prefix = selected ? '{cyan-fg}> ' : '{white-fg}  ';
-    const suffix = selected ? '{/}' : '{/}';
+    const prefix = selected ? "{cyan-fg}> " : "{white-fg}  ";
+    const suffix = selected ? "{/}" : "{/}";
     menuContent.push(`${prefix}${option}${suffix}`);
   });
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 45,
     height: menuContent.length + 2,
     tags: true,
-    border: { type: 'line' },
+    border: { type: "line", fg: "magenta" },
     style: {
-      fg: 'white',
-      bg: 'black',
-      border: { fg: 'magenta' },
-      focus: { border: { fg: 'cyan' } },
-      hover: { border: { fg: 'cyan' } }
+      fg: "white",
+      bg: "black",
+      // focus: { border: { fg: 'cyan' } },
+      // hover: { border: { fg: 'cyan' } },
     },
-    content: menuContent.join('\n')
+    content: menuContent.join("\n"),
   });
 
   screen.render();
@@ -238,7 +236,7 @@ function showMenu(): void {
  * Show high scores
  */
 async function showHighscores(): Promise<void> {
-  gameData.state = 'highscores';
+  gameData.state = "highscores";
 
   try {
     gameData.highscores = await rpcHandlers.getHighscores();
@@ -247,23 +245,25 @@ async function showHighscores(): Promise<void> {
   }
 
   const content = [
-    '{yellow-fg}HIGH SCORES{/}',
-    '',
-    '{white-fg}RANK  NAME   SCORE     LVL  MAX%{/}',
-    '{gray-fg}----  ----  --------   ---  ----{/}'
+    "{yellow-fg}HIGH SCORES{/}",
+    "",
+    "{white-fg}RANK  NAME   SCORE     LVL  MAX%{/}",
+    "{gray-fg}----  ----  --------   ---  ----{/}",
   ];
 
   gameData.highscores.slice(0, 10).forEach((score, index) => {
-    const rank = (index + 1).toString().padStart(2, ' ');
-    const name = score.name.padEnd(4, ' ');
-    const scoreStr = score.score.toString().padStart(8, ' ');
-    const level = score.level.toString().padStart(2, ' ');
-    const percent = (score.maxPercent || 75).toString().padStart(3, ' ');
-    content.push(`{cyan-fg}${rank}.{/}   {white-fg}${name}{/}  {yellow-fg}${scoreStr}{/}   {green-fg}${level}{/}  {magenta-fg}${percent}%{/}`);
+    const rank = (index + 1).toString().padStart(2, " ");
+    const name = score.name.padEnd(4, " ");
+    const scoreStr = score.score.toString().padStart(8, " ");
+    const level = score.level.toString().padStart(2, " ");
+    const percent = (score.maxPercent || 75).toString().padStart(3, " ");
+    content.push(
+      `{cyan-fg}${rank}.{/}   {white-fg}${name}{/}  {yellow-fg}${scoreStr}{/}   {green-fg}${level}{/}  {magenta-fg}${percent}%{/}`
+    );
   });
 
-  content.push('');
-  content.push('{gray-fg}Press any key to return{/}');
+  content.push("");
+  content.push("{gray-fg}Press any key to return{/}");
 
   if (menuBox) {
     menuBox.destroy();
@@ -271,16 +271,14 @@ async function showHighscores(): Promise<void> {
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 45,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
-    style: {
-      border: { fg: 'yellow' }
-    },
-    content: content.join('\n')
+    border: { type: "line", fg: "yellow" },
+    style: {},
+    content: content.join("\n"),
   });
 
   screen.render();
@@ -291,29 +289,29 @@ async function showHighscores(): Promise<void> {
  */
 function showHelp(): void {
   const content = [
-    '{yellow-fg}HOW TO PLAY{/}',
-    '',
-    '{cyan-fg}OBJECTIVE:{/}',
-    'Claim 75%+ of the playfield by drawing',
-    'lines that enclose areas without the Qix.',
-    '',
-    '{cyan-fg}ENEMIES:{/}',
-    '{magenta-fg}*{/} Qix - Bounces in unclaimed area',
-    '{red-fg}+{/} Sparx - Patrols the borders',
-    '{yellow-fg}~{/} Fuse - Burns if you stop drawing',
-    '',
-    '{cyan-fg}POWER-UPS:{/}',
-    'S=Speed, H=Shield, F=Freeze, W=Warp',
-    'Letters spell word for auto-complete!',
-    '',
-    '{white-fg}CONTROLS:{/}',
-    'Arrow Keys - Move marker',
-    'Z          - Slow Draw (2x points)',
-    'X          - Fast Draw',
-    'P          - Pause',
-    'Q          - Quit',
-    '',
-    '{gray-fg}Press any key to return{/}'
+    "{yellow-fg}HOW TO PLAY{/}",
+    "",
+    "{cyan-fg}OBJECTIVE:{/}",
+    "Claim 75%+ of the playfield by drawing",
+    "lines that enclose areas without the Qix.",
+    "",
+    "{cyan-fg}ENEMIES:{/}",
+    "{magenta-fg}*{/} Qix - Bounces in unclaimed area",
+    "{red-fg}+{/} Sparx - Patrols the borders",
+    "{yellow-fg}~{/} Fuse - Burns if you stop drawing",
+    "",
+    "{cyan-fg}POWER-UPS:{/}",
+    "S=Speed, H=Shield, F=Freeze, W=Warp",
+    "Letters spell word for auto-complete!",
+    "",
+    "{white-fg}CONTROLS:{/}",
+    "Arrow Keys - Move marker",
+    "Z          - Slow Draw (2x points)",
+    "X          - Fast Draw",
+    "P          - Pause",
+    "Q          - Quit",
+    "",
+    "{gray-fg}Press any key to return{/}",
   ];
 
   if (menuBox) {
@@ -322,16 +320,16 @@ function showHelp(): void {
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 50,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
+    border: { type: "line" },
     style: {
-      border: { fg: 'cyan' }
+      border: { fg: "cyan" },
     },
-    content: content.join('\n')
+    content: content.join("\n"),
   });
 
   screen.render();
@@ -341,7 +339,7 @@ function showHelp(): void {
  * Start the game
  */
 function startGame(): void {
-  gameData.state = 'playing';
+  gameData.state = "playing";
   gameData.score = 0;
   gameData.lives = STARTING_LIVES;
   gameData.level = 1;
@@ -366,9 +364,9 @@ function startGame(): void {
   }
 
   gameLoop = setInterval(() => {
-    if (gameData.state === 'playing') {
+    if (gameData.state === "playing") {
       engine?.update();
-    } else if (gameData.state === 'levelTransition') {
+    } else if (gameData.state === "levelTransition") {
       gameData.transitionTimer--;
       if (gameData.transitionTimer <= 0) {
         engine?.advanceLevel();
@@ -384,30 +382,30 @@ function handleInput(key: string): void {
   const inputKey = normalizeKey(key);
 
   switch (gameData.state) {
-    case 'menu':
+    case "menu":
       handleMenuInput(inputKey);
       break;
 
-    case 'highscores':
+    case "highscores":
       showMenu();
       break;
 
-    case 'playing':
+    case "playing":
       handleGameInput(inputKey);
       break;
 
-    case 'paused':
-      if (inputKey === 'p' || inputKey === 'escape') {
-        gameData.state = 'playing';
+    case "paused":
+      if (inputKey === "p" || inputKey === "escape") {
+        gameData.state = "playing";
         engine?.render();
       }
       break;
 
-    case 'gameover':
+    case "gameover":
       handleGameOverInput(inputKey);
       break;
 
-    case 'enterName':
+    case "enterName":
       handleNameEntryInput(inputKey);
       break;
 
@@ -420,15 +418,15 @@ function handleInput(key: string): void {
  * Normalize key input
  */
 function normalizeKey(key: string): InputKey {
-  if (key === '\x1b[A' || key === 'w' || key === 'W') return 'up';
-  if (key === '\x1b[B' || key === 's' || key === 'S') return 'down';
-  if (key === '\x1b[C' || key === 'd' || key === 'D') return 'right';
-  if (key === '\x1b[D' || key === 'a' || key === 'A') return 'left';
-  if (key === ' ') return 'space';
-  if (key === '\r' || key === '\n') return 'enter';
-  if (key === '\x1b' || key === '\x1b\x1b') return 'escape';
-  if (key === '\x7f' || key === '\b') return 'backspace';
-  if (key === '\t') return 'tab';
+  if (key === "\x1b[A" || key === "w" || key === "W") return "up";
+  if (key === "\x1b[B" || key === "s" || key === "S") return "down";
+  if (key === "\x1b[C" || key === "d" || key === "D") return "right";
+  if (key === "\x1b[D" || key === "a" || key === "A") return "left";
+  if (key === " ") return "space";
+  if (key === "\r" || key === "\n") return "enter";
+  if (key === "\x1b" || key === "\x1b\x1b") return "escape";
+  if (key === "\x7f" || key === "\b") return "backspace";
+  if (key === "\t") return "tab";
   return key.toLowerCase();
 }
 
@@ -437,18 +435,21 @@ function normalizeKey(key: string): InputKey {
  */
 function handleMenuInput(key: InputKey): void {
   switch (key) {
-    case 'up':
+    case "up":
       gameData.menuSelection = Math.max(0, gameData.menuSelection - 1);
       showMenu();
       break;
 
-    case 'down':
-      gameData.menuSelection = Math.min(MENU_OPTIONS.length - 1, gameData.menuSelection + 1);
+    case "down":
+      gameData.menuSelection = Math.min(
+        MENU_OPTIONS.length - 1,
+        gameData.menuSelection + 1
+      );
       showMenu();
       break;
 
-    case 'enter':
-    case 'space':
+    case "enter":
+    case "space":
       switch (gameData.menuSelection) {
         case 0:
           startGame();
@@ -461,15 +462,15 @@ function handleMenuInput(key: InputKey): void {
           break;
         case 3:
           cleanup();
-          door.exit();
+          doorContext?.close();
           break;
       }
       break;
 
-    case 'q':
-    case 'escape':
+    case "q":
+    case "escape":
       cleanup();
-      door.exit();
+      doorContext?.close();
       break;
   }
 }
@@ -479,29 +480,29 @@ function handleMenuInput(key: InputKey): void {
  */
 function handleGameInput(key: InputKey): void {
   switch (key) {
-    case 'up':
-    case 'down':
-    case 'left':
-    case 'right':
+    case "up":
+    case "down":
+    case "left":
+    case "right":
       engine?.handleDirection(key as Direction);
       break;
 
-    case 'z':
+    case "z":
       engine?.handleSlowDraw();
       break;
 
-    case 'x':
+    case "x":
       engine?.handleFastDraw();
       break;
 
-    case 'p':
-      gameData.state = 'paused';
+    case "p":
+      gameData.state = "paused";
       showPauseScreen();
       break;
 
-    case 'q':
-    case 'escape':
-      gameData.state = 'menu';
+    case "q":
+    case "escape":
+      gameData.state = "menu";
       if (gameLoop) {
         clearInterval(gameLoop);
         gameLoop = null;
@@ -516,10 +517,10 @@ function handleGameInput(key: InputKey): void {
  */
 function showPauseScreen(): void {
   const content = [
-    '{yellow-fg}PAUSED{/}',
-    '',
-    '{white-fg}Press P to resume{/}',
-    '{gray-fg}Press Q to quit{/}'
+    "{yellow-fg}PAUSED{/}",
+    "",
+    "{white-fg}Press P to resume{/}",
+    "{gray-fg}Press Q to quit{/}",
   ];
 
   if (menuBox) {
@@ -528,17 +529,17 @@ function showPauseScreen(): void {
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 30,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
+    border: { type: "line" },
     style: {
-      border: { fg: 'yellow' },
-      bg: 'black'
+      border: { fg: "yellow" },
+      bg: "black",
     },
-    content: content.join('\n')
+    content: content.join("\n"),
   });
 
   screen.render();
@@ -548,17 +549,18 @@ function showPauseScreen(): void {
  * Handle game over input
  */
 function handleGameOverInput(key: InputKey): void {
-  if (key === 'enter' || key === 'space') {
-    const lowestScore = gameData.highscores[gameData.highscores.length - 1]?.score || 0;
+  if (key === "enter" || key === "space") {
+    const lowestScore =
+      gameData.highscores[gameData.highscores.length - 1]?.score || 0;
     if (gameData.score > lowestScore || gameData.highscores.length < 10) {
-      gameData.state = 'enterName';
-      gameData.playerName = '';
+      gameData.state = "enterName";
+      gameData.playerName = "";
       gameData.playerNameCursor = 0;
       showNameEntry();
     } else {
       showMenu();
     }
-  } else if (key === 'q' || key === 'escape') {
+  } else if (key === "q" || key === "escape") {
     showMenu();
   }
 }
@@ -568,16 +570,16 @@ function handleGameOverInput(key: InputKey): void {
  */
 function showNameEntry(): void {
   const content = [
-    '{yellow-fg}NEW HIGH SCORE!{/}',
-    '',
+    "{yellow-fg}NEW HIGH SCORE!{/}",
+    "",
     `{white-fg}Score: {yellow-fg}${gameData.score}{/}`,
     `{white-fg}Level: {cyan-fg}${gameData.level}{/}`,
-    '',
-    '{cyan-fg}Enter your initials:{/}',
-    '',
-    `{white-fg}[ ${gameData.playerName.padEnd(3, '_')} ]{/}`,
-    '',
-    '{gray-fg}Press ENTER when done{/}'
+    "",
+    "{cyan-fg}Enter your initials:{/}",
+    "",
+    `{white-fg}[ ${gameData.playerName.padEnd(3, "_")} ]{/}`,
+    "",
+    "{gray-fg}Press ENTER when done{/}",
   ];
 
   if (menuBox) {
@@ -586,17 +588,17 @@ function showNameEntry(): void {
 
   menuBox = blessed.box({
     parent: gameArea,
-    top: 'center',
-    left: 'center',
+    top: "center",
+    left: "center",
     width: 35,
     height: content.length + 2,
     tags: true,
-    border: { type: 'line' },
+    border: { type: "line" },
     style: {
-      border: { fg: 'yellow' },
-      bg: 'black'
+      border: { fg: "yellow" },
+      bg: "black",
     },
-    content: content.join('\n')
+    content: content.join("\n"),
   });
 
   screen.render();
@@ -606,28 +608,32 @@ function showNameEntry(): void {
  * Handle name entry input
  */
 async function handleNameEntryInput(key: InputKey): Promise<void> {
-  if (key === 'enter') {
+  if (key === "enter") {
     if (gameData.playerName.length > 0) {
       try {
         await rpcHandlers.saveHighscore({
           name: gameData.playerName,
           score: gameData.score,
           level: gameData.level,
-          maxPercent: Math.floor(gameData.claimedPercent)
+          maxPercent: Math.floor(gameData.claimedPercent),
         });
       } catch {
         // Continue anyway
       }
       showMenu();
     }
-  } else if (key === 'backspace') {
+  } else if (key === "backspace") {
     if (gameData.playerName.length > 0) {
       gameData.playerName = gameData.playerName.slice(0, -1);
       showNameEntry();
     }
-  } else if (key === 'escape') {
+  } else if (key === "escape") {
     showMenu();
-  } else if (typeof key === 'string' && key.length === 1 && /[A-Za-z0-9]/.test(key)) {
+  } else if (
+    typeof key === "string" &&
+    key.length === 1 &&
+    /[A-Za-z0-9]/.test(key)
+  ) {
     if (gameData.playerName.length < 3) {
       gameData.playerName += key.toUpperCase();
       showNameEntry();
@@ -638,10 +644,17 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
 /**
  * Cleanup resources
  */
+let keepAlive: ReturnType<typeof setInterval> | null = null;
+// doorContext already declared above
+
 function cleanup(): void {
   if (gameLoop) {
     clearInterval(gameLoop);
     gameLoop = null;
+  }
+  if (keepAlive) {
+    clearInterval(keepAlive);
+    keepAlive = null;
   }
   if (screen) {
     screen.removeAllListeners();
@@ -650,8 +663,12 @@ function cleanup(): void {
 }
 
 // Door lifecycle hooks
-door.onStart(async () => {
+door.onStart(async (ctx: any) => {
+  doorContext = ctx;
   gameData = createInitialGameData();
+
+  // Prevent event loop from emptying
+  keepAlive = setInterval(() => {}, 60000);
 
   try {
     gameData.highscores = await rpcHandlers.getHighscores();
@@ -663,16 +680,16 @@ door.onStart(async () => {
   showMenu();
 });
 
-door.onInput((data: string) => {
-  handleInput(data);
+door.onInput((ctx: any, key: any) => {
+  handleInput(key.raw || key.key || key);
 });
 
 door.onClose(() => {
   cleanup();
 });
 
-door.onError((error: Error) => {
-  console.error('[Super Qix] Error:', error);
+door.onError((ctx: any, error: Error) => {
+  console.error("[Super Qix] Error:", error);
   cleanup();
 });
 

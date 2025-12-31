@@ -5,30 +5,31 @@
 
 // Game states
 export type GameState =
-  | 'menu'
-  | 'playing'
-  | 'dying'
-  | 'stageIntro'
-  | 'challengingStage'
-  | 'stageComplete'
-  | 'gameover'
-  | 'highscores'
-  | 'enterName';
+  | "menu"
+  | "playing"
+  | "dying"
+  | "stageIntro"
+  | "challengingStage"
+  | "stageComplete"
+  | "gameover"
+  | "highscores"
+  | "enterName"
+  | "paused";
 
 // Alien types
 export type AlienType =
-  | 'bee'       // Blue/Yellow grunt (Zako)
-  | 'butterfly' // Red butterfly (Goei)
-  | 'boss'      // Green boss galaga (can capture)
-  | 'captured'; // Player's captured fighter
+  | "bee" // Blue/Yellow grunt (Zako)
+  | "butterfly" // Red butterfly (Goei)
+  | "boss" // Green boss galaga (can capture)
+  | "captured"; // Player's captured fighter
 
 // Alien behavior states
 export type AlienState =
-  | 'formation'  // In formation at top
-  | 'diving'     // Attacking player
-  | 'returning'  // Going back to formation
-  | 'capturing'  // Boss tractor beam
-  | 'dead';
+  | "formation" // In formation at top
+  | "diving" // Attacking player
+  | "returning" // Going back to formation
+  | "capturing" // Boss tractor beam
+  | "dead";
 
 // Position
 export interface Position {
@@ -48,7 +49,7 @@ export interface Player {
   y: number;
   isDead: boolean;
   deathFrame: number;
-  hasDualFighter: boolean;  // After rescuing captured ship
+  hasDualFighter: boolean; // After rescuing captured ship
   isCaptured: boolean;
 }
 
@@ -57,7 +58,7 @@ export interface Bullet {
   id: number;
   x: number;
   y: number;
-  dy: number;  // Positive = enemy, negative = player
+  dy: number; // Positive = enemy, negative = player
   isEnemy: boolean;
 }
 
@@ -68,13 +69,13 @@ export interface Alien {
   state: AlienState;
   x: number;
   y: number;
-  formationX: number;  // Position in formation
+  formationX: number; // Position in formation
   formationY: number;
-  health: number;      // Boss takes 2 hits
+  health: number; // Boss takes 2 hits
   diveProgress: number;
-  divePath: Position[];  // Path for dive attack
+  divePath: Position[]; // Path for dive attack
   divePathIndex: number;
-  capturedFighter: boolean;  // Boss has captured player
+  capturedFighter: boolean; // Boss has captured player
   tractorBeamActive: boolean;
 }
 
@@ -132,14 +133,14 @@ export interface GalagaData {
 
   // Formation
   formation: FormationSlot[][];
-  formationOffset: number;  // Formation sway
+  formationOffset: number; // Formation sway
   formationDirection: 1 | -1;
 
   // Spawning
   alienIdCounter: number;
   bulletIdCounter: number;
   explosionIdCounter: number;
-  spawnPhase: number;  // For stage intro animation
+  spawnPhase: number; // For stage intro animation
   aliensToSpawn: AlienType[];
 
   // Challenging stage
@@ -164,11 +165,15 @@ export interface GalagaData {
 
 // Input types
 export type InputKey =
-  | 'left' | 'right'
-  | 'fire' | 'space'
-  | 'enter' | 'escape'
-  | 'p' | 'q'
-  | 'backspace'
+  | "left"
+  | "right"
+  | "fire"
+  | "space"
+  | "enter"
+  | "escape"
+  | "p"
+  | "q"
+  | "backspace"
   | string;
 
 // Stage configuration
@@ -184,17 +189,21 @@ export interface StageConfig {
 
 // Sound effects
 export type SoundEffect =
-  | 'shoot'
-  | 'explosion'
-  | 'alienDive'
-  | 'capture'
-  | 'dualFighter'
-  | 'stageStart'
-  | 'challenging'
-  | 'gameOver';
+  | "shoot"
+  | "explosion"
+  | "alienDive"
+  | "capture"
+  | "dualFighter"
+  | "stageStart"
+  | "challenging"
+  | "gameOver";
 
 // RPC methods
 export interface RPCMethods {
   getHighscores: () => Promise<HighScore[]>;
-  saveHighscore: (params: { name: string; score: number; stage: number }) => Promise<void>;
+  saveHighscore: (params: {
+    name: string;
+    score: number;
+    stage: number;
+  }) => Promise<void>;
 }

@@ -4,23 +4,24 @@
  */
 
 export type GameState =
-  | 'menu'
-  | 'playing'
-  | 'dying'
-  | 'levelComplete'
-  | 'gameover'
-  | 'highscores'
-  | 'enterName';
+  | "menu"
+  | "playing"
+  | "dying"
+  | "levelComplete"
+  | "gameover"
+  | "highscores"
+  | "enterName"
+  | "paused";
 
-export type Direction = 'up' | 'down' | 'left' | 'right';
+export type Direction = "up" | "down" | "left" | "right";
 
 export type CellType =
-  | 'empty'
-  | 'ice'        // Normal ice block
-  | 'diamond'    // Diamond block (for bonus)
-  | 'wall';      // Outer wall
+  | "empty"
+  | "ice" // Normal ice block
+  | "diamond" // Diamond block (for bonus)
+  | "wall"; // Outer wall
 
-export type EnemyState = 'walking' | 'hatching' | 'stunned' | 'dead';
+export type EnemyState = "walking" | "hatching" | "stunned" | "dead";
 
 export interface Position {
   x: number;
@@ -93,11 +94,17 @@ export interface PengoData {
 }
 
 export type InputKey =
-  | 'up' | 'down' | 'left' | 'right'
-  | 'push' | 'space'
-  | 'enter' | 'escape'
-  | 'p' | 'q'
-  | 'backspace'
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "push"
+  | "space"
+  | "enter"
+  | "escape"
+  | "p"
+  | "q"
+  | "backspace"
   | string;
 
 export interface LevelConfig {
@@ -109,16 +116,20 @@ export interface LevelConfig {
 }
 
 export type SoundEffect =
-  | 'push'
-  | 'crush'
-  | 'stun'
-  | 'death'
-  | 'hatch'
-  | 'diamondBonus'
-  | 'levelComplete'
-  | 'gameOver';
+  | "push"
+  | "crush"
+  | "stun"
+  | "death"
+  | "hatch"
+  | "diamondBonus"
+  | "levelComplete"
+  | "gameOver";
 
 export interface RPCMethods {
   getHighscores: () => Promise<HighScore[]>;
-  saveHighscore: (params: { name: string; score: number; level: number }) => Promise<void>;
+  saveHighscore: (params: {
+    name: string;
+    score: number;
+    level: number;
+  }) => Promise<void>;
 }

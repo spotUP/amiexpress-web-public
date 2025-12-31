@@ -10,7 +10,7 @@
     "bundle": "./dist/client.bundle.js"
   },
   "server": {
-    "entry": "./server.ts"
+    "entry": "./index.ts"
   },
   "scripts": {
     "build": "tsc && esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
