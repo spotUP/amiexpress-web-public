@@ -10,6 +10,16 @@ const door = new ClientDoor({
 
 const audio = new AudioEngine();
 
+console.log("[Zoo Keeper] Client door initializing...");
+
+door.on("init", () => {
+  console.log("[Zoo Keeper] Client door init event");
+});
+
+door.on("connect", (user: any) => {
+  console.log(`[Zoo Keeper] Connected as ${user.name}`);
+});
+
 door.on("audio", async (data: any) => {
   try {
     if (data && data.action === "play" && data.name) {
@@ -25,5 +35,8 @@ door.on("audio", async (data: any) => {
     console.error("Audio error:", err);
   }
 });
+
+console.log("[Zoo Keeper] Starting client door...");
+door.start();
 
 export default door;

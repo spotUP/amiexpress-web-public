@@ -10,6 +10,16 @@ const door = new ClientDoor({
 
 const audio = new AudioEngine();
 
+console.log("[Galaga] Client door initializing...");
+
+door.on("init", () => {
+  console.log("[Galaga] Client door init event");
+});
+
+door.on("connect", (user: any) => {
+  console.log(`[Galaga] Connected as ${user.name}`);
+});
+
 door.on("audio", async (data: any) => {
   try {
     if (data && data.action === "play" && data.name) {
@@ -25,5 +35,8 @@ door.on("audio", async (data: any) => {
     console.error("Audio error:", err);
   }
 });
+
+console.log("[Galaga] Starting client door...");
+door.start();
 
 export default door;

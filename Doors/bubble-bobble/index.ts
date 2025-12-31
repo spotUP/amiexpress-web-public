@@ -566,6 +566,7 @@ function cleanup(): void {
 }
 
 door.onStart(async (ctx: any) => {
+  console.log("[Bubble Bobble] Server component starting...");
   doorContext = ctx;
   gameData = createInitialGameData();
 

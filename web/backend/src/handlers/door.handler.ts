@@ -1507,56 +1507,6 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
       // No package.json or parse error - not a problem
     }
 
-    const isHybridSDKDoor = packageJson && packageJson.runtime === 'hybrid' &&
-                           typeof doorModule.runDoor !== 'function';
-
-    if (isHybridSDKDoor) {
-      // Hybrid door using SDK's ServerDoor class - just importing it starts the server
-      // The door.start() call in the module handles everything
-      console.log(`[executeTypeScriptDoor] Hybrid SDK door detected - server component started via import`);
-      console.log(`[executeTypeScriptDoor] Door server is running, client bundle already loaded`);
-
-      // Register RPC handlers from server module with ClientDoorBridge
-      // This enables client-to-server RPC calls (e.g., highscore saving)
-      const rpcHandlers = doorModule.rpcHandlers || doorModule.default?.rpcHandlers || doorModule.default;
-      if (rpcHandlers && typeof rpcHandlers === 'object') {
-        const { getClientDoorBridge } = require('../doors/client-door-bridge');
-        const bridge = getClientDoorBridge();
-
-        // Find the session ID - it should be stored from executeClientDoor
-        // We need to get it from the session or socket
-        const sessionId = (session as any).clientDoorSessionId || hybridSessionId;
-
-        if (sessionId) {
-          for (const [method, handler] of Object.entries(rpcHandlers)) {
-            if (typeof handler === 'function') {
-              bridge.registerRPCHandler(sessionId, method, async (params: any) => {
-                return (handler as Function)(params);
-              });
-              console.log(`[executeTypeScriptDoor] Registered RPC handler: ${method}`);
-            }
-          }
-        } else {
-          console.warn(`[executeTypeScriptDoor] No sessionId available for RPC handler registration`);
-        }
-      }
-
-      // Set door active flag so BBS knows door is running
-      session.inDoorManager = true;
-
-      // Notify frontend that door is active
-      socket.emit('door:status', { status: 'running' });
-
-      // Door will handle its own lifecycle via SDK's ServerDoor class
-      // Input routing, disconnects, etc. are handled by the SDK
-      console.log(`[executeTypeScriptDoor] Hybrid SDK door lifecycle managed by SDK`);
-
-      // Keep session alive until door disconnects or user exits
-      // The SDK's door.disconnect() or door.onConnect() handler will clean up
-      return;
-    }
-
-    // Detect door pattern: SDK v2.0 Door instance or legacy runDoor() function
     const isSDKDoor = doorModule.default &&
                      typeof doorModule.default.execute === 'function' &&
                      typeof doorModule.default.getConfig === 'function';
@@ -3485,6 +3435,10 @@ async function executeClientDoor(socket: any, session: BBSSession, door: Door, m
     const { user: clientDoorUser, isGuest } = resolveDoorExecutionUser(session);
     callersLog(isGuest ? null : clientDoorUser.id, clientDoorUser.username, 'Executed client door', door.name);
     callersLogManager.logDoor(nodeId, door.name);
+
+    // Give the frontend 1 second to load the bundle and set up listeners
+    // before the server proceeds to the server-side component.
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     return sessionId;
 
