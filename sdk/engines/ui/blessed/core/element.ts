@@ -439,6 +439,13 @@ export class Element extends EventEmitter {
     return pos ? pos.xl - pos.xi : 0;
   }
 
+  set width(val: number | string) {
+    if (this.position.width === val) return;
+    this.position.width = val;
+    this._coordsCacheValid = false;
+    this.emit('resize');
+  }
+
   /**
    * Get calculated height (in rows)
    */
@@ -447,44 +454,67 @@ export class Element extends EventEmitter {
     return pos ? pos.yl - pos.yi : 0;
   }
 
+  set height(val: number | string) {
+    if (this.position.height === val) return;
+    this.position.height = val;
+    this._coordsCacheValid = false;
+    this.emit('resize');
+  }
+
   /**
    * Get left position (relative to parent)
    */
-  get left(): number {
+  get left(): number | string {
     const pos = this._getCoords();
     if (!pos || !this.parent) return 0;
     const parentPos = this.parent._getCoords();
     return parentPos ? pos.xi - parentPos.xi : pos.xi;
   }
 
+  set left(val: number | string) {
+    this.rleft = val as any;
+  }
+
   /**
    * Get right position (relative to parent)
    */
-  get right(): number {
+  get right(): number | string {
     const pos = this._getCoords();
     if (!pos || !this.parent) return 0;
     const parentPos = this.parent._getCoords();
     return parentPos ? parentPos.xl - pos.xl : 0;
   }
 
+  set right(val: number | string) {
+    this.rright = val as any;
+  }
+
   /**
    * Get top position (relative to parent)
    */
-  get top(): number {
+  get top(): number | string {
     const pos = this._getCoords();
     if (!pos || !this.parent) return 0;
     const parentPos = this.parent._getCoords();
     return parentPos ? pos.yi - parentPos.yi : pos.yi;
   }
 
+  set top(val: number | string) {
+    this.rtop = val as any;
+  }
+
   /**
    * Get bottom position (relative to parent)
    */
-  get bottom(): number {
+  get bottom(): number | string {
     const pos = this._getCoords();
     if (!pos || !this.parent) return 0;
     const parentPos = this.parent._getCoords();
     return parentPos ? parentPos.yl - pos.yl : 0;
+  }
+
+  set bottom(val: number | string) {
+    this.rbottom = val as any;
   }
 
   /**
