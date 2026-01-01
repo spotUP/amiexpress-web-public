@@ -1,0 +1,7 @@
+ACCESS=20
+LOCATION=Doors:QuickNew/QuickNew
+ARGS=Doors:QuickNew/QuickNew.Config 7
+TYPE=XIM
+STACK=4096
+FORM
+ICONFACE

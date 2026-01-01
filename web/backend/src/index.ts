@@ -273,6 +273,7 @@ export interface BBSSession {
   manualMenuTargetState?: LoggedOnSubState;
   user?: any; // Will be User from database (expert stored as "X"/"N")
   currentConf: number;
+  currentConference?: number; // Current conference ID (GlobalStructures parity)
   conferenceId: number; // XIM doors read this property for current conference
   currentMsgBase: number;
   timeRemaining: number;
