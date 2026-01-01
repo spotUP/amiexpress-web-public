@@ -228,10 +228,10 @@ export async function createApp(session: DoorSession) {
   // ========== CHANNEL LIST (Left Sidebar) ==========
   // ========== COMMAND AUTOCOMPLETE ==========
   const commandSuggestions = createList({
-    parent: screen,
-    bottom: INPUT_HEIGHT + STATUS_HEIGHT,
+    parent: chatPanel, // Use chatPanel as parent to ensure it draws on top of chat log
+    bottom: 0,         // Position at bottom of chat panel
     left: 0,
-    width: '100%',  // Full screen width to fit command descriptions
+    width: '100%',     // Full width of parent panel
     height: 10,
     label: ' Commands ',
     border: { type: 'line' },
@@ -253,9 +253,9 @@ export async function createApp(session: DoorSession) {
 
   // Ghost text overlay for inline completion preview
   const ghostText = createBox({
-    parent: screen,
-    bottom: STATUS_HEIGHT + 1,  // Align with input field content (middle row of input box)
-    left: 10,  // Will be dynamically positioned based on cursor
+    parent: screen, // Parent to screen to avoid panel clipping
+    bottom: STATUS_HEIGHT + 1,  // Align with input field content
+    left: 10,
     width: 70,
     height: 1,
     tags: true,
@@ -302,12 +302,12 @@ export async function createApp(session: DoorSession) {
     }
 
     // Format command items with name, usage, and description
-    // Dynamically calculate width based on current screen width
-    const screenWidth = (screen as any).width || 80;
+    // Dynamically calculate width based on parent panel width (chatPanel)
+    const chatWidth = (chatPanel as any).width || 62;
     const nameWidth = 12;
     const usageWidth = 20;
     // Description gets the remaining space (minus borders and spacing)
-    const descWidth = Math.max(10, screenWidth - nameWidth - usageWidth - 6);
+    const descWidth = Math.max(10, chatWidth - nameWidth - usageWidth - 6);
 
     const items = filteredCommands.map(cmd => {
       const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
@@ -316,11 +316,15 @@ export async function createApp(session: DoorSession) {
       return `{cyan-fg}/${name}{/cyan-fg} {gray-fg}${usage}{/gray-fg} ${desc}`;
     });
 
-    // Ensure list width is updated to full screen width before showing
-    commandSuggestions.position.width = screenWidth;
+    // Ensure list width is updated to match parent panel
+    (commandSuggestions as any).width = chatWidth;
+    commandSuggestions.position.width = chatWidth;
+    invalidateCache(commandSuggestions);
+    
     commandSuggestions.setItems(items);
     commandSuggestions.select(0);
     commandSuggestions.show();
+    commandSuggestions.setFront();
     commandSuggestionsVisible = true;
 
     // Show ghost text for top match (Claude-style inline completion)
@@ -345,6 +349,7 @@ export async function createApp(session: DoorSession) {
         // Build content: typed portion in white, remaining in gray
         ghostText.setContent(`{white-fg}${typedPortion}{/white-fg}{gray-fg}${remainingPortion}{/gray-fg}`);
         ghostText.show();
+        ghostText.setFront();
       } else {
         // No exact prefix match - hide ghost text
         ghostText.hide();
@@ -712,7 +717,7 @@ export async function createApp(session: DoorSession) {
 
     // Update chat panel dimensions based on new screen size
     // Use position properties, not options (options are only read at construction)
-    const chatWidth = width - SIDEBAR_WIDTH;
+    let chatWidth = width - SIDEBAR_WIDTH;
     const chatHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;  // Removed TYPING_HEIGHT since typing bar is hidden
 
     // Update full-width elements (percentage widths need recalculation on resize)
@@ -720,8 +725,18 @@ export async function createApp(session: DoorSession) {
     inputBox.position.width = width - EMOJI_BUTTON_WIDTH;  // Leave space for emoji button
     emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
     menuBar.element.position.width = width;
-    commandSuggestions.position.width = width;  // Full width for command suggestions
+    
+    // Update commandSuggestions width based on its new parent (chatPanel)
+    chatWidth = width - SIDEBAR_WIDTH;
+    (commandSuggestions as any).width = chatWidth;
+    commandSuggestions.position.width = chatWidth;
+    
     ghostText.position.width = width;           // Responsive ghost text
+
+    if (commandSuggestionsVisible) {
+      commandSuggestions.setFront();
+      ghostText.setFront();
+    }
 
     if (breakpoint === 'small') {
       // Hide sidebar on small screens (< 80 cols)
@@ -1854,6 +1869,8 @@ export async function createApp(session: DoorSession) {
       // Ensure command suggestions appear above everything else
       // (must be called after all other elements are created)
       commandSuggestions.setIndex(9999);
+      commandSuggestions.setFront();
+      ghostText.setFront();
 
       // Start animation manager for animated text effects
       animationManager.start();
