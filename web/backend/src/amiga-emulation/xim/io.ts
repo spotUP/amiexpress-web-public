@@ -257,17 +257,9 @@ export class XIMIOHandler {
       `[XIMIOHandler] Completing line input with: "${result}"`
     );
 
-    // Ensure stringPtr points to embedded buffer if the field exists
-    if (!msg.stringPtr) {
-      const strPtr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-      if (this.messageParser.writeStringPointer(msg.msgAddr, strPtr)) {
-        msg.stringPtr = strPtr;
-      }
-    }
-
     // Write into embedded buffer
     this.messageParser.writeMessageString(msg.msgAddr, result);
-    // If a string pointer was provided, mirror there too
+    // If a string pointer was provided by the door, mirror there too
     if (msg.stringPtr) {
       this.messageParser.writeString(
         msg.stringPtr,
@@ -1319,11 +1311,7 @@ export class XIMIOHandler {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);
     }
     this.messageParser.writeData(msg.msgAddr, data);
-    // Set strPtr before replying when the field exists - some doors dereference it.
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+    // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
 
     // Log outgoing reply to XIM structured logger
     const humanName = this.messageParser.getCommandName(msg.command);

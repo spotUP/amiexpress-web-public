@@ -1148,10 +1148,23 @@ export class DoorMessageHandler {
         break;
 
       case XIMCommand.BB_MAINLINE:
-        // express.e:3794-3800: Main command line (BBS version string)
-        // Real AmiExpress returns version like "v5.3" - doors check this for compatibility
-        console.log(`[DoorMessageHandler]   BB_MAINLINE: Returning BBS version`);
-        this.writeStringToMessage(msgAddr, "v5.3");
+        // express.e:3794-3800: Main command line (command + params)
+        {
+          const command =
+            (this.config.bbsSession as any)?.doorCommand ||
+            (this.config.bbsSession as any)?.currentCommand ||
+            (this.config.bbsSession as any)?.command ||
+            '';
+          const params =
+            (this.config.bbsSession as any)?.doorParams ||
+            (this.config.bbsSession as any)?.commandParams ||
+            (this.config.bbsSession as any)?.params ||
+            '';
+          const trimmedParams = typeof params === 'string' ? params.trim() : '';
+          const mainLine = trimmedParams ? `${command} ${trimmedParams}` : `${command}`;
+          console.log(`[DoorMessageHandler]   BB_MAINLINE: "${mainLine}"`);
+          this.writeStringToMessage(msgAddr, mainLine);
+        }
         break;
 
       case XIMCommand.BB_NODEID:
@@ -1188,17 +1201,11 @@ export class DoorMessageHandler {
 
       // System commands
       case XIMCommand.EXPRESS_VERSION:
-        // express.e:3808-3810: Returns the command used to invoke the door
-        // AquaScan uses this to look up DOORUSE.<cmd>=NEWSCAN/FILESCAN/etc in its .info file
-        // e.g., if invoked with "N" command, returns "N" so door checks DOORUSE.N=NEWSCAN
+        // express.e:3808-3810: Returns getExpressMajorVer() string
         {
-          const doorCmd = (this.config.bbsSession as any)?.doorCommand ||
-                          this.config.doorId?.toUpperCase() ||
-                          'N';
-          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Returning door command "${doorCmd}"`);
-          this.writeStringToMessage(msgAddr, doorCmd);
-          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
-          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: Written "${doorCmd}" to string, data=1`);
+          const version = this.getExpressMajorVersion();
+          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: "${version}"`);
+          this.writeStringToMessage(msgAddr, version);
         }
         break;
 
@@ -1921,6 +1928,43 @@ export class DoorMessageHandler {
     this.socket.on("door:keypress", handler);
     this.socket.on("keypress", handler);
     this.socket.emit("door:await-key");
+  }
+
+  /**
+   * Return AmiExpress major/minor version string (express.e getExpressMajorVer)
+   */
+  private getExpressMajorVersion(): string {
+    const session: any = this.config.bbsSession || {};
+    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer : '';
+    if (mimicVer.length > 0) {
+      return mimicVer;
+    }
+
+    const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
+    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.3';
+
+    const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
+      ? expressVer.slice(1)
+      : expressVer;
+    const dotIndex = normalized.indexOf('.');
+    if (dotIndex >= 0) {
+      const major = parseInt(normalized.slice(0, dotIndex), 10);
+      const minor = parseInt(normalized.slice(dotIndex + 1), 10);
+      if (Number.isFinite(major) && Number.isFinite(minor)) {
+        return `v${major}.${minor}`;
+      }
+      if (Number.isFinite(major)) {
+        return `v${major}`;
+      }
+      return 'v5.3';
+    }
+
+    const major = parseInt(normalized, 10);
+    if (Number.isFinite(major)) {
+      return `v${major}`;
+    }
+
+    return 'v5.3';
   }
 
   /**

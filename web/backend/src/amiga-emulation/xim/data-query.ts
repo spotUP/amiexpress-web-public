@@ -954,11 +954,7 @@ export class XIMDataQueryHandler {
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    // Reset string pointers to the embedded buffer when present to avoid stale pointers.
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+    // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
     this.messageParser.writeData(msg.msgAddr, data);
 
     // Log outgoing reply to XIM structured logger

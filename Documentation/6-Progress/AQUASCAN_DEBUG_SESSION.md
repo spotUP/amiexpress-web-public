@@ -1,5 +1,21 @@
 # AquaScan Debug Session - 2025-12-30
 
+## Session 2026-01-01 (cont)
+- **Hypothesis**: Reply handlers are overwriting msg.strptr/fillers; AquaScan expects them untouched (strptr only for JH_SMPTR), so the EXPRESS_VERSION reply corrupts state and the door restarts.
+- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:view -- --door N --last 200`, `Documentation/4-Door-Developers/Aquascan N.log`, `AmiExpress-Sources/express.e`.
+- **Observations**: Real Amiga log shows follow-up requests after EXPRESS_VERSION: BB_MAINLINE (131), DT_LINELENGTH (113), DT_TIMELASTON (122), DT_NAME (100), JH_WRITE (4), etc. Current XIM logs stop at EXPRESS_VERSION with repeated JH_REGISTER. express.e processXimMsg uses msg.strptr only for JH_SMPTR (line ~3412).
+- **Action**: Removed writeStringPointer in INTERPRET_MCI and SIG_LI; stopped auto-setting strptr during line input completion so we do not overwrite door-provided values.
+- **Result**: Pending (requires backend restart and rerun `N S U`).
+- **Next**: Restart backend, rerun `N S U`, then re-run `xim:view`/`xim:analyze` to confirm DT_LINELENGTH/DT_TIMELASTON/DT_NAME/JH_WRITE appear and no slide/PC jump occurs.
+
+## Session 2026-01-01
+- **Hypothesis**: Backend poller is consuming its own ReplyMsg when mn_ReplyPort=AEDoorPort, causing repeated EXPRESS_VERSION and preventing follow-up DT_* / JH_SM output.
+- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:flow -- --door N`, `npm run xim:view -- --door N --last 200`.
+- **Observations**: XIM viewer shows incoming EXPRESS_VERSION with string "v5.3" immediately after reply; flow repeats init sequence; no DT_TIMELASTON/DT_LINELENGTH/DT_NAME/JH_SM. Analyzer reports incomplete session; last message EXPRESS_VERSION_REPLY.
+- **Action**: Added reply tracking in `web/backend/src/amiga-emulation/api/ExecLibrary.ts` (mark in ReplyMsg; clear when GetMsg returns).
+- **Result**: Pending (requires backend restart and rerun `N S U`).
+- **Next**: Restart backend, rerun `N S U`, re-run XIM analyze/view to confirm progression beyond EXPRESS_VERSION.
+
 ## CRITICAL DEBUGGING LESSON - READ FIRST
 
 **ALWAYS CHECK MEMORY OPERATIONS FIRST when debugging 68K emulation issues.**

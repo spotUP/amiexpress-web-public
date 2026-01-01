@@ -151,7 +151,7 @@ export class List extends Element {
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
       const isHovered = index === this._hoveredItem && !isSelected;
-      const marker = isSelected ? '> ' : '  ';
+      const marker = this.interactive ? (isSelected ? '> ' : '  ') : '';
       const start = newLines.length;
 
       // Get item styles
@@ -163,7 +163,7 @@ export class List extends Element {
       let openTags = '';
       let closeTags = '';
 
-      if (isSelected && itemSelectedStyle) {
+      if (this.interactive && isSelected && itemSelectedStyle) {
         // Apply selected style to selected item
         if (itemSelectedStyle.fg) {
           openTags += `{${itemSelectedStyle.fg}-fg}`;
@@ -192,7 +192,7 @@ export class List extends Element {
       if (this.wrapItemsEnabled) {
         // Wrap long items to multiple lines
         const parsed = this.options.tags ? parseTags(itemText) : itemText;
-        const wrapWidth = Math.max(1, this.getItemWrapWidth() - 2); // -2 for marker
+        const wrapWidth = Math.max(1, this.getItemWrapWidth() - (this.interactive ? 2 : 0));
         const wrapped = this.wrapAnsiText(parsed, wrapWidth);
 
         if (wrapped.length === 0) {

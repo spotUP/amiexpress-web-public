@@ -141,8 +141,8 @@ export class XIMBBSInfoHandler {
 
     this.messageParser.writeMessageString(msg.msgAddr, version);
 
-    // express.e sets msg.data:=0 (line 3810) regardless of input
-    this.reply(msg, 0);
+    // express.e does not modify msg.data for EXPRESS_VERSION
+    this.reply(msg, msg.data ?? 0);
   }
 
   /**
@@ -468,34 +468,37 @@ export class XIMBBSInfoHandler {
 
   private getExpressMajorVersion(): string {
     const session: any = this.bbsSession || {};
-    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer.trim() : '';
+    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer : '';
     if (mimicVer.length > 0) {
       return mimicVer;
     }
 
     // express.e uses the core expressVer string; avoid using web/app versions here.
-    const raw =
-      (typeof session.expressVer === 'string' ? session.expressVer : '');
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) {
-      return '5';
-    }
+    const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
+    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.3';
 
-    const normalized = trimmed.startsWith('v') || trimmed.startsWith('V')
-      ? trimmed.slice(1)
-      : trimmed;
+    const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
+      ? expressVer.slice(1)
+      : expressVer;
     const dotIndex = normalized.indexOf('.');
     if (dotIndex >= 0) {
-      const majorStr = normalized.slice(0, dotIndex);
-      return majorStr;
+      const major = parseInt(normalized.slice(0, dotIndex), 10);
+      const minor = parseInt(normalized.slice(dotIndex + 1), 10);
+      if (Number.isFinite(major) && Number.isFinite(minor)) {
+        return `v${major}.${minor}`;
+      }
+      if (Number.isFinite(major)) {
+        return `v${major}`;
+      }
+      return 'v5.3';
     }
 
     const major = parseInt(normalized, 10);
     if (Number.isFinite(major)) {
-      return `${major}`;
+      return `v${major}`;
     }
 
-    return '5';
+    return 'v5.3';
   }
 
   /**
@@ -801,11 +804,7 @@ export class XIMBBSInfoHandler {
    * Send reply to door
    */
   private reply(msg: XIMMessage, data: number): void {
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    // Reset string pointers to the embedded buffer when present to avoid stale pointers.
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+    // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
     this.messageParser.writeData(msg.msgAddr, data);
 
     // Log outgoing reply to XIM structured logger

@@ -88,11 +88,7 @@ export class XIMSystemCommandsHandler {
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // Set strPtr/fillers when the fields exist in the message layout.
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+    // express.e does not modify strptr/fillers for JH_REGISTER.
 
     // Use standard ReplyMsg to send reply to the door's mn_ReplyPort.
     // The door's reply port (e.g., 0xa0500) is separate from the AEDoorPort
@@ -628,11 +624,7 @@ export class XIMSystemCommandsHandler {
     if (writeDataField) {
       this.messageParser.writeData(msg.msgAddr, data);
     }
-    // Set strPtr before replying when the field exists - some doors dereference it.
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller1(msg.msgAddr, stringAddr);
-    this.messageParser.writeFiller2(msg.msgAddr, stringAddr);
+    // express.e replies only set msg.string/msg.data; do not modify strptr/fillers.
 
     // Log outgoing reply to XIM structured logger
     const humanName = this.messageParser.getCommandName(msg.command);
@@ -1394,8 +1386,6 @@ export class XIMSystemCommandsHandler {
     const processed = this.processMCIString(mciText);
 
     this.messageParser.writeMessageString(msg.msgAddr, processed);
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
 
     console.log(`[XIMSystem]   Processed: "${processed.substring(0, 40)}..."`);
     this.reply(msg, processed.length);
@@ -1525,8 +1515,6 @@ export class XIMSystemCommandsHandler {
     // frontend support for password input mode
     // The door expects the result in msg.string
     this.messageParser.writeMessageString(msg.msgAddr, '');
-    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    this.messageParser.writeStringPointer(msg.msgAddr, stringAddr);
 
     // TODO: Implement actual secure line input via socket event
     // This would emit 'door:password-input' and wait for response

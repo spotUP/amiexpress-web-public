@@ -5009,6 +5009,9 @@ export class ExecLibrary {
         port.messages.length
       }`
     );
+    if (this.repliedMessages.has(msgAddr)) {
+      this.repliedMessages.delete(msgAddr);
+    }
     this.protectReturnedMessage(
       msgAddr,
       `GetMsg port=0x${portAddr.toString(16)}`
@@ -5227,6 +5230,9 @@ export class ExecLibrary {
     // Message.mn_Node.ln_Type is at offset 8
     const NT_REPLYMSG = 6;
     this.emulator.writeMemory(msgAddr + 8, NT_REPLYMSG);
+
+    // Track replies so host-side polling can skip them on AEDoorPort.
+    this.repliedMessages.add(msgAddr);
 
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
