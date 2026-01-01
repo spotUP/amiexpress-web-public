@@ -627,7 +627,7 @@ export class Screen extends Element {
   private styleToAttr(style: any): number {
     let flags = 0;
     let fgCode = 0x1ff; // Default: no color
-    let bgCode = 0x1ff; // Default: transparent
+    let bgCode = 0; // Default background: black
 
     if (style.bold) flags |= 1;
     if (style.underline) flags |= 2;
