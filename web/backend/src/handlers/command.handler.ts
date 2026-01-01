@@ -602,10 +602,11 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
   // an empty string (internal advanceDisplayFlow tick).
   if (session.subState === LoggedOnSubState.DISPLAY_MENU && data !== '') {
     session.subState = LoggedOnSubState.READ_COMMAND;
-    // Display the menu once before allowing command input; do not swallow keystroke.
+    // Display the menu once BEFORE allowing command input IF we are in an internal tick (data === '').
+    // But since we are here with data !== '', we just transition to READ_COMMAND
+    // and let the character be processed normally.
     session.menuPause = false;
-    await displayMainMenu(socket, session);
-    // Continue processing this keystroke so it reaches READ_COMMAND.
+    // NO 'await displayMainMenu(socket, session);' here - it would redraw the prompt.
   }
 
   const trimmedScreenCommand = (data || '').trim();
