@@ -43,6 +43,7 @@ export class XIMIOHandler {
   private hotkeyMessage: XIMMessage | null = null;
   private waitingForPause: boolean = false;
   private pauseReply: { msg: XIMMessage; data: number } | null = null;
+  private pauseInputBuffer: string = '';
 
   // ANSI sequence buffer for handling split escape sequences across JH_SM calls
   // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
@@ -115,9 +116,15 @@ export class XIMIOHandler {
     console.log(`[XIMIOHandler] Parsed into ${tokens.length} token(s)`);
 
     for (const token of tokens) {
-      if (this.waitingForPause && this.pauseReply) {
-        console.log('[XIMIOHandler] Pause acknowledged, resuming output');
-        this.finishPause();
+      // Handle input during pause
+      if (this.waitingForPause) {
+        console.log('[XIMIOHandler] Accumulating pause input');
+        this.pauseInputBuffer += token;
+        
+        // Check for completion (Enter or space typically resumes)
+        if (token === '\r' || token === '\n' || token === ' ') {
+          this.completePauseInput();
+        }
         continue;
       }
 
@@ -286,21 +293,20 @@ export class XIMIOHandler {
 
   /**
    * Handle door write request (JH_WRITE)
-   * From E sources (express.e:1085)
+   * From E sources (express.e:3380)
    */
   handleWrite(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
     const addNewline = msg.data === 1;
 
     console.log(
-      '[XIMIOHandler] Door writing to terminal:',
+      '[XIMIOHandler] Door writing to terminal (JH_WRITE):',
       JSON.stringify(text)
     );
 
-    // Use door-specific pagination setting (PAGINATION tooltype)
-    // If autoPauseEnabled=true, XIM will pause after pauseLines
-    // If autoPauseEnabled=false (default), door handles its own pagination
-    const bytesWritten = this.emitText(text, addNewline, true, this.state.autoPauseEnabled, msg);
+    // express.e:3380 - JH_WRITE calls aePuts(msg.string)
+    // aePuts does NOT increment lineCount or check for pause.
+    const bytesWritten = this.emitText(text, addNewline, false, false, msg);
 
     console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
     this.reply(msg, bytesWritten);
@@ -338,31 +344,14 @@ export class XIMIOHandler {
   /**
    * Handle JH_SM (Send Message)
    * From E sources (express.e:3406-3411)
-   *
-   * IMPORTANT: Doors control their own line endings by:
-   * 1. Setting msg.data=0 for text WITHOUT newline (e.g., partial line, prompt)
-   * 2. Setting msg.data=1 for text WITH newline (or sending empty string with data=1)
-   *
-   * Example: Bulls sends ASCII art as:
-   *   "line content" (data=0) + "_" (data=0) + "" (data=1) <- newline only at end
-   *
-   * We MUST trust msg.data - overriding it causes double newlines.
    */
   handleSendMessage(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
-
-    // express.e:3406-3411: IF msg.data THEN aePuts('\b\n')
-    // Trust msg.data exactly - doors control their own line endings
     const shouldAddNewline = msg.data !== 0;
 
-    // DEBUG: Show hex bytes if string contains control characters
-    const hasControlChars = /[\x00-\x1f]/.test(text);
-    const hexBytes = hasControlChars ? ' hex=' + Array.from(text.slice(0, 20)).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ') : '';
-    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})${hexBytes}`);
+    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
 
-    // Use door-specific pagination setting (PAGINATION tooltype)
-    // Most doors handle their own pagination (e.g. AquaScan shows "More? (Y/n/ns)")
-    // but doors with PAGINATION tooltype set will use XIM auto-pause
+    // express.e:3406-3411: IF msg.data THEN aePuts('\b\n'); checkForPause()
     this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
 
     this.reply(msg, 1);
@@ -371,9 +360,6 @@ export class XIMIOHandler {
   /**
    * Handle JH_SMPTR (Send Message via Pointer)
    * From E sources (express.e:3412-3417)
-   *
-   * Like JH_SM but uses msg.strptr instead of msg.string embedded buffer.
-   * This allows doors to pass longer strings via a separate memory pointer.
    */
   handleSendMessagePtr(msg: XIMMessage): void {
     // Read text from strptr (filler1 field contains the string pointer)
@@ -389,8 +375,9 @@ export class XIMIOHandler {
 
     const shouldAddNewline = msg.data !== 0;
 
-    console.log(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, addNewline=${shouldAddNewline})`);
+    console.log(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
 
+    // express.e:3412-3417: IF msg.data THEN aePuts('\b\n'); checkForPause()
     this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
 
     this.reply(msg, 1);
@@ -662,6 +649,7 @@ export class XIMIOHandler {
   handleConsoleOutput(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
+    // express.e:3395-3400: IF msg.data THEN conPuts('\b\n'); checkForPause()
     this.emitText(text, msg.data !== 0, true, true, msg);
 
     this.reply(msg, 1);
@@ -676,7 +664,8 @@ export class XIMIOHandler {
 
     console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
 
-    this.emitText(text, msg.data !== 0, true, true, msg);
+    // express.e:3401-3405: IF msg.data THEN serPuts('\b\n') (No checkForPause!)
+    this.emitText(text, msg.data !== 0, false, false, msg);
 
     this.reply(msg, 1);
   }
@@ -785,7 +774,6 @@ export class XIMIOHandler {
   /**
    * Handle JH_MCI (Process MCI codes)
    * From E sources (express.e:3456-3462)
-   * Processes MCI codes in the message string and outputs to terminal
    */
   async handleMCI(msg: XIMMessage): Promise<void> {
     console.log(`[XIMIOHandler] JH_MCI: Processing MCI codes`);
@@ -802,16 +790,13 @@ export class XIMIOHandler {
       const sysopName = bbsSession.sysopName || 'Sysop';
       const location = bbsSession.user?.location || 'The Internet';
 
-      // Process MCI codes
-      const result = await parseMciCodes(inputString, bbsSession as any, bbsName, sysopName, location);
+      // express.e:3457 - processMci(msg.string)
+      // Pass socket to enable inline emission and command execution
+      const result = await parseMciCodes(inputString, bbsSession as any, bbsName, sysopName, location, this.socket);
 
-      // Output parsed content to terminal (express.e: processMci outputs to terminal)
-      this.socket.emit('ansi-output', result.parsed);
-
-      // If data flag is set, output backspace + newline (express.e:3459-3461)
+      // express.e:3459-3461 - IF msg.data THEN aePuts('\b\n'); checkForPause()
       if (msg.data) {
-        this.socket.emit('ansi-output', '\b\n');
-        // Note: checkForPause() not implemented yet
+        this.emitText('', true, true, true, msg);
       }
 
       console.log(`[XIMIOHandler] JH_MCI: Processed successfully`);
@@ -1040,7 +1025,8 @@ export class XIMIOHandler {
       for (let s = 0; s < segments.length; s++) {
         const segment = segments[s];
         const isLastSegment = s === segments.length - 1;
-        const suffix = isLastSegment && !shouldAddLineBreak ? '' : '\r\n';
+        const endsInNewline = !isLastSegment || shouldAddLineBreak;
+        const suffix = endsInNewline ? '\r\n' : '';
         const output = `${segment}${suffix}`;
 
         // Emit output BEFORE checking pause
@@ -1052,23 +1038,10 @@ export class XIMIOHandler {
         this.socket.emit('ansi-output', output);
         bytesSent += output.length;
 
-        const shouldTrackLine = trackLines;
-        if (shouldTrackLine) {
+        // express.e only increments lineCount and checks pause if a newline was emitted
+        if (trackLines && endsInNewline) {
           this.state.lineCount += 1;
-
-          // Check pause AFTER emitting current line
-          if (
-            autoPause &&
-            !this.state.nonStopText &&
-            pendingMsg &&
-            this.state.lineCount >= this.state.pauseLines
-          ) {
-            this.waitingForPause = true;
-            this.pauseReply = { msg: pendingMsg, data: 1 };
-            this.socket.emit(
-              'ansi-output',
-              '\r\npress <RETURN> to continue\r\n'
-            );
+          if (autoPause && this.checkForPause(pendingMsg)) {
             return bytesSent;
           }
         }
@@ -1283,20 +1256,66 @@ export class XIMIOHandler {
   }
 
   /**
-   * Finish a pending pause prompt.
+   * Check if a pause is required based on current line count.
+   * Returns true if paused, false otherwise.
    */
-  private finishPause(): void {
-    if (!this.pauseReply) {
-      return;
+  private checkForPause(pendingMsg?: XIMMessage): boolean {
+    if (this.state.nonStopText || !pendingMsg) {
+      return false;
     }
 
-    const { msg, data } = this.pauseReply;
+    if (this.state.lineCount >= this.state.pauseLines) {
+      console.log(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
+      this.waitingForPause = true;
+      this.pauseReply = { msg: pendingMsg, data: 1 };
+      this.pauseInputBuffer = '';
+      
+      // Notify user - Match express.e:5192 exactly
+      this.socket.emit('ansi-output', '(Pause)...More(y/n/ns)? ');
+      
+      // Pause emulator while waiting for user to acknowledge pause
+      this.emulator.pause();
+      return true;
+    }
 
+    return false;
+  }
+
+  /**
+   * Complete a pending pause when user acknowledges it.
+   */
+  private completePauseInput(): void {
+    if (!this.waitingForPause || !this.pauseReply) return;
+
+    console.log('[XIMIOHandler] Pause acknowledged, resuming');
+    
+    // Clear pause prompt - Match express.e:5200 exactly (Move Up 1, Clear Line)
+    this.socket.emit('ansi-output', '\x1b[1A\x1b[K');
+    
+    const { msg, data } = this.pauseReply;
     this.waitingForPause = false;
     this.pauseReply = null;
     this.state.lineCount = 0;
+    
+    // Handle 'ns' (non-stop) input
+    if (this.pauseInputBuffer.toLowerCase().includes('ns')) {
+      this.state.nonStopText = true;
+    }
+    
+    this.pauseInputBuffer = '';
 
+    // Reply to the message that triggered the pause
     this.reply(msg, data);
+    
+    // Resume emulator
+    this.emulator.resume();
+  }
+
+  /**
+   * Finish a pending pause prompt (legacy handler).
+   */
+  private finishPause(): void {
+    this.completePauseInput();
   }
 
   /**
