@@ -96,6 +96,12 @@ export function clearHistory(session: BBSSession): void {
  */
 export async function loadHistory(session: BBSSession, userId: number | string): Promise<void> {
   console.log(`[CommandHistory] loadHistory called for userId=${userId}`);
+  
+  // CRITICAL: Clear existing history before loading
+  session.commandHistory = [];
+  session.historyIndex = 0;
+  session.historyCycle = 0;
+
   try {
     const db = getDatabase();
     if (!db) {

@@ -1,7 +1,6 @@
 ACCESS=20
-LOCATION=Doors:QuickNew/QuickNew
-ARGS=Doors:QuickNew/QuickNew.Config 7
-TYPE=XIM
-STACK=4096
+LOCATION=BBS:Screens/QuickNew.txt
+TYPE=MCI
+MCI_TEXT=~SS_BBS:Screens/QuickNew.txt
 FORM
 ICONFACE

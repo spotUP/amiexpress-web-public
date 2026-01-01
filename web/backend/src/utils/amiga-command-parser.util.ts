@@ -106,13 +106,12 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
       for (const line of lines) {
         const trimmed = line.trim();
 
-        // Skip empty lines and non-tooltype lines
-        if (!trimmed || !trimmed.includes('=')) {
+        if (!trimmed) {
           continue;
         }
 
-        // Commented-out tooltypes are wrapped in parentheses; skip them
-        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+        // Commented-out tooltypes are wrapped in parentheses or prefixed with '!'
+        if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
           continue;
         }
 
@@ -134,7 +133,7 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
         } else {
           // Flag mode: just the key
           const key = cleanLine.toUpperCase().trim();
-          if (key) {
+          if (key && /^[A-Z0-9_]{2,64}$/.test(key)) {
             console.log(`[parseInfoFile]   Tooltype (Flag): ${key}`);
             tooltypes.set(key, 'YES'); // Standard Amiga practice for flags
           }
