@@ -249,6 +249,7 @@ let SCREEN_MENU: string = 'MENU';
 const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.DISPLAY_BULL,
   LoggedOnSubState.DISPLAY_NODE_BULL,
+  LoggedOnSubState.EXEC_QUICKNEW,
   LoggedOnSubState.CONF_SCAN,
   LoggedOnSubState.DISPLAY_CONF_BULL,
   LoggedOnSubState.DISPLAY_MENU,
