@@ -748,6 +748,7 @@ export function createModalManager(screen: Screen, returnFocusElement?: any) {
     height: '100%',
     opacity: 0.5,
     hidden: true,
+    zIndex: 500, // Above normal UI
     style: { bg: 'black' }
   });
 
@@ -793,6 +794,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     left: 'center',
     width: 50,
     tags: true,
+    zIndex: 600, // Above overlay
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
   });
 
@@ -802,6 +804,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     left: 'center',
     width: 50,
     tags: true,
+    zIndex: 600, // Above overlay
     style: { fg: 'white', bg: 'black', border: { fg: 'green' } }
   });
 
@@ -812,6 +815,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     width: 45,
     title: ' Confirm ',
     tags: true,
+    zIndex: 600, // Above overlay
     style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } }
   });
 
