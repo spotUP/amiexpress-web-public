@@ -31,8 +31,8 @@ export class Overlay extends Box {
       keyable: true,    // Enable key events
       clickable: true,  // Enable click events
       style: {
+        bg: 'transparent',
         ...styleWithoutBg,
-        // Don't set bg at all - blessed will not render a background then
         // CSS overlay provides dimming for web, ANSI clients just see the modal on top
       },
     });

@@ -73,6 +73,8 @@ export class DoorLoader {
         parent: screen,
         opacity: options.overlayOpacity ?? 0.5,
         hidden: true,
+        zIndex: 1000,
+        style: { bg: 'transparent' },
       });
     }
 
@@ -88,6 +90,7 @@ export class DoorLoader {
       padding: 1,
       hidden: true,
       tags: true,
+      zIndex: 1001,
       style: {
         bg: 'black',
         fg: 'white',

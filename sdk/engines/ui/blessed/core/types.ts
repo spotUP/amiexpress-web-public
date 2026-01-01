@@ -107,6 +107,7 @@ export interface ElementOptions {
   dockBorders?: boolean;
   ignoreDockContrast?: boolean;
   disabled?: boolean;  // Disable interaction (grayed out, not focusable/clickable)
+  zIndex?: number;     // Rendering order (higher = front)
 
   // Focus management
   tabIndex?: number;  // Tab order (0 = natural order, -1 = not tabbable, 1+ = explicit order)

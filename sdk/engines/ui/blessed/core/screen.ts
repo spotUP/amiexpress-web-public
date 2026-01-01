@@ -627,7 +627,7 @@ export class Screen extends Element {
   private styleToAttr(style: any): number {
     let flags = 0;
     let fgCode = 0x1ff; // Default: no color
-    let bgCode = 0; // Default background: black for BBS consistency
+    let bgCode = 0x1ff; // Default: transparent
 
     if (style.bold) flags |= 1;
     if (style.underline) flags |= 2;
@@ -740,8 +740,14 @@ export class Screen extends Element {
       (element as any).renderScrollbar();
     }
 
-    // Render children
-    for (const child of element.children) {
+    // Render children - sort by zIndex if available
+    const sortedChildren = [...element.children].sort((a, b) => {
+      const zA = a.options.zIndex || 0;
+      const zB = b.options.zIndex || 0;
+      return zA - zB;
+    });
+
+    for (const child of sortedChildren) {
       this._renderElement(child);
     }
   }
