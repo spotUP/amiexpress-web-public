@@ -57,20 +57,13 @@ export class XIMSystemCommandsHandler {
     console.log('[XIMSystem] Door registering with BBS');
 
     // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
-    const regNodeId =
-      (this.bbsSession?.nodeId as number) ||
-      (this.bbsSession as any)?.nodeNumber ||
-      1;
     const rawLineLen =
+      this.bbsSession?.user?.linesPerScreen ??
       this.bbsSession?.user?.lineLength ??
-      this.bbsSession?.pauseLines ??
-      (this.bbsSession as any)?.lineWrap ??
-      (this.state as any)?.pauseLines;
+      this.bbsSession?.user?.pageLength;
     const lineLen =
       typeof rawLineLen === 'number' && rawLineLen > 0 ? rawLineLen : 29;
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
-    this.messageParser.writeNodeId(msg.msgAddr, msg.nodeId ?? regNodeId);
-    this.messageParser.writeLineNumber(msg.msgAddr, 0);
     const parsedFinal = this.messageParser.parseMessage(msg.msgAddr);
     if (!parsedFinal.messageLength) {
       console.warn('[XIMSystem][RegisterReply] mn_Length is 0; optional fields disabled');
@@ -81,14 +74,14 @@ export class XIMSystemCommandsHandler {
       )} str="${parsedFinal.string}"`
     );
     console.log(
-      `[XIMSystem][RegisterReply][dbg] wrote nodeId=${regNodeId} cmd(lineLen)=${lineLen} data=${parsedFinal.data}`
+      `[XIMSystem][RegisterReply][dbg] wrote cmd(lineLen)=${lineLen} data=${parsedFinal.data}`
     );
 
     this.state.registered = true;
     this.state.shuttingDown = false;
     this.state.lineCount = 0;
 
-    // express.e does not modify strptr/fillers for JH_REGISTER.
+    // express.e does not modify node/line/strptr/fillers for JH_REGISTER.
 
     // Use standard ReplyMsg to send reply to the door's mn_ReplyPort.
     // The door's reply port (e.g., 0xa0500) is separate from the AEDoorPort
@@ -112,11 +105,7 @@ export class XIMSystemCommandsHandler {
     console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
 
     console.log(`[XIMSystem] Registration acknowledged`);
-
-    // CRITICAL FIX: Populate BBSInfo AFTER library initialization
-    // The real AEDoor.library's CreateComm() has set up the DIFace structure
-    // and pointers. Now we populate the actual user data at those addresses.
-    this.populateBBSInfoPostRegister(msg);
+    // express.e only sets msg.command for JH_REGISTER; avoid post-register memory writes.
   }
 
   /**

@@ -47,8 +47,8 @@ const OFFSET_END = 1; // Seek from end of file
 
 // AllocDosObject types (from dos/dosextens.h)
 const DOS_FILEHANDLE = 0;   // Allocate FileHandle structure
-const DOS_FIB = 1;          // Allocate FileInfoBlock structure (260 bytes)
-const DOS_EXALLCONTROL = 2; // Allocate ExAllControl structure
+const DOS_EXALLCONTROL = 1; // Allocate ExAllControl structure
+const DOS_FIB = 2;          // Allocate FileInfoBlock structure (260 bytes)
 const DOS_STDPKT = 3;       // Allocate DosPacket structure
 const DOS_CLI = 4;          // Allocate CommandLineInterface structure
 const DOS_RDARGS = 5;       // Allocate RDArgs structure
@@ -5209,14 +5209,14 @@ export class DosLibrary {
 
   /**
    * AllocDosObject - Allocate a DOS object (V36)
-   * D1 = type (DOS_FILEHANDLE=0, DOS_FIB=1, DOS_EXALLCONTROL=2, DOS_STDPKT=3, DOS_CLI=4, DOS_RDARGS=5)
+   * D1 = type (DOS_FILEHANDLE=0, DOS_EXALLCONTROL=1, DOS_FIB=2, DOS_STDPKT=3, DOS_CLI=4, DOS_RDARGS=5)
    * D2 = tags (pointer to tag list, often NULL)
    * Returns: D0 = pointer to allocated object or 0 on error
    *
    * Structure sizes:
    * - DOS_FILEHANDLE: 48 bytes (FileHandle)
-   * - DOS_FIB: 260 bytes (FileInfoBlock)
    * - DOS_EXALLCONTROL: 16 bytes (ExAllControl)
+   * - DOS_FIB: 260 bytes (FileInfoBlock)
    * - DOS_STDPKT: 68 bytes (DosPacket)
    * - DOS_CLI: 64 bytes (CommandLineInterface)
    * - DOS_RDARGS: 32 bytes (RDArgs)

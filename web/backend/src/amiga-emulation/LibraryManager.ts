@@ -330,17 +330,6 @@ export class LibraryManager {
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
 
-    if (!this.execLibrary.loadRealAEDoorLibrary()) {
-      console.warn("[LibraryManager] Real AEDoor.library failed to load");
-    }
-
-    // If a supported Kickstart is present, extract key libraries to disk once so
-    // doors can load real binaries instead of stubs. This is generic and runs
-    // only when files are missing.
-    if (romPath) {
-      this.ensureRomLibrariesExtracted(romPath, projectRoot);
-    }
-
     const libraryLoader = new LibraryLoader(this.emulator, undefined, this.kickstartRom);
     // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
     // addSearchPath() unshifts, so add in reverse priority order.
@@ -351,6 +340,17 @@ export class LibraryManager {
     console.log(
       `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
     );
+
+    // If a supported Kickstart is present, extract key libraries to disk once so
+    // doors can load real binaries instead of stubs. This is generic and runs
+    // only when files are missing.
+    if (romPath) {
+      this.ensureRomLibrariesExtracted(romPath, projectRoot);
+    }
+
+    if (!this.execLibrary.loadRealAEDoorLibrary()) {
+      console.warn("[LibraryManager] Real AEDoor.library failed to load");
+    }
 
     // Pre-register any libraries present on disk so getLibraryBase() can
     // resolve them before OpenLibrary is invoked.

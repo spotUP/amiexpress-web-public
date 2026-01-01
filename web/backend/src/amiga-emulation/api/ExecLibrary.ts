@@ -107,7 +107,6 @@ export class ExecLibrary {
   private messagePorts: Map<number, MessagePort> = new Map(); // address -> port
   private repliedMessages: Set<number> = new Set(); // track messages we've replied to via ReplyMsg
   private publicPorts: Map<string, number> = new Map(); // lower-case name -> address
-  private nextPortAddress: number = 0x0a0000; // Start at 640KB (between Task and library stubs)
 
   // Semaphore tracking
   private publicSemaphores: Map<string, number> = new Map(); // name -> address
@@ -4318,15 +4317,12 @@ export class ExecLibrary {
         16
       )}, this.bbsTask.address=0x${this.bbsTask.address.toString(16)}`
     );
-    console.log(
-      `[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(
-        16
-      )}`
-    );
-
     // Allocate memory for MsgPort structure (34 bytes)
-    const portAddr = this.nextPortAddress;
-    this.nextPortAddress += 0x100; // Space for port + message queue
+    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (portAddr === 0) {
+      console.warn("[ExecLibrary]   CreateMsgPort failed: AllocMem returned 0");
+      return 0;
+    }
 
     // Initialize MsgPort structure
     // struct MsgPort {
@@ -4432,15 +4428,12 @@ export class ExecLibrary {
     console.log(
       `[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`
     );
-    console.log(
-      `[ExecLibrary]   Next port address: 0x${this.nextPortAddress.toString(
-        16
-      )}`
-    );
-
     // Allocate memory for MsgPort structure (34 bytes)
-    const portAddr = this.nextPortAddress;
-    this.nextPortAddress += 0x100; // Space for port + message queue
+    const portAddr = this.allocMem(34, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (portAddr === 0) {
+      console.warn("[ExecLibrary]   CreatePort failed: AllocMem returned 0");
+      return 0;
+    }
 
     // Read the port name if provided
     let portName = "";
