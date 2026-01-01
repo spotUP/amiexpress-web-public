@@ -451,6 +451,7 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
       const toolFlags = getConferenceToolFlags(confNumber);
 
       if (session.subState === LoggedOnSubState.DISPLAY_BULL) {
+        // Skip BULL if we just came from QuickNew and need to continue
         if (!toolFlags.noBulls) {
           displayFlowLog('showing BULL');
           const shown = await displayScreen(socket, session, 'BULL');
@@ -465,23 +466,9 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
         continue;
       }
 
-      if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
-        if (!toolFlags.noBulls) {
-          displayFlowLog('showing NODE_BULL');
-          const shown = await displayScreen(socket, session, 'NODE_BULL');
-          if (shown && pauseDisplayFlow(socket, session)) {
-            session.subState = LoggedOnSubState.EXEC_QUICKNEW;
-            displayFlowLog('pause after NODE_BULL');
-            return;
-          }
-        }
-        displayFlowLog('skip NODE_BULL (toolFlags or not shown)');
-        session.subState = LoggedOnSubState.EXEC_QUICKNEW;
-        continue;
-      }
-
       if (session.subState === LoggedOnSubState.EXEC_QUICKNEW) {
         // AmiExpress EXEC_QUICKNEW support (express.e:29845-29847)
+        // This is now the first step in the display flow
         const bbsRoot = config.get('dataDir');
         const nodeId = session.nodeId || 0;
         const nodeInfoPath = path.join(bbsRoot, `Node${nodeId}.info`);
@@ -491,26 +478,22 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
           if (tooltypes.has('EXEC_QUICKNEW')) {
             displayFlowLog('EXEC_QUICKNEW detected, running command');
             const { runSysCommand } = require('./command-execution.handler');
+            // Execute the door - output will be sent to terminal
             await runSysCommand(socket, session, 'QUICKNEW', '');
             
-            // Display result file
-            const quickNewPath = path.join(bbsRoot, 'Screens', 'QuickNew.txt');
-            if (fs.existsSync(quickNewPath)) {
-              displayFlowLog('Displaying QuickNew.txt');
-              await displayScreen(socket, session, 'QuickNew', false);
-              if (pauseDisplayFlow(socket, session)) {
-                session.subState = LoggedOnSubState.CONF_SCAN;
-                return;
-              }
+            // Force a pause after QuickNew output
+            if (pauseDisplayFlow(socket, session)) {
+              session.subState = LoggedOnSubState.DISPLAY_BULL;
+              return;
             }
           }
         }
 
-        session.subState = LoggedOnSubState.CONF_SCAN;
+        session.subState = LoggedOnSubState.DISPLAY_BULL;
         continue;
       }
 
-      if (session.subState === LoggedOnSubState.CONF_SCAN) {
+      if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
         displayFlowLog('running confScan');
         const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);

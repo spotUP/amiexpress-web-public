@@ -369,6 +369,13 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   session.currentConference = 0;
   session.currentConf = 0;
   
+  // express.e:28574 - Join default conference after scan finishes
+  // This restores currentConf so subsequent screens (CONF_BULL, MENU) can be found.
+  const confToJoin = user?.confRJoin || 1;
+  const msgToJoin = user?.msgBaseRJoin || 1;
+  console.log(`[confScan] Scan complete. Joining default conference ${confToJoin} (base ${msgToJoin})`);
+  await joinConference(socket, session, confToJoin, msgToJoin, true);
+
   // Restore current login date
   if (user) {
     user.newSinceDate = originalNewSinceDate;

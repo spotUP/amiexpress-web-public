@@ -384,7 +384,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Set session user data
       // ... (existing code continues) ...
       session.state = BBSState.LOGGEDON;
-      session.subState = LoggedOnSubState.DISPLAY_BULL;
+      session.subState = LoggedOnSubState.EXEC_QUICKNEW;
       session.user = { ...user, lastLoginBeforeUpdate };
       session.ansiMode = user.ansi;
       installAnsiFilter(socket, session);

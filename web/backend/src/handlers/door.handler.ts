@@ -2573,7 +2573,7 @@ async function executeMciDoor(socket: any, session: BBSSession, door: Door, door
   }
 
   // Import parseMciCodes function
-  const { parseMciCodes, addAnsiEscapes } = require('./screen.handler');
+  const { parseMciCodes } = require('./screen.handler');
 
   // Convert escape sequences in MCI_TEXT to actual characters
   // Replace literal \r\n, \r, \n with actual CRLF
@@ -2582,22 +2582,40 @@ async function executeMciDoor(socket: any, session: BBSSession, door: Door, door
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\r');
 
-  // Process MCI codes (express.e:4297 calls processMci())
-  let processedText = parseMciCodes(mciText, session);
+  // Process MCI codes inline (express.e:4297 calls processMci())
+  // Passing socket enables inline emission and command execution
+  const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+  const { loadBBSConfig } = require('../services/bbs-config-file.service');
+  const bbsConfig = loadBBSConfig(bbsRoot);
+  
+  const parsedResult = await parseMciCodes(
+    mciText, 
+    session, 
+    bbsConfig.bbs_name, 
+    bbsConfig.sysop_name, 
+    bbsConfig.location, 
+    socket
+  );
 
-  // Add ESC prefix to ANSI codes if needed
-  processedText = addAnsiEscapes(processedText);
+  // If the result wasn't already emitted inline (no special codes), send it now
+  if (!parsedResult.inlineEmitted && parsedResult.parsed.length > 0) {
+    let processedText = parsedResult.parsed;
+    const { addAnsiEscapes } = require('./screen.handler');
+    processedText = addAnsiEscapes(processedText);
+    processedText = processedText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+    socket.emit('ansi-output', processedText);
+  }
 
-  // Normalize line endings
-  processedText = processedText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-
-  // Display the processed text
-  socket.emit('ansi-output', processedText);
-
-  // Pause after display
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  // Handle manual pause if requested by MCI (~SP.)
+  if (parsedResult.hasPause) {
+    const { doPause } = require('./screen.handler');
+    doPause(socket, session);
+  } else {
+    // Standard pause after display
+    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
 
   console.log(`[executeMciDoor] MCI door completed: ${door.name}`);
 }
