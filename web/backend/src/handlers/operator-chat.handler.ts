@@ -28,6 +28,16 @@ import { OperatorChatRepository } from '../database/operator-chat.repository';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, simulateNaturalTyping } from './grumpy-sysop-bot.handler';
+import {
+  renderPicker,
+  handlePickerInput,
+  shouldOpenPicker,
+  createPickerState,
+  renderPickerClosed,
+  handlePickerMouse,
+  SmileyPickerState,
+  getSelectedSmiley
+} from '../utils/smiley-picker.util';
 import { userSessions, socketToUser } from '../server/session-manager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import * as fs from 'fs';
@@ -180,30 +190,32 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
       }
 
       // Send real-time typing preview to BBS user's terminal at line 22
-      const page = repository.getPageRequest(data.pageId);
-      if (page) {
-        const sysopHandle = chatSession.sysopHandle || 'Sysop';
-        const buffer = (chatSession as any).sysopTypingBuffer || '';
-
-        // Display typing preview at line 22 (below scroll region, above separator)
-        // Uses save/restore cursor to preserve BBS user's typing position at line 24
-        const typingPreview =
-          '\x1b7' + // Save BBS user's cursor position (they're typing at line 24)
-          '\x1b[22;1H' + // Move to line 22 (typing preview line)
-          '\x1b[2K' + // Clear ENTIRE line (not just from cursor)
-          (buffer.length > 0
-            ? `\x1b[36m${sysopHandle}:\x1b[0m ${buffer}\x1b[36m|\x1b[0m`
-            : '') +
-          '\x1b8'; // Restore BBS user's cursor position
-
-        io.to(`user:${page.userId}`).emit('ansi-output', typingPreview);
-      }
-
-      // Update typing indicator
-      chatSession.isTyping.sysop = (chatSession as any).sysopTypingBuffer.length > 0;
-    });
-  });
-
+            // Real-time sysop keystroke transmission to BBS user
+            // Restored: Live typing preview at line 23 (bottom of chat window)
+            // This mimics the 'live' feel while keeping the user's input line (24) clean.
+            const page = repository.getPageRequest(data.pageId);
+            if (page) {
+              const sysopHandle = chatSession.sysopHandle || 'Sysop';
+              const buffer = (chatSession as any).sysopTypingBuffer || '';
+      
+              // Display typing preview at line 23 (bottom of scroll region)
+              // Uses save/restore cursor to preserve BBS user's typing position at line 24
+              const typingPreview =
+                '\x1b7' + // Save BBS user's cursor position (they're typing at line 24)
+                '\x1b[23;1H' + // Move to line 23
+                '\x1b[2K' + // Clear line
+                (buffer.length > 0
+                  ? `\x1b[36m${sysopHandle}:\x1b[0m ${buffer}`
+                  : '') +
+                '\x1b8'; // Restore BBS user's cursor position
+      
+              io.to(`user:${page.userId}`).emit('ansi-output', typingPreview);
+            }
+      
+            // Update typing indicator
+            chatSession.isTyping.sysop = (chatSession as any).sysopTypingBuffer.length > 0;
+          });
+        });
   // Start page timeout checker
   setInterval(() => {
     checkPageTimeouts(io, repository);
@@ -326,41 +338,43 @@ export async function handlePageSysop(
   // Set cooldown
   repository.setUserCooldown(session.user!.id, config.pageCooldown);
 
-  // Send notifications
-  await sendPageNotifications(io, repository, pageRequest, config);
-
-  // Store page ID in tempData (but don't change subState yet - user can continue using BBS)
-  // In express.e, user returns to normal operation after the paging animation
+  // Store page ID in tempData immediately
   session.tempData = { ...session.tempData, pageId: pageRequest.id };
+  
+  // Set state to waiting
+  session.subState = LoggedOnSubState.OPERATOR_CHAT_WAITING;
 
-  // Display waiting message with animated dots (match express.e exactly)
-  // express.e: FOR i:=0 TO 19, each iteration: DisplayBeep, aePuts(' .'), Delay 50 ticks (~1 sec)
+  // Display waiting message with animated dots
   const currentTime = new Date().toLocaleString();
-  // Get sysop name from BBS config (cmds.sysopName in express.e)
   const bbsConfig = loadBBSConfig(bbsRoot);
   const sysopName = bbsConfig.sysop_name || 'the operator';
 
   socket.emit('ansi-output', `\r\n${currentTime}\r\n`);
   socket.emit('ansi-output', `\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
 
-  // Set state to waiting during animation (allows CTRL+C to abort)
-  session.subState = LoggedOnSubState.OPERATOR_CHAT_WAITING;
-
   // Start animated dot sequence - 30 dots over 30 seconds
   let dotCount = 0;
   const maxDots = 30;
+  
+  // Register interval in map immediately (before async notifications)
+  // This ensures acceptPage can find and stop it even if notifications take time
   const dotInterval = setInterval(() => {
-    // Check if interval was stopped externally (via stopPagingDots)
+    // Check if interval was stopped externally
     if (!activePagingIntervals.has(pageRequest.id)) {
       clearInterval(dotInterval);
       return;
     }
 
-    // Check if session state changed (chat accepted or cancelled)
-    // Stop dots if: pageId changed, pageId cleared, OR state is no longer WAITING
-    // (covers both OPERATOR_CHAT_ACTIVE and returning to DISPLAY_MENU)
+    // Check if session state changed
     if (session.tempData?.pageId !== pageRequest.id ||
         session.subState !== LoggedOnSubState.OPERATOR_CHAT_WAITING) {
+      stopPagingDots(pageRequest.id);
+      return;
+    }
+
+    // Check if page was accepted (e.g. by bot) but race condition missed stopPagingDots
+    const currentPage = repository.getPageRequest(pageRequest.id);
+    if (currentPage?.status === PageStatus.ACCEPTED) {
       stopPagingDots(pageRequest.id);
       return;
     }
@@ -372,9 +386,7 @@ export async function handlePageSysop(
     if (dotCount >= maxDots) {
       stopPagingDots(pageRequest.id);
 
-      // Check if chat was already accepted (by bot or sysop) before resetting state
       const page = repository.getPageRequest(pageRequest.id);
-      // Cast to avoid TS narrowing issue - session.subState can change between intervals
       const currentSubState = session.subState as LoggedOnSubState;
       const chatAccepted = page?.status === PageStatus.ACCEPTED ||
                            currentSubState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
@@ -384,23 +396,22 @@ export async function handlePageSysop(
         socket.emit('ansi-output', 'You may continue using the system\r\n');
         socket.emit('ansi-output', `until ${sysopName} answers your request.\r\n\r\n`);
 
-        // Return to normal BBS operation (like express.e)
-        // User keeps pageId in tempData so they can receive chat-accepted later
         if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
           session.subState = LoggedOnSubState.DISPLAY_MENU;
         }
       }
-      // If chat was accepted, don't show the message or change state - user is already chatting
     }
-  }, 1000); // 1 second per dot (express.e uses 50 ticks = 1 second)
+  }, 1000);
 
-  // Register interval in map for reliable cleanup
   activePagingIntervals.set(pageRequest.id, dotInterval);
-
-  // Store interval ID so it can be cleared if chat is accepted/cancelled
-  session.tempData = { ...session.tempData, pageId: pageRequest.id, dotIntervalId: dotInterval };
+  session.tempData = { ...session.tempData, dotIntervalId: dotInterval };
 
   console.log(`[Operator Chat] Page created: ${pageRequest.id} from ${session.user!.username}@Node${session.nodeId}`);
+
+  // Send notifications asynchronously (don't block paging UI)
+  sendPageNotifications(io, repository, pageRequest, config).catch(err => {
+    console.error('[Operator Chat] Failed to send notifications:', err);
+  });
 
   return {
     success: true,
@@ -541,7 +552,7 @@ async function sendPageNotifications(
 
 /**
  * Accept a page and start chat session
- * Sets up split-screen layout like livechat (scroll region 1-21, typing preview at 22, separator at 23, input at 24)
+ * Sets up linear chat with scroll region 1-23 (leaving line 24 for smiley button)
  */
 async function acceptPage(
   io: any,
@@ -574,11 +585,11 @@ async function acceptPage(
   // Update page status
   repository.updatePageStatus(pageId, PageStatus.ACCEPTED, sysopId, sysopHandle);
 
-  // Load existing chat messages from database (messages sent before sysop accepted)
+  // Load existing chat messages
   const existingMessages = repository.getChatMessages(pageId);
   console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages for page ${pageId}`);
 
-  // Create chat session with existing message history
+  // Create chat session
   const chatSession: ChatSession = {
     pageId,
     userId: page.userId,
@@ -589,79 +600,53 @@ async function acceptPage(
     sysopSessionId,
     startedAt: new Date(),
     lastActivity: new Date(),
-    messages: existingMessages, // Include existing messages
+    messages: existingMessages,
     isTyping: { user: false, sysop: false }
   };
 
   activeChatSessions.set(pageId, chatSession);
 
-  // Send existing message history to sysop frontend
+  // Send history to sysop
   if (existingMessages.length > 0) {
     const messagesWithTimestamps = existingMessages.map(msg => ({
       ...msg,
-      timestamp: msg.timestamp.getTime() // Convert Date to number for frontend
+      timestamp: msg.timestamp.getTime()
     }));
     io.to(sysopSessionId).emit('operator:message-history', {
       pageId,
       messages: messagesWithTimestamps
     });
-    console.log(`[Operator Chat] Sent ${existingMessages.length} message(s) to sysop ${sysopHandle}`);
   }
 
-  // Notify user that sysop accepted with split-screen setup (like livechat)
-  // Set up fixed chat layout: scroll region 1-21, typing preview at 22, separator at 23, input at 24
+  // Notify user - Linear Chat Setup matching AmiExpress
+  // Scroll region 1-23 to keep line 24 for input
   const userSetupScreen =
-    '\x1b%G' + // Select UTF-8 character set
-    '\x1b[2J\x1b[H' + // Clear screen, home cursor
-    '\x1b[1;21r' + // Set scroll region to lines 1-21 (messages area - allows scrolling)
-    '\x1b[32m===============================================================\x1b[0m\r\n' +
-    `\x1b[36m              OPERATOR CHAT WITH ${sysopHandle.toUpperCase()}\x1b[0m\r\n` +
-    '\x1b[32m===============================================================\x1b[0m\r\n' +
-    '\r\n' +
-    'Type your messages and press ENTER to send.\r\n' +
-    'Type \x1b[33m/END\x1b[0m to exit, \x1b[33mCtrl+E\x1b[0m for smileys, \x1b[33m/HELP\x1b[0m for commands.\r\n' +
-    '\r\n' +
-    '\x1b[23;1H' + // Move to line 23
-    '\x1b[36m-----------------------------------------------------------------\x1b[0m' +
-    '\x1b[24;1H'; // Move to line 24 for input
+    '\x1b%G' + // Select UTF-8
+    '\x1b[2J\x1b[H' + // Clear Screen and Home Cursor (Clean Slate)
+    '\x1b[?1000h\x1b[?1006h' + // Enable mouse reporting
+    '\x1b[1;23r' + // Set scroll region 1-23
+    '\r\n\r\nThis is ' + sysopHandle + ', How can I help you??\r\n\r\n' +
+    '\x1b[24;1H'; // Move cursor to input line (24)
 
-  // Debug: Check which sockets are in the target room
   const targetRoom = `user:${page.userId}`;
-  const socketsInRoom = io.sockets.adapter.rooms.get(targetRoom);
-  console.log(`[Operator Chat] Sending to room ${targetRoom}, sockets in room: ${socketsInRoom ? Array.from(socketsInRoom).join(', ') : 'NONE'}`);
-
-  // Try room-based emit first
-  console.log(`[Operator Chat] Sending split-screen setup to room ${targetRoom}`);
   io.to(targetRoom).emit('ansi-output', userSetupScreen);
 
-  console.log(`[Operator Chat] Sending chat-accepted to room ${targetRoom}`);
   io.to(targetRoom).emit('operator:chat-accepted', {
     pageId,
     sysopHandle
   });
 
-  // CRITICAL: Update user's session state from the session manager
-  // BBS sessions are stored in userSessions map, NOT on socket.session
+  // Update session state
   const userSession = userSessions.get(page.userId);
   if (userSession) {
-    console.log(`[Operator Chat] Found user session for userId ${page.userId}`);
-
-    // CRITICAL: Update session state directly
     if (userSession.tempData?.pageId === pageId) {
-      // Clear the dot animation interval if still running
       if (userSession.tempData?.dotIntervalId) {
         clearInterval(userSession.tempData.dotIntervalId);
         delete userSession.tempData.dotIntervalId;
       }
-
       userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
       userSession.inputBuffer = '';
-      console.log(`[Operator Chat] Set user ${page.userHandle} session to OPERATOR_CHAT_ACTIVE`);
-    } else {
-      console.warn(`[Operator Chat] User session found but pageId mismatch: session has ${userSession.tempData?.pageId}, expected ${pageId}`);
     }
-  } else {
-    console.warn(`[Operator Chat] Could not find user session for userId ${page.userId}`);
   }
 
   // Notify sysop
@@ -675,15 +660,13 @@ async function acceptPage(
     lastCommand: page.lastCommand
   });
 
-  // Broadcast to other sysops that page was accepted
   io.emit('operator:page-accepted', { pageId, sysopHandle });
-
   console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
 }
 
 /**
  * Send chat message
- * Uses scroll region message insertion like livechat (messages appear in lines 1-21, input stays at line 24)
+ * Linear style: Just raw text with color codes, no timestamps
  */
 async function sendChatMessage(
   io: any,
@@ -696,14 +679,11 @@ async function sendChatMessage(
   nodeId: number
 ): Promise<void> {
   const chatSession = activeChatSessions.get(pageId);
-  if (!chatSession) {
-    console.error(`[Operator Chat] Chat session not found: ${pageId}`);
-    return;
-  }
+  if (!chatSession) return;
 
   // Create message
   const chatMessage: ChatMessage = {
-    id: '', // Will be set by repository
+    id: '',
     pageId,
     senderId,
     senderHandle,
@@ -713,26 +693,17 @@ async function sendChatMessage(
     nodeId
   };
 
-  // Save to database
   const saved = repository.addChatMessage(chatMessage);
-
-  // Add to session
   chatSession.messages.push(saved);
   chatSession.lastActivity = new Date();
 
-  // Clear typing buffers when message is sent
-  if (senderType === 'user') {
-    (chatSession as any).userTypingBuffer = '';
-  } else if (senderType === 'sysop') {
-    (chatSession as any).sysopTypingBuffer = '';
-  }
+  // Clear typing buffers
+  if (senderType === 'user') (chatSession as any).userTypingBuffer = '';
+  if (senderType === 'sysop') (chatSession as any).sysopTypingBuffer = '';
 
   // If bot-controlled and message is from user, generate bot response
   console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSession as any).isBotControlled}, senderType=${senderType}`);
   if ((chatSession as any).isBotControlled && senderType === 'user') {
-    console.log(`[Operator Chat] User message in bot session, generating response for: "${message}"`);
-
-    // Build context
     const page = repository.getPageRequest(pageId);
     if (page) {
       const context = {
@@ -743,25 +714,33 @@ async function sendChatMessage(
         messageHistory: (chatSession as any).botMessageHistory || []
       };
 
-      // Add user message to history
-      context.messageHistory.push({ role: 'user', content: message });
-
-      // Get bot response (async, don't wait)
-      getGrumpySysopResponse(message, context).then(botResponse => {
-        // Add bot message to history
-        context.messageHistory.push({ role: 'bot', content: botResponse });
+      // Add user message to history if it has content
+      if (message.trim() !== '') {
+        context.messageHistory.push({ role: 'user', content: message });
         (chatSession as any).botMessageHistory = context.messageHistory;
+        console.log(`[Operator Chat] Added user message to history: "${message}"`);
+      }
 
-        // Send bot response with natural typing after short delay
-        setTimeout(() => {
-          simulateNaturalTyping(io, pageId, botResponse, () => {
-            // After typing animation completes, save message to database
-            sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', botResponse, nodeId);
-          });
-        }, 1000 + Math.random() * 2000); // 1-3 second delay before starting to type
-      }).catch(err => {
-        console.error('[Operator Chat] Bot response error:', err);
-      });
+      // Trigger bot reply ONLY if user sent an empty message (Double Enter signal)
+      if (message.trim() === '') {
+        console.log(`[Operator Chat] User sent double-enter (empty message), triggering bot response...`);
+        
+        getGrumpySysopResponse(message, context).then(botResponse => {
+          // Add bot message to history
+          context.messageHistory.push({ role: 'bot', content: botResponse });
+          (chatSession as any).botMessageHistory = context.messageHistory;
+
+          // Send bot response with natural typing after short delay
+          setTimeout(() => {
+            simulateNaturalTyping(io, pageId, botResponse, () => {
+              // After typing animation completes, save message to database
+              sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', botResponse, nodeId);
+            });
+          }, 500 + Math.random() * 500); // 0.5-1.0s delay
+        }).catch(err => {
+          console.error('[Operator Chat] Bot response error:', err);
+        });
+      }
     }
   }
 
@@ -771,122 +750,74 @@ async function sendChatMessage(
     timestamp: saved.timestamp.getTime()
   });
 
-  // Send ANSI output to user's terminal using scroll region (like livechat)
+  // Emit to User (Linear ANSI text)
   const page = repository.getPageRequest(pageId);
   if (page) {
-    // Format timestamp like livechat
-    const timestamp = new Date().toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-
-    // Color based on sender type (cyan for sysop, yellow for user)
-    const nameColor = senderType === 'sysop' ? '36' : '33'; // cyan or yellow
-
-    // Insert message into scroll region while keeping cursor at line 24
-    // This matches the livechat pattern exactly
-    // When USER sends a message, clear their input line (24) after
-    // When SYSOP sends a message, preserve user's input line (they may be typing)
-    const clearInputLine = senderType === 'user'
-      ? '\x1b[24;1H\x1b[2K' // Move to line 24 and clear it (user just submitted)
-      : '';
-
-    // Word-wrap long messages to prevent overflow past scroll region
-    // Terminal is 80 cols, prefix "HH:MM Handle: " is ~18 chars, leave margin
-    const maxLineWidth = 78;
-    const prefix = `\x1b[36m${timestamp}\x1b[0m \x1b[${nameColor}m${senderHandle}:\x1b[0m `;
-    const prefixVisibleLen = timestamp.length + 1 + senderHandle.length + 2; // "HH:MM Handle: "
-    const firstLineMaxChars = maxLineWidth - prefixVisibleLen;
-    const continuationIndent = '       '; // 7 spaces to align with message text
-    const continuationMaxChars = maxLineWidth - continuationIndent.length;
-
-    // Word-wrap the message
-    const wrappedLines = wordWrapMessage(message, firstLineMaxChars, continuationMaxChars);
-
-    // Build ANSI output for each line
-    let insertMessage =
-      '\x1b7' + // Save cursor position
-      '\x1b[1;21r' + // Reinforce scroll region (lines 1-21) to prevent full-screen scroll
-      '\x1b[22;1H\x1b[2K'; // Move to line 22, clear ENTIRE line (typing preview)
-
-    // Insert first line with timestamp and handle
-    insertMessage +=
-      '\x1b[21;1H' + // Move to line 21 (bottom of scroll region)
-      '\x1b[S' + // Scroll Up (SU): Scroll the scroll region up by 1 line
-      '\x1b[21;1H' + // Move to line 21 (now a blank line after scroll)
-      prefix + wrappedLines[0]; // Write first line with prefix
-
-    // Insert continuation lines (if any)
-    for (let i = 1; i < wrappedLines.length; i++) {
-      insertMessage +=
-        '\x1b[21;1H' + // Move to line 21
-        '\x1b[S' + // Scroll up
-        '\x1b[21;1H' + // Move to line 21
-        continuationIndent + wrappedLines[i]; // Write continuation line
+    // AmiExpress Style: Color + Text + Newline
+    const color = senderType === 'sysop' ? '36' : '33';
+    
+    // Word-wrap the message to fit within 79 columns (to avoid natural wrap at 80)
+    const wrappedLines = wordWrapMessage(message, 79, 79);
+    
+    // Determine line ending:
+    // GrumpyBot: Double Enter (\r\n\r\n) to signal turn end automatically
+    // Humans: Single Enter (\r\n) - they will type double enter themselves
+    const lineEnding = senderHandle === 'GrumpyBot' ? '\r\n\r\n' : '\r\n';
+    
+    let output = '';
+    
+    if (senderType === 'user') {
+      // User sent: Clear input line, print message(s), reset cursor
+      output = '\x1b[24;1H\x1b[2K'; // Clear input line
+      
+      for (const line of wrappedLines) {
+        output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
+      }
+      
+      output += '\x1b[24;1H'; // Move cursor to start of input
+    } else {
+      // Sysop sent: Preserve user input (save cursor), print message(s), restore cursor
+      output = '\x1b7'; // Save cursor position
+      
+      for (const line of wrappedLines) {
+        output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
+      }
+      
+      output += '\x1b8'; // Restore cursor position
     }
 
-    insertMessage +=
-      clearInputLine + // Clear user's input line ONLY when user sent the message
-      '\x1b[24;1H'; // Move cursor back to line 24 for next input
-
-    io.to(`user:${page.userId}`).emit('ansi-output', insertMessage);
+    io.to(`user:${page.userId}`).emit('ansi-output', output);
   }
-
-  console.log(`[Operator Chat] Message in page ${pageId} from ${senderHandle}: ${message.substring(0, 50)}...`);
 }
 
 /**
  * End chat session
- * Resets scroll region and shows chat summary (like livechat)
+ * Resets scroll region and shows simple summary
  */
 async function endChat(io: any, repository: OperatorChatRepository, pageId: string): Promise<void> {
   const chatSession = activeChatSessions.get(pageId);
-  if (!chatSession) {
-    console.error(`[Operator Chat] Chat session not found: ${pageId}`);
-    return;
-  }
+  if (!chatSession) return;
 
-  // Update page status
   repository.updatePageStatus(pageId, PageStatus.ENDED);
-
-  // Log transcript to SysLogs
   await logChatTranscript(repository, chatSession);
 
-  // Calculate stats
-  const messageCount = chatSession.messages.length;
-  const duration = Math.floor((Date.now() - chatSession.startedAt.getTime()) / 60000);
-
-  // Build end message with scroll region reset (like livechat)
-  const page = repository.getPageRequest(pageId);
-  const partnerName = chatSession.sysopHandle || 'Sysop';
+  // Simple End Message
   const endMessage =
     '\x1b[?25l' + // Hide cursor
-    '\x1b[r' + // Reset scroll region to full screen
-    '\x1b[2J\x1b[H' + // Clear entire screen and move cursor to home
-    '\x1b[3J' + // Clear scrollback buffer
-    '\r\n\x1b[32m===============================================================\x1b[0m\r\n' +
-    '\x1b[36m                    OPERATOR CHAT ENDED\x1b[0m\r\n' +
-    '\x1b[32m===============================================================\x1b[0m\r\n' +
-    '\r\n' +
-    `Chat with ${partnerName} has ended.\r\n` +
-    `Duration: ${duration} minute(s)\r\n` +
-    `Messages exchanged: ${messageCount}\r\n` +
+    '\x1b[r' + // Reset scroll region
+    '\x1b[?1000l\x1b[?1006l' + // Disable mouse
+    '\r\n\r\nEnding Chat.\r\n' + // Exact text from express.e
     '\r\n' +
     '\x1b[32mPress any key to continue...\x1b[0m' +
-    '\x1b[?25h'; // Show cursor again
+    '\x1b[?25h';
 
-  // Send to BBS user
+  const page = repository.getPageRequest(pageId);
   if (page) {
     io.to(`user:${page.userId}`).emit('ansi-output', endMessage);
   }
 
-  // Notify both parties
   io.to(`page:${pageId}`).emit('operator:chat-ended', { pageId });
-
-  // Remove from active sessions
   activeChatSessions.delete(pageId);
-
   console.log(`[Operator Chat] Chat session ${pageId} ended`);
 }
 

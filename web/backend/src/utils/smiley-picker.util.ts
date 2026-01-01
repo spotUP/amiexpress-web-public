@@ -102,7 +102,7 @@ export function renderPicker(state: SmileyPickerState): string {
   output += `\x1b[${startY + 1};${startX}H`;
   const title = ' ASCII SMILEYS ';
   const titlePadding = Math.floor((pickerWidth - 2 - title.length) / 2);
-  output += `\x1b[44m\x1b[37m|${' '.repeat(titlePadding)}\x1b[1;33m${title}\x1b[0m\x1b[44m\x1b[37m${' '.repeat(pickerWidth - 3 - titlePadding - title.length)}|\x1b[0m`;
+  output += `\x1b[44m\x1b[37m|${' '.repeat(titlePadding)}\x1b[1;33m${title}\x1b[0m\x1b[44m\x1b[37m${' '.repeat(pickerWidth - 2 - titlePadding - title.length)}|\x1b[0m`;
 
   // Separator
   output += `\x1b[${startY + 2};${startX}H`;
@@ -112,18 +112,19 @@ export function renderPicker(state: SmileyPickerState): string {
   output += `\x1b[${startY + 3};${startX}H`;
   output += `\x1b[44m\x1b[37m| `;
 
-  let tabX = 2;
+  let visibleTabLen = 2;
   for (let i = 0; i < SMILEY_CATEGORIES.length; i++) {
     const cat = SMILEY_CATEGORIES[i];
     const shortName = cat.name.substring(0, 3);
     if (i === state.categoryIndex) {
       output += `\x1b[43m\x1b[30m[${shortName}]\x1b[0m\x1b[44m\x1b[37m `;
+      visibleTabLen += 6;
     } else {
       output += `\x1b[40m${shortName}\x1b[44m `;
+      visibleTabLen += 4;
     }
-    tabX += shortName.length + 3;
   }
-  output += ' '.repeat(Math.max(0, pickerWidth - 2 - tabX));
+  output += ' '.repeat(Math.max(0, pickerWidth - 1 - visibleTabLen));
   output += `|\x1b[0m`;
 
   // Empty line
@@ -132,8 +133,7 @@ export function renderPicker(state: SmileyPickerState): string {
 
   // Smiley grid
   const smileys = category.smileys;
-  const rows = Math.ceil(smileys.length / maxSmileysPerRow);
-
+  
   for (let row = 0; row < 5; row++) {
     output += `\x1b[${startY + 5 + row};${startX}H`;
     output += `\x1b[44m\x1b[37m| `;
@@ -154,7 +154,8 @@ export function renderPicker(state: SmileyPickerState): string {
       }
     }
     output += lineContent;
-    output += `|\x1b[0m`;
+    // Add padding to reach the right border (pickerWidth - 2 inner space - 45 smiley space - 1 extra from '| ')
+    output += ' '.repeat(pickerWidth - 2 - 45 - 1) + `|\x1b[0m`;
   }
 
   // Empty line before instructions
@@ -163,9 +164,9 @@ export function renderPicker(state: SmileyPickerState): string {
 
   // Instructions
   output += `\x1b[${startY + 11};${startX}H`;
-  const instructions = ' Arrows:Move  Tab:Category  Enter:Select  Esc:Cancel ';
+  const instructions = ' Arrows:Move Tab:Cat Enter:Sel Esc:Exit ';
   const instrPadding = Math.floor((pickerWidth - 2 - instructions.length) / 2);
-  output += `\x1b[44m\x1b[37m|${' '.repeat(instrPadding)}\x1b[36m${instructions}\x1b[37m${' '.repeat(pickerWidth - 3 - instrPadding - instructions.length)}|\x1b[0m`;
+  output += `\x1b[44m\x1b[37m|${' '.repeat(instrPadding)}\x1b[36m${instructions}\x1b[37m${' '.repeat(pickerWidth - 2 - instrPadding - instructions.length)}|\x1b[0m`;
 
   // Bottom border
   output += `\x1b[${startY + 12};${startX}H`;
@@ -275,6 +276,73 @@ export function handlePickerInput(
   }
 
   return { action: 'update', newState };
+}
+
+/**
+ * Handle mouse input for the picker
+ */
+export function handlePickerMouse(
+  state: SmileyPickerState,
+  x: number, // 1-based
+  y: number  // 1-based
+): { action: 'select' | 'cancel' | 'update' | 'none'; smiley?: string; newState: SmileyPickerState } {
+  const { pickerWidth, pickerHeight, startX, startY, maxSmileysPerRow } = getPickerDimensions();
+  const newState = { ...state };
+
+  // Check if click is outside the picker
+  if (x < startX || x >= startX + pickerWidth || y < startY || y >= startY + pickerHeight) {
+    // Click outside -> Cancel
+    newState.isOpen = false;
+    return { action: 'cancel', newState };
+  }
+
+  const relX = x - startX;
+  const relY = y - startY;
+
+  // Category Tabs (Line 3 relative to startY - 0-indexed offset from startY)
+  // Render uses startY + 3 for tabs
+  if (relY === 3) {
+    let currentX = 2; // "| " offset
+    for (let i = 0; i < SMILEY_CATEGORIES.length; i++) {
+      const isSelected = i === state.categoryIndex;
+      const width = isSelected ? 6 : 4; // "[XXX] " vs "XXX "
+      
+      if (relX >= currentX && relX < currentX + width) {
+        // Clicked on this tab
+        if (i !== state.categoryIndex) {
+          newState.categoryIndex = i;
+          newState.smileyIndex = 0;
+          return { action: 'update', newState };
+        }
+        return { action: 'none', newState };
+      }
+      currentX += width;
+    }
+  }
+
+  // Smiley Grid (Lines 5-9 relative to startY)
+  if (relY >= 5 && relY < 10) {
+    const row = relY - 5;
+    
+    if (relX >= 2) {
+      const gridX = relX - 2; // Skip "| "
+      const col = Math.floor(gridX / 9); // 9 chars per smiley
+      
+      if (col >= 0 && col < maxSmileysPerRow) {
+        const idx = row * maxSmileysPerRow + col;
+        const category = SMILEY_CATEGORIES[state.categoryIndex];
+        
+        if (idx < category.smileys.length) {
+          newState.smileyIndex = idx;
+          // Click on smiley -> Select it immediately
+          newState.isOpen = false;
+          return { action: 'select', smiley: category.smileys[idx], newState };
+        }
+      }
+    }
+  }
+
+  return { action: 'none', newState };
 }
 
 /**

@@ -115,13 +115,13 @@ IMPORTANT: You can answer BBS usage questions using your knowledge base. When us
 1. Complain about them not reading the docs first (grumpily)
 2. Eventually give them the answer (reluctantly)
 3. Reference the specific command or feature
-4. Keep it SHORT (2-3 sentences max)
+4. Keep it SHORT (1-2 sentences max). DO NOT RAMBLE.
 
 Example:
 User: "How do I read messages?"
-You: "*sighs* Did you even TRY reading the help? Press R for messages. It's literally on the main menu. Back in '92 we had to figure this stuff out with a manual."
+You: "*sighs* Did you even TRY reading the help? Press R. It's literally on the main menu."
 
-Keep responses SHORT (2-3 sentences max). Be grumpy but funny. Eventually be helpful.`;
+CRITICAL: Be concise. Typing at 2400 baud is slow, so you don't waste bytes.`;
 
 // Massively expanded response database for natural, varied conversations
 const RULE_BASED_RESPONSES = {
@@ -526,7 +526,12 @@ async function discoverFreeModels(): Promise<string[]> {
       .filter(model => {
         const promptPrice = parseFloat(model.pricing?.prompt || '1');
         const completionPrice = parseFloat(model.pricing?.completion || '1');
-        return promptPrice === 0 && completionPrice === 0;
+        const isFree = promptPrice === 0 && completionPrice === 0;
+        // Filter out "think" models as they are too verbose/slow for this use case
+        // and often exhaust token limits with internal reasoning
+        const isThinkingModel = model.id.toLowerCase().includes('think');
+
+        return isFree && !isThinkingModel;
       })
       .map(model => model.id);
 
@@ -573,6 +578,12 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
     return null;
   }
 
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
+    return null;
+  }
+
   try {
     const messages = [
       { role: 'system', content: GRUMPY_SYSOP_PERSONALITY },
@@ -592,13 +603,15 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
       {
         model: freeModel,
         messages: messages,
-        max_tokens: 150,
+        max_tokens: 1000,
         temperature: 0.9,
       },
       {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
           'HTTP-Referer': 'https://amiexpress.com',
+          'X-Title': 'AmiExpress BBS',
         },
         timeout: 10000
       }
@@ -610,8 +623,12 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
       return content;
     }
     return null;
-  } catch (error) {
-    console.error('[Grumpy Bot] OpenRouter failed:', error instanceof Error ? error.message : error);
+  } catch (error: any) {
+    console.error('[Grumpy Bot] OpenRouter failed:', error.message);
+    if (error.response) {
+      console.error('[Grumpy Bot] Status:', error.response.status);
+      console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
+    }
 
     // If this model failed, try to find another one
     if (cachedFreeModels.length > 1) {
@@ -766,12 +783,12 @@ export async function getGrumpySysopResponse(
 
   if (aiResponse) {
     console.log('[Grumpy Bot] Using AI response');
-    return aiResponse;
+    return `[AI] ${aiResponse}`;
   }
 
   // Fall back to rule-based
   console.log('[Grumpy Bot] Using rule-based response');
-  return getRuleBasedResponse(userMessage);
+  return `[RB] ${getRuleBasedResponse(userMessage)}`;
 }
 
 /**
@@ -831,19 +848,18 @@ export async function simulateNaturalTyping(
   message: string,
   onComplete: () => void
 ): Promise<void> {
-  const TYPO_PROBABILITY = 0.08; // 8% chance of typo per character
-  const MIN_TYPING_DELAY = 40; // ms (fast typing)
-  const MAX_TYPING_DELAY = 180; // ms (slow typing)
-  const PAUSE_AFTER_TYPO = 300; // ms (pause to "realize" mistake)
-  const BACKSPACE_DELAY = 80; // ms per backspace
+  const TYPO_PROBABILITY = 0.04; // 4% chance of typo per character
+  const MIN_TYPING_DELAY = 20; // ms (fast typing)
+  const MAX_TYPING_DELAY = 80; // ms (slow typing)
+  const PAUSE_AFTER_TYPO = 150; // ms (pause to "realize" mistake)
+  const BACKSPACE_DELAY = 40; // ms per backspace
 
   let buffer = '';
 
-  // Helper to display typing buffer at line 22
-  // IMPORTANT: Truncate to prevent overflow past line 22 into divider (line 23)
-  const MAX_PREVIEW_WIDTH = 65; // "GrumpyBot: " is 11 chars, "|" is 1, leave margin = 80-11-1-3
+  // Helper to display typing buffer at line 23 (Sysop line in linear chat)
+  // IMPORTANT: Truncate to prevent overflow
+  const MAX_PREVIEW_WIDTH = 65; 
   const displayTyping = (text: string) => {
-    // Truncate text to prevent overflow - show last N characters if too long
     let displayText = text;
     if (text.length > MAX_PREVIEW_WIDTH) {
       displayText = '...' + text.slice(-(MAX_PREVIEW_WIDTH - 3));
@@ -851,11 +867,10 @@ export async function simulateNaturalTyping(
 
     const ansiOutput =
       '\x1b7' + // Save cursor position (user typing at line 24)
-      '\x1b[1;21r' + // Reinforce scroll region to prevent any full-screen scroll
-      '\x1b[22;1H' + // Move to line 22 (typing preview line)
-      '\x1b[K' + // Clear line
+      '\x1b[23;1H' + // Move to line 23
+      '\x1b[2K' + // Clear line
       (displayText.length > 0
-        ? `\x1b[90m\x1b[36mGrumpyBot:\x1b[0m ${displayText}\x1b[36m|\x1b[0m`
+        ? `\x1b[36mGrumpyBot:\x1b[0m ${displayText}`
         : '') +
       '\x1b8'; // Restore cursor position
 
@@ -916,8 +931,9 @@ export async function simulateNaturalTyping(
   }
 
   // Typing complete - clear typing preview
-  displayTyping('');
-
+  // Note: We don't clear line 23 here, as sendChatMessage will overwrite it
+  // with the committed message immediately after.
+  
   onComplete();
 }
 
