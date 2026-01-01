@@ -185,7 +185,7 @@ export async function createApp(session: DoorSession) {
 
   // ========== CHAT LOG (Main Area) - CREATE FIRST so it renders behind fixed UI ==========
   // Chat log fills from sidebar to right edge
-  const { panel: chatPanel, log: chatLog, preview: chatPreview } = createChatLog(screen, SIDEBAR_WIDTH);
+  const { panel: chatPanel, log: chatLog } = createChatLog(screen, SIDEBAR_WIDTH);
 
   // Connect animation manager to chat log (done later after animationManager is created)
   // We'll use a deferred connection pattern
@@ -728,10 +728,6 @@ export async function createApp(session: DoorSession) {
     menuBar.element.position.width = width;
     commandSuggestions.position.width = width;  // Full width for command suggestions
 
-    const PREVIEW_HEIGHT = 1;
-    const logWidth = (breakpoint === 'small' ? width : chatWidth) - 2;
-    const logHeight = chatHeight - 2 - PREVIEW_HEIGHT;
-
     if (breakpoint === 'small') {
       // Hide sidebar on small screens (< 80 cols)
       channelList.hide();
@@ -740,11 +736,8 @@ export async function createApp(session: DoorSession) {
       chatPanel.position.width = width;
       chatPanel.position.height = chatHeight;
       // Update chatLog to match panel (minus 2 for resize handles)
-      chatLog.position.width = logWidth;
-      chatLog.position.height = logHeight;
-      chatPreview.position.width = logWidth;
-      chatPreview.position.left = 0;
-      
+      chatLog.position.width = width - 2;
+      chatLog.position.height = chatHeight - 2;
       typingBar.position.left = 0;
       typingBar.position.width = width;
     } else {
@@ -758,11 +751,8 @@ export async function createApp(session: DoorSession) {
       chatPanel.position.width = chatWidth;
       chatPanel.position.height = chatHeight;
       // Update chatLog to match panel (minus 2 for resize handles)
-      chatLog.position.width = logWidth;
-      chatLog.position.height = logHeight;
-      chatPreview.position.width = logWidth;
-      chatPreview.position.left = 0;
-
+      chatLog.position.width = chatWidth - 2;
+      chatLog.position.height = chatHeight - 2;
       typingBar.position.left = SIDEBAR_WIDTH;
       typingBar.position.width = chatWidth;
     }
@@ -775,7 +765,6 @@ export async function createApp(session: DoorSession) {
     invalidateCache(commandSuggestions);
     invalidateCache(chatPanel);
     invalidateCache(chatLog);
-    invalidateCache(chatPreview);
     invalidateCache(typingBar);
     invalidateCache(channelList);
     invalidateCache(userList);
@@ -1198,24 +1187,62 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  function appendLineToLog(line: string) {
-    // Add directly to the log widget (handles newlines correctly)
-    chatLog.add(line);
+  // Track the typing preview content
+  const typingPreviewLines = new Map<number, string>();
+  let typingPreviewLineCount = 0;
 
-    // Register animated lines with animation manager if needed
-    // (Note: animation manager currently uses line indexes which might need adjustment for Log widget)
-    // For now, we focus on fixing the concatenation issue.
-    
-    screen.render();
+  // Track logical chat messages separately (getLines returns wrapped lines which breaks our logic)
+  const chatMessages: string[] = [];
+
+  // Helper function to rebuild chat content from logical messages + previews
+  function rebuildChatContent() {
+    const previewLines = Array.from(typingPreviewLines.values());
+    // CRITICAL: Use \r\n for line separation to ensure Amiga terminals return to left margin
+    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
+
+    chatLog.setContent(fullContent);
+    typingPreviewLineCount = previewLines.length;
+
+    // Auto-scroll to bottom
+    chatLog.setScrollPerc(100);
+  }
+
+  // Helper function to append a line to the log while preserving typing previews
+  function appendLineToLog(line: string) {
+    // Add to our logical message list
+    chatMessages.push(line);
+
+    // Register animated lines with animation manager
+    const lineIndex = chatMessages.length - 1;
+    if (hasAnimationTags(line)) {
+      animationManager.registerLine(lineIndex, line);
+    }
+
+    // Rebuild content with all messages + previews
+    rebuildChatContent();
   }
 
   function updateTypingPreview() {
     const now = Date.now();
-    const previewLines: string[] = [];
+    let hasChanges = false;
+
+    // Clean up entries in typingPreviewLines that are no longer in typingBuffers
+    // This handles the case when a user submits a message (their buffer is deleted)
+    for (const visibleUserId of typingPreviewLines.keys()) {
+      if (!state.typingBuffers.has(visibleUserId)) {
+        typingPreviewLines.delete(visibleUserId);
+        hasChanges = true;
+      }
+    }
 
     // Update typing preview content for each user
     for (const [userId, buf] of state.typingBuffers) {
       if (now - buf.lastUpdate > 5000) {
+        // Expired - remove from preview
+        if (typingPreviewLines.has(userId)) {
+          typingPreviewLines.delete(userId);
+          hasChanges = true;
+        }
         continue;
       }
 
@@ -1224,13 +1251,24 @@ export async function createApp(session: DoorSession) {
         const time = formatTime(new Date());
         // Format preview like a real message
         const line = `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
-        previewLines.push(line);
+
+        // Only update if content changed
+        if (typingPreviewLines.get(userId) !== line) {
+          typingPreviewLines.set(userId, line);
+          hasChanges = true;
+        }
+      } else if (typingPreviewLines.has(userId)) {
+        typingPreviewLines.delete(userId);
+        hasChanges = true;
       }
     }
 
-    // Update the dedicated preview box
-    chatPreview.setContent(previewLines.join('  '));
-    screen.render();
+    // Display current typing previews in the chat log (inline after last message)
+    if (hasChanges) {
+      // Rebuild content from our tracked messages + updated previews
+      rebuildChatContent();
+      screen.render();
+    }
   }
 
   // Events and activity now go to chat log (use appendLineToLog for proper tracking)
@@ -1349,9 +1387,12 @@ export async function createApp(session: DoorSession) {
   const setCurrentRoomLabel = (value: string) => { currentRoomLabel = value; };
   setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, setCurrentRoomLabel, showMessageDialog, inputBox, screen);
 
-  // but chatPreview is a separate widget that also needs clearing
+  // but typingPreviewLines is a separate Map that also needs clearing
+  // setupRoomHandlers already clears state.typingBuffers via setChannel,
+  // but typingPreviewLines is a separate Map that also needs clearing
   socket.on('room:joined', () => {
-    chatPreview.setContent('');
+    typingPreviewLines.clear();
+    typingPreviewLineCount = 0;
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
@@ -1570,10 +1611,11 @@ export async function createApp(session: DoorSession) {
     showFileSharing,
     updateTypingPreview,
     () => {
-      // Clear chat log
+      // Clear chat log - both the tracked messages and the display
+      chatMessages.length = 0;
+      typingPreviewLines.clear();
+      typingPreviewLineCount = 0;
       chatLog.setContent('');
-      chatPreview.setContent('');
-      screen.render();
     }
   ));
 

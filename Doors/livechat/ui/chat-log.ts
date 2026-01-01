@@ -2,8 +2,7 @@
  * Chat log component
  * Main chat message display area
  */
-import { Screen, Log, DockablePanel, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MENU_HEIGHT } from './menu-bar';
 import { STATUS_HEIGHT } from './status-bar';
@@ -16,7 +15,7 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: any; preview: any } {
+): { panel: DockablePanel; log: any } {
   // Create dockable panel for chat
   // Calculate dimensions based on screen size
   const screenWidth = (screen as any).width || 80;
@@ -54,13 +53,10 @@ export function createChatLog(
   const panelWidth = screenWidth - sidebarWidth;
   const panelHeight = screenHeight - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;
 
-  // The preview area height (usually 1 or 2 lines for who is typing)
-  const PREVIEW_HEIGHT = 1;
   const logWidth = panelWidth - 2;
-  const logHeight = panelHeight - 2 - PREVIEW_HEIGHT;
+  const logHeight = panelHeight - 2;
 
-  // 1. Permanent Log
-  const chatLog = blessed.log({
+  const chatLog = createBox({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -77,29 +73,13 @@ export function createChatLog(
       ch: '█',
       style: { fg: 'cyan' }
     },
-    scrollback: 1000,
     style: {
       fg: 'white',
       bg: 'black',
     },
   });
 
-  // 2. Live Typing Preview (at bottom of panel)
-  const typingPreview = createBox({
-    parent: chatPanel,
-    bottom: 0,
-    left: 0,
-    width: logWidth,
-    height: PREVIEW_HEIGHT,
-    tags: true,
-    content: '',
-    style: {
-      fg: 'gray',
-      bg: 'black',
-    }
-  });
-
-  return { panel: chatPanel, log: chatLog, preview: typingPreview };
+  return { panel: chatPanel, log: chatLog };
 }
 
 export function updateChatHeader(
@@ -111,11 +91,10 @@ export function updateChatHeader(
 
 /**
  * Add a BBS event announcement to the chat log
- * Events are displayed in a distinct format from regular chat messages
  */
 export function addBBSEvent(
   chatLog: any,
   formattedEvent: string
 ) {
-  chatLog.add(formattedEvent);
+  // Logic handled by app.ts rebuildChatContent
 }
