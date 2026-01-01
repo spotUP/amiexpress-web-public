@@ -68,7 +68,7 @@ export function createChatLog(
     scrollable: true,
     alwaysScroll: true,
     tags: true,
-    wrap: true,
+    wrap: false,
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
