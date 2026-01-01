@@ -1,270 +1,307 @@
 /**
  * Amiga .info File Parser and Writer
  *
- * Handles Amiga Workbench icon files (.info) which contain:
- * - DiskObject structure (icon metadata)
- * - Tool Types (configuration strings)
- * - Icon images (FORM ICON chunks)
- *
- * Format based on classic AmigaOS 1.x/2.x .info files
+ * Handles Amiga Workbench icon files (.info) while preserving binary data
+ * (images, drawer data, etc.). Supports both standard binary icons and
+ * text-based representations.
  */
 
 import * as fs from 'fs';
 import { execSync } from 'child_process';
-import { parseIFFFile, IFFFile, readBE32, writeBE32, readBE16, writeBE16 } from './iff-parser.util';
 
 export interface Tooltype {
   key: string;
   value: string;
   commented: boolean;
+  prefix: string;        // Amiga-style prefix (#, %, +, ', etc.)
   originalLine: string;
 }
 
 export interface InfoFile {
   filePath: string;
-  diskObject: Buffer;    // Original DiskObject structure
+  isBinary: boolean;
+  diskObject: Buffer;    // Data before tooltypes (header)
+  iconData: Buffer;      // Data after tooltypes (footer)
   tooltypes: Tooltype[];
-  iconData: Buffer;      // FORM ICON chunk (if present)
-  rawBuffer: Buffer;     // Complete original file
+  rawBuffer: Buffer;     // Original file content
 }
 
 /**
- * Find tooltypes section boundaries in .info file
- * Use strings command to locate tooltypes, then find their position in binary
+ * Extract tooltypes from file using 'strings' command.
+ * This is robust for both text and binary Amiga icons.
  */
-function findTooltypesSection(buffer: Buffer, tooltypes: Tooltype[]): { start: number; end: number } {
-  // Find "FORM" marker (end of tooltypes, start of icon data)
-  const formIndex = buffer.indexOf('FORM');
-  const end = formIndex !== -1 ? formIndex : buffer.length;
-
-  if (tooltypes.length === 0) {
-    return { start: end, end };
-  }
-
-  // Find the first tooltype in the binary
-  const firstKey = tooltypes[0].key;
-  const firstLine = tooltypes[0].originalLine;
-
-  // Search for the first tooltype string in the buffer
-  let start = end;
-  for (let i = 0x100; i < end - firstLine.length; i++) {
-    const str = buffer.toString('utf8', i, i + firstLine.length);
-    if (str === firstLine) {
-      start = i;
-      break;
-    }
-  }
-
-  return { start, end };
-}
-
-/**
- * Parse tooltypes using strings command (reliable and matches existing code)
- */
-function parseTooltypesWithStrings(filePath: string): Tooltype[] {
+function extractTooltypes(filePath: string): Tooltype[] {
   const tooltypes: Tooltype[] = [];
-
   try {
-    const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
+    // -a: scan whole file, -t x: show offset in hex
+    const output = execSync(`strings -a -t x "${filePath}"`, { encoding: 'utf8' });
     const lines = output.split('\n');
 
     for (const line of lines) {
-      const trimmed = line.trim();
+      const match = line.trim().match(/^\s*([0-9a-f]+)\s+(.+)$/i);
+      if (!match) continue;
 
-      // Skip empty lines
-      if (!trimmed) {
-        continue;
-      }
-
-      // Skip parenthesized lines (commented tooltypes)
-      if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
-        continue;
-      }
-
-      let cleaned = trimmed;
+      const content = match[2].trim();
+      let cleaned = content;
       let commented = false;
+      let prefix = '';
 
-      // Check for comment prefix
+      // Handle comments
       if (cleaned.startsWith('!')) {
         commented = true;
         cleaned = cleaned.substring(1);
-      } else if (cleaned.startsWith('#') || cleaned.startsWith('+') || cleaned.startsWith('%') || cleaned.startsWith("'")) {
-        // Amiga-style prefixes, not comments
+      } else if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+        commented = true;
+        cleaned = cleaned.substring(1, cleaned.length - 1);
+      }
+
+      // Handle Amiga prefixes
+      if (cleaned.startsWith('#') || cleaned.startsWith('+') || cleaned.startsWith('%') || cleaned.startsWith("'")) {
+        prefix = cleaned.substring(0, 1);
         cleaned = cleaned.substring(1);
       }
 
       const eqIdx = cleaned.indexOf('=');
-      if (eqIdx === -1) {
-        const keyOnly = cleaned.trim();
-        const normalized = keyOnly.toUpperCase();
-        if (!/^[A-Z0-9_]{2,64}$/.test(normalized)) {
-          continue;
+      if (eqIdx !== -1) {
+        const key = cleaned.substring(0, eqIdx).toUpperCase().trim();
+        const value = cleaned.substring(eqIdx + 1).trim();
+        if (key) {
+          tooltypes.push({
+            key,
+            value,
+            commented,
+            prefix,
+            originalLine: content
+          });
         }
-
-        tooltypes.push({
-          key: normalized,
-          value: '',
-          commented,
-          originalLine: trimmed
-        });
-        continue;
-      }
-
-      if (eqIdx < 1) continue;
-
-      const [key, ...valueParts] = cleaned.split('=');
-      const value = valueParts.join('=').trim();
-
-      if (key) {
-        tooltypes.push({
-          key: key.toUpperCase().trim(),
-          value,
-          commented,
-          originalLine: trimmed
-        });
+      } else {
+        // Flag mode: just the key
+        const key = cleaned.toUpperCase().trim();
+        if (key && /^[A-Z0-9_]{2,64}$/.test(key)) {
+          tooltypes.push({
+            key,
+            value: '',
+            commented,
+            prefix,
+            originalLine: content
+          });
+        }
       }
     }
   } catch (error) {
-    console.error(`[parseTooltypesWithStrings] Error:`, error);
+    console.error(`[InfoFileUtil] Error extracting strings:`, error);
   }
-
   return tooltypes;
 }
 
 /**
- * Parse .info file
+ * Parse .info file into components
  */
 export function parseInfoFile(filePath: string): InfoFile {
   const buffer = fs.readFileSync(filePath);
+  const isBinary = buffer.length > 2 && buffer[0] === 0xe3 && buffer[1] === 0x10;
+  
+  const tooltypes = extractTooltypes(filePath);
 
-  // Parse tooltypes using strings command (reliable)
-  const tooltypes = parseTooltypesWithStrings(filePath);
+  if (!isBinary) {
+    // For text files, just treat tooltypes as the whole content (minus FORM trailer if present)
+    const formIdx = buffer.indexOf('FORM');
+    const iconData = formIdx !== -1 ? buffer.slice(formIdx) : Buffer.alloc(0);
+    return {
+      filePath,
+      isBinary: false,
+      diskObject: Buffer.alloc(0),
+      iconData,
+      tooltypes,
+      rawBuffer: buffer
+    };
+  }
 
-  // Find tooltypes section boundaries
-  const { start, end } = findTooltypesSection(buffer, tooltypes);
+  // BINARY MODE: Identify tooltype block boundaries
+  if (tooltypes.length === 0) {
+    return {
+      filePath,
+      isBinary: true,
+      diskObject: buffer.slice(0, 78),
+      iconData: buffer.slice(78),
+      tooltypes: [],
+      rawBuffer: buffer
+    };
+  }
 
-  // Extract icon data (FORM chunk if present)
-  const formIndex = buffer.indexOf('FORM');
-  const iconData = formIndex !== -1 ? buffer.slice(formIndex) : Buffer.alloc(0);
+  let firstOffset = buffer.length;
+  let lastEndOffset = 0;
 
-  // DiskObject is everything before tooltypes
-  const diskObject = buffer.slice(0, start);
+  for (const tt of tooltypes) {
+    const idx = buffer.indexOf(tt.originalLine);
+    if (idx !== -1) {
+      if (idx < firstOffset) firstOffset = idx;
+      const end = idx + tt.originalLine.length;
+      if (end > lastEndOffset) lastEndOffset = end;
+    }
+  }
+
+  let end = lastEndOffset;
+  while (end < buffer.length && buffer[end] === 0) {
+    end++;
+  }
 
   return {
     filePath,
-    diskObject,
+    isBinary: true,
+    diskObject: buffer.slice(0, firstOffset),
+    iconData: buffer.slice(end),
     tooltypes,
-    iconData,
     rawBuffer: buffer
   };
 }
 
 /**
- * Write .info file with updated tooltypes
- * Preserves DiskObject structure and icon data
+ * Write updated .info file
  */
 export function writeInfoFile(info: InfoFile): void {
-  // Build new tooltypes buffer
   const tooltypeBuffers: Buffer[] = [];
 
   for (const tt of info.tooltypes) {
-    // Build the tooltype string
-    let line = '';
-
-    if (tt.commented) {
-      line = `!${tt.key}=${tt.value}`;
-    } else {
-      line = `${tt.key}=${tt.value}`;
-    }
-
-    // Create null-terminated string
-    const strBuf = Buffer.from(line + '\0', 'utf8');
-    tooltypeBuffers.push(strBuf);
+    const prefix = tt.commented ? '!' : '';
+    const amigaPrefix = tt.prefix || '';
+    const line = `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
+    tooltypeBuffers.push(Buffer.from(line + '\0', 'utf8'));
   }
 
-  // Combine buffers
+  if (info.isBinary) {
+    tooltypeBuffers.push(Buffer.from('\0'));
+  }
+
   const tooltypesBuffer = Buffer.concat(tooltypeBuffers);
 
-  // Build complete file: DiskObject + Tooltypes + Icon Data
-  const newBuffer = Buffer.concat([
-    info.diskObject,
-    tooltypesBuffer,
-    info.iconData
-  ]);
+  let newBuffer: Buffer;
+  if (info.isBinary) {
+    newBuffer = Buffer.concat([
+      info.diskObject,
+      tooltypesBuffer,
+      info.iconData
+    ]);
+  } else {
+    const textLines = info.tooltypes.map(tt => {
+      const prefix = tt.commented ? '!' : '';
+      const amigaPrefix = tt.prefix || '';
+      return `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
+    }).join('\n') + '\n';
+    
+    newBuffer = Buffer.concat([
+      Buffer.from(textLines, 'utf8'),
+      info.iconData
+    ]);
+  }
 
-  // Write to file
   fs.writeFileSync(info.filePath, newBuffer);
 }
 
 /**
- * Update a specific tooltype in .info file
+ * TooltypeEditor - Batch editor for .info files
  */
-export function updateTooltype(info: InfoFile, key: string, value: string, commented: boolean): InfoFile {
+export class TooltypeEditor {
+  private info: InfoFile;
+
+  constructor(filePath: string) {
+    this.info = parseInfoFile(filePath);
+  }
+
+  public getTooltypes(): Tooltype[] {
+    return this.info.tooltypes;
+  }
+
+  public set(key: string, value: string, commented: boolean = false, prefix: string = ''): this {
+    this.info = updateTooltype(this.info, key, value, commented, prefix);
+    return this;
+  }
+
+  public add(key: string, value: string, commented: boolean = false, prefix: string = ''): this {
+    return this.set(key, value, commented, prefix);
+  }
+
+  public remove(key: string): this {
+    this.info = removeTooltype(this.info, key);
+    return this;
+  }
+
+  public toggle(key: string): this {
+    this.info = toggleTooltypeComment(this.info, key);
+    return this;
+  }
+
+  public save(): void {
+    writeInfoFile(this.info);
+  }
+
+  public getInfo(): InfoFile {
+    return this.info;
+  }
+}
+
+/**
+ * Utility functions for updating tooltypes
+ */
+export function updateTooltype(
+  info: InfoFile, 
+  key: string, 
+  value: string, 
+  commented: boolean, 
+  prefix: string = ''
+): InfoFile {
   const upperKey = key.toUpperCase();
   const existingIndex = info.tooltypes.findIndex(tt => tt.key === upperKey);
 
-  if (existingIndex !== -1) {
-    // Update existing tooltype
-    info.tooltypes[existingIndex] = {
-      key: upperKey,
-      value,
-      commented,
-      originalLine: `${commented ? '!' : ''}${upperKey}=${value}`
-    };
-  } else {
-    // Add new tooltype
-    info.tooltypes.push({
-      key: upperKey,
-      value,
-      commented,
-      originalLine: `${commented ? '!' : ''}${upperKey}=${value}`
-    });
-  }
-
-  return info;
-}
-
-/**
- * Toggle tooltype comment status
- */
-export function toggleTooltypeComment(info: InfoFile, key: string): InfoFile {
-  const upperKey = key.toUpperCase();
-  const tooltype = info.tooltypes.find(tt => tt.key === upperKey);
-
-  if (tooltype) {
-    tooltype.commented = !tooltype.commented;
-    tooltype.originalLine = `${tooltype.commented ? '!' : ''}${tooltype.key}=${tooltype.value}`;
-  }
-
-  return info;
-}
-
-/**
- * Remove tooltype from .info file
- */
-export function removeTooltype(info: InfoFile, key: string): InfoFile {
-  const upperKey = key.toUpperCase();
-  info.tooltypes = info.tooltypes.filter(tt => tt.key !== upperKey);
-  return info;
-}
-
-/**
- * Add tooltype to .info file
- */
-export function addTooltype(info: InfoFile, key: string, value: string, commented: boolean = false): InfoFile {
-  const upperKey = key.toUpperCase();
-
-  // Check if already exists
-  if (info.tooltypes.some(tt => tt.key === upperKey)) {
-    throw new Error(`Tooltype ${upperKey} already exists`);
-  }
-
-  info.tooltypes.push({
+  const newTt = {
     key: upperKey,
     value,
     commented,
-    originalLine: `${commented ? '!' : ''}${upperKey}=${value}`
-  });
+    prefix,
+    originalLine: `${commented ? '!' : ''}${prefix}${upperKey}${value ? '=' + value : ''}`
+  };
 
+  if (existingIndex !== -1) {
+    // Preserve existing prefix if not provided
+    if (!prefix && info.tooltypes[existingIndex].prefix) {
+      newTt.prefix = info.tooltypes[existingIndex].prefix;
+      newTt.originalLine = `${commented ? '!' : ''}${newTt.prefix}${upperKey}${value ? '=' + value : ''}`;
+    }
+    info.tooltypes[existingIndex] = newTt;
+  } else {
+    info.tooltypes.push(newTt);
+  }
+  return info;
+}
+
+export function addTooltype(
+  info: InfoFile, 
+  key: string, 
+  value: string, 
+  commented: boolean = false, 
+  prefix: string = ''
+): InfoFile {
+  const upperKey = key.toUpperCase();
+  if (info.tooltypes.some(tt => tt.key === upperKey)) {
+    throw new Error(`Tooltype ${upperKey} already exists`);
+  }
+  return updateTooltype(info, key, value, commented, prefix);
+}
+
+export function toggleTooltypeComment(info: InfoFile, key: string): InfoFile {
+  const upperKey = key.toUpperCase();
+  const tt = info.tooltypes.find(tt => tt.key === upperKey);
+  if (tt) {
+    tt.commented = !tt.commented;
+    const prefix = tt.commented ? '!' : '';
+    const amigaPrefix = tt.prefix || '';
+    tt.originalLine = `${prefix}${amigaPrefix}${tt.key}${tt.value ? '=' + tt.value : ''}`;
+  }
+  return info;
+}
+
+export function removeTooltype(info: InfoFile, key: string): InfoFile {
+  const upperKey = key.toUpperCase();
+  info.tooltypes = info.tooltypes.filter(tt => tt.key !== upperKey);
   return info;
 }

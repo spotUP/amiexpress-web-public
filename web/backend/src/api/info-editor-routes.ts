@@ -130,83 +130,41 @@ function getFileType(relativePath: string): InfoFileMetadata['type'] {
 
 /**
  * GET /api/info-editor/files
- * List all .info files in the BBS directory
+ * List all .info files in the BBS directory (recursive)
  */
 infoEditorRouter.get('/files', async (req: Request, res: Response) => {
   try {
     const bbsRoot = config.get('dataDir');
     const files: InfoFileMetadata[] = [];
 
-    // Scan Commands directories
-    const commandDirs = [
-      path.join(bbsRoot, 'Commands/BBSCmd'),
-      path.join(bbsRoot, 'Commands/SysCmd')
-    ];
-
-    for (const dir of commandDirs) {
-      if (amigafs.existsSync(dir)) {
-        const entries = amigafs.readdirSync(dir);
-        for (const entry of entries) {
-          if (entry.toLowerCase().endsWith('.info')) {
-            const fullPath = path.join(dir, entry);
+    // Recursive file walker
+    const walk = (dir: string) => {
+      const entries = amigafs.readdirSync(dir);
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry);
+        try {
+          const stats = amigafs.statSync(fullPath);
+          if (stats.isDirectory()) {
+            // Skip large/irrelevant directories
+            if (entry === 'node_modules' || entry === '.git' || entry === 'logs') continue;
+            walk(fullPath);
+          } else if (entry.toLowerCase().endsWith('.info')) {
             const relativePath = path.relative(bbsRoot, fullPath);
             files.push({
               path: fullPath,
               relativePath,
               basename: entry,
-              type: 'command',
-              tooltypes: []  // Don't load all tooltypes yet for performance
+              type: getFileType(relativePath),
+              tooltypes: []
             });
-          }
-        }
-      }
-    }
-
-    // Scan Doors directory
-    const doorsDir = path.join(bbsRoot, 'Doors');
-    if (amigafs.existsSync(doorsDir)) {
-      const doorEntries = amigafs.readdirSync(doorsDir);
-      for (const doorName of doorEntries) {
-        const doorPath = path.join(doorsDir, doorName);
-        try {
-          const doorStat = amigafs.statSync(doorPath);
-          if (doorStat.isDirectory()) {
-            const doorFiles = amigafs.readdirSync(doorPath);
-            for (const file of doorFiles) {
-              if (file.toLowerCase().endsWith('.info')) {
-                const fullPath = path.join(doorPath, file);
-                const relativePath = path.relative(bbsRoot, fullPath);
-                files.push({
-                  path: fullPath,
-                  relativePath,
-                  basename: file,
-                  type: 'door',
-                  tooltypes: []
-                });
-              }
-            }
           }
         } catch (err) {
           // Skip if can't stat
-          continue;
         }
       }
-    }
+    };
 
-    // Scan Conference .info files
-    const confFiles = amigafs.readdirSync(bbsRoot).filter(f =>
-      f.match(/^Conf\d+\.info$/i)
-    );
-    for (const confFile of confFiles) {
-      const fullPath = path.join(bbsRoot, confFile);
-      files.push({
-        path: fullPath,
-        relativePath: confFile,
-        basename: confFile,
-        type: 'conference',
-        tooltypes: []
-      });
-    }
+    walk(bbsRoot);
 
     res.json({ files });
 

@@ -116,20 +116,28 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
           continue;
         }
 
-        // Parse KEY=VALUE format
-        // Remove leading '+', '#', '%', or '\'' if present (express.e uses +LOCATION, Amiga .info files use #LOCATION, %LOCATION, or 'LOCATION)
+        // Parse KEY=VALUE format or just KEY (flag)
+        // Remove leading '+', '#', '%', or '\'' if present
         let cleanLine = trimmed;
         if (cleanLine.startsWith('+') || cleanLine.startsWith('#') || cleanLine.startsWith('%') || cleanLine.startsWith("'")) {
           cleanLine = cleanLine.substring(1);
         }
 
-        const [key, ...valueParts] = cleanLine.split('=');
-        const value = valueParts.join('=').trim(); // Handle values with '=' in them
-
-        if (key && value) {
-          const cleanKey = key.toUpperCase().trim();
-          console.log(`[parseInfoFile]   Tooltype: ${cleanKey}=${value}`);
-          tooltypes.set(cleanKey, value);
+        const eqIdx = cleanLine.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = cleanLine.substring(0, eqIdx).toUpperCase().trim();
+          const value = cleanLine.substring(eqIdx + 1).trim();
+          if (key) {
+            console.log(`[parseInfoFile]   Tooltype: ${key}=${value}`);
+            tooltypes.set(key, value);
+          }
+        } else {
+          // Flag mode: just the key
+          const key = cleanLine.toUpperCase().trim();
+          if (key) {
+            console.log(`[parseInfoFile]   Tooltype (Flag): ${key}`);
+            tooltypes.set(key, 'YES'); // Standard Amiga practice for flags
+          }
         }
       }
 
