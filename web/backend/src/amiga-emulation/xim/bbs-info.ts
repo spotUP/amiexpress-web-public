@@ -260,6 +260,22 @@ export class XIMBBSInfoHandler {
       // CONF_ACCESS (614) - Check user's access to a specific conference
       // Returns: 0=no access, 1=has access, 2=invalid conference
       // Per axcommon.e, this is the ONLY command at 614 (BB_NUMCONFS does NOT exist)
+      case XIMCommand.ENVSTAT:
+        if (msg.data) {
+          // Read status: return currentStat as string
+          const status = (this.bbsSession as any)?.currentStat ?? 0;
+          this.messageParser.writeMessageString(msg.msgAddr, status.toString());
+          console.log(`[XIMBBSInfo] ENVSTAT [READ]: ${status}`);
+        } else if (msg.string) {
+          // Write status: update currentStat
+          const newStatus = parseInt(msg.string.trim(), 10);
+          if (!Number.isNaN(newStatus)) {
+            (this.bbsSession as any).currentStat = newStatus;
+            console.log(`[XIMBBSInfo] ENVSTAT [WRITE]: ${newStatus}`);
+          }
+        }
+        this.reply(msg, 1);
+        return;
       case XIMCommand.CONF_ACCESS:
         this.handleConfAccess(msg);
         return;

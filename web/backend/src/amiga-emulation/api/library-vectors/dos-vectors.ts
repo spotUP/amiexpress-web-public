@@ -254,6 +254,20 @@ export const DOS_VECTORS: LibraryVector[] = [
     },
   },
   {
+    offset: -216,
+    name: "SelectInput",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.SelectInput();
+    },
+  },
+  {
+    offset: -222,
+    name: "SelectOutput",
+    handler: (emu, lib: DosLibrary) => {
+      return lib.SelectOutput();
+    },
+  },
+  {
     offset: -228,
     name: "AllocDosObject",
     handler: (emu, lib: DosLibrary) => {

@@ -1441,46 +1441,66 @@ export class DosLibrary {
 
   /**
    * Input - Get standard input file handle
-   * Returns: D0 = inherited stdin handle
-   *
-   * From AmigaDOS spec:
-   * "Input() is used to identify the initial input stream allocated when
-   * the program was initiated. Never close the filehandle returned by Input!"
    */
   Input(): number {
-    // NEW: Use allocated FileHandle structure with proper memory BPTR
-    if (this.useNewFileSystem && this.stdinBptr !== 0) {
-      console.log(`[dos.library] Input (FileManager) returning BPTR 0x${this.stdinBptr.toString(16)}`);
-      return this.stdinBptr;
+    // Return current redirected handle from FileManager
+    if (this.useNewFileSystem && this.fileManager) {
+      const currentStdin = this.fileManager.getStdinBptr();
+      return currentStdin;
     }
 
-    // LEGACY: Old implementation
-    console.log(
-      `[dos.library] Input() returning inherited handle ${this.inheritedInput}`
-    );
     return this.inheritedInput;
   }
 
   /**
    * Output - Get standard output file handle
-   * Returns: D0 = inherited stdout handle
-   *
-   * From AmigaDOS spec:
-   * "Output() is used to identify the initial output stream allocated when
-   * the program was initiated."
    */
   Output(): number {
-    // NEW: Use allocated FileHandle structure with proper memory BPTR
-    if (this.useNewFileSystem && this.stdoutBptr !== 0) {
-      console.log(`[dos.library] Output (FileManager) returning BPTR 0x${this.stdoutBptr.toString(16)}`);
-      return this.stdoutBptr;
+    // Return current redirected handle from FileManager
+    if (this.useNewFileSystem && this.fileManager) {
+      const currentStdout = this.fileManager.getStdoutBptr();
+      return currentStdout;
     }
 
-    // LEGACY: Old implementation
-    console.log(
-      `[dos.library] Output() returning inherited handle ${this.inheritedOutput}`
-    );
     return this.inheritedOutput;
+  }
+
+  /**
+   * SelectInput - Set the current standard input handle
+   * D1 = new handle
+   * Returns: D0 = old handle
+   */
+  SelectInput(): number {
+    const newHandle = this.emulator.getRegister(CPURegister.D1);
+    const oldHandle = this.Input();
+    
+    console.log(`[dos.library] SelectInput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
+    
+    if (this.useNewFileSystem && this.fileManager) {
+      this.fileManager.setStdinBptr(newHandle);
+    }
+    
+    this.inheritedInput = newHandle;
+    return oldHandle;
+  }
+
+  /**
+   * SelectOutput - Set the current standard output handle
+   * D1 = new handle
+   * Returns: D0 = old handle
+   */
+  SelectOutput(): number {
+    const newHandle = this.emulator.getRegister(CPURegister.D1);
+    const oldHandle = this.Output();
+    
+    console.log(`[dos.library] SelectOutput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
+    
+    if (this.useNewFileSystem && this.fileManager) {
+      this.fileManager.setStdoutHandle(newHandle);
+    }
+    
+    this.inheritedOutput = newHandle;
+    return oldHandle;
   }
 
   /**
@@ -1532,16 +1552,17 @@ export class DosLibrary {
   DateStamp(): number {
     const dateStampPtr = this.emulator.getRegister(CPURegister.D1);
 
-    // Get current time
+    // Get current local time
     const now = new Date();
 
-    // Calculate days since Jan 1, 1978
-    const epoch = new Date("1978-01-01T00:00:00Z");
-    const daysSinceEpoch = Math.floor(
-      (now.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+    // Calculate days since Jan 1, 1978 (Local)
+    const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const epoch = new Date(1978, 0, 1);
+    const daysSinceEpoch = Math.round(
+      (nowMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Calculate minutes past midnight
+    // Calculate minutes past midnight (Local)
     const minutesPastMidnight = now.getHours() * 60 + now.getMinutes();
 
     // Calculate ticks past minute (50 ticks/sec)
@@ -1549,7 +1570,7 @@ export class DosLibrary {
       now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
 
     console.log(
-      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
+      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute} (Local)`
     );
 
     // Write DateStamp structure (3 x 32-bit longs, big-endian)
@@ -2518,9 +2539,10 @@ export class DosLibrary {
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
-      const epoch = new Date("1978-01-01T00:00:00Z");
-      const days = Math.floor(
-        (mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+      const mtimeMidnight = new Date(mtime.getFullYear(), mtime.getMonth(), mtime.getDate());
+      const epoch = new Date(1978, 0, 1);
+      const days = Math.round(
+        (mtimeMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
       );
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
@@ -2699,9 +2721,10 @@ export class DosLibrary {
 
       // fib_Date (12 bytes DateStamp)
       const mtime = stats.mtime;
-      const epoch = new Date("1978-01-01T00:00:00Z");
-      const days = Math.floor(
-        (mtime.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
+      const mtimeMidnight = new Date(mtime.getFullYear(), mtime.getMonth(), mtime.getDate());
+      const epoch = new Date(1978, 0, 1);
+      const days = Math.round(
+        (mtimeMidnight.getTime() - epoch.getTime()) / (1000 * 60 * 60 * 24)
       );
       const minutes = mtime.getHours() * 60 + mtime.getMinutes();
       const ticks = mtime.getSeconds() * 50;
@@ -4892,8 +4915,8 @@ export class DosLibrary {
       `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
     );
 
-    // Convert Amiga days (since 1978-01-01) to JavaScript Date
-    const epoch = new Date("1978-01-01T00:00:00Z");
+    // Convert Amiga days (since 1978-01-01) to JavaScript Date (Local)
+    const epoch = new Date(1978, 0, 1);
     const dateMs = epoch.getTime() + ds_Days * 24 * 60 * 60 * 1000;
     const date = new Date(dateMs);
 
