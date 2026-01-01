@@ -1197,11 +1197,10 @@ export async function createApp(session: DoorSession) {
   // Helper function to rebuild chat content from logical messages + previews
   function rebuildChatContent() {
     const previewLines = Array.from(typingPreviewLines.values());
-    const fullContent = [...chatMessages, ...previewLines].join('\n');
+    // CRITICAL: Use \r\n for line separation to ensure Amiga terminals return to left margin
+    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
 
     chatLog.setContent(fullContent);
-    typingPreviewLineCount = previewLines.length;
-
     // Auto-scroll to bottom
     chatLog.setScrollPerc(100);
   }

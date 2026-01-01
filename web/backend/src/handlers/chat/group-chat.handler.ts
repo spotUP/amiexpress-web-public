@@ -67,7 +67,7 @@ function sendRoomError(socket: Socket, message: string): void {
  */
 function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: string) {
   const socketRoom = 'room:' + roomId;
-  const output = AnsiUtil.line(AnsiUtil.warning('*** ' + message + ' ***'));
+  const output = AnsiUtil.warning('*** ' + message + ' ***') + '\r\n';
 
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
@@ -91,7 +91,7 @@ function broadcastRoomMessage(roomId: string, senderUsername: string, message: s
 
   const socketRoom = 'room:' + roomId;
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-  const output = AnsiUtil.line('[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message);
+  const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message + '\r\n';
 
   console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
 
