@@ -59,7 +59,7 @@ export function createChatLog(
 
   // CRITICAL FIX: Use a List widget instead of Log or Box.
   // Items in a list are GUARANTEED to be on separate lines by the engine.
-  const chatLog = createBox({
+  const chatLog = blessed.log({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -71,11 +71,11 @@ export function createChatLog(
     scrollable: true,
     alwaysScroll: true,
     tags: true,
-    wrap: false,
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
     },
+    scrollback: 1000,
     style: {
       fg: 'white',
       bg: 'black',
@@ -86,7 +86,7 @@ export function createChatLog(
 }
 
 export function updateChatHeader(
-  chatLog: any,
+  chatLog: Log,
   channelName: string
 ) {
   chatLog.setLabel(` ${channelName} `);
@@ -96,9 +96,8 @@ export function updateChatHeader(
  * Add a BBS event announcement to the chat log
  */
 export function addBBSEvent(
-  chatLog: any,
+  chatLog: Log,
   formattedEvent: string
 ) {
-  chatLog.addItem(formattedEvent);
-  chatLog.scrollTo(chatLog.items.length);
+  chatLog.add(formattedEvent);
 }

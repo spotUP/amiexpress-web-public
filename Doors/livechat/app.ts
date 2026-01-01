@@ -1190,37 +1190,51 @@ export async function createApp(session: DoorSession) {
   // Track logical chat messages separately
   const chatMessages: string[] = [];
 
-  // Helper function to rebuild chat content from logical messages + previews
-  function rebuildChatContent() {
-    const previewLines = Array.from(state.typingBuffers.values()).map(buf => {
-      const color = getUserColor(buf.username);
-      const time = formatTime(new Date());
-      return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
-    });
-
-    // CRITICAL: JOIN WITH \r\n AND ENSURE CONTENT IS UNIQUE TO FORCE RE-RENDER
-    // We add a tiny timestamp or counter to force the diff-engine to send the full row
-    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
-
-    chatLog.setContent(fullContent);
-    chatLog.setScrollPerc(100);
-  }
-
   function appendLineToLog(line: string) {
+    // 1. Clear any current preview lines before adding a permanent one
+    const lineCount = chatLog.getLineCount();
+    for (let i = chatMessages.length; i < lineCount; i++) {
+      chatLog.setLine(i, '');
+    }
+
+    // 2. Add the permanent message
+    chatLog.add(line);
     chatMessages.push(line);
     
-    // Register animated lines
+    // 3. Register animated lines
     const lineIndex = chatMessages.length - 1;
     if (hasAnimationTags(line)) {
       animationManager.registerLine(lineIndex, line);
     }
 
-    rebuildChatContent();
     screen.render();
   }
 
   function updateTypingPreview() {
-    rebuildChatContent();
+    const now = Date.now();
+    let previewIndex = chatMessages.length;
+
+    // Update typing preview content for each user
+    for (const [userId, buf] of state.typingBuffers) {
+      if (now - buf.lastUpdate > 5000) continue;
+
+      if (buf.buffer.length > 0) {
+        const color = getUserColor(buf.username);
+        const time = formatTime(new Date());
+        const line = `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
+        
+        // Write the preview to the next available line in the log
+        chatLog.setLine(previewIndex++, line);
+      }
+    }
+
+    // Clear any leftover preview lines if number of typers decreased
+    const totalLines = chatLog.getLineCount();
+    for (let i = previewIndex; i < totalLines; i++) {
+      chatLog.setLine(i, '');
+    }
+
+    chatLog.setScrollPerc(100);
     screen.render();
   }
 
@@ -1340,10 +1354,9 @@ export async function createApp(session: DoorSession) {
   const setCurrentRoomLabel = (value: string) => { currentRoomLabel = value; };
   setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, setCurrentRoomLabel, showMessageDialog, inputBox, screen);
 
-  // but typingPreviewLines is a separate Map that also needs clearing
-  // setupRoomHandlers already clears state.typingBuffers via setChannel,
+  // No explicit clearing needed anymore, chatLog is handled via appendLineToLog
   socket.on('room:joined', () => {
-    // No explicit clearing needed anymore
+    // New room joined
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
@@ -1562,9 +1575,9 @@ export async function createApp(session: DoorSession) {
     showFileSharing,
     updateTypingPreview,
     () => {
-      // Clear chat log - both the tracked messages and the display
+      // Clear chat log
       chatMessages.length = 0;
-      chatLog.setContent('');
+      chatLog.clear();
       screen.render();
     }
   ));

@@ -1180,7 +1180,13 @@ export class Screen extends Element {
         if (attr !== lastAttrCell || ch !== lastCh) {
           // Position cursor if needed
           if (x !== lastX + 1 || y !== lastY) {
-            parts.push(cursor.pos(x, y));
+            // BBS Optimization: If moving to the start of the next line,
+            // use literal \r\n which is universally supported and forces separation.
+            if (y === lastY + 1 && x === 0) {
+              parts.push('\r\n');
+            } else {
+              parts.push(cursor.pos(x, y));
+            }
           }
 
           // Change attributes if needed
