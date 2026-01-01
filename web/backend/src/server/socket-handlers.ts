@@ -336,12 +336,7 @@ function registerCommandHandler(socket: Socket) {
   });
 
   const markDoorInput = (session: BBSSession, data: string): boolean => {
-    const now = Date.now();
-    const last = (session as any).__lastDoorInput;
-    if (last && last.data === data && now - last.ts < 100) {
-      return true; // duplicate within debounce window
-    }
-    (session as any).__lastDoorInput = { data, ts: now };
+    // Debounce disabled for doors to ensure real-time fidelity
     return false;
   };
 

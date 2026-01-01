@@ -1190,51 +1190,41 @@ export async function createApp(session: DoorSession) {
   // Track logical chat messages separately
   const chatMessages: string[] = [];
 
-  function appendLineToLog(line: string) {
-    // 1. Clear any current preview lines before adding a permanent one
-    const lineCount = chatLog.getLineCount();
-    for (let i = chatMessages.length; i < lineCount; i++) {
-      chatLog.setLine(i, '');
+  // Helper function to rebuild chat content from logical messages + previews
+  function rebuildChatContent() {
+    const previewLines = Array.from(state.typingBuffers.values()).map(buf => {
+      const color = getUserColor(buf.username);
+      const time = formatTime(new Date());
+      return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
+    });
+
+    // CRITICAL: Use CRLF for separation to force margin return
+    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
+
+    // FORCE REDRAW: Tell the screen to ignore its previous state
+    if (screen && (screen as any).forceFullRedraw) {
+      (screen as any).forceFullRedraw();
     }
 
-    // 2. Add the permanent message
-    chatLog.add(line);
+    chatLog.setContent(fullContent);
+    chatLog.setScrollPerc(100);
+  }
+
+  function appendLineToLog(line: string) {
     chatMessages.push(line);
     
-    // 3. Register animated lines
+    // Register animated lines
     const lineIndex = chatMessages.length - 1;
     if (hasAnimationTags(line)) {
       animationManager.registerLine(lineIndex, line);
     }
 
+    rebuildChatContent();
     screen.render();
   }
 
   function updateTypingPreview() {
-    const now = Date.now();
-    let previewIndex = chatMessages.length;
-
-    // Update typing preview content for each user
-    for (const [userId, buf] of state.typingBuffers) {
-      if (now - buf.lastUpdate > 5000) continue;
-
-      if (buf.buffer.length > 0) {
-        const color = getUserColor(buf.username);
-        const time = formatTime(new Date());
-        const line = `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
-        
-        // Write the preview to the next available line in the log
-        chatLog.setLine(previewIndex++, line);
-      }
-    }
-
-    // Clear any leftover preview lines if number of typers decreased
-    const totalLines = chatLog.getLineCount();
-    for (let i = previewIndex; i < totalLines; i++) {
-      chatLog.setLine(i, '');
-    }
-
-    chatLog.setScrollPerc(100);
+    rebuildChatContent();
     screen.render();
   }
 
@@ -1575,9 +1565,9 @@ export async function createApp(session: DoorSession) {
     showFileSharing,
     updateTypingPreview,
     () => {
-      // Clear chat log
+      // Clear chat log - both the tracked messages and the display
       chatMessages.length = 0;
-      chatLog.clear();
+      chatLog.setContent('');
       screen.render();
     }
   ));
@@ -1598,9 +1588,8 @@ export async function createApp(session: DoorSession) {
         }
         return;
       }
-      // For regular messages, let the natural 'submit' event handler process it
-      // DON'T manually emit submit here - it causes double submission
-      // The blessed input widget will emit 'submit' naturally on enter
+      // For regular messages, explicitly trigger submit since Textarea defaults to newline
+      inputBox.submit();
       return;
     }
 
