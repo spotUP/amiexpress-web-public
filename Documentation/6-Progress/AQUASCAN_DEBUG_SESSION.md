@@ -1,5 +1,13 @@
 # AquaScan Debug Session - 2025-12-30
 
+## Session 2026-01-01 (cont 2)
+- **Hypothesis**: `AllocDosObject` uses swapped `DOS_EXALLCONTROL`/`DOS_FIB` constants, corrupting memory when AquaScan allocates ExAllControl/FIB.
+- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:flow -- --door N --last 200`, `npm run xim:validate -- --door N --verbose`, `Documentation/7-Reference Sources/NDK3.2R4/Include_H/dos/dos.h`.
+- **Observations**: XIM flow shows each run stops after `EXPRESS_VERSION_REPLY` and restarts; no `DT_TIMELASTON`/`DT_LINELENGTH`/`DT_NAME`/`JH_SM`. NDK headers define `DOS_EXALLCONTROL=1`, `DOS_FIB=2`, but `DosLibrary.ts` had them reversed.
+- **Action**: Fixed constants in `web/backend/src/amiga-emulation/api/DosLibrary.ts` and updated `AllocDosObject` comment.
+- **Result**: Pending (rerun `N S U` and inspect XIM flow/logs).
+- **Next**: Re-run `N S U`, confirm DT_* and JH_SM appear after `EXPRESS_VERSION_REPLY` and no door restart.
+
 ## Session 2026-01-01 (cont)
 - **Hypothesis**: Reply handlers are overwriting msg.strptr/fillers; AquaScan expects them untouched (strptr only for JH_SMPTR), so the EXPRESS_VERSION reply corrupts state and the door restarts.
 - **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:view -- --door N --last 200`, `Documentation/4-Door-Developers/Aquascan N.log`, `AmiExpress-Sources/express.e`.
