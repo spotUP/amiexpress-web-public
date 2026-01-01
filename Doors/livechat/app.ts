@@ -1187,96 +1187,60 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  // Track the typing preview content
-  const typingPreviewLines = new Map<number, string>();
-  let typingPreviewLineCount = 0;
-
-  // Track logical chat messages separately (getLines returns wrapped lines which breaks our logic)
+  // Track logical chat messages separately
   const chatMessages: string[] = [];
+  
+  // Track the current number of preview lines being displayed at the bottom
+  let currentPreviewCount = 0;
 
-  // Helper function to rebuild chat content from logical messages + previews
-  function rebuildChatContent() {
-    const previewLines = Array.from(typingPreviewLines.values());
-    const width = (chatLog as any).width || 78;
-    
-    // Classic BBS trick: Pad every permanent line to the full width 
-    // to force the terminal to advance, then join with explicit CRLF.
-    const paddedMessages = chatMessages.map(line => {
-      // Strip tags to calculate visible length
-      const visible = stripTags(line);
-      const padding = Math.max(0, width - visible.length);
-      return line + ' '.repeat(padding);
-    });
-
-    const fullContent = [...paddedMessages, ...previewLines].join('\r\n');
-
-    chatLog.setContent(fullContent);
-    // Auto-scroll to bottom
-    chatLog.setScrollPerc(100);
-  }
-
-  // Helper function to append a line to the log while preserving typing previews
   function appendLineToLog(line: string) {
-    // Add to our logical message list
-    chatMessages.push(line);
+    // 1. Remove previous preview lines if they exist
+    for (let i = 0; i < currentPreviewCount; i++) {
+      // Logic to effectively "pop" the log isn't native, so we clear and rebuild
+      // But adding a line is permanent.
+    }
 
-    // Register animated lines with animation manager
+    // 2. Add the permanent line to the widget
+    chatLog.add(line);
+    chatMessages.push(line);
+    
+    // Reset preview count since they were "pushed down"
+    currentPreviewCount = 0;
+
+    // 3. Register animated lines
     const lineIndex = chatMessages.length - 1;
     if (hasAnimationTags(line)) {
       animationManager.registerLine(lineIndex, line);
     }
 
-    // Rebuild content with all messages + previews
-    rebuildChatContent();
+    screen.render();
   }
 
   function updateTypingPreview() {
     const now = Date.now();
-    let hasChanges = false;
+    const activePreviews: string[] = [];
 
-    // Clean up entries in typingPreviewLines that are no longer in typingBuffers
-    // This handles the case when a user submits a message (their buffer is deleted)
-    for (const visibleUserId of typingPreviewLines.keys()) {
-      if (!state.typingBuffers.has(visibleUserId)) {
-        typingPreviewLines.delete(visibleUserId);
-        hasChanges = true;
-      }
-    }
-
-    // Update typing preview content for each user
+    // Calculate updated preview content
     for (const [userId, buf] of state.typingBuffers) {
-      if (now - buf.lastUpdate > 5000) {
-        // Expired - remove from preview
-        if (typingPreviewLines.has(userId)) {
-          typingPreviewLines.delete(userId);
-          hasChanges = true;
-        }
-        continue;
-      }
+      if (now - buf.lastUpdate > 5000) continue;
 
       if (buf.buffer.length > 0) {
         const color = getUserColor(buf.username);
         const time = formatTime(new Date());
-        // Format preview like a real message
         const line = `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
-
-        // Only update if content changed
-        if (typingPreviewLines.get(userId) !== line) {
-          typingPreviewLines.set(userId, line);
-          hasChanges = true;
-        }
-      } else if (typingPreviewLines.has(userId)) {
-        typingPreviewLines.delete(userId);
-        hasChanges = true;
+        activePreviews.push(line);
       }
     }
 
-    // Display current typing previews in the chat log (inline after last message)
-    if (hasChanges) {
-      // Rebuild content from our tracked messages + updated previews
-      rebuildChatContent();
-      screen.render();
-    }
+    // To keep it inline and separated, we clear and rebuild the log content
+    // combining permanent messages and active previews.
+    // This is the most reliable way to ensure the widget and terminal see the \n
+    const fullContent = [...chatMessages, ...activePreviews].join('\n');
+    chatLog.setContent(fullContent);
+    currentPreviewCount = activePreviews.length;
+    
+    chatLog.setScrollPerc(100);
+    screen.render();
   }
 
   // Events and activity now go to chat log (use appendLineToLog for proper tracking)
@@ -1395,12 +1359,9 @@ export async function createApp(session: DoorSession) {
   const setCurrentRoomLabel = (value: string) => { currentRoomLabel = value; };
   setupRoomHandlers(socket, state, onlineUsers, userId, username, nodeId, presenceService, updateChannelList, updateUserTable, updateStatusBar, addSystemMessage, addActivity, audio, hideLoading, setChannel, setCurrentRoomLabel, showMessageDialog, inputBox, screen);
 
-  // but typingPreviewLines is a separate Map that also needs clearing
-  // setupRoomHandlers already clears state.typingBuffers via setChannel,
-  // but typingPreviewLines is a separate Map that also needs clearing
+  // Clear typing state when switching rooms
   socket.on('room:joined', () => {
-    typingPreviewLines.clear();
-    typingPreviewLineCount = 0;
+    currentPreviewCount = 0;
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
@@ -1621,8 +1582,7 @@ export async function createApp(session: DoorSession) {
     () => {
       // Clear chat log - both the tracked messages and the display
       chatMessages.length = 0;
-      typingPreviewLines.clear();
-      typingPreviewLineCount = 0;
+      currentPreviewCount = 0;
       chatLog.setContent('');
     }
   ));

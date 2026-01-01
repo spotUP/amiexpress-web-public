@@ -4,7 +4,6 @@
  */
 import { Screen, Log, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MENU_HEIGHT } from './menu-bar';
 import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
@@ -16,9 +15,8 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: any } {
+): { panel: DockablePanel; log: Log } {
   // Create dockable panel for chat
-  // Calculate dimensions based on screen size
   const screenWidth = (screen as any).width || 80;
   const screenHeight = (screen as any).height || 24;
 
@@ -57,7 +55,7 @@ export function createChatLog(
   const logWidth = panelWidth - 2;
   const logHeight = panelHeight - 2;
 
-  const chatLog = createBox({
+  const chatLog = blessed.log({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -69,11 +67,12 @@ export function createChatLog(
     scrollable: true,
     alwaysScroll: true,
     tags: true,
-    wrap: false,
+    wrap: true,
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
     },
+    scrollback: 1000,
     style: {
       fg: 'white',
       bg: 'black',
@@ -84,7 +83,7 @@ export function createChatLog(
 }
 
 export function updateChatHeader(
-  chatLog: any,
+  chatLog: Log,
   channelName: string
 ) {
   chatLog.setLabel(` ${channelName} `);
@@ -94,8 +93,8 @@ export function updateChatHeader(
  * Add a BBS event announcement to the chat log
  */
 export function addBBSEvent(
-  chatLog: any,
+  chatLog: Log,
   formattedEvent: string
 ) {
-  // Logic handled by app.ts rebuildChatContent
+  chatLog.add(formattedEvent);
 }
