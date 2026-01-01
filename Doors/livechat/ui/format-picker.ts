@@ -1,11 +1,6 @@
-/**
- * Format Picker Dialog
- * Two-panel interface: Categories | Options
- * For applying formatting to selected text
- */
-
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box, List, Button } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Panel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 export type FormatCategory = 'colors' | 'effects' | 'markdown';
@@ -19,14 +14,14 @@ export interface Format {
 // Available formats grouped by category
 const FORMATS: Record<FormatCategory, Format[]> = {
   colors: [
-    { category: 'colors', name: 'Red', wrap: (t) => `{red}${t}{/red}` },
-    { category: 'colors', name: 'Green', wrap: (t) => `{green}${t}{/green}` },
-    { category: 'colors', name: 'Blue', wrap: (t) => `{blue}${t}{/blue}` },
-    { category: 'colors', name: 'Yellow', wrap: (t) => `{yellow}${t}{/yellow}` },
-    { category: 'colors', name: 'Cyan', wrap: (t) => `{cyan}${t}{/cyan}` },
-    { category: 'colors', name: 'Magenta', wrap: (t) => `{magenta}${t}{/magenta}` },
-    { category: 'colors', name: 'White', wrap: (t) => `{white}${t}{/white}` },
-    { category: 'colors', name: 'Gray', wrap: (t) => `{gray}${t}{/gray}` },
+    { category: 'colors', name: 'Red', wrap: (t) => `{red-fg}${t}{/}` },
+    { category: 'colors', name: 'Green', wrap: (t) => `{green-fg}${t}{/}` },
+    { category: 'colors', name: 'Blue', wrap: (t) => `{blue-fg}${t}{/}` },
+    { category: 'colors', name: 'Yellow', wrap: (t) => `{yellow-fg}${t}{/}` },
+    { category: 'colors', name: 'Cyan', wrap: (t) => `{cyan-fg}${t}{/}` },
+    { category: 'colors', name: 'Magenta', wrap: (t) => `{magenta-fg}${t}{/}` },
+    { category: 'colors', name: 'White', wrap: (t) => `{white-fg}${t}{/}` },
+    { category: 'colors', name: 'Gray', wrap: (t) => `{gray-fg}${t}{/}` },
   ],
   effects: [
     { category: 'effects', name: 'Rainbow', wrap: (t) => `~rainbow~${t}~/rainbow~` },
@@ -47,13 +42,15 @@ const FORMATS: Record<FormatCategory, Format[]> = {
 
 export class FormatPicker {
   private modalBackground: Box;
-  private overlay: Box;
+  private overlay: Panel;
   private closeButton: Button;
   private categoryList: List;
   private formatList: List;
   private currentCategory: FormatCategory = 'colors';
   private onSelect: ((format: Format) => void) | null = null;
   private onCancel: (() => void) | null = null;
+
+  private _responsiveCleanup: (() => void) | null = null;
 
   constructor(screen: Screen) {
     // Modal background - clicking it closes the dialog
@@ -66,11 +63,10 @@ export class FormatPicker {
       hidden: true,
       clickable: true,
       mouse: true,
+      ch: ' ', // Fill with spaces to clear background
       style: {
         bg: 'black',
-        transparent: true,
       },
-      // @ts-ignore - zIndex exists but not in types
       zIndex: 999,
     });
 
@@ -79,31 +75,31 @@ export class FormatPicker {
       this.hide();
     });
 
-    this.overlay = createBox({
+    this.overlay = new Panel({
       parent: screen,
-      bottom: 5,  // Above status bar and input
-      right: 2,
-      width: 40,
+      top: 'center',
+      left: 'center',
+      width: 44, // Increased width to account for inner padding
       height: 16,
-      label: ' Format [Tab | Enter] ',
+      title: ' Format [Tab | Enter] ',
       border: { type: 'line', fg: 'yellow' },
-      shadow: true,
+      shadow: false,
       hidden: true,
       mouse: true,
       keys: true,
       clickable: true,
+      ch: ' ', // Fill with spaces to clear background
       style: {
         fg: 'white',
         bg: 'black',
       },
-      // @ts-ignore - zIndex exists but not in types
       zIndex: 1000,
     });
 
     // Close button [X] in top-right corner
-    this.closeButton = blessed.box({
+    this.closeButton = blessed.button({
       parent: this.overlay,
-      top: 0,
+      top: -1, // Position on the top border
       right: 1,
       width: 3,
       height: 1,
@@ -116,12 +112,16 @@ export class FormatPicker {
         hover: {
           fg: 'white',
           bg: 'red'
+        },
+        focus: {
+          fg: 'white',
+          bg: 'red'
         }
       },
     }) as unknown as Button;
 
     // Close on button click
-    this.closeButton.on('click', () => {
+    this.closeButton.on('press', () => {
       if (this.onCancel) {
         this.onCancel();
       }
@@ -131,10 +131,10 @@ export class FormatPicker {
     // Category list (left panel)
     this.categoryList = createList({
       parent: this.overlay,
-      top: 1,
+      top: 0,
       left: 0,
       width: 14,
-      height: 13,
+      height: '100%-2',
       label: ' Type ',
       border: { type: 'line', fg: 'green' },
       mouse: true,
@@ -142,6 +142,7 @@ export class FormatPicker {
       interactive: true,
       vi: true,
       keys: true,
+      ch: ' ', // Opaque background
       style: {
         fg: 'white',
         bg: 'black',
@@ -156,10 +157,10 @@ export class FormatPicker {
     // Format list (right panel)
     this.formatList = createList({
       parent: this.overlay,
-      top: 1,
+      top: 0,
       left: 14,
-      width: 24,
-      height: 13,
+      right: 0,
+      height: '100%-2',
       label: ' Options ',
       border: { type: 'line', fg: 'yellow' },
       mouse: true,
@@ -167,6 +168,7 @@ export class FormatPicker {
       keys: true,
       clickable: true,
       interactive: true,
+      ch: ' ', // Opaque background
       scrollbar: {
         ch: ' ',
       },
@@ -229,7 +231,7 @@ export class FormatPicker {
       this.hide();
     });
 
-    // Arrow keys for navigation
+    // Arrow keys for navigation (explicitly needed for some terminals)
     this.categoryList.key(['up', 'k'], () => {
       this.categoryList.up(1);
       this.overlay.screen.render();
@@ -268,63 +270,37 @@ export class FormatPicker {
     const items = formats.map(f => {
       // Show format name with color preview for colors
       if (category === 'colors') {
-        return `{${f.name.toLowerCase()}-fg}${f.name}{/${f.name.toLowerCase()}-fg}`;
+        const colorName = f.name.toLowerCase();
+        return `{${colorName}-fg}${f.name}{/}`;
       }
       return f.name;
     });
     this.formatList.setItems(items);
-    this.overlay.screen.render();
+    if (this.overlay.screen) {
+      this.overlay.screen.render();
+    }
   }
 
   show(
     screen: any,
     onSelect: (format: Format) => void,
     onCancel: () => void,
-    position?: { x: number; y: number }
+    _position?: { x: number; y: number }
   ) {
     this.onSelect = onSelect;
     this.onCancel = onCancel;
 
-    // Position overlay relative to selection if provided
-    if (position) {
-      const overlayWidth = 40;
-      const overlayHeight = 16;
-      const screenWidth = screen.width || 80;
-      const screenHeight = screen.height || 24;
-
-      // Position above the selection point, aligned to it
-      let left = position.x;
-      let top = position.y - overlayHeight - 1;
-
-      // Keep within screen bounds
-      if (left + overlayWidth > screenWidth) {
-        left = screenWidth - overlayWidth - 1;
-      }
-      if (left < 0) left = 0;
-
-      // If not enough room above, position below
-      if (top < 0) {
-        top = position.y + 1;
-      }
-      if (top + overlayHeight > screenHeight) {
-        top = screenHeight - overlayHeight - 1;
-      }
-
-      const overlay = this.overlay as any;
-      overlay.options.left = left;
-      overlay.options.top = top;
-      overlay.position.left = left;
-      overlay.position.top = top;
-      // Clear the fixed positioning
-      overlay.options.bottom = undefined;
-      overlay.options.right = undefined;
-      overlay.position.bottom = undefined;
-      overlay.position.right = undefined;
-      overlay._coordsCacheValid = false;
-    }
-
     this.modalBackground.show();
     this.overlay.show();
+    this.overlay.setFront();
+
+    // Use SDK's responsive utilities
+    const { makeModalResponsive } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+    if (this._responsiveCleanup) {
+      this._responsiveCleanup();
+    }
+    this._responsiveCleanup = makeModalResponsive(this.overlay);
+
     // Focus the Type panel first
     this.categoryList.focus();
     this.categoryList.select(0);
@@ -333,9 +309,15 @@ export class FormatPicker {
   }
 
   hide() {
+    if (this._responsiveCleanup) {
+      this._responsiveCleanup();
+      this._responsiveCleanup = null;
+    }
     this.modalBackground.hide();
     this.overlay.hide();
-    this.overlay.screen.render();
+    if (this.overlay.screen) {
+      this.overlay.screen.render();
+    }
   }
 
   isVisible(): boolean {
@@ -343,6 +325,10 @@ export class FormatPicker {
   }
 
   destroy() {
+    if (this._responsiveCleanup) {
+      this._responsiveCleanup();
+      this._responsiveCleanup = null;
+    }
     this.modalBackground.destroy();
     this.closeButton.destroy();
     this.overlay.destroy();

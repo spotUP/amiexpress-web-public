@@ -101,7 +101,11 @@ export function createSubmitHandler(
         }
 
         if (r.action === 'leave' || cmdName === 'leave' || cmdName === 'part') {
-          socket.emit('room:leave');
+          if (state.currentChannel) {
+            socket.emit('room:leave');
+          } else {
+            addSystemMessage('You are not in a room');
+          }
         }
 
         if (cmdName === 'create' && r.data?.name) {
@@ -168,6 +172,7 @@ export function createSubmitHandler(
             let channelName = args[0].replace(/^art:/i, '');
             const fullName = `art:${channelName}`;
             drawingChannels.add(fullName);
+            if (state.currentChannel) socket.emit('room:leave');
             socket.emit('room:join', { room: fullName });
             state.currentChannel = fullName;
             updateStatusBar();

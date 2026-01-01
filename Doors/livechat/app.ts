@@ -254,7 +254,7 @@ export async function createApp(session: DoorSession) {
   // Ghost text overlay for inline completion preview
   const ghostText = createBox({
     parent: screen,
-    bottom: INPUT_HEIGHT + STATUS_HEIGHT - 1,  // Align with input field content
+    bottom: STATUS_HEIGHT + 1,  // Align with input field content (middle row of input box)
     left: 10,  // Will be dynamically positioned based on cursor
     width: 70,
     height: 1,
@@ -302,15 +302,22 @@ export async function createApp(session: DoorSession) {
     }
 
     // Format command items with name, usage, and description
+    // Dynamically calculate width based on current screen width
+    const screenWidth = (screen as any).width || 80;
+    const nameWidth = 12;
+    const usageWidth = 20;
+    // Description gets the remaining space (minus borders and spacing)
+    const descWidth = Math.max(10, screenWidth - nameWidth - usageWidth - 6);
+
     const items = filteredCommands.map(cmd => {
-      const nameWidth = 15;
-      const usageWidth = 25;
-      const name = cmd.name.padEnd(nameWidth);
+      const name = cmd.name.padEnd(nameWidth).slice(0, nameWidth);
       const usage = (cmd.usage || '').padEnd(usageWidth).slice(0, usageWidth);
-      const desc = cmd.description || '';
+      const desc = (cmd.description || '').slice(0, descWidth);
       return `{cyan-fg}/${name}{/cyan-fg} {gray-fg}${usage}{/gray-fg} ${desc}`;
     });
 
+    // Ensure list width is updated to full screen width before showing
+    commandSuggestions.position.width = screenWidth;
     commandSuggestions.setItems(items);
     commandSuggestions.select(0);
     commandSuggestions.show();
@@ -714,6 +721,7 @@ export async function createApp(session: DoorSession) {
     emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
     menuBar.element.position.width = width;
     commandSuggestions.position.width = width;  // Full width for command suggestions
+    ghostText.position.width = width;           // Responsive ghost text
 
     if (breakpoint === 'small') {
       // Hide sidebar on small screens (< 80 cols)
@@ -750,6 +758,7 @@ export async function createApp(session: DoorSession) {
     invalidateCache(emojiButton);
     invalidateCache(menuBar.element);
     invalidateCache(commandSuggestions);
+    invalidateCache(ghostText);
     invalidateCache(chatPanel);
     invalidateCache(chatLog);
     invalidateCache(typingBar);
@@ -1804,56 +1813,14 @@ export async function createApp(session: DoorSession) {
   // ========== CLEANUP ==========
 
   function cleanup() {
-    socket.emit('room:leave');
+    state.running = false;
+
+    // Send leave room only if we are in a room
+    if (state.currentChannel) {
+      socket.emit('room:leave');
+    }
+
     events.clear();
-
-    // Stop listening to BBS events to prevent memory leak
-    bbsEventHandler.unlisten();
-
-    // Stop listening to thread events
-    cleanupThreadListeners(socket);
-
-    // Stop listening to pin events
-    cleanupPinListeners(socket);
-
-    // Stop listening to search events
-    cleanupSearchListeners(socket);
-
-    // Cleanup voice channel
-    voiceChannel.destroy();
-
-    // Cleanup animation manager
-    animationManager.destroy();
-
-    // Cleanup format picker
-    formatPicker.destroy();
-
-    // Remove moderation event listeners
-    socket.removeAllListeners('chat:kicked');
-    socket.removeAllListeners('chat:banned');
-    socket.removeAllListeners('chat:muted');
-
-    // Remove all socket listeners to prevent memory leaks
-    socket.removeAllListeners('chat:keystroke');
-    socket.removeAllListeners('chat:keystroke-submit');
-    socket.removeAllListeners('chat:keystroke-clear');
-    socket.removeAllListeners('chat:message');
-    socket.removeAllListeners('chat:edited');
-    socket.removeAllListeners('chat:dm');
-    socket.removeAllListeners('chat:presence');
-    socket.removeAllListeners('chat:reaction');
-    socket.removeAllListeners('bbs:event');
-    socket.removeAllListeners('room:joined');
-    socket.removeAllListeners('room:left');
-    socket.removeAllListeners('room:list');
-    socket.removeAllListeners('room:kicked');
-    socket.removeAllListeners('room:error');
-    socket.removeAllListeners('room:created');
-    socket.removeAllListeners('room:user-joined');
-    socket.removeAllListeners('room:user-left');
-    socket.removeAllListeners('disconnect');
-    socket.removeAllListeners('connect');
-    socket.removeAllListeners('connect_error');
 
     // Disable mouse and clean up input handler
     screen.disableMouse();
