@@ -822,6 +822,9 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
   function showMessageDialog(text: string, callback?: () => void) {
     modalOverlay.show();
     modalOverlay.setFront();
+    messageDialog.show();
+    messageDialog.setFront();
+    messageDialog.focus();
     messageDialog.once('hide', () => {
       modalOverlay.hide();
       if (returnFocusElement) returnFocusElement.focus();
@@ -835,6 +838,9 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
   function showPromptDialog(text: string, value: string, callback: (err: Error | null, val?: string) => void) {
     modalOverlay.show();
     modalOverlay.setFront();
+    promptDialog.show();
+    promptDialog.setFront();
+    promptDialog.focus();
     promptDialog.once('hide', () => {
       modalOverlay.hide();
       if (returnFocusElement) returnFocusElement.focus();
@@ -848,6 +854,9 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
   function showConfirmDialog(text: string, callback: (answer: boolean) => void) {
     modalOverlay.show();
     modalOverlay.setFront();
+    questionDialog.show();
+    questionDialog.setFront();
+    questionDialog.focus();
     questionDialog.once('hide', () => {
       modalOverlay.hide();
       if (returnFocusElement) returnFocusElement.focus();
