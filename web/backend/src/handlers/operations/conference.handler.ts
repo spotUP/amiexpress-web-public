@@ -93,21 +93,22 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
 /**
  * Join conference function (joinConf equivalent)
  */
-export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number) {
+export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
+    if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
     return false;
   }
 
   const messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
   if (!messageBase) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base for this conference!\x1b[0m\r\n');
+    if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base for this conference!\x1b[0m\r\n');
     return false;
   }
 
   session.currentConf = confId;
   session.conferenceId = confId; // XIM doors read this
+  session.currentConference = confId; // GlobalStructures reads this
   session.currentMsgBase = msgBaseId;
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
@@ -122,18 +123,6 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
     } catch (err) {
       console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'Conference Switching',
-        `Failed to persist auto-rejoin settings for conference`,
-        {
-          error: err instanceof Error ? err.message : String(err),
-          userId: session.user.id,
-          conferenceId: confId
-        },
-        DebugSeverity.WARNING
-      );
     }
   }
 
@@ -147,21 +136,18 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       session.lastNewReadConf = validated.lastNewReadConf || 0;
     } catch (err) {
       console.error('[joinConference] Failed to load/validate message pointers:', err);
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'Conference Switching',
-        `Failed to load/validate message pointers when joining conference`,
-        {
-          error: err instanceof Error ? err.message : String(err),
-          userId: session.user.id,
-          conferenceId: confId,
-          messageBaseId: msgBaseId
-        },
-        DebugSeverity.WARNING
-      );
       session.lastMsgReadConf = 0;
       session.lastNewReadConf = 0;
+    }
+  }
+
+  // Sync node files so doors (like AquaScan) see the new conference
+  if (session.user && session.nodeId !== undefined) {
+    try {
+      const { nodeFileManager } = require('../../services/NodeFileManager');
+      nodeFileManager.writeNodeUserFile(session.nodeId, session.user);
+    } catch (err) {
+      console.warn('[joinConference] Failed to sync node user file:', err);
     }
   }
 
@@ -170,16 +156,19 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     await callersLog(session.user.id, session.user.username, 'Joined conference', conference.name);
   }
 
-  // Like express.e:28576-28577 - load flagged files and command history
-  const finalMessage = `Conference joined: ${conference.name} (Base: ${messageBase.name})`;
-  finalizeCommand(socket, session, finalMessage);
-  await loadFlagged(socket, session);
-  await loadHistory(session);
+  if (!silent) {
+    // Like express.e:28576-28577 - load flagged files and command history
+    const finalMessage = `Conference joined: ${conference.name} (Base: ${messageBase.name})`;
+    finalizeCommand(socket, session, finalMessage);
+    await loadFlagged(socket, session);
+    await loadHistory(session);
 
-  // Express.e:28579 - Set menuPause flag (pause before next menu display)
-  session.menuPause = true;
+    // Express.e:28579 - Set menuPause flag (pause before next menu display)
+    session.menuPause = true;
 
-  // Move to menu display
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // Move to menu display
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
   return true;
 }

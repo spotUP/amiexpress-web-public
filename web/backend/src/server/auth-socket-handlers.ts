@@ -116,6 +116,12 @@ export function registerAuthHandlers(socket: Socket) {
         // Clear any pending disconnect timer
         clearPendingDisconnect(String(user.id));
 
+        // Load command history from database
+        const { loadHistory } = require('../utils/command-history.util');
+        loadHistory(existingSession, user.id).catch((err: any) => {
+          console.error('[Session Restore] Failed to load command history:', err);
+        });
+
         // Notify client of successful restoration
         socket.emit('session-restored', {
           user: {
@@ -369,65 +375,25 @@ export function registerAuthHandlers(socket: Socket) {
         return;
       }
 
+      // Preserve previous last login for conference scan (New Since Date)
+      const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
+      
       // Update last login
       await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
 
       // Set session user data
-      if (data.token) {
-        const userId = String(user.id);
-        const pending = pendingDisconnects.get(userId);
-        const existingSession = userSessions.get(userId);
-
-        if (pending && existingSession && existingSession !== session) {
-          console.log(`[AUTH] Rebinding socket ${socket.id} to existing session for user ${userId}`);
-          clearPendingDisconnect(userId);
-
-          socketToUser.delete(pending.socketId);
-          socketToNodeId.delete(pending.socketId);
-
-          // Drop the pre-login session created for this socket.
-          deleteSession(socket.id);
-
-          session = existingSession;
-          session.socket = socket;
-          session.socketId = socket.id;
-          session.lastActivity = Date.now();
-
-          setSession(socket.id, session);
-          socketToUser.set(socket.id, userId);
-          sessionLogManager.updateSession(socket.id, userId, user.username, session.nodeId);
-
-          if (session.bbsApi?.setSocket) {
-            session.bbsApi.setSocket(socket);
-          }
-
-          if (session.gameModeEnabled) {
-            socket.emit('game-mode', true);
-          }
-
-          if (session.inDoorManager && session.doorReconnectHandler) {
-            session.doorReconnectHandler();
-          }
-
-          socket.emit('ansi-output', '\r\n\x1b[32mReconnected.\x1b[0m\r\n');
-
-          if (!session.inDoorManager) {
-            session.menuPause = true;
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            const { displayMainMenu } = require('../handlers/command-handler/menu');
-            await displayMainMenu(socket, session);
-          }
-
-          triggerSamiLogRefresh();
-          return;
-        }
-      }
-
+      // ... (existing code continues) ...
       session.state = BBSState.LOGGEDON;
       session.subState = LoggedOnSubState.DISPLAY_BULL;
-      session.user = user;
+      session.user = { ...user, lastLoginBeforeUpdate };
       session.ansiMode = user.ansi;
       installAnsiFilter(socket, session);
+
+      // Load command history from database
+      const { loadHistory } = require('../utils/command-history.util');
+      loadHistory(session, user.id).catch((err: any) => {
+        console.error('[LOGIN] Failed to load command history:', err);
+      });
 
       // Test sysop debug system
       SysopDebugUtil.debug(

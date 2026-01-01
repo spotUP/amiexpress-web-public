@@ -98,6 +98,8 @@ import {
 import { handlePageSysopCommand } from './command-handler/page-sysop-command';
 import { processBatchFile } from '../server/file-socket-handlers';
 import { config } from '../config';
+import { loadBBSConfig } from '../services/bbs-config-file.service';
+import { parseInfoFile } from '../utils/amiga-command-parser.util';
 import {
   handleLiveChatCommand
 } from './chat/chat-commands.handler';
@@ -467,12 +469,42 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
           displayFlowLog('showing NODE_BULL');
           const shown = await displayScreen(socket, session, 'NODE_BULL');
           if (shown && pauseDisplayFlow(socket, session)) {
-            session.subState = LoggedOnSubState.CONF_SCAN;
+            session.subState = LoggedOnSubState.EXEC_QUICKNEW;
             displayFlowLog('pause after NODE_BULL');
             return;
           }
         }
         displayFlowLog('skip NODE_BULL (toolFlags or not shown)');
+        session.subState = LoggedOnSubState.EXEC_QUICKNEW;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.EXEC_QUICKNEW) {
+        // AmiExpress EXEC_QUICKNEW support (express.e:29845-29847)
+        const bbsRoot = config.get('dataDir');
+        const nodeId = session.nodeId || 0;
+        const nodeInfoPath = path.join(bbsRoot, `Node${nodeId}.info`);
+        
+        if (fs.existsSync(nodeInfoPath)) {
+          const tooltypes = parseInfoFile(nodeInfoPath);
+          if (tooltypes.has('EXEC_QUICKNEW')) {
+            displayFlowLog('EXEC_QUICKNEW detected, running command');
+            const { runSysCommand } = require('./command-execution.handler');
+            await runSysCommand(socket, session, 'QUICKNEW', '');
+            
+            // Display result file
+            const quickNewPath = path.join(bbsRoot, 'Screens', 'QuickNew.txt');
+            if (fs.existsSync(quickNewPath)) {
+              displayFlowLog('Displaying QuickNew.txt');
+              await displayScreen(socket, session, 'QuickNew', false);
+              if (pauseDisplayFlow(socket, session)) {
+                session.subState = LoggedOnSubState.CONF_SCAN;
+                return;
+              }
+            }
+          }
+        }
+
         session.subState = LoggedOnSubState.CONF_SCAN;
         continue;
       }

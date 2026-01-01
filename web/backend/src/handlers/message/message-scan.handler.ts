@@ -162,19 +162,6 @@ async function checkMailConfScan(conferenceId: number, messageBaseId: number, us
     return (confBase.scanFlags & MAIL_SCAN_MASK) !== 0;
   } catch (error) {
     console.error(`[checkMailConfScan] Failed to load conf_base for user ${userId} conf ${conferenceId} msgBase ${messageBaseId}:`, error);
-    SysopDebugUtil.debug(
-      null,
-      null,
-      'Message Scanning',
-      `Failed to load message pointers for mail scan check`,
-      {
-        error: error instanceof Error ? error.message : String(error),
-        userId,
-        conferenceId,
-        messageBaseId
-      },
-      DebugSeverity.WARNING
-    );
     return true; // Fallback to scanning if we cannot determine
   }
 }
@@ -269,19 +256,6 @@ async function countNewMessages(
     }
   } catch (error) {
     console.error(`Error counting messages in conf ${conferenceId} msgbase ${messageBaseId}:`, error);
-    SysopDebugUtil.debug(
-      null,
-      null,
-      'Message Scanning',
-      `Failed to count messages in conference`,
-      {
-        error: error instanceof Error ? error.message : String(error),
-        conferenceId,
-        messageBaseId,
-        username
-      },
-      DebugSeverity.WARNING
-    );
   }
 
   return { newPublic, newPrivate, lastScanned, mailStatHigh };
@@ -305,6 +279,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   }
 
   const { runSysCommand } = require('../command-execution.handler');
+  const { joinConference } = require('../operations/conference.handler');
 
   // express.e:28071 - setEnvStat(ENV_SCANNING)
   session.currentStat = 9; // ENV_SCANNING
@@ -313,65 +288,95 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
   socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
 
-  // Suppress menu prompts during conference scan - doors complete but we don't want
-  // to show menu after each one, only after the entire scan finishes
+  // Suppress menu prompts during conference scan
   session.inConfScan = true;
 
   // express.e:28086-28114 - FOR conf:=1 TO cmds.numConf
-  const numConf = _conferences?.length || 1;
+  const numConf = _conferences?.length || 0;
   let mystat = 0; // RESULT_SUCCESS
 
+  const user = session.user;
+  const username = user?.username || 'Unknown';
+  console.log(`[confScan] Starting scan for ${username}. Total conferences: ${numConf}`);
+
+  // Cache original newSinceDate to restore after scan
+  const originalNewSinceDate = user?.newSinceDate;
+  
+  // Use previous login date for 'New Since' logic during scan
+  if (user?.lastLoginBeforeUpdate) {
+    user.newSinceDate = user.lastLoginBeforeUpdate;
+    console.log(`[confScan] Using previous login date for scan: ${user.newSinceDate.toISOString()}`);
+  } else {
+    console.log(`[confScan] WARNING: No previous login date found for ${username}`);
+  }
+
+  // Get conference access string
+  const confAccess = user?.confAccess || user?.conferenceAccess || '';
+  console.log(`[confScan] Access string: "${confAccess}" (len=${confAccess.length})`);
+
   for (let conf = 1; conf <= numConf; conf++) {
+    const confName = _conferences[conf - 1]?.name || `Conf ${conf}`;
+    
     // express.e:28087 - IF (checkConfAccess(conf))
-    const confAccess = session.confAccess || '';
-    const hasAccess = confAccess.length === 0 || (confAccess.length >= conf && confAccess[conf - 1] !== '-');
+    // AmiExpress uses 'X' for access, '_' for no access
+    const accessChar = confAccess.length >= conf ? confAccess[conf - 1].toUpperCase() : '_';
+    const hasAccess = accessChar === 'X';
 
     if (!hasAccess) {
-      console.log(`[confScan] Skipping conference ${conf} - no access`);
+      if (conf <= 14) { 
+        console.log(`[confScan] Skipping ${confName} (index ${conf-1}) - char is "${accessChar}"`);
+      }
       continue;
     }
 
-    // express.e:28089 - fscan:=checkFileConfScan(conf)
-    // For now, assume file scanning is enabled for all conferences
-    const fscan = true;
+    console.log(`[confScan] -> Scanning ${confName} (${conf}/${numConf})`);
 
-    console.log(`[confScan] Scanning conference ${conf}/${numConf}`);
+    try {
+      // Find first message base for this conference
+      const firstMsgBase = _messageBases.find(mb => mb.conferenceId === conf);
+      const msgBaseId = firstMsgBase ? firstMsgBase.id : 1;
 
-    // express.e:28099-28104 - Run file scan for this conference
-    if (fscan) {
-      try {
+      // Join conference silently to setup environment
+      await joinConference(socket, session, conf, msgBaseId, true);
+
+      // express.e:28089 - fscan:=checkFileConfScan(conf)
+      // FORCED TRUE for debugging to ensure we see output
+      const fscan = true;
+
+      // express.e:28099-28104 - Run file scan for this conference
+      if (fscan) {
         // express.e:28100 - newFilesPauseFlag:=TRUE
         session.newFilesPauseFlag = true;
 
-        // express.e:28101 - currentConf:=conf
-        // NOTE: Use currentConference (not currentConf) to match GlobalStructures.ts
-        session.currentConference = conf;
-        console.log(`[confScan] Set currentConference=${conf}, calling AquaScan (N S U)`);
+        console.log(`[confScan] Calling AquaScan (N S U) for conference ${conf}`);
 
         // express.e:28102 - runSysCommand('N','S U')
         await runSysCommand(socket, session, 'N', 'S U');
 
-        // express.e:28103 - currentConf:=0
-        session.currentConference = 0;
-
         // express.e:28104 - newFilesPauseFlag:=FALSE
         session.newFilesPauseFlag = false;
-
-        console.log(`[confScan] Conference ${conf} scan completed`);
-      } catch (err) {
-        console.error(`[confScan] Conference ${conf} scan failed:`, err);
-        // express.e:28106 - mystat:=RESULT_SUCCESS (continue on error)
-        mystat = 0;
       }
+    } catch (err) {
+      console.error(`[confScan] Conference ${conf} scan failed:`, err);
+      mystat = 0; // Continue to next conference
     }
 
     // express.e:28109 - EXIT mystat=RESULT_FAILURE
     if (mystat === -1) break;
   }
 
+  // express.e:28103 - currentConf:=0
+  session.currentConference = 0;
+  session.currentConf = 0;
+  
+  // Restore current login date
+  if (user) {
+    user.newSinceDate = originalNewSinceDate;
+  }
+
   console.log('[confScan] All conferences scanned');
 
-  // Clear the confScan flag - menu prompts can resume now
+  // Clear the confScan flag
   session.inConfScan = false;
 
   // express.e:28149 - ENDPROC RESULT_SUCCESS
