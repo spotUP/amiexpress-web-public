@@ -1492,6 +1492,19 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     const importPath = `file://${resolvedDoorPath}`;
     console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
+    // INSTANT FEEDBACK: Show backend loading screen immediately for TypeScript doors
+    // This clears the BBS menu and shows a loader while the door module initializes
+    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    socket.emit('ansi-output', '\r\n\r\n\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m┌────────────────────────────────────────────────────────────┐\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
+    socket.emit('ansi-output', `  \x1b[1;36m│\x1b[0m  \x1b[1;33mLoading application: ${door.name.padEnd(35)}\x1b[0m  \x1b[1;36m│\x1b[0m\r\n`);
+    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m  \x1b[32mPlease wait while the environment initializes...\x1b[0m          \x1b[1;36m│\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m  \x1b[36m[\x1b[32m██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\x1b[36m]\x1b[0m  \x1b[1;36m│\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
+    socket.emit('ansi-output', '  \x1b[1;36m└────────────────────────────────────────────────────────────┘\x1b[0m\r\n');
+
     // Dynamically import the door module
     const doorModule = await import(importPath);
 
