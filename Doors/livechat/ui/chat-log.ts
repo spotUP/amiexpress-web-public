@@ -2,8 +2,9 @@
  * Chat log component
  * Main chat message display area
  */
-import { Screen, Log, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, List, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MENU_HEIGHT } from './menu-bar';
 import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
@@ -15,7 +16,7 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: Log } {
+): { panel: DockablePanel; log: List } {
   // Create dockable panel for chat
   const screenWidth = (screen as any).width || 80;
   const screenHeight = (screen as any).height || 24;
@@ -55,7 +56,9 @@ export function createChatLog(
   const logWidth = panelWidth - 2;
   const logHeight = panelHeight - 2;
 
-  const chatLog = blessed.log({
+  // CRITICAL FIX: Use a List widget instead of Log or Box.
+  // Items in a list are GUARANTEED to be on separate lines by the engine.
+  const chatLog = createList({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -67,23 +70,23 @@ export function createChatLog(
     scrollable: true,
     alwaysScroll: true,
     tags: true,
-    wrap: true,
+    interactive: false, // Don't allow selecting items manually
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
     },
-    scrollback: 1000,
     style: {
       fg: 'white',
       bg: 'black',
-    },
+      selected: { fg: 'white', bg: 'black' } // Keep it looking like a log
+    } as any,
   });
 
   return { panel: chatPanel, log: chatLog };
 }
 
 export function updateChatHeader(
-  chatLog: Log,
+  chatLog: List,
   channelName: string
 ) {
   chatLog.setLabel(` ${channelName} `);
@@ -93,8 +96,9 @@ export function updateChatHeader(
  * Add a BBS event announcement to the chat log
  */
 export function addBBSEvent(
-  chatLog: Log,
+  chatLog: List,
   formattedEvent: string
 ) {
-  chatLog.add(formattedEvent);
+  chatLog.addItem(formattedEvent);
+  chatLog.scrollTo(chatLog.items.length);
 }

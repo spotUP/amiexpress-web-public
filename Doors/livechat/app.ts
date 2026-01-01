@@ -1190,29 +1190,28 @@ export async function createApp(session: DoorSession) {
   // Track logical chat messages separately
   const chatMessages: string[] = [];
   
-  // Track the current number of preview lines being displayed at the bottom
-  let currentPreviewCount = 0;
+  // Track how many lines of preview we are currently showing at the bottom
+  let lastPreviewCount = 0;
 
   function appendLineToLog(line: string) {
-    // 1. Remove previous preview lines if they exist
-    for (let i = 0; i < currentPreviewCount; i++) {
-      // Logic to effectively "pop" the log isn't native, so we clear and rebuild
-      // But adding a line is permanent.
+    // 1. Remove previous preview items before adding a permanent one
+    for (let i = 0; i < lastPreviewCount; i++) {
+      chatLog.removeItem(chatLog.items.length - 1);
     }
+    lastPreviewCount = 0;
 
-    // 2. Add the permanent line to the widget
-    chatLog.add(line);
+    // 2. Add the permanent message
+    chatLog.addItem(line);
     chatMessages.push(line);
     
-    // Reset preview count since they were "pushed down"
-    currentPreviewCount = 0;
-
     // 3. Register animated lines
     const lineIndex = chatMessages.length - 1;
     if (hasAnimationTags(line)) {
       animationManager.registerLine(lineIndex, line);
     }
 
+    // Auto-scroll
+    chatLog.scrollTo(chatLog.items.length);
     screen.render();
   }
 
@@ -1232,14 +1231,20 @@ export async function createApp(session: DoorSession) {
       }
     }
 
-    // To keep it inline and separated, we clear and rebuild the log content
-    // combining permanent messages and active previews.
-    // This is the most reliable way to ensure the widget and terminal see the \n
-    const fullContent = [...chatMessages, ...activePreviews].join('\n');
-    chatLog.setContent(fullContent);
-    currentPreviewCount = activePreviews.length;
+    // 1. Remove old previews
+    for (let i = 0; i < lastPreviewCount; i++) {
+      chatLog.removeItem(chatLog.items.length - 1);
+    }
+
+    // 2. Add new previews
+    for (const line of activePreviews) {
+      chatLog.addItem(line);
+    }
     
-    chatLog.setScrollPerc(100);
+    lastPreviewCount = activePreviews.length;
+    
+    // Auto-scroll
+    chatLog.scrollTo(chatLog.items.length);
     screen.render();
   }
 
@@ -1361,7 +1366,7 @@ export async function createApp(session: DoorSession) {
 
   // Clear typing state when switching rooms
   socket.on('room:joined', () => {
-    currentPreviewCount = 0;
+    lastPreviewCount = 0;
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
@@ -1580,10 +1585,11 @@ export async function createApp(session: DoorSession) {
     showFileSharing,
     updateTypingPreview,
     () => {
-      // Clear chat log - both the tracked messages and the display
+      // Clear chat log
       chatMessages.length = 0;
-      currentPreviewCount = 0;
-      chatLog.setContent('');
+      lastPreviewCount = 0;
+      chatLog.setItems([]);
+      screen.render();
     }
   ));
 
