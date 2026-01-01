@@ -1197,8 +1197,18 @@ export async function createApp(session: DoorSession) {
   // Helper function to rebuild chat content from logical messages + previews
   function rebuildChatContent() {
     const previewLines = Array.from(typingPreviewLines.values());
-    // CRITICAL: Use \r\n for line separation to ensure Amiga terminals return to left margin
-    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
+    const width = (chatLog as any).width || 78;
+    
+    // Classic BBS trick: Pad every permanent line to the full width 
+    // to force the terminal to advance, then join with explicit CRLF.
+    const paddedMessages = chatMessages.map(line => {
+      // Strip tags to calculate visible length
+      const visible = stripTags(line);
+      const padding = Math.max(0, width - visible.length);
+      return line + ' '.repeat(padding);
+    });
+
+    const fullContent = [...paddedMessages, ...previewLines].join('\r\n');
 
     chatLog.setContent(fullContent);
     // Auto-scroll to bottom

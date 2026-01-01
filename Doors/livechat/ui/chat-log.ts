@@ -16,7 +16,7 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: Log } {
+): { panel: DockablePanel; log: any } {
   // Create dockable panel for chat
   // Calculate dimensions based on screen size
   const screenWidth = (screen as any).width || 80;
@@ -57,7 +57,7 @@ export function createChatLog(
   const logWidth = panelWidth - 2;
   const logHeight = panelHeight - 2;
 
-  const chatLog = blessed.log({
+  const chatLog = createBox({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -69,11 +69,11 @@ export function createChatLog(
     scrollable: true,
     alwaysScroll: true,
     tags: true,
+    wrap: false,
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
     },
-    scrollback: 1000,
     style: {
       fg: 'white',
       bg: 'black',
