@@ -1197,7 +1197,7 @@ export async function createApp(session: DoorSession) {
   // Helper function to rebuild chat content from logical messages + previews
   function rebuildChatContent() {
     const previewLines = Array.from(typingPreviewLines.values());
-    const fullContent = [...chatMessages, ...previewLines].join('\n');
+    const fullContent = [...chatMessages, ...previewLines].join('\r\n');
 
     chatLog.setContent(fullContent);
     typingPreviewLineCount = previewLines.length;
