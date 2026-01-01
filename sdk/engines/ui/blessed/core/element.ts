@@ -1115,7 +1115,7 @@ export class Element extends EventEmitter {
 
     let flags = 0;
     let fgCode = 0x1ff; // Default: no color (-1)
-    let bgCode = 0x1ff; // Default: no color (-1)
+    let bgCode = 0; // Default: black (0)
 
     // Parse flags
     if (style.bold) flags |= 1;
