@@ -740,15 +740,15 @@ export function setupDoorLifecycle(
  * hideModal(settingsModal);  // Hides both and returns focus to inputBox
  */
 export function createModalManager(screen: Screen, returnFocusElement?: any) {
-  const modalOverlay = blessed.overlay({
+  const modalOverlay = blessed.box({
     parent: screen,
     top: 0,
     left: 0,
     width: '100%',
     height: '100%',
-    opacity: 0.5,
     hidden: true,
     zIndex: 500, // Above normal UI
+    ch: ' ',     // Fill with spaces to ensure opacity
     style: { bg: 'black' }
   });
 
@@ -795,6 +795,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     width: 50,
     tags: true,
     zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
   });
 
@@ -805,6 +806,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     width: 50,
     tags: true,
     zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
     style: { fg: 'white', bg: 'black', border: { fg: 'green' } }
   });
 
@@ -816,6 +818,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     title: ' Confirm ',
     tags: true,
     zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
     style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } }
   });
 
