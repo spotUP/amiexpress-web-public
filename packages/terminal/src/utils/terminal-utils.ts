@@ -136,7 +136,7 @@ export const XTERM_CONFIG = {
     allowTransparency: false,
     cursorBlink: true,
     cursorStyle: 'block' as const,
-    scrollback: 2000,
+    scrollback: 10000,
     fontWeight: 'normal' as const,
     fontWeightBold: 'bold' as const,
     allowProposedApi: true,

@@ -6,6 +6,7 @@ import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
+import { MediaHandler } from '../utils/media-handler';
 
 // RIP Graphics types (inline to avoid package dependency)
 const RIP_WIDTH = 640;
@@ -30,6 +31,8 @@ interface BBSTerminalProps {
   onConnect?: () => void;
   /** Disconnect callback */
   onDisconnect?: (reason: string) => void;
+  /** Raw ANSI output callback */
+  onAnsiOutput?: (data: string) => void;
 }
 
 export interface BBSTerminalRef {
@@ -62,6 +65,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   onConnectionError,
   onConnect,
   onDisconnect,
+  onAnsiOutput,
 }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
@@ -104,6 +108,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const zmodemSentry = useRef<any | null>(null);
   const zmodemRef = useRef<any | null>(null);
   const audioEngineRef = useRef<SDKClient.AudioEngine | null>(null);
+  const mediaHandlerRef = useRef<MediaHandler | null>(null);
   const audioReadyRef = useRef<boolean>(false);
   const sfxBufferRef = useRef<string>('');
 
@@ -705,6 +710,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
     socketRef.current = socket;
 
+    // Initialize media handler for audio/video streaming
+    const mediaHandler = new MediaHandler(socket);
+    mediaHandlerRef.current = mediaHandler;
+
+    // Socket media event handlers
+    socket.on('audio:start-streaming', async (options, callback) => {
+      try {
+        await mediaHandler.startMicrophone(options);
+        callback({ success: true, streamId: `audio-${socket.id}` });
+      } catch (err: any) {
+        callback({ success: false, error: err.message });
+      }
+    });
+
+    socket.on('audio:stop-streaming', (callback) => {
+      mediaHandler.stopMicrophone();
+      if (typeof callback === 'function') callback();
+    });
+
+    socket.on('audio:mute', (data: { muted: boolean }) => {
+      mediaHandler.setMuted(data.muted);
+    });
+
+    socket.on('audio:volume', (data: { volume: number }) => {
+      mediaHandler.setVolume(data.volume);
+    });
+
+    socket.on('video:start-stream', async (data, callback) => {
+      try {
+        const { options } = data;
+        await mediaHandler.startVideo(options?.width, options?.height, options?.fps);
+        callback({ success: true, streamId: `video-${socket.id}` });
+      } catch (err: any) {
+        callback({ success: false, error: err.message });
+      }
+    });
+
+    socket.on('video:stop-stream', (data, callback) => {
+      mediaHandler.stopVideo();
+      if (typeof callback === 'function') callback({ success: true });
+    });
+
     // Socket event handlers
     socket.on('connect', () => {
       console.log('[Terminal] Connected to BBS backend');
@@ -1026,6 +1073,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
+      if (onAnsiOutput) {
+        onAnsiOutput(data);
+      }
       const overlayPrefix = '\x1b]9999;overlay;';
       let overlayPayload = overlayBufferRef.current + data;
       overlayBufferRef.current = '';
@@ -1550,6 +1600,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Cleanup
     return () => {
+      mediaHandlerRef.current?.destroy();
       socket.disconnect();
       socket.offAny(handleDoorMessageEvent);
       term.dispose();

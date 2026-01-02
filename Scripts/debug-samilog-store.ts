@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const STORE = fs.readFileSync(path.join(process.cwd(), 'S/SAmiLog.Store'));
+const STORE = fs.readFileSync(path.join(process.cwd(), 'Utils/samilog/SAmiLog.Store'));
 const VERSION_LENGTH = 8;
 const CLEAR = 4;
 const RES = 36;

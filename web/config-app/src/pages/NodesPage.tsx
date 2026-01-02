@@ -48,7 +48,7 @@ export function NodesPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (nodeNumber: number) => apiClient.createNodeConfig({ node_number: nodeNumber }),
+    mutationFn: (nodeNumber: number) => apiClient.createNodeConfig({ node_number: nodeNumber - 1 }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['nodes'] });
       showSuccess('Node created');
@@ -56,7 +56,7 @@ export function NodesPage() {
   });
 
   const handleEdit = (node: NodeConfig) => {
-    setEditingNode(node.node_number);
+    setEditingNode(node.node_number + 1); // Store as 1-based for UI matching
     setFormData(node);
   };
 
@@ -100,8 +100,8 @@ export function NodesPage() {
   const rows: NodeRow[] = useMemo(
     () =>
       Array.from({ length: maxNodes }, (_, i) => {
-        const nodeNumber = i + 1;
-        return { nodeNumber, config: nodeMap.get(nodeNumber) || null };
+        const nodeNumber = i + 1; // UI Display
+        return { nodeNumber, config: nodeMap.get(i) || null }; // Look up by 0-based i
       }),
     [maxNodes, nodeMap]
   );
