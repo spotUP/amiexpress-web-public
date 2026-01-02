@@ -532,6 +532,40 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
+    // Intercept pause prompts (checkForPause) before any other handling
+    if ((session as any).checkPauseHandler) {
+      // Accumulate line input for pause prompts
+      if (!(session as any).checkPauseBuffer) {
+        (session as any).checkPauseBuffer = '';
+      }
+
+      // Treat CR/LF as submission
+      if (data === '\r' || data === '\n') {
+        const handler = (session as any).checkPauseHandler;
+        const buffer = (session as any).checkPauseBuffer;
+        // Clear buffer before invoking handler; handler may register a new one
+        (session as any).checkPauseBuffer = '';
+        // If handler persists, clear it after invocation
+        handler(buffer);
+        if ((session as any).checkPauseHandler === handler) {
+          (session as any).checkPauseHandler = undefined;
+        }
+        return;
+      }
+
+      // Handle backspace
+      if (data === '\x7f' || data === '\b') {
+        (session as any).checkPauseBuffer = ((session as any).checkPauseBuffer as string).slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+        return;
+      }
+
+      // Accumulate other characters
+      (session as any).checkPauseBuffer += data;
+      socket.emit('ansi-output', data);
+      return;
+    }
+
     // Intercept pause prompts (flagPause) before any other handling
     if ((session as any).flagPauseHandler) {
       // Accumulate line input for pause prompts

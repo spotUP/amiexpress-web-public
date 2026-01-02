@@ -731,6 +731,7 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
 
 // Display new files from database - express.e:27906-27950 myNewFiles()
 async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
+  const { checkForPause, flagPause } = require('../utils/flag-pause.util');
   let foundNewFiles = false;
   let totalNewFiles = 0;
 
@@ -741,6 +742,22 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
     try {
       // express.e:27914,27928 - Output "Scanning directory X" for each directory
       socket.emit('ansi-output', `Scanning ${area.name || 'directory ' + (dirIndex + 1)}...\r\n`);
+
+      // express.e:27934-27938 - Pause after each directory
+      // During confScan (newFilesPauseFlag=TRUE), use checkForPause()
+      // Otherwise use flagPause(1) for manual N command
+      let shouldContinue = true;
+      if (session.newFilesPauseFlag) {
+        shouldContinue = await checkForPause(socket, session);
+      } else {
+        shouldContinue = await flagPause(socket, session, 1);
+      }
+
+      // If user chose to stop, break out of loop
+      if (!shouldContinue) {
+        console.log('[displayNewFilesFromDatabase] User stopped scan');
+        break;
+      }
 
       // Query files newer than search date in this area
       const query = `
