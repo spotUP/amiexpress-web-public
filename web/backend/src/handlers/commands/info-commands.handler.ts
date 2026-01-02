@@ -503,6 +503,15 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', AnsiUtil.colorize(modemLabel, 'yellow'));
   socket.emit('ansi-output', '\r\n');
 
+  // Option 18: Terminal Font (web extension)
+  const userFont = currentUser.fontPreference || 'TopazPlus_a1200';
+  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
+  socket.emit('ansi-output', ' 18');
+  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
+  socket.emit('ansi-output', AnsiUtil.colorize('TERMINAL FONT.......... ', 'magenta'));
+  socket.emit('ansi-output', AnsiUtil.colorize(userFont, 'yellow'));
+  socket.emit('ansi-output', '\r\n');
+
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', 'Which to change <CR>=QUIT ? ');
 }
@@ -549,11 +558,10 @@ export function handleWriteUserParamsCommand(socket: any, session: BBSSession): 
 export async function handleWOptionSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const trimmed = input.trim();
 
-  // CR/empty = quit and save (express.e:25836-25840)
+  // CR/empty = quit (express.e:25836-25840)
   if (trimmed === '') {
     socket.emit('ansi-output', '\r\n');
-    // Save user account (express.e:25838)
-    await db.updateUser(session.user.id, session.user);
+    // Each option already saves immediately, no need to save again here
     session.inputBuffer = '';
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -565,7 +573,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   const option = parseInt(trimmed, 10);
 
   // Invalid option number
-  if (isNaN(option) || option < 0 || option > 17) {
+  if (isNaN(option) || option < 0 || option > 18) {
     _displayWCommandMenu(socket, session);
     return;
   }
@@ -732,6 +740,19 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       });
       socket.emit('ansi-output', `Select (0-${MODEM_OPTIONS.length - 1}) or <CR>=Cancel: `);
       session.subState = LoggedOnSubState.W_EDIT_MODEM_SPEED;
+      break;
+
+    case 18: // Terminal font (web extension)
+      socket.emit('ansi-output', '\r\nSelect Terminal Font:\r\n');
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[2] ', 'blue') + 'TopazPlus_a500   - Classic Amiga Topaz (500)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[3] ', 'blue') + 'Topaz_a1200      - Original Topaz (1200)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[4] ', 'blue') + 'Topaz_a500       - Original Topaz (500)\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize('[5] ', 'blue') + 'mosoul           - MO\'Soul (alternate)\r\n');
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', 'Select (1-5) or <CR>=Cancel: ');
+      session.subState = LoggedOnSubState.W_EDIT_FONT;
       break;
 
     default:
@@ -1129,6 +1150,44 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
     modemEmulator.disable();
     console.log(`[W Command] Modem emulation disabled (full speed)`);
   }
+
+  _displayWCommandMenu(socket, session);
+  session.subState = LoggedOnSubState.W_OPTION_SELECT;
+}
+
+// Handle font selection (web extension)
+export async function handleWEditFontInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const trimmed = input.trim();
+  if (trimmed === '') {
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    return;
+  }
+
+  const choice = parseInt(trimmed, 10);
+  const fontMap: { [key: string]: string } = {
+    '1': 'TopazPlus_a1200',
+    '2': 'TopazPlus_a500',
+    '3': 'Topaz_a1200',
+    '4': 'Topaz_a500',
+    '5': 'mosoul'
+  };
+
+  const selectedFont = fontMap[trimmed];
+  if (!selectedFont) {
+    socket.emit('ansi-output', '\r\nInvalid selection. Use 1-5.\r\n');
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    return;
+  }
+
+  // Update user font preference
+  await db.updateUser(session.user.id, { fontPreference: selectedFont });
+  session.user.fontPreference = selectedFont;
+
+  // Send font change event to frontend
+  socket.emit('set-font', selectedFont);
+  socket.emit('ansi-output', `\r\nFont set to: ${selectedFont}\r\n`);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;

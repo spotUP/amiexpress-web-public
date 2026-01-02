@@ -78,6 +78,7 @@ export interface User {
   securityFlags?: string;
   secOverride?: string;
   userFlags: number;
+  fontPreference?: string;  // Terminal font preference (web extension)
   created: Date;
   updated: Date;
 }
