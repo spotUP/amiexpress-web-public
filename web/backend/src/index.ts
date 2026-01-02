@@ -301,6 +301,8 @@ export interface BBSSession {
   shortcuts?: Map<string, string>; // Loaded shortcuts from .keys (matches express.e shortcuts list)
   doorExpertMode: boolean; // Like AmiExpress doorExpertMode - express.e:28583 - door can force menu display
   displayFlowPaused?: boolean; // Waiting for keypress to advance BULL/NODE_BULL/CONF_BULL/menu flow
+  newFilesPauseFlag?: boolean; // Like AmiExpress newFilesPauseFlag - express.e:216,28100 - controls pause during confScan
+  inConfScan?: boolean; // Whether user is currently in conference scan - suppress menu prompts
   tempData?: any; // Temporary data storage for complex operations (like file listing)
   uploadContext?: UploadSessionContext;
   pendingDisplayInputs?: string[];

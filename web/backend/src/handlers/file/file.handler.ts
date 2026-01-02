@@ -666,79 +666,82 @@ export async function displayFileStatus(socket: any, session: BBSSession, params
 // ===== New Files (N command) =====
 
 export async function displayNewFiles(socket: any, session: BBSSession, params: string) {
-  console.log('displayNewFiles called with params:', params);
+  console.log('[displayNewFiles] Called with params:', params);
 
-  // Parse parameters (like parseParams in AmiExpress)
-  const parsedParams = parseParams(params);
-  console.log('Parsed params:', parsedParams);
+  try {
+    // Parse parameters (like parseParams in AmiExpress)
+    const parsedParams = parseParams(params);
+    console.log('[displayNewFiles] Parsed params:', parsedParams);
 
-  // Check for non-stop flag (NS parameter)
-  const nonStopDisplay = parsedParams.includes('NS');
+    // Check for non-stop flag (NS parameter) - express.e:27869,27900
+    const nonStopDisplay = parsedParams.includes('NS');
 
-  // Check for silent/unattended mode (S or U parameters)
-  const silentMode = parsedParams.includes('S') || parsedParams.includes('U');
+    // express.e:27862-27866 - 'S' means "use Since date", NOT silent mode
+    // Get date to search from
+    let searchDate: Date;
+    const firstParam = parsedParams.length > 0 ? parsedParams[0].toUpperCase() : '';
 
-  if (!silentMode) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '\x1b[36m-= New Files Since Last Login =-\x1b[0m\r\n');
-  }
-
-  // Get date to search from
-  let searchDate: Date;
-  if (parsedParams.length > 0 && parsedParams[0] !== 'NS') {
-    // Direct date provided
-    const dateStr = parsedParams[0];
-    if (dateStr.length === 8) {
-      // Parse MM-DD-YY format
-      const month = parseInt(dateStr.substring(0, 2)) - 1; // JS months are 0-based
-      const day = parseInt(dateStr.substring(3, 5));
-      const year = 2000 + parseInt(dateStr.substring(6, 8)); // Y2K compliant
+    if (firstParam === 'S') {
+      // 'S' = use Since date (lastLogin) - express.e:27862-27863
+      searchDate = session.user?.newSinceDate || session.user?.lastLogin || new Date(Date.now() - 86400000);
+    } else if (firstParam.length === 8 && firstParam !== 'NS') {
+      // Direct date provided in MM-DD-YY format
+      const month = parseInt(firstParam.substring(0, 2)) - 1; // JS months are 0-based
+      const day = parseInt(firstParam.substring(3, 5));
+      const year = 2000 + parseInt(firstParam.substring(6, 8)); // Y2K compliant
       searchDate = new Date(year, month, day);
     } else {
-      searchDate = session.user?.lastLogin || new Date(Date.now() - 86400000); // Default to 1 day ago
+      // Default to lastLogin - express.e:27855
+      searchDate = session.user?.newSinceDate || session.user?.lastLogin || new Date(Date.now() - 86400000);
     }
-  } else {
-    // Use user's last login date (like loggedOnUser.newSinceDate in AmiExpress)
-    searchDate = session.user?.lastLogin || new Date(Date.now() - 86400000);
-  }
 
-  if (!silentMode) {
+    console.log('[displayNewFiles] Search date:', searchDate);
+
+    // Always show header during confScan (express.e doesn't suppress this)
+    socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
-  }
 
-  // Get file areas for current conference from database
-  const conferenceId = session.currentConf || 1;
-  const areas = await db.getFileAreas(conferenceId);
+    // Get file areas for current conference from database
+    const conferenceId = session.currentConf || 1;
+    console.log('[displayNewFiles] Getting file areas for conference:', conferenceId);
+    const areas = await db.getFileAreas(conferenceId);
+    console.log('[displayNewFiles] Found', areas.length, 'file areas');
 
   if (areas.length === 0) {
-    // In silent mode, just return without output or state changes
-    if (silentMode) {
-      return;
-    }
     socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
     finalizeCommand(socket, session, 'New files unavailable');
     return;
   }
 
-  // Display new files from database (silentMode passed to suppress output)
-  await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay, silentMode);
+    // Display new files from database - express.e:27906-27950
+    await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
 
-  // Only show pause prompt if not in silent/unattended mode (express.e behavior)
-  if (!silentMode) {
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = true;
+    // Pause prompt controlled by newFilesPauseFlag (set by confScan) - express.e:27934-27938
+    if (!session.newFilesPauseFlag) {
+      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      session.menuPause = true;
+    }
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  } catch (error) {
+    console.error('[displayNewFiles] ERROR:', error);
+    socket.emit('ansi-output', `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }
 
-// Display new files from database - express.e:28115+ myNewFiles()
-async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean, silentMode: boolean = false) {
+// Display new files from database - express.e:27906-27950 myNewFiles()
+async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
   let foundNewFiles = false;
   let totalNewFiles = 0;
 
-  // Loop through all file areas in conference
-  for (const area of areas) {
+  // Loop through all file areas in conference - express.e:27906 WHILE(fLLoop<=dirScan)
+  for (let dirIndex = 0; dirIndex < areas.length; dirIndex++) {
+    const area = areas[dirIndex];
+
     try {
+      // express.e:27914,27928 - Output "Scanning directory X" for each directory
+      socket.emit('ansi-output', `Scanning ${area.name || 'directory ' + (dirIndex + 1)}...\r\n`);
+
       // Query files newer than search date in this area
       const query = `
         SELECT
@@ -755,17 +758,14 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
         ORDER BY uploaddate DESC
       `;
 
-      const result = await db.query(query, [area.id, searchDate]);
+      // Convert Date to Unix timestamp (seconds) for SQLite3 compatibility
+      const searchTimestamp = Math.floor(searchDate.getTime() / 1000);
+      const result = await db.query(query, [area.id, searchTimestamp]);
       const newFiles = result.rows;
 
       if (newFiles.length > 0) {
         foundNewFiles = true;
         totalNewFiles += newFiles.length;
-
-        // Skip all output in silent mode (just count the files)
-        if (silentMode) {
-          continue;
-        }
 
         // Display area header
         socket.emit('ansi-output', `\r\n\x1b[33m${area.name}\x1b[0m\r\n`);
@@ -801,14 +801,12 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
     }
   }
 
-  // Summary (skip in silent mode)
-  if (!silentMode) {
-    socket.emit('ansi-output', '\r\n');
-    if (foundNewFiles) {
-      socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
-    } else {
-      socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
-    }
+  // Summary - express.e always shows this
+  socket.emit('ansi-output', '\r\n');
+  if (foundNewFiles) {
+    socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
+  } else {
+    socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
   }
 
   if (!nonStop) {

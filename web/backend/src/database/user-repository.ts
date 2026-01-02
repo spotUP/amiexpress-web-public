@@ -199,7 +199,11 @@ export class UserRepository extends BaseRepository<User> {
       sanitizedUpdates.username = sanitizeInput(sanitizedUpdates.username);
     }
 
-    const fields = Object.keys(sanitizedUpdates).filter(key => key !== 'id' && key !== 'created');
+    const fields = Object.keys(sanitizedUpdates).filter(key =>
+      key !== 'id' &&
+      key !== 'created' &&
+      key !== 'lastLoginBeforeUpdate'  // Runtime-only field, not in DB schema
+    );
     if (fields.length === 0) return;
 
     const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');

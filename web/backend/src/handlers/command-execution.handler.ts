@@ -205,6 +205,17 @@ async function runCommand(
 ): Promise<number> {
   const cmdUpper = cmd.toUpperCase();
 
+  // express.e:4733-4748 - Check for INTERNAL command FIRST (before external doors)
+  // Internal commands take priority over external command files
+  const { processBBSCommand } = require('./command-handler/internal-commands');
+  const internalResult = await processBBSCommand(socket, session, cmdUpper, params);
+
+  // If internal command handled it (not RESULT_FAILURE), return immediately
+  if (internalResult !== RESULT_FAILURE) {
+    console.log(`[runCommand] Internal command '${cmdUpper}' handled (result=${internalResult})`);
+    return internalResult;
+  }
+
   // express.e:4630-4670 - Find command in cache
   let commandDef: CommandDefinition | null = null;
 
@@ -273,9 +284,8 @@ async function runCommand(
     return RESULT_NOT_ALLOWED;
   }
 
-  // express.e:4733-4748 - Check for INTERNAL command (recursive processing)
-  // INTERNAL commands redirect to other internal commands
-  // For now, we'll skip this and proceed to door execution
+  // express.e:4733-4748 - Internal commands are now checked BEFORE external doors
+  // (see lines 208-217 above - internal commands take priority)
 
   // express.e:4750-4807 - Execute the door/command
   console.log(`  Executing ${commandDef.type} door: ${commandDef.location}`);
