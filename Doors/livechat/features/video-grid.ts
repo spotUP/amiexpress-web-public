@@ -80,7 +80,7 @@ export class VideoGrid {
       tags: true,
       // Low z-index so it doesn't block modals/dialogs
       // @ts-ignore - zIndex exists but not in types
-      zIndex: 0,
+      zIndex: 10,
     });
   }
 
@@ -121,6 +121,16 @@ export class VideoGrid {
           audioLevel: participant.audioLevel,
         });
       }
+    }
+  }
+
+  /**
+   * Update participant with a new video frame
+   */
+  updateParticipantVideo(userId: number | string, frame: string): void {
+    const tile = this.tiles.get(userId);
+    if (tile) {
+      tile.setVideoFrame(frame);
     }
   }
 
@@ -222,6 +232,14 @@ export class VideoGrid {
    */
   hide(): void {
     this.container.hide();
+    this.screen.render();
+  }
+
+  /**
+   * Bring grid to front
+   */
+  setFront(): void {
+    this.container.setFront();
     this.screen.render();
   }
 

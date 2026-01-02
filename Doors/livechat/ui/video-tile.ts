@@ -205,6 +205,16 @@ export class VideoTile {
   }
 
   /**
+   * Set a new video frame (ASCII)
+   */
+  setVideoFrame(frame: string): void {
+    if (this.options.hasVideo) {
+      this.videoBox.setContent(frame);
+      this.screen.render();
+    }
+  }
+
+  /**
    * Set active speaker highlighting
    */
   setActive(active: boolean): void {

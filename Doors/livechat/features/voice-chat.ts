@@ -400,12 +400,39 @@ export class VoiceChannel {
   }
 
   private async startVideoStream() {
-    // TODO: Implement video streaming using ctx.video API
-    // For now, just a placeholder
+    if (!this.ctx?.video) return;
+
+    try {
+      const videoOptions = this.qualityManager?.getVideoProfile() || {};
+      const streamId = await this.ctx.video.startStream(
+        { type: 'webcam' },
+        {
+          width: videoOptions.asciiWidth || 80,
+          height: videoOptions.asciiHeight || 24,
+          fps: videoOptions.fps || 10,
+          colored: videoOptions.colored ?? true,
+        }
+      );
+      console.log(`[VoiceChat] Started video stream: ${streamId}`);
+    } catch (error: any) {
+      this.showError('Failed to start video: ' + error.message);
+      this.hasVideo = false;
+    }
   }
 
   private async stopVideoStream() {
-    // TODO: Stop video stream
+    if (!this.ctx?.video) return;
+
+    try {
+      // Find our own video stream and stop it
+      const streams = await this.ctx.video.getStreams();
+      const myStreamId = `video-${(this.ctx as any).socket?.id}`;
+      if (streams.includes(myStreamId)) {
+        await this.ctx.video.stopStream(myStreamId);
+      }
+    } catch (error: any) {
+      console.error('[VoiceChat] Error stopping video stream:', error);
+    }
   }
 
   private toggleAutoQuality() {

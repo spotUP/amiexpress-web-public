@@ -409,6 +409,13 @@ export class EnhancedVoiceChannel {
       }
     });
 
+    // Handle incoming video frames
+    this.socket.on('video:frame', (data: { userId: string | number, frame: string }) => {
+      if (this.videoGrid) {
+        this.videoGrid.updateParticipantVideo(data.userId, data.frame);
+      }
+    });
+
     // Mute events
     this.socket.on('voice:mute', (data: any) => {
       if (this.videoGrid) {
@@ -438,21 +445,51 @@ export class EnhancedVoiceChannel {
   private updateVideoGridVisibility() {
     if (!this.videoGrid) return;
 
-    // Show video grid if anyone (including current user) has video enabled
-    const hasAnyVideo = this.videoGrid.getParticipants().some(p => p.hasVideo);
+    // Show video grid if we are in a voice channel
+    const inVoice = this.isInVoiceChannel();
 
-    if (hasAnyVideo && !this.videoGrid.isVisible()) {
+    if (inVoice && !this.videoGrid.isVisible()) {
       this.videoGrid.show();
-    } else if (!hasAnyVideo && this.videoGrid.isVisible()) {
+      this.videoGrid.setFront(); // Ensure it's above the chat log
+    } else if (!inVoice && this.videoGrid.isVisible()) {
       this.videoGrid.hide();
     }
   }
 
-  public toggleVideo() {
+  public async toggleVideo() {
     this.videoEnabled = !this.videoEnabled;
 
     // Notify server
     this.socket.emit('voice:video-toggle', { hasVideo: this.videoEnabled });
+
+    // Handle video streaming
+    if (this.ctx?.video) {
+      if (this.videoEnabled) {
+        try {
+          const videoOptions = this.qualityManager?.getVideoProfile() || {};
+          await this.ctx.video.startStream(
+            { type: 'webcam' },
+            {
+              width: videoOptions.asciiWidth || 80,
+              height: videoOptions.asciiHeight || 24,
+              fps: videoOptions.fps || 10,
+              colored: videoOptions.colored ?? true,
+            }
+          );
+        } catch (error: any) {
+          console.error('[VoiceChannel] Failed to start video stream:', error);
+          this.videoEnabled = false;
+          this.socket.emit('voice:video-toggle', { hasVideo: false });
+        }
+      } else {
+        try {
+          const myStreamId = `video-${this.socket.id}`;
+          await this.ctx.video.stopStream(myStreamId);
+        } catch (error: any) {
+          console.error('[VoiceChannel] Failed to stop video stream:', error);
+        }
+      }
+    }
 
     // Update own participant in video grid
     if (this.videoGrid) {
@@ -553,6 +590,9 @@ export class EnhancedVoiceChannel {
         // Show control bar
         this.controlBar.show();
 
+        // Update grid visibility (will show avatars by default)
+        this.updateVideoGridVisibility();
+
         if (this.onJoinVoiceCallback) {
           this.onJoinVoiceCallback(channelId);
         }
@@ -623,6 +663,19 @@ export class EnhancedVoiceChannel {
       await this.ctx.audio.startStreaming(audioOptions);
     } catch (error: any) {
       console.error('Failed to start audio streaming:', error);
+    }
+  }
+
+  public showGrid() {
+    if (this.videoGrid) {
+      this.videoGrid.show();
+      this.videoGrid.setFront();
+    }
+  }
+
+  public hideGrid() {
+    if (this.videoGrid) {
+      this.videoGrid.hide();
     }
   }
 

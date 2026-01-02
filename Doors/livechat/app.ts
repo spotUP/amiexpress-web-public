@@ -228,10 +228,10 @@ export async function createApp(session: DoorSession) {
   // ========== CHANNEL LIST (Left Sidebar) ==========
   // ========== COMMAND AUTOCOMPLETE ==========
   const commandSuggestions = createList({
-    parent: chatPanel, // Use chatPanel as parent to ensure it draws on top of chat log
-    bottom: 0,         // Position at bottom of chat panel
+    parent: screen,    // Parent to screen for full width alignment
+    bottom: STATUS_HEIGHT + INPUT_HEIGHT, // Position above input box
     left: 0,
-    width: '100%',     // Full width of parent panel
+    width: '100%',     // Full width of screen
     height: 10,
     label: ' Commands ',
     border: { type: 'line' },
@@ -302,8 +302,8 @@ export async function createApp(session: DoorSession) {
     }
 
     // Format command items with name, usage, and description
-    // Dynamically calculate width based on parent panel width (chatPanel)
-    const chatWidth = (chatPanel as any).width || 62;
+    // Dynamically calculate width based on screen width
+    const chatWidth = (screen as any).width || 80;
     const nameWidth = 12;
     const usageWidth = 20;
     // Description gets the remaining space (minus borders and spacing)
@@ -316,9 +316,10 @@ export async function createApp(session: DoorSession) {
       return `{cyan-fg}/${name}{/cyan-fg} {gray-fg}${usage}{/gray-fg} ${desc}`;
     });
 
-    // Ensure list width is updated to match parent panel
+    // Ensure list width is updated to match screen
     (commandSuggestions as any).width = chatWidth;
     commandSuggestions.position.width = chatWidth;
+    commandSuggestions.position.left = 0;
     invalidateCache(commandSuggestions);
     
     commandSuggestions.setItems(items);
@@ -556,10 +557,12 @@ export async function createApp(session: DoorSession) {
         // Join voice channel
         const channelId = channel.id.replace('voice-', '');
         voiceChannel.joinVoiceChannel(channelId);
+        voiceChannel.showGrid();
       } else if (!isCurrentChannel(channel.id, channel.name)) {
         // Join text channel
         if (state.currentChannel) socket.emit('room:leave');
         socket.emit('room:join', { roomName: channel.name });
+        voiceChannel.hideGrid();
       }
     }
   }
@@ -577,11 +580,13 @@ export async function createApp(session: DoorSession) {
       // Join voice channel
       const channelId = channel.id.replace('voice-', '');
       voiceChannel.joinVoiceChannel(channelId);
+      voiceChannel.showGrid(); // Show the video grid
       addSystemMessage(`Joining voice channel: ${channel.name}`);
     } else if (!isCurrentChannel(channel.id, channel.name)) {
       // Join text channel
       if (state.currentChannel) socket.emit('room:leave');
       socket.emit('room:join', { roomName: channel.name });
+      voiceChannel.hideGrid(); // Hide video grid when viewing text
     }
 
     // Return focus to input after selection
@@ -726,10 +731,10 @@ export async function createApp(session: DoorSession) {
     emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
     menuBar.element.position.width = width;
     
-    // Update commandSuggestions width based on its new parent (chatPanel)
-    chatWidth = width - SIDEBAR_WIDTH;
-    (commandSuggestions as any).width = chatWidth;
-    commandSuggestions.position.width = chatWidth;
+    // Update commandSuggestions width (now parented to screen for left alignment)
+    (commandSuggestions as any).width = width;
+    commandSuggestions.position.width = width;
+    commandSuggestions.position.left = 0;
     
     ghostText.position.width = width;           // Responsive ghost text
 
