@@ -24,5 +24,5 @@ doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.
 ; BBS:utils/SAD-CLC.exe bbs:node1/CallersLog 100 
 bbs:utils/strip bbs:node1/DoorLog 100000 bbs:node1/DLogBackup
 bbs:utils/strip bbs:node1/Callerslog 100000 bbs:node1/CLogBackup
-bbs:utils/samilog/samilog -UC"0" -O"BBS:Bulletins/bull6.txt"15
+bbs:utils/samilog/samilog -UC"1" -O"*"15
 ; BBS:utils/samilog/SamiLog -UC"1" -O"ram:test.txt"15

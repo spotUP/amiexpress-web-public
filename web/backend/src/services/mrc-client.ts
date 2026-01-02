@@ -264,7 +264,7 @@ function handleClientData(userConn: UserConnection, data: Buffer): void {
 
   for (const packet of packets) {
     const tildeCount = (packet.match(/~/g) || []).length;
-    if (tildeCount < 5) {
+    if (tildeCount < 6) {
       if (DEBUG_FLAG) {
         logger(`invalid packet: ${packet}`);
       }

@@ -2,9 +2,52 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
-import { writeQuickNewScreen } from '../utils/quicknew-generator';
-import { writeLastCallersBulletin } from '../utils/lastcallers-generator';
+import { writeQuickNewScreen, generateQuickNewFromConfig } from '../utils/quicknew-generator';
+import { writeLastCallersBulletin, generateLastCallersBulletin } from '../utils/lastcallers-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
+
+/**
+ * Parse AmigaDOS-style command line arguments with quote handling.
+ * CRITICAL: Keep quotes IN the arguments - AmigaDOS programs expect to parse them.
+ *
+ * Examples:
+ *   -UC"0" -> ['-UC"0"']  (program parses the quotes)
+ *   -O"BBS:path"15 -> ['-O"BBS:path"15']  (program parses quotes and number)
+ *   doors:path/file arg1 arg2 -> ['doors:path/file', 'arg1', 'arg2']
+ *
+ * Only splits on spaces OUTSIDE of quotes. Quotes remain in the arguments.
+ */
+function parseAmigaDOSArgs(cmdLine: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < cmdLine.length; i++) {
+    const char = cmdLine[i];
+
+    if (char === '"') {
+      // Keep the quote in the argument
+      current += char;
+      inQuotes = !inQuotes;
+    } else if (char === ' ' && !inQuotes) {
+      // Whitespace outside quotes - end current argument
+      if (current) {
+        parts.push(current);
+        current = '';
+      }
+    } else {
+      // Regular character - accumulate
+      current += char;
+    }
+  }
+
+  // Push final argument if any
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts;
+}
 
 function resolveAssign(p: string): string {
   const lower = p.toLowerCase();
@@ -143,7 +186,8 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     redirect = right.trim();
   }
 
-  const parts = cmdPart.split(/\s+/);
+  // Parse AmigaDOS-style arguments (handles quotes like -UC"0" -O"path"15)
+  const parts = parseAmigaDOSArgs(cmdPart);
   if (parts.length === 0) {
     return;
   }
@@ -184,18 +228,76 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
-  // Special-case QuickNew (68K) to generate screens:quicknew.txt
+  // Special-case QuickNew (TypeScript) to generate screens:quicknew.txt
+  // Command format: doors:quicknew/quicknew <config_file> <days_back> >bbs:screens/quicknew.txt
+  // Example: doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.txt
   if (program.includes('quicknew/quicknew')) {
-    const doorPath = resolveAssign('doors:quicknew/quicknew');
-    const args = resolvedArgs; // Use resolved paths to avoid path doubling
-    const nodeNum = nodeId || 1;
-    if (doorPath) {
-      const envOverrides = {
-        AEDOOR_STDOUT: 'screens:quicknew.txt',
-      };
-      await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath), undefined, envOverrides);
-      console.log('[BatchScheduler] Ran QuickNew with stdout redirected to screens:quicknew.txt');
+    const args = resolvedArgs;
+    if (args.length >= 2) {
+      const configPath = args[0]; // Already resolved by resolvedArgs
+      const daysBack = parseInt(args[1], 10) || 7;
+
+      // Output path comes from stdout redirect in batch file (e.g., >bbs:screens/quicknew.txt)
+      // We extract it from the original command line using the redirect variable
+      let outputPath = 'Screens/quicknew.txt'; // Default
+      if (redirect) {
+        // Resolve the output path (e.g., bbs:screens/quicknew.txt -> /path/to/Screens/quicknew.txt)
+        const resolved = resolveAssign(redirect);
+        if (resolved) {
+          outputPath = resolved;
+        }
+      }
+
+      console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath}, days: ${daysBack}, output: ${outputPath}`);
+      await generateQuickNewFromConfig(configPath, daysBack, outputPath);
+      console.log('[BatchScheduler] QuickNew generated successfully');
+    } else {
+      console.error('[BatchScheduler] QuickNew requires config file and days back arguments');
     }
+    return;
+  }
+
+  // Generate last callers bulletin using TypeScript SAmiLog implementation
+  // Replaces 68K SAmiLog binary with TypeScript port (100% format compatible)
+  // Command format: samilog -UC"N" -O"output/path"count
+  if (program.includes('samilog/samilog') || program.includes('typescript:samilog')) {
+    console.log('[BatchScheduler] Running TypeScript SAmiLog');
+
+    // Parse SAmiLog arguments: -UC"node" -O"output"count
+    let nodeNum = nodeId || 1;
+    let outputPath = 'Bulletins/bull6.txt';
+    let count = 15;
+
+    for (const arg of amigaArgs) {
+      // Parse -UC"N" for node number
+      const ucMatch = arg.match(/^-UC"(\d+)"$/i);
+      if (ucMatch) {
+        nodeNum = parseInt(ucMatch[1], 10);
+        console.log(`[BatchScheduler] SAmiLog node: ${nodeNum}`);
+      }
+
+      // Parse -O"path"count for output and count
+      const oMatch = arg.match(/^-O"([^"]+)"(\d+)$/i);
+      if (oMatch) {
+        const rawPath = oMatch[1];
+        count = parseInt(oMatch[2], 10);
+
+        // Resolve BBS: assign and convert to Unix path
+        if (rawPath.toLowerCase() === '*') {
+          outputPath = 'Bulletins/bull6.txt'; // Default
+        } else {
+          outputPath = resolveAssign(rawPath).replace(config.get('dataDir') + path.sep, '');
+        }
+        console.log(`[BatchScheduler] SAmiLog output: ${outputPath}, count: ${count}`);
+      }
+    }
+
+    const baseDir = config.get('dataDir');
+    const content = generateLastCallersBulletin(count);
+    const fullPath = path.join(baseDir, outputPath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content, 'utf-8');
+    console.log(`[BatchScheduler] SAmiLog bulletin written to ${outputPath}`);
     return;
   }
 
