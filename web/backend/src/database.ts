@@ -1194,7 +1194,7 @@ export class Database {
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS node_config (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          node_number INTEGER NOT NULL UNIQUE CHECK (node_number >= 1 AND node_number <= 8),
+          node_number INTEGER NOT NULL UNIQUE CHECK (node_number >= 1 AND node_number <= 255),
 
           -- Node Settings
           node_start TEXT NOT NULL DEFAULT 'BBS:EXPRESS',

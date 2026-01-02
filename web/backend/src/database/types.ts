@@ -323,12 +323,12 @@ export interface SystemConfig {
 }
 
 /**
- * Node Configuration (1-8 nodes)
+ * Node Configuration (1-255 nodes)
  * TOOLTYPE_NODE from express.e
  */
 export interface NodeConfig {
   id: number;
-  node_number: number;  // 1-8
+  node_number: number;  // 1-255
 
   // Node Settings
   node_start: string;

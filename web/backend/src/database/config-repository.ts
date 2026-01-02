@@ -4,7 +4,7 @@
  *
  * Handles:
  * - System configuration (singleton)
- * - Node configuration (1-8 nodes)
+ * - Node configuration (1-255 nodes)
  * - Conference configuration
  * - Doors/commands
  * - Languages

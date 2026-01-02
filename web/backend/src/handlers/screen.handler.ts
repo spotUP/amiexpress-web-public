@@ -782,14 +782,29 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   // Process %NODELIST before %N to avoid collision
   if (parsed.includes('%NODELIST')) {
     let nodeList = '';
-    const totalNodes = 8;
-    const currentNode = 1;
+    const sysConfig = await db.getConfigRepository().getSystemConfig();
+    const totalNodes = sysConfig?.max_nodes || 255;
+    const currentNode = session.nodeId || 0;
+    
+    // Import nodeStatusManager dynamically to avoid circular dependencies
+    const { nodeStatusManager } = require('../nodes/NodeStatusManager');
+    const activeNodes = nodeStatusManager.getActiveNodes();
+    
     for (let i = 0; i < totalNodes; i++) {
       let status = 'Waiting';
-      if (i === currentNode) status = 'You';
-      else if (i === 0) status = 'Sysop';
-      else if (i === 7) status = 'Shutdown';
-      nodeList += `Node ${i}:  ${status}\r\n`;
+      const nodeInfo = nodeStatusManager.getNodeInfo(i);
+      
+      if (i === currentNode) {
+        status = '\x1b[32mYou\x1b[0m';
+      } else if (nodeInfo && nodeInfo.status !== -1) { // -1 is NodeStatus.ENV_NOTACTIVE
+        status = nodeInfo.handle || 'Active';
+      }
+      
+      // Only show up to 10 nodes in this simple list to avoid blowing up the screen
+      // unless specifically requested. AmiExpress usually only showed 8.
+      if (i < 10 || (nodeInfo && nodeInfo.status !== -1)) {
+        nodeList += `Node ${i}:  ${status}\r\n`;
+      }
     }
     parsed = parsed.replace(/%NODELIST/g, nodeList);
   }
@@ -1157,8 +1172,17 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   const sxRegex = /~SX_([^|]+)\|\|/g;
   let sxMatch;
   while ((sxMatch = sxRegex.exec(parsed)) !== null) {
-    const basePath = sxMatch[1].trim();
+    let basePath = sxMatch[1].trim();
     screenDebug('[MCI] Found ~SX_ sequential file request:', basePath);
+
+    // Resolve Amiga assign paths using centralized resolver
+    if (basePath.includes(':')) {
+      const { config } = require('../config');
+      const baseDir = config.getConfig().dataDir;
+      const bbsPaths = new BBSPaths(baseDir);
+      basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
+      screenDebug('[MCI] ~SX_ resolved path to:', basePath);
+    }
 
     // Get next sequential file
     const nextFile = sequentialFileManager.getNextFile(basePath);
@@ -1204,25 +1228,13 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       let basePath = srMatch[2].trim();
       screenDebug('[MCI] Found ~SR_ random file request:', basePath);
 
-      // Resolve Amiga assign paths
+      // Resolve Amiga assign paths using centralized resolver
       if (basePath.includes(':')) {
         const { config } = require('../config');
         const baseDir = config.getConfig().dataDir;
-        const colonIdx = basePath.indexOf(':');
-        const assign = basePath.substring(0, colonIdx).toUpperCase();
-        const subpath = basePath.substring(colonIdx + 1);
-
-        if (assign === 'WORK' || assign === 'BBS') {
-          let resolvedSubpath = subpath;
-          if (resolvedSubpath.toLowerCase().startsWith('bbs/')) {
-            resolvedSubpath = resolvedSubpath.substring(4);
-          }
-          basePath = path.join(baseDir, resolvedSubpath);
-          screenDebug('[MCI] ~SR_ resolved WORK:/BBS: path to:', basePath);
-        } else if (assign === 'SCREENS') {
-          basePath = path.join(baseDir, 'Screens', subpath);
-          screenDebug('[MCI] ~SR_ resolved SCREENS: path to:', basePath);
-        }
+        const bbsPaths = new BBSPaths(baseDir);
+        basePath = bbsPaths.resolveAmigaPath(basePath, session?.nodeId || 0);
+        screenDebug('[MCI] ~SR_ resolved path to:', basePath);
       }
 
       const maxCount = Math.max(1, maxCountRaw ? parseInt(maxCountRaw, 10) : 99);
@@ -2457,12 +2469,9 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
 
   const lines = paged.lines;
   const emitPage = (startIdx: number, endIdx: number, prompt: boolean) => {
-    // Overwrite the previous pause prompt (ESC[1A moves up, ESC[K clears line)
-    // express.e:5200 - aePuts('[1A[K')
-    const prefix = startIdx > 0 ? '\x1b[1A\x1b[K' : '';
     const chunk = lines.slice(startIdx, endIdx).join('\r\n');
     const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
-    socket.emit(paged.eventName, prefix + chunk + promptLine);
+    socket.emit(paged.eventName, chunk + promptLine);
   };
 
   // NS: dump the rest without further prompts
