@@ -205,18 +205,8 @@ async function runCommand(
 ): Promise<number> {
   const cmdUpper = cmd.toUpperCase();
 
-  // express.e:4733-4748 - Check for INTERNAL command FIRST (before external doors)
-  // Internal commands take priority over external command files
-  const { processBBSCommand } = require('./command-handler/internal-commands');
-  const internalResult = await processBBSCommand(socket, session, cmdUpper, params);
-
-  // If internal command handled it (not RESULT_FAILURE), return immediately
-  if (internalResult !== RESULT_FAILURE) {
-    console.log(`[runCommand] Internal command '${cmdUpper}' handled (result=${internalResult})`);
-    return internalResult;
-  }
-
-  // express.e:4630-4670 - Find command in cache
+  // express.e:28247-28256 - Check EXTERNAL commands FIRST (SYSCMD/BBSCMD)
+  // Then fall back to internal commands if not found
   let commandDef: CommandDefinition | null = null;
 
   if (cmdType === CommandType.SYSCMD) {
@@ -225,11 +215,12 @@ async function runCommand(
     commandDef = commandCache.bbscmd.get(cmdUpper) || null;
   }
 
-  // express.e:4647, 4669 - Command not found
+  // express.e:28256 - If no external command found, try internal commands
   if (!commandDef) {
-    // Note: Sysop debug message is sent later in internal-commands.ts
-    // at the final "Unknown command" display, not here during lookup
-    return RESULT_FAILURE;
+    console.log(`[runCommand] No external command found for '${cmdUpper}', trying internal commands`);
+    const { processBBSCommand } = require('./command-handler/internal-commands');
+    const internalResult = await processBBSCommand(socket, session, cmdUpper, params);
+    return internalResult;
   }
 
   // Log "Executing" only AFTER command is found (not before lookup like old code did)
