@@ -187,6 +187,7 @@ export class UserRepository extends BaseRepository<User> {
       topDownloadCPS: safeNumber(user.topdownloadcps, 0),
       byteLimit: safeNumber(user.bytelimit, 0),
       userFlags: safeNumber(user.userflags, 0),
+      fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
       created: new Date(user.created * 1000),
       updated: new Date(user.updated * 1000),
     } as User;
