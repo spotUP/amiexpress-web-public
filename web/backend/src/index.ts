@@ -338,6 +338,7 @@ export interface BBSSession {
   screenWidth?: number; // Terminal width (40 for C64, 80 for modern)
   screenHeight?: number; // Terminal height (25 for C64, 24 for modern)
   currentRoomId?: string; // Current chat room ID for group chat
+  currentVoiceChannelId?: string; // Current voice channel ID for voice chat
 
   // Phase 9: Security/ACS System (express.e:165-167, 306-308)
   acsLevel: number; // Current ACS level (0-255, or -1 if invalid) - express.e:165

@@ -117,6 +117,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
 
     // Add participant to voice channel
     const participant = addVoiceParticipant(roomId, userId, username, socket.id);
+    session.currentVoiceChannelId = roomId;
 
     // Join voice room (separate from chat room)
     const voiceRoomId = `voice:${roomId}`;
@@ -167,6 +168,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const removed = removeVoiceParticipant(roomId, userId);
 
     if (removed) {
+      delete session.currentVoiceChannelId;
       const voiceRoomId = `voice:${roomId}`;
       socket.leave(voiceRoomId);
 
@@ -202,6 +204,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
 
     // Add participant to voice channel
     const participant = addVoiceParticipant(channelId, userId, username, socket.id);
+    session.currentVoiceChannelId = channelId;
 
     // Join voice room
     const voiceRoomId = `voice:${channelId}`;
@@ -254,6 +257,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const removed = removeVoiceParticipant(channelId, userId);
 
     if (removed) {
+      delete session.currentVoiceChannelId;
       const voiceRoomId = `voice:${channelId}`;
       socket.leave(voiceRoomId);
 
@@ -274,7 +278,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const session = sessions.get(socket.id);
     if (!session) return;
 
-    const roomId = session.currentRoomId;
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
     const userId = session.user?.id;
@@ -300,7 +304,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const session = sessions.get(socket.id);
     if (!session) return;
 
-    const roomId = session.currentRoomId;
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
     const userId = session.user?.id;
@@ -328,7 +332,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const session = sessions.get(socket.id);
     if (!session) return;
 
-    const roomId = session.currentRoomId;
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
     const userId = session.user?.id;
@@ -356,7 +360,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const session = sessions.get(socket.id);
     if (!session) return;
 
-    const roomId = session.currentRoomId;
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
     const userId = session.user?.id;
@@ -381,7 +385,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const session = sessions.get(socket.id);
     if (!session) return;
 
-    const roomId = session.currentRoomId;
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
     if (!roomId) return;
 
     const userId = session.user?.id;

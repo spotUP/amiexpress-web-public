@@ -4,6 +4,9 @@
  * Network quality monitoring and adaptive quality management for audio/video streaming
  */
 
+export { Audio } from './Audio';
+export { Video } from './Video';
+
 export {
   NetworkQualityMonitor,
   type NetworkMetrics,
