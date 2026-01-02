@@ -100,7 +100,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guruPhaseRef = useRef<number>(0);
   const guruStaticRendered = useRef<boolean>(false);
-  const normalFont = useRef<string>('mosoul, "Courier New", monospace');
+  const normalFont = useRef<string>('TopazPlus_a1200, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
@@ -132,6 +132,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const pendingUploadFiles = useRef<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const transferTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
+  useEffect(() => {
+    const fonts = [
+      { family: 'TopazPlus_a1200', url: '/fonts/TopazPlus_a1200_v1.0.ttf' },
+      { family: 'TopazPlus_a500', url: '/fonts/TopazPlus_a500_v1.0.ttf' },
+      { family: 'Topaz_a1200', url: '/fonts/Topaz_a1200_v1.0.ttf' },
+      { family: 'Topaz_a500', url: '/fonts/Topaz_a500_v1.0.ttf' },
+      { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' }
+    ];
+
+    const loadFonts = async () => {
+      console.log('[Font Preload] Loading all fonts...');
+      const promises = fonts.map(async ({ family, url }) => {
+        try {
+          const fontFace = new FontFace(family, `url(${url})`);
+          await fontFace.load();
+          document.fonts.add(fontFace);
+          console.log('[Font Preload] Loaded:', family);
+        } catch (error) {
+          console.error('[Font Preload] Failed to load', family, error);
+        }
+      });
+      await Promise.all(promises);
+      console.log('[Font Preload] All fonts loaded');
+    };
+
+    loadFonts();
+  }, []);
 
   const resetZmodem = () => {
     zmodemSession.current = null;
@@ -1195,7 +1224,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log('[PETSCII] Received petscii-output, length:', data.length);
       const currentFont = term.options.fontFamily;
       if (!currentFont?.includes('PetMe64')) {
-        normalFont.current = currentFont || 'mosoul, "Courier New", monospace';
+        normalFont.current = currentFont || 'TopazPlus_a1200, "Courier New", monospace';
         console.log('[PETSCII] Saved normal font:', normalFont.current);
       }
       console.log('[PETSCII] Switching font from', currentFont, 'to PetMe64');
@@ -1213,7 +1242,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (size.cols === 40 && size.rows === 25) {
         const currentFont = term.options.fontFamily;
         if (!currentFont?.includes('PetMe64')) {
-          normalFont.current = currentFont || 'mosoul, "Courier New", monospace';
+          normalFont.current = currentFont || 'TopazPlus_a1200, "Courier New", monospace';
         }
         term.options.fontFamily = 'PetMe64, "Courier New", monospace';
         console.log('[PETSCII] Terminal resized to 40x25, switched to PetMe64 font');
@@ -1480,10 +1509,42 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       };
 
       const metrics = fontMetrics[fontName] || { size: 16, lineHeight: 1.2 };
-      term.options.fontFamily = `${fontName}, "Courier New", monospace`;
+      const fontFamily = `${fontName}, "Courier New", monospace`;
+
+      // Update both the terminal options and the normalFont ref
+      term.options.fontFamily = fontFamily;
       term.options.fontSize = metrics.size;
       term.options.lineHeight = metrics.lineHeight;
+      normalFont.current = fontFamily;
+
       console.log('[Font] Applied font:', fontName, 'size:', metrics.size, 'lineHeight:', metrics.lineHeight);
+    });
+
+    // Handle font preference loaded from database on login
+    socket.on('font-preference', (data: { font: string }) => {
+      console.log('[Font Preference] Received saved preference:', data.font);
+      const fontMetrics: Record<string, { size: number; lineHeight: number }> = {
+        'mosoul': { size: 16, lineHeight: 1.2 },
+        'MicroKnight': { size: 16, lineHeight: 1.2 },
+        'MicroKnightPlus': { size: 16, lineHeight: 1.2 },
+        'P0T-NOoDLE': { size: 16, lineHeight: 1.2 },
+        'Topaz_a500': { size: 16, lineHeight: 1.2 },
+        'Topaz_a1200': { size: 16, lineHeight: 1.2 },
+        'TopazPlus_a500': { size: 16, lineHeight: 1.2 },
+        'TopazPlus_a1200': { size: 16, lineHeight: 1.2 }
+      };
+
+      const fontName = data.font;
+      const metrics = fontMetrics[fontName] || { size: 16, lineHeight: 1.2 };
+      const fontFamily = `${fontName}, "Courier New", monospace`;
+
+      // Update both the terminal options and the normalFont ref
+      term.options.fontFamily = fontFamily;
+      term.options.fontSize = metrics.size;
+      term.options.lineHeight = metrics.lineHeight;
+      normalFont.current = fontFamily;
+
+      console.log('[Font Preference] Applied saved font:', fontName, 'size:', metrics.size, 'lineHeight:', metrics.lineHeight);
     });
 
     // Keyboard input handling
