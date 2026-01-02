@@ -2,8 +2,8 @@
  * Chat log component
  * Main chat message display area
  */
-import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, DockablePanel, Log } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { MENU_HEIGHT } from './menu-bar';
 import { STATUS_HEIGHT } from './status-bar';
 import { INPUT_HEIGHT } from './input-box';
@@ -15,7 +15,7 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: any } {
+): { panel: DockablePanel; log: Log } {
   // Create dockable panel for chat
   const screenWidth = (screen as any).width || 80;
   const screenHeight = (screen as any).height || 24;
@@ -55,8 +55,8 @@ export function createChatLog(
   const logWidth = panelWidth - 2;
   const logHeight = panelHeight - 2;
 
-  // Use a standard Box for unified inline chat
-  const chatLog = createBox({
+  // Use Log widget for proper chat functionality with type safety
+  const chatLog = createLog({
     parent: chatPanel,
     top: 0,
     left: 0,
@@ -67,8 +67,9 @@ export function createChatLog(
     mouse: true,
     scrollable: true,
     alwaysScroll: true,
+    scrollOnInput: true,
+    scrollback: 1000,
     tags: true,
-    wrap: false,
     scrollbar: {
       ch: '█',
       style: { fg: 'cyan' }
@@ -83,9 +84,9 @@ export function createChatLog(
 }
 
 export function updateChatHeader(
-  chatLog: any,
+  chatLog: Log,
   channelName: string
-) {
+): void {
   chatLog.setLabel(` ${channelName} `);
 }
 
@@ -93,8 +94,9 @@ export function updateChatHeader(
  * Add a BBS event announcement to the chat log
  */
 export function addBBSEvent(
-  chatLog: any,
+  chatLog: Log,
   formattedEvent: string
-) {
-  // Logic handled by app.ts rebuildChatContent
+): void {
+  // Add the event to the log using the Log widget's add method
+  chatLog.add(formattedEvent);
 }

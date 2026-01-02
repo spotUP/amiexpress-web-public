@@ -500,11 +500,13 @@ export class XIMIOHandler {
       return;
     }
 
-    // No input available - return -1 (timeout) immediately instead of pausing
-    // This allows doors to continue their main loop and prevents deadlocks
-    console.log('[XIMIOHandler] JH_HK: No input available, returning -1 (timeout)');
-    this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-    this.reply(msg, -1, '');
+    // No input available - pause emulator and wait for user input
+    // express.e:3438-3448 shows readChar(doorTimeout) which BLOCKS until input
+    // Returning -1 immediately breaks doors that expect blocking behavior
+    console.log('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
+    this.waitingForHotkey = true;
+    this.hotkeyMessage = msg;
+    this.emulator.pause();
   }
 
   /**
@@ -1288,9 +1290,6 @@ export class XIMIOHandler {
     if (!this.waitingForPause || !this.pauseReply) return;
 
     console.log('[XIMIOHandler] Pause acknowledged, resuming');
-    
-    // Clear pause prompt - Match express.e:5200 exactly (Move Up 1, Clear Line)
-    this.socket.emit('ansi-output', '\x1b[1A\x1b[K');
     
     const { msg, data } = this.pauseReply;
     this.waitingForPause = false;

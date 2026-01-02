@@ -49,6 +49,7 @@ export interface ExecutionState {
   lastProgressTime: number;
   gapJumpLogged: boolean;
   stuckLoopCount: number;
+  lastJumpSize: number;
 }
 
 export interface LifecycleConfig {
@@ -243,6 +244,7 @@ export class DoorLifecycleManager {
       lastProgressTime: Date.now(),
       gapJumpLogged: false,
       stuckLoopCount: 0,
+      lastJumpSize: 0,
     };
   }
 
@@ -558,27 +560,15 @@ export class DoorLifecycleManager {
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
         const pcAfterBatch = this.emulator.getRegister(16);
         
-        // Detect stuck loop: AquaScan/N jumps forward by 0x9c40 bytes repeatedly
-        // logic: if PC jumps by exactly 0x9c40 (40000) > 5 times, kill it
+        // Generic stuck loop detection: detect ANY repeated identical PC jump pattern
+        // This avoids door-specific magic numbers like 0x9c40 (CLAUDE.md rule #2)
         const jumpSize = pcAfterBatch - pcBeforeBatch;
-        
-        // Log slide progress for debugging
-        if (jumpSize > 0x1000) {
-           const op = this.emulator.readMemory16(pcBeforeBatch);
-           console.log(`[DoorLifecycleManager] SLIDE DETECTED: pc=0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} (size 0x${jumpSize.toString(16)}) op=0x${op.toString(16)}`);
-           
-           // Dump 16 bytes at PC
-           let hex = "";
-           for (let i = 0; i < 16; i += 2) {
-             try { hex += this.emulator.readMemory16(pcBeforeBatch + i).toString(16).padStart(4, '0') + " "; } catch(e) { hex += "???? "; }
-           }
-           console.log(`[DoorLifecycleManager]   Memory at 0x${pcBeforeBatch.toString(16)}: ${hex}`);
-        }
 
-        if (jumpSize === 0x9c40) {
+        // Track if we see the same jump size repeatedly (indicates stuck execution pattern)
+        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize) {
           this.executionState.stuckLoopCount++;
-          if (this.executionState.stuckLoopCount > 5) {
-            console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x9c40 repeatedly (${this.executionState.stuckLoopCount} times)`);
+          if (this.executionState.stuckLoopCount > 10) {
+            console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x${jumpSize.toString(16)} repeatedly (${this.executionState.stuckLoopCount} times)`);
             console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}`);
             this.terminate();
             return;
@@ -586,6 +576,7 @@ export class DoorLifecycleManager {
         } else {
           this.executionState.stuckLoopCount = 0;
         }
+        this.executionState.lastJumpSize = jumpSize;
 
         // Update iteration count with actual instructions executed
         const instructionsExecuted = result < 0 ? Math.abs(result) - 1 : result;
@@ -843,10 +834,23 @@ export class DoorLifecycleManager {
           16
         )} lastPCbytes=[${lastPcBytes}]`
       );
-      // RELAXED CHECK: Do not terminate for PC out of bounds if it's high memory.
-      // Doors like AquaScan/N execute code at 0x4fxxxx which is outside initial segments.
-      // this.terminate();
-      // return true;
+      // Smart PC bounds check: only terminate for definitely invalid addresses
+      // High memory execution (0x4fxxxx etc) is legitimate for dynamically loaded code
+      // But we should catch truly corrupted PCs:
+      // - PC = 0 (null pointer execution)
+      // - PC at odd address (68K requires even addresses)
+      // - PC in very low memory (below 0x400 is vectors/system area)
+      const isCriticallyInvalid =
+        pc === 0 ||                    // Null pointer
+        (pc & 1) !== 0 ||              // Odd address (illegal on 68K)
+        pc < 0x400;                    // System vectors area
+
+      if (isCriticallyInvalid) {
+        console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toString(16)} - terminating`);
+        this.terminate();
+        return true;
+      }
+      // Otherwise just log warning but continue (legitimate high-memory code)
     }
 
     return false;
