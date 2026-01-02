@@ -8,3 +8,4 @@ DESCRIPTION=Classic 1981 Namco space shooter - destroy alien formations and resc
 AUTHOR=AmiExpress BBS
 VERSION=1.0.0
 CATEGORY=Games/Arcade
+PRELOADER=YES

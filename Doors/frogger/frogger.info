@@ -8,3 +8,4 @@ DESCRIPTION=Classic 1981 Konami arcade game - help the frog cross the road and r
 AUTHOR=AmiExpress BBS
 VERSION=1.0.0
 CATEGORY=Games/Arcade
+PRELOADER=YES
