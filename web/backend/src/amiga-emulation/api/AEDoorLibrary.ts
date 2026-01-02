@@ -203,8 +203,8 @@ export class AEDoorLibrary {
     const eventHookAddr = this.execLibrary.allocMem(4, MEMF_CLEAR); // 4 bytes for event hook pointer
     const nameBufAddr = this.execLibrary.allocMem(16, MEMF_CLEAR);  // 16 bytes for CLI/SysOp name
     const bbsInfoAddr = this.execLibrary.allocMem(152, MEMF_CLEAR); // BBS info buffer
-    const nodeBufAddr = this.execLibrary.allocMem(8, MEMF_CLEAR);   // Per-node status buffer
-    const nodeStateAddr = this.execLibrary.allocMem(16, MEMF_CLEAR); // Node state data (CRITICAL)
+    const nodeBufAddr = this.execLibrary.allocMem(255, MEMF_CLEAR);   // Per-node status buffer
+    const nodeStateAddr = this.execLibrary.allocMem(512, MEMF_CLEAR); // Node state data (CRITICAL)
 
     // Initialize DoorInfo structure with all required fields
     this.emulator.writeMemory32(difaceAddr + DIFACE_EVENT_HOOK_OFFSET, eventHookAddr);
@@ -215,7 +215,7 @@ export class AEDoorLibrary {
 
     // Initialize node state data (critical for Bulls door and others)
     // Format: [word count][security level][user data...]
-    this.emulator.writeMemory16(nodeStateAddr, 8);     // Word count
+    this.emulator.writeMemory16(nodeStateAddr, 255);     // Word count
     this.emulator.writeMemory16(nodeStateAddr + 2, 100); // Security level
     this.emulator.writeMemory16(nodeStateAddr + 4, nodeId); // Node ID
     this.emulator.writeMemory16(nodeStateAddr + 6, 1); // Active flag

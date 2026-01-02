@@ -724,7 +724,7 @@ export class LibraryManager {
     // CRITICAL: ONLY enable for doors that use this older API (SIM/SUP/TIM/IIM).
     // XIM/AIM doors check 0x790 and misinterpret our trap address as a frame pointer,
     // leading to register corruption (A5) and crashes.
-    if (currentIsSIM && currentDoorType !== "XIM" && currentDoorType !== "AIM") {
+    if (currentIsSIM) {
       console.log("[LibraryManager] Setting up BBS API dispatcher for SIM door...");
 
       // Initialize low-memory region (parameter blocks at 0x794, 0x79c)

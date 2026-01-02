@@ -28,6 +28,7 @@ interface ActiveInputState {
   command: number;
   replyPortAddr: number;
   resumeCallback: () => void;
+  onInput?: (input: string) => void;
 }
 
 export class DoorMessageHandler {
@@ -45,6 +46,7 @@ export class DoorMessageHandler {
   // Door display state (express.e:3876,3877)
   private lineCount: number = 0;
   private nonStopDisplayFlag: boolean = false;
+  private waitingForPause: boolean = false;
   private logMessageRequest(
     msgAddr: number,
     command: number,
@@ -111,6 +113,10 @@ export class DoorMessageHandler {
     this.sentInitialMessage = state.sentInitialMessage;
   }
 
+  isWaitingForPause(): boolean {
+    return this.waitingForPause;
+  }
+
   /**
    * Setup Socket.IO input handler for JH_PM/JH_LI/JH_HK commands
    * Listens to door:input events and resumes emulator when input arrives
@@ -122,11 +128,17 @@ export class DoorMessageHandler {
         return;
       }
 
-      const { msgAddr, maxlen, command, replyPortAddr, resumeCallback } = this.activeInput;
+      const { msgAddr, maxlen, command, replyPortAddr, resumeCallback, onInput } = this.activeInput;
       console.log(`[DoorMessageHandler] door:input: "${data}" for command ${command}`);
 
       // Trim to maxlen
       const trimmed = data.slice(0, maxlen);
+
+      if (onInput) {
+        this.activeInput = null;
+        onInput(trimmed);
+        return;
+      }
 
       // Write input to message string
       this.writeStringToMessage(msgAddr, trimmed);
@@ -148,6 +160,64 @@ export class DoorMessageHandler {
       // Clear active input and resume
       this.activeInput = null;
       resumeCallback();
+    });
+  }
+
+  private async checkForPause(): Promise<number> {
+    const user = this.config.bbsSession?.user;
+    if (!user) {
+      return 0;
+    }
+
+    const rawLineLen = user.linesPerScreen ?? user.lineLength ?? 0;
+    const lineLen = typeof rawLineLen === "number" && rawLineLen > 0 ? rawLineLen : 22;
+
+    if (!this.nonStopDisplayFlag) {
+      this.lineCount += 1;
+    }
+
+    if (!this.nonStopDisplayFlag && this.lineCount >= lineLen) {
+      if (this.activeInput) {
+        return 0;
+      }
+
+      this.lineCount = 0;
+      this.socket.emit("ansi-output", "(Pause)...More(y/n/ns)? ");
+      this.waitingForPause = true;
+      const input = await this.waitForPauseResponse();
+      this.waitingForPause = false;
+      const trimmed = input.trim();
+      if (trimmed.length > 0 && (trimmed[0] === "N" || trimmed[0] === "n")) {
+        if (trimmed.length > 1 && (trimmed[1] === "S" || trimmed[1] === "s")) {
+          this.nonStopDisplayFlag = true;
+        } else {
+          this.socket.emit("ansi-output", "\x1b[1A\x1b[K");
+          this.emulator.resume();
+          return -1;
+        }
+      }
+
+      this.socket.emit("ansi-output", "\x1b[1A\x1b[K");
+      this.emulator.resume();
+    }
+
+    return 0;
+  }
+
+  private waitForPauseResponse(): Promise<string> {
+    return new Promise((resolve) => {
+      this.activeInput = {
+        msgAddr: 0,
+        maxlen: 3,
+        command: XIMCommand.JH_SM,
+        replyPortAddr: this.doorReplyPortAddr,
+        resumeCallback: () => {},
+        onInput: (input: string) => {
+          resolve(input);
+        },
+      };
+      this.emulator.pause();
+      console.log("[DoorMessageHandler] checkForPause: waiting for user input");
     });
   }
 
