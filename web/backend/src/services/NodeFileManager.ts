@@ -218,7 +218,7 @@ export class NodeFileManager {
   getActiveNodes(): number[] {
     const activeNodes: number[] = [];
 
-    for (let i = 0; i < 8; i++) {  // Max 8 nodes
+    for (let i = 0; i < 255; i++) {  // Max 255 nodes
       if (this.nodeUserFilesExist(i)) {
         activeNodes.push(i);
       }

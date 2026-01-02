@@ -53,7 +53,7 @@ const AMIGA_EPOCH = Date.UTC(1978, 0, 1);
 const REFRESH_INTERVAL_MS = 60 * 1000;
 
 function getStorePath(): string {
-  return path.join(DATA_DIR, 'S', 'SAmiLog.Store');
+  return path.join(DATA_DIR, 'Utils', 'samilog', 'SAmiLog.Store');
 }
 
 function getBaselineCandidates(): string[] {

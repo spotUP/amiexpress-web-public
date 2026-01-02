@@ -64,7 +64,7 @@ export interface NodeInfo {
  */
 export class NodeStatusManager {
   private nodes: Map<number, NodeInfo> = new Map();
-  private readonly MAX_NODES = 8;  // AmiExpress supports up to 8 nodes
+  private readonly MAX_NODES = 255;  // AmiExpress supports up to 255 nodes
   private multiPortAddress: number = 0;
   private singlePortAddresses: Map<number, number> = new Map();
   private nameAddresses: Map<number, number> = new Map(); // node -> name string address

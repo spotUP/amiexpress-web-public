@@ -51,7 +51,7 @@ var NodeStatus;
 class NodeStatusManager {
     constructor() {
         this.nodes = new Map();
-        this.MAX_NODES = 8; // AmiExpress supports up to 8 nodes
+        this.MAX_NODES = 255; // AmiExpress supports up to 255 nodes
         this.multiPortAddress = 0;
         this.singlePortAddresses = new Map();
         this.nameAddresses = new Map(); // node -> name string address

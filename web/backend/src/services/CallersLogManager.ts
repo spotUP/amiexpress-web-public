@@ -175,7 +175,7 @@ export class CallersLogManager {
   getLastCaller(nodeId: number = 0): string | null {
     try {
       // Try all nodes starting from nodeId
-      for (let i = nodeId; i < 8; i++) {
+      for (let i = nodeId; i < 255; i++) {
         const logPath = this.getLogPath(i);
         if (!fs.existsSync(logPath)) continue;
 
@@ -231,7 +231,7 @@ export class CallersLogManager {
   /**
    * Initialize CallersLog for all nodes (create directories)
    */
-  initializeAllNodes(maxNodes: number = 8): void {
+  initializeAllNodes(maxNodes: number = 255): void {
     for (let i = 0; i < maxNodes; i++) {
       this.ensureNodeDir(i);
     }

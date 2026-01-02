@@ -161,14 +161,15 @@ export async function startNewUserRegistration(socket: Socket, session: any, use
 }
 
 /**
- * Prompt for name - express.e:30115-30168 (jLoop1)
- * express.e:30144 - lineInput('',loggedOnUser.name,30,...) prefills with login name
+ * Prompt for name - express.e:30141
  */
 function promptForName(socket: Socket, session: any) {
   const prefill = session.newUserData?.username || '';
-  // express.e:30141-30144 - Show prompt with prefilled value
-  socket.emit('ansi-output', `\r\nEnter your Name: ${prefill}`);
-  // Set input buffer to prefill value so user can edit it or press Enter to accept
+  // express.e:30141 - StringF(string,'\b\n\s ',namePrompt) where namePrompt defaults to 'Enter your Name: '
+  socket.emit('ansi-output', `\r\nEnter your Name: `);
+  // We send the prefill as actual input to the frontend so it appears at the prompt
+  socket.emit('ansi-output', prefill);
+  // Set input buffer to prefill so just pressing Enter accepts it
   session.inputBuffer = prefill;
 }
 
@@ -176,18 +177,20 @@ function promptForName(socket: Socket, session: any) {
  * Handle name input - express.e:30115-30168
  */
 export async function handleNameInput(socket: Socket, session: any, input: string) {
-  const name = input.trim();
+  // If input is empty but we have a prefill in inputBuffer, use that
+  // This happens if the user just presses Enter
+  let name = input.trim();
+  if (name === '' && session.inputBuffer) {
+    name = session.inputBuffer.trim();
+  }
+
   session.newUserData.retryCount = session.newUserData.retryCount || 0;
 
-  // express.e:30138-30145 - Blank line counts as error
+  // express.e:30138 - IF(StrLen(loggedOnUser.name)=0)
   if (name === '') {
     session.newUserData.retryCount++;
-    console.log(`[NEW USER] Retry count: ${session.newUserData.retryCount}/5 (empty name)`);
-
-    // express.e:30142-30145 - Too many errors, disconnect
     if (session.newUserData.retryCount > 5) {
-      console.log('[NEW USER] Too many errors, disconnecting');
-      socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
+      socket.emit('ansi-output', '\r\nToo Many Errors, Goodbye!\r\n');
       setTimeout(() => socket.disconnect(), 500);
       return;
     }
@@ -196,24 +199,24 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
     return;
   }
 
-  // express.e:30126-30129 - Check for single character
+  // express.e:30126 - IF(StrLen(loggedOnUser.name)=1)
   if (name.length === 1) {
-    socket.emit('ansi-output', '\r\n\x1b[31mGet REAL!!  One Character???\x1b[0m\r\n');
+    socket.emit('ansi-output', '\r\nGet REAL!!  One Character???\r\n');
     promptForName(socket, session);
     return;
   }
 
-  // express.e:30135-30144 - Check for duplicate name
+  // express.e:30135 - aePuts('\b\nChecking for duplicate name...')
   socket.emit('ansi-output', '\r\nChecking for duplicate name...');
 
   const existingUser = await db.getUserByUsername(name);
   if (existingUser) {
-    socket.emit('ansi-output', '\x1b[31mAlready in use!, try another.\x1b[0m\r\n');
+    socket.emit('ansi-output', 'Already in use!, try another.\r\n');
     promptForName(socket, session);
     return;
   }
 
-  socket.emit('ansi-output', '\x1b[32mOk!\x1b[0m\r\n\r\n');
+  socket.emit('ansi-output', 'Ok!\r\n\r\n');
 
   // Save name and move to next question
   session.newUserData.username = name;
@@ -226,7 +229,8 @@ export async function handleNameInput(socket: Socket, session: any, input: strin
  * Prompt for location - express.e:30172
  */
 function promptForLocation(socket: Socket, session: any) {
-  socket.emit('ansi-output', 'City, State: ');
+  socket.emit('ansi-output', '\r\nCity, State: ');
+  session.inputBuffer = '';
 }
 
 /**
@@ -235,7 +239,7 @@ function promptForLocation(socket: Socket, session: any) {
 export async function handleLocationInput(socket: Socket, session: any, input: string) {
   const location = input.trim();
 
-  // Blank line - go back to name
+  // Blank line - go back to name (express.e:30177 JUMP iJLoop)
   if (location === '') {
     socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.NEW_USER_NAME;
@@ -244,7 +248,6 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
   }
 
   session.newUserData.location = location;
-  socket.emit('ansi-output', '\r\n');
   session.subState = LoggedOnSubState.NEW_USER_PHONE;
   promptForPhone(socket, session);
 }
@@ -253,7 +256,8 @@ export async function handleLocationInput(socket: Socket, session: any, input: s
  * Prompt for phone - express.e:30181
  */
 function promptForPhone(socket: Socket, session: any) {
-  socket.emit('ansi-output', 'Phone Number: ');
+  socket.emit('ansi-output', '\r\nPhone Number: ');
+  session.inputBuffer = '';
 }
 
 /**
@@ -262,7 +266,7 @@ function promptForPhone(socket: Socket, session: any) {
 export async function handlePhoneInput(socket: Socket, session: any, input: string) {
   const phone = input.trim();
 
-  // Blank line - go back to location
+  // Blank line - go back to location (express.e:30186 JUMP jLoop2)
   if (phone === '') {
     socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.NEW_USER_LOCATION;
@@ -271,7 +275,6 @@ export async function handlePhoneInput(socket: Socket, session: any, input: stri
   }
 
   session.newUserData.phone = phone;
-  socket.emit('ansi-output', '\r\n');
   session.subState = LoggedOnSubState.NEW_USER_EMAIL;
   promptForEmail(socket, session);
 }
@@ -280,7 +283,8 @@ export async function handlePhoneInput(socket: Socket, session: any, input: stri
  * Prompt for email - express.e:30191
  */
 function promptForEmail(socket: Socket, session: any) {
-  socket.emit('ansi-output', 'E-Mail Address: ');
+  socket.emit('ansi-output', '\r\nE-Mail Address: ');
+  session.inputBuffer = '';
 }
 
 /**
@@ -289,7 +293,7 @@ function promptForEmail(socket: Socket, session: any) {
 export async function handleEmailInput(socket: Socket, session: any, input: string) {
   const email = input.trim();
 
-  // Blank line - go back to phone
+  // Blank line - go back to phone (express.e:30196 JUMP jLoop3)
   if (email === '') {
     socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.NEW_USER_PHONE;
@@ -298,16 +302,14 @@ export async function handleEmailInput(socket: Socket, session: any, input: stri
   }
 
   // Validate email format
-  // Must contain @ with local part and domain with TLD
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid email format. Please include @ and domain (e.g., user@example.com)\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', '\r\nInvalid email format. Please include @ and domain.\r\n\r\n');
     promptForEmail(socket, session);
     return;
   }
 
   session.newUserData.email = email;
-  socket.emit('ansi-output', '\r\n');
   session.subState = LoggedOnSubState.NEW_USER_PASSWORD;
   promptForPassword(socket, session);
 }
@@ -318,7 +320,7 @@ export async function handleEmailInput(socket: Socket, session: any, input: stri
 function promptForAccessPassword(socket: Socket, session: any) {
   session.inputBuffer = '';
   setPasswordMask(socket, session, true);
-  socket.emit('ansi-output', 'Enter New User Password: ');
+  socket.emit('ansi-output', '\r\nEnter New User Password: ');
 }
 
 export async function handleAccessPasswordInput(socket: Socket, session: any, input: string) {
@@ -363,21 +365,13 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
         doPause(socket, session, () => continueIntroFlow(socket, session, 'join'));
       }
       return; // Wait for user to press space
+    } else {
+      // Placeholder if missing
+      socket.emit('ansi-output', '\r\n\x1b[1;33mWelcome to AmiExpress!\x1b[0m\r\n');
+      socket.emit('ansi-output', 'Guest access is restricted to browsing only.\r\n');
+      doPause(socket, session, () => continueIntroFlow(socket, session, 'join'));
+      return;
     }
-
-    // No GUESTLOGON, try JOIN
-    const joinShown = await showScreen(socket, session, screenConfig.JOIN);
-    if (joinShown) {
-      if (session.paginatedScreen) {
-        session.paginatedScreen.onComplete = () => continueIntroFlow(socket, session, 'name');
-      } else {
-        doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
-      }
-      return; // Wait for user to press space
-    }
-
-    // No intro screens, proceed directly to name prompt
-    session.newUserData.introShown = true;
   }
 
   finishIntroAndPromptName(socket, session);
@@ -394,7 +388,10 @@ function continueIntroFlow(socket: Socket, session: any, phase: string) {
           doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
         }
       } else {
-        continueIntroFlow(socket, session, 'name');
+        // Placeholder if missing
+        socket.emit('ansi-output', '\r\n\x1b[1;32mJoining AmiExpress...\x1b[0m\r\n');
+        socket.emit('ansi-output', 'Please answer the following questions to register.\r\n');
+        doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
       }
     });
     return;
@@ -459,7 +456,7 @@ function promptForAutoValidation(socket: Socket, session: any) {
   data.autoValidationTries = data.autoValidationTries || 5;
   session.inputBuffer = '';
   setPasswordMask(socket, session, true);
-  socket.emit('ansi-output', 'Enter the auto-validation password (if known): ');
+  socket.emit('ansi-output', '\r\nEnter the auto-validation password (if known): ');
 }
 
 async function getComputerChoices(): Promise<string[]> {
@@ -507,7 +504,7 @@ async function getComputerChoices(): Promise<string[]> {
  */
 function promptForPassword(socket: Socket, session: any) {
   setPasswordMask(socket, session, true);
-  socket.emit('ansi-output', 'Enter a PassWord: ');
+  socket.emit('ansi-output', '\r\nEnter a PassWord: ');
 }
 
 function getSecurityPolicy(): SecurityPolicy {
@@ -558,7 +555,7 @@ function passwordMeetsStrength(password: string, minStrength: number): boolean {
 export async function handlePasswordInput(socket: Socket, session: any, input: string) {
   const password = input.trim();
 
-  // Blank line - go back to email
+  // Blank line - go back to email (express.e:30205 JUMP jLoop4)
   if (password === '') {
     socket.emit('ansi-output', '\r\n');
     setPasswordMask(socket, session, false);
@@ -569,13 +566,13 @@ export async function handlePasswordInput(socket: Socket, session: any, input: s
 
   const policy = getSecurityPolicy();
   if (password.length < policy.minLength) {
-    socket.emit('ansi-output', `\r\n\x1b[31mPassword too short, must be at least ${policy.minLength} characters.\x1b[0m\r\n\r\n`);
+    socket.emit('ansi-output', `\r\nPassword length must be at least ${policy.minLength} chars, try again..\r\n`);
     promptForPassword(socket, session);
     return;
   }
 
   if (!passwordMeetsStrength(password, policy.minStrength)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mPassword too weak. Use mixed case, numbers, and symbols.\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', `\r\nPassword must have at least ${policy.minStrength} of these:\r\n  upper case,lower case, numeric and symbols, try again..\r\n`);
     promptForPassword(socket, session);
     return;
   }
@@ -593,9 +590,9 @@ export async function handlePasswordInput(socket: Socket, session: any, input: s
 export async function handlePasswordConfirm(socket: Socket, session: any, input: string) {
   const confirmation = input.trim();
 
-  // Check if passwords match
+  // Check if passwords match (express.e:30207 - IF(StrCmp(string,str2)=0))
   if (confirmation !== session.newUserData.password) {
-    socket.emit('ansi-output', '\r\n\x1b[31mPasswords do not match, try again..\x1b[0m\r\n\r\n');
+    socket.emit('ansi-output', '\r\nPasswords do not match, try again..\r\n');
     session.subState = LoggedOnSubState.NEW_USER_PASSWORD;
     promptForPassword(socket, session);
     return;
@@ -609,7 +606,7 @@ export async function handlePasswordConfirm(socket: Socket, session: any, input:
 }
 
 /**
- * Prompt for lines per screen - express.e:30236-30237
+ * Prompt for lines per screen - express.e:11303-11306
  */
 function promptForLines(socket: Socket, session: any) {
   if (!session.newUserData.linesCountdownShown) {
@@ -617,39 +614,51 @@ function promptForLines(socket: Socket, session: any) {
     for (let count = 70; count >= 2; count--) {
       socket.emit('ansi-output', ` ${count}\r\n`);
     }
-    socket.emit('ansi-output', '\r\n');
   }
-  socket.emit('ansi-output', 'Enter the number you see at the top of your screen (or 0 for Auto): ');
+  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
+  session.inputBuffer = '';
 }
 
 /**
  * Handle lines input - express.e:30236-30237
  */
 export async function handleLinesInput(socket: Socket, session: any, input: string) {
-  const lines = parseInt(input.trim()) || 0;
-
-  session.newUserData.linesPerScreen = lines;
+  const val = input.trim();
+  if (val === '') {
+    // Blank line - return RESULT_SUCCESS (keep current or default)
+    session.newUserData.linesPerScreen = 0;
+  } else {
+    const lines = parseInt(val) || 0;
+    session.newUserData.linesPerScreen = lines;
+  }
+  
   socket.emit('ansi-output', '\r\n');
   session.subState = LoggedOnSubState.NEW_USER_COMPUTER;
   await promptForComputer(socket, session);
 }
 
 /**
- * Prompt for computer type - express.e:30238-30239
+ * Prompt for computer type - express.e:11315-11325
  */
 async function promptForComputer(socket: Socket, session: any) {
   const choices = await getComputerChoices();
   session.newUserData.computerChoices = choices;
 
-  socket.emit('ansi-output', '\r\n');
+  // express.e:11315 - FOR stat:=0 TO computerTypes.count()-1 STEP 2
   for (let i = 0; i < choices.length; i += 2) {
-    const leftIndex = i + 1;
-    const rightIndex = i + 2;
-    const left = `${String(leftIndex).padStart(2, ' ')} > ${choices[i]}`.padEnd(38, ' ');
-    const right = rightIndex <= choices.length ? `${String(rightIndex).padStart(2, ' ')} > ${choices[rightIndex - 1]}` : '';
-    socket.emit('ansi-output', `${left}${right}\r\n`);
+    // StringF(tempStr,'\d[2]> \l\s[34] ',stat+1,computerTypes.item(stat))
+    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].padEnd(34, ' ')}`;
+    let right = '';
+    if (i + 1 < choices.length) {
+      // StringF(tempStr,'\d[2]> \l\s[34]\b\n',stat+2,computerTypes.item(stat+1))
+      right = `${String(i + 2).padStart(2, ' ')}> ${choices[i+1].padEnd(34, ' ')}\r\n`;
+    } else {
+      right = '\r\n';
+    }
+    socket.emit('ansi-output', `${left}${right}`);
   }
   socket.emit('ansi-output', '\r\nChoose computer type: ');
+  session.inputBuffer = '';
 }
 
 /**
@@ -660,26 +669,30 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
   const choices = session.newUserData.computerChoices || await getComputerChoices();
 
   if (selection === '') {
-    session.newUserData.computerType = session.newUserData.computerType || choices[0] || 'AMiGA 500';
+    // Blank line - RESULT_SUCCESS
+    session.newUserData.computerType = choices[0];
   } else {
     const numericChoice = parseInt(selection, 10);
     if (Number.isNaN(numericChoice) || numericChoice < 1 || numericChoice > choices.length) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice, try again.\x1b[0m\r\n\r\n');
       await promptForComputer(socket, session);
       return;
     }
     session.newUserData.computerType = choices[numericChoice - 1];
+    // express.e:11333 - loggedOnUser.secBulletin:=stat-1
+    session.newUserData.computerIndex = numericChoice - 1;
   }
 
+  socket.emit('ansi-output', '\r\n');
   session.subState = LoggedOnSubState.NEW_USER_SCREEN_CLEAR;
   promptForScreenClear(socket, session);
 }
 
 /**
- * Prompt for screen clear preference - express.e:30250-30260
+ * Prompt for screen clear preference - express.e:30250
  */
 function promptForScreenClear(socket: Socket, session: any) {
-  socket.emit('ansi-output', '\r\nYou want Screen Clears after Messages ? ');
+  socket.emit('ansi-output', 'You want Screen Clears after Messages ? ');
+  session.inputBuffer = '';
 }
 
 /**
@@ -688,10 +701,11 @@ function promptForScreenClear(socket: Socket, session: any) {
 export async function handleScreenClearInput(socket: Socket, session: any, input: string) {
   const response = input.trim().toUpperCase();
 
-  // reference-board default: No; only Y/YES enables
-  session.newUserData.screenClear = response === 'Y' || response === 'YES';
+  // express.e:30256 - IF((ch="Y") OR (ch="y"))
+  const enabled = response === 'Y' || response === 'YES';
+  session.newUserData.screenClear = enabled;
 
-  if (session.newUserData.screenClear) {
+  if (enabled) {
     socket.emit('ansi-output', 'Yes..\r\n\r\n');
   } else {
     socket.emit('ansi-output', 'No!\r\n\r\n');
@@ -708,15 +722,20 @@ export async function handleScreenClearInput(socket: Socket, session: any, input
 function showSummaryAndConfirm(socket: Socket, session: any) {
   const data = session.newUserData;
 
+  // Format matches express.e StringF calls 30264-30281
   socket.emit('ansi-output', `Handle: ${data.username}\r\n`);
   socket.emit('ansi-output', `City, St.: ${data.location}\r\n`);
   socket.emit('ansi-output', `Phone Num: ${data.phone}\r\n`);
   socket.emit('ansi-output', `E-Mail   : ${data.email}\r\n`);
-  socket.emit('ansi-output', `Num Lines: ${data.linesPerScreen === 0 ? 'Auto' : data.linesPerScreen}\r\n`);
+  
+  const lineStr = data.linesPerScreen === 0 ? 'Auto' : String(data.linesPerScreen);
+  socket.emit('ansi-output', `Num Lines: ${lineStr}\r\n`);
   socket.emit('ansi-output', `PassWord : ENCRYPTED\r\n`);
-  socket.emit('ansi-output', `Computer : ${data.computerType || 'AMiGA 500'}\r\n`);
+  socket.emit('ansi-output', `Computer : ${data.computerType}\r\n`);
   socket.emit('ansi-output', `Scrn Clr : ${data.screenClear ? 'YES' : 'NO'}\r\n\r\n`);
+  
   socket.emit('ansi-output', 'Is the above Correct? ');
+  session.inputBuffer = '';
 }
 
 async function continueRegistrationFlow(socket: Socket, session: any) {
@@ -911,7 +930,7 @@ async function advanceQuestionnaire(socket: Socket, session: any): Promise<void>
     questionnaire.currentIndex++;
     if (step.type === 'text') {
       questionnaire.transcript.push(step.content);
-      socket.emit('ansi-output', `${step.content}\r\n\r\n`);
+      socket.emit('ansi-output', `${step.content}\r\n`);
       continue;
     }
     questionnaire.awaitingPromptIndex = questionnaire.currentIndex - 1;

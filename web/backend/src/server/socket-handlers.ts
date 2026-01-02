@@ -270,6 +270,9 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   import('../handlers/voice-channel.handler').then(({ registerVoiceChannelHandlers }) => registerVoiceChannelHandlers(socket, io, sessions)).catch((err) => {
     console.error('[SOCKET HANDLER ERROR] Failed to load voice-channel.handler:', err);
   });
+  import('../handlers/audio-video.handler').then(({ registerAudioVideoHandlers }) => registerAudioVideoHandlers(socket, io, sessions)).catch((err) => {
+    console.error('[SOCKET HANDLER ERROR] Failed to load audio-video.handler:', err);
+  });
 
   // XIM injection handlers - disabled until type errors fixed
   // import('../handlers/debug/xim-injection.handler').then(({ registerXIMInjectionHandlers }) => {

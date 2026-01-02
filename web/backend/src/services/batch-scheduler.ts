@@ -50,7 +50,7 @@ function resolveExecutable(base: string): string | null {
   return null;
 }
 
-async function runProgram(progPath: string, args: string[], redirectPath?: string, nodeId: number = 1): Promise<void> {
+async function runProgram(progPath: string, args: string[], redirectPath?: string, nodeId: number = 1, envOverrides?: Record<string, string>): Promise<void> {
   const ext = path.extname(progPath).toLowerCase();
   const isTs = ext === '.ts';
   const isJs = ext === '.js';
@@ -60,7 +60,7 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
 
   // Route Amiga binaries through the door runner (everything non-TS/JS in batches)
   if (!isTs && !isJs) {
-    await runAmigaDoorViaRunner(progPath, nodeId || 1, args, path.dirname(progPath), redirectPath);
+    await runAmigaDoorViaRunner(progPath, nodeId || 1, args, path.dirname(progPath), redirectPath, envOverrides);
     return;
   }
 
@@ -212,7 +212,8 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   }
 
   // Generic Amiga binary execution (works for any utility: SuperAmiLog, custom tools, etc.)
-  const resolvedProg = resolveExecutable(resolveAssign(parts[0]));
+  const rawProg = resolveAssign(parts[0]);
+  const resolvedProg = resolveExecutable(rawProg) || (require('../utils/amigafs').resolvePath(rawProg));
   if (!resolvedProg) {
     console.warn('[BatchScheduler] Skipping missing program:', parts[0]);
     return;

@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
+import { db } from '../database';
 
 export interface BBSUser {
   id: string;
@@ -565,12 +566,13 @@ export class BBSApi {
   /**
    * Get BBS system information
    */
-  getSystemInfo(): BBSSystemInfo {
+  async getSystemInfo(): Promise<BBSSystemInfo> {
+    const sysConfig = await db.getConfigRepository().getSystemConfig();
     return {
-      bbsName: 'AmiExpress-Web',
-      sysopName: 'Sysop',
+      bbsName: sysConfig?.bbs_name || 'AmiExpress-Web',
+      sysopName: sysConfig?.sysop_name || 'Sysop',
       version: '2.x',
-      nodes: 8
+      nodes: sysConfig?.max_nodes || 255
     };
   }
 
