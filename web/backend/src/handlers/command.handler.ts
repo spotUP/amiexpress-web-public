@@ -138,6 +138,7 @@ import {
   handleWEditProtocolInput,
   handleWEditTranslatorInput,
   handleWEditModemSpeedInput,
+  handleWEditFontInput,
   setInfoCommandsDependencies
 } from './commands/info-commands.handler';
 import {
@@ -467,28 +468,9 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
       }
 
       if (session.subState === LoggedOnSubState.EXEC_QUICKNEW) {
-        // AmiExpress EXEC_QUICKNEW support (express.e:29845-29847)
-        // This is now the first step in the display flow
-        const bbsRoot = config.get('dataDir');
-        const nodeId = session.nodeId || 0;
-        const nodeInfoPath = path.join(bbsRoot, `Node${nodeId}.info`);
-        
-        if (fs.existsSync(nodeInfoPath)) {
-          const tooltypes = parseInfoFile(nodeInfoPath);
-          if (tooltypes.has('EXEC_QUICKNEW')) {
-            displayFlowLog('EXEC_QUICKNEW detected, running command');
-            const { runSysCommand } = require('./command-execution.handler');
-            // Execute the door - output will be sent to terminal
-            await runSysCommand(socket, session, 'QUICKNEW', '');
-            
-            // Force a pause after QuickNew output
-            if (pauseDisplayFlow(socket, session)) {
-              session.subState = LoggedOnSubState.DISPLAY_BULL;
-              return;
-            }
-          }
-        }
-
+        // Skip EXEC_QUICKNEW - quicknew is displayed via ~SS_BBS:screens/quicknew.txt MCI code
+        // in the LOGON security screens (logon10.txt, logon20.txt, etc.)
+        // The batch jobs (batch0-batch6) run periodically to regenerate quicknew.txt
         session.subState = LoggedOnSubState.DISPLAY_BULL;
         continue;
       }
@@ -3225,6 +3207,25 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       const input = session.inputBuffer;
       session.inputBuffer = '';
       await handleWEditModemSpeedInput(socket, session, input);
+    } else if (data === '\x7f') {
+      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
+      socket.emit('ansi-output', '\b \b');
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
+    }
+    return;
+  }
+
+  if (session.subState === LoggedOnSubState.W_EDIT_FONT) {
+    // Edit terminal font (web extension)
+    console.log('[W_EDIT_FONT] State detected, data:', data, 'inputBuffer:', session.inputBuffer);
+    if (!session.inputBuffer) session.inputBuffer = '';
+    if (data === '\r' || data === '\n') {
+      const input = session.inputBuffer;
+      console.log('[W_EDIT_FONT] Enter pressed, calling handleWEditFontInput with:', input);
+      session.inputBuffer = '';
+      await handleWEditFontInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
       socket.emit('ansi-output', '\b \b');
