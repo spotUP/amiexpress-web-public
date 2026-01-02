@@ -1,7 +1,4 @@
-import * as AnsiToHtmlModule from 'ansi-to-html';
-
-// Handle both ESM and CommonJS exports
-const AnsiToHtml = (AnsiToHtmlModule as any).default || AnsiToHtmlModule;
+import AnsiToHtml from 'ansi-to-html';
 
 // Create ANSI to HTML converter with custom options
 const converter = new AnsiToHtml({

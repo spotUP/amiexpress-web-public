@@ -65,16 +65,15 @@ export class SoundEffects {
     if (!this.audioContext) throw new Error('No audio context');
 
     const sampleRate = this.audioContext.sampleRate;
-    const length = sampleRate * duration;
+    const length = Math.floor(sampleRate * duration);
     const impulse = this.audioContext.createBuffer(2, length, sampleRate);
     const leftChannel = impulse.getChannelData(0);
     const rightChannel = impulse.getChannelData(1);
 
     for (let i = 0; i < length; i++) {
-      const n = length - i;
-      // Exponential decay with random diffusion for realistic reverb
-      leftChannel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-      rightChannel[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      const envelope = Math.exp(-i / (sampleRate * decay));
+      leftChannel[i] = (Math.random() * 2 - 1) * envelope;
+      rightChannel[i] = (Math.random() * 2 - 1) * envelope;
     }
 
     return impulse;
@@ -192,7 +191,7 @@ export const getSoundEffects = (): SoundEffects => {
 };
 
 // React hook for sound effects
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 export const useSoundEffects = () => {
   const [sfx] = useState(() => getSoundEffects());

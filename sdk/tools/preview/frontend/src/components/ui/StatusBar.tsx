@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, AlertCircle, CheckCircle, Clock, Cpu, HardDrive, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Cpu, HardDrive } from 'lucide-react';
 
 interface StatusBarProps {
   currentFile?: string;

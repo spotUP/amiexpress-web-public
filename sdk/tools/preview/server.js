@@ -570,6 +570,65 @@ app.post('/api/doors/:doorId/files/*', (req, res) => {
   }
 });
 
+// =============================================================================
+// AI ASSISTANT & GENERATION
+// =============================================================================
+
+/**
+ * Discover free models from OpenRouter
+ */
+async function discoverOpenRouterFreeModels(includeReasoning = true) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    const models = data.data || [];
+
+    // Filter for free models (pricing is "0")
+    return models
+      .filter(model => {
+        const promptPrice = parseFloat(model.pricing?.prompt || '1');
+        const completionPrice = parseFloat(model.pricing?.completion || '1');
+        const isFree = promptPrice === 0 && completionPrice === 0;
+
+        if (!isFree) return false;
+
+        if (!includeReasoning) {
+          // Filter out "think" models if reasoning is not requested
+          const isThinkingModel = model.id.toLowerCase().includes('think') ||
+                                 model.id.toLowerCase().includes('reason') ||
+                                 model.id.toLowerCase().includes('deepseek-r1');
+          if (isThinkingModel) return false;
+        }
+
+        return true;
+      })
+      .map(model => model.id)
+      .sort();
+  } catch (error) {
+    console.error('Error discovering OpenRouter models:', error);
+    return [];
+  }
+}
+
+// API: Get free OpenRouter models
+app.get('/api/ai-models/openrouter/free', async (req, res) => {
+  try {
+    const includeReasoning = req.query.reasoning === 'true';
+    const models = await discoverOpenRouterFreeModels(includeReasoning);
+    res.json(models);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API: Build door (TypeScript compilation)
 app.post('/api/doors/:doorId/build', (req, res) => {
   try {
@@ -630,25 +689,48 @@ app.post('/api/doors/:doorId/build', (req, res) => {
   }
 });
 
+/**
+ * Format model ID for OpenRouter API
+ */
+function formatOpenRouterModel(model) {
+  if (!model) return 'meta-llama/llama-4-maverick:free';
+  
+  // Strip :free suffix for the API call (it's metadata, not part of the model ID)
+  let modelForApi = model.replace(/:free$/, '');
+
+  // Capitalization mapping for models where providers expect specific casing
+  const capitalizationMap = {
+    'agentica-org/deepcoder-14b-preview': 'agentica-org/DeepCoder-14B-Preview',
+  };
+
+  // Apply capitalization fix if needed (case-insensitive lookup)
+  const modelLower = modelForApi.toLowerCase();
+  if (capitalizationMap[modelLower]) {
+    modelForApi = capitalizationMap[modelLower];
+  }
+  
+  return modelForApi;
+}
+
 // API: AI Prompt for Door Improvement
 app.post('/api/ai-prompt', async (req, res) => {
   try {
-    const { doorId, currentFile, buildErrors, prompt, apiKey } = req.body;
+    const { doorId, currentFile, buildErrors, prompt, apiKey, provider = 'openrouter', model } = req.body;
 
     if (!doorId || !prompt) {
       return res.status(400).json({ error: 'doorId and prompt are required' });
     }
 
-    if (!apiKey) {
-      return res.status(400).json({ error: 'OpenRouter API key is required' });
+    if (!apiKey && !process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY) {
+      return res.status(400).json({ error: 'API key is required' });
     }
 
-    const doorPath = resolveDoorPath(doorId);
-    if (!fs.existsSync(doorPath)) {
+    const targetDoorPath = resolveDoorPath(doorId);
+    if (!fs.existsSync(targetDoorPath)) {
       return res.status(404).json({ error: 'Door not found' });
     }
 
-    console.log(`[AI] AI prompt for ${doorId}: ${prompt.substring(0, 50)}...`);
+    console.log(`[AI] AI prompt for ${doorId} (${provider}): ${prompt.substring(0, 50)}...`);
 
     // Build context for AI
     let context = `You are an expert TypeScript developer helping to improve a BBS door game for the AmiExpress SDK.
@@ -665,7 +747,7 @@ ${currentFile.content}
 `;
     } else {
       // Load main index.ts file
-      const indexPath = path.join(doorPath, 'index.ts');
+      const indexPath = path.join(targetDoorPath, 'index.ts');
       if (fs.existsSync(indexPath)) {
         const indexContent = fs.readFileSync(indexPath, 'utf8');
         context += `\nMain file (index.ts):
@@ -684,7 +766,7 @@ ${buildErrors.map(e => `- ${e.file}:${e.line}: ${e.message}`).join('\n')}
     }
 
     // Add package.json context
-    const pkgPath = path.join(doorPath, 'package.json');
+    const pkgPath = path.join(targetDoorPath, 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       context += `\nPackage Info:
@@ -712,39 +794,117 @@ Important:
 - Maintain the existing code style
 - If fixing errors, explain what was wrong`;
 
-    // Call OpenRouter API
-    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://github.com/spotUP/amiexpress-web',
-        'X-Title': 'AmiExpress SDK Door Editor',
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3.5-sonnet',
-        messages: [
-          {
-            role: 'user',
-            content: context,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
-    });
+    let aiMessage = '';
 
-    if (!openRouterResponse.ok) {
-      const error = await openRouterResponse.json();
-      console.error('OpenRouter API error:', error);
-      return res.status(500).json({
-        success: false,
-        error: error.error?.message || 'Failed to get AI response',
+    if (provider === 'openrouter') {
+      const effectiveKey = apiKey || process.env.OPENROUTER_API_KEY;
+      const modelForApi = formatOpenRouterModel(model);
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${effectiveKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/amiexpress/sdk',
+          'X-Title': 'AmiExpress SDK Door Editor',
+        },
+        body: JSON.stringify({
+          model: modelForApi,
+          messages: [
+            {
+              role: 'user',
+              content: context,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+        }),
       });
-    }
 
-    const aiResponse = await openRouterResponse.json();
-    const aiMessage = aiResponse.choices?.[0]?.message?.content;
+      if (!response.ok) {
+        const error = await response.json();
+        return res.status(500).json({ success: false, error: error.error?.message || 'OpenRouter API request failed' });
+      }
+
+      const aiResponse = await response.json();
+      console.log(`[AI] OpenRouter response received:`, JSON.stringify(aiResponse).substring(0, 500));
+      
+      if (!aiResponse.choices || aiResponse.choices.length === 0) {
+        console.error('[AI] OpenRouter returned no choices:', aiResponse);
+        return res.status(500).json({
+          success: false,
+          error: 'AI returned no response choices. Try a different model.',
+        });
+      }
+      
+      aiMessage = aiResponse.choices?.[0]?.message?.content;
+    } else if (provider === 'claude') {
+      const effectiveKey = apiKey || process.env.ANTHROPIC_API_KEY;
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': effectiveKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: model || 'claude-3-5-sonnet-20241022',
+          max_tokens: 4000,
+          messages: [{ role: 'user', content: context }],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return res.status(500).json({ success: false, error: error.error?.message || 'Claude API request failed' });
+      }
+
+      const aiResponse = await response.json();
+      aiMessage = aiResponse.content[0].text;
+    } else if (provider === 'openai') {
+      const effectiveKey = apiKey || process.env.OPENAI_API_KEY;
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${effectiveKey}`,
+        },
+        body: JSON.stringify({
+          model: model || 'gpt-4o',
+          messages: [{ role: 'user', content: context }],
+          max_tokens: 4000,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[AI] OpenAI error:', error);
+        return res.status(500).json({ success: false, error: error.error?.message || 'OpenAI API request failed' });
+      }
+
+      const aiResponse = await response.json();
+      console.log(`[AI] OpenAI response received:`, JSON.stringify(aiResponse).substring(0, 500));
+      aiMessage = aiResponse.choices?.[0]?.message?.content;
+    } else if (provider === 'gemini') {
+      const effectiveKey = apiKey || process.env.GEMINI_API_KEY;
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-pro'}:generateContent?key=${effectiveKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: context }] }],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[AI] Gemini error:', error);
+        return res.status(500).json({ success: false, error: error.error?.message || 'Gemini API request failed' });
+      }
+
+      const aiResponse = await response.json();
+      console.log(`[AI] Gemini response received:`, JSON.stringify(aiResponse).substring(0, 500));
+      aiMessage = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
 
     if (!aiMessage) {
       return res.status(500).json({
@@ -756,24 +916,74 @@ Important:
     // Parse AI response
     let parsedResponse;
     try {
-      // Try to extract JSON from response (might be wrapped in markdown)
-      const jsonMatch = aiMessage.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsedResponse = JSON.parse(jsonMatch[0]);
-      } else {
-        parsedResponse = JSON.parse(aiMessage);
+      console.log(`[AI] Parsing response (first 200 chars): ${aiMessage.substring(0, 200).replace(/\n/g, ' ')}...`);
+      
+      // Robust JSON extraction
+      const extractJson = (text) => {
+        if (!text) return null;
+        
+        // 1. Strip thought blocks/reasoning if present
+        let cleanedText = text.replace(/<(thought|reasoning)>[\s\S]*?<\/\1>/gi, '');
+        
+        // 2. Try to find JSON in markdown code blocks first
+        const codeBlockMatch = cleanedText.match(/```(?:json)?\s*(\{[\s\S]*?code[\s\S]*?\})\s*```/i);
+        
+        if (codeBlockMatch) {
+          try {
+            return JSON.parse(codeBlockMatch[1]);
+          } catch (e) {
+            // Fall through
+          }
+        }
+        
+        // 3. Try to find any block that looks like our JSON structure (flexible key order)
+        // This looks for a { ... "key" ... "key" ... } structure
+        const jsonRegex = /\{\s*"(?:explanation|code)"[\s\S]*?"(?:explanation|code)"[\s\S]*?\}/i;
+        const match = cleanedText.match(jsonRegex);
+        
+        if (match) {
+          try {
+            return JSON.parse(match[0]);
+          } catch (e) {
+            // Fall through
+          }
+        }
+        
+        // 4. Last resort: try greedy match
+        const greedyMatch = cleanedText.match(/\{[\s\S]*\}/);
+        if (greedyMatch) {
+          try {
+            return JSON.parse(greedyMatch[0]);
+          } catch (e) {
+            // Fall through
+          }
+        }
+        
+        // 5. Try parsing the whole thing
+        try {
+          return JSON.parse(cleanedText);
+        } catch (e) {
+          return null;
+        }
+      };
+
+      parsedResponse = extractJson(aiMessage);
+      
+      if (!parsedResponse || !parsedResponse.code) {
+        throw new Error('Could not find valid JSON with "code" key in AI response');
       }
     } catch (parseError) {
-      console.error('Failed to parse AI response:', aiMessage);
+      console.error('Failed to parse AI response. Raw message:', aiMessage);
+      console.error('Parse error:', parseError.message);
       return res.status(500).json({
         success: false,
-        error: 'Failed to parse AI response. Please try again.',
+        error: `Failed to parse AI response: ${parseError.message}. The AI might have returned invalid formatting. Please try again.`,
       });
     }
 
     // Build response
     const filePath = currentFile?.path || 'index.ts';
-    const originalContent = currentFile?.content || fs.readFileSync(path.join(doorPath, 'index.ts'), 'utf8');
+    const originalContent = currentFile?.content || (fs.existsSync(path.join(targetDoorPath, 'index.ts')) ? fs.readFileSync(path.join(targetDoorPath, 'index.ts'), 'utf8') : '');
 
     res.json({
       success: true,
@@ -1787,18 +1997,23 @@ Return ONLY valid TypeScript code with no explanations. The code should be compl
     }
 
     const aiResponse = await response.json();
-    const gameCode = aiResponse.content[0].text;
+    let gameCode = aiResponse.content[0].text;
+
+    // Clean code: remove thought blocks and markdown code blocks
+    gameCode = gameCode.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+    gameCode = gameCode.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '').trim();
+    gameCode = gameCode.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
 
     // Create door ID (sanitized name)
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = resolveDoorPath(doorId);
+    const targetDoorPath = resolveDoorPath(doorId);
 
     // Create door directory
-    if (fs.existsSync(doorPath)) {
+    if (fs.existsSync(targetDoorPath)) {
       return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
     }
 
-    fs.mkdirSync(doorPath, { recursive: true });
+    fs.mkdirSync(targetDoorPath, { recursive: true });
 
     // Create package.json
     const packageJson = {
@@ -1825,7 +2040,7 @@ Return ONLY valid TypeScript code with no explanations. The code should be compl
     };
 
     fs.writeFileSync(
-      path.join(doorPath, 'package.json'),
+      path.join(targetDoorPath, 'package.json'),
       JSON.stringify(packageJson, null, 2)
     );
 
@@ -1849,12 +2064,12 @@ Return ONLY valid TypeScript code with no explanations. The code should be compl
     };
 
     fs.writeFileSync(
-      path.join(doorPath, 'tsconfig.json'),
+      path.join(targetDoorPath, 'tsconfig.json'),
       JSON.stringify(tsconfig, null, 2)
     );
 
     // Create index.ts with generated code
-    fs.writeFileSync(path.join(doorPath, 'index.ts'), gameCode);
+    fs.writeFileSync(path.join(targetDoorPath, 'index.ts'), gameCode);
 
     // Create README.md
     const readme = `# ${name}
@@ -1884,12 +2099,12 @@ npm run build
 *Generated with AI Game Wizard*
 `;
 
-    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+    fs.writeFileSync(path.join(targetDoorPath, 'README.md'), readme);
 
     // Install dependencies
     console.log(`[PACKAGE] Installing dependencies for ${doorId}...`);
     execSync('npm install', {
-      cwd: doorPath,
+      cwd: targetDoorPath,
       stdio: 'ignore',
     });
 
@@ -1916,7 +2131,7 @@ app.post('/api/games/generate-stream', async (req, res) => {
   console.log(`[API] Timestamp: ${new Date().toISOString()}`);
 
   try {
-    const { name, description, bbsCommand, type, features, provider = 'claude', model, apiKey, qualityMode = 'balanced' } = req.body;
+    const { name, description, bbsCommand, type, features, provider = 'openrouter', model, apiKey, qualityMode = 'balanced' } = req.body;
 
     console.log(`[API] Request params:`, { name, provider, model, qualityMode, hasApiKey: !!apiKey });
 
@@ -2143,21 +2358,7 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       console.log(`[OpenRouter] ========== Starting OpenRouter Request ==========`);
       console.log(`[OpenRouter] Model (raw): ${model}`);
 
-      // Strip :free suffix for the API call (it's metadata, not part of the model ID)
-      let modelForApi = (model || 'meta-llama/llama-4-maverick:free').replace(/:free$/, '');
-
-      // Capitalization mapping for models where providers expect specific casing
-      const capitalizationMap = {
-        'agentica-org/deepcoder-14b-preview': 'agentica-org/DeepCoder-14B-Preview',
-      };
-
-      // Apply capitalization fix if needed (case-insensitive lookup)
-      const modelLower = modelForApi.toLowerCase();
-      if (capitalizationMap[modelLower]) {
-        const originalModel = modelForApi;
-        modelForApi = capitalizationMap[modelLower];
-        console.log(`[OpenRouter] Applied capitalization fix: "${originalModel}" -> "${modelForApi}"`);
-      }
+      const modelForApi = formatOpenRouterModel(model);
 
       console.log(`[OpenRouter] Model (for API): ${modelForApi}`);
       console.log(`[OpenRouter] API key present: ${!!providerKey}`);
@@ -2352,18 +2553,20 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
 
     sendProgress(60, 'Creating project structure...');
 
-    // Clean code (remove markdown code blocks if present)
+    // Clean code: remove thought blocks and markdown code blocks
+    gameCode = gameCode.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+    gameCode = gameCode.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '').trim();
     gameCode = gameCode.replace(/```typescript\n?/g, '').replace(/```\n?/g, '').trim();
 
     // Create door ID
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = resolveDoorPath(doorId);
+    const newGamePath = resolveDoorPath(doorId);
 
-    if (fs.existsSync(doorPath)) {
+    if (fs.existsSync(newGamePath)) {
       return sendError(`A game with ID "${doorId}" already exists`);
     }
 
-    fs.mkdirSync(doorPath, { recursive: true });
+    fs.mkdirSync(newGamePath, { recursive: true });
 
     sendProgress(70, 'Creating package files...');
 
@@ -2386,7 +2589,7 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       license: 'MIT',
     };
 
-    fs.writeFileSync(path.join(doorPath, 'package.json'), JSON.stringify(packageJson, null, 2));
+    fs.writeFileSync(path.join(newGamePath, 'package.json'), JSON.stringify(packageJson, null, 2));
 
     // Create tsconfig.json
     const tsconfig = {
@@ -2407,10 +2610,10 @@ Return ONLY valid TypeScript code with no explanations before or after.`;
       exclude: ['node_modules', 'dist'],
     };
 
-    fs.writeFileSync(path.join(doorPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+    fs.writeFileSync(path.join(newGamePath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
 
     // Create index.ts
-    fs.writeFileSync(path.join(doorPath, 'index.ts'), gameCode);
+    fs.writeFileSync(path.join(newGamePath, 'index.ts'), gameCode);
 
     // Create README.md
     const readme = `# ${name}
@@ -2443,13 +2646,13 @@ npm run build
 *Generated with AI Game Wizard - ${new Date().toISOString()}*
 `;
 
-    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+    fs.writeFileSync(path.join(newGamePath, 'README.md'), readme);
 
     sendProgress(80, 'Installing dependencies...');
 
     // Install dependencies
     console.log(`[PACKAGE] Installing dependencies for ${doorId}...`);
-    execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
+    execSync('npm install', { cwd: newGamePath, stdio: 'ignore' });
 
     sendProgress(100, 'Complete!');
     console.log(`[OK] Game created: ${doorId}`);
@@ -2473,13 +2676,13 @@ app.post('/api/games/save', async (req, res) => {
     }
 
     const doorId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const doorPath = resolveDoorPath(doorId);
+    const targetDoorPath = resolveDoorPath(doorId);
 
-    if (fs.existsSync(doorPath)) {
+    if (fs.existsSync(targetDoorPath)) {
       return res.status(409).json({ error: `A game with ID "${doorId}" already exists` });
     }
 
-    fs.mkdirSync(doorPath, { recursive: true });
+    fs.mkdirSync(targetDoorPath, { recursive: true });
 
     // Create all files
     const packageJson = {
@@ -2498,7 +2701,7 @@ app.post('/api/games/save', async (req, res) => {
       license: 'MIT',
     };
 
-    fs.writeFileSync(path.join(doorPath, 'package.json'), JSON.stringify(packageJson, null, 2));
+    fs.writeFileSync(path.join(targetDoorPath, 'package.json'), JSON.stringify(packageJson, null, 2));
 
     const tsconfig = {
       compilerOptions: {
@@ -2518,8 +2721,8 @@ app.post('/api/games/save', async (req, res) => {
       exclude: ['node_modules', 'dist'],
     };
 
-    fs.writeFileSync(path.join(doorPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
-    fs.writeFileSync(path.join(doorPath, 'index.ts'), code);
+    fs.writeFileSync(path.join(targetDoorPath, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+    fs.writeFileSync(path.join(targetDoorPath, 'index.ts'), code);
 
     const readme = `# ${name}
 
@@ -2535,10 +2738,10 @@ ${(features || []).map(f => `- ${f}`).join('\n')}
 *Generated with AI Game Wizard*
 `;
 
-    fs.writeFileSync(path.join(doorPath, 'README.md'), readme);
+    fs.writeFileSync(path.join(targetDoorPath, 'README.md'), readme);
 
     // Install dependencies
-    execSync('npm install', { cwd: doorPath, stdio: 'ignore' });
+    execSync('npm install', { cwd: targetDoorPath, stdio: 'ignore' });
 
     console.log(`[OK] Game saved: ${doorId}`);
 

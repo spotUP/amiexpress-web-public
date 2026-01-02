@@ -67,7 +67,7 @@ export interface PerformanceMetrics {
 }
 
 export interface AppSettings {
-  theme: 'light' | 'dark';
+  theme: string;
   editorTheme: 'vs-dark' | 'vs-light';
   terminalFontSize: number;
   editorFontSize: number;
@@ -75,15 +75,23 @@ export interface AppSettings {
   showLineNumbers: boolean;
   enableKeyboardShortcuts: boolean;
   playbackSpeed: number;
+  // AI Settings
+  aiProvider: string;
+  aiModel: string;
+  aiFreeModelsOnly: boolean;
+  useReasoningModels: boolean;
 }
 
 export interface WebSocketMessage {
-  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus' | 'client-door-bundle' | 'debug' | 'auto-launch';
+  type: 'output' | 'input' | 'error' | 'status' | 'build' | 'doorList' | 'doorMetadata' | 'fileContent' | 'buildStatus' | 'client-door-bundle' | 'debug' | 'auto-launch' | 'door-message' | 'door-server-message';
   data: any;
   timestamp?: number;
   // For client-door-bundle messages
   doorId?: string;
   code?: string;
+  // For door-message and door-server-message
+  sessionId?: string;
+  event?: string;
 }
 
 export interface ConnectionStatus {

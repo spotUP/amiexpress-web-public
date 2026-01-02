@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Cpu, HardDrive, Zap, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, Cpu, HardDrive, Zap, Clock, TrendingUp, TrendingDown, X } from 'lucide-react';
 
 export interface PerformanceMetric {
   timestamp: number;
@@ -22,6 +22,7 @@ interface PerformanceProfilerProps {
   onStartProfiling: () => void;
   onStopProfiling: () => void;
   isProfiling: boolean;
+  onClose?: () => void;
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export const PerformanceProfiler: React.FC<PerformanceProfilerProps> = ({
   onStartProfiling,
   onStopProfiling,
   isProfiling,
+  onClose,
   className = '',
 }) => {
   const [tab, setTab] = useState<'realtime' | 'analysis'>('realtime');
@@ -93,16 +95,26 @@ export const PerformanceProfiler: React.FC<PerformanceProfilerProps> = ({
           <Activity className="w-5 h-5 text-green-500" />
           <h3 className="font-semibold text-white">Performance Profiler</h3>
         </div>
-        <button
-          onClick={isProfiling ? onStopProfiling : onStartProfiling}
-          className={`px-4 py-1.5 rounded transition-all ${
-            isProfiling
-              ? 'bg-red-600 hover:bg-red-700 animate-pulse'
-              : 'bg-green-600 hover:bg-green-700'
-          } text-white`}
-        >
-          {isProfiling ? 'Stop' : 'Start'} Profiling
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={isProfiling ? onStopProfiling : onStartProfiling}
+            className={`px-4 py-1.5 rounded transition-all ${
+              isProfiling
+                ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                : 'bg-green-600 hover:bg-green-700'
+            } text-white`}
+          >
+            {isProfiling ? 'Stop' : 'Start'} Profiling
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-gray-700 rounded transition-colors text-gray-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

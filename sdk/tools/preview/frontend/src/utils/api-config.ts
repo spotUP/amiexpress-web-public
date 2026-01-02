@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * SDK API Configuration
  *
@@ -19,7 +20,9 @@
 // In dev mode, Vite proxy handles this. In production, we need explicit URL
 // Use env var VITE_SDK_API_URL to override
 export const SDK_API_URL = import.meta.env.VITE_SDK_API_URL ||
-  (import.meta.env.DEV ? '' : `http://${window.location.hostname}:8080`);
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? `${window.location.protocol}//${window.location.hostname}:8080`
+    : (import.meta.env.DEV ? '' : `http://${window.location.hostname}:8080`));
 
 /**
  * Helper to construct full API URL

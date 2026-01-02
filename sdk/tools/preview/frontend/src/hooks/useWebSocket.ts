@@ -31,7 +31,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<any>(null);
   const isMountedRef = useRef(true);
 
   // Store callbacks in refs to avoid recreating connect function

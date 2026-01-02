@@ -2,11 +2,7 @@ import { useState, useRef, useEffect, useCallback, lazy, Suspense, FormEvent } f
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import {
   // Lazy-loaded heavy components moved below
-  BuildStatusEnhanced,
   ScreenshotCapture,
-  SessionRecorder,
-  ReleaseArchive,
-  DoorInfo,
   Header,
   DoorListEnhanced,
   Settings,
@@ -15,13 +11,9 @@ import {
   KeyboardOverlay,
   CRTEffect,
   StatusBar,
-  QuickActions,
-  GradientMesh,
-  OnboardingTour,
   HapticFeedback,
   EnhancedLoader,
   TerminalTabs,
-  CodeMinimap,
 } from './components';
 import { BBSTerminal, type BBSTerminalRef } from './components/BBSTerminal';
 import type { XTermTerminalRef } from './components/XTermTerminal';
@@ -40,7 +32,7 @@ import {
   ConnectionStatus,
   SessionEvent,
 } from './types';
-import { ChevronLeft, ChevronRight, Play, Hammer, Keyboard, Wand2, Camera, Save, Sparkles, Layout, Monitor, Code2, Columns, File, FileText, Copy, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, Keyboard, Wand2, Camera, Sparkles, Monitor, Code2, Columns, File, FileText, Copy, Trash2 } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
 import { SDK_API_URL } from './utils/api-config';
 
@@ -104,7 +96,7 @@ const CodeMinimapLazy = lazy(() =>
 );
 
 const defaultSettings: AppSettings = {
-  theme: 'dark',
+  theme: 'dark-blue',
   editorTheme: 'vs-dark',
   terminalFontSize: 14,
   editorFontSize: 14,
@@ -112,6 +104,11 @@ const defaultSettings: AppSettings = {
   showLineNumbers: true,
   enableKeyboardShortcuts: true,
   playbackSpeed: 1.0,
+  // AI Settings
+  aiProvider: 'openrouter',
+  aiModel: 'meta-llama/llama-4-maverick:free',
+  aiFreeModelsOnly: true,
+  useReasoningModels: true,
 };
 
 function App() {
@@ -125,11 +122,28 @@ function App() {
 
   // State management
   const [settings, setSettings] = useLocalStorage<AppSettings>('sdk-preview-settings', defaultSettings);
+
+  // Ensure all settings fields are initialized (for existing users with old settings)
+  useEffect(() => {
+    let needsUpdate = false;
+    const updatedSettings = { ...settings };
+
+    for (const key in defaultSettings) {
+      if (updatedSettings[key as keyof AppSettings] === undefined) {
+        (updatedSettings as any)[key] = (defaultSettings as any)[key];
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      setSettings(updatedSettings);
+    }
+  }, [settings, setSettings]);
+
   const [showSettings, setShowSettings] = useState(false);
   const [showGameWizard, setShowGameWizard] = useState(false);
   const [showKeyboardOverlay, setShowKeyboardOverlay] = useState(true);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [celebrationMessage, setCelebrationMessage] = useState('Success!');
   const [enableCRT, setEnableCRT] = useState(false);
   const [doorsLoading, setDoorsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
@@ -144,7 +158,8 @@ function App() {
   const [showPerformanceProfiler, setShowPerformanceProfiler] = useState(false);
   const [terminalTabs] = useState([
     { id: 'bbs', name: 'BBS', active: true },
-    { id: 'logs', name: 'Logs', active: false }
+    { id: 'logs', name: 'Logs', active: false },
+    { id: 'ai', name: 'AI Assistant', active: false }
   ]);
   const [activeTerminalTab, setActiveTerminalTab] = useState('bbs');
 
@@ -155,8 +170,7 @@ function App() {
 
   // Hot reload state
   const [hotReloadEnabled, setHotReloadEnabled] = useLocalStorage('sdk-hot-reload-enabled', true);
-  const [hotReloadDelay, setHotReloadDelay] = useLocalStorage('sdk-hot-reload-delay', 2000);
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveTimer = useRef<any>(null);
 
   // New UX features state
   const [showOnboarding, setShowOnboarding] = useLocalStorage('sdk-preview-onboarding-complete', false);
@@ -192,6 +206,12 @@ function App() {
     '',
   ]);
   const [logsOutput, setLogsOutput] = useState<string[]>(initialLogs.current);
+  const [aiOutput, setAiOutput] = useState<string[]>([
+    '\x1b[35m=== AI Assistant Output ===\x1b[0m',
+    '',
+    'AI thoughts and responses will appear here.',
+    '',
+  ]);
 
   const BBS_API_URL =
     import.meta.env.VITE_BBS_API_URL ||
@@ -289,6 +309,15 @@ function App() {
   const resetLogs = useCallback(() => {
     setLogsOutput(initialLogs.current);
   }, []);
+
+  const resetAIOutput = useCallback(() => {
+    setAiOutput([
+      '\x1b[35m=== AI Assistant Output ===\x1b[0m',
+      '',
+      'AI thoughts and responses will appear here.',
+      '',
+    ]);
+  }, []);
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTermTerminalRef>(null);
   const bbsTerminalRef = useRef<BBSTerminalRef>(null);
@@ -370,8 +399,9 @@ function App() {
   // WebSocket connection
   // SDK preview backend always runs on port 8080
   // Use env var VITE_SDK_PREVIEW_WS_URL to override
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = import.meta.env.VITE_SDK_PREVIEW_WS_URL ||
-                `ws://${window.location.hostname}:8080`;
+                `${wsProtocol}//${window.location.hostname}:8080`;
 
   const { status: wsStatus, send: wsSend, ws: wsRef } = useWebSocket({
     url: wsUrl,
@@ -409,7 +439,7 @@ function App() {
       case 'debug':
         // Debug logs from the server go to Logs tab
         setLogsOutput((prev) => [...prev, message.data]);
-        recorder.addEvent('debug', message.data, message.data);
+        recorder.addEvent('output', `[DEBUG] ${message.data}`, message.data);
         break;
 
       case 'doorList':
@@ -568,102 +598,105 @@ function App() {
 
       case 'client-door-bundle':
         // Client door: execute bundled code in browser - output goes to BBS tab
-        setBbsOutput((prev) => [
-          ...prev,
-          `\x1b[36m[CLIENT DOOR] Received bundle for ${message.doorId} (${message.code.length} bytes)\x1b[0m`,
-          `\x1b[32m[CLIENT DOOR] Executing in browser with Web Audio API...\x1b[0m`,
-          '',
-        ]);
-        (async () => {
-          try {
-          // Set up window.__BBS__ for the door to use
-          // This provides a Socket.IO-compatible interface wrapping the WebSocket
-          const sessionId = `client-door-${message.doorId}-${Date.now()}`;
+        if (message.code) {
+          setBbsOutput((prev) => [
+            ...prev,
+            `\x1b[36m[CLIENT DOOR] Received bundle for ${message.doorId} (${message.code!.length} bytes)\x1b[0m`,
+            `\x1b[32m[CLIENT DOOR] Executing in browser with Web Audio API...\x1b[0m`,
+            '',
+          ]);
+          (async () => {
+            try {
+            // Set up window.__BBS__ for the door to use
+            // This provides a Socket.IO-compatible interface wrapping the WebSocket
+            const sessionId = `client-door-${message.doorId}-${Date.now()}`;
 
-          // Create a Socket.IO-like wrapper around the WebSocket
-          const socketIOWrapper = {
-            emit: (event: string, data: any) => {
-              // Handle door:client:message events (output from ClientDoor)
-              if (event === 'door:client:message' && data.message) {
-                const msg = data.message;
-                // Handle OUTPUT messages - display in BBS terminal
-                if (msg.type === 'output') {
-                  setBbsOutput((prev) => [...prev, msg.data.text || msg.data]);
+            // Create a Socket.IO-like wrapper around the WebSocket
+            const socketIOWrapper = {
+              emit: (event: string, data: any) => {
+                // Handle door:client:message events (output from ClientDoor)
+                if (event === 'door:client:message' && data.message) {
+                  const msg = data.message;
+                  // Handle OUTPUT messages - display in BBS terminal
+                  if (msg.type === 'output') {
+                    setBbsOutput((prev) => [...prev, msg.data.text || msg.data]);
+                  }
+                  // Could handle other message types here
                 }
-                // Could handle other message types here
-              }
 
-              // Also send to server if needed
-              if (wsRef.current) {
-                wsSend({
-                  type: 'door-message',
+                // Also send to server if needed
+                if (wsRef.current) {
+                  wsSend({
+                    type: 'door-message' as any,
+                    sessionId,
+                    event,
+                    data,
+                  });
+                }
+              },
+              on: (event: string, handler: (data: any) => void) => {
+                // Store event handlers for this session
+                const win = window as any;
+                if (!win.__BBS_HANDLERS__) {
+                  win.__BBS_HANDLERS__ = {};
+                }
+                if (!win.__BBS_HANDLERS__[sessionId]) {
+                  win.__BBS_HANDLERS__[sessionId] = {};
+                }
+                win.__BBS_HANDLERS__[sessionId][event] = handler;
+              },
+            };
+
+            // Set up global __BBS__ object for the door
+            (window as any).__BBS__ = {
+              socket: socketIOWrapper,
+              sessionId,
+            };
+
+            // Execute the bundled code
+            // The code will detect window.__BBS__ and use it for communication
+            const blobUrl = URL.createObjectURL(
+              new Blob([message.code!], { type: 'application/javascript' })
+            );
+            try {
+              await import(/* @vite-ignore */ blobUrl);
+            } finally {
+              URL.revokeObjectURL(blobUrl);
+            }
+
+            // Set active client door session
+            setActiveClientDoorSession(sessionId);
+
+            // Send CONNECT message to initialize the door
+            // This simulates the server sending user info to the door
+            setTimeout(() => {
+              const connectEvent = new CustomEvent('bbs:door:message', {
+                detail: {
                   sessionId,
-                  event,
-                  data,
-                });
-              }
-            },
-            on: (event: string, handler: (data: any) => void) => {
-              // Store event handlers for this session
-              if (!window.__BBS_HANDLERS__) {
-                window.__BBS_HANDLERS__ = {};
-              }
-              if (!window.__BBS_HANDLERS__[sessionId]) {
-                window.__BBS_HANDLERS__[sessionId] = {};
-              }
-              window.__BBS_HANDLERS__[sessionId][event] = handler;
-            },
-          };
-
-          // Set up global __BBS__ object for the door
-          (window as any).__BBS__ = {
-            socket: socketIOWrapper,
-            sessionId,
-          };
-
-          // Execute the bundled code
-          // The code will detect window.__BBS__ and use it for communication
-          const blobUrl = URL.createObjectURL(
-            new Blob([message.code], { type: 'application/javascript' })
-          );
-          try {
-            await import(/* @vite-ignore */ blobUrl);
-          } finally {
-            URL.revokeObjectURL(blobUrl);
-          }
-
-          // Set active client door session
-          setActiveClientDoorSession(sessionId);
-
-          // Send CONNECT message to initialize the door
-          // This simulates the server sending user info to the door
-          setTimeout(() => {
-            const connectEvent = new CustomEvent('bbs:door:message', {
-              detail: {
-                sessionId,
-                message: {
-                  type: 'connect',
-                  user: {
-                    id: 1,
-                    username: 'PreviewUser',
-                    secLevel: 255,
+                  message: {
+                    type: 'connect',
+                    user: {
+                      id: 1,
+                      username: 'PreviewUser',
+                      secLevel: 255,
+                    },
                   },
                 },
-              },
-            });
-            window.dispatchEvent(connectEvent);
-          }, 100);
+              });
+              window.dispatchEvent(connectEvent);
+            }, 100);
 
-          soundEffects.notification();
-          } catch (err: any) {
-            // Execution errors go to Logs tab
-            setLogsOutput((prev) => [
-              ...prev,
-              `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
-            ]);
-            soundEffects.error();
-          }
-        })();
+            soundEffects.notification();
+            } catch (err: any) {
+              // Execution errors go to Logs tab
+              setLogsOutput((prev) => [
+                ...prev,
+                `\x1b[31m[CLIENT DOOR] Execution error: ${err.message}\x1b[0m`,
+              ]);
+              soundEffects.error();
+            }
+          })();
+        }
         break;
     }
   }
@@ -743,9 +776,9 @@ function App() {
         // Auto-build
         setBuildStatus((prev) => ({ ...prev, building: true }));
         wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
-        toast.info('Hot reload...', 'Auto-building changes', { duration: 2000 });
+        toast.info('Hot reload...', 'Auto-building changes');
         soundEffects.notification();
-      }, hotReloadDelay);
+      }, 2000);
     }
   };
 
@@ -877,16 +910,6 @@ function App() {
           xtermRef.current?.focus();
         }, 100);
       }, 1500);
-    }
-  };
-
-  // Handle build door
-  const handleBuildDoor = () => {
-    if (selectedDoor) {
-      setBuildStatus((prev) => ({ ...prev, building: true }));
-      wsSend({ type: 'input', data: `buildDoor:${selectedDoor.id}` });
-      toast.info('Building door...', `Compiling ${selectedDoor.name}`);
-      soundEffects.notification();
     }
   };
 
@@ -1458,7 +1481,50 @@ function App() {
                         <BBSTerminal
                           ref={bbsTerminalRef}
                           fontSize={settings.terminalFontSize}
+                          onAnsiOutput={(data) => {
+                            // Filter out screen clear sequences for the scrollback log
+                            const filtered = data.replace(/\x1b\[2J/g, '').replace(/\x1b\[H/g, '');
+                            if (filtered) {
+                              setLogsOutput((prev) => [...prev, filtered]);
+                            }
+                          }}
                         />
+                      ) : activeTerminalTab === 'ai' ? (
+                        <Suspense fallback={<div className="p-4 text-gray-400">Loading AI log...</div>}>
+                          <div className="h-full flex flex-col gap-2">
+                            <div className="flex justify-end gap-2 px-2 pt-1">
+                              <button
+                                onClick={() => {
+                                  const text = aiOutput
+                                    .map((line) => line.replace(/\x1b\[[0-9;]*m/g, ''))
+                                    .join('\n');
+                                  navigator.clipboard
+                                    .writeText(text)
+                                    .catch((err) => console.error('Copy failed', err));
+                                }}
+                                className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 inline-flex items-center gap-1 text-xs"
+                                title="Copy AI log"
+                              >
+                                <Copy className="w-4 h-4" />
+                                <span className="hidden sm:inline">Copy</span>
+                              </button>
+                              <button
+                                onClick={resetAIOutput}
+                                className="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 inline-flex items-center gap-1 text-xs"
+                                title="Clear AI log"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="hidden sm:inline">Clear</span>
+                              </button>
+                            </div>
+                            <div className="flex-1 min-h-0">
+                              <XTermTerminal
+                                output={aiOutput}
+                                fontSize={settings.terminalFontSize}
+                              />
+                            </div>
+                          </div>
+                        </Suspense>
                       ) : (
                       <Suspense fallback={<div className="p-4 text-gray-400">Loading terminal...</div>}>
                         <div className="h-full flex flex-col gap-2">
@@ -1519,11 +1585,22 @@ function App() {
               <Panel defaultSize={20} minSize={15} maxSize={40}>
                 <Suspense fallback={<div className="p-4 text-gray-400">Loading AI tools...</div>}>
                   <AIPromptPanel
+                    settings={settings}
+                    onSettingsChange={setSettings}
                     selectedDoor={selectedDoor?.id || null}
-                    currentFile={currentFile}
+                    currentFile={currentFile && currentFile.content ? {
+                      path: currentFile.path,
+                      content: currentFile.content
+                    } : null}
                     buildErrors={buildStatus.errors}
                     onApplyCode={handleApplyCode}
                     onShowDiff={handleShowDiff}
+                    onAIOutput={(text) => {
+                      setAiOutput((prev) => [...prev, text]);
+                      if (activeTerminalTab !== 'ai') {
+                        setActiveTerminalTab('ai');
+                      }
+                    }}
                   />
                 </Suspense>
               </Panel>
@@ -1711,10 +1788,12 @@ function App() {
                       <div className="h-full overflow-y-auto p-4 animate-fadeIn">
                         <Suspense fallback={<div className="text-gray-400">Loading git panel...</div>}>
                           <GitIntegration
-                            doorPath={selectedDoor?.id || ''}
-                            onCommit={(message) => {
+                            status={null}
+                            commits={[]}
+                            branches={[]}
+                            onCommit={(message, files) => {
                               soundEffects.success();
-                              toast.success('Committed!', message);
+                              toast.success('Committed!', `${message} (${files.length} files)`);
                             }}
                             onPush={() => {
                               soundEffects.success();
@@ -1724,6 +1803,8 @@ function App() {
                               soundEffects.notification();
                               toast.info('Pulled!', 'Updates pulled from remote');
                             }}
+                            onBranchSwitch={() => {}}
+                            onRefresh={() => {}}
                           />
                         </Suspense>
                       </div>
@@ -1806,9 +1887,6 @@ function App() {
                 const newDoor = doors.find((d) => d.id === doorId);
                 if (newDoor) {
                   handleDoorSelect(newDoor);
-                  // Trigger celebration for game creation!
-                  setCelebrationMessage('🎮 Game Created!');
-                  setShowSuccessCelebration(true);
                   // Auto-launch the newly created game after a brief delay
                   setTimeout(() => {
                     handleRunDoor();
@@ -1849,11 +1927,15 @@ function App() {
         </div>
       )}
 
-      {/* Performance Profiler */}
       {showPerformanceProfiler && (
         <div className="fixed top-4 right-4 z-40">
           <Suspense fallback={<div className="text-gray-200 p-3 bg-gray-800 rounded">Loading profiler...</div>}>
             <PerformanceProfiler
+              metrics={performanceMetrics}
+              snapshots={performanceSnapshots}
+              onStartProfiling={handleStartProfiling}
+              onStopProfiling={handleStopProfiling}
+              isProfiling={isProfiling}
               onClose={() => setShowPerformanceProfiler(false)}
             />
           </Suspense>

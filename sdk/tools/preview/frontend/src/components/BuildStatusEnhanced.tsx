@@ -35,7 +35,7 @@ export const BuildStatusEnhanced: React.FC<BuildStatusProps> = ({
         { id: 'validate', label: 'Validating output...', status: 'pending' },
       ]);
 
-      const timers: NodeJS.Timeout[] = [];
+      const timers: any[] = [];
 
       // Step 1: Init (0-25%)
       timers.push(

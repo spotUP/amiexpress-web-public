@@ -3,7 +3,7 @@ import { Sun, Moon, Settings, Wifi, WifiOff, Loader } from 'lucide-react';
 import { ConnectionStatus } from '../types';
 
 interface HeaderProps {
-  theme: 'light' | 'dark';
+  theme: string;
   onThemeToggle: () => void;
   connectionStatus: ConnectionStatus;
   onSettingsClick: () => void;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { ConnectionStatus as ConnectionStatusType } from '../../types';
 
 interface ConnectionBannerProps {

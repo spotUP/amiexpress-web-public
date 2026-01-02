@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Folder, File, X, Edit2, Trash2, FolderPlus, Check, X as XIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { Folder, File, Edit2, Trash2, FolderPlus, Check, X as XIcon } from 'lucide-react';
 
 interface FileNode {
   id: string;

@@ -1,13 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Wand2, Send, Loader2, Sparkles, CheckCircle, XCircle, Code, AlertCircle, History, Trash2, RotateCcw } from 'lucide-react';
+import { Send, Loader2, Sparkles, CheckCircle, XCircle, Code, History, Trash2, RotateCcw, ChevronDown } from 'lucide-react';
 import { SDK_API_URL } from '../utils/api-config';
+import { AppSettings } from '../types';
 
 interface AIPromptPanelProps {
+  settings: AppSettings;
+  onSettingsChange: (settings: AppSettings) => void;
   selectedDoor: string | null;
   currentFile: { path: string; content: string } | null;
   buildErrors: any[];
   onApplyCode: (code: string, filePath: string) => void;
   onShowDiff: (original: string, suggested: string, filePath: string, explanation?: string) => void;
+  onAIOutput?: (text: string) => void;
   className?: string;
 }
 
@@ -15,7 +19,7 @@ interface AIResponse {
   success: boolean;
   suggestion?: string;
   explanation?: string;
-  filesToModify?: Array<{
+  filesToModify?: Array<{ 
     path: string;
     originalContent: string;
     suggestedContent: string;
@@ -33,33 +37,82 @@ interface ConversationEntry {
 }
 
 export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
+  settings,
+  onSettingsChange,
   selectedDoor,
   currentFile,
   buildErrors,
   onApplyCode,
   onShowDiff,
+  onAIOutput,
   className = '',
 }) => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AIResponse | null>(null);
-  const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('openrouter-api-key') || '';
-  });
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState(settings.aiModel || 'meta-llama/llama-4-maverick:free');
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [progressDots, setProgressDots] = useState('');
+  
   const [conversationHistory, setConversationHistory] = useState<ConversationEntry[]>(() => {
     const stored = localStorage.getItem('ai-conversation-history');
     return stored ? JSON.parse(stored) : [];
   });
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const progressInterval = useRef<any>(null);
 
-  // Save API key to localStorage
+  // Sync selected model back to settings
   useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('openrouter-api-key', apiKey);
+    if (selectedModel && selectedModel !== settings.aiModel) {
+      onSettingsChange({ ...settings, aiModel: selectedModel });
     }
-  }, [apiKey]);
+  }, [selectedModel]);
+
+  // Get API key for the current provider
+  const getApiKey = () => {
+    const savedKeys = JSON.parse(localStorage.getItem('ai_api_keys') || '{}');
+    if (settings.aiProvider === 'openrouter' && !savedKeys.openrouter) {
+      return localStorage.getItem('openrouter-api-key') || '';
+    }
+    return savedKeys[settings.aiProvider] || '';
+  };
+
+  // Load models when provider or settings change
+  useEffect(() => {
+    const fetchModels = async () => {
+      if (settings.aiProvider === 'openrouter') {
+        setLoadingModels(true);
+        try {
+          const res = await fetch(`${SDK_API_URL}/api/ai-models/openrouter/free?reasoning=${settings.useReasoningModels}`);
+          if (res.ok) {
+            const data = await res.json();
+            setModels(data);
+            if (data.length > 0 && !data.includes(selectedModel)) {
+              setSelectedModel(data[0]);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch models:', error);
+        } finally {
+          setLoadingModels(false);
+        }
+      } else {
+        setModels([]);
+      }
+    };
+
+    fetchModels();
+  }, [settings.aiProvider, settings.aiFreeModelsOnly, settings.useReasoningModels]);
+
+  // Update selected model when settings change (if not openrouter)
+  useEffect(() => {
+    if (settings.aiProvider !== 'openrouter') {
+      setSelectedModel(settings.aiModel);
+    }
+  }, [settings.aiModel, settings.aiProvider]);
 
   // Save conversation history to localStorage
   useEffect(() => {
@@ -68,21 +121,43 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
 
   // Auto-focus textarea when component mounts
   useEffect(() => {
-    if (textareaRef.current && !showApiKeyInput) {
+    if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [showApiKeyInput]);
+  }, []);
+
+  // Handle dots animation
+  useEffect(() => {
+    if (loading) {
+      progressInterval.current = setInterval(() => {
+        setProgressDots(prev => prev.length >= 20 ? '.' : prev + '.');
+      }, 200);
+    } else {
+      if (progressInterval.current) clearInterval(progressInterval.current);
+      setProgressDots('');
+    }
+    return () => {
+      if (progressInterval.current) clearInterval(progressInterval.current);
+    };
+  }, [loading]);
 
   const handleSubmit = async () => {
     if (!prompt.trim() || !selectedDoor) return;
 
-    if (!apiKey) {
-      setShowApiKeyInput(true);
+    const apiKey = getApiKey();
+    if (!apiKey && settings.aiProvider !== 'ollama') {
+      alert(`Please set your API key for ${settings.aiProvider} in Settings.`);
       return;
     }
 
     setLoading(true);
     setResponse(null);
+
+    // Send to AI tab
+    if (onAIOutput) {
+      onAIOutput(`\x1b[36m[USER]\x1b[0m ${prompt.trim()}`);
+      onAIOutput(`\x1b[90m[SYSTEM] Calling ${settings.aiProvider} with model ${selectedModel}...\x1b[0m`);
+    }
 
     try {
       const contextData = {
@@ -94,6 +169,8 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         buildErrors: buildErrors,
         prompt: prompt.trim(),
         apiKey: apiKey,
+        provider: settings.aiProvider,
+        model: selectedModel,
       };
 
       const res = await fetch(`${SDK_API_URL}/api/ai-prompt`, {
@@ -105,12 +182,27 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
       });
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to get AI response');
+        let errorMsg = 'Failed to get AI response';
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
 
       const data: AIResponse = await res.json();
       setResponse(data);
+
+      if (onAIOutput) {
+        if (data.success) {
+          onAIOutput(`\x1b[32m[AI EXPLANATION]\x1b[0m ${data.explanation}`);
+          if (data.filesToModify && data.filesToModify.length > 0) {
+            onAIOutput(`\x1b[32m[AI SUGGESTION]\x1b[0m Suggested changes for ${data.filesToModify[0].path}`);
+          }
+        } else {
+          onAIOutput(`\x1b[31m[AI ERROR]\x1b[0m ${data.error}`);
+        }
+      }
 
       // Save to conversation history
       if (selectedDoor) {
@@ -122,7 +214,7 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
           response: data,
           filePath: currentFile?.path,
         };
-        setConversationHistory((prev) => [entry, ...prev].slice(0, 50)); // Keep last 50
+        setConversationHistory((prev) => [entry, ...prev].slice(0, 50));
       }
 
       // Clear prompt on success
@@ -130,17 +222,20 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         setPrompt('');
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       setResponse({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMsg,
       });
+      if (onAIOutput) {
+        onAIOutput(`\x1b[31m[AI ERROR]\x1b[0m ${errorMsg}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Ctrl+Enter or Cmd+Enter to submit
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
@@ -149,8 +244,6 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
 
   const handleApplySuggestion = () => {
     if (!response?.filesToModify || response.filesToModify.length === 0) return;
-
-    // For now, apply to the first file
     const file = response.filesToModify[0];
     onApplyCode(file.suggestedContent, file.path);
     setResponse(null);
@@ -158,69 +251,62 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
 
   const handleShowDiff = () => {
     if (!response?.filesToModify || response.filesToModify.length === 0) return;
-
     const file = response.filesToModify[0];
     onShowDiff(file.originalContent, file.suggestedContent, file.path, response.explanation);
   };
 
-  // Handle rerunning a prompt from history
   const handleRerunPrompt = (entry: ConversationEntry) => {
     setPrompt(entry.prompt);
     setShowHistory(false);
     textareaRef.current?.focus();
   };
 
-  // Clear history
   const handleClearHistory = () => {
     if (window.confirm('Clear all conversation history? This cannot be undone.')) {
       setConversationHistory([]);
     }
   };
 
-  // Filter history by current door
   const filteredHistory = selectedDoor
     ? conversationHistory.filter((entry) => entry.doorId === selectedDoor)
     : conversationHistory;
 
   return (
     <div className={`flex h-full bg-[#1E1E1E] border-t border-gray-700 ${className}`}>
-      {/* Main Panel */}
       <div className="flex-1 flex flex-col min-w-0">
-      {/* Header */}
       <div className="bg-[#252526] px-4 py-2 border-b border-gray-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-purple-400" />
-          <span className="text-sm font-medium text-gray-300">AI Door Assistant</span>
+          <span className="text-sm font-medium text-gray-300">AI Assistant</span>
           {selectedDoor && (
             <span className="text-xs text-gray-500">({selectedDoor})</span>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          {apiKey ? (
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-500" />
-              <span className="text-xs text-gray-500">API Key Set</span>
-              <button
-                onClick={() => setShowApiKeyInput(true)}
-                className="text-xs text-blue-400 hover:text-blue-300"
+        <div className="flex items-center gap-2">
+          {settings.aiProvider === 'openrouter' && models.length > 0 && (
+            <div className="relative group">
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="appearance-none bg-[#1E1E1E] border border-gray-700 rounded px-2 py-1 pr-6 text-xs text-gray-300 focus:outline-none focus:border-blue-500 cursor-pointer"
               >
-                Change
-              </button>
+                {models.map(m => (
+                  <option key={m} value={m}>{m.split('/').pop()}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-gray-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-          ) : (
-            <button
-              onClick={() => setShowApiKeyInput(true)}
-              className="flex items-center gap-1 text-xs text-yellow-400 hover:text-yellow-300"
-            >
-              <AlertCircle className="w-4 h-4" />
-              Set API Key
-            </button>
           )}
+          
+          {loadingModels && (
+            <Loader2 className="w-3 h-3 text-gray-500 animate-spin" />
+          )}
+
+          <div className="h-4 w-px bg-gray-700 mx-1" />
+
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-              showHistory ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'
-            }`}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${showHistory ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
             title="Conversation History"
           >
             <History className="w-3 h-3" />
@@ -232,39 +318,18 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         </div>
       </div>
 
-      {/* API Key Input */}
-      {showApiKeyInput && (
-        <div className="bg-[#252526] px-4 py-3 border-b border-gray-700">
-          <div className="flex items-center gap-2">
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter OpenRouter API Key (sk-or-...)"
-              className="flex-1 bg-[#1E1E1E] border border-gray-700 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-            />
-            <button
-              onClick={() => setShowApiKeyInput(false)}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            >
-              Save
-            </button>
-          </div>
-          <div className="mt-2 text-xs text-gray-500">
-            Get your free API key at{' '}
-            <a
-              href="https://openrouter.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
-            >
-              openrouter.ai
-            </a>
+      {loading && (
+        <div className="bg-[#252526] px-4 py-2 border-b border-gray-700">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+            <div className="flex-1 flex items-center gap-1">
+              <span className="text-xs font-mono text-purple-400">Thinking</span>
+              <span className="text-xs font-mono text-purple-400">{progressDots}</span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Response Display */}
       {response && (
         <div className="bg-[#252526] px-4 py-3 border-b border-gray-700 max-h-48 overflow-y-auto">
           {response.success ? (
@@ -313,7 +378,6 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         </div>
       )}
 
-      {/* Prompt Input */}
       <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
         <textarea
           ref={textareaRef}
@@ -322,26 +386,24 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
           onKeyDown={handleKeyDown}
           placeholder={
             selectedDoor
-              ? "Ask AI to improve your door (e.g., 'Add color cycling animation', 'Fix the game loop', 'Optimize performance')...\n\nPress Ctrl+Enter to submit"
+              ? "Ask AI to improve your door...\n\nPress Ctrl+Enter to submit"
               : 'Select a door to start using AI assistance...'
           }
           disabled={!selectedDoor || loading}
           className="flex-1 w-full bg-[#252526] border border-gray-700 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none font-mono"
         />
 
-        {/* Action Buttons */}
         <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 flex flex-col gap-1">
             {currentFile && (
               <span>
                 Editing: <span className="text-blue-400">{currentFile.path}</span>
               </span>
             )}
-            {buildErrors.length > 0 && (
-              <span className="ml-3 text-yellow-400">
-                {buildErrors.length} build error{buildErrors.length !== 1 ? 's' : ''} detected
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Provider: <span className="text-purple-400 font-medium capitalize">{settings.aiProvider}</span></span>
+              <span className="text-gray-400">Model: <span className="text-blue-400 font-medium">{(selectedModel || '').split('/').pop()}</span></span>
+            </div>
           </div>
 
           <button
@@ -364,32 +426,31 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
         </div>
       </div>
 
-      {/* Quick Suggestions */}
       {!loading && !response && selectedDoor && (
         <div className="px-4 pb-3 flex flex-wrap gap-2">
           <span className="text-xs text-gray-500">Quick actions:</span>
           {buildErrors.length > 0 && (
             <button
-              onClick={() => setPrompt('Fix the build errors in this file')}
+              onClick={() => { setPrompt('Fix the build errors in this file'); }}
               className="text-xs px-2 py-1 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded transition-colors"
             >
               Fix Build Errors
             </button>
           )}
           <button
-            onClick={() => setPrompt('Add comments and improve code documentation')}
+            onClick={() => { setPrompt('Add comments and improve code documentation'); }}
             className="text-xs px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded transition-colors"
           >
             Add Comments
           </button>
           <button
-            onClick={() => setPrompt('Optimize this code for better performance')}
+            onClick={() => { setPrompt('Optimize this code for better performance'); }}
             className="text-xs px-2 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded transition-colors"
           >
             Optimize Code
           </button>
           <button
-            onClick={() => setPrompt('Add error handling and validation')}
+            onClick={() => { setPrompt('Add error handling and validation'); }}
             className="text-xs px-2 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded transition-colors"
           >
             Add Error Handling
@@ -398,7 +459,6 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
       )}
       </div>
 
-      {/* Conversation History Sidebar */}
       {showHistory && (
         <div className="w-80 border-l border-gray-700 bg-[#252526] flex flex-col">
           <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
@@ -417,8 +477,6 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
             {filteredHistory.length === 0 ? (
               <div className="text-center text-gray-500 text-sm mt-8">
                 No conversation history yet.
-                <br />
-                Start asking questions!
               </div>
             ) : (
               <div className="space-y-2">
@@ -440,10 +498,7 @@ export const AIPromptPanel: React.FC<AIPromptPanelProps> = ({
                         )}
                       </div>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRerunPrompt(entry);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleRerunPrompt(entry); }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-700 rounded"
                         title="Rerun this prompt"
                       >

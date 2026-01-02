@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, CheckCircle, XCircle, Info, AlertCircle, Play, Hammer, Wand2, X } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Info, AlertCircle, Play, X } from 'lucide-react';
 
 export interface ActivityItem {
   id: string;

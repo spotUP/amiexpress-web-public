@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Star, Clock, Package, X, Wand2, Play, FileCode, Trash2, Download, Upload, ServerCog, ServerOff, FolderInput } from 'lucide-react';
+import { Search, Star, Clock, Package, X, Wand2, Play, FileCode, Trash2, Download, ServerCog, ServerOff, FolderInput } from 'lucide-react';
 import { DoorListItem } from '../types';
 import { formatRelativeTime } from '../utils/format';
 import { DoorListSkeleton } from './ui/Skeleton';

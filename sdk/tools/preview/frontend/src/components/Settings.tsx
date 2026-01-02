@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Monitor, Type, Keyboard, Key, Eye, EyeOff, Check, Zap } from 'lucide-react';
+import { X, Monitor, Type, Keyboard, Key, Eye, EyeOff, Check, Zap, Sparkles } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsProps {
@@ -414,6 +414,7 @@ export const Settings: React.FC<SettingsProps> = ({
               </p>
 
               {[
+                { id: 'openrouter', name: 'OpenRouter (Llama, Mistral, etc.)', placeholder: 'sk-or-...' },
                 { id: 'claude', name: 'Claude (Anthropic)', placeholder: 'sk-ant-...' },
                 { id: 'openai', name: 'OpenAI', placeholder: 'sk-...' },
                 { id: 'gemini', name: 'Google Gemini', placeholder: 'AIza...' },
@@ -463,6 +464,69 @@ export const Settings: React.FC<SettingsProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          </section>
+
+          {/* AI Prompt Configuration */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              <h3 className="text-lg font-semibold text-white">AI Prompt Configuration</h3>
+            </div>
+
+            <div className="ml-7 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Preferred AI Provider (for Door Assistant)
+                </label>
+                <select
+                  value={settings.aiProvider}
+                  onChange={(e) => updateSetting('aiProvider', e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="openrouter">OpenRouter (Recommended)</option>
+                  <option value="claude">Anthropic Claude</option>
+                  <option value="openai">OpenAI GPT</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="ollama">Ollama (Local)</option>
+                </select>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={settings.aiFreeModelsOnly}
+                    onChange={(e) => updateSetting('aiFreeModelsOnly', e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                      Free Models Only (OpenRouter)
+                    </span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Only list and use models that cost 0 credits on OpenRouter.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={settings.useReasoningModels}
+                    onChange={(e) => updateSetting('useReasoningModels', e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                      Use Reasoning Models
+                    </span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Include models with advanced reasoning capabilities (e.g., DeepSeek R1, Kimi, etc.)
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
           </section>
 
