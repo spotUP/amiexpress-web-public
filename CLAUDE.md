@@ -287,10 +287,49 @@ Check: `wc -c handoff.md` <5000. Archive details to `Documentation/`.
 - Context budget is 200K tokens - we need to make it last
 - Efficient sessions allow more work per conversation
 
-**Git Status Optimization:**
-- Keep .gitignore up-to-date to exclude generated/temporary files
-- Git status is included in every context window
-- 3000 untracked files = thousands of wasted tokens
+**Git Status Hygiene (CRITICAL for context efficiency):**
+
+Git status is included in EVERY context window. Bloated git status wastes massive tokens.
+
+**Monitor git status line count:**
+```bash
+git status --short | wc -l
+```
+- **Target:** <20 lines
+- **Warning:** >50 lines (check .gitignore and commit working code)
+- **Critical:** >100 lines (immediate cleanup required)
+
+**Prevent bloat - commit early and often:**
+- ❌ **WRONG**: Let 200+ files accumulate over multiple sessions
+- ✅ **CORRECT**: Commit working code after each significant feature/fix
+- Don't wait for "perfect" - commit incremental progress
+- Runtime files are auto-ignored, code changes should be committed
+
+**Keep .gitignore current:**
+- **Build artifacts:** `**src/**/*.{js,d.ts,d.ts.map,js.map}`
+- **Runtime files:** `*.user, user.data, Bulletins/bull*.txt, batch[0-9]`
+- **Backups:** `*.backup, *.backup-*, bbsConfig.info.pre-*`
+- **Reference docs:** Large directories in Documentation/7-Reference Sources/
+- **Node temp dirs:** `Node[0-9]*/` (for per-node runtime data)
+
+**File type audit - if you see many untracked files:**
+```bash
+git status --short | grep "^??" | awk '{print $2}' | grep -o '\.[^.]*$' | sort | uniq -c | sort -rn
+```
+- If you see hundreds of .map, .js, .d.ts files → missing .gitignore pattern
+- If you see hundreds of reference docs → add to .gitignore
+- If you see legitimate code files → commit them
+
+**Context impact examples:**
+- 1,500 untracked files = ~60K tokens wasted per session (30% of budget)
+- 200 modified files = ~35K tokens wasted per session (17% of budget)
+- 20 files = ~3K tokens (negligible overhead)
+
+**Session cleanup checklist:**
+1. Check git status line count before ending session
+2. If >50 lines: commit working code or update .gitignore
+3. Never leave 100+ files uncommitted across sessions
+4. Add new runtime file patterns to .gitignore immediately
 
 ---
 
