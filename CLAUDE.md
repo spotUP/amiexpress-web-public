@@ -267,6 +267,31 @@ Check: `wc -c handoff.md` <5000. Archive details to `Documentation/`.
 
 **Remember:** Good engineering = fix root causes. Workarounds = technical debt.
 
+### 15. CONTEXT EFFICIENCY - MINIMIZE TOKEN USAGE
+
+**Every Read/Edit operation costs tokens.** Be surgical and efficient.
+
+**File Operations Best Practices:**
+1. **Plan edits first** - Know exactly what sections you need before reading
+2. **Read larger chunks once** - Single Read operation for entire relevant section (not multiple small reads)
+3. **Batch edits** - Make multiple related edits in fewer Edit operations
+4. **Avoid re-reading** - Keep track of what you've already seen
+
+**Examples:**
+- ❌ **WRONG**: Read lines 100-200, then 200-300, then 300-400 (3 reads = 3x overhead)
+- ✅ **CORRECT**: Read lines 100-400 once (1 read, plan all edits, execute)
+
+**Why this matters:**
+- Each tool call has formatting/reminder overhead (~200-500 tokens)
+- Reading 300 lines in 3 chunks costs more than reading 300 lines once
+- Context budget is 200K tokens - we need to make it last
+- Efficient sessions allow more work per conversation
+
+**Git Status Optimization:**
+- Keep .gitignore up-to-date to exclude generated/temporary files
+- Git status is included in every context window
+- 3000 untracked files = thousands of wasted tokens
+
 ---
 
 ## Project Overview

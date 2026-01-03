@@ -265,3 +265,4 @@ a.out
 # Bulletins/bull*.txt
 bbsConfig.info.backup
 bbsConfig.info.txt
+Node[0-9]*/

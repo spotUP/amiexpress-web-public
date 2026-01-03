@@ -1870,6 +1870,12 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const { content, isPetscii, filePath } = screenData;
     // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
     session.lastScreenFilePath = filePath;
+
+    // [NEWLINE-DEBUG] Log raw content newlines
+    const rawNewlines = (content.match(/\n/g) || []).length;
+    const rawCRLF = (content.match(/\r\n/g) || []).length;
+    console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} bytes, ${rawNewlines} \\n, ${rawCRLF} \\r\\n`);
+
     screenDebug(`[displayScreen]  Screen loaded successfully: ${screenName}`);
     screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
     screenDebug(`[displayScreen] PETSCII: ${isPetscii ? 'YES' : 'NO'}`);
@@ -1929,6 +1935,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         if (segmentResult.slowmoCount !== undefined) session.slowmoCount = segmentResult.slowmoCount;
         if (segmentResult.inlineEmitted) inlineEmitted = true;
 
+        // [NEWLINE-DEBUG] Log parsed segment newlines
+        const parsedSegmentNewlines = (parsed.match(/\n/g) || []).length;
+        const parsedSegmentCRLF = (parsed.match(/\r\n/g) || []).length;
+        console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} bytes, ${parsedSegmentNewlines} \\n, ${parsedSegmentCRLF} \\r\\n`);
+
         // DON'T set lastScreenHadPause here - let pauseDisplayFlow handle the pause
         // to avoid double pause prompts. screenSegments is already set for subsequent segments.
         // express.e:28556-28557: IF (displayScreen(SCREEN_BULL)) THEN doPause()
@@ -1945,6 +1956,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         if (result.slowmoCount !== undefined) session.slowmoCount = result.slowmoCount;
         if (result.inlineEmitted) inlineEmitted = true;
         session.lastScreenHadPause = result.hasPause;
+
+        // [NEWLINE-DEBUG] Log parsed content newlines (single segment case)
+        const parsedNewlines = (parsed.match(/\n/g) || []).length;
+        const parsedCRLF = (parsed.match(/\r\n/g) || []).length;
+        console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes, ${parsedNewlines} \\n, ${parsedCRLF} \\r\\n`);
       }
     } else {
       // Normal processing (no ~SP segments or not a flow screen)
@@ -1961,6 +1977,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       }
       if (result.inlineEmitted) inlineEmitted = true;
       session.lastScreenHadPause = result.hasPause;
+
+      // [NEWLINE-DEBUG] Log parsed content newlines (normal case)
+      const parsedNormalNewlines = (parsed.match(/\n/g) || []).length;
+      const parsedNormalCRLF = (parsed.match(/\r\n/g) || []).length;
+      console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes NORMAL: ${parsed.length} bytes, ${parsedNormalNewlines} \\n, ${parsedNormalCRLF} \\r\\n`);
     }
 
     // Log MCI parsing results
@@ -1974,10 +1995,19 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Add ESC prefix to bare ANSI sequences only for ANSI paths
     if (!isPetscii) {
       parsed = addAnsiEscapes(parsed);
+      // [NEWLINE-DEBUG] Log after addAnsiEscapes
+      const afterAnsiNewlines = (parsed.match(/\n/g) || []).length;
+      const afterAnsiCRLF = (parsed.match(/\r\n/g) || []).length;
+      console.log(`[NEWLINE-DEBUG] AFTER addAnsiEscapes: ${parsed.length} bytes, ${afterAnsiNewlines} \\n, ${afterAnsiCRLF} \\r\\n`);
     }
 
     // Normalize line endings for terminal display
     parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+    // [NEWLINE-DEBUG] Log after line ending normalization (CRITICAL)
+    const afterNormalizeNewlines = (parsed.match(/\n/g) || []).length;
+    const afterNormalizeCRLF = (parsed.match(/\r\n/g) || []).length;
+    console.log(`[NEWLINE-DEBUG] AFTER NORMALIZE: ${parsed.length} bytes, ${afterNormalizeNewlines} \\n, ${afterNormalizeCRLF} \\r\\n`);
 
     // For flow screens (BULL/NODE_BULL/CONF_BULL/LOGON/etc.), ensure the frame ends
     // with a newline so the pause prompt does not collide with the final line of content.
@@ -2001,6 +2031,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const pageHeight = session?.screenHeight || 25;
     const lines = parsed.split(/\r\n|\n/);
     const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
+
+    // [NEWLINE-DEBUG] Log line splitting
+    console.log(`[NEWLINE-DEBUG] SPLIT INTO LINES: ${lines.length} lines`);
+    console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) => `  [${i}] len=${line.length}: ${line.substring(0, 80)}`).join('\n'));
+
     // Note: eventName defined earlier for ~SP segment processing
     const slowmoSpeed = session.slowmo || 0;
     let slowmoCount = session.slowmoCount || 0;
