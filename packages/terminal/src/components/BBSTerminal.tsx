@@ -80,8 +80,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     'registering' |
     'loggedin' |
     'checking-username' |
-    'logging-in'
+    'logging-in' |
+    'password-reset'
   >('waiting');
+  const passwordResetInput = useRef<string>(''); // Buffer for password reset input
   const username = useRef<string>('');
   const password = useRef<string>('');
   const newUserPromptUsername = useRef<string>('');
@@ -1390,6 +1392,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Prefill username if provided (e.g., when user presses R to retry after "user not found")
       username.current = data?.prefillUsername || '';
       password.current = '';
+      passwordResetInput.current = '';
+      passwordMode.current = false;
     });
 
     socket.on('prompt-password', () => {
@@ -1399,6 +1403,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('password-mode', (enabled: boolean) => {
+      passwordMode.current = enabled;
+    });
+
+    // Password reset flow - express.e:29152-29213
+    socket.on('prompt-password-reset', (data: { state: string }) => {
+      console.log('[PasswordReset] Entering password reset mode:', data.state);
+      loginState.current = 'password-reset';
+      passwordResetInput.current = '';
+      // mask-input controls whether to echo or mask characters
+    });
+
+    socket.on('mask-input', (enabled: boolean) => {
+      console.log('[PasswordReset] Mask input:', enabled);
       passwordMode.current = enabled;
     });
 
@@ -1595,6 +1612,26 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
+      // Handle password reset flow - express.e:29152-29213
+      if (loginState.current === 'password-reset') {
+        if (key === '\r' || key === '\n') {
+          console.log('[PasswordReset] Sending input:', passwordResetInput.current.length > 0 ? '(has input)' : '(empty)');
+          socket.emit('password-reset-input', { input: passwordResetInput.current });
+          term.write('\r\n');
+          passwordResetInput.current = '';
+        } else if (key === '\x7f' || key === '\b') {
+          if (passwordResetInput.current.length > 0) {
+            passwordResetInput.current = passwordResetInput.current.slice(0, -1);
+            term.write('\b \b');
+          }
+        } else if (key.length === 1 && key >= ' ') {
+          passwordResetInput.current += key;
+          // passwordMode controls whether to show * or the actual character
+          term.write(passwordMode.current ? '*' : key);
+        }
+        return;
+      }
+
       // Handle new user prompt
       if (loginState.current === 'new-user-prompt') {
         const promptUser = newUserPromptUsername.current || username.current || '';
@@ -1648,7 +1685,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         loginState.current === 'password' ||
         loginState.current === 'new-user-prompt' ||
         loginState.current === 'checking-username' ||
-        loginState.current === 'logging-in'
+        loginState.current === 'logging-in' ||
+        loginState.current === 'password-reset'
         // Note: 'registering' removed - server handles registration input including pause prompts
       ) {
         return;

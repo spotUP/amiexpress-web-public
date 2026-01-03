@@ -318,6 +318,34 @@ export interface SystemConfig {
   vapid_private_key: string;
   vapid_contact_email: string;
 
+  // Mail Notifications (MAIL_ON_* flags from express.e:6694-6739, 24197, 29155)
+  mail_on_upload: boolean;         // Email sysop when user uploads a file
+  mail_on_sysop_comment: boolean;  // Email sysop when user sends comment
+  mail_on_logon: boolean;          // Email sysop when user logs on
+  mail_on_new_user: boolean;       // Email sysop when new user registers
+  mail_on_logoff: boolean;         // Email sysop when user logs off
+  mail_on_sysop_page: boolean;     // Email sysop when user pages
+  mail_on_pwd_fail: boolean;       // Email user on password failure (reset link)
+
+  // Auto-Validation Settings (express.e:29677-29688, 30063-30076)
+  autoval_delay: number;           // Hours before auto-validation (0 = immediate, -1 = disabled)
+  autoval_preset: string;          // Preset name to apply on auto-validation
+  autoval_password: string;        // Password for instant auto-validation
+
+  // Password Expiry (express.e:29785-29787)
+  password_expiry_days: number;    // Days until password expires (0 = never)
+
+  // User Management (express.e:31952)
+  auto_deactivate_days: number;    // Days of inactivity before deactivating user (0 = never)
+
+  // File Management (express.e:19258, 31801, 31804)
+  filediz_syscmd: string;          // Command for extracting file descriptions
+  max_desclines: number;           // Maximum lines for file descriptions
+  hold_access_level: number;       // Access level required to hold files
+
+  // Local Upload Path (express.e:17891)
+  local_upload_path: string;       // Default path for local uploads
+
   // Metadata
   created_at: Date;
   updated_at: Date;

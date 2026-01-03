@@ -3,8 +3,176 @@ import * as path from 'path';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
 import { writeQuickNewScreen, generateQuickNewFromConfig } from '../utils/quicknew-generator';
-import { writeLastCallersBulletin, generateLastCallersBulletin } from '../utils/lastcallers-generator';
+import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
+import { generateMultiTop } from '../utils/multitop-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
+import { InfoFileParser } from './info-file-parser';
+
+/**
+ * EXECUTE_ON_* Event Types (from express.e:6666-6744)
+ * These are tooltypes in bbsConfig.info that specify commands to run on BBS events.
+ */
+export type ExecuteOnEvent =
+  | 'LOGON'           // User logs on (express.e:6715)
+  | 'LOGOFF'          // User logs off (express.e:6738)
+  | 'NEW_USER'        // New user registers (express.e:6726)
+  | 'UPLOAD'          // File uploaded (express.e:6692)
+  | 'CONNECT'         // Modem/telnet connect (express.e:7353)
+  | 'STATUS_CHANGE'   // Node status changes (express.e:13229,13248,13469,13515)
+  | 'SYSOP_COMMENT'   // User sends sysop comment (express.e:6704)
+  | 'SYSOP_PAGE';     // User pages sysop (express.e:24196)
+
+/**
+ * Cache for bbsConfig.info tooltypes to avoid re-parsing on every event
+ */
+let executeOnCache: Map<string, string> | null = null;
+let executeOnCacheTime = 0;
+const CACHE_TTL_MS = 30000; // 30 second cache
+
+/**
+ * Read all tooltypes from bbsConfig.info (including EXECUTE_ON_* and EXECUTE_ASYNC_ON_*)
+ */
+function getExecuteOnTooltypes(): Map<string, string> {
+  const now = Date.now();
+  if (executeOnCache && (now - executeOnCacheTime) < CACHE_TTL_MS) {
+    return executeOnCache;
+  }
+
+  const tooltypes = new Map<string, string>();
+  const bbsRoot = config.getConfig().dataDir;
+  const configPath = path.join(bbsRoot, 'bbsConfig.info');
+
+  if (!fs.existsSync(configPath)) {
+    console.log('[BatchScheduler] bbsConfig.info not found, no EXECUTE_ON_* tooltypes');
+    executeOnCache = tooltypes;
+    executeOnCacheTime = now;
+    return tooltypes;
+  }
+
+  try {
+    const buffer = fs.readFileSync(configPath);
+    const parser = new InfoFileParser();
+    const parsed = parser.parse(buffer);
+
+    for (const [key, value] of parsed.toolTypes.entries()) {
+      const upperKey = key.toUpperCase();
+      // Only cache EXECUTE_ON_* and EXECUTE_ASYNC_ON_* tooltypes
+      if (upperKey.startsWith('EXECUTE_ON_') || upperKey.startsWith('EXECUTE_ASYNC_ON_')) {
+        tooltypes.set(upperKey, value);
+      }
+    }
+
+    console.log(`[BatchScheduler] Loaded ${tooltypes.size} EXECUTE_ON_* tooltypes from bbsConfig.info`);
+  } catch (error) {
+    console.error('[BatchScheduler] Failed to read bbsConfig.info:', error);
+  }
+
+  executeOnCache = tooltypes;
+  executeOnCacheTime = now;
+  return tooltypes;
+}
+
+/**
+ * Clear the EXECUTE_ON cache (call when bbsConfig.info changes)
+ */
+export function clearExecuteOnCache(): void {
+  executeOnCache = null;
+  executeOnCacheTime = 0;
+}
+
+/**
+ * Run EXECUTE_ON_* command for an event (express.e:6666-6687)
+ *
+ * This reads EXECUTE_ON_{event} and EXECUTE_ASYNC_ON_{event} tooltypes from
+ * bbsConfig.info and executes them. Matches original AmiExpress behavior.
+ *
+ * @param event - The event type (LOGON, LOGOFF, NEW_USER, UPLOAD, etc.)
+ * @param nodeId - Node number for context
+ * @param context - Optional context for MCI substitution (username, location, etc.)
+ */
+export async function runExecuteOn(
+  event: ExecuteOnEvent,
+  nodeId: number = 1,
+  context?: {
+    username?: string;
+    location?: string;
+    confName?: string;
+    confNum?: number;
+  }
+): Promise<void> {
+  const tooltypes = getExecuteOnTooltypes();
+
+  // Check for EXECUTE_ON_{event} (synchronous)
+  const syncKey = `EXECUTE_ON_${event}`;
+  const syncCmd = tooltypes.get(syncKey);
+  if (syncCmd) {
+    console.log(`[BatchScheduler] Running ${syncKey}: ${syncCmd}`);
+    const processed = processMciInCommand(syncCmd, nodeId, context);
+    try {
+      await executeLine(processed, nodeId);
+    } catch (error) {
+      console.error(`[BatchScheduler] Error executing ${syncKey}:`, error);
+    }
+  }
+
+  // Check for EXECUTE_ASYNC_ON_{event} (asynchronous - fire and forget)
+  const asyncKey = `EXECUTE_ASYNC_ON_${event}`;
+  const asyncCmd = tooltypes.get(asyncKey);
+  if (asyncCmd) {
+    console.log(`[BatchScheduler] Running ${asyncKey}: ${asyncCmd}`);
+    const processed = processMciInCommand(asyncCmd, nodeId, context);
+    // Fire and forget - don't await
+    executeLine(processed, nodeId).catch((error) => {
+      console.error(`[BatchScheduler] Error executing ${asyncKey}:`, error);
+    });
+  }
+
+  if (!syncCmd && !asyncCmd) {
+    // No EXECUTE_ON_* defined for this event - that's fine, just skip
+    return;
+  }
+}
+
+/**
+ * Process MCI codes in command string (express.e:6675 processMci)
+ * Basic MCI substitution for common codes used in EXECUTE_ON commands.
+ */
+function processMciInCommand(
+  cmd: string,
+  nodeId: number,
+  context?: {
+    username?: string;
+    location?: string;
+    confName?: string;
+    confNum?: number;
+  }
+): string {
+  let result = cmd;
+
+  // Node number
+  result = result.replace(/%N/gi, nodeId.toString());
+
+  // User info if available
+  if (context?.username) {
+    result = result.replace(/%U/gi, context.username);
+  }
+  if (context?.location) {
+    result = result.replace(/%L/gi, context.location);
+  }
+  if (context?.confName) {
+    result = result.replace(/%C/gi, context.confName);
+  }
+  if (context?.confNum !== undefined) {
+    result = result.replace(/%#/gi, context.confNum.toString());
+  }
+
+  // Date/time
+  const now = new Date();
+  result = result.replace(/%D/gi, now.toLocaleDateString());
+  result = result.replace(/%T/gi, now.toLocaleTimeString());
+
+  return result;
+}
 
 /**
  * Parse AmigaDOS-style command line arguments with quote handling.
@@ -215,15 +383,77 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
-  // Special-case MultiTop (68K) to generate bull1..bull5
+  // Special-case MultiTop (TypeScript) to generate bull1..bull5
+  // Command format: doors:multitop/mtop <design_file> <output_file> [ignoresysop] [userdata] <user_data_file>
+  // Example: doors:multitop/mtop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.txt ignoresysop userdata bbs:user.data
   if (program.includes('multitop/mtop')) {
-    const doorPath = resolveAssign('doors:multitop/mtop');
-    // Expect args: <design> <output> [ignoresysop] [userdata] [userDataPath]
     const args = resolvedArgs;
-    const nodeNum = nodeId || 1;
-    if (doorPath) {
-      await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));
-      console.log('[BatchScheduler] Ran MultiTop with args:', args.join(' '));
+    if (args.length >= 2) {
+      // args[0] is design file path (e.g. "doors:multitop/designs/mtopulbytes1.dsg")
+      // args[1] is output file path (e.g. "bbs:bulletins/bull1.txt")
+      // These are raw Amiga paths - must resolve assigns to filesystem paths
+      const rawDesignPath = args[0].replace(/^"|"$/g, '');
+      const rawOutputPath = args[1].replace(/^"|"$/g, '');
+      const designPath = resolveAssign(rawDesignPath);
+      const outputPath = resolveAssign(rawOutputPath);
+
+      // Parse optional flags
+      const ignoreSysop = args.some(arg => arg.toLowerCase() === 'ignoresysop');
+
+      console.log(`[BatchScheduler] Generating MultiTop from design: ${designPath} (raw: ${rawDesignPath}), output: ${outputPath}, ignoreSysop: ${ignoreSysop}`);
+      await generateMultiTop(designPath, outputPath, { ignoreSysop });
+      console.log('[BatchScheduler] MultiTop generated successfully');
+    } else {
+      console.error('[BatchScheduler] MultiTop requires design file and output file arguments');
+    }
+    return;
+  }
+
+  // Special-case GLCUpdater (TypeScript) to send caller data to global server
+  // Command format: utils:glcupdater BBSNAME CALLERSLOG [IGNORELOCAL] [IGNORESYSOP] [IGNORESYSOPUSER] [PROCESSALL]
+  // Example: utils:glcupdater "AmiExpress" bbs:node1/callerslog IGNORELOCAL IGNORESYSOP
+  if (program.includes('glcupdater')) {
+    const { processCallersLog } = await import('../utils/glc-updater');
+
+    // Parse GLCUpdater arguments
+    const options: any = {
+      bbsName: '',
+      callersLog: '',
+      ignoreLocal: false,
+      ignoreSysop: false,
+      ignoreSysopUser: false,
+      processAll: false
+    };
+
+    for (let i = 0; i < resolvedArgs.length; i++) {
+      const arg = resolvedArgs[i];
+
+      if (arg.toUpperCase() === 'IGNORELOCAL') {
+        options.ignoreLocal = true;
+      } else if (arg.toUpperCase() === 'IGNORESYSOP') {
+        options.ignoreSysop = true;
+      } else if (arg.toUpperCase() === 'IGNORESYSOPUSER') {
+        options.ignoreSysopUser = true;
+      } else if (arg.toUpperCase() === 'PROCESSALL') {
+        options.processAll = true;
+      } else if (arg.toUpperCase().startsWith('TIMEZONE=')) {
+        options.timeZone = arg.substring(9);
+      } else if (!options.bbsName) {
+        // Strip quotes from BBS name
+        options.bbsName = arg.replace(/^"|"$/g, '');
+      } else if (!options.callersLog) {
+        // Resolve Amiga assign (bbs:, etc.) to filesystem path
+        const rawPath = arg.replace(/^"|"$/g, '');
+        options.callersLog = resolveAssign(rawPath);
+      }
+    }
+
+    if (options.bbsName && options.callersLog) {
+      console.log(`[BatchScheduler] Running GLCUpdater for ${options.bbsName}, log: ${options.callersLog}`);
+      await processCallersLog(options);
+      console.log('[BatchScheduler] GLCUpdater completed');
+    } else {
+      console.error('[BatchScheduler] GLCUpdater requires BBSNAME and CALLERSLOG parameters');
     }
     return;
   }
@@ -234,7 +464,12 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   if (program.includes('quicknew/quicknew')) {
     const args = resolvedArgs;
     if (args.length >= 2) {
-      const configPath = args[0]; // Already resolved by resolvedArgs
+      // args[0] is the config file path (e.g. "doors:quicknew/quicknew.config")
+      // It might be quoted, so strip quotes first
+      const rawConfigPath = args[0].replace(/^"|"$/g, '');
+      // Resolve Amiga assign (doors:, bbs:) to absolute filesystem path
+      const configPath = resolveAssign(rawConfigPath);
+      
       const daysBack = parseInt(args[1], 10) || 7;
 
       // Output path comes from stdout redirect in batch file (e.g., >bbs:screens/quicknew.txt)
@@ -248,7 +483,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
         }
       }
 
-      console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath}, days: ${daysBack}, output: ${outputPath}`);
+      console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath} (raw: ${args[0]}), days: ${daysBack}, output: ${outputPath}`);
       await generateQuickNewFromConfig(configPath, daysBack, outputPath);
       console.log('[BatchScheduler] QuickNew generated successfully');
     } else {
@@ -293,7 +528,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     }
 
     const baseDir = config.get('dataDir');
-    const content = generateLastCallersBulletin(count);
+    const content = generateSamiLogBulletin(count);
     const fullPath = path.join(baseDir, outputPath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, content, 'utf-8');
@@ -302,9 +537,10 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   }
 
   // Special-case SlickTop (68K) to generate bull11
+  // 68K doors expect raw Amiga paths - the emulator resolves assigns internally
   if (program.includes('slicktop/slicktop')) {
     const doorPath = resolveAssign('doors:slicktop/slicktop');
-    const args = resolvedArgs; // Use resolved paths to avoid path doubling
+    const args = resolvedArgs; // Raw Amiga paths - emulator resolves assigns
     const nodeNum = nodeId || 1;
     if (doorPath) {
       await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));

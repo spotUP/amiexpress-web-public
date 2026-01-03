@@ -476,6 +476,24 @@ export async function advanceDisplayFlow(socket: any, session: BBSSession): Prom
       }
 
       if (session.subState === LoggedOnSubState.DISPLAY_NODE_BULL) {
+        // express.e:28557 - IF (displayScreen(SCREEN_NODE_BULL)) THEN doPause()
+        // SCREEN_NODE_BULL looks in NodeN/Screens/ for BULL.TXT (express.e:6551-6553)
+        if (!toolFlags.noBulls) {
+          displayFlowLog('showing NODE_BULL');
+          const shown = await displayScreen(socket, session, 'NODE_BULL');
+          if (shown && pauseDisplayFlow(socket, session)) {
+            // Advance to next state so we don't loop back to displaying this screen
+            session.subState = LoggedOnSubState.CONF_SCAN;
+            displayFlowLog('pause after NODE_BULL');
+            return;
+          }
+        }
+        displayFlowLog('skip NODE_BULL (toolFlags or not shown)');
+        session.subState = LoggedOnSubState.CONF_SCAN;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.CONF_SCAN) {
         displayFlowLog('running confScan');
         const { performConferenceScan } = require('./message/message-scan.handler');
         await performConferenceScan(socket, session);
@@ -3452,6 +3470,32 @@ export async function handleCommand(socket: any, session: BBSSession, data: stri
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
+    }
+    return;
+  } else if (session.subState === LoggedOnSubState.BULLETIN_INPUT) {
+    // Handle bulletin input (number, ?, or Enter to exit)
+    console.log(' In BULLETIN_INPUT state, buffering input');
+
+    // Initialize inputBuffer if needed
+    if (!session.inputBuffer) {
+      session.inputBuffer = '';
+    }
+
+    // Buffer characters until Enter is pressed
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '');
+      session.inputBuffer = '';
+      socket.emit('ansi-output', '\r\n');
+
+      handleBulletinInputFromDisplayFileCommands(socket, session, input);
+    } else if (data === '\x7f' || data === '\b') { // Backspace
+      if (session.inputBuffer.length > 0) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer += data;
+      socket.emit('ansi-output', data);
     }
     return;
    } else {

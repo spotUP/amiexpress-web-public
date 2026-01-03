@@ -8,6 +8,8 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import { runExecuteOn } from '../services/batch-scheduler';
+import { mailOnUpload } from '../services/mail-notification.service';
 
 function resolveSysopStatsDir(bbsDataPath: string): string {
   const rootDir = path.join(bbsDataPath, 'SysopStats');
@@ -104,21 +106,25 @@ export async function updateSysopUploadStats(
  * @param username Uploader's name
  * @param location Uploader's location
  * @param bbsName BBS name
- * @param sysopEmail Sysop's email (if configured)
- * @param mailOnUpload Whether MAIL_ON_UPLOAD is enabled
  * @param webhookService Optional webhook service for triggering events
+ * @param nodeId Node number for EXECUTE_ON context
  */
 export async function doUploadNotify(
   username: string,
   location: string,
   bbsName: string,
-  sysopEmail?: string,
-  mailOnUpload: boolean = false,
-  webhookService?: any
+  webhookService?: any,
+  nodeId: number = 1
 ): Promise<void> {
   try {
-    // Express.e:6691 - runExecuteOn('UPLOAD')
-    // Web implementation: Use webhook system for event notifications
+    // Express.e:6692 - runExecuteOn('UPLOAD')
+    // Run EXECUTE_ON_UPLOAD command from bbsConfig.info
+    try {
+      await runExecuteOn('UPLOAD', nodeId, { username, location });
+    } catch (error: any) {
+      console.error(`[UploadNotify] EXECUTE_ON_UPLOAD failed: ${error.message}`);
+    }
+
     console.log(`[UploadNotify] Upload event triggered for ${username}`);
 
     // Trigger NEW_UPLOAD webhook if webhook service is available
@@ -136,18 +142,11 @@ export async function doUploadNotify(
     }
 
     // Express.e:6693-6697 - Send email notification if configured
-    if (mailOnUpload && sysopEmail && sysopEmail.length > 0) {
-      const subject = `${bbsName}: Ami-Express upload notification`;
-      const body = `This is a notification that ${username} from ${location} has uploaded\n\n`;
-
-      console.log(`[UploadNotify] Would send email to ${sysopEmail}`);
-      console.log(`[UploadNotify] Subject: ${subject}`);
-      console.log(`[UploadNotify] Body: ${body}`);
-
-      // Email sending requires email service configuration
-      // When EmailService is implemented, call:
-      // await emailService.send({ to: sysopEmail, subject, body });
-      console.log(`[UploadNotify] Email sending requires EmailService implementation`);
+    // MAIL_ON_UPLOAD tooltype - handled by mail-notification.service
+    try {
+      await mailOnUpload(username, location);
+    } catch (error: any) {
+      console.error(`[UploadNotify] MAIL_ON_UPLOAD failed: ${error.message}`);
     }
   } catch (error: any) {
     console.error(`[UploadNotify] Error sending notification: ${error.message}`);

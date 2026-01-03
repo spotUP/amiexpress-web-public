@@ -1,0 +1,9 @@
+BBSCMD=E
+TYPE=TS
+LOCATION=Doors/mail-composer
+DESCRIPTION=New advanced message editor with autocomplete and formatting
+ACCESS=10
+MULTINODE=YES
+PRIORITY=SAME
+CATEGORY=Messaging
+SHOWPRELOADER=YES

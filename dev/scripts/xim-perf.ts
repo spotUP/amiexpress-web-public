@@ -543,7 +543,7 @@ ${metrics.slowestOperations[0].time > 1000 ? '⚠️ This operation is very slow
     ];
 
     comparisons.forEach(comp => {
-      const diff = current.current - comp.baseline;
+      const diff = comp.current - comp.baseline;
       const percentChange = (diff / comp.baseline) * 100;
 
       const improved = comp.lowerIsBetter ? diff < 0 : diff > 0;

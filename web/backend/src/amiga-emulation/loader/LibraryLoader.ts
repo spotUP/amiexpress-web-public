@@ -20,10 +20,34 @@ export interface LibraryJumpTable {
 export interface LoadedLibrary {
   name: string;
   version: number;
+  revision: number;
   baseAddress: number;
   jumpTable: Map<number, number>;  // offset -> address
   codeSegments: Array<{ address: number; size: number }>;
   dataSegments: Array<{ address: number; size: number }>;
+}
+
+/**
+ * Parsed Amiga version string information
+ * Format: \0$VER: programname version.revision (dd.mm.yyyy) comment\0
+ *
+ * Per Amiga Style Guide:
+ * - version and revision are separate integers (NOT a decimal)
+ * - The dot separates them: 1.36 is higher than 1.4
+ * - Date is dd.mm.yyyy in parentheses
+ * - Program name cannot contain spaces
+ */
+export interface AmigaVersionInfo {
+  programName: string;
+  version: number;
+  revision: number;
+  date?: {
+    day: number;
+    month: number;
+    year: number;
+  };
+  comment?: string;
+  rawString: string;
 }
 
 export class LibraryLoader {
@@ -201,10 +225,28 @@ export class LibraryLoader {
       // Parse jump table from first code segment
       const jumpTable = this.parseJumpTable(baseAddress, codeSegments[0]);
 
+      // Parse version from $VER string in library data
+      // Format: \0$VER: programname version.revision (dd.mm.yyyy) comment\0
+      const versionInfo = this.parseVersionString(libraryData);
+      let version = minVersion;
+      let revision = 0;
+      if (versionInfo) {
+        version = versionInfo.version;
+        revision = versionInfo.revision;
+        const dateStr = versionInfo.date
+          ? `(${versionInfo.date.day}.${versionInfo.date.month}.${versionInfo.date.year})`
+          : '';
+        console.log(`[LibraryLoader] Parsed $VER: ${versionInfo.programName} ${version}.${revision} ${dateStr}`);
+        if (versionInfo.comment) {
+          console.log(`[LibraryLoader]   Comment: ${versionInfo.comment}`);
+        }
+      }
+
       // Create library structure
       const library: LoadedLibrary = {
         name: libraryName,
-        version: minVersion, // TODO: Parse from library header
+        version,
+        revision,
         baseAddress,
         jumpTable,
         codeSegments,
@@ -322,6 +364,202 @@ export class LibraryLoader {
     }
 
     return jumpTable;
+  }
+
+  /**
+   * Parse Amiga version string from binary data
+   *
+   * Amiga version string format (per Amiga Style Guide):
+   *   \0$VER: programname version.revision (dd.mm.yyyy) comment\0
+   *
+   * Key rules:
+   * - version and revision are separate integers (NOT decimal)
+   * - The dot separates them: 1.36 is numerically higher than 1.4
+   * - Date is dd.mm.yyyy enclosed in parentheses
+   * - Program name cannot contain spaces (use underscores)
+   * - Leading null byte before $VER helps version scanner locate string
+   *
+   * @see https://wiki.amigaos.net/wiki/Version_Strings
+   */
+  parseVersionString(data: Buffer): AmigaVersionInfo | null {
+    // Search for "$VER:" marker in the binary
+    // Can be preceded by null byte: \0$VER:
+    const verMarker = Buffer.from('$VER:');
+    let pos = data.indexOf(verMarker);
+
+    if (pos === -1) {
+      return null;
+    }
+
+    // Extract the raw string for logging (up to null terminator or reasonable length)
+    let rawEnd = pos + 5;
+    while (rawEnd < data.length && rawEnd < pos + 128 && data[rawEnd] !== 0) {
+      rawEnd++;
+    }
+    const rawString = data.slice(pos, rawEnd).toString('ascii');
+
+    // Skip past "$VER:" and any whitespace
+    pos += 5;
+    while (pos < data.length && (data[pos] === 0x20 || data[pos] === 0x09)) {
+      pos++;
+    }
+
+    // Parse program name (until space - names cannot contain spaces)
+    let programName = '';
+    while (pos < data.length && data[pos] !== 0x20 && data[pos] !== 0x00) {
+      programName += String.fromCharCode(data[pos]);
+      pos++;
+    }
+
+    if (programName.length === 0) {
+      return null;
+    }
+
+    // Skip whitespace before version number
+    while (pos < data.length && data[pos] === 0x20) {
+      pos++;
+    }
+
+    // Parse version number (integer before the dot)
+    let versionStr = '';
+    while (pos < data.length && data[pos] >= 0x30 && data[pos] <= 0x39) {
+      versionStr += String.fromCharCode(data[pos]);
+      pos++;
+    }
+
+    if (versionStr.length === 0) {
+      return null;
+    }
+
+    const version = parseInt(versionStr, 10);
+    if (isNaN(version)) {
+      return null;
+    }
+
+    // Parse revision number (after the dot)
+    let revision = 0;
+    if (pos < data.length && data[pos] === 0x2e) { // '.'
+      pos++; // Skip the dot
+      let revisionStr = '';
+      while (pos < data.length && data[pos] >= 0x30 && data[pos] <= 0x39) {
+        revisionStr += String.fromCharCode(data[pos]);
+        pos++;
+      }
+      if (revisionStr.length > 0) {
+        revision = parseInt(revisionStr, 10);
+        if (isNaN(revision)) {
+          revision = 0;
+        }
+      }
+    }
+
+    // Skip whitespace before date
+    while (pos < data.length && data[pos] === 0x20) {
+      pos++;
+    }
+
+    // Parse date if present: (dd.mm.yyyy) or (dd.mm.yy) or (dd Mon yyyy)
+    let date: { day: number; month: number; year: number } | undefined;
+    if (pos < data.length && data[pos] === 0x28) { // '('
+      pos++; // Skip opening paren
+      let dateStr = '';
+      while (pos < data.length && data[pos] !== 0x29 && data[pos] !== 0x00) {
+        dateStr += String.fromCharCode(data[pos]);
+        pos++;
+      }
+      if (pos < data.length && data[pos] === 0x29) {
+        pos++; // Skip closing paren
+      }
+
+      // Try standard format first: dd.mm.yyyy or dd.mm.yy
+      let dateMatch = dateStr.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+      if (dateMatch) {
+        const day = parseInt(dateMatch[1], 10);
+        const month = parseInt(dateMatch[2], 10);
+        let year = parseInt(dateMatch[3], 10);
+        // Convert 2-digit year to 4-digit (pre-OS4 format)
+        if (year < 100) {
+          year = year >= 70 ? 1900 + year : 2000 + year;
+        }
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+          date = { day, month, year };
+        }
+      } else {
+        // Try text month format: "dd Mon yyyy" or "dd-Mon-yy"
+        const monthNames: { [key: string]: number } = {
+          'jan': 1, 'january': 1,
+          'feb': 2, 'february': 2,
+          'mar': 3, 'march': 3,
+          'apr': 4, 'april': 4,
+          'may': 5,
+          'jun': 6, 'june': 6,
+          'jul': 7, 'july': 7,
+          'aug': 8, 'august': 8,
+          'sep': 9, 'sept': 9, 'september': 9,
+          'oct': 10, 'october': 10,
+          'nov': 11, 'november': 11,
+          'dec': 12, 'december': 12
+        };
+        const textDateMatch = dateStr.match(/(\d{1,2})[\s\-]+([A-Za-z]+)[\s\-]+(\d{2,4})/);
+        if (textDateMatch) {
+          const day = parseInt(textDateMatch[1], 10);
+          const monthStr = textDateMatch[2].toLowerCase();
+          let year = parseInt(textDateMatch[3], 10);
+          const month = monthNames[monthStr];
+          if (year < 100) {
+            year = year >= 70 ? 1900 + year : 2000 + year;
+          }
+          if (!isNaN(day) && month && !isNaN(year)) {
+            date = { day, month, year };
+          }
+        }
+      }
+    }
+
+    // Skip whitespace before comment
+    while (pos < data.length && data[pos] === 0x20) {
+      pos++;
+    }
+
+    // Parse optional comment (until null terminator)
+    let comment: string | undefined;
+    if (pos < data.length && data[pos] !== 0x00) {
+      let commentStr = '';
+      while (pos < data.length && data[pos] !== 0x00 && data[pos] !== 0x0d && data[pos] !== 0x0a) {
+        commentStr += String.fromCharCode(data[pos]);
+        pos++;
+      }
+      if (commentStr.trim().length > 0) {
+        comment = commentStr.trim();
+      }
+    }
+
+    return {
+      programName,
+      version,
+      revision,
+      date,
+      comment,
+      rawString
+    };
+  }
+
+  /**
+   * Legacy method for backward compatibility
+   * Returns just the major version number
+   */
+  private parseVersionFromData(data: Buffer): number {
+    const info = this.parseVersionString(data);
+    return info ? info.version : 0;
+  }
+
+  /**
+   * Get full version info from data
+   * Returns version and revision as separate values
+   */
+  private parseFullVersionFromData(data: Buffer): { version: number; revision: number } {
+    const info = this.parseVersionString(data);
+    return info ? { version: info.version, revision: info.revision } : { version: 0, revision: 0 };
   }
 
   /**

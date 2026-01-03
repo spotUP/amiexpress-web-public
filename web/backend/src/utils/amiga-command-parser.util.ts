@@ -262,9 +262,13 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     return null;
   }
 
-  // Extract command name from filename (remove .info extension, case-insensitive)
+  // Extract command name from BBSCMD or SYSCMD tooltype, or fall back to filename.
+  // Many .info files don't have explicit BBSCMD/SYSCMD - the filename IS the command.
+  // e.g., AEDOOR.info -> AEDOOR, WHO.info -> WHO
+  const commandNameFromTooltype = tooltypes.get('BBSCMD') || tooltypes.get('SYSCMD');
   const baseName = path.basename(filePath);
-  const name = baseName.replace(/\.info$/i, '').toUpperCase();
+  const nameFromFile = baseName.replace(/\.info$/i, '').toUpperCase();
+  const name = commandNameFromTooltype ? commandNameFromTooltype.toUpperCase() : nameFromFile;
 
   // Preserve all tooltypes for downstream consumers (uppercased keys)
   const toolTypeObject = Object.fromEntries(tooltypes.entries());
@@ -460,16 +464,16 @@ export function scanCommandDirectory(
 
           const existing = commands.get(cmd.name);
 
-          if (!existing) {
-            commands.set(cmd.name, cmd);
-          } else if (existing.type !== DoorType.TS && cmd.type === DoorType.TS) {
-            console.log(`      Replacing ${cmd.name} with TypeScript door version`);
+          if (!existing || cmd.type) {
+            if (existing) {
+              console.log(`      Overriding existing command '${cmd.name}' with new door definition.`);
+            }
             commands.set(cmd.name, cmd);
           } else {
             console.log(`      Command ${cmd.name} already loaded (skipping due to priority)`);
           }
         } else {
-          console.log(`      Failed to parse .info file`);
+          console.log(`      Failed to parse .info file or missing BBSCMD/SYSCMD tooltype`);
         }
       }
     }

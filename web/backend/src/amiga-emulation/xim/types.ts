@@ -391,3 +391,90 @@ export const ArrowKeyCodes = {
   UPARROW: 4,
   DOWNARROW: 5,
 } as const;
+
+/**
+ * Environment status values from aedoor.i
+ * Used with ENVSTAT command to report current user activity
+ */
+export const ENVStatus = {
+  ENV_DROPPED: -1,      // Carrier dropped / disconnected
+  ENV_IDLE: 0,          // User is idle at menu
+  ENV_DOWNLOADING: 1,   // Downloading files
+  ENV_UPLOADING: 2,     // Uploading files
+  ENV_DOORS: 3,         // Running a door
+  ENV_MAIL: 4,          // Reading/writing mail
+  ENV_STATS: 5,         // Viewing statistics
+  ENV_ACCOUNT: 6,       // Account maintenance
+  ENV_ZOOM: 7,          // In zoom mode
+  ENV_FILES: 8,         // File section
+  ENV_BULLETINS: 9,     // Reading bulletins
+  ENV_VIEWING: 10,      // Viewing files
+  ENV_LOGON: 11,        // Logging on
+  ENV_LOGOFF: 12,       // Logging off
+  ENV_SYSOP: 13,        // Sysop functions
+  ENV_SHELL: 14,        // In shell
+  ENV_EMACS: 15,        // In editor
+  ENV_JOIN: 16,         // Joining conference
+  ENV_CHAT: 17,         // In chat
+  ENV_NOTACTIVE: 18,    // Node not active
+  ENV_REQ_CHAT: 19,     // Requesting chat
+  ENV_CONNECT: 20,      // Connecting
+  ENV_LOGGINGON: 21,    // Logging on
+  ENV_AWAITCONNECT: 22, // Awaiting connection
+  ENV_SCANNING: 23,     // Scanning messages/files
+  ENV_SHUTDOWN: 24,     // Shutting down
+  ENV_MULTICHAT: 25,    // Multi-node chat
+  ENV_SUSPEND: 26,      // Suspended
+  ENV_RESERVE: 27,      // Reserved
+} as const;
+
+/**
+ * AEDoor error codes from aedoor.i
+ * Returned by various XIM operations to indicate error conditions
+ */
+export const AEDoorError = {
+  AEERR_ABORTED: 0,     // Transfer unsuccessful
+  AEERR_NONODE: -1,     // No node active
+  AEERR_TIMEOUT: -2,    // Keyboard timeout
+  AEERR_NOCARRIER: -2,  // Lost carrier (same as timeout)
+  AEERR_NOMEM: -3,      // Not enough memory
+  AEERR_BUFFOVER: -4,   // Buffer overflow
+} as const;
+
+/**
+ * Data direction convention for DT_* commands
+ * Used with msg.data to indicate read vs write operation
+ */
+export const DataDirection = {
+  READIT: 1,   // Door wants to READ data FROM BBS (msg.data !== 0)
+  WRITEIT: 0,  // Door wants to WRITE data TO BBS (msg.data === 0)
+} as const;
+
+/**
+ * Field length limits from xdoorcmd.def
+ * Maximum string lengths for various data fields
+ */
+export const FieldLengths = {
+  DT_NAME: 30,           // User name
+  DT_PASSWORD: 8,        // User password
+  DT_LOCATION: 29,       // User location
+  DT_PHONENUMBER: 12,    // Phone number
+  DT_SLOTNUMBER: 10,     // Slot number (numeric string)
+  DT_SECSTATUS: 10,      // Security status (numeric)
+  DT_EXPERT: 1,          // Expert mode flag
+  DT_LINELENGTH: 10,     // Screen length (numeric)
+  ACTIVE_NODES: 9,       // Active nodes string
+  DT_CONFACCESS: 9,      // Conference access (XXXXXXX_X)
+  DT_CONFACCESS2: 25,    // Extended conference access
+  DT_REALNAME: 26,       // Real name
+  BB_CONFNAME: 58,       // Conference name
+  BB_CONFLOCAL: 58,      // Conference local path
+  BB_LOCAL: 40,          // BBS directory
+  BB_MAINLINE: 190,      // Last command entered
+  BB_STATUS: 10,         // User status
+  RETURNCOMMAND: 190,    // Return command
+  BB_CHATFLAG: 3,        // Chat enabled (ON/OFF)
+  DT_STAMP: 190,         // Date/time stamp strings
+  EXPRESS_VERSION: 10,   // Version string
+  GENERIC_STRING: 200,   // Maximum embedded string (MESSAGE_STRING_CAPACITY)
+} as const;

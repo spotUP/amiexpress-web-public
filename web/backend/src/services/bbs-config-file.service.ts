@@ -11,6 +11,7 @@ import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
 import { parseInfoFile, updateTooltype, writeInfoFile } from '../utils/info-file.util';
 import type { SystemConfig } from '../database/types';
+import { isSensitiveField } from '../utils/secrets-encryption.util';
 
 export interface BBSConfigData {
   // Identity
@@ -516,4 +517,108 @@ function getDefaultConfig(): BBSConfigData {
     log_retention_days: 90,
     sysop_debug_enabled: false,
   };
+}
+
+/**
+ * Sensitive tooltype names that should be stripped from .info files
+ * These map to fields that contain passwords, API keys, etc.
+ */
+const SENSITIVE_TOOLTYPES = [
+  'SMTP_PASSWORD',
+  'SMTP_USERNAME', // Can contain auth tokens
+  'SENDGRID_API_KEY',
+  'REGKEY',
+  'FTP_PASSWORD',
+  'API_KEY',
+  'DISCORD_WEBHOOK_URL',
+  'RENDER_DEPLOY_HOOK_URL',
+] as const;
+
+/**
+ * Strip sensitive tooltypes from bbsConfig.info file
+ * Creates a backup before modification
+ *
+ * @param bbsRoot - Root directory containing bbsConfig.info
+ * @returns Object with strippedCount and backupPath
+ */
+export function stripSecretsFromConfigFile(bbsRoot: string): {
+  success: boolean;
+  strippedCount: number;
+  backupPath?: string;
+  error?: string;
+} {
+  const configPath = path.join(bbsRoot, 'bbsConfig.info');
+  const configTextPath = configPath + '.txt';
+  const backupTime = new Date().toISOString().replace(/[:.]/g, '-');
+
+  let strippedCount = 0;
+
+  try {
+    // Process binary .info file
+    if (fs.existsSync(configPath)) {
+      const backupPath = `${configPath}.pre-strip-${backupTime}.backup`;
+      fs.copyFileSync(configPath, backupPath);
+      console.log(`[BBSConfig] Created backup: ${backupPath}`);
+
+      const infoFile = parseInfoFile(configPath);
+      if (infoFile) {
+        for (const sensitiveKey of SENSITIVE_TOOLTYPES) {
+          const index = infoFile.tooltypes.findIndex(
+            tt => tt.key.toUpperCase() === sensitiveKey
+          );
+          if (index !== -1) {
+            infoFile.tooltypes.splice(index, 1);
+            strippedCount++;
+            console.log(`[BBSConfig] Stripped ${sensitiveKey} from bbsConfig.info`);
+          }
+        }
+        writeInfoFile(infoFile);
+      }
+    }
+
+    // Process text overlay file
+    if (fs.existsSync(configTextPath)) {
+      const backupPath = `${configTextPath}.pre-strip-${backupTime}.backup`;
+      fs.copyFileSync(configTextPath, backupPath);
+
+      let content = fs.readFileSync(configTextPath, 'utf-8');
+      const lines = content.split(/\r?\n/);
+      const filteredLines: string[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const eqIdx = trimmed.indexOf('=');
+        const key = eqIdx === -1 ? trimmed : trimmed.slice(0, eqIdx).trim();
+        const upperKey = key.toUpperCase();
+
+        // Check if this is a sensitive tooltype
+        const isSensitive = SENSITIVE_TOOLTYPES.some(st => upperKey === st) ||
+          isSensitiveField(key.toLowerCase().replace(/_/g, '_'));
+
+        if (isSensitive && trimmed) {
+          strippedCount++;
+          console.log(`[BBSConfig] Stripped ${key} from bbsConfig.info.txt`);
+          // Add comment indicating field was moved to database
+          filteredLines.push(`; ${key}=<MOVED TO DATABASE - ENCRYPTED>`);
+        } else {
+          filteredLines.push(line);
+        }
+      }
+
+      fs.writeFileSync(configTextPath, filteredLines.join('\n'), 'utf-8');
+    }
+
+    return {
+      success: true,
+      strippedCount,
+      backupPath: `${configPath}.pre-strip-${backupTime}.backup`,
+    };
+  } catch (error: any) {
+    console.error('[BBSConfig] Failed to strip secrets:', error);
+    return {
+      success: false,
+      strippedCount,
+      error: error.message,
+    };
+  }
 }

@@ -199,6 +199,25 @@ export class Prompt extends Box {
       }
       this.screen?.render();
     });
+
+    // Arrow left/right navigation between buttons (when not in input field)
+    this.key(['left'], () => {
+      const focused = this.screen?.getFocused();
+      // Only navigate between buttons if not in input field
+      if (focused !== this.inputField) {
+        this.okButton.focus();
+        this.screen?.render();
+      }
+    });
+
+    this.key(['right'], () => {
+      const focused = this.screen?.getFocused();
+      // Only navigate between buttons if not in input field
+      if (focused !== this.inputField) {
+        this.cancelButton.focus();
+        this.screen?.render();
+      }
+    });
   }
 
   /**

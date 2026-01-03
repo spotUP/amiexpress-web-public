@@ -11,6 +11,8 @@ import { checkSecurity } from '../../utils/security.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { writeMessageFile, formatMessageDate } from '../../utils/message-file.util';
 import { config } from '../../config';
+import { runExecuteOn } from '../../services/batch-scheduler';
+import { mailOnSysopComment } from '../../services/mail-notification.service';
 
 
 // Dependencies (injected from index.ts)
@@ -417,12 +419,26 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       console.log('[Message] Webhook call completed');
 
       // If message is to sysop, also trigger COMMENT_POSTED webhook
+      // express.e:6704 - runExecuteOn('SYSOP_COMMENT') called from doCommentNotify()
       if (entry.toUser.toLowerCase() === 'sysop') {
         await webhookService.sendWebhook(WebhookTrigger.COMMENT_POSTED, {
           username: session.user!.username,
           subject: entry.subject,
           conference: conference?.name || 'Unknown'
         });
+
+        // EXECUTE_ON_SYSOP_COMMENT tooltype
+        await runExecuteOn('SYSOP_COMMENT', session.nodeId || 1, {
+          username: session.user!.username,
+          location: session.user!.location || ''
+        });
+
+        // MAIL_ON_SYSOP_COMMENT tooltype - express.e:6705-6709
+        await mailOnSysopComment(
+          session.user!.username,
+          entry.subject,
+          entry.lines.join('\n')
+        );
       }
     } catch (error) {
       console.error('[Webhook] Error sending new message webhook:', error);

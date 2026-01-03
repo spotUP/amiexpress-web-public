@@ -59,6 +59,12 @@
       "types": "./dist/engines/ui/blessed/utils/animations/index.d.ts",
       "default": "./dist/engines/ui/blessed/utils/animations/index.js"
     },
+    "./engines/ui/ansi-editor": {
+      "types": "./dist/engines/ui/ansi-editor/index.d.ts",
+      "import": "./dist-esm/engines/ui/ansi-editor/index.js",
+      "require": "./dist/engines/ui/ansi-editor/index.js",
+      "default": "./dist/engines/ui/ansi-editor/index.js"
+    },
     "./utils/blessed-helpers": {
       "types": "./dist/utils/blessed-helpers.d.ts",
       "default": "./dist/utils/blessed-helpers.js"

@@ -5,7 +5,7 @@
  * leaderboard displays, and cycling announcements
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { GameEngine } from '../core/game';
 import type { SoundEngine } from '../audio/sounds';

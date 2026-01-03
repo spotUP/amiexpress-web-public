@@ -198,6 +198,9 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         importConfig: req.body.importConfig !== false,
         importBulletins: req.body.importBulletins !== false,
         importScreens: req.body.importScreens !== false,
+        // Strip sensitive data (passwords, API keys) from .info files after importing to DB
+        // This improves security - secrets are stored encrypted in database instead
+        stripSecretsFromInfo: req.body.stripSecretsFromInfo === true,
       };
 
       console.log('[ImportAPI] Executing import:', sessionId, options);

@@ -131,17 +131,40 @@ export class XIMBBSInfoHandler {
   }
 
   /**
-   * Handle EXPRESS_VERSION (Get BBS Version)
-   * From E sources (express.e:3808-3810)
+   * Handle EXPRESS_VERSION (Get Door Command Args)
+   *
+   * CRITICAL: Real Amiga behavior differs from express.e source!
+   * - express.e:3808-3810 says return getExpressMajorVer() (version)
+   * - Real Amiga log (Aquascan N.log) shows EXPRESS_VERSION returns JUST the args
+   *   Line 22-24: msg request 152, string: "N S U" (NOT "AquaScan.020 N S U")
+   * - BB_MAINLINE (second call) returns version ("v5.3")
+   *
+   * AquaScan uses EXPRESS_VERSION to get its invocation args:
+   * - "N" = NEWSCAN mode, "S" = Skip scanned, "U" = User mode
+   * Without the correct args, door doesn't know its mode and exits immediately.
+   *
+   * We match Real Amiga behavior, not express.e source, for door compatibility.
    */
   handleExpressVersion(msg: XIMMessage): void {
-    const version = this.getExpressMajorVersion();
+    // XIM doors expect COMMAND PARAMETERS here, not BBS version (Real Amiga behavior).
+    // Door needs "S U" flags to know scan mode. Without them, exits immediately.
+    const doorParams =
+      (this.bbsSession as any)?.doorParams ||
+      (this.bbsSession as any)?.commandParams ||
+      '';
+    const result = typeof doorParams === 'string' ? doorParams.trim() : '';
 
-    console.log(`[XIMBBSInfo] EXPRESS_VERSION: "${version}"`);
+    console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning params="${result}" for XIM door`);
 
-    this.messageParser.writeMessageString(msg.msgAddr, version);
+    this.messageParser.writeMessageString(msg.msgAddr, result);
 
-    // express.e does not modify msg.data for EXPRESS_VERSION
+    // Verify what was written to buffer
+    const verifyBuffer = this.messageParser.readString(
+      msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+      DoorConstants.MESSAGE_STRING_CAPACITY
+    );
+    console.log(`[XIMBBSInfo] EXPRESS_VERSION verify buffer: "${verifyBuffer}"`);
+
     this.reply(msg, msg.data ?? 0);
   }
 
@@ -453,31 +476,43 @@ export class XIMBBSInfoHandler {
 
   /**
    * Handle main line command
-   * From E sources (express.e:3794-3800)
+   *
+   * CRITICAL: Real Amiga behavior differs from express.e source!
+   * Real Amiga log shows BB_MAINLINE returns VERSION on second call:
+   * - First BB_MAINLINE: empty string
+   * - EXPRESS_VERSION: "N S U" (door args)
+   * - Second BB_MAINLINE: "v5.3" (version)
+   *
+   * Since EXPRESS_VERSION now returns door args, BB_MAINLINE should
+   * return the BBS version to match Real Amiga behavior.
    */
   handleMainLine(msg: XIMMessage): void {
-    console.log('[XIMBBSInfo] BB_MAINLINE - Get main command line');
+    // Real Amiga pattern (from Aquascan N.log):
+    // - First BB_MAINLINE: returns EMPTY
+    // - EXPRESS_VERSION: returns door args ("N S U")
+    // - Second BB_MAINLINE: returns version ("v5.3")
+    //
+    // Track call count to return appropriate value
+    const callCount = ((this.state as any).mainlineCallCount || 0) + 1;
+    (this.state as any).mainlineCallCount = callCount;
 
-    // express.e:3794-3800: returns command + params from menu prompt.
-    const command =
-      (this.bbsSession as any)?.doorCommand ||
-      (this.bbsSession as any)?.currentCommand ||
-      (this.bbsSession as any)?.command ||
-      '';
-    const params =
-      (this.bbsSession as any)?.doorParams ||
-      (this.bbsSession as any)?.commandParams ||
-      (this.bbsSession as any)?.params ||
-      '';
-    const trimmedParams = typeof params === 'string' ? params.trim() : '';
-    const mainLine = trimmedParams ? `${command} ${trimmedParams}` : `${command}`;
-    this.messageParser.writeMessageString(msg.msgAddr, mainLine);
+    let result: string;
+    if (callCount === 1) {
+      // First call: return empty string
+      result = '';
+      console.log(`[XIMBBSInfo] BB_MAINLINE (call #${callCount}) - returning EMPTY (Real Amiga behavior)`);
+    } else {
+      // Subsequent calls: return version
+      result = this.getExpressMajorVersion();
+      console.log(`[XIMBBSInfo] BB_MAINLINE (call #${callCount}) - returning version "${result}" (Real Amiga behavior)`);
+    }
+
+    this.messageParser.writeMessageString(msg.msgAddr, result);
     const verify = this.messageParser.readString(
       msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
       DoorConstants.MESSAGE_STRING_CAPACITY
     );
     console.log(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
-    console.log(`  Command line: "${mainLine}"`);
 
     this.reply(msg, msg.data ?? 0);
   }

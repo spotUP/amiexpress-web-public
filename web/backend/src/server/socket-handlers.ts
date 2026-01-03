@@ -31,7 +31,8 @@ import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './d
 import { nodeManager, arexxEngine } from '../services/node-manager.service';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { userFileManager } from '../services/UserFileManager';
-import { runLogoffBatches } from '../services/batch-scheduler';
+import { runLogoffBatches, runExecuteOn } from '../services/batch-scheduler';
+import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
 import { displayScreen } from '../handlers/screen.handler';
 import { handleCommand } from '../handlers/command.handler';
@@ -157,6 +158,12 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
 
   // Start tracking session output for admin log viewer
   sessionLogManager.startSession(socket.id);
+
+  // express.e:7353 - runExecuteOn('CONNECT') when connection is established
+  // Note: nodeId is 0 here as no session is assigned yet
+  runExecuteOn('CONNECT', 0, {}).catch((err) =>
+    console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
+  );
 
   const session = getSession(socket.id);
   if (session) {
@@ -955,6 +962,23 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
         },
         DebugSeverity.WARNING
       );
+    }
+
+    // Run EXECUTE_ON_LOGOFF command from bbsConfig.info (express.e:6738)
+    try {
+      await runExecuteOn('LOGOFF', session.nodeId || 1, {
+        username: session.user.username,
+        location: session.user.location
+      });
+    } catch (err) {
+      console.error('[LOGOFF] EXECUTE_ON_LOGOFF failed:', err);
+    }
+
+    // MAIL_ON_LOGOFF tooltype - express.e:6739-6743
+    try {
+      await mailOnLogoff(session.user.username, session.user.location || '');
+    } catch (err) {
+      console.error('[LOGOFF] MAIL_ON_LOGOFF failed:', err);
     }
 
     // Save command history to disk (express.e:25067, 7951, 28612, 28631)

@@ -523,6 +523,13 @@ class ApiClient {
     });
   }
 
+  // SMTP Testing
+  async testSmtp() {
+    return this.request<ApiResponse>(`${API_BASE}/config/smtp/test`, {
+      method: 'POST',
+    });
+  }
+
   // Logs
   async getLogs(type: string = 'backend', lines: number = 500, search: string = '') {
     const params = new URLSearchParams();
@@ -553,16 +560,16 @@ class ApiClient {
   }
 
   // Batches
-  async getBatches() {
-    return this.request<ApiResponse>(`${API_BASE}/batches`);
+  async getBatches(): Promise<{ batches: string[] }> {
+    return this.request<{ batches: string[] }>(`${API_BASE}/batches`);
   }
 
-  async getBatch(name: string) {
-    return this.request<ApiResponse>(`${API_BASE}/batches/${name}`);
+  async getBatch(name: string): Promise<{ name: string; content: string }> {
+    return this.request<{ name: string; content: string }>(`${API_BASE}/batches/${name}`);
   }
 
-  async saveBatch(name: string, content: string) {
-    return this.request<ApiResponse>(`${API_BASE}/batches/${name}`, {
+  async saveBatch(name: string, content: string): Promise<{ name: string; saved: boolean }> {
+    return this.request<{ name: string; saved: boolean }>(`${API_BASE}/batches/${name}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     });
@@ -645,6 +652,35 @@ class ApiClient {
 
   async updateOperatorChatConfig(config: any) {
     return this.request<ApiResponse>(`${API_BASE}/config/operator-chat`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
+
+  // Global Wall Management
+  async getGlobalWallComments(page: number = 1, limit: number = 20) {
+    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments?page=${page}&limit=${limit}`);
+  }
+
+  async updateGlobalWallComment(id: string, data: any) {
+    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteGlobalWallComment(id: string) {
+    return this.request<ApiResponse>(`${API_BASE}/globalwall/comments/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getGlobalWallConfig() {
+    return this.request<ApiResponse>(`${API_BASE}/globalwall/config`);
+  }
+
+  async updateGlobalWallConfig(config: any) {
+    return this.request<ApiResponse>(`${API_BASE}/globalwall/config`, {
       method: 'PUT',
       body: JSON.stringify(config),
     });

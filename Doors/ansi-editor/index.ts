@@ -736,11 +736,8 @@ class ANSIEditor {
 // DOOR CONNECTION HANDLER
 // =============================================================================
 
-door.onConnect(async (user: any) => {
+door.onConnect(async (user: any, socket: any) => {
   console.log(`[ANSI Editor] User ${user.name} connected`);
-
-  // Get socket from door context (implementation-specific)
-  const socket = (door as any).getSocket(user.id);
 
   if (!socket) {
     console.error('[ANSI Editor] No socket found for user');
@@ -762,5 +759,8 @@ export default door;
 
 // Provide runDoor entrypoint expected by the TS door harness
 export async function runDoor(session: any): Promise<void> {
-  await runDoorWithSession(door, session);
+  // await runDoorWithSession(door, session);
+  if (door.onConnect) {
+    await door.onConnect(session.user, session.socket);
+  }
 }

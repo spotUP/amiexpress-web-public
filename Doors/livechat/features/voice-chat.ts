@@ -403,14 +403,14 @@ export class VoiceChannel {
     if (!this.ctx?.video) return;
 
     try {
-      const videoOptions = this.qualityManager?.getVideoProfile() || {};
+      const videoOptions = this.qualityManager?.getVideoProfile();
       const streamId = await this.ctx.video.startStream(
         { type: 'webcam' },
         {
-          width: videoOptions.asciiWidth || 80,
-          height: videoOptions.asciiHeight || 24,
-          fps: videoOptions.fps || 10,
-          colored: videoOptions.colored ?? true,
+          width: videoOptions?.asciiWidth || 80,
+          height: videoOptions?.asciiHeight || 24,
+          fps: videoOptions?.fps || 10,
+          colored: videoOptions?.colored ?? true,
         }
       );
       console.log(`[VoiceChat] Started video stream: ${streamId}`);

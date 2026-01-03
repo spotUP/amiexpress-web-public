@@ -181,11 +181,23 @@ export class Question extends Box {
 
     // Tab between buttons
     this.key(['tab'], () => {
-      if (this.yesButton.focused) {
+      const focused = this.screen?.getFocused?.();
+      if (focused === this.yesButton) {
         this.noButton.focus();
       } else {
         this.yesButton.focus();
       }
+      this.screen?.render();
+    });
+
+    // Arrow left/right navigation between buttons
+    this.key(['left'], () => {
+      this.yesButton.focus();
+      this.screen?.render();
+    });
+
+    this.key(['right'], () => {
+      this.noButton.focus();
       this.screen?.render();
     });
   }

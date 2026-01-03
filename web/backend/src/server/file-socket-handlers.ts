@@ -574,13 +574,14 @@ export async function handleUploadBatchComplete(
   await callersLog(session.user!.id, session.user!.username, summaryLog);
 
   // Notify sysop of upload (express.e:19098)
+  // EXECUTE_ON_UPLOAD + MAIL_ON_UPLOAD handled by doUploadNotify
   try {
     await doUploadNotify(
       session.user!.name || session.user!.username,
       session.user!.location || "Unknown",
       config.get("bbsName") || "AmiExpress BBS",
-      undefined, // TODO: Get sysop email from config
-      false // TODO: Get MAIL_ON_UPLOAD from config
+      undefined, // webhookService
+      session.nodeId || 1 // nodeId for EXECUTE_ON_UPLOAD
     );
   } catch (error: any) {
     console.error(

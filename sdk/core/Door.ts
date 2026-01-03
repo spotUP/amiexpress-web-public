@@ -77,8 +77,12 @@ export class Door {
    * This is called by the BBS backend when a user runs the door
    */
   async execute(rawSession: RawDoorSession): Promise<void> {
+    // Reset state if door was left in running state from a previous crash/disconnect
+    // ESM modules are cached, so the same Door instance may be reused across sessions
     if (this.isRunning) {
-      throw new Error('Door is already running');
+      console.warn('[Door] Door was in running state from previous session - resetting');
+      this.isRunning = false;
+      this.inputLoopResolve = null;
     }
 
     this.isRunning = true;

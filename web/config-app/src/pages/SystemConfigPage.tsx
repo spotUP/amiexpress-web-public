@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Key, Trash2, RefreshCw } from 'lucide-react';
+import { Key, Trash2, RefreshCw, Eye, EyeOff, Lock, Mail, CheckCircle, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { SystemConfig, Language, ScreenType } from '../types';
 import { useEffect, useRef, useState } from 'react';
@@ -69,6 +69,11 @@ export function SystemConfigPage() {
   const skipNextSave = useRef(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
+  // Password visibility and SMTP test state
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [smtpTestStatus, setSmtpTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [smtpTestMessage, setSmtpTestMessage] = useState<string>('');
+
   // Define categories
   const categories = ['All', 'General', 'Security & Access', 'Networking', 'System'];
 
@@ -78,8 +83,8 @@ export function SystemConfigPage() {
 
     const categoryMap: Record<string, string[]> = {
       'General': ['Basic Information', 'Display Settings', 'Language Settings'],
-      'Security & Access': ['Security Settings', 'Session Settings', 'New User Defaults'],
-      'Networking': ['Mail & SMTP Settings', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
+      'Security & Access': ['Security Settings', 'Session Settings', 'New User Defaults', 'Auto-Validation Settings', 'Password & Account Security'],
+      'Networking': ['Mail & SMTP Settings', 'Email Notification Events', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
       'System': ['System Limits', 'File Management', 'System Behavior', 'Logging Settings']
     };
 
@@ -158,6 +163,16 @@ export function SystemConfigPage() {
       setAutoSaveStatus('saving');
       autoSaveTimer.current = setTimeout(() => {
         const { created_at, updated_at, ...updates } = value as any;
+
+        // Don't overwrite existing encrypted passwords with empty strings
+        // If password field is empty, remove it from updates to preserve existing value
+        if (!updates.smtp_password || updates.smtp_password === '') {
+          delete updates.smtp_password;
+        }
+        if (!updates.reg_key || updates.reg_key === '') {
+          delete updates.reg_key;
+        }
+
         mutation.mutate(updates);
       }, 800);
     });
@@ -217,6 +232,27 @@ export function SystemConfigPage() {
       showError(`Failed to delete SSH key: ${error.message}`);
     } finally {
       setIsDeletingKey(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setSmtpTestStatus('testing');
+    setSmtpTestMessage('');
+    try {
+      const result = await apiClient.testSmtp();
+      if (result?.data?.success) {
+        setSmtpTestStatus('success');
+        setSmtpTestMessage('SMTP test email sent successfully!');
+        showSuccess('SMTP test email sent successfully!');
+      } else {
+        setSmtpTestStatus('error');
+        setSmtpTestMessage(result?.data?.error || 'SMTP test failed');
+        showError(`SMTP test failed: ${result?.data?.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      setSmtpTestStatus('error');
+      setSmtpTestMessage(error.message);
+      showError(`SMTP test failed: ${error.message}`);
     }
   };
 
@@ -707,6 +743,106 @@ export function SystemConfigPage() {
         </div>
         )}
 
+        {/* Auto-Validation Settings */}
+        {shouldShowSection('Auto-Validation Settings') && (
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Auto-Validation Settings</h2>
+          <p className="text-sm text-bbs-muted mb-6">
+            Configure automatic validation for new users. Users can be validated after a delay period
+            or instantly with a password.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="autoval_delay" className="label">
+                Auto-Validation Delay (hours)
+              </label>
+              <input
+                id="autoval_delay"
+                type="number"
+                {...register('autoval_delay', { min: -1, valueAsNumber: true })}
+                className="input-field w-full"
+                placeholder="-1 to disable"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Hours to wait before auto-validating. -1 = disabled, 0 = immediate.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="autoval_preset" className="label">
+                Auto-Validation Preset
+              </label>
+              <input
+                id="autoval_preset"
+                type="text"
+                {...register('autoval_preset')}
+                className="input-field w-full"
+                placeholder="Preset name"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                User preset to apply when auto-validating (from Presets directory).
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="autoval_password" className="label">
+                Instant Validation Password
+              </label>
+              <input
+                id="autoval_password"
+                type="password"
+                {...register('autoval_password')}
+                className="input-field w-full"
+                placeholder="Leave empty to disable"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Password users can enter for instant validation during signup.
+              </p>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Password & Account Security */}
+        {shouldShowSection('Password & Account Security') && (
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Password & Account Security</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="password_expiry_days" className="label">
+                Password Expiry (days)
+              </label>
+              <input
+                id="password_expiry_days"
+                type="number"
+                {...register('password_expiry_days', { min: 0, valueAsNumber: true })}
+                className="input-field w-full"
+                placeholder="0 = never expires"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Days until password expires and user must change it. 0 = never.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="auto_deactivate_days" className="label">
+                Auto-Deactivate After (days)
+              </label>
+              <input
+                id="auto_deactivate_days"
+                type="number"
+                {...register('auto_deactivate_days', { min: 0, valueAsNumber: true })}
+                className="input-field w-full"
+                placeholder="0 = never deactivate"
+              />
+              <p className="text-xs text-bbs-muted mt-1">
+                Days of inactivity before user account is deactivated. 0 = never.
+              </p>
+            </div>
+          </div>
+        </div>
+        )}
+
         {/* Display Settings */}
         {shouldShowSection('Display Settings') && (
         <div className="card">
@@ -882,6 +1018,62 @@ export function SystemConfigPage() {
                 Check for Duplicate Uploads
               </label>
             </div>
+
+            <div>
+              <label htmlFor="local_upload_path" className="label">
+                Local Upload Path
+              </label>
+              <input
+                id="local_upload_path"
+                type="text"
+                {...register('local_upload_path')}
+                className="input-field w-full"
+                placeholder="RAM:uploads"
+              />
+              <p className="text-xs text-bbs-muted mt-1">Default path for local file uploads.</p>
+            </div>
+
+            <div>
+              <label htmlFor="filediz_syscmd" className="label">
+                File DIZ Extract Command
+              </label>
+              <input
+                id="filediz_syscmd"
+                type="text"
+                {...register('filediz_syscmd')}
+                className="input-field w-full"
+                placeholder="lha e {file} FILE_ID.DIZ"
+              />
+              <p className="text-xs text-bbs-muted mt-1">Command to extract FILE_ID.DIZ from archives.</p>
+            </div>
+
+            <div>
+              <label htmlFor="max_desclines" className="label">
+                Max Description Lines
+              </label>
+              <input
+                id="max_desclines"
+                type="number"
+                {...register('max_desclines', { min: 1, max: 100, valueAsNumber: true })}
+                className="input-field w-full"
+                placeholder="25"
+              />
+              <p className="text-xs text-bbs-muted mt-1">Maximum lines for file descriptions.</p>
+            </div>
+
+            <div>
+              <label htmlFor="hold_access_level" className="label">
+                Hold Files Access Level
+              </label>
+              <input
+                id="hold_access_level"
+                type="number"
+                {...register('hold_access_level', { min: 0, max: 255, valueAsNumber: true })}
+                className="input-field w-full"
+                placeholder="100"
+              />
+              <p className="text-xs text-bbs-muted mt-1">Minimum access level to put files on hold.</p>
+            </div>
           </div>
         </div>
         )}
@@ -930,16 +1122,31 @@ export function SystemConfigPage() {
             </div>
 
             <div>
-              <label htmlFor="smtp_password" className="label">
+              <label htmlFor="smtp_password" className="label flex items-center gap-2">
                 SMTP Password
+                <span className="inline-flex items-center gap-1 text-xs text-green-400 font-normal">
+                  <Lock size={12} />
+                  Encrypted
+                </span>
               </label>
-              <input
-                id="smtp_password"
-                type="password"
-                {...register('smtp_password')}
-                className="input-field w-full"
-              />
-              <p className="text-xs text-bbs-muted mt-1">Leave empty to keep existing credentials.</p>
+              <div className="relative">
+                <input
+                  id="smtp_password"
+                  type={showSmtpPassword ? 'text' : 'password'}
+                  {...register('smtp_password')}
+                  className="input-field w-full pr-10"
+                  placeholder="Enter new password or leave empty to keep existing"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-bbs-muted hover:text-bbs-text transition-colors"
+                  title={showSmtpPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showSmtpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+              <p className="text-xs text-bbs-muted mt-1">Leave empty to keep existing encrypted credentials.</p>
             </div>
 
             <div>
@@ -999,6 +1206,143 @@ export function SystemConfigPage() {
               />
               <label htmlFor="smtp_ssl" className="text-sm text-bbs-text">
                 SMTP SSL/TLS
+              </label>
+            </div>
+          </div>
+
+          {/* SMTP Test Section */}
+          <div className="mt-6 pt-6 border-t border-bbs-border">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleTestSmtp}
+                disabled={smtpTestStatus === 'testing'}
+                className="btn-primary flex items-center gap-2"
+              >
+                {smtpTestStatus === 'testing' ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    <span>Testing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={18} />
+                    <span>Test SMTP Connection</span>
+                  </>
+                )}
+              </button>
+
+              {smtpTestStatus === 'success' && (
+                <div className="flex items-center gap-2 text-green-400">
+                  <CheckCircle size={18} />
+                  <span className="text-sm">{smtpTestMessage}</span>
+                </div>
+              )}
+
+              {smtpTestStatus === 'error' && (
+                <div className="flex items-center gap-2 text-red-400">
+                  <XCircle size={18} />
+                  <span className="text-sm">{smtpTestMessage}</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-bbs-muted mt-2">
+              Sends a test email to the sysop email address to verify SMTP configuration.
+            </p>
+          </div>
+        </div>
+        )}
+
+        {/* Email Notification Events */}
+        {shouldShowSection('Email Notification Events') && (
+        <div className="card">
+          <h2 className="text-xl font-semibold text-bbs-text mb-6">Email Notification Events</h2>
+          <p className="text-sm text-bbs-muted mb-6">
+            Configure which BBS events trigger email notifications to the sysop.
+            Requires SMTP to be configured above.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_new_user"
+                type="checkbox"
+                {...register('mail_on_new_user')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_new_user" className="text-sm text-bbs-text">
+                New User Registration
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_logon"
+                type="checkbox"
+                {...register('mail_on_logon')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_logon" className="text-sm text-bbs-text">
+                User Logon
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_logoff"
+                type="checkbox"
+                {...register('mail_on_logoff')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_logoff" className="text-sm text-bbs-text">
+                User Logoff
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_upload"
+                type="checkbox"
+                {...register('mail_on_upload')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_upload" className="text-sm text-bbs-text">
+                File Upload
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_sysop_comment"
+                type="checkbox"
+                {...register('mail_on_sysop_comment')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_sysop_comment" className="text-sm text-bbs-text">
+                Sysop Comment/Feedback
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_sysop_page"
+                type="checkbox"
+                {...register('mail_on_sysop_page')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_sysop_page" className="text-sm text-bbs-text">
+                Sysop Page Request
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <input
+                id="mail_on_pwd_fail"
+                type="checkbox"
+                {...register('mail_on_pwd_fail')}
+                className="w-4 h-4"
+              />
+              <label htmlFor="mail_on_pwd_fail" className="text-sm text-bbs-text">
+                Password Failure (send reset link to user)
               </label>
             </div>
           </div>

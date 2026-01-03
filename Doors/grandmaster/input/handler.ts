@@ -4,7 +4,7 @@
  * Manages keyboard input with DAS/ARR timing
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { GameAction, InputState } from '../core/types';
 import { keyToAction, DEFAULT_KEYS, TIMING, type KeyConfig } from './config';
 

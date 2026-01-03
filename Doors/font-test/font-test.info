@@ -1,0 +1,11 @@
+MENUNAME=Font Test
+CMDNAME=fonttest
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=Font alignment test with Unicode and Amiga fonts
+CATEGORY=Utilities
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

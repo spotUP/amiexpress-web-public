@@ -1,0 +1,57 @@
+# BBSLink Configuration
+# Get your codes from http://www.bbslink.net/ (free registration)
+
+SERVERHOST=games.bbslink.net
+HTTPPORT=80
+TELNETPORT=23
+TIMEOUT=10
+
+# Your BBSLink credentials (required)
+SYSCODE=YOUR_SYSCODE_HERE
+AUTHCODE=YOUR_AUTHCODE_HERE
+SCHEMECODE=YOUR_SCHEMECODE_HERE
+
+# Default door code (optional, defaults to MENU)
+DOORCODE=MENU
+
+# Game-specific door codes (optional)
+# Format: GAMECODE=doorcode
+# These allow direct game launch via parameters
+#
+# Example: LINKMENU LUNA would launch Lunatix
+# Example: LINKMENU LORD would launch Legend of the Red Dragon
+
+LUNA=luna
+LORD=lord
+LRD2=lrd2
+MZKL=mzkl
+TEOS=teos
+OOII=ooii
+TW2002=tw2002
+GWAR=gwar
+GGAM=ggam
+USRP=usrp
+BRE=bre
+FALC=falc
+FHON=fhon
+ARCL=arcl
+DMUD=dmud
+PIMP=pimp
+NETR=netr
+ASSN=assn
+BBSC=bbsc
+VSYS=vsys
+TPIT=tpit
+BORD=bord
+JUNK=junk
+MMOT=mmot
+DARK=dark
+HACK=hack
+MEGA=mega
+FISH=fish
+LMON=lmon
+DMAS=dmas
+BCR=bcr
+LEGN=legn
+DKNS=dkns
+TEST=test

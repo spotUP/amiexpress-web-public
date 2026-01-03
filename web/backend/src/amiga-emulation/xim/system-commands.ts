@@ -9,7 +9,7 @@ import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
-import { XIMCommand, XIMMessage, BBSSessionData, XIMState } from './types';
+import { XIMCommand, XIMMessage, BBSSessionData, XIMState, ENVStatus } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { BBSPaths } from '../../utils/bbs-paths.util';
@@ -366,21 +366,28 @@ export class XIMSystemCommandsHandler {
   /**
    * Handle ENVSTAT (Environment Status)
    * From E sources (express.e:3677-3683)
+   * From assembly (aedoor.i): ENV_DROPPED = -1 when carrier lost
    */
   handleEnvStat(msg: XIMMessage): void {
     console.log('[XIMSystem] ENVSTAT - Environment status');
 
     const isRead = msg.data !== 0;
     if (isRead) {
-      // Return current environment status from session (set by command-execution.handler.ts)
-      // For file scan commands (FR, F, N, etc.), this will be 8 (ENV_FILES)
-      const status = (this.bbsSession as any).currentStat || 0;
-      this.messageParser.writeMessageString(msg.msgAddr, status.toString());
-      console.log(`  [READ] Status: ${status}`);
+      // Per assembly sources: return -1 (ENV_DROPPED) when carrier is lost
+      if (this.state.carrierDropped) {
+        this.messageParser.writeMessageString(msg.msgAddr, ENVStatus.ENV_DROPPED.toString());
+        console.log(`  [READ] Status: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
+      } else {
+        // Return current environment status from session (set by command-execution.handler.ts)
+        // For file scan commands (FR, F, N, etc.), this will be 8 (ENV_FILES)
+        const status = (this.bbsSession as any).currentStat || ENVStatus.ENV_IDLE;
+        this.messageParser.writeMessageString(msg.msgAddr, status.toString());
+        console.log(`  [READ] Status: ${status}`);
+      }
     } else {
       const value = this.getMessageString(msg);
       if (value.length > 0) {
-        (this.bbsSession as any).currentStat = parseInt(value) || 0;
+        (this.bbsSession as any).currentStat = parseInt(value) || ENVStatus.ENV_IDLE;
         console.log(`  [WRITE] Set status: ${value}`);
       }
     }

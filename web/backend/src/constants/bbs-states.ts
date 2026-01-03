@@ -183,6 +183,7 @@ export enum LoggedOnSubState {
   W_EDIT_PROTOCOL = 'w_edit_protocol',                // Edit transfer protocol (option 11)
   W_EDIT_TRANSLATOR = 'w_edit_translator',            // Edit translator (option 15)
   W_EDIT_MODEM_SPEED = 'w_edit_modem_speed',          // Edit modem emulation speed (web extension)
+  W_EDIT_FONT = 'w_edit_font',                        // Edit terminal font (web extension)
 
   // User Stats (S command) - Web-specific font selection
   USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option

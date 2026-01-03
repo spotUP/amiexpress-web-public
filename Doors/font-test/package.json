@@ -1,0 +1,16 @@
+{
+  "name": "font-test",
+  "version": "1.0.0",
+  "description": "Font alignment test door",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

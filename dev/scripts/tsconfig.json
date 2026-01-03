@@ -1,15 +1,31 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "node",
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["**/*.ts"],
+  "files": [
+    "xim-analyzer.ts",
+    "xim-debug.ts",
+    "xim-decode.ts",
+    "xim-diff.ts",
+    "xim-flow.ts",
+    "xim-issue-knowledge-base.ts",
+    "xim-monitor.ts",
+    "xim-perf.ts",
+    "xim-record.ts",
+    "xim-replay.ts",
+    "xim-replay-real.ts",
+    "xim-trace.ts",
+    "xim-validate.ts",
+    "xim-viewer.ts",
+    "watch-doors.ts"
+  ],
   "exclude": ["node_modules"]
 }

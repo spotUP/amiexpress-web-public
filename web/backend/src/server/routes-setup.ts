@@ -26,6 +26,7 @@ import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
+import { createGlobalWallRouter } from '../api/globalwall-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
@@ -131,6 +132,10 @@ export function registerHttpRoutes(app: Application): void {
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
   app.use('/api/chat', chatRouter);
+
+  // ===== Global Wall API - Sysop-only Routes =====
+  const globalWallRouter = createGlobalWallRouter(db);
+  app.use('/api/globalwall', authenticateToken(db), requireSysop(), globalWallRouter);
 
   // ===== Static File Serving for Unified Deployment =====
   // Note: Using process.cwd() instead of __dirname for tsx compatibility

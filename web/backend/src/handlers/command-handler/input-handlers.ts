@@ -441,6 +441,38 @@ async function handleRemainingStates(
       return;
     }
 
+    // Handle BULLETIN_INPUT state - bulletin number/command input
+    if (session.subState === LoggedOnSubState.BULLETIN_INPUT) {
+      // Initialize inputBuffer if needed
+      if (!session.inputBuffer) {
+        session.inputBuffer = "";
+      }
+
+      // Handle Enter - process input
+      if (data === "\r" || data === "\n") {
+        const input = session.inputBuffer || "";
+        session.inputBuffer = "";
+        socket.emit("ansi-output", "\r\n");
+        handleBulletinInputFromDisplayFileCommands(socket, session, input);
+        return;
+      }
+      // Handle Backspace
+      else if (data === "\x7f" || data === "\b") {
+        if (session.inputBuffer.length > 0) {
+          session.inputBuffer = session.inputBuffer.slice(0, -1);
+          socket.emit("ansi-output", "\b \b");
+        }
+        return;
+      }
+      // Handle printable characters
+      else if (data.length === 1 && data >= " " && data <= "~") {
+        session.inputBuffer += data;
+        socket.emit("ansi-output", data);
+        return;
+      }
+      return;
+    }
+
     // For other states, log but don't block
     console.log(
       "❌ Not in handled command input state, current subState:",

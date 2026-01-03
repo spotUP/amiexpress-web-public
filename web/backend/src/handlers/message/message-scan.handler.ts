@@ -20,6 +20,7 @@ import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManag
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { getAllMessageIds, readMessageFile, readMailStats } from '../../utils/message-file.util';
 import { config } from '../../config';
+import { handleNewFilesCommand } from '../commands/navigation-commands.handler';
 
 // Dependencies injected from index.ts
 let _db: any = null;
@@ -278,7 +279,8 @@ export async function performConferenceScan(socket: any, session: any): Promise<
     return 0; // RESULT_SUCCESS
   }
 
-  const { runSysCommand } = require('../command-execution.handler');
+  // NOTE: We use internal handler directly instead of runSysCommand('N')
+  // because n.info points to AquaScan which writes to files, not terminal
   const { joinConference } = require('../operations/conference.handler');
 
   // express.e:28071 - setEnvStat(ENV_SCANNING)
@@ -348,10 +350,12 @@ export async function performConferenceScan(socket: any, session: any): Promise<
         // express.e:28100 - newFilesPauseFlag:=TRUE
         session.newFilesPauseFlag = true;
 
-        console.log(`[confScan] Calling AquaScan (N S U) for conference ${conf}`);
+        console.log(`[confScan] Calling internal file handler (N S U) for conference ${conf}`);
 
         // express.e:28102 - runSysCommand('N','S U')
-        await runSysCommand(socket, session, 'N', 'S U');
+        // Using internal handler directly to output "Scanning directory X..." messages
+        // (n.info points to AquaScan which writes to bulletin files, not terminal)
+        await handleNewFilesCommand(socket, session, 'S U');
 
         // express.e:28104 - newFilesPauseFlag:=FALSE
         session.newFilesPauseFlag = false;

@@ -83,13 +83,24 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
     }
   }
 
-  // express.e:25066 - saveFlagged()
+  // express.e:25064 - saveFlagged()
   // Save flagged files list (for web version, this is handled in session)
 
-  // express.e:25067 - saveHistory()
-  // Save command history (for web version, this is handled in session)
+  // express.e:25065 - saveHistory()
+  // CRITICAL: Save command history NOW, before disconnect, per express.e
+  // Previously this was only in disconnect cleanup, causing a race condition
+  // where history was lost if user logged in again within 15 seconds
+  if (session.user?.id) {
+    try {
+      const { saveHistory } = require('../../utils/command-history.util');
+      await saveHistory(session, session.user.id);
+      console.log(`[LOGOFF] Saved command history for user ${session.user.username}`);
+    } catch (err) {
+      console.error('[LOGOFF] Failed to save command history:', err);
+    }
+  }
 
-  // express.e:25068 - reqState:=REQ_STATE_LOGOFF
+  // express.e:25066 - reqState:=REQ_STATE_LOGOFF
   // express.e:25069 - setEnvStat(ENV_LOGOFF)
   console.log('[ENV] Logoff');
 

@@ -565,7 +565,13 @@ export class DoorLifecycleManager {
         const jumpSize = pcAfterBatch - pcBeforeBatch;
 
         // Track if we see the same jump size repeatedly (indicates stuck execution pattern)
-        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize) {
+        // BUT: Don't trigger on legitimate Wait() loops - doors wait for XIM messages
+        // ALSO: Don't trigger for XIM doors at all - they legitimately loop polling for messages
+        const isInWaitLoop = this.emulator.isPaused() ||
+                            (this.libraryManager?.execLibrary as any)?.currentTask?.isWaiting;
+        const isXIMDoor = this.config.doorType === 'XIM';
+
+        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize && !isInWaitLoop && !isXIMDoor) {
           this.executionState.stuckLoopCount++;
           if (this.executionState.stuckLoopCount > 10) {
             console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x${jumpSize.toString(16)} repeatedly (${this.executionState.stuckLoopCount} times)`);
@@ -1411,6 +1417,9 @@ export class DoorLifecycleManager {
   private async pollXIMMessages(): Promise<void> {
     this.pollCount++;
 
+    // AGGRESSIVE LOGGING: Log EVERY poll to see when it stops working
+    console.log(`[DoorLifecycleManager][pollXIMMessages] POLL #${this.pollCount} doorType="${this.config.doorType}"`);
+
     // Log doorType on first poll
     if (this.pollCount === 1) {
       console.log(`[DoorLifecycleManager] pollXIMMessages called: doorType="${this.config.doorType}"`);
@@ -1483,7 +1492,9 @@ export class DoorLifecycleManager {
     // we use skipReplies option to leave reply messages for the door to get.
     try {
       // Use skipReplies to leave NT_REPLYMSG messages in queue for the door
+      console.log(`[DoorLifecycleManager][pollXIMMessages] CALLING getMsg(port=0x${aePortAddr.toString(16)}, skipReplies=true)`);
       const msgAddr = execLib.getMsg(aePortAddr, { skipReplies: true });
+      console.log(`[DoorLifecycleManager][pollXIMMessages] getMsg RETURNED: msgAddr=0x${(msgAddr || 0).toString(16)}`);
       if (msgAddr && msgAddr !== 0) {
         console.log(`[DoorLifecycleManager] XIM polling: Got message at 0x${msgAddr.toString(16)}`);
 
@@ -1502,6 +1513,8 @@ export class DoorLifecycleManager {
         } else {
           console.log(`[DoorLifecycleManager] XIM polling: ximProtocol is null`);
         }
+      } else {
+        console.log(`[DoorLifecycleManager][pollXIMMessages] NO MESSAGE - getMsg returned 0`);
       }
     } catch (error) {
       console.error(`[DoorLifecycleManager] XIM polling error:`, error);

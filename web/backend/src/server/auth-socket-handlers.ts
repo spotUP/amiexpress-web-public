@@ -4,6 +4,7 @@
  */
 
 import { Socket } from 'socket.io';
+import * as crypto from 'crypto';
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { db } from '../database';
@@ -29,7 +30,8 @@ import { triggerSamiLogRefresh } from '../services/SamiLogService';
 import { sanitizeInput } from '../utils/input-normalizer.util';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { displayScreen, doPause } from '../handlers/screen.handler';
-import { runLoginBatches } from '../services/batch-scheduler';
+import { runLoginBatches, runExecuteOn } from '../services/batch-scheduler';
+import { mailOnLogon, mailOnPwdFail, isMailEventEnabled, isSmtpConfigured } from '../services/mail-notification.service';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { emitUserLogin } from '../services/bbs-event-emitter';
@@ -304,6 +306,28 @@ export function registerAuthHandlers(socket: Socket) {
               { reason: 'invalid password', username: safeUsername, retries: session.loginRetryCount, maxFails },
               DebugSeverity.CRITICAL
             );
+
+            // express.e:29152-29177 - MAIL_ON_PWD_FAIL password reset flow
+            // Check if password reset is available: MAIL_ON_PWD_FAIL enabled, SMTP configured, user has email
+            const mailEnabled = await isMailEventEnabled('PWD_FAIL');
+            const smtpConfigured = await isSmtpConfigured();
+            const userEmail = existingUser?.email;
+
+            if (mailEnabled && smtpConfigured && userEmail) {
+              // express.e:29155-29160 - Prompt for password reset
+              socket.emit('ansi-output', '\r\n\x1b[33mExcessive Password Failure\x1b[0m\r\n\r\n');
+              socket.emit('ansi-output', 'Do you want to send a reset code to your email address? (Y/n): ');
+
+              // Store state for password reset flow
+              session.passwordResetUsername = safeUsername;
+              session.passwordResetState = 'await_confirm';
+
+              // Tell frontend to switch to password reset mode
+              socket.emit('prompt-password-reset', { state: 'await_confirm' });
+              return;
+            }
+
+            // No reset available - disconnect
             socket.emit('ansi-output', '\r\n\x1b[31mToo Many Errors, Goodbye!\x1b[0m\r\n');
             setTimeout(() => socket.disconnect(), 500);
             return;
@@ -420,6 +444,19 @@ export function registerAuthHandlers(socket: Socket) {
           { nodeId: session.nodeId, error: (err as Error).message },
           DebugSeverity.WARNING
         );
+      });
+
+      // Run EXECUTE_ON_LOGON command from bbsConfig.info (express.e:6715)
+      runExecuteOn('LOGON', session.nodeId || 1, {
+        username: user.username,
+        location: user.location
+      }).catch((err) => {
+        console.error('[LOGIN] EXECUTE_ON_LOGON failed:', err);
+      });
+
+      // MAIL_ON_LOGON tooltype - express.e:6716-6720
+      mailOnLogon(user.username, user.location || '').catch((err) => {
+        console.error('[LOGIN] MAIL_ON_LOGON failed:', err);
       });
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
@@ -761,6 +798,109 @@ export function registerAuthHandlers(socket: Socket) {
         DebugSeverity.CRITICAL
       );
       socket.emit('login-failed', 'Registration error');
+    }
+  });
+
+  // Password reset flow handler - express.e:29152-29213
+  socket.on('password-reset-input', async (data: { input: string }) => {
+    try {
+      const input = (data.input || '').trim().toUpperCase();
+
+      if (session.passwordResetState === 'await_confirm') {
+        // express.e:29160-29167 - Handle Y/n confirmation
+        if (input === 'Y' || input === 'YES' || input === '') {
+          // Generate 10-char alphanumeric reset code - express.e:29168
+          const resetCode = crypto.randomBytes(5).toString('hex').toUpperCase();
+          session.passwordResetCode = resetCode;
+
+          // Get user email
+          const user = await db.getUserByUsername(session.passwordResetUsername || '');
+          if (!user?.email) {
+            socket.emit('ansi-output', '\r\n\x1b[31mNo email address on file.\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+
+          // Send reset code via email - express.e:29169-29172
+          const emailSent = await mailOnPwdFail(user.email, resetCode);
+          if (!emailSent) {
+            socket.emit('ansi-output', '\r\n\x1b[31mFailed to send reset code. Please contact the sysop.\x1b[0m\r\n');
+            setTimeout(() => socket.disconnect(), 500);
+            return;
+          }
+
+          socket.emit('ansi-output', '\r\n\x1b[32mReset code sent to your email address.\x1b[0m\r\n');
+          socket.emit('ansi-output', '\r\nEnter reset code: ');
+          session.passwordResetState = 'await_code';
+        } else {
+          // User declined - disconnect
+          socket.emit('ansi-output', '\r\n\x1b[31mGoodbye!\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+        }
+      } else if (session.passwordResetState === 'await_code') {
+        // express.e:29173-29188 - Verify reset code
+        const enteredCode = input.toUpperCase();
+        if (enteredCode === session.passwordResetCode) {
+          socket.emit('ansi-output', '\r\n\x1b[32mCode verified!\x1b[0m\r\n');
+          socket.emit('ansi-output', '\r\nEnter new password: ');
+          session.passwordResetState = 'await_new_password';
+          // Tell client to mask input
+          socket.emit('mask-input', true);
+        } else {
+          // express.e:29189-29195 - Wrong code, disconnect
+          socket.emit('ansi-output', '\r\n\x1b[31mInvalid reset code.\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+        }
+      } else if (session.passwordResetState === 'await_new_password') {
+        // express.e:29196-29213 - Set new password
+        const newPassword = data.input || ''; // Don't trim - password can have spaces
+
+        if (newPassword.length < 4) {
+          socket.emit('ansi-output', '\r\n\x1b[33mPassword must be at least 4 characters.\x1b[0m\r\n');
+          socket.emit('ansi-output', 'Enter new password: ');
+          return;
+        }
+
+        // Update password in database
+        const user = await db.getUserByUsername(session.passwordResetUsername || '');
+        if (!user) {
+          socket.emit('ansi-output', '\r\n\x1b[31mUser not found.\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+          return;
+        }
+
+        try {
+          await db.updateUserPassword(user.id, newPassword);
+          socket.emit('ansi-output', '\r\n\x1b[32mPassword updated successfully!\x1b[0m\r\n');
+          socket.emit('ansi-output', '\r\nPlease login with your new password.\r\n\r\n');
+
+          // Clear reset state
+          session.passwordResetCode = undefined;
+          session.passwordResetUsername = undefined;
+          session.passwordResetState = undefined;
+          session.loginRetryCount = 0;
+
+          // Tell client to unmask input and return to login
+          socket.emit('mask-input', false);
+          socket.emit('retry-login', {});
+        } catch (err) {
+          console.error('[AUTH] Failed to update password:', err);
+          socket.emit('ansi-output', '\r\n\x1b[31mFailed to update password. Please try again later.\x1b[0m\r\n');
+          setTimeout(() => socket.disconnect(), 500);
+        }
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'AUTH',
+        'Exception in password-reset-input handler',
+        { error: (error as Error).message, state: session.passwordResetState },
+        DebugSeverity.CRITICAL
+      );
+      socket.emit('ansi-output', '\r\n\x1b[31mPassword reset error. Goodbye!\x1b[0m\r\n');
+      setTimeout(() => socket.disconnect(), 500);
     }
   });
 }

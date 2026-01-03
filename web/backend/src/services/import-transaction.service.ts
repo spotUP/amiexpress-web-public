@@ -28,6 +28,7 @@ import type {
   AmigaBBSConfig,
 } from '../types/amiga-import';
 import type { User } from '../types';
+import { stripSecretsFromConfigFile } from './bbs-config-file.service';
 import type { Conference } from '../database/types';
 
 /**
@@ -72,6 +73,13 @@ export interface ImportOptions {
   importConfig?: boolean;
   importBulletins?: boolean;
   importScreens?: boolean;
+
+  /**
+   * Strip sensitive data (passwords, API keys) from .info files after importing to database
+   * This improves security by removing plain-text secrets from disk
+   * A backup is always created before stripping
+   */
+  stripSecretsFromInfo?: boolean;
 }
 
 /**
@@ -269,6 +277,21 @@ export class ImportTransactionService extends EventEmitter {
       if (options.importConfig !== false) {
         this.emitProgress(sessionId, 95, 'Importing configuration...');
         await this.importConfig(session.importData.config);
+
+        // Optionally strip secrets from .info files after importing to database
+        if (options.stripSecretsFromInfo) {
+          this.emitProgress(sessionId, 96, 'Securing configuration files...');
+          const bbsRoot = session.importData.extractedPath;
+          const stripResult = stripSecretsFromConfigFile(bbsRoot);
+          if (stripResult.success) {
+            result.warnings.push(
+              `Stripped ${stripResult.strippedCount} sensitive fields from .info files. Backup: ${stripResult.backupPath}`
+            );
+            console.log(`[ImportTransaction] Stripped ${stripResult.strippedCount} secrets from .info files`);
+          } else {
+            result.warnings.push(`Failed to strip secrets from .info files: ${stripResult.error}`);
+          }
+        }
       }
 
       // Import bulletins
@@ -602,23 +625,68 @@ export class ImportTransactionService extends EventEmitter {
 
   /**
    * Import BBS configuration
+   * Stores config in database with sensitive fields encrypted
    */
   private async importConfig(config: AmigaBBSConfig): Promise<void> {
     console.log('[ImportTransaction] Importing configuration');
 
     // Map Amiga config to modern format
     const mapped = this.mapper.mapAmigaConfigToModern(config);
-
-    // Store in BBS config system
-    // TODO: Integrate with actual BBS config storage
     console.log('[ImportTransaction] Config keys:', Object.keys(mapped));
 
-    // For now, log the config
+    // Build updates object for system_config table
+    // Note: updateSystemConfig handles encryption of sensitive fields automatically
+    const updates: Record<string, any> = {};
+
+    // SMTP settings
     if (mapped.smtp) {
-      console.log('[ImportTransaction] SMTP config:', mapped.smtp);
+      updates.smtp_server = mapped.smtp.host;
+      updates.smtp_port = mapped.smtp.port;
+      updates.smtp_username = mapped.smtp.username || '';
+      updates.smtp_password = mapped.smtp.password || '';
+      updates.smtp_ssl = mapped.smtp.ssl || false;
+      console.log('[ImportTransaction] Importing SMTP config (password will be encrypted)');
     }
+
+    // Email addresses
+    if (mapped.sysopEmail) {
+      updates.sysop_email = mapped.sysopEmail;
+    }
+    if (mapped.bbsEmail) {
+      updates.bbs_email = mapped.bbsEmail;
+    }
+
+    // FTP settings
     if (mapped.ftp) {
-      console.log('[ImportTransaction] FTP config:', mapped.ftp);
+      updates.ftp_host = mapped.ftp.host;
+      updates.ftp_port = mapped.ftp.port;
+      updates.ftp_data_ports = mapped.ftp.dataPorts || '';
+      console.log('[ImportTransaction] Importing FTP config');
+    }
+
+    // Password security
+    if (mapped.passwordSecurity) {
+      updates.password_security = mapped.passwordSecurity;
+    }
+
+    // Mail notification settings
+    if (mapped.notifications) {
+      updates.mail_on_new_user = mapped.notifications.mailOnNewUser;
+      updates.mail_on_sysop_comment = mapped.notifications.mailOnSysopComment;
+      updates.mail_on_pwd_fail = mapped.notifications.mailOnPwdFail;
+    }
+
+    // Registration key (sensitive)
+    if (config.regKey) {
+      updates.reg_key = config.regKey;
+      console.log('[ImportTransaction] Importing registration key (will be encrypted)');
+    }
+
+    // Only update if we have something to update
+    if (Object.keys(updates).length > 0) {
+      const configRepo = this.db.getConfigRepository();
+      configRepo.updateSystemConfig(updates);
+      console.log(`[ImportTransaction] Stored ${Object.keys(updates).length} config values in database`);
     }
   }
 

@@ -1186,6 +1186,20 @@ export class LibraryTraps {
     const result = (vector.handler as any)(this.emulator, library, returnAddr);
     const preserveRegs = vector.name === "Forbid" || vector.name === "Permit";
 
+    // CRITICAL: Check if Wait() is blocking - if so, don't advance PC
+    // Wait() will be re-executed after Signal() wakes the door
+    if (library === this.execLibrary && this.execLibrary.consumeIsWaitBlocking()) {
+      // Wait() is blocking - push return address back onto stack and keep PC at trap
+      const sp = this.emulator.getRegister(15);
+      this.emulator.writeMemory32(sp - 4, returnAddr);
+      this.emulator.setRegister(15, sp - 4);
+      // Keep PC at the current trap address so Wait() is called again after Signal()
+      this.emulator.setRegister(16, pc);
+      this.emulator.refillPrefetch();
+      console.log(`[LibraryTraps] Wait() BLOCKING - PC stays at trap 0x${pc.toString(16)}, returnAddr pushed back`);
+      return true;
+    }
+
     // CRITICAL: Check for SP corruption immediately after handler
     const spAfterHandler = this.emulator.getRegister(15);
     if (spAfterHandler === 0xfffffffa || spAfterHandler < 0x1000) {

@@ -7,7 +7,17 @@
  * Environment variables:
  *   XIM_DEBUG=1          - Enable XIM logging (legacy format)
  *   XIM_DEBUG_JSON=1     - Enable structured JSON logging
+ *   XIM_DEBUG_AMIGA=1    - Enable Amiga CONSOLE_DEBUG compatible format
  *   XIM_LOG_FILE=path    - Custom log file path (default: logs/xim-debug.json)
+ *   XIM_AMIGA_LOG=path   - Amiga format log file (default: logs/xim-amiga.log)
+ *
+ * Amiga CONSOLE_DEBUG format (for direct comparison with real Amiga logs):
+ *   <timestamp> execute syscmd: <command>
+ *   <timestamp> setenvmsg: <envmsg>
+ *   <timestamp> run door: <door_path>
+ *   <timestamp> msg request: <command_number>
+ *   <timestamp> data: <value>
+ *   <timestamp> string: <value>
  */
 
 import * as fs from 'fs';
@@ -44,8 +54,11 @@ export class XIMLogger {
   private static instance: XIMLogger;
   private enabled: boolean;
   private jsonEnabled: boolean;
+  private amigaEnabled: boolean;
   private logFile: string;
+  private amigaLogFile: string;
   private logStream: fs.WriteStream | null = null;
+  private amigaLogStream: fs.WriteStream | null = null;
   private messageCount = 0;
   private errorCount = 0;
   private startTime = Date.now();
@@ -53,14 +66,21 @@ export class XIMLogger {
   private constructor() {
     this.enabled = process.env.XIM_DEBUG === '1';
     this.jsonEnabled = process.env.XIM_DEBUG_JSON === '1';
+    this.amigaEnabled = process.env.XIM_DEBUG_AMIGA === '1';
 
     // Use BBS_DATA_DIR or project root for log file path
     const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../..');
     this.logFile = process.env.XIM_LOG_FILE || path.join(bbsRoot, 'logs', 'xim-debug.json');
+    this.amigaLogFile = process.env.XIM_AMIGA_LOG || path.join(bbsRoot, 'logs', 'xim-amiga.log');
 
     if (this.jsonEnabled) {
       console.log(`[XIMLogger] JSON logging enabled, writing to: ${this.logFile}`);
       this.initLogStream();
+    }
+
+    if (this.amigaEnabled) {
+      console.log(`[XIMLogger] Amiga CONSOLE_DEBUG format enabled, writing to: ${this.amigaLogFile}`);
+      this.initAmigaLogStream();
     }
   }
 
@@ -95,6 +115,102 @@ export class XIMLogger {
     } catch (err) {
       console.error('[XIMLogger] Failed to initialize log stream:', err);
     }
+  }
+
+  private initAmigaLogStream() {
+    try {
+      const dir = path.dirname(this.amigaLogFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Rotate log if it's too large (>10MB)
+      if (fs.existsSync(this.amigaLogFile)) {
+        const stats = fs.statSync(this.amigaLogFile);
+        if (stats.size > 10 * 1024 * 1024) {
+          const backup = `${this.amigaLogFile}.${Date.now()}.old`;
+          fs.renameSync(this.amigaLogFile, backup);
+        }
+      }
+
+      this.amigaLogStream = fs.createWriteStream(this.amigaLogFile, { flags: 'a' });
+    } catch (err) {
+      console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
+    }
+  }
+
+  /**
+   * Get Unix timestamp in seconds (matches Amiga DateStamp format)
+   */
+  private getAmigaTimestamp(): number {
+    return Math.floor(Date.now() / 1000);
+  }
+
+  /**
+   * Write a line in Amiga CONSOLE_DEBUG format
+   */
+  private writeAmigaLog(line: string) {
+    if (this.amigaEnabled && this.amigaLogStream) {
+      this.amigaLogStream.write(line + '\n');
+    }
+  }
+
+  /**
+   * Log syscmd execution (Amiga format)
+   * Format: <timestamp> execute syscmd: <command>
+   */
+  logExecuteSysCmd(command: string) {
+    const ts = this.getAmigaTimestamp();
+    this.writeAmigaLog(`${ts} execute syscmd: ${command}`);
+  }
+
+  /**
+   * Log environment message set (Amiga format)
+   * Format: <timestamp> setenvmsg: <envmsg>
+   */
+  logSetEnvMsg(envmsg: string) {
+    const ts = this.getAmigaTimestamp();
+    this.writeAmigaLog(`${ts} setenvmsg: ${envmsg}`);
+  }
+
+  /**
+   * Log door execution (Amiga format)
+   * Format: <timestamp> run door: <door_path>
+   */
+  logRunDoor(doorPath: string) {
+    const ts = this.getAmigaTimestamp();
+    this.writeAmigaLog(`${ts} run door: ${doorPath}`);
+  }
+
+  /**
+   * Log XIM message request in Amiga CONSOLE_DEBUG format
+   * Format:
+   *   <timestamp> msg request: <command_number>
+   *   <timestamp> data: <value>
+   *   <timestamp> string: <value>
+   *
+   * For multi-line strings, the content appears on subsequent lines after "string:"
+   */
+  logAmigaMessage(command: number, data: number, stringValue: string) {
+    const ts = this.getAmigaTimestamp();
+    this.writeAmigaLog(`${ts} msg request: ${command}`);
+    this.writeAmigaLog(`${ts} data: ${data}`);
+
+    // Handle multi-line strings like Amiga does:
+    // Short strings on same line, long/multi-line on next line
+    if (stringValue.includes('\n') || stringValue.length > 60) {
+      this.writeAmigaLog(`${ts} string: `);
+      this.writeAmigaLog(stringValue);
+    } else {
+      this.writeAmigaLog(`${ts} string: ${stringValue}`);
+    }
+  }
+
+  /**
+   * Check if Amiga logging is enabled
+   */
+  isAmigaEnabled(): boolean {
+    return this.amigaEnabled;
   }
 
   log(
@@ -252,6 +368,10 @@ export class XIMLogger {
       });
       this.logStream.end();
       this.logStream = null;
+    }
+    if (this.amigaLogStream) {
+      this.amigaLogStream.end();
+      this.amigaLogStream = null;
     }
   }
 }

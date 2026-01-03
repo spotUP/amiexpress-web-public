@@ -54,6 +54,7 @@ import {
 import {
   handleLiveChatCommand
 } from '../chat/chat-commands.handler';
+import { commandCache } from '../command-execution.handler';
 import {
   handleGreetingsCommand,
   handleMailScanCommand,
@@ -116,6 +117,14 @@ const RESULT_FAILURE = -1;
  * @returns RESULT_SUCCESS if command was handled, RESULT_FAILURE if not recognized
  */
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = ''): Promise<number> {
+  // FIX: Prioritize external BBS commands (doors) over internal hardcoded commands.
+  // If a command exists in the BBSCMD cache, it's a door and should always run.
+  if (commandCache.bbscmd.has(command)) {
+    console.log(`[InternalRouter] Overriding internal command '${command}' with external BBSCMD door.`);
+    const { runBbsCommand } = require('../command-execution.handler');
+    return runBbsCommand(socket, session, command, params);
+  }
+
   const doors = getDoors();
 
   // Map commands to internalCommandX functions from AmiExpress

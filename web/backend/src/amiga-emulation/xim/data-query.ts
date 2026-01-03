@@ -7,7 +7,7 @@
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
-import { XIMMessage, XIMCommand, BBSSessionData, XIMState } from './types';
+import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
@@ -170,6 +170,8 @@ export class XIMDataQueryHandler {
         break;
 
       case XIMCommand.DT_SLOTNUMBER:
+        // Per doordocs.txt (AmiExpress 2.20): Originally read-only (msg->Data = 1 only)
+        // We allow write for extended compatibility with later doors
         if (isRead) {
           const sessionSlot = Number((this.bbsSession as any)?.userSlotNumber);
           const userSlot = Number((user as any)?.slotNumber);
@@ -182,6 +184,7 @@ export class XIMDataQueryHandler {
           this.messageParser.writeString(stringAddr, slotNum.toString(), 200);
           console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
         } else {
+          // Extended: allow write for compatibility with later AmiExpress versions
           const newSlot = parseInt(this.messageParser.readString(stringAddr, 200));
           if (Number.isFinite(newSlot)) {
             if (user) (user as any).slotNumber = newSlot;
@@ -206,12 +209,18 @@ export class XIMDataQueryHandler {
       case XIMCommand.ENVSTAT:
         // Environment status - returns current BBS activity state
         // Used by doors like AquaScan to determine BBS context (files, mail, etc.)
+        // Per assembly (aedoor.i): return -1 (ENV_DROPPED) when carrier lost
         if (isRead) {
-          const envStat = (this.bbsSession as any).currentStat || 0;
-          this.messageParser.writeString(stringAddr, envStat.toString(), 200);
-          console.log(`  [READ] ENVSTAT: ${envStat}`);
+          if (this.state.carrierDropped) {
+            this.messageParser.writeString(stringAddr, ENVStatus.ENV_DROPPED.toString(), 200);
+            console.log(`  [READ] ENVSTAT: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
+          } else {
+            const envStat = (this.bbsSession as any).currentStat || ENVStatus.ENV_IDLE;
+            this.messageParser.writeString(stringAddr, envStat.toString(), 200);
+            console.log(`  [READ] ENVSTAT: ${envStat}`);
+          }
         } else {
-          const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
+          const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || ENVStatus.ENV_IDLE;
           (this.bbsSession as any).currentStat = newStat;
           console.log(`  [WRITE] ENVSTAT: ${newStat}`);
         }
@@ -666,15 +675,21 @@ export class XIMDataQueryHandler {
         break;
 
       case XIMCommand.ACTIVE_NODES:
+        // Per doordocs.txt: "string 10 bytes in length, with 'X's marking active nodes"
+        // NOTE: Original limit was 9 nodes, docs say "will surely be changing"
+        // Using underscore for inactive to match DT_CONFACCESS convention
         if (isRead) {
           const { nodeFileManager } = require('../../services/NodeFileManager');
           let nodesStatus = '';
-          for (let i = 0; i < 32; i++) {
+          // Check first 9 nodes (1-9) per original spec, padded to 10 bytes
+          for (let i = 1; i <= 9; i++) {
             const isActive = nodeFileManager.nodeUserFilesExist(i);
-            nodesStatus += isActive ? 'X' : ' ';
+            nodesStatus += isActive ? 'X' : '_';
           }
-          this.messageParser.writeString(stringAddr, nodesStatus, 32);
-          console.log(`  [READ] ACTIVE_NODES: ${nodesStatus.replace(/ /g, '_')}`);
+          // Pad to 10 bytes total
+          nodesStatus += '_';
+          this.messageParser.writeString(stringAddr, nodesStatus, 10);
+          console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
         }
         break;
 

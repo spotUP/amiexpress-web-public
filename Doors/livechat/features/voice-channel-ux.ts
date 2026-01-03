@@ -466,14 +466,14 @@ export class EnhancedVoiceChannel {
     if (this.ctx?.video) {
       if (this.videoEnabled) {
         try {
-          const videoOptions = this.qualityManager?.getVideoProfile() || {};
+          const videoOptions = this.qualityManager?.getVideoProfile();
           await this.ctx.video.startStream(
             { type: 'webcam' },
             {
-              width: videoOptions.asciiWidth || 80,
-              height: videoOptions.asciiHeight || 24,
-              fps: videoOptions.fps || 10,
-              colored: videoOptions.colored ?? true,
+              width: videoOptions?.asciiWidth || 80,
+              height: videoOptions?.asciiHeight || 24,
+              fps: videoOptions?.fps || 10,
+              colored: videoOptions?.colored ?? true,
             }
           );
         } catch (error: any) {

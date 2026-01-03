@@ -18,6 +18,7 @@ Usage: ./dev/scripts/start-servers.sh [options]
 
 Options:
   --debug | -v | --verbose   Enable debug mode (full logs)
+  --quick | -q               FAST START: Skip all builds, use existing
   --full | --all             Open BBS + Admin/Settings + SDK (default)
   --sdk-only                 Open SDK preview only; build SDK only
   --bbs-only                 Open BBS terminal only; build BBS only
@@ -26,6 +27,9 @@ Options:
 
 Note: Door file watcher is ENABLED by default. Backend auto-restarts when
       door files change. Use --no-watch to disable for production-like testing.
+
+Quick mode (--quick) skips: npm checks, SDK build, door builds, frontend builds,
+TypeScript check. Use for fast debugging when dependencies haven't changed.
 EOF
 }
 
@@ -34,6 +38,7 @@ DEBUG_MODE=false
 DEBUG_OUTPUT="false"
 OPEN_MODE="full"  # Default: Open all three tabs (BBS, Admin, SDK)
 WATCH_DOORS=true  # Default: Enable door file watcher (auto-restart on changes)
+QUICK_MODE=false  # Default: Full build (set true with --quick for fast debug startup)
 
 # Check all arguments
 for arg in "$@"; do
@@ -57,6 +62,9 @@ for arg in "$@"; do
       ;;
     --no-watch)
       WATCH_DOORS=false
+      ;;
+    --quick|-q)
+      QUICK_MODE=true
       ;;
   esac
 done
@@ -92,6 +100,11 @@ if [ "$WATCH_DOORS" = true ]; then
 else
   printf "%b\n" "${YELLOW}→ Door file watcher DISABLED (manual restart required)${RESET}"
   printf "%b\n" "   ${WHITE}Remove --no-watch to enable auto-restart${RESET}"
+fi
+
+if [ "$QUICK_MODE" = true ]; then
+  printf "%b\n" "${YELLOW}${BOLD}→ QUICK MODE: Skipping all builds (using existing artifacts)${RESET}"
+  printf "%b\n" "   ${WHITE}Remove --quick for full build with dependency checks${RESET}"
 fi
 
 # Get the repository root directory (portable)
@@ -173,20 +186,25 @@ printf "%b\n" "   ${WHITE}$PREVIEW_LOG${RESET}"
 echo ""
 
 # === ENHANCED SETUP CHECKS ===
-printf "%b\n" "${CYAN}→ Checking environment setup...${RESET}"
-echo ""
-
-# Check for .env.local
-if [ ! -f "$REPO_ROOT/.env.local" ]; then
-  printf "%b\n" "${YELLOW}[WARNING] .env.local not found${RESET}"
-  printf "%b\n" "   ${WHITE}Copying .env.example to .env.local...${RESET}"
-  cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env.local"
-  printf "%b\n" "   ${GREEN}[OK] Created .env.local - please review and update if needed${RESET}"
+# Skip all build/check steps in quick mode
+if [ "$QUICK_MODE" = true ]; then
+  printf "%b\n" "${YELLOW}→ QUICK MODE: Skipping dependency checks and builds${RESET}"
   echo ""
-fi
+else
+  printf "%b\n" "${CYAN}→ Checking environment setup...${RESET}"
+  echo ""
 
-# Unset NODE_ENV for dependency installation (we need devDependencies)
-unset NODE_ENV
+  # Check for .env.local
+  if [ ! -f "$REPO_ROOT/.env.local" ]; then
+    printf "%b\n" "${YELLOW}[WARNING] .env.local not found${RESET}"
+    printf "%b\n" "   ${WHITE}Copying .env.example to .env.local...${RESET}"
+    cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env.local"
+    printf "%b\n" "   ${GREEN}[OK] Created .env.local - please review and update if needed${RESET}"
+    echo ""
+  fi
+
+  # Unset NODE_ENV for dependency installation (we need devDependencies)
+  unset NODE_ENV
 
 # Function to check and install dependencies
 check_and_install_deps() {
@@ -411,6 +429,8 @@ fi
 echo ""
 printf "%b\n" "${GREEN}${BOLD}→ Environment setup complete!${RESET}"
 echo ""
+
+fi  # End of QUICK_MODE check (if QUICK_MODE=true, all above was skipped)
 
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1

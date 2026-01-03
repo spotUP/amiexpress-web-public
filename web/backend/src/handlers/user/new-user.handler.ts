@@ -21,6 +21,8 @@ import { config } from '../../config';
 import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
 import { emitUserLogin } from '../../services/bbs-event-emitter';
+import { runExecuteOn } from '../../services/batch-scheduler';
+import { mailOnNewUser } from '../../services/mail-notification.service';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -1186,6 +1188,23 @@ async function createAccount(socket: Socket, session: any) {
       });
     } catch (error) {
       console.error('[Webhook] Error sending new user webhook:', error);
+    }
+
+    // Run EXECUTE_ON_NEW_USER command from bbsConfig.info (express.e:6726)
+    try {
+      await runExecuteOn('NEW_USER', session.nodeId || 1, {
+        username: data.username,
+        location: data.location
+      });
+    } catch (error) {
+      console.error('[NewUser] Error running EXECUTE_ON_NEW_USER:', error);
+    }
+
+    // MAIL_ON_NEW_USER tooltype - express.e:6728-6732
+    try {
+      await mailOnNewUser(data.username, data.location);
+    } catch (error) {
+      console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     }
 
     // Fetch the full user object

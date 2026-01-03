@@ -121,6 +121,32 @@ export interface SystemConfig {
   log_retention_days: number;
   sysop_debug_enabled: boolean;
 
+  // Mail Notifications (MAIL_ON_* flags)
+  mail_on_upload: boolean;
+  mail_on_sysop_comment: boolean;
+  mail_on_logon: boolean;
+  mail_on_new_user: boolean;
+  mail_on_logoff: boolean;
+  mail_on_sysop_page: boolean;
+  mail_on_pwd_fail: boolean;
+
+  // Auto-Validation Settings
+  autoval_delay: number;
+  autoval_preset: string;
+  autoval_password: string;
+
+  // Password Expiry
+  password_expiry_days: number;
+
+  // User Management
+  auto_deactivate_days: number;
+
+  // File Management (additional)
+  filediz_syscmd: string;
+  max_desclines: number;
+  hold_access_level: number;
+  local_upload_path: string;
+
   // Metadata
   created_at: Date;
   updated_at: Date;

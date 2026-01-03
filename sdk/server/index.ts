@@ -123,8 +123,14 @@ export class ServerDoor extends EventEmitter {
    * Start the door and begin accepting connections
    */
   public start(): void {
-    if (this.state !== 'idle') {
-      throw new Error('Door is already running');
+    // Reset state if door was left in running state from a previous crash/disconnect
+    // ESM modules are cached, so the same ServerDoor instance may be reused across sessions
+    if (this.state !== 'idle' && this.state !== 'shutdown') {
+      console.warn('[ServerDoor] Door was in running state from previous session - resetting');
+      this.state = 'idle';
+      this.frameCount = 0;
+      this.lastFrameTime = 0;
+      this.users.clear();
     }
 
     this.state = 'running';

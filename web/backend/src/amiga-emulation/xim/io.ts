@@ -13,7 +13,7 @@ import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { DoorConstants } from '../DoorTypes';
-import { ArrowKeyCodes, BBSSessionData, XIMMessage, XIMState } from './types';
+import { ArrowKeyCodes, BBSSessionData, XIMCommand, XIMMessage, XIMState } from './types';
 import { XIMMessageParser } from './messages';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -349,7 +349,19 @@ export class XIMIOHandler {
     const text = this.getMessageString(msg);
     const shouldAddNewline = msg.data !== 0;
 
-    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
+    // DEBUG: Log raw bytes from message string buffer
+    const rawBytes: number[] = [];
+    const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+    for (let i = 0; i < 80; i++) {
+      const byte = this.emulator.readMemory(stringAddr + i);
+      if (byte === 0) break;
+      rawBytes.push(byte);
+    }
+    const rawStr = rawBytes.map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : `.`).join('');
+    console.log(`[XIMIOHandler] JH_SM DEBUG: msgAddr=0x${msg.msgAddr.toString(16)} stringAddr=0x${stringAddr.toString(16)}`);
+    console.log(`[XIMIOHandler] JH_SM DEBUG: rawBytes[0..${rawBytes.length}] = "${rawStr}"`);
+    console.log(`[XIMIOHandler] JH_SM DEBUG: msg.string="${msg.string}" msg.stringPtr=0x${(msg.stringPtr || 0).toString(16)}`);
+    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, len=${text.length})`);
 
     // express.e:3406-3411: IF msg.data THEN aePuts('\b\n'); checkForPause()
     this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
@@ -1371,6 +1383,85 @@ export class XIMIOHandler {
       this.reply(this.pauseReply.msg, -1);
       this.waitingForPause = false;
       this.pauseReply = null;
+    }
+  }
+
+  /**
+   * Handle BB_PURGELINE commands
+   * Per doordocs.txt (AmiExpress 2.20 Module Interface):
+   * - BB_PURGELINE (522): aborts serial input, flushes buffer, requests more input
+   * - BB_PURGELINESTART (523): clears buffer, requests more input
+   * - BB_PURGELINEEND (524): clears buffer only
+   */
+  handlePurgeLine(msg: XIMMessage): void {
+    console.log('[XIMIOHandler] Purge line command');
+
+    let requestMoreInput = false;
+
+    switch (msg.command) {
+      case XIMCommand.BB_PURGELINE:
+        // Aborts serial input, flushes buffer, requests more input
+        console.log('  BB_PURGELINE: Abort input, flush buffer, request more');
+        requestMoreInput = true;
+        break;
+
+      case XIMCommand.BB_PURGELINESTART:
+        // Clear buffer, request more input
+        console.log('  BB_PURGELINESTART: Clear buffer, request more');
+        requestMoreInput = true;
+        break;
+
+      case XIMCommand.BB_PURGELINEEND:
+        // Clear buffer only
+        console.log('  BB_PURGELINEEND: Clear buffer only');
+        requestMoreInput = false;
+        break;
+    }
+
+    this.clearInputBuffer(requestMoreInput);
+    this.reply(msg, 1);
+  }
+
+  /**
+   * Clear input buffer helper
+   * Called by handlePurgeLine
+   */
+  private clearInputBuffer(requestMoreInput: boolean = false): void {
+    console.log(`[XIMIOHandler] Clearing input buffer (requestMore=${requestMoreInput})`);
+
+    // Clear the input queue
+    const queueSize = this.inputQueue.length;
+    this.inputQueue.length = 0;
+
+    // Clear any line input in progress
+    this.lineInputBuffer = '';
+
+    // If we were waiting for input, we need to abort it
+    if (this.waitingForLineInput && this.lineInputMessage) {
+      console.log('[XIMIOHandler] Aborting pending line input');
+      this.waitingForLineInput = false;
+      this.lineInputMessage = null;
+    }
+
+    if (this.waitingForHotkey && this.hotkeyMessage) {
+      console.log('[XIMIOHandler] Aborting pending hotkey');
+      this.waitingForHotkey = false;
+      this.hotkeyMessage = null;
+    }
+
+    if (this.waitingForPause) {
+      console.log('[XIMIOHandler] Aborting pending pause');
+      this.waitingForPause = false;
+      this.pauseInputBuffer = '';
+      this.pauseReply = null;
+    }
+
+    console.log(`[XIMIOHandler] Cleared ${queueSize} queued inputs`);
+
+    // On a real Amiga BBS, "request more input" would signal the serial port
+    // In our web context, the frontend is always ready to send more input
+    if (requestMoreInput) {
+      console.log('[XIMIOHandler] Ready for more input');
     }
   }
 }

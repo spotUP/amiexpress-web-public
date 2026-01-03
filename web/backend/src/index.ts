@@ -359,6 +359,10 @@ export interface BBSSession {
   lastScreenHadPause?: boolean; // Whether the last displayed screen contained ~SP.
   lastScreenFilePath?: string; // Resolved path of last displayed screen (used for .keys lookup)
   loginRetryCount: number; // Login retry counter - express.e:29461, 29560 (max 5 before disconnect)
+  // Password reset flow - express.e:29152-29213
+  passwordResetCode?: string; // Generated 10-char reset code sent to email
+  passwordResetUsername?: string; // Username attempting password reset
+  passwordResetState?: 'await_confirm' | 'await_code' | 'await_new_password'; // Current reset flow state
   callerNum?: number; // Caller number for this session (total calls to BBS)
   paginatedScreen?: {
     lines: string[];
@@ -1388,6 +1392,14 @@ io.on("connection", async (socket) => {
 
   // express.e:29527-29528 - ANSI prompt (unless FORCE_ANSI tooltype is set)
   // "ANSI, RIP or No graphics (A/r/n)?"
+  // Skip if in password reset mode (express.e:29152-29213)
+  if (session.passwordResetState) {
+    console.log(
+      `[Connection] Skipping ANSI prompt - in password reset mode for node ${nodeSession.nodeId}`
+    );
+    return;
+  }
+
   socket.emit(
     "ansi-output",
     "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "

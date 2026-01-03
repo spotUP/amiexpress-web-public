@@ -145,6 +145,10 @@ export class ExecLibrary {
   // This fixes doors that use tight WaitPort loops (Bulls, FR) vs Wait() (AquaScan)
   private needsXIMPoll: boolean = false;
 
+  // Flag set when Wait() blocks - tells handleTrap NOT to advance PC
+  // This allows Wait() to be re-executed after Signal() wakes the door
+  private isWaitBlocking: boolean = false;
+
   // Door init callback - called when door calls CreatePort (initialization complete)
   private doorInitCallback: (() => void) | null = null;
   private doorPortAddr: number = 0;
@@ -315,6 +319,16 @@ export class ExecLibrary {
    */
   clearNeedsXIMPoll(): void {
     this.needsXIMPoll = false;
+  }
+
+  /**
+   * Check if Wait() is blocking and needs special handling
+   * When true, handleTrap should NOT advance PC - Wait() will be re-executed after Signal()
+   */
+  consumeIsWaitBlocking(): boolean {
+    const was = this.isWaitBlocking;
+    this.isWaitBlocking = false;
+    return was;
   }
 
   recordWaitPortReturn(returnAddr: number): void {
@@ -2111,11 +2125,16 @@ export class ExecLibrary {
           );
 
           // Register in libraries list
+          // LibraryLoader now properly parses $VER string for version.revision
+          // Example: "$VER: AEDoorLib 2.7 (18 May 1996)" -> version=2, revision=7
+          // Fallback to version 2 if parsing fails (doors require >= 2)
+          const aedoorVersion = loadedLib.version > 0 ? loadedLib.version : 2;
+          const aedoorRevision = loadedLib.revision || 0;
           const lib: LibraryNode = {
             address: loadedLib.baseAddress,
             name: "AEDoor.library",
-            version: loadedLib.version,
-            revision: 0,
+            version: aedoorVersion,
+            revision: aedoorRevision,
             openCount: 0,
             negSize: 30, // Standard Amiga library header size
             posSize: 34,
@@ -2164,7 +2183,7 @@ export class ExecLibrary {
             { lvo: -12, fileOffset: 0x10e, name: "Close" },
             { lvo: -18, fileOffset: 0x124, name: "Expunge" },
             { lvo: -24, fileOffset: 0x16c, name: "Reserved" },
-            { lvo: -30, fileOffset: 0x3f0, name: "CreateComm" },
+            { lvo: -30, fileOffset: 0x170, name: "CreateComm" },
             { lvo: -36, fileOffset: 0x278, name: "DeleteComm" },
             { lvo: -42, fileOffset: 0x388, name: "SendCmd" },
             { lvo: -48, fileOffset: 0x38e, name: "SendStrCmd" },
@@ -2284,7 +2303,7 @@ export class ExecLibrary {
         { lvo: -18, fileOffset: 0x124, name: "Expunge" },
         { lvo: -24, fileOffset: 0x16c, name: "Reserved" },
         // AEDoor.library specific functions
-        { lvo: -30, fileOffset: 0x3f0, name: "CreateComm" },
+        { lvo: -30, fileOffset: 0x170, name: "CreateComm" },
         { lvo: -36, fileOffset: 0x278, name: "DeleteComm" },
         { lvo: -42, fileOffset: 0x388, name: "SendCmd" },
         { lvo: -48, fileOffset: 0x38e, name: "SendStrCmd" },
@@ -4816,6 +4835,7 @@ export class ExecLibrary {
 
     // If door is sending a message (not suppressed), clear from repliedMessages
     // This handles when door reuses a message buffer for a new command
+    console.log(`[ExecLibrary][PutMsg] DEBUG: suppressDoorCallback=${suppressDoorCallback}, has(0x${msgAddr.toString(16)})=${this.repliedMessages.has(msgAddr)}, repliedMessages.size=${this.repliedMessages.size}`);
     if (!suppressDoorCallback && this.repliedMessages.has(msgAddr)) {
       console.log(
         `[ExecLibrary][PutMsg] Door reusing replied message 0x${msgAddr.toString(
@@ -5230,21 +5250,16 @@ export class ExecLibrary {
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
 
-    // NOTE: Removed double-queuing to AEDoorPort - it was causing PC corruption
-    // The same message object was being queued to multiple ports, causing stack/return address
-    // corruption when the door processed it. Replies should ONLY go to the replyPort specified
-    // in the message header (mn_ReplyPort), not to AEDoorPort.
+    // NOTE: Doors should poll their own reply port for replies, not AEDoorPort.
+    // The standard Exec message flow is:
+    // 1. Door sends to AEDoorPort with mn_ReplyPort = door's reply port
+    // 2. Express processes and calls ReplyMsg() which sends to door's reply port
+    // 3. Door polls its reply port with GetMsg to receive the reply
     //
-    // Previous workaround (now removed):
-    // - Queued replies to both replyPort AND AEDoorPort
-    // - Intended for doors that poll AEDoorPort after sending XIM commands
-    // - Caused PC corruption: PC jumped from 0x2ae2 → 0x1d99ca after processing reply
-    // - Root cause: Same message object modified by multiple port accesses
-    //
-    // Proper behavior per Amiga autodocs:
-    // - ReplyMsg() sends message ONLY to mn_ReplyPort
-    // - Door should use the replyPort it specified when sending the message
-    // - If door needs to poll AEDoorPort, it should set mn_ReplyPort = AEDoorPort
+    // Earlier attempt to also copy to AEDoorPort was removed because:
+    // - 68K trap logs showed door correctly polling its reply port (not AEDoorPort)
+    // - Copies were being consumed by XIM polling instead of door's GetMsg
+    // - Created message clutter without benefiting the door
 
     console.log(
       `[ExecLibrary] Reply sent to port 0x${replyPortAddr.toString(16)}`
@@ -5433,13 +5448,17 @@ export class ExecLibrary {
     this.currentTask.state = 2; // TS_WAIT
     this.currentTask.isWaiting = true;
 
+    // CRITICAL: Set blocking flag so handleTrap doesn't advance PC
+    // This allows Wait() to be re-executed after Signal() wakes the door
+    this.isWaitBlocking = true;
+
     // PAUSE emulator execution until Signal() resumes us
-    // IMPORTANT: We return 0 now, but keep sigWait set so Signal() knows we're waiting.
-    // Signal() will:
-    //   1. Check sigWait to see if task is waiting
-    //   2. Set sigRecvd with the signals
-    //   3. Call emulator.resume()
-    // The door's polling loop will call Wait() again and find signals in sigRecvd.
+    // When Signal() is called:
+    //   1. sigRecvd is set with the signals
+    //   2. emulator.resume() is called
+    //   3. handleTrap sees isWaitBlocking=true, pushes returnAddr back, keeps PC at trap
+    //   4. Next iteration re-executes Wait() trap
+    //   5. Wait() finds signals in sigRecvd and returns them
     console.log(
       "[ExecLibrary]   *** PAUSING EMULATOR - waiting for signals ***"
     );
@@ -5564,22 +5583,12 @@ export class ExecLibrary {
         if (this.currentTask.isWaiting) {
           this.currentTask.isWaiting = false;
 
-          // CRITICAL FIX: Set D0 to the matched signals so Wait() effectively returns them
-          // Without this, Wait() returns 0 to the door because it already returned before
-          // Signal() was called. The door needs to see the signals that woke it up.
-          this.emulator.setRegister(0, matchedSignals);
+          // DON'T set D0 or clear sigRecvd here!
+          // With the new blocking fix, Wait() will be re-executed after resume.
+          // Wait() will find signals in sigRecvd, return them in D0, and clear them.
+          // If we did it here, Wait() would see sigRecvd=0 and block again.
           console.log(
-            `[ExecLibrary]   *** Setting D0=0x${matchedSignals.toString(
-              16
-            )} for Wait() return ***`
-          );
-
-          // Clear the matched signals from sigRecvd (like Wait() does when it returns)
-          this.currentTask.sigRecvd &= ~matchedSignals;
-          console.log(
-            `[ExecLibrary]   Cleared signals, sigRecvd now: 0x${this.currentTask.sigRecvd.toString(
-              16
-            )}`
+            `[ExecLibrary]   *** Wait() will re-execute and find signals in sigRecvd=0x${this.currentTask.sigRecvd.toString(16)} ***`
           );
 
           this.emulator.resume(); // RESUME emulator execution

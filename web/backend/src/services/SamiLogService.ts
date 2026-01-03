@@ -36,12 +36,12 @@ const DEFAULT_ENTRY = {
   usage: '-:-- ',
   upKb: '   0 ',
   upFiles: '   0 ',
-  dnKb: '   0',
-  dnFiles: '   0',
+  dnKb: '   0\n',  // CRITICAL: Must have newline per SAmiLog.Store format
+  dnFiles: '   0\n',  // CRITICAL: Must have newline per SAmiLog.Store format
   onTime: '--:--:-- ',
   offTime: '--:--:-- ',
   avgCps: '   0 ',
-  baud: '2400',
+  baud: '-----',  // 5 chars, no null terminator in this field
   flag1: 0,
   flag2: 0,
   flag3: 0
@@ -150,9 +150,10 @@ function formatCount(value: number): string {
   return value.toString().padStart(5, ' ');
 }
 
-function formatKiloBytes(bytes: number): string {
+function formatKiloBytes(bytes: number, includeNewline: boolean = false): string {
   const kb = Math.floor(bytes / 1024);
-  return kb.toString().padStart(4, ' ').concat(' ');
+  const formatted = kb.toString().padStart(4, ' ');
+  return includeNewline ? formatted + '\n' : formatted + ' ';
 }
 
 function buildEntry(session?: BBSSession) {
@@ -188,14 +189,14 @@ function buildEntry(session?: BBSSession) {
     location,
     node: nodeStr.slice(-1) || '0',
     usage: formatDuration(connectionStart),
-    upKb: formatKiloBytes(uploadsBytes),
+    upKb: formatKiloBytes(uploadsBytes, false),  // No newline for upload KB
     upFiles: formatCount(uploadsCount),
-    dnKb: formatKiloBytes(downloadsBytes),
-    dnFiles: formatCount(downloadsCount),
+    dnKb: formatKiloBytes(downloadsBytes, true),  // CRITICAL: Newline required for download KB
+    dnFiles: formatCount(downloadsCount) + '\n',  // CRITICAL: Newline required for download files
     onTime: formatTimeOfDay(connectionStart),
     offTime: session.state === BBSState.LOGGEDON ? '--:--:-- ' : '--:--:-- ',
     avgCps: '   0 ',
-    baud: baud.toString().padStart(5, ' '),
+    baud: baud.toString().padStart(5, ' '),  // 5 chars exactly (writeStringField will not add null for baud)
     flag1,
     flag2,
     flag3: 0
@@ -308,4 +309,108 @@ ensureStoreExists();
  */
 export async function triggerSamiLogRefresh(): Promise<void> {
   ensureStoreExists();
+}
+
+/**
+ * Read a user entry from the SAmiLog.Store buffer
+ */
+function readEntry(buffer: Buffer, index: number): {
+  name: string;
+  location: string;
+  node: string;
+  usage: string;
+  upKb: string;
+  upFiles: string;
+  dnKb: string;
+  dnFiles: string;
+  onTime: string;
+  offTime: string;
+  avgCps: string;
+  baud: string;
+  isDefault: boolean;
+} {
+  const offset = USERS_OFFSET + index * USER_ENTRY_BYTES;
+
+  const name = buffer.toString('latin1', offset, offset + 18).replace(/\u0000/g, '').trim();
+  const location = buffer.toString('latin1', offset + 18, offset + 39).replace(/\u0000/g, '').trim();
+  const node = buffer.toString('latin1', offset + 39, offset + 40).replace(/\u0000/g, '') || '0';
+  const usage = buffer.toString('latin1', offset + 40, offset + 46).replace(/\u0000/g, '').trim();
+  const upKb = buffer.toString('latin1', offset + 46, offset + 52).replace(/\u0000/g, '').trim();
+  const upFiles = buffer.toString('latin1', offset + 52, offset + 58).replace(/\u0000/g, '').trim();
+  const dnKb = buffer.toString('latin1', offset + 58, offset + 64).replace(/\u0000|\n/g, '').trim();
+  const dnFiles = buffer.toString('latin1', offset + 64, offset + 70).replace(/\u0000|\n/g, '').trim();
+  const onTime = buffer.toString('latin1', offset + 70, offset + 80).replace(/\u0000/g, '').trim();
+  const offTime = buffer.toString('latin1', offset + 80, offset + 90).replace(/\u0000/g, '').trim();
+  const avgCps = buffer.toString('latin1', offset + 90, offset + 96).replace(/\u0000/g, '').trim();
+  const baud = buffer.toString('latin1', offset + 96, offset + 101).replace(/\u0000/g, '').trim();
+
+  const isDefault = name === DEFAULT_NAME || name === '[-----USER-----]' || !name;
+
+  return { name, location, node, usage, upKb, upFiles, dnKb, dnFiles, onTime, offTime, avgCps, baud, isDefault };
+}
+
+/**
+ * Generate a formatted Last Callers bulletin from SAmiLog.Store
+ *
+ * Output format matches original SAmiLog design file output:
+ * - Header with column labels
+ * - Each caller on one line with stats
+ *
+ * @param limit Maximum number of entries to include (default 20)
+ * @returns Formatted bulletin string
+ */
+export function generateBulletin(limit: number = 20): string {
+  try {
+    const storePath = getStorePath();
+
+    if (!fs.existsSync(storePath)) {
+      console.log('[SamiLog] Store not found, returning empty bulletin');
+      return 'No callers logged yet.\r\n';
+    }
+
+    const buffer = fs.readFileSync(storePath);
+
+    if (buffer.length < USERS_OFFSET + TOTAL_USER_BYTES) {
+      console.warn('[SamiLog] Store file too small');
+      return 'No callers logged yet.\r\n';
+    }
+
+    // Read all entries and filter out defaults
+    const entries: ReturnType<typeof readEntry>[] = [];
+    for (let i = 0; i < USER_COUNT && entries.length < limit; i++) {
+      const entry = readEntry(buffer, i);
+      if (!entry.isDefault) {
+        entries.push(entry);
+      }
+    }
+
+    if (entries.length === 0) {
+      return 'No callers logged yet.\r\n';
+    }
+
+    // Build formatted output
+    // Header matching SAmiLog style
+    const header =
+      'Last Callers\r\n' +
+      '============\r\n' +
+      'Name              Location              Node Time   Up KB  Dn KB  On Time   Baud\r\n' +
+      '----------------- --------------------- ---- ------ ------ ------ --------- -----\r\n';
+
+    const lines = entries.map(e => {
+      const name = e.name.substring(0, 17).padEnd(17);
+      const location = e.location.substring(0, 21).padEnd(21);
+      const node = e.node.padStart(4);
+      const usage = e.usage.padStart(6);
+      const upKb = e.upKb.padStart(6);
+      const dnKb = e.dnKb.padStart(6);
+      const onTime = e.onTime.padStart(9);
+      const baud = e.baud.padStart(5);
+      return `${name} ${location} ${node} ${usage} ${upKb} ${dnKb} ${onTime} ${baud}`;
+    });
+
+    return header + lines.join('\r\n') + '\r\n';
+  } catch (err) {
+    console.error('[SamiLog] Error generating bulletin:', err);
+    return 'Error reading caller data.\r\n';
+  }
 }

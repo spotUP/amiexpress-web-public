@@ -286,8 +286,8 @@ class XIMSessionDiff {
       averageTimingDelta: avgDelta,
       maxTimingDelta: maxDelta,
       minTimingDelta: minDelta,
-      slowest1,
-      slowest2,
+      slowestMessage1: slowest1,
+      slowestMessage2: slowest2,
     };
   }
 
@@ -411,12 +411,12 @@ class XIMSessionDiff {
     console.log(`    Average delta: ${Math.floor(comparison.timingAnalysis.averageTimingDelta)}ms`);
     console.log(`    Max delta: ${Math.floor(comparison.timingAnalysis.maxTimingDelta)}ms`);
 
-    if (comparison.timingAnalysis.slowest1) {
-      console.log(`    Slowest (S1): ${comparison.timingAnalysis.slowest1.type} (${comparison.timingAnalysis.slowest1.time}ms)`);
+    if (comparison.timingAnalysis.slowestMessage1) {
+      console.log(`    Slowest (S1): ${comparison.timingAnalysis.slowestMessage1.type} (${comparison.timingAnalysis.slowestMessage1.time}ms)`);
     }
 
-    if (comparison.timingAnalysis.slowest2) {
-      console.log(`    Slowest (S2): ${comparison.timingAnalysis.slowest2.type} (${comparison.timingAnalysis.slowest2.time}ms)`);
+    if (comparison.timingAnalysis.slowestMessage2) {
+      console.log(`    Slowest (S2): ${comparison.timingAnalysis.slowestMessage2.type} (${comparison.timingAnalysis.slowestMessage2.time}ms)`);
     }
     console.log('');
 
@@ -514,11 +514,11 @@ class XIMSessionDiff {
     lines.push('## Timing Analysis\n');
     lines.push(`- Average delta: ${Math.floor(comparison.timingAnalysis.averageTimingDelta)}ms`);
     lines.push(`- Max delta: ${Math.floor(comparison.timingAnalysis.maxTimingDelta)}ms`);
-    if (comparison.timingAnalysis.slowest1) {
-      lines.push(`- Slowest (S1): ${comparison.timingAnalysis.slowest1.type} (${comparison.timingAnalysis.slowest1.time}ms)`);
+    if (comparison.timingAnalysis.slowestMessage1) {
+      lines.push(`- Slowest (S1): ${comparison.timingAnalysis.slowestMessage1.type} (${comparison.timingAnalysis.slowestMessage1.time}ms)`);
     }
-    if (comparison.timingAnalysis.slowest2) {
-      lines.push(`- Slowest (S2): ${comparison.timingAnalysis.slowest2.type} (${comparison.timingAnalysis.slowest2.time}ms)`);
+    if (comparison.timingAnalysis.slowestMessage2) {
+      lines.push(`- Slowest (S2): ${comparison.timingAnalysis.slowestMessage2.type} (${comparison.timingAnalysis.slowestMessage2.time}ms)`);
     }
     lines.push('');
 

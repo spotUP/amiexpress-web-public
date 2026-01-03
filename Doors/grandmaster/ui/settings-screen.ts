@@ -4,7 +4,7 @@
  * Interactive settings editor with real-time preview
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { AppState, PlayerSettings, RotationSystem } from '../core/types';
 

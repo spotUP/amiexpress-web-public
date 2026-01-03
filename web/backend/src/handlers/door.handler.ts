@@ -1492,21 +1492,25 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     const importPath = `file://${resolvedDoorPath}`;
     console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
-    // INSTANT FEEDBACK: Show backend loading screen immediately for TypeScript doors
-    // This clears the BBS menu and shows a loader while the door module initializes
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-    socket.emit('ansi-output', '\r\n\r\n\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m┌────────────────────────────────────────────────────────────┐\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
-    socket.emit('ansi-output', `  \x1b[1;36m│\x1b[0m  \x1b[1;33mLoading application: ${door.name.padEnd(35)}\x1b[0m  \x1b[1;36m│\x1b[0m\r\n`);
-    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m  \x1b[32mPlease wait while the environment initializes...\x1b[0m          \x1b[1;36m│\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m  \x1b[36m[\x1b[32m██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\x1b[36m]\x1b[0m  \x1b[1;36m│\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m│\x1b[0m                                                            \x1b[1;36m│\x1b[0m\r\n');
-    socket.emit('ansi-output', '  \x1b[1;36m└────────────────────────────────────────────────────────────┘\x1b[0m\r\n');
+    // Show animated preloader if SHOWPRELOADER tooltype is set
+    // Only show for doors that explicitly enable it (avoids delay for simple doors)
+    const showPreloader = door.toolTypes?.SHOWPRELOADER?.toUpperCase() === 'YES' ||
+                         door.toolTypes?.SHOWPRELOADER === '1';
 
-    // Dynamically import the door module
-    const doorModule = await import(importPath);
+    let doorModule: any;
+    if (showPreloader) {
+      const { showPreloaderWhile } = require('../../../../sdk/utils/door-preloader');
+      // Pass socket directly - session.socket doesn't exist, socket is a separate parameter
+      const doorDisplayName = door.title || door.name || door.command || 'Application';
+      doorModule = await showPreloaderWhile(
+        socket,
+        doorDisplayName,
+        async () => await import(importPath)
+      );
+    } else {
+      // Import directly without preloader
+      doorModule = await import(importPath);
+    }
 
     // Check if this is a hybrid door using SDK's ServerDoor class
     // These doors call door.start() when imported and don't export runDoor()
@@ -2223,6 +2227,12 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
     (session as any).doorCommand = door.command;
     (session as any).doorId = door.command;
     console.log(`[executeAmigaDoor] Verified session.doorCommand="${(session as any).doorCommand}"`);
+
+    // Set door parameters for EXPRESS_VERSION to return (XIM doors need this)
+    const paramString = door.parameters ? door.parameters.join(' ') : '';
+    (session as any).doorParams = paramString;
+    (session as any).commandParams = paramString;
+    console.log(`[executeAmigaDoor] Set doorParams="${paramString}" for EXPRESS_VERSION`);
 
     // Set bbsRoot on session so XIMProtocol can find command .info files
     (session as any).bbsRoot = bbsRoot;

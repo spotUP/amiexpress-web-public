@@ -21,6 +21,7 @@ import fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
+import { config } from '../../config';
 
 import type { BBSSession } from '../../index';
 
@@ -580,8 +581,9 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
 
   console.log('[ENV] Bulletins');
 
-  // Check if BullHelp.txt exists
-  const bullHelpPath = path.join(_confScreenDir, 'Bulletins', 'BullHelp.txt');
+  // Check if BullHelp.txt exists - Bulletins are at BBS root, NOT in Screens/
+  const dataDir = config.get('dataDir');
+  const bullHelpPath = path.join(dataDir, 'Bulletins', 'BullHelp.txt');
   if (!amigafs.existsSync(bullHelpPath)) {
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.errorLine('Sorry, there are no bulletins available'));
@@ -615,8 +617,9 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
  * Helper: Show bulletin help screen and prompt for bulletin number
  */
 function _showBulletinHelp(socket: any, session: BBSSession): void {
-  // Display BullHelp screen
-  const bullHelpBasePath = path.join('Bulletins', 'BullHelp');
+  // Display BullHelp screen - use full path with dataDir
+  const dataDir = config.get('dataDir');
+  const bullHelpBasePath = path.join(dataDir, 'Bulletins', 'BullHelp');
   const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
   if (helpScreen) {
@@ -639,7 +642,8 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
  * Helper: Display a specific bulletin
  */
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
-  const bulletinBasePath = path.join('Bulletins', `Bull${bulletinNum}`);
+  const dataDir = config.get('dataDir');
+  const bulletinBasePath = path.join(dataDir, 'Bulletins', `Bull${bulletinNum}`);
   const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
 
   socket.emit('ansi-output', '\r\n');

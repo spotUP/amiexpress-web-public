@@ -189,11 +189,6 @@ Example_BBS/
 # BBS runtime data files - INCLUDE AS TEMPLATE DATA
 # (Commented out to include Node directories and BBS files)
 # Node*/
-# node*.user
-# node*.userkeys
-# user.data
-# user.keys
-# user.misc
 # DOOR.SYS
 # DORINFO*.DEF
 # Conf*/Files/*.dir
@@ -205,6 +200,17 @@ Node*/door.sys
 Node*/DORINFO*.DEF
 Node*/DORINFO*.def
 Node*/TempAns
+
+# Runtime-generated files (context optimization)
+Bulletins/bull*.txt
+batch[0-9]
+batch[0-9][0-9]
+*.user
+node*.user
+user.data
+user.keys
+user.misc
+.DS_Store
 
 # Large backup files (>50MB, excluded to avoid GitHub limit)
 Node*/CLogBackup

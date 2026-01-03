@@ -4,7 +4,7 @@
  * Multiplayer game screen with opponent minimaps and attack indicators
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';

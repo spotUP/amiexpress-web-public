@@ -152,7 +152,7 @@ export function usePushNotifications() {
       }
 
       // Register service worker if not already
-      let registration = await navigator.serviceWorker.ready;
+      let registration: ServiceWorkerRegistration | null = await navigator.serviceWorker.ready;
       if (!registration) {
         registration = await registerServiceWorker();
         if (!registration) {
@@ -161,9 +161,11 @@ export function usePushNotifications() {
       }
 
       // Subscribe to push
+      // Convert Uint8Array to ArrayBuffer for applicationServerKey
+      const vapidKeyArray = urlBase64ToUint8Array(vapidPublicKey);
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        applicationServerKey: new Uint8Array(vapidKeyArray).buffer as ArrayBuffer
       });
 
       // Send subscription to server

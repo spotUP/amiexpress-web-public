@@ -10,6 +10,7 @@
 
 import { MoiraEmulator } from '../amiga-emulation/cpu/MoiraEmulator';
 import { ExecLibrary } from '../amiga-emulation/api/ExecLibrary';
+import { runExecuteOn } from '../services/batch-scheduler';
 
 /**
  * Node status codes (from express.e)
@@ -240,6 +241,13 @@ export class NodeStatusManager {
     if (address && nameAddr) {
       this.writeSinglePortToMemory(emulator, nodeId, address, nameAddr);
     }
+
+    // express.e:13229,13248,13469,13515 - runExecuteOn('STATUS_CHANGE')
+    // Called when node status or misc info changes
+    runExecuteOn('STATUS_CHANGE', nodeId, {
+      username: node.handle,
+      location: node.location
+    }).catch((err) => console.error('[NodeStatusManager] EXECUTE_ON_STATUS_CHANGE failed:', err));
 
     console.log(`[NodeStatusManager] Updated node ${nodeId}: ${node.handle} - ${NodeStatus[node.status]}`);
   }

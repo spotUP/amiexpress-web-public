@@ -4,7 +4,7 @@
  * Displays high scores and rankings for all game modes
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { HighScoreManager, HighScoreEntry } from '../core/high-scores';
 import type { SoundEngine } from '../audio/sounds';

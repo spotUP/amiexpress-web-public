@@ -6,6 +6,7 @@ import { SystemConfigPage } from './pages/SystemConfigPage';
 import { NodesPage } from './pages/NodesPage';
 import { ConferencesPage } from './pages/ConferencesPage';
 import { DoorsPage } from './pages/DoorsPage';
+import { GlobalWallPage } from './pages/GlobalWallPage';
 import { LanguagesPage } from './pages/LanguagesPage';
 import { ProtocolsPage } from './pages/ProtocolsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -71,6 +72,7 @@ function App() {
         <Route path="users" element={<UsersPage />} />
         <Route path="conferences" element={<ConferencesPage />} />
         <Route path="doors" element={<DoorsPage />} />
+        <Route path="globalwall" element={<GlobalWallPage />} />
         <Route path="languages" element={<LanguagesPage />} />
         <Route path="protocols" element={<ProtocolsPage />} />
         <Route path="security" element={<SecurityPage />} />

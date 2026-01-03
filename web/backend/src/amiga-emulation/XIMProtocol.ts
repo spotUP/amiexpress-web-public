@@ -403,6 +403,12 @@ export class XIMProtocol {
       `[XIMProtocol] <<< XIM Command: ${msg.command} (${humanName}) data=${msg.data} string="${msg.string || ''}"`
     );
 
+    // Log in Amiga CONSOLE_DEBUG format for direct comparison with real Amiga logs
+    // Note: This logs the REQUEST. The response will be logged by the handler after filling in values.
+    if (ximLogger.isAmigaEnabled()) {
+      ximLogger.logAmigaMessage(msg.command, msg.data, msg.string || '');
+    }
+
     // Log to door log file for debugging
     if (this.doorLogger) {
       this.doorLogger.xim('RX', `${msg.command} (${humanName})`, `data=${msg.data} str="${msg.string || ''}"`);
@@ -954,7 +960,8 @@ export class XIMProtocol {
       case XIMCommand.BB_PURGELINE:
       case XIMCommand.BB_PURGELINESTART:
       case XIMCommand.BB_PURGELINEEND:
-        this.bbsInfoHandler.handlePurgeLine(msg);
+        // Per doordocs.txt: these clear the INPUT BUFFER, not screen
+        this.ioHandler.handlePurgeLine(msg);
         break;
 
       case XIMCommand.BB_NONSTOPTEXT:

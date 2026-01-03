@@ -28,6 +28,14 @@ const BUILD_VERSION = `v2.${dayOfYear}`;
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
+import {
+  AutocompleteManager,
+  AutocompleteDialog,
+  UsernameProvider,
+  BBSCodeProvider,
+  WordProvider,
+  type AutocompleteContext,
+} from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
 
 /**
  * Global canvas rendering mode for all chart widgets
@@ -174,9 +182,11 @@ export async function createApp(session: DoorSession) {
       '24. Map Demo',
       '25. Picture Demo',
       '26. Markdown Demo',
-      '27. New Features',
-      '28. Stress Test',
-      '29. View Results',
+      '27. Panel Demo',
+      '28. Autocomplete Demo',
+      '29. New Features',
+      '30. Stress Test',
+      '31. View Results',
       ' 0. Exit',
     ],
   });
@@ -1930,6 +1940,398 @@ End of sample markdown.`;
     screen.render();
   }
 
+  // ========== PANEL DEMO ==========
+  function showPanelDemo() {
+    clearDemo();
+    currentDemo = 'panel';
+    demoBox.setLabel(' Panel Demo - Multi-Panel Layouts ');
+
+    // Import Panel widget
+    const { Panel } = blessed;
+
+    // Create 3 panels with Alt+number shortcuts
+    const panel1 = new Panel({
+      parent: demoBox,
+      top: 0,
+      left: 0,
+      width: '33%-1',
+      height: '70%',
+      title: 'Panel 1 (Alt+1)',
+      panelIndex: 1,
+      border: { type: 'line' },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'cyan' },
+      },
+    });
+
+    const panel2 = new Panel({
+      parent: demoBox,
+      top: 0,
+      left: '33%',
+      width: '34%',
+      height: '70%',
+      title: 'Panel 2 (Alt+2)',
+      panelIndex: 2,
+      border: { type: 'line' },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'green' },
+      },
+    });
+
+    const panel3 = new Panel({
+      parent: demoBox,
+      top: 0,
+      left: '67%+1',
+      right: 0,
+      height: '70%',
+      title: 'Panel 3 (Alt+3)',
+      panelIndex: 3,
+      border: { type: 'line' },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'magenta' },
+      },
+    });
+
+    // Panel 1: List widget
+    const list1 = blessed.list({
+      parent: panel1,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      keys: true,
+      vi: true,
+      mouse: true,
+      scrollable: true,
+      alwaysScroll: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        selected: { fg: 'black', bg: 'cyan' },
+      },
+      items: [
+        'Item 1',
+        'Item 2',
+        'Item 3',
+        'Item 4',
+        'Item 5',
+        'Item 6',
+        'Item 7',
+        'Item 8',
+      ],
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'cyan' },
+      },
+    });
+
+    // Panel 2: Form with inputs
+    const form = blessed.form({
+      parent: panel2,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      keys: true,
+      vi: true,
+    });
+
+    blessed.text({
+      parent: form,
+      top: 1,
+      left: 1,
+      content: 'Name:',
+      tags: true,
+      style: { fg: 'yellow' },
+    });
+
+    const nameInput = blessed.textbox({
+      parent: form,
+      top: 2,
+      left: 1,
+      right: 1,
+      height: 1,
+      inputOnFocus: true,
+      mouse: true,
+      keys: true,
+      style: {
+        fg: 'white',
+        bg: 'blue',
+        focus: { fg: 'white', bg: 'green' },
+      },
+    });
+
+    blessed.text({
+      parent: form,
+      top: 4,
+      left: 1,
+      content: 'Email:',
+      tags: true,
+      style: { fg: 'yellow' },
+    });
+
+    const emailInput = blessed.textbox({
+      parent: form,
+      top: 5,
+      left: 1,
+      right: 1,
+      height: 1,
+      inputOnFocus: true,
+      mouse: true,
+      keys: true,
+      style: {
+        fg: 'white',
+        bg: 'blue',
+        focus: { fg: 'white', bg: 'green' },
+      },
+    });
+
+    // Panel 3: Checkboxes
+    blessed.text({
+      parent: panel3,
+      top: 1,
+      left: 1,
+      content: '{yellow-fg}Options:{/}',
+      tags: true,
+    });
+
+    const checkbox1 = blessed.checkbox({
+      parent: panel3,
+      top: 3,
+      left: 2,
+      content: 'Option 1',
+      mouse: true,
+      keys: true,
+      style: {
+        fg: 'white',
+        focus: { fg: 'yellow' },
+      },
+    });
+
+    const checkbox2 = blessed.checkbox({
+      parent: panel3,
+      top: 5,
+      left: 2,
+      content: 'Option 2',
+      mouse: true,
+      keys: true,
+      checked: true,
+      style: {
+        fg: 'white',
+        focus: { fg: 'yellow' },
+      },
+    });
+
+    const checkbox3 = blessed.checkbox({
+      parent: panel3,
+      top: 7,
+      left: 2,
+      content: 'Option 3',
+      mouse: true,
+      keys: true,
+      style: {
+        fg: 'white',
+        focus: { fg: 'yellow' },
+      },
+    });
+
+    // Instructions box at bottom
+    blessed.box({
+      parent: demoBox,
+      top: '70%',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      label: ' Instructions ',
+      border: { type: 'line' },
+      tags: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'yellow' },
+      },
+      content: [
+        '{cyan-fg}Panel Features:{/}',
+        '',
+        '{yellow-fg}Keyboard Shortcuts:{/}',
+        '  {green-fg}Alt+1, Alt+2, Alt+3{/} - Switch between panels',
+        '  {green-fg}Tab{/} - Navigate between widgets in active panel',
+        '  {green-fg}Click{/} - Activate panel by clicking anywhere on it',
+        '',
+        '{yellow-fg}Visual Feedback:{/}',
+        '  - Active panel border highlights when child widget has focus',
+        '  - Panel activates when any child widget is focused',
+        '  - Each panel manages its own focus group',
+      ].join('\n'),
+    });
+
+    // Activate first panel
+    panel1.activate();
+    setStatus('Panel demo: Alt+1/2/3 to switch panels, Tab to navigate widgets');
+    addResult('Panel Widget', 'pass', 'Multi-panel layout with shortcuts');
+    screen.render();
+  }
+
+  // ========== AUTOCOMPLETE DEMO ==========
+  function showAutocompleteDemo() {
+    clearDemo();
+    currentDemo = 'autocomplete';
+    demoBox.setLabel(' Autocomplete Demo - Ctrl+Space ');
+
+    // Create input area
+    const inputBox = blessed.box({
+      parent: demoBox,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: 15,
+      border: { type: 'line' },
+      label: ' Type here (Ctrl+Space for suggestions) ',
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'cyan' },
+      },
+    });
+
+    const textarea = blessed.textarea({
+      parent: inputBox,
+      top: 0,
+      left: 0,
+      width: '100%-2',
+      height: '100%-2',
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+      },
+      value: 'Try typing:\n@spot - for username completion\n[bold] - for BBSCode tags\nHello world - for word completion\n\nPress Ctrl+Space to show autocomplete!',
+    });
+
+    // Create autocomplete manager with all providers
+    const usernames = ['spot', 'admin', 'sysop', 'guest', 'testuser'];
+    const usernameProvider = new UsernameProvider(usernames);
+    const bbscodeProvider = new BBSCodeProvider();
+    const wordProvider = new WordProvider();
+
+    const autocompleteManager = new AutocompleteManager([
+      usernameProvider,
+      bbscodeProvider,
+      wordProvider,
+    ]);
+
+    // Create autocomplete dialog
+    const autocompleteDialog = new AutocompleteDialog({
+      parent: screen,
+      cursorRow: 5,
+      cursorCol: 10,
+      onSelect: (suggestion) => {
+        // Get current value and insert suggestion
+        const currentValue = textarea.getValue();
+        const lines = currentValue.split('\n');
+        const cursorPos = (textarea as any).cursor;
+
+        if (cursorPos) {
+          const line = lines[cursorPos.line] || '';
+          const newLine =
+            line.substring(0, cursorPos.col) +
+            suggestion.insertText +
+            line.substring(cursorPos.col);
+          lines[cursorPos.line] = newLine;
+          textarea.setValue(lines.join('\n'));
+
+          // Move cursor after insertion
+          (textarea as any).cursor.col += suggestion.insertText.length;
+        }
+
+        textarea.focus();
+        screen.render();
+      },
+      onCancel: () => {
+        textarea.focus();
+        screen.render();
+      },
+    });
+
+    // Handle Ctrl+Space for autocomplete
+    textarea.key(['C-space'], () => {
+      const currentValue = textarea.getValue();
+      const lines = currentValue.split('\n');
+      const cursorPos = (textarea as any).cursor || { line: 0, col: 0 };
+
+      const context: AutocompleteContext = {
+        currentLine: lines[cursorPos.line] || '',
+        cursorPosition: cursorPos.col || 0,
+        documentContent: lines,
+        lineNumber: cursorPos.line || 0,
+      };
+
+      if (!autocompleteManager.shouldTrigger(context)) {
+        setStatus('No autocomplete suggestions for current context');
+        return;
+      }
+
+      autocompleteManager.getSuggestions(context).then(suggestions => {
+        if (suggestions.length === 0) {
+          setStatus('No autocomplete suggestions found');
+          return;
+        }
+
+        // Update dialog position
+        const boxTop = inputBox.top as number;
+        const boxLeft = inputBox.left as number;
+        (autocompleteDialog as any).box.top = boxTop + 1 + (cursorPos.line || 0);
+        (autocompleteDialog as any).box.left = boxLeft + 1 + (cursorPos.col || 0);
+
+        autocompleteDialog.show(suggestions);
+        setStatus(`Showing ${suggestions.length} autocomplete suggestions`);
+      });
+    });
+
+    // Info panel
+    blessed.box({
+      parent: demoBox,
+      top: 15,
+      left: 0,
+      width: '100%',
+      height: 10,
+      border: { type: 'line' },
+      label: ' Features ',
+      tags: true,
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: { fg: 'yellow' },
+      },
+      content: [
+        '{cyan-fg}Autocomplete Features:{/}',
+        '',
+        '{green-fg}Username Provider:{/} Type @ followed by name',
+        '  {gray-fg}Suggests: @spot, @admin, @sysop, @guest, @testuser{/}',
+        '',
+        '{green-fg}BBSCode Provider:{/} Type [ followed by tag name',
+        '  {gray-fg}Suggests: [bold], [color], [url], [quote], etc.{/}',
+        '',
+        '{green-fg}Word Provider:{/} Type 3+ letter word',
+        '  {gray-fg}Suggests words from document{/}',
+      ].join('\n'),
+    });
+
+    textarea.focus();
+    setStatus('Type text and press Ctrl+Space for autocomplete suggestions');
+    addResult('Autocomplete', 'pass', 'All providers working');
+    screen.render();
+  }
+
   // ========== 14. STRESS TEST ==========
   function showStressTest() {
     clearDemo();
@@ -2031,10 +2433,12 @@ End of sample markdown.`;
       case 23: showMapDemo(); break;
       case 24: showPictureDemo(); break;
       case 25: showMarkdownDemo(); break;
-      case 26: showNewFeatures(); break;
-      case 27: showStressTest(); break;
-      case 28: showResults(); break;
-      case 29: cleanup(); break;
+      case 26: showPanelDemo(); break;
+      case 27: showAutocompleteDemo(); break;
+      case 28: showNewFeatures(); break;
+      case 29: showStressTest(); break;
+      case 30: showResults(); break;
+      case 31: cleanup(); break;
     }
   });
 

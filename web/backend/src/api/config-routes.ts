@@ -1492,6 +1492,22 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
     }
   });
 
+  // ===== SMTP Testing =====
+
+  /**
+   * POST /api/config/smtp/test
+   * Test SMTP connection by sending a test email to sysop
+   */
+  router.post('/smtp/test', async (req: any, res: Response) => {
+    try {
+      const { testSmtpConnection } = await import('../services/mail-notification.service');
+      const result = await testSmtpConnection();
+      sendResponse(res, result, result.success ? 'SMTP test email sent successfully' : `SMTP test failed: ${result.error}`);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   // ===== Log Viewer =====
 
   /**

@@ -4,7 +4,7 @@
  * Multiplayer lobby for matchmaking and custom games
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/screen';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { GrandmasterNetworkManager, PlayerInfo, MatchState, MultiplayerMode } from '../network/network-manager';
 import type { AppState } from '../core/types';

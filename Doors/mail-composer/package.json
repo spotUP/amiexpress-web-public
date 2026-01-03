@@ -1,0 +1,41 @@
+{
+  "name": "@amiexpress/mail-composer",
+  "version": "1.0.0",
+  "description": "Full-featured ANSI message editor for BBS mail",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mail",
+    "editor",
+    "ansi",
+    "bbs",
+    "composer"
+  ],
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "door": {
+    "name": "Mail Composer",
+    "command": "COMPOSE",
+    "aliases": [
+      "WRITE",
+      "MAIL"
+    ],
+    "description": "Full-featured ANSI editor for composing BBS messages with color support",
+    "category": "Mail",
+    "minPlayers": 1,
+    "maxPlayers": 1,
+    "version": "1.0.0",
+    "runtime": "typescript"
+  }
+}

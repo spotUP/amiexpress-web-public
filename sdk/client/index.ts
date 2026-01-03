@@ -95,8 +95,16 @@ export class ClientDoor extends EventEmitter {
    * @param wsUrl - WebSocket URL (default: ws://localhost:3001) - ignored if window.__BBS__ exists
    */
   public start(wsUrl: string = 'ws://localhost:3001'): void {
-    if (this.state !== 'idle') {
-      throw new Error('Door is already running');
+    // Reset state if door was left in running state from a previous crash/disconnect
+    // ESM modules are cached, so the same ClientDoor instance may be reused across sessions
+    if (this.state !== 'idle' && this.state !== 'shutdown') {
+      console.warn('[ClientDoor] Door was in running state from previous session - resetting');
+      this.state = 'idle';
+      this.frameCount = 0;
+      this.lastFrameTime = 0;
+      this.user = null;
+      this.ws = null;
+      this.rpcRequests.clear();
     }
 
     this.state = 'connecting';

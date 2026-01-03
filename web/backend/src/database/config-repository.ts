@@ -29,6 +29,7 @@ import type {
   FileChecker,
   FileCheckerError
 } from './types';
+import { decryptSecret, encryptSecret, isSensitiveField } from '../utils/secrets-encryption.util';
 
 export class ConfigRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
@@ -180,6 +181,7 @@ export class ConfigRepository extends BaseRepository<any> {
 
   /**
    * Update system configuration
+   * Encrypts sensitive fields (passwords, API keys) before storing
    */
   updateSystemConfig(updates: Partial<SystemConfig>): SystemConfig {
     const fields: string[] = [];
@@ -190,10 +192,17 @@ export class ConfigRepository extends BaseRepository<any> {
       if (key === 'id' || key === 'created_at' || key === 'updated_at') return;
 
       fields.push(`${key} = ?`);
+
+      // Encrypt sensitive fields before storing
+      let processedValue = value;
+      if (typeof value === 'string' && isSensitiveField(key)) {
+        processedValue = encryptSecret(value);
+      }
+
       values.push(
-        typeof value === 'boolean' ? (value ? 1 : 0) :
-        Array.isArray(value) ? JSON.stringify(value) :
-        value
+        typeof processedValue === 'boolean' ? (processedValue ? 1 : 0) :
+        Array.isArray(processedValue) ? JSON.stringify(processedValue) :
+        processedValue
       );
     });
 
@@ -1018,8 +1027,8 @@ export class ConfigRepository extends BaseRepository<any> {
       allow_internet_email: Boolean(row.allow_internet_email),
       smtp_server: row.smtp_server,
       smtp_port: row.smtp_port,
-      smtp_username: row.smtp_username || '',
-      smtp_password: row.smtp_password || '',
+      smtp_username: decryptSecret(row.smtp_username || ''),
+      smtp_password: decryptSecret(row.smtp_password || ''),
       smtp_ssl: Boolean(row.smtp_ssl),
       smtp_from_email: row.smtp_from_email || '',
       sysop_email: row.sysop_email || '',
@@ -1035,14 +1044,35 @@ export class ConfigRepository extends BaseRepository<any> {
       ssh_port: row.ssh_port ?? 31337,
       quiet_join: Boolean(row.quiet_join),
       convert_to_mb: Boolean(row.convert_to_mb),
-      reg_key: row.reg_key || '',
+      reg_key: decryptSecret(row.reg_key || ''),
       debug_mode: Boolean(row.debug_mode),
       log_level: row.log_level,
       log_retention_days: row.log_retention_days,
       sysop_debug_enabled: Boolean(row.sysop_debug_enabled),
       vapid_public_key: row.vapid_public_key || '',
-      vapid_private_key: row.vapid_private_key || '',
+      vapid_private_key: decryptSecret(row.vapid_private_key || ''),
       vapid_contact_email: row.vapid_contact_email || '',
+      // Mail Notifications (MAIL_ON_* flags)
+      mail_on_upload: Boolean(row.mail_on_upload),
+      mail_on_sysop_comment: Boolean(row.mail_on_sysop_comment),
+      mail_on_logon: Boolean(row.mail_on_logon),
+      mail_on_new_user: Boolean(row.mail_on_new_user),
+      mail_on_logoff: Boolean(row.mail_on_logoff),
+      mail_on_sysop_page: Boolean(row.mail_on_sysop_page),
+      mail_on_pwd_fail: Boolean(row.mail_on_pwd_fail),
+      // Auto-Validation Settings
+      autoval_delay: row.autoval_delay ?? -1,
+      autoval_preset: row.autoval_preset || '',
+      autoval_password: decryptSecret(row.autoval_password || ''),
+      // Password Expiry
+      password_expiry_days: row.password_expiry_days ?? 0,
+      // User Management
+      auto_deactivate_days: row.auto_deactivate_days ?? 0,
+      // File Management (additional)
+      filediz_syscmd: row.filediz_syscmd || '',
+      max_desclines: row.max_desclines ?? 25,
+      hold_access_level: row.hold_access_level ?? 100,
+      local_upload_path: row.local_upload_path || '',
       created_at: new Date(row.created_at * 1000),
       updated_at: new Date(row.updated_at * 1000)
     };

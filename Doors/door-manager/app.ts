@@ -921,7 +921,7 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
       try {
         const tooltypes = await bbs.readInfoFile(file.path);
         if (tooltypes) {
-          state.entries = tooltypes.map(tt => ({
+          state.entries = tooltypes.map((tt: InfoEntry) => ({
             key: tt.key,
             value: tt.value,
             commented: tt.commented

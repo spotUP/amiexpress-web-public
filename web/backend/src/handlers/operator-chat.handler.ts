@@ -40,6 +40,8 @@ import {
 } from '../utils/smiley-picker.util';
 import { userSessions, socketToUser } from '../server/session-manager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
+import { runExecuteOn } from '../services/batch-scheduler';
+import { mailOnSysopPage } from '../services/mail-notification.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -314,6 +316,17 @@ export async function handlePageSysop(
   };
 
   const pageRequest = repository.createPageRequest(pageData);
+
+  // express.e:24196 - runExecuteOn('SYSOP_PAGE') called from sysopPaged()
+  runExecuteOn('SYSOP_PAGE', session.nodeId || 1, {
+    username: session.user!.username,
+    location: session.user!.location
+  }).catch((err) => console.error('[Operator Chat] EXECUTE_ON_SYSOP_PAGE failed:', err));
+
+  // MAIL_ON_SYSOP_PAGE tooltype - express.e:24197-24201
+  mailOnSysopPage(session.user!.username).catch((err) =>
+    console.error('[Operator Chat] MAIL_ON_SYSOP_PAGE failed:', err)
+  );
 
   // Join user-specific rooms so targeted emits reach this socket
   try {

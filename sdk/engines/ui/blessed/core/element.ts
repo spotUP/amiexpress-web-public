@@ -57,6 +57,13 @@ export class Element extends EventEmitter {
   private _dragM?: (...args: any[]) => void;
   private _drag?: { x: number; y: number };
 
+  // Scrollbar drag tracking
+  private _scrollbarDragging: boolean = false;
+  private _scrollbarDragStartY: number = 0;
+  private _scrollbarDragStartBase: number = 0;
+  private _scrollbarMouseMoveHandler?: (data: any) => void;
+  private _scrollbarMouseUpHandler?: (data: any) => void;
+
   /**
    * Draggable property with setter that enables/disables dragging
    * EXACT from neo-blessed element.js: __defineSetter__('draggable', ...)
@@ -1956,6 +1963,28 @@ export class Element extends EventEmitter {
     this.emit('mouse', event);
 
     if (event.action === 'mousedown') {
+      // Check for scrollbar click first - this enables scrollbar dragging
+      if (event.button === 'left' && this.isOnScrollbar(event.x, event.y)) {
+        const geom = this._getScrollbarGeometry();
+        if (geom) {
+          // If clicking on thumb, start drag
+          // If clicking on track above/below thumb, jump to that position
+          if (event.y >= geom.thumbTop && event.y < geom.thumbTop + geom.thumbHeight) {
+            // Clicked on thumb - start drag
+            this._startScrollbarDrag(event.y);
+          } else {
+            // Clicked on track - jump to that position
+            const clickRatio = (event.y - geom.trackTop) / geom.trackHeight;
+            const newScroll = Math.round(clickRatio * geom.maxScroll);
+            this.setScroll(newScroll);
+            this.screen?.render();
+            // Start drag from new position
+            this._startScrollbarDrag(event.y);
+          }
+          return; // Don't process as normal click
+        }
+      }
+
       // Only emit click events if element is clickable
       if (this.clickable) {
         this.emit('mousedown', event);
@@ -2233,6 +2262,111 @@ export class Element extends EventEmitter {
    */
   hasScrollbar(): boolean {
     return !!(this.options.scrollbar && this.options.scrollable);
+  }
+
+  /**
+   * Check if a point is on the scrollbar track
+   * Returns true if the click is on the scrollbar column
+   */
+  isOnScrollbar(x: number, y: number): boolean {
+    if (!this.hasScrollbar() || !this.screen) return false;
+
+    const pos = this._getCoords();
+    if (!pos) return false;
+
+    const border = this.hasBorder() ? 1 : 0;
+    const scrollbarX = pos.xl - border - 1;
+
+    // Check if click is on the scrollbar column and within vertical bounds
+    return x === scrollbarX && y >= pos.yi + border && y < pos.yl - border;
+  }
+
+  /**
+   * Get the scrollbar geometry for drag calculations
+   */
+  private _getScrollbarGeometry(): { trackTop: number; trackHeight: number; thumbHeight: number; thumbTop: number; maxScroll: number } | null {
+    if (!this.hasScrollbar() || !this.screen) return null;
+
+    const pos = this._getCoords();
+    if (!pos) return null;
+
+    const border = this.hasBorder() ? 1 : 0;
+    const contentHeight = this._lines.length;
+    const viewHeight = this.iheight;
+
+    if (contentHeight <= viewHeight) return null;
+
+    const trackTop = pos.yi + border;
+    const trackHeight = viewHeight;
+    const thumbHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
+    const maxScroll = contentHeight - viewHeight;
+    const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
+    const thumbTop = trackTop + Math.floor(scrollRatio * (trackHeight - thumbHeight));
+
+    return { trackTop, trackHeight, thumbHeight, thumbTop, maxScroll };
+  }
+
+  /**
+   * Start scrollbar drag operation
+   */
+  private _startScrollbarDrag(mouseY: number): void {
+    if (!this.screen) return;
+
+    this._scrollbarDragging = true;
+    this._scrollbarDragStartY = mouseY;
+    this._scrollbarDragStartBase = this.childBase;
+
+    // Create mousemove handler
+    this._scrollbarMouseMoveHandler = (data: any) => {
+      if (!this._scrollbarDragging) return;
+      if (data.action !== 'mousemove') return;
+
+      const geom = this._getScrollbarGeometry();
+      if (!geom) return;
+
+      // Calculate how much the mouse moved in track space
+      const deltaY = data.y - this._scrollbarDragStartY;
+
+      // Convert pixel movement to scroll units
+      // The ratio is: (trackHeight - thumbHeight) pixels = maxScroll scroll units
+      const scrollableTrackHeight = geom.trackHeight - geom.thumbHeight;
+      if (scrollableTrackHeight <= 0) return;
+
+      const scrollDelta = Math.round((deltaY / scrollableTrackHeight) * geom.maxScroll);
+      const newScroll = Math.max(0, Math.min(geom.maxScroll, this._scrollbarDragStartBase + scrollDelta));
+
+      if (newScroll !== this.childBase) {
+        this.setScroll(newScroll);
+        this.screen?.render();
+      }
+    };
+
+    // Create mouseup handler
+    this._scrollbarMouseUpHandler = (data: any) => {
+      if (data.action === 'mouseup') {
+        this._endScrollbarDrag();
+      }
+    };
+
+    // Register handlers on screen
+    this.screen.on('mouse', this._scrollbarMouseMoveHandler);
+    this.screen.on('mouse', this._scrollbarMouseUpHandler);
+  }
+
+  /**
+   * End scrollbar drag operation
+   */
+  private _endScrollbarDrag(): void {
+    this._scrollbarDragging = false;
+
+    if (this.screen && this._scrollbarMouseMoveHandler) {
+      this.screen.removeListener('mouse', this._scrollbarMouseMoveHandler);
+      this._scrollbarMouseMoveHandler = undefined;
+    }
+    if (this.screen && this._scrollbarMouseUpHandler) {
+      this.screen.removeListener('mouse', this._scrollbarMouseUpHandler);
+      this._scrollbarMouseUpHandler = undefined;
+    }
   }
 
   /**
@@ -3049,6 +3183,9 @@ export class Element extends EventEmitter {
 
   destroy(): void {
     if (this.destroyed) return;
+
+    // End any active scrollbar drag
+    this._endScrollbarDrag();
 
     // Emit overlay hide event if element had opacity
     if (this.options.style?.opacity !== undefined) {

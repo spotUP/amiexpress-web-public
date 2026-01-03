@@ -519,7 +519,81 @@ export class Database {
 
       if (!systemConfigColumns.includes('vapid_contact_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_contact_email TEXT DEFAULT \'\'');
-        console.log('✓ Added vapid_contact_email column');
+        console.log('[+] Added vapid_contact_email column');
+      }
+
+      // Mail Notification Settings (MAIL_ON_* flags from express.e)
+      if (!systemConfigColumns.includes('mail_on_upload')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_upload INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_upload column');
+      }
+      if (!systemConfigColumns.includes('mail_on_sysop_comment')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_sysop_comment INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_sysop_comment column');
+      }
+      if (!systemConfigColumns.includes('mail_on_logon')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_logon INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_logon column');
+      }
+      if (!systemConfigColumns.includes('mail_on_new_user')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_new_user INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_new_user column');
+      }
+      if (!systemConfigColumns.includes('mail_on_logoff')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_logoff INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_logoff column');
+      }
+      if (!systemConfigColumns.includes('mail_on_sysop_page')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_sysop_page INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_sysop_page column');
+      }
+      if (!systemConfigColumns.includes('mail_on_pwd_fail')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_pwd_fail INTEGER DEFAULT 0');
+        console.log('[+] Added mail_on_pwd_fail column');
+      }
+
+      // Auto-Validation Settings (express.e:29677-29688, 30063-30076)
+      if (!systemConfigColumns.includes('autoval_delay')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_delay INTEGER DEFAULT -1');
+        console.log('[+] Added autoval_delay column');
+      }
+      if (!systemConfigColumns.includes('autoval_preset')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_preset TEXT DEFAULT \'\'');
+        console.log('[+] Added autoval_preset column');
+      }
+      if (!systemConfigColumns.includes('autoval_password')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_password TEXT DEFAULT \'\'');
+        console.log('[+] Added autoval_password column');
+      }
+
+      // Password Expiry (express.e:29785)
+      if (!systemConfigColumns.includes('password_expiry_days')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN password_expiry_days INTEGER DEFAULT 0');
+        console.log('[+] Added password_expiry_days column');
+      }
+
+      // User Management (express.e:31952)
+      if (!systemConfigColumns.includes('auto_deactivate_days')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN auto_deactivate_days INTEGER DEFAULT 0');
+        console.log('[+] Added auto_deactivate_days column');
+      }
+
+      // File Management (express.e:19258, 31801, 31804)
+      if (!systemConfigColumns.includes('filediz_syscmd')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN filediz_syscmd TEXT DEFAULT \'\'');
+        console.log('[+] Added filediz_syscmd column');
+      }
+      if (!systemConfigColumns.includes('max_desclines')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN max_desclines INTEGER DEFAULT 25');
+        console.log('[+] Added max_desclines column');
+      }
+      if (!systemConfigColumns.includes('hold_access_level')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN hold_access_level INTEGER DEFAULT 100');
+        console.log('[+] Added hold_access_level column');
+      }
+      if (!systemConfigColumns.includes('local_upload_path')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN local_upload_path TEXT DEFAULT \'\'');
+        console.log('[+] Added local_upload_path column');
       }
 
       console.log('All migrations completed successfully');
@@ -1792,6 +1866,16 @@ export class Database {
 
   async updateUser(...args: Parameters<UserRepository['updateUser']>) {
     return this.userRepo!.updateUser(...args);
+  }
+
+  /**
+   * Update user password - express.e:29196-29213
+   * Hashes the password and updates the database
+   */
+  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
+    const hashedPassword = await this.hashPassword(newPassword);
+    await this.userRepo!.updateUser(userId, { passwordHash: hashedPassword });
+    console.log(`[Database] Password updated for user ${userId}`);
   }
 
   async getUsers(...args: Parameters<UserRepository['getUsers']>) {

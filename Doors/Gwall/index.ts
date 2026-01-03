@@ -653,6 +653,300 @@ function showBBSKey(socket: SocketIOSocket): void {
   }
   transmit(socket, `${settings.gridcolour}\`----- ----- - --------- ------------------------------- -- ---------------- -''`);
 }
+
+function findWallItemById(id: string): WallItem | null {
+  return wallItems.find(item => item.id === id) || null;
+}
+
+async function sysopEdit(socket: SocketIOSocket, bbs: any): Promise<void> {
+  transmit(socket, '');
+  const lineid = await queryLine(bbs, 'Enter the id of the line you wish to edit: ', 5);
+
+  if (lineid.trim().length === 0) return;
+
+  const item = findWallItemById(lineid.trim());
+  if (!item) {
+    transmit(socket, '\x1b[0mError: Item not found');
+    return;
+  }
+
+  transmit(socket, '');
+  transmit(socket, '1) Edit username');
+  transmit(socket, '2) Edit source');
+  transmit(socket, '3) Edit bbs code');
+  transmit(socket, '4) Edit comment');
+  transmit(socket, '5) Cancel edit');
+  transmit(socket, '');
+
+  const choice = await getDoorKey(bbs, 'Choose 1-5: ', true);
+  transmit(socket, '');
+
+  if (choice === '5') return;
+
+  let dataPoint: DataPoint;
+  let oldValue = '';
+
+  switch (choice) {
+    case '1':
+      dataPoint = DataPoint.DP_USERNAME;
+      oldValue = item.username;
+      break;
+    case '2':
+      dataPoint = DataPoint.DP_SOURCE;
+      oldValue = item.source;
+      break;
+    case '3':
+      dataPoint = DataPoint.DP_BBSSHORTCODE;
+      oldValue = item.bbsshortcode;
+      break;
+    case '4':
+      dataPoint = DataPoint.DP_COMMENT;
+      oldValue = item.comment;
+      break;
+    default:
+      return;
+  }
+
+  sendStr(socket, 'OldValue: ');
+  transmit(socket, oldValue);
+  transmit(socket, '');
+
+  // Extract color code if editing comment
+  let colorCode = '';
+  if (dataPoint === DataPoint.DP_COMMENT && oldValue.startsWith('\x1b[3') && oldValue[4] === 'm') {
+    colorCode = oldValue.substring(0, 5);
+  }
+
+  const prompt = colorCode ? `\x1b[0mEnter new value: ${colorCode}` : '\x1b[0mEnter new value: ';
+  const newValue = await queryLine(bbs, prompt, 255);
+
+  if (newValue.trim().length === 0) return;
+
+  // Build update parameters
+  let newUsername = dataPoint === DataPoint.DP_USERNAME ? newValue : '';
+  let newSource = dataPoint === DataPoint.DP_SOURCE ? newValue : '';
+  let newComment = dataPoint === DataPoint.DP_COMMENT ? (colorCode + newValue) : '';
+  let newShortCode = dataPoint === DataPoint.DP_BBSSHORTCODE ? newValue : '';
+
+  await putcomment(lineid.trim(), newUsername, newSource, newComment, newShortCode);
+  transmit(socket, '');
+  transmit(socket, '\x1b[0mComment updated successfully');
+}
+
+async function sysopRemove(socket: SocketIOSocket, bbs: any): Promise<void> {
+  transmit(socket, '');
+  const lineid = await queryLine(bbs, 'Enter the id of the line you wish to remove: ', 5);
+
+  if (lineid.trim().length === 0) return;
+
+  const item = findWallItemById(lineid.trim());
+  if (!item) {
+    transmit(socket, '\x1b[0mError: Item not found');
+    return;
+  }
+
+  // Add confirmation for safety (not in original, but safer)
+  transmit(socket, '');
+  const confirm = await getDoorKey(bbs, `Remove "${item.comment.substring(0, 40)}"? [Y/N] `, true);
+  transmit(socket, '');
+
+  if (confirm === 'Y') {
+    await deletecomment(lineid.trim());
+    transmit(socket, '\x1b[0mComment removed successfully');
+  } else {
+    transmit(socket, '\x1b[0mCancelled');
+  }
+}
+
+async function sysopShortCodeUpdate(socket: SocketIOSocket, bbs: any): Promise<void> {
+  transmit(socket, '');
+
+  if (settings.mybbsshortcode !== '???') {
+    sendStr(socket, 'OldValue: ');
+    transmit(socket, settings.mybbsshortcode);
+    transmit(socket, '');
+  }
+
+  const newValue = await queryLine(bbs, 'Enter the 3 digit code to use for your bbs: ', 3);
+
+  if (newValue.trim().length > 0 && newValue.trim().length <= 3) {
+    settings.mybbsshortcode = newValue.trim();
+    saveSettings();
+    transmit(socket, '\x1b[0mBBS code updated successfully');
+  }
+}
+
+async function sysopStyleUpdate(socket: SocketIOSocket, bbs: any): Promise<void> {
+  transmit(socket, '');
+  sendStr(socket, 'OldValue: ');
+  transmit(socket, settings.style.toString());
+  transmit(socket, '');
+
+  const newValue = await queryLine(bbs, `Select new style (1-${MAXSTYLE}): `, 1);
+  const newStyle = parseInt(newValue, 10);
+
+  if (newStyle >= 1 && newStyle <= MAXSTYLE) {
+    settings.style = newStyle;
+    saveSettings();
+    transmit(socket, '\x1b[0mStyle updated successfully');
+  } else {
+    transmit(socket, '\x1b[0mInvalid style number');
+  }
+}
+
+async function sysopColourUpdate(socket: SocketIOSocket, bbs: any): Promise<void> {
+  transmit(socket, '');
+
+  const newValue = await queryLine(bbs, `Select new colour preset (1-${MAXPRESET}): `, 1);
+  const newColour = parseInt(newValue, 10);
+
+  if (newColour >= 1 && newColour <= MAXPRESET) {
+    settings.coloursettings = colourpresets[newColour - 1];
+    applyColours();
+    saveSettings();
+    transmit(socket, '\x1b[0mColour preset updated successfully');
+  } else {
+    transmit(socket, '\x1b[0mInvalid preset number');
+  }
+}
+
+async function sysopSettingsUpdate(socket: SocketIOSocket, bbs: any): Promise<void> {
+  const displaylines = calculateDisplayLines() - 4;
+  let pagenum = 1;
+  let inputBuffer = '';
+
+  while (inputBuffer !== '4') {
+    const rescode = await getwalljson(pagenum, displaylines, tempFile);
+
+    if (rescode === 200) {
+      try {
+        const jsonBuffer = readFileSync(tempFile, 'utf-8');
+        decodejson(jsonBuffer);
+      } catch (err) {
+        transmit(socket, '\x1b[0mError loading wall data');
+        return;
+      }
+
+      sendCLS(socket);
+
+      // Show header
+      switch (settings.style) {
+        case 1: header1(socket, true); break;
+        case 2: header2(socket, true); break;
+        case 3: header3(socket, true); break;
+        case 4: header4(socket, true); break;
+        default: header2(socket, true); break;
+      }
+
+      displaywalldata(socket, displaylines, true);
+
+      // Menu separator
+      let sep1 = '', sep3 = '';
+      if (settings.style === 3 || settings.style === 4) {
+        sep1 = '|';
+        sep3 = settings.style === 3 ? 'Ś' : '|';
+      } else {
+        sep1 = 'Ś';
+        sep3 = 'Ś';
+      }
+
+      transmit(socket, `${settings.gridcolour}${sep1}------- -  -  - --- - --- ----------------------- ---------- ----------------${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}1) Edit BBS Short code\x1b[54C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}2) Edit Wall Style\x1b[58C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}3) Edit Colour Preset\x1b[55C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}4) Back to Sysop Page\x1b[55C${settings.gridcolour}${sep3}`);
+
+      // Show footer
+      switch (settings.style) {
+        case 1: footer1(socket, true); break;
+        case 2: footer2(socket, true); break;
+        case 3: footer3(socket, true); break;
+        case 4: footer4(socket, true); break;
+        default: footer2(socket, true); break;
+      }
+    } else {
+      transmit(socket, '\x1b[0mThe server is not currently responding');
+      return;
+    }
+
+    inputBuffer = await getDoorKey(bbs, undefined, false);
+
+    if (inputBuffer === '1') await sysopShortCodeUpdate(socket, bbs);
+    else if (inputBuffer === '2') await sysopStyleUpdate(socket, bbs);
+    else if (inputBuffer === '3') await sysopColourUpdate(socket, bbs);
+    else if (inputBuffer === 'B') pagenum++;
+    else if (inputBuffer === 'F' && pagenum > 1) pagenum--;
+  }
+}
+
+async function sysopMode(socket: SocketIOSocket, bbs: any): Promise<void> {
+  const displaylines = calculateDisplayLines() - 4;
+  let pagenum = 1;
+  let key = '';
+
+  while (key !== '4') {
+    const rescode = await getwalljson(pagenum, displaylines, tempFile);
+
+    if (rescode === 200) {
+      try {
+        const jsonBuffer = readFileSync(tempFile, 'utf-8');
+        decodejson(jsonBuffer);
+      } catch (err) {
+        transmit(socket, '\x1b[0mError loading wall data');
+        return;
+      }
+
+      sendCLS(socket);
+
+      // Show header with sysop mode indicator
+      switch (settings.style) {
+        case 1: header1(socket, true); break;
+        case 2: header2(socket, true); break;
+        case 3: header3(socket, true); break;
+        case 4: header4(socket, true); break;
+        default: header2(socket, true); break;
+      }
+
+      displaywalldata(socket, displaylines, true);
+
+      // Menu separator
+      let sep1 = '', sep3 = '';
+      if (settings.style === 3 || settings.style === 4) {
+        sep1 = '|';
+        sep3 = settings.style === 3 ? 'Ś' : '|';
+      } else {
+        sep1 = 'Ś';
+        sep3 = 'Ś';
+      }
+
+      transmit(socket, `${settings.gridcolour}${sep1}------- -  -  - --- - --- ----------------------- ---------- ----------------${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}1) Edit a comment\x1b[59C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}2) Remove a comment\x1b[57C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}3) Update settings\x1b[58C${settings.gridcolour}${sep3}`);
+      transmit(socket, `${settings.gridcolour}${sep1} ${settings.sysopmenuitemscolour}4) Exit\x1b[69C${settings.gridcolour}${sep3}`);
+
+      // Show footer
+      switch (settings.style) {
+        case 1: footer1(socket, true); break;
+        case 2: footer2(socket, true); break;
+        case 3: footer3(socket, true); break;
+        case 4: footer4(socket, true); break;
+        default: footer2(socket, true); break;
+      }
+    } else {
+      transmit(socket, '\x1b[0mThe server is not currently responding');
+      return;
+    }
+
+    key = await getDoorKey(bbs, undefined, false);
+
+    if (key === '1') await sysopEdit(socket, bbs);
+    else if (key === '2') await sysopRemove(socket, bbs);
+    else if (key === '3') await sysopSettingsUpdate(socket, bbs);
+    else if (key === 'B') pagenum++;
+    else if (key === 'F' && pagenum > 1) pagenum--;
+  }
+}
 export async function runDoor(doorSession: any): Promise<void> {
   const { socket, user, bbs } = doorSession;
 
@@ -692,7 +986,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   // Check if configured
   if (settings.mybbsshortcode === '???') {
-      const accesslevel = user.secStatus || 0;
+      const accesslevel = user.secLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
         transmit(socket, '');
         transmit(socket, '\x1b[0mThe wall has not yet been configured, performing initial setup');
@@ -763,13 +1057,10 @@ export async function runDoor(doorSession: any): Promise<void> {
     transmit(socket, '\x1b[0m');
 
     if (inputBuffer === 'S') {
-      const accesslevel = user.secStatus || 0;
+      const accesslevel = user.secLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
-        // Sysop mode - not fully implemented due to complexity
-        transmit(socket, '');
-        transmit(socket, '\x1b[0mSysop mode not yet implemented in this version');
-        transmit(socket, '');
-        return;
+        await sysopMode(socket, bbs);
+        redo = true; // Refresh wall after sysop mode
       }
     }
 

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Network, Edit2, Save, X, FileCode } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
@@ -47,7 +46,6 @@ const AMIXNET_FILES: InfoFileItem[] = [
 ];
 
 export function AmiXnetPage() {
-  const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
 
   // Info editor modal state
