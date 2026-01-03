@@ -8,6 +8,17 @@ dist/
 backend/dist/
 .vite/
 
+# TypeScript build artifacts in source directories
+web/backend/src/**/*.js
+web/backend/src/**/*.d.ts
+web/backend/src/**/*.d.ts.map
+web/backend/src/**/*.js.map
+web/config-app/src/**/*.js
+web/config-app/src/**/*.d.ts
+sdk/dist-esm/**/*.map
+!web/backend/src/**/*.config.js
+!web/backend/src/**/*.setup.js
+
 # Environment variables
 .env
 .env.local
@@ -223,7 +234,14 @@ dev/docs/radare2
 
 # NDK reference docs - too large for git
 Documentation/7-Reference Sources/NDK3.2R4/
+Documentation/7-Reference Sources/AmiXDoors-master/
+Documentation/7-Reference Sources/Doors_with_Source/
 highscores.json
+
+# Backup files
+*.backup
+*.backup-*
+bbsConfig.info.pre-*
 
 # C Door development - build artifacts
 dev/c-doors/doors/**/*.o
