@@ -73,7 +73,85 @@ export function setupKeyboardShortcuts(s: any, cl: any, dc: any, ib: any, sbt: (
   const fpi = (ps: any[], f: any): number => ps.findIndex(p => p === f || ((p as any).rows && (p as any).rows === f));
 
   s.key(['tab'], () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const ni = (ci + 1) % ps.length; ps[ni].focus(); s.render(); });
-  s.key(['S-tab'], () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const pi = (ci - 1 + ps.length) % ps.length; ps[pi].focus(); s.render(); });
+  s.key(['S-tab'], () => { const ps = fp(); const cf = s.getFocused(); let ci = fpi(ps, cf); if (ci === -1) ci = 0; const pi = (ci - 1 + ps.length) % ps.length; ps[pi].push ? ps[pi].focus() : ps[pi].focus(); s.render(); });
+  
+  // Emergency Layout Reset (Alt+R)
+  s.key(['M-r'], () => {
+    // Reset sidebar to left dock
+    if (cl.parent && (cl.parent as any).setDockPosition) {
+      (cl.parent as any).setDockPosition('float'); // Force undock first
+      (cl.parent as any).setDockPosition('left');
+    }
+    // Reset main chat to float/center
+    if (cl.setDockPosition) {
+      cl.setDockPosition('float');
+      const sw = (s as any).width || 80;
+      const sh = (s as any).height || 24;
+      cl.width = sw - SW;
+      cl.height = sh - 5;
+      cl.aleft = SW;
+      cl.atop = 1;
+    }
+    asm('Layout reset to defaults');
+    s.render();
+  });
+
+  // Fullscreen Macro (Alt+F)
+  s.key(['M-f'], () => {
+    const focused = s.getFocused();
+    // Walk up to find the containing DockablePanel
+    let panel = focused;
+    while (panel && !(panel.constructor.name === 'DockablePanel')) {
+      panel = panel.parent;
+    }
+
+    if (panel && (panel as any).toggleMaximize) {
+      (panel as any).toggleMaximize();
+      asm((panel as any).isMaximized() ? 'Fullscreen enabled' : 'Fullscreen disabled');
+    } else {
+      // If no specific panel focused, try the main chat panel
+      if (cl.toggleMaximize) {
+        cl.toggleMaximize();
+        asm(cl.isMaximized() ? 'Chat Fullscreen enabled' : 'Chat Fullscreen disabled');
+      }
+    }
+    s.render();
+  });
+
+  // Layout Preset Cycle (Alt+L)
+  let currentLayoutIndex = 0;
+  s.key(['M-l'], () => {
+    currentLayoutIndex = (currentLayoutIndex + 1) % 3;
+    const sw = (s as any).width || 80;
+    const sh = (s as any).height || 24;
+    const MH = 1; // Menu height
+    const SH = 1; // Status height
+    const IH = 3; // Input height
+    const contentH = sh - MH - SH - IH;
+
+    // Sidebar panel
+    const sbp = chl.parent;
+
+    switch (currentLayoutIndex) {
+      case 0: // Standard
+        sbp.setState({ x: 0, y: MH, width: SW, height: contentH, position: 'left' });
+        cl.setState({ x: SW, y: MH, width: sw - SW, height: contentH, position: 'float' });
+        asm('Layout: Standard');
+        break;
+      case 1: // Wide Sidebar
+        sbp.setState({ x: 0, y: MH, width: Math.floor(sw * 0.4), height: contentH, position: 'left' });
+        cl.setState({ x: Math.floor(sw * 0.4), y: MH, width: Math.floor(sw * 0.6), height: contentH, position: 'float' });
+        asm('Layout: Wide Sidebar');
+        break;
+      case 2: // Vertical Split (Top/Bottom)
+        sbp.setState({ x: 0, y: MH, width: sw, height: Math.floor(contentH * 0.4), position: 'top' });
+        cl.setState({ x: 0, y: MH + Math.floor(contentH * 0.4), width: sw, height: Math.floor(contentH * 0.6), position: 'bottom' });
+        asm('Layout: Vertical Split');
+        break;
+    }
+    s.render();
+  });
+
   s.key(['f6'], () => { sfs(); });
   s.key(['C-s'], () => { sso(); });
   s.key(['C-c', 'C-q'], () => { scon('Are you sure you want to quit LiveChat?', (c) => { if (c) cu(); }); });

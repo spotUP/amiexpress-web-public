@@ -7,7 +7,7 @@ import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine
 import { MessageHandler } from '../handlers/message';
 import { CommandHandler } from '../handlers/command';
 
-export function initializeLiveChat(session: any) {
+export function initializeLiveChat(session: any, screen: any) {
   const { user, socket } = session;
   const username = user?.username || 'Guest';
   const userId = parseInt(user?.id, 10) || 0;
@@ -24,10 +24,14 @@ export function initializeLiveChat(session: any) {
   const socketEmitter = new SocketEmitter(socket);
   const presenceService = new PresenceService();
   const eventBus = new ExtendedEventBus(socket);
-  const audioEngine = new AudioEngine({ enabled: true, sfxVolume: 0.5 });
+  const audioEngine = new AudioEngine({ enabled: true, sfxVolume: 0.5 }, socket);
   const audio = new AudioService(audioEngine);
   const messageHandler = new MessageHandler();
   const commandHandler = new CommandHandler();
+
+  // Unlock audio on first interaction (click or keypress)
+  (screen as any).on('user-interaction', () => {
+  });
 
   presenceService.setStatus(userId, 'online');
 

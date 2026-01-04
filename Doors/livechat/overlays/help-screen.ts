@@ -5,6 +5,7 @@ import blessed, { Screen, Textarea } from '@amiexpress/bbs-door-sdk/engines/ui/b
 import { HELP_PART_1 } from './help-content-1';
 import { HELP_PART_2 } from './help-content-2';
 import { HELP_PART_3 } from './help-content-3';
+import { HELP_PART_4 } from './help-content-4';
 
 export function createHelpScreen(
   screen: Screen,
@@ -56,7 +57,7 @@ export function createHelpScreen(
       style: { fg: 'cyan' }
     },
     style: { fg: 'white', bg: 'black' },
-    content: HELP_PART_1 + HELP_PART_2 + HELP_PART_3,
+    content: HELP_PART_1 + HELP_PART_2 + HELP_PART_3 + HELP_PART_4,
   });
 
   blessed.box({

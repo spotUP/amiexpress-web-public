@@ -32,7 +32,7 @@ export abstract class BaseModal {
     if (this.container) {
       this.container.destroy();
       this.container = null;
-      this.ui.render();
+      this.ui.render(true);
     }
   }
 }
@@ -126,7 +126,7 @@ export class ToolSelectorModal extends BaseModal {
       });
 
       list.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -291,7 +291,7 @@ export class ColorPickerModal extends BaseModal {
 
       fgList.focus();
       updatePreview();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -397,7 +397,7 @@ export class FileDialogModal extends BaseModal {
       });
 
       list.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -479,7 +479,7 @@ export class ConfirmDialog extends BaseModal {
       noButton.key(['escape', 'n'], () => noButton.press());
 
       yesButton.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -541,7 +541,7 @@ export class MessageDialog extends BaseModal {
       okButton.key(['enter', 'escape'], () => okButton.press());
 
       okButton.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -708,7 +708,7 @@ export class HelpDialog extends BaseModal {
       });
 
       this.container.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -795,7 +795,7 @@ export class GalleryBrowserModal extends BaseModal {
       });
 
       list.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }
@@ -844,7 +844,7 @@ export class RecentFilesModal extends BaseModal {
         });
 
         this.container.focus();
-        this.ui.render();
+        this.ui.render(true);
         return;
       }
 
@@ -904,7 +904,7 @@ export class RecentFilesModal extends BaseModal {
       });
 
       list.focus();
-      this.ui.render();
+      this.ui.render(true);
     });
   }
 }

@@ -6,7 +6,6 @@ export class SocketEmitter {
   constructor(socket: any) { this.s = socket; }
 
   keystroke(chId: string, uid: number, char: string): void {
-    console.log('[SOCKET EMIT] Emitting chat:keystroke:', { channelId: chId, userId: uid, char, socketExists: !!this.s, emitExists: !!this.s?.emit });
     this.s?.emit?.('chat:keystroke', { channelId: chId, userId: uid, char });
   }
   keystrokeClear(chId: string, uid: number): void {

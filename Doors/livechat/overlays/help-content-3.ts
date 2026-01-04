@@ -23,6 +23,4 @@ Features 25+ widget types including:
 - Drawing canvas (whiteboard)
 - File manager browser
 - Semi-transparent overlays
-- Password input boxes
-
-{gray-fg}Press Escape or F1 to close this help{/gray-fg}`;
+- Password input boxes`;

@@ -61,6 +61,8 @@ export class VideoGrid {
   private currentUserId: number | string;
   private currentUsername: string;
   private activeSpeaker?: number | string;
+  private lastWidth: number = 0;
+  private lastHeight: number = 0;
 
   constructor(options: VideoGridOptions) {
     this.screen = options.screen;
@@ -73,14 +75,19 @@ export class VideoGrid {
       left: options.left ?? 0,
       top: options.top ?? 0,
       width: options.width ?? '100%',
-      height: options.height ?? '100%-3',
+      height: options.height ?? '100%',
       style: {
-        bg: 'black',
+        bg: 'transparent',
       },
       tags: true,
       // Low z-index so it doesn't block modals/dialogs
       // @ts-ignore - zIndex exists but not in types
       zIndex: 10,
+    });
+
+    // Re-layout on container resize
+    this.container.on('resize', () => {
+      this.updateGrid();
     });
   }
 
@@ -88,7 +95,7 @@ export class VideoGrid {
    * Add or update a participant in the grid
    */
   addParticipant(participant: VideoParticipant): void {
-    this.participants.set(participant.userId, participant);
+    this.participants.set(String(participant.userId), participant);
     this.updateGrid();
   }
 
@@ -96,11 +103,12 @@ export class VideoGrid {
    * Remove a participant from the grid
    */
   removeParticipant(userId: number | string): void {
-    this.participants.delete(userId);
-    const tile = this.tiles.get(userId);
+    const id = String(userId);
+    this.participants.delete(id);
+    const tile = this.tiles.get(id);
     if (tile) {
       tile.destroy();
-      this.tiles.delete(userId);
+      this.tiles.delete(id);
     }
     this.updateGrid();
   }
@@ -109,10 +117,11 @@ export class VideoGrid {
    * Update participant status (mute, video, speaking)
    */
   updateParticipant(userId: number | string, updates: Partial<VideoParticipant>): void {
-    const participant = this.participants.get(userId);
+    const id = String(userId);
+    const participant = this.participants.get(id);
     if (participant) {
       Object.assign(participant, updates);
-      const tile = this.tiles.get(userId);
+      const tile = this.tiles.get(id);
       if (tile) {
         tile.updateStatus({
           isMuted: participant.isMuted,
@@ -128,9 +137,21 @@ export class VideoGrid {
    * Update participant with a new video frame
    */
   updateParticipantVideo(userId: number | string, frame: string): void {
-    const tile = this.tiles.get(userId);
+    const id = String(userId);
+    const tile = this.tiles.get(id);
     if (tile) {
       tile.setVideoFrame(frame);
+    }
+  }
+
+  /**
+   * Update participant with an error message
+   */
+  updateParticipantError(userId: number | string, error: string): void {
+    const id = String(userId);
+    const tile = this.tiles.get(id);
+    if (tile) {
+      tile.setVideoError(error);
     }
   }
 
@@ -140,7 +161,7 @@ export class VideoGrid {
   setActiveSpeaker(userId?: number | string): void {
     // Remove previous active speaker highlight
     if (this.activeSpeaker !== undefined) {
-      const prevTile = this.tiles.get(this.activeSpeaker);
+      const prevTile = this.tiles.get(String(this.activeSpeaker));
       if (prevTile) {
         prevTile.setActive(false);
       }
@@ -149,7 +170,7 @@ export class VideoGrid {
     // Set new active speaker
     this.activeSpeaker = userId;
     if (userId !== undefined) {
-      const tile = this.tiles.get(userId);
+      const tile = this.tiles.get(String(userId));
       if (tile) {
         tile.setActive(true);
       }
@@ -165,6 +186,10 @@ export class VideoGrid {
     const participantArray = Array.from(this.participants.values());
     const participantCount = participantArray.length;
 
+    // Get current container dimensions
+    const containerWidth = this.container.width as number;
+    const containerHeight = this.container.height as number;
+
     if (participantCount === 0) {
       // Clear all tiles
       for (const tile of this.tiles.values()) {
@@ -175,14 +200,27 @@ export class VideoGrid {
       return;
     }
 
-    // Calculate grid dimensions
-    const { cols, rows } = calculateGridDimensions(participantCount);
+    // Calculate optimal grid (cols x rows) to fill the space
+    // We want to maximize the area of each tile (tileWidth * tileHeight)
+    let bestCols = 1;
+    let bestRows = 1;
+    let maxArea = 0;
 
-    // Calculate tile dimensions
-    const containerWidth = this.container.width as number;
-    const containerHeight = this.container.height as number;
-    const tileWidth = Math.floor(containerWidth / cols);
-    const tileHeight = Math.floor(containerHeight / rows);
+    for (let cols = 1; cols <= participantCount; cols++) {
+      const rows = Math.ceil(participantCount / cols);
+      const tileWidth = Math.floor(containerWidth / cols);
+      const tileHeight = Math.floor(containerHeight / rows);
+      const area = tileWidth * tileHeight;
+
+      if (area > maxArea) {
+        maxArea = area;
+        bestCols = cols;
+        bestRows = rows;
+      }
+    }
+
+    const tileWidth = Math.floor(containerWidth / bestCols);
+    const tileHeight = Math.floor(containerHeight / bestRows);
 
     // Clear existing tiles
     for (const tile of this.tiles.values()) {
@@ -192,13 +230,24 @@ export class VideoGrid {
 
     // Create tiles for each participant
     participantArray.forEach((participant, index) => {
-      const row = Math.floor(index / cols);
-      const col = index % cols;
+      const row = Math.floor(index / bestCols);
+      const col = index % bestCols;
+
+      // For the last row, center the remaining tiles if any
+      let xOffset = 0;
+      const isLastRow = row === bestRows - 1;
+      if (isLastRow) {
+        const tilesInLastRow = participantCount - (row * bestCols);
+        if (tilesInLastRow < bestCols) {
+          const rowWidth = tilesInLastRow * tileWidth;
+          xOffset = Math.floor((containerWidth - rowWidth) / 2);
+        }
+      }
 
       const tileOptions: VideoTileOptions = {
         parent: this.container,
         screen: this.screen,
-        left: col * tileWidth,
+        left: (col * tileWidth) + xOffset,
         top: row * tileHeight,
         width: tileWidth,
         height: tileHeight,

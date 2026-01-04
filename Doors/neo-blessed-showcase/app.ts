@@ -25,8 +25,41 @@ const startOfYear = new Date(now.getFullYear(), 0, 0);
 const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86400000);
 const BUILD_VERSION = `v2.${dayOfYear}`;
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import blessed, {
+  screen,
+  box,
+  list,
+  Grid,
+  grid,
+  Donut,
+  donut,
+  Gauge,
+  gauge,
+  LineChart,
+  linechart,
+  ContribLog as Log,
+  contribLog as log,
+  ContribTable as Table,
+  contribTable as table,
+  Tree,
+  tree,
+  Picture,
+  picture,
+  Sparkline,
+  sparkline,
+  LCD,
+  lcd,
+  Map,
+  map,
+  Bar,
+  bar,
+  StackedBar,
+  stackedBar,
+  GaugeList,
+  gaugeList,
+  Markdown,
+  markdown
+} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
   AutocompleteManager,
@@ -1125,7 +1158,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'linechart';
     demoBox.setLabel(' Line Chart Demo ');
 
-    const lineChart = new contrib.Line({
+    const lineChart = new LineChart({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Line Chart - Multiple Series ', border: { type: 'line' },
@@ -1156,7 +1189,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'barchart';
     demoBox.setLabel(' Bar Chart Demo ');
 
-    const barChart = new contrib.Bar({
+    const barChart = new Bar({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Bar Chart - Monthly Stats ', border: { type: 'line' },
@@ -1186,7 +1219,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'stackedbar';
     demoBox.setLabel(' Stacked Bar Chart Demo ');
 
-    const stackedBar = new contrib.StackedBar({
+    const stackedBar = new StackedBar({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Stacked Bar - Quarterly Revenue ', border: { type: 'line' },
@@ -1217,7 +1250,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'donut';
     demoBox.setLabel(' Donut Chart Demo ');
 
-    const donut = new contrib.Donut({
+    const donut = new Donut({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Donut Chart - Market Share ', border: { type: 'line' },
@@ -1249,7 +1282,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'sparkline';
     demoBox.setLabel(' Sparkline Demo ');
 
-    const sparkline = new contrib.Sparkline({
+    const sparkline = new Sparkline({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Sparklines - System Metrics ', border: { type: 'line' },
@@ -1283,7 +1316,7 @@ export async function createApp(session: DoorSession) {
     demoBox.setLabel(' Gauge Demo ');
 
     // Single gauge (animated)
-    const gauge1 = new contrib.Gauge({
+    const gauge1 = new Gauge({
       parent: demoBox,
       top: 0, left: 0, right: 0, height: 6,
       label: ' Animated Gauge (Single) ', border: { type: 'line' },
@@ -1301,7 +1334,7 @@ export async function createApp(session: DoorSession) {
     }, 100);
 
     // Stacked gauge (multiple segments)
-    const gauge2 = new contrib.Gauge({
+    const gauge2 = new Gauge({
       parent: demoBox,
       top: 6, left: 0, right: 0, height: 6,
       label: ' Stacked Gauge (Multiple Segments) ', border: { type: 'line' },
@@ -1332,7 +1365,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'gaugelist';
     demoBox.setLabel(' GaugeList Demo ');
 
-    const gaugeList = new contrib.GaugeList({
+    const gaugeList = new GaugeList({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' Multiple Gauges - System Resources ', border: { type: 'line' },
@@ -1367,7 +1400,7 @@ export async function createApp(session: DoorSession) {
     demoBox.setLabel(' LCD Demo ');
 
     // Counter LCD
-    const lcd = new contrib.LCD({
+    const lcd = new LCD({
       parent: demoBox,
       top: 0, left: 0, right: 0, height: 10,
       label: ' LCD Counter ', border: { type: 'line' },
@@ -1406,7 +1439,7 @@ export async function createApp(session: DoorSession) {
     demoBox.setLabel(' Contrib: Tree, Table, Log, Map, Picture, Markdown ');
 
     // Tree - with fold/unfold using left/right arrows and Enter
-    const tree = new contrib.Tree({
+    const tree = new Tree({
       parent: demoBox,
       top: 0, left: 0, width: '33%', height: 10,
       label: ' Tree (Left/Right/Enter) ', border: { type: 'line' },
@@ -1426,7 +1459,7 @@ export async function createApp(session: DoorSession) {
     tree.on('select', (n: any) => { setStatus(`Tree: ${n.name} (Enter/Space=toggle, Left=collapse, Right=expand)`); addResult('Tree', 'pass', 'Navigation works'); });
 
     // contrib Table
-    const contribTable = new contrib.Table({
+    const contribTable = new Table({
       parent: demoBox,
       top: 0, left: '33%', width: '34%', height: 10,
       label: ' Contrib Table ', border: { type: 'line' },
@@ -1440,7 +1473,7 @@ export async function createApp(session: DoorSession) {
     addResult('Table (contrib)', 'pass', 'Styled table');
 
     // contrib Log
-    const contribLog = new contrib.Log({
+    const contribLog = new Log({
       parent: demoBox,
       top: 0, left: '67%', width: '33%-1', height: 10,
       label: ' Contrib Log ', border: { type: 'line' },
@@ -1503,7 +1536,7 @@ export async function createApp(session: DoorSession) {
     demoBox.setLabel(' Contrib Layouts: Grid, Carousel ');
 
     // Grid
-    const grid = new contrib.Grid({ rows: 4, cols: 4, screen: demoBox as any });
+    const grid = new Grid({ rows: 4, cols: 4, screen: demoBox as any });
 
     grid.set(0, 0, 2, 2, blessed.box, {
       label: ' Grid 0,0 (2x2) ',
@@ -1559,7 +1592,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'map';
     demoBox.setLabel(' Map Widget Demo ');
 
-    const map = new contrib.Map({
+    const map = new Map({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' World Map ',
@@ -1592,7 +1625,7 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'picture';
     demoBox.setLabel(' Picture Widget Demo ');
 
-    const picture = new contrib.Picture({
+    const picture = new Picture({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' ASCII Picture ',
@@ -1644,7 +1677,7 @@ Multiple lines
 
 End of sample markdown.`;
 
-    const markdown = new contrib.Markdown({
+    const markdown = new Markdown({
       parent: demoBox,
       top: 0, left: 0, right: 0, bottom: 4,
       label: ' Markdown Renderer ',

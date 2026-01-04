@@ -67,6 +67,8 @@ export class VideoTile {
   private screen: Screen;
   private options: VideoTileOptions;
   private isActive: boolean = false;
+  private hasFrame: boolean = false;
+  private videoError: string | null = null;
 
   constructor(options: VideoTileOptions) {
     this.options = options;
@@ -96,7 +98,7 @@ export class VideoTile {
       left: 0,
       top: 0,
       width: '100%',
-      height: '100%-3',
+      height: '100%-1',
       style: {
         bg: options.hasVideo ? 'black' : getBackgroundColor(options.username),
       },
@@ -112,7 +114,7 @@ export class VideoTile {
       left: 0,
       bottom: 0,
       width: '100%',
-      height: 3,
+      height: 1,
       content: this.renderStatusBar(),
       style: {
         bg: 'black',
@@ -127,21 +129,30 @@ export class VideoTile {
    */
   private updateVideoDisplay(): void {
     if (this.options.hasVideo) {
-      // Show video stream placeholder
-      // In a real implementation, this would render actual video frames
-      const videoPlaceholder = [
-        '',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '  {gray-fg}████████████████████████{/gray-fg}',
-        '',
-      ];
-      this.videoBox.setContent(videoPlaceholder.join('\n'));
+      // Only show placeholder if we haven't received any frames yet
+      if (!this.hasFrame) {
+        const width = (this.container.width as number) - 4;
+        const height = (this.container.height as number) - 4;
+        
+        // Create a centered message
+        const message = this.videoError || 'WAITING FOR VIDEO...';
+        const topPadding = Math.max(0, Math.floor((height - 1) / 2));
+        
+        const placeholder = [
+          '{gray-fg}' + '┌' + '─'.repeat(width) + '┐' + '{/gray-fg}',
+          ...Array(topPadding).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
+          '{gray-fg}│{/gray-fg}{center}{yellow-fg}{bold}' + message + '{/yellow-fg}{/bold}{/center}{gray-fg}│{/gray-fg}',
+          ...Array(Math.max(0, height - topPadding - 1)).fill('{gray-fg}│' + ' '.repeat(width) + '│{/gray-fg}'),
+          '{gray-fg}└' + '─'.repeat(width) + '┘' + '{/gray-fg}',
+        ];
+        
+        this.videoBox.setContent(placeholder.join('\n'));
+      }
       this.videoBox.style.bg = 'black';
     } else {
+      // Reset frame tracking and error when video is disabled
+      this.hasFrame = false;
+      this.videoError = null;
       // Show avatar with colored background
       const avatar = generateAvatar(this.options.username);
       const avatarContent = [
@@ -164,12 +175,7 @@ export class VideoTile {
     const videoIcon = this.options.hasVideo ? '{blue-fg}[V]{/blue-fg}' : '';
     const youLabel = this.options.isCurrentUser ? ' {yellow-fg}(you){/yellow-fg}' : '';
 
-    let statusLine = ` ${speakingIcon} ${username}${youLabel}`;
-    if (muteIcon || videoIcon) {
-      statusLine += `\n ${muteIcon} ${videoIcon}`.trim();
-    }
-
-    return statusLine;
+    return ` ${speakingIcon} ${username}${youLabel} ${muteIcon} ${videoIcon}`.trim();
   }
 
   /**
@@ -209,9 +215,21 @@ export class VideoTile {
    */
   setVideoFrame(frame: string): void {
     if (this.options.hasVideo) {
+      this.hasFrame = true;
+      this.videoError = null; // Clear error on frame
       this.videoBox.setContent(frame);
       this.screen.render();
     }
+  }
+
+  /**
+   * Set a video error message
+   */
+  setVideoError(message: string): void {
+    this.videoError = message;
+    this.hasFrame = false;
+    this.updateVideoDisplay();
+    this.screen.render();
   }
 
   /**

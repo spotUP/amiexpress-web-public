@@ -162,12 +162,10 @@ export class LoginModal {
   private setupEventHandlers() {
     // Login button click - both press and click events
     this.loginButton.on('press', () => {
-      console.log('[LoginModal] Button pressed');
       this.handleSubmit();
     });
 
     this.loginButton.on('click', () => {
-      console.log('[LoginModal] Button clicked');
       this.handleSubmit();
     });
 
@@ -176,22 +174,18 @@ export class LoginModal {
       // Use getFocused() method - there is no .focused property on Screen
       const focused = this.screen.getFocused();
 
-      console.log('[LoginModal] Enter pressed, focused element:', focused?.constructor?.name);
 
       if (focused === this.usernameInput) {
         // Move to password field
-        console.log('[LoginModal] Moving focus to password field');
         this.passwordInput.focus();
         this.screen.render();
         return false;
       } else if (focused === this.passwordInput) {
         // Submit form
-        console.log('[LoginModal] Submitting from password field');
         this.handleSubmit();
         return false;
       } else if (focused === this.loginButton) {
         // Button pressed
-        console.log('[LoginModal] Submitting from button');
         this.handleSubmit();
         return false;
       }
@@ -209,16 +203,12 @@ export class LoginModal {
     // Tab to switch between fields - MUST be at screen level because screen intercepts Tab
     this.screen.key(['tab'], () => {
       const focused = this.screen.getFocused();
-      console.log('[LoginModal] Tab pressed, focused:', focused?.constructor?.name);
 
       if (focused === this.usernameInput) {
-        console.log('[LoginModal] Moving focus from username to password');
         this.passwordInput.focus();
       } else if (focused === this.passwordInput) {
-        console.log('[LoginModal] Moving focus from password to button');
         this.loginButton.focus();
       } else if (focused === this.loginButton) {
-        console.log('[LoginModal] Moving focus from button to username');
         this.usernameInput.focus();
       }
       this.screen.render();
@@ -262,59 +252,10 @@ export class LoginModal {
   }
 
   public show() {
-    console.log('[LoginModal.show] Called');
-    console.log('[LoginModal.show] usernameInput properties:', {
-      // @ts-ignore
-      type: this.usernameInput.type,
-      // @ts-ignore
-      focusable: this.usernameInput.options?.focusable,
-      // @ts-ignore
-      keys: this.usernameInput.options?.keys,
-      // @ts-ignore
-      mouse: this.usernameInput.options?.mouse,
-      visible: this.usernameInput.visible,
-      // @ts-ignore
-      hidden: this.usernameInput.hidden,
-    });
-
-    console.log('[LoginModal.show] loginButton properties:', {
-      // @ts-ignore
-      type: this.loginButton.type,
-      // @ts-ignore
-      focusable: this.loginButton.options?.focusable,
-      // @ts-ignore
-      keys: this.loginButton.options?.keys,
-      // @ts-ignore
-      mouse: this.loginButton.options?.mouse,
-      visible: this.loginButton.visible,
-      // @ts-ignore
-      hidden: this.loginButton.hidden,
-    });
-
     this.modalBackground.show();
     this.modalBox.show();
-
-    console.log('[LoginModal.show] About to call usernameInput.focus()');
-    // @ts-ignore - access internal properties
-    console.log('[LoginModal.show] usernameInput.options.focusable:', this.usernameInput.options?.focusable);
-    // @ts-ignore
-    console.log('[LoginModal.show] usernameInput.disabled:', this.usernameInput.disabled);
-    // @ts-ignore
-    console.log('[LoginModal.show] screen._focused BEFORE:', this.screen._focused);
-    console.log('[LoginModal.show] screen.getFocused() BEFORE:', this.screen.getFocused());
-
     this.usernameInput.focus();
-
-    // @ts-ignore
-    console.log('[LoginModal.show] screen._focused AFTER focus():', this.screen._focused);
-    console.log('[LoginModal.show] screen.getFocused() AFTER focus():', this.screen.getFocused());
-    console.log('[LoginModal.show] usernameInput.focused:', this.usernameInput.focused);
-
     this.screen.render();
-
-    // @ts-ignore
-    console.log('[LoginModal.show] screen._focused AFTER render():', this.screen._focused);
-    console.log('[LoginModal.show] screen.getFocused() AFTER render():', this.screen.getFocused());
   }
 
   public hide() {

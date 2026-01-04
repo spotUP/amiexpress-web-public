@@ -15,9 +15,8 @@
  * - Real-time canvas rendering
  */
 
-import { Door } from '@amiexpress/bbs-door-sdk';
-import { runDoorWithSession } from '@amiexpress/bbs-door-sdk/tools/runDoorSession';
-import { UIEngine } from '@amiexpress/bbs-door-sdk';
+import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import { UIEngine, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 
 import { EditorState, Tool, ANSI, SHORTCUTS, Cell } from './types.js';
 import {
@@ -166,13 +165,10 @@ class ANSIEditor {
   private state: EditorState;
   private ui: UIEngine;
   private running: boolean = false;
-  private outputBuffer: string = '';
-  private user: any;
-  private socket: any;
+  private ctx: DoorContext;
 
-  constructor(user: any, socket: any) {
-    this.user = user;
-    this.socket = socket;
+  constructor(ctx: DoorContext) {
+    this.ctx = ctx;
     this.state = createInitialState();
 
     // Create UI engine for modals
@@ -182,15 +178,32 @@ class ANSIEditor {
       smartCSR: true,
       enableMouse: true,
       enableKeys: true,
+      output: (data: string) => { /* Capture via getOutput() instead */ }
     });
   }
 
   // ===========================================================================
-  // MAIN EDITOR LOOP
+  // INITIALIZATION
   // ===========================================================================
 
-  async run(): Promise<void> {
+  async init(): Promise<void> {
     this.running = true;
+
+    // Setup event routing from UI engine to socket
+    this.ui.on('render', () => {
+      const output = this.ui.getOutput();
+      if (output) {
+        this.emit(output);
+      }
+    });
+
+    // Key events (now coming from our UIEngine/blessed)
+    this.ui.on('keypress', (ch: string, key: any) => {
+      const focused = this.ui.getScreen().getFocused();
+      if (!focused || focused === this.ui.getScreen()) {
+        this.handleKeypress(ch, key);
+      }
+    });
 
     // Initial screen draw
     this.emit(ANSI.CLEAR_SCREEN);
@@ -198,53 +211,39 @@ class ANSIEditor {
     this.refresh();
 
     // Show welcome message
-    await this.showWelcome();
-
-    // Enable mouse support
-    this.socket.emit('enableMouseEvents', true);
-
-    // Main event loop
-    this.setupEventHandlers();
-
-    // Wait until editor exits
-    await new Promise<void>((resolve) => {
-      this.socket.on('disconnect', () => {
-        this.running = false;
-        resolve();
-      });
-
-      // Exit handler
-      door.on('exit', () => {
-        this.running = false;
-        resolve();
-      });
+    // Note: We don't await this here because it would block initialization
+    // Instead, we let it run in the background
+    this.showWelcome().then(() => {
+        // Enable mouse support after welcome modal is closed
+        this.ctx.socket.emit('enableMouseEvents', true);
     });
 
-    // Cleanup
-    this.socket.emit('enableMouseEvents', false);
-    this.emit(ANSI.SHOW_CURSOR);
-    this.emit(ANSI.CLEAR_SCREEN);
-  }
-
-  // ===========================================================================
-  // EVENT HANDLERS
-  // ===========================================================================
-
-  private setupEventHandlers(): void {
-    // Keyboard input
-    this.socket.on('data', (data: string) => {
-      this.handleKeyboard(data);
-    });
-
-    // Mouse input
-    this.socket.on('mouse', (event: any) => {
+    // Handle mouse events from socket
+    this.ctx.socket.on('mouse', (event: any) => {
       this.handleMouse(event);
     });
+  }
 
-    // Key events (from blessed/SDK)
-    this.socket.on('keypress', (ch: string, key: any) => {
-      this.handleKeypress(ch, key);
-    });
+  /**
+   * Main input entry point called by Door.onInput
+   */
+  public handleInput(key: KeyPress): void {
+    if (!this.running) return;
+
+    // 1. Feed to UIEngine for modals/blessed widgets
+    this.ui.getScreen().program._handleData(key.raw);
+    
+    // 2. Handle canvas drawing if no modal is active
+    const focused = this.ui.getScreen().getFocused();
+    if (!focused || focused === this.ui.getScreen()) {
+       // Only call handleKeyboard for printable single characters
+       if (key.raw.length === 1 && key.raw.charCodeAt(0) >= 32) {
+         this.handleKeyboard(key.raw);
+       } else if (key.raw === '\x1b') {
+         // ESC
+         this.handleKeyboard(key.raw);
+       }
+    }
   }
 
   // ===========================================================================
@@ -490,23 +489,26 @@ class ANSIEditor {
   // ===========================================================================
 
   private refresh(): void {
-    // Clear output buffer
-    this.outputBuffer = '';
-
-    // Render canvas
-    this.outputBuffer += renderCanvas(this.state);
-
-    // Render status bar
+    // 1. Render canvas + status bar
+    let output = renderCanvas(this.state);
     if (this.state.showStatusBar) {
-      this.outputBuffer += renderStatusBar(this.state);
+      output += renderStatusBar(this.state);
     }
+    this.emit(output);
 
-    // Emit to client
-    this.emit(this.outputBuffer);
+    // 2. If a modal is up, re-render it on top to ensure visibility
+    const focused = this.ui.getScreen().getFocused();
+    if (focused && focused !== this.ui.getScreen()) {
+      this.ui.render(true);
+      const modalOutput = this.ui.getOutput();
+      if (modalOutput) {
+        this.emit(modalOutput);
+      }
+    }
   }
 
   private emit(data: string): void {
-    this.socket.emit('data', data);
+    this.ctx.socket.emit('data', data);
   }
 
   // ===========================================================================
@@ -728,7 +730,7 @@ class ANSIEditor {
     }
 
     this.running = false;
-    door.disconnect(this.user.id);
+    this.ctx.close();
   }
 }
 
@@ -736,22 +738,30 @@ class ANSIEditor {
 // DOOR CONNECTION HANDLER
 // =============================================================================
 
-const handleConnection = async (user: any, socket: any) => {
-  console.log(`[ANSI Editor] User ${user.name} connected`);
+// Store active editors by socket ID to support concurrent sessions
+const activeEditors = new Map<string, ANSIEditor>();
 
-  if (!socket) {
-    console.error('[ANSI Editor] No socket found for user');
-    return;
+door.onStart(async (ctx: DoorContext) => {
+  console.log(`[ANSI Editor] User ${ctx.user.username} connected`);
+
+  const editor = new ANSIEditor(ctx);
+  activeEditors.set(ctx.socket.id, editor);
+  
+  // Initialize editor (non-blocking)
+  await editor.init();
+});
+
+door.onInput(async (ctx: DoorContext, key: KeyPress) => {
+  const editor = activeEditors.get(ctx.socket.id);
+  if (editor) {
+    editor.handleInput(key);
   }
+});
 
-  // Create and run editor
-  const editor = new ANSIEditor(user, socket);
-  await editor.run();
-
-  console.log(`[ANSI Editor] User ${user.name} disconnected`);
-};
-
-door.onConnect(handleConnection);
+door.onClose(async (ctx: DoorContext) => {
+  console.log(`[ANSI Editor] User ${ctx.user.username} disconnected`);
+  activeEditors.delete(ctx.socket.id);
+});
 
 // =============================================================================
 // EXPORT
@@ -761,5 +771,5 @@ export default door;
 
 // Provide runDoor entrypoint expected by the TS door harness
 export async function runDoor(session: any): Promise<void> {
-  await handleConnection(session.user, session.socket);
+  await door.execute(session);
 }

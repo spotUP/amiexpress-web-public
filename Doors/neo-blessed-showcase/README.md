@@ -139,8 +139,7 @@ Each page in the showcase includes:
 ### Dependencies
 
 - `@amiexpress/bbs-door-sdk` - Core SDK and Door class
-- `@amiexpress/bbs-door-sdk/engines/ui/blessed` - neo-blessed UI framework
-- `@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib` - blessed-contrib widgets
+- `@amiexpress/bbs-door-sdk/engines/ui/blessed` - Main UI library including all widgets and charts
 
 ### File Structure
 

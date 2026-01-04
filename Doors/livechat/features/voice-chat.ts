@@ -413,7 +413,6 @@ export class VoiceChannel {
           colored: videoOptions?.colored ?? true,
         }
       );
-      console.log(`[VoiceChat] Started video stream: ${streamId}`);
     } catch (error: any) {
       this.showError('Failed to start video: ' + error.message);
       this.hasVideo = false;
@@ -431,7 +430,6 @@ export class VoiceChannel {
         await this.ctx.video.stopStream(myStreamId);
       }
     } catch (error: any) {
-      console.error('[VoiceChat] Error stopping video stream:', error);
     }
   }
 

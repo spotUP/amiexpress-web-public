@@ -21,6 +21,7 @@ export function createInputBox(screen: Screen): Textarea {
     label: ' Message ',
     border: { type: 'line' },
     inputOnFocus: true,
+    tags: true,
     mouse: true,
     style: {
       fg: 'white',

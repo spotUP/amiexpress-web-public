@@ -29,5 +29,5 @@ export function wrapText(text: string, width: number): string[] {
 
 /** Escape special chars for blessed tags */
 export function escapeContent(text: string): string {
-  return text.replace(/\{/g, '{{').replace(/\}/g, '}}');
+  return text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
 }

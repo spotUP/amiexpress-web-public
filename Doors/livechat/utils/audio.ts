@@ -18,6 +18,13 @@ export class AudioService {
     this.mentionEnabled = enabled;
   }
 
+  /** Play a library sound effect */
+  playSound(name: string, params: any = {}): void {
+    if (!this.enabled) return;
+    this.engine.playSound?.(name, params);
+  }
+
+  /** Play a raw note (fallback) */
   play(name: keyof typeof SOUNDS): void {
     if (!this.enabled) return;
     if (name === 'mention' && !this.mentionEnabled) return;
@@ -31,15 +38,19 @@ export class AudioService {
   }
 
   onMessage(isMention: boolean): void {
-    this.play(isMention ? 'mention' : 'message');
+    if (isMention) {
+      this.playSound('notification');
+    } else {
+      this.playSound('click');
+    }
   }
 
-  onJoin(): void { this.play('join'); }
-  onLeave(): void { this.play('leave'); }
-  onError(): void { this.play('error'); }
-  onNotification(): void { this.play('notification'); }
-  onReaction(): void { this.play('reaction'); }
-  onDM(): void { this.play('dm'); }
+  onJoin(): void { this.playSound('success'); }
+  onLeave(): void { this.playSound('cancel'); }
+  onError(): void { this.playSound('error'); }
+  onNotification(): void { this.playSound('notification'); }
+  onReaction(): void { this.playSound('confirm'); }
+  onDM(): void { this.playSound('confirm'); }
 }
 
 export { SOUNDS, SoundConfig };

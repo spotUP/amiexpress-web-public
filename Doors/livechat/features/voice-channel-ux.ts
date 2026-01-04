@@ -69,13 +69,15 @@ export class VoiceControlBar {
   }
 
   private createUI(parent: any) {
+    // Detect if we are inside a DockablePanel (like the sidebar)
+    const isInsidePanel = parent && (parent.constructor.name === 'DockablePanel' || parent.options?.title);
+    
     // Bottom control bar container (Discord-style: bottom left corner)
-    // Position above status bar (height 1) and input box (height 3)
     this.container = blessed.box({
       parent,
-      bottom: 4,  // Above status bar (1) and input box (3)
+      bottom: isInsidePanel ? 0 : 4,
       left: 0,
-      width: 42,
+      width: isInsidePanel ? '100%' : 42,
       height: 3,
       tags: true,
       style: {
@@ -93,14 +95,14 @@ export class VoiceControlBar {
     });
 
     // Set high z-index to appear above other elements
-    (this.container as any).zi = 9999;
+    (this.container as any).zIndex = 10000;
 
     // User status with speaking indicator
     this.statusBox = blessed.box({
       parent: this.container,
       top: 0,
       left: 1,
-      width: 14,
+      width: isInsidePanel ? '35%' : 14,
       height: 1,
       tags: true,
       content: `{gray-fg}[ ]{/gray-fg} ${this.username.substring(0, 8)}`,
@@ -114,7 +116,7 @@ export class VoiceControlBar {
     this.muteButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 15,
+      left: isInsidePanel ? '40%' : 15,
       width: 5,
       height: 1,
       tags: true,
@@ -139,7 +141,7 @@ export class VoiceControlBar {
     this.videoButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 21,
+      left: isInsidePanel ? '55%' : 21,
       width: 5,
       height: 1,
       tags: true,
@@ -164,8 +166,8 @@ export class VoiceControlBar {
     this.disconnectButton = blessed.box({
       parent: this.container,
       top: 0,
-      left: 27,
-      width: 12,
+      right: 1,
+      width: isInsidePanel ? '25%' : 12,
       height: 1,
       tags: true,
       content: '{red-fg}[X] Leave{/red-fg}',
@@ -261,8 +263,8 @@ export class VoiceControlBar {
 
   public show() {
     this.container.show();
-    this.container.setFront();  // Bring to front of other elements
-    this.screen.render();
+    this.container.setFront();  // Bring to front of other elements in parent
+    if (this.screen) this.screen.render();
   }
 
   public hide() {
@@ -280,6 +282,7 @@ export class VoiceControlBar {
  * Discord UX: Voice channels appear in channel list with participants
  */
 export interface EnhancedVoiceChannelOptions {
+  parent?: any; // Parent for voice control bar
   channelList: any;
   screen: any;
   socket: any;
@@ -292,6 +295,7 @@ export interface EnhancedVoiceChannelOptions {
 }
 
 export class EnhancedVoiceChannel {
+  private parent?: any;
   private channelList: any;
   private screen: any;
   private socket: any;
@@ -310,6 +314,7 @@ export class EnhancedVoiceChannel {
   private videoEnabled = false;
 
   constructor(options: EnhancedVoiceChannelOptions) {
+    this.parent = options.parent;
     this.channelList = options.channelList;
     this.screen = options.screen;
     this.socket = options.socket;
@@ -338,7 +343,7 @@ export class EnhancedVoiceChannel {
       const channel = this.voiceChannels.get(data.channelId);
       if (channel) {
         channel.participants.push({
-          userId: data.userId,
+          userId: String(data.userId),
           username: data.username,
           isSpeaking: false,
         });
@@ -346,9 +351,9 @@ export class EnhancedVoiceChannel {
       }
 
       // Add to video grid
-      if (this.videoGrid && data.userId !== this.userId) {
+      if (this.videoGrid && String(data.userId) !== String(this.userId)) {
         this.videoGrid.addParticipant({
-          userId: data.userId,
+          userId: String(data.userId),
           username: data.username,
           socketId: '',
           isMuted: data.isMuted || false,
@@ -363,19 +368,19 @@ export class EnhancedVoiceChannel {
     this.socket.on('voice:left', (data: any) => {
       const channel = this.voiceChannels.get(data.channelId);
       if (channel) {
-        channel.participants = channel.participants.filter(p => p.userId !== data.userId);
+        channel.participants = channel.participants.filter(p => String(p.userId) !== String(data.userId));
         this.updateChannelList();
       }
 
       // Remove from video grid
       if (this.videoGrid) {
-        this.videoGrid.removeParticipant(data.userId);
+        this.videoGrid.removeParticipant(String(data.userId));
       }
     });
 
-    this.socket.on('voice:speaking', (data: any) => {
+    this.socket.on('audio-speaking-status', (data: any) => {
       for (const channel of this.voiceChannels.values()) {
-        const participant = channel.participants.find(p => p.userId === data.userId);
+        const participant = channel.participants.find(p => String(p.userId) === String(data.userId));
         if (participant) {
           participant.isSpeaking = data.isSpeaking;
           this.updateChannelList();
@@ -385,14 +390,18 @@ export class EnhancedVoiceChannel {
 
       // Update video grid
       if (this.videoGrid) {
-        this.videoGrid.updateParticipant(data.userId, {
+        this.videoGrid.updateParticipant(String(data.userId), {
           isSpeaking: data.isSpeaking,
           audioLevel: data.audioLevel || 0,
         });
 
-        // Set active speaker
-        if (data.isSpeaking) {
-          this.videoGrid.setActiveSpeaker(data.userId);
+        // Set active speaker highlight (for others)
+        const targetId = String(data.userId);
+        if (data.isSpeaking && targetId !== String(this.userId)) {
+          this.videoGrid.setActiveSpeaker(targetId);
+        } else if (!data.isSpeaking && targetId !== String(this.userId)) {
+          // If they stopped speaking, remove highlight
+          this.videoGrid.setActiveSpeaker(undefined);
         }
       }
     });
@@ -400,7 +409,7 @@ export class EnhancedVoiceChannel {
     // Video toggle events
     this.socket.on('voice:video-toggle', (data: any) => {
       if (this.videoGrid) {
-        this.videoGrid.updateParticipant(data.userId, {
+        this.videoGrid.updateParticipant(String(data.userId), {
           hasVideo: data.hasVideo,
         });
 
@@ -412,7 +421,7 @@ export class EnhancedVoiceChannel {
     // Handle incoming video frames
     this.socket.on('video:frame', (data: { userId: string | number, frame: string }) => {
       if (this.videoGrid) {
-        this.videoGrid.updateParticipantVideo(data.userId, data.frame);
+        this.videoGrid.updateParticipantVideo(String(data.userId), data.frame);
       }
     });
 
@@ -476,17 +485,30 @@ export class EnhancedVoiceChannel {
               colored: videoOptions?.colored ?? true,
             }
           );
+
+          // Route local frames to the video grid for preview
+          this.ctx.video.onFrame((frame: string) => {
+            if (this.videoEnabled && this.videoGrid) {
+              this.videoGrid.updateParticipantVideo(this.userId, frame);
+            }
+          });
         } catch (error: any) {
-          console.error('[VoiceChannel] Failed to start video stream:', error);
-          this.videoEnabled = false;
-          this.socket.emit('voice:video-toggle', { hasVideo: false });
+          this.videoEnabled = true; // Keep it enabled so we can show the error in the tile
+          
+          if (this.videoGrid) {
+            const errorMsg = error.message?.includes('denied') ? 'CAMERA BLOCKED' : 'STREAM ERROR';
+            this.videoGrid.updateParticipantError(this.userId, errorMsg);
+          }
+          
+          this.socket.emit('voice:video-toggle', { hasVideo: true });
         }
       } else {
         try {
           const myStreamId = `video-${this.socket.id}`;
           await this.ctx.video.stopStream(myStreamId);
+          // Remove listener
+          this.ctx.video.onFrame(() => {}); 
         } catch (error: any) {
-          console.error('[VoiceChannel] Failed to stop video stream:', error);
         }
       }
     }
@@ -520,7 +542,7 @@ export class EnhancedVoiceChannel {
         // Create control bar
         if (!this.controlBar) {
           this.controlBar = new VoiceControlBar({
-            parent: this.screen,
+            parent: this.parent || this.screen,
             screen: this.screen,
             socket: this.socket,
             ctx: this.ctx,
@@ -608,7 +630,6 @@ export class EnhancedVoiceChannel {
           await completeJoin(response.participants);
         } else {
           // Server responded but denied - still show UI for demo/testing
-          console.warn('Voice channel join denied by server, using local mode');
           await completeJoin();
         }
       });
@@ -616,13 +637,11 @@ export class EnhancedVoiceChannel {
       // Timeout: If server doesn't respond in 2 seconds, proceed anyway (local/demo mode)
       setTimeout(async () => {
         if (!callbackReceived) {
-          console.warn('Voice channel server timeout, using local mode');
           await completeJoin();
         }
       }, 2000);
 
     } catch (error: any) {
-      console.error('Failed to join voice channel:', error);
     }
   }
 
@@ -651,7 +670,6 @@ export class EnhancedVoiceChannel {
         this.onLeaveVoiceCallback();
       }
     } catch (error: any) {
-      console.error('Failed to leave voice channel:', error);
     }
   }
 
@@ -662,7 +680,6 @@ export class EnhancedVoiceChannel {
       const audioOptions = this.qualityManager.getAudioStreamOptions();
       await this.ctx.audio.startStreaming(audioOptions);
     } catch (error: any) {
-      console.error('Failed to start audio streaming:', error);
     }
   }
 

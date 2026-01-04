@@ -19,7 +19,8 @@ export function parseMarkdown(text: string): string {
 /** Parse color tags {color}text{/color} and {bg:color}text{/bg} */
 export function parseColors(text: string): string {
   // Foreground colors: {red}text{/red} -> {red-fg}text{/red-fg}
-  text = text.replace(/\{(\w+)\}(.+?)\{\/\1\}/g, (match, color, content) => {
+  // Use [^{]+ to prevent matching across multiple tags and causing bleed
+  text = text.replace(/\{(\w+)\}([^{]+)\{\/\1\}/g, (match, color, content) => {
     if (VALID_COLORS.includes(color)) {
       return `{${color}-fg}${content}{/${color}-fg}`;
     }
@@ -27,7 +28,7 @@ export function parseColors(text: string): string {
   });
 
   // Background colors: {bg:blue}text{/bg} -> {blue-bg}text{/blue-bg}
-  text = text.replace(/\{bg:(\w+)\}(.+?)\{\/bg\}/g, (match, color, content) => {
+  text = text.replace(/\{bg:(\w+)\}([^{]+)\{\/bg\}/g, (match, color, content) => {
     if (VALID_COLORS.includes(color)) {
       return `{${color}-bg}${content}{/${color}-bg}`;
     }
@@ -72,7 +73,10 @@ export function parseEmotes(text: string): string {
 
 /** Full markdown parsing (excludes animations - those are parsed separately) */
 export function parseContent(text: string): string {
-  let result = text;
+  // FIRST: Escape raw text to prevent user-injected blessed tags from causing bleed
+  let result = text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
+
+  // THEN: Parse our supported formatting which will inject its own tags
   result = parseCodeBlock(result);
   result = parseMarkdown(result);
   result = parseColors(result);  // Color tags

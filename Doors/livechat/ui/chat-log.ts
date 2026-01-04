@@ -23,6 +23,7 @@ export function createChatLog(
   const chatPanel = new DockablePanel({
     parent: screen,
     title: ' Chat ',
+    label: ' Chat ',
     top: MENU_HEIGHT,
     left: sidebarWidth,
     width: screenWidth - sidebarWidth,
@@ -34,6 +35,8 @@ export function createChatLog(
     minWidth: 40,
     minHeight: 10,
     zIndex: 1,
+    persistenceKey: 'chat-main',
+    topConstraint: MENU_HEIGHT,
     border: { type: 'line', fg: 'green' },
     style: {
       fg: 'white',

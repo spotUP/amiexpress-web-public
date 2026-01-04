@@ -441,27 +441,33 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
 
   // Display callers
   for (const call of data.calls) {
+    // E source line 260: \l\s[18] = left-aligned 18 chars
     const username = call.Username.substring(0, 18).padEnd(18);
     let locationOrBBS = showLocation ? call.location : call.Bbsname;
 
     if (config.centreName) {
       locationOrBBS = centre(locationOrBBS, 21);
     } else {
+      // E source: \l\s[21] = left-aligned 21 chars
       locationOrBBS = locationOrBBS.substring(0, 21).padEnd(21);
     }
 
-    const dateon = call.Dateon.substring(0, 5);
-    const timeon = call.TimeOn.substring(0, 5);
-    const timeoff = call.TimeOff.substring(0, 5);
+    // E source: \l\s[5] = left-aligned 5 chars (MUST pad even if empty)
+    const dateon = call.Dateon.substring(0, 5).padEnd(5);
+    // E source: \l\s[5]-\l\s[5] = "TIMEON-TIMEOFF" (11 chars total)
+    const timeon = call.TimeOn.substring(0, 5).padEnd(5);
+    const timeoff = call.TimeOff.substring(0, 5).padEnd(5);
+    // E source: \l\s[10] = left-aligned 10 chars
     const actions = call.Actions.substring(0, 10).padEnd(10);
 
     const upload = formatSize(call.Upload);
     const download = formatSize(call.Download);
 
-    // Truncate if too long
+    // E source line 258-259: if too long, use 'LOTS'
     const uploadDisplay = upload.length > 8 ? 'LOTS' : upload;
     const downloadDisplay = download.length > 8 ? 'LOTS' : download;
 
+    // E source: \r\s[4] = right-aligned 4 chars (last 4 of formatted size)
     const line = `\x1b[36m${username}\x1b[34m:\x1b[32m${locationOrBBS}\x1b[34m:\x1b[37m${dateon}\x1b[34m:\x1b[37m${timeon}-${timeoff}\x1b[34m:\x1b[36m${actions}\x1b[34m:\x1b[37m${uploadDisplay.padStart(4)}\x1b[34m:\x1b[37m${downloadDisplay.padStart(4)}`;
     emitTrimmedLine(socket, line);
   }

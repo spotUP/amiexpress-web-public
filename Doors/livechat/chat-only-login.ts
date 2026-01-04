@@ -31,7 +31,6 @@ async function verifyCredentials(credentials: LoginCredentials): Promise<{ succe
       }
     };
   } catch (error) {
-    console.error('[ChatOnlyLogin] Error verifying credentials:', error);
     return { success: false, error: 'Login failed - server error' };
   }
 }
@@ -46,7 +45,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 3;
 
-    console.log('[ChatOnlyLogin] Initializing blessed login modal');
 
     // Create blessed screen
     screen = createScreen(bbs);
@@ -66,13 +64,11 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     loginModal = createLoginModal({
       screen,
       onSubmit: async (credentials: LoginCredentials) => {
-        console.log('[ChatOnlyLogin] Submitting credentials for user:', credentials.username);
 
         // Verify credentials directly (we're on the server!)
         const result = await verifyCredentials(credentials);
 
         if (result.success && result.user) {
-          console.log('[ChatOnlyLogin] Login successful for:', result.user.username);
 
           // Update session with user data
           session.user = result.user;
@@ -90,13 +86,11 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
 
           resolve(true);
         } else {
-          console.log('[ChatOnlyLogin] Login failed:', result.error);
           loginModal.showError(result.error || 'Login failed');
           loginModal.clearInputs();
         }
       },
       onError: (message: string) => {
-        console.log('[ChatOnlyLogin] Error:', message);
       },
     });
 
@@ -104,7 +98,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     disconnectionModal = createDisconnectionModal({
       screen,
       onRetry: () => {
-        console.log('[ChatOnlyLogin] User requested reconnect');
         reconnectAttempts++;
         if (reconnectAttempts <= MAX_RECONNECT_ATTEMPTS) {
           socket.connect();
@@ -116,7 +109,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
         }
       },
       onCancel: () => {
-        console.log('[ChatOnlyLogin] User cancelled reconnection');
         if (loginModal) loginModal.destroy();
         if (disconnectionModal) disconnectionModal.destroy();
         if (screen) screen.destroy();
@@ -138,7 +130,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
 
     // Handle connection errors during login
     socket.on('disconnect', (reason: string) => {
-      console.log('[ChatOnlyLogin] Disconnected:', reason);
       if (reason !== 'io client disconnect') {
         loginModal.hide();
         disconnectionModal.showError(
@@ -150,7 +141,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     });
 
     socket.on('connect_error', (error: any) => {
-      console.error('[ChatOnlyLogin] Connection error:', error.message);
       reconnectAttempts++;
       if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         loginModal.hide();
@@ -163,7 +153,6 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     });
 
     socket.on('connect', () => {
-      console.log('[ChatOnlyLogin] Reconnected');
       reconnectAttempts = 0;
       if (disconnectionModal) {
         disconnectionModal.hide();

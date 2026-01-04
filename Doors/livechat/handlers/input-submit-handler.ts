@@ -5,7 +5,7 @@ import type { Socket } from 'socket.io-client';
 import type { CommandRegistry } from '../commands/types';
 import { executeCommand } from '../core/command-exec';
 import { replaceEmojis } from '../utils/emojis';
-import { formatTime } from '../utils/format';
+import { formatTime, escapeContent } from '../utils/format';
 import { getUserColor } from '../core/formatter';
 
 export function createSubmitHandler(
@@ -217,15 +217,14 @@ export function createSubmitHandler(
         }
       }
 
-      // Force complete clear by hiding and showing the input box
+      // Force complete clear including live preview content
       inputBox.clearValue();
-      inputBox.hide();
-      screen.render();
-      inputBox.show();
+      if ((inputBox as any).setContent) (inputBox as any).setContent('');
+      if ((inputBox as any)._invalidateCoords) (inputBox as any)._invalidateCoords();
+      
       inputBox.focus();
       screen.render();
     } catch (error) {
-      console.error('[LiveChat] Error in submit handler:', error);
       addSystemMessage(`{red-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/red-fg}`);
       inputBox.clearValue();
       inputBox.focus();

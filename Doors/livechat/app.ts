@@ -11,9 +11,26 @@
  * - Settings panel with checkboxes
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
-import { DockablePanel, Question } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, {
+  screen,
+  box,
+  list,
+  textbox,
+  form,
+  button,
+  ScrollableBox,
+  ScrollableText,
+  Loading,
+  Message,
+  Question,
+  Prompt,
+  Log,
+  Grid,
+  grid,
+  Carousel,
+  carousel,
+  DockablePanel,
+} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 // Local helper to strip blessed tags from text
@@ -103,11 +120,10 @@ import { createEventsCommand } from './commands/events';
 
 // Types
 import { PRESENCE_INDICATORS } from './types';
-import type { PresenceStatus, BBSEvent, Message } from './types';
+import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
 import type { SlashCommand } from './commands/types';
 
-// Import widget types
-import type { Log } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+// Import widget types (Log already imported above)
 
 interface DoorSession {
   socket: any;
@@ -132,7 +148,10 @@ export async function createApp(session: DoorSession) {
   const { bbs, socket } = session;
   bbs.enableWideMode?.();
 
-  const ctx = initializeLiveChat(session);
+  // ========== CREATE NEO-BLESSED SCREEN ==========
+  const screen = createScreen(bbs);
+
+  const ctx = initializeLiveChat(session, screen);
   const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService,
     eventBus, audioEngine, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
   let { currentRoomLabel } = ctx;
@@ -141,14 +160,24 @@ export async function createApp(session: DoorSession) {
   const initialRoomId = session.bbsSession?.currentRoomId as string | undefined;
   const initialRoomName = session.bbsSession?.currentRoomName as string | undefined;
 
-  // ========== CREATE NEO-BLESSED SCREEN ==========
-  const screen = createScreen(bbs);
-
   // ========== INPUT HANDLING ==========
   // Wire up terminal input to the blessed screen
-  // The BBS calls doorInputHandler with raw terminal input
-  // Also handle F1 key directly since it may not pass through correctly
-  let showHelpFn: (() => void) | null = null;  // Will be set later after showHelp is defined
+  // Also unlock audio on first interaction
+  screen.on('keypress', () => {
+    if (!(audioEngine as any)._initialized) {
+      audioEngine.init().catch(() => {});
+      (audioEngine as any)._initialized = true;
+    }
+  });
+  
+  screen.on('click', () => {
+    if (!(audioEngine as any)._initialized) {
+      audioEngine.init().catch(() => {});
+      (audioEngine as any)._initialized = true;
+    }
+  });
+
+  let showHelpFn: (() => void) | null = null;
 
   if (session.bbsSession) {
     // CRITICAL: Set BOTH flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
@@ -209,6 +238,7 @@ export async function createApp(session: DoorSession) {
 
   // Wire up emoji button to show emoji picker
   emojiButton.on('press', () => {
+    audio.playSound('click');
     if (!emojiPicker.isVisible()) {
       emojiPicker.show(
         screen,
@@ -224,6 +254,10 @@ export async function createApp(session: DoorSession) {
         }
       );
     }
+  });
+
+  emojiButton.on('mouseenter', () => {
+    audio.playSound('hover');
   });
 
   const inputHistory = createInputHistory(screen, inputBox);
@@ -409,18 +443,39 @@ export async function createApp(session: DoorSession) {
     inputBox.focus();
   });
 
-  // ========== CHANNEL LIST (Left Sidebar) ==========
-  const channelList = createList({
+  // ========== SIDEBAR PANEL (Left side) ==========
+  const sidebarPanel = new DockablePanel({
     parent: screen,
-    top: MENU_HEIGHT,  // Start right below menu
+    title: ' Sidebar ',
+    label: ' Sidebar ',
+    top: MENU_HEIGHT,
     left: 0,
     width: SIDEBAR_WIDTH,
     bottom: STATUS_HEIGHT + INPUT_HEIGHT,
-    label: ' [Ch] Us ', // Tabs: [active] inactive
-    border: { type: 'line' },
+    dockPosition: 'left',
+    resizable: true,
+    draggable: true,
+    persistenceKey: 'sidebar',
+    zIndex: 1,
+    topConstraint: MENU_HEIGHT,
+    border: { type: 'line', fg: 'cyan' },
     style: {
       fg: 'white',
-      border: { fg: 'cyan' },
+      bg: 'black',
+    }
+  });
+
+  // ========== CHANNEL LIST (Inside Sidebar) ==========
+  const channelList = createList({
+    parent: sidebarPanel,
+    top: 0,
+    left: 0,
+    width: '100%-2',
+    height: '100%-2',
+    label: ' [Ch] Us ', // Tabs: [active] inactive
+    border: { type: 'none' },
+    style: {
+      fg: 'white',
       // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
       // Use 'item.hover' and 'item.selected' for per-item styling
       item: {
@@ -439,6 +494,10 @@ export async function createApp(session: DoorSession) {
       ch: '█'
     },
     items: [],
+  });
+
+  channelList.on('mouseenter', () => {
+    audio.playSound('hover');
   });
 
   // Default channels to show when server hasn't responded
@@ -617,15 +676,15 @@ export async function createApp(session: DoorSession) {
     screen.render();
   });
 
-  // ========== USER LIST (Left Sidebar - same position as channels) ==========
+  // ========== USER LIST (Inside Sidebar - same position as channels) ==========
   const userList = createList({
-    parent: screen,
-    top: MENU_HEIGHT,  // Start right below menu
+    parent: sidebarPanel,
+    top: 0,
     left: 0,
-    width: SIDEBAR_WIDTH,
-    bottom: STATUS_HEIGHT + INPUT_HEIGHT,
+    width: '100%-2',
+    height: '100%-2',
     label: ' Ch [Us] ', // Tabs: inactive [active]
-    border: { type: 'line' },
+    border: { type: 'none' },
     mouse: true,
     clickable: true,  // Enable click events
     interactive: true,  // Enable interactive selection
@@ -636,7 +695,6 @@ export async function createApp(session: DoorSession) {
     hidden: true,  // Hidden by default, channels shown first
     style: {
       fg: 'white',
-      border: { fg: 'magenta' },
       // NOTE: Don't use widget-level 'hover' or 'selected' - those apply to WHOLE widget
       // Use 'item.hover' and 'item.selected' for per-item styling
       item: {
@@ -717,7 +775,6 @@ export async function createApp(session: DoorSession) {
   screen.responsiveLayout.onResize((width, height) => {
     // Validate dimensions are positive numbers to prevent crashes
     if (!width || !height || width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
-      console.error(`[LiveChat] Invalid resize dimensions: ${width}x${height}, ignoring`);
       return;
     }
 
@@ -890,6 +947,7 @@ export async function createApp(session: DoorSession) {
   let pendingPrivateRoom = '';
 
   passwordSubmitBtn.on('press', () => {
+    audio.playSound('click');
     const password = passwordInput.getValue();
     if (pendingPrivateRoom && password) {
       socket.emit('room:join', { roomName: pendingPrivateRoom, password });
@@ -1012,6 +1070,7 @@ export async function createApp(session: DoorSession) {
 
   // ========== VOICE CHANNEL (Discord-style UX) ==========
   const voiceChannel = createEnhancedVoiceChannel({
+    parent: sidebarPanel,
     channelList,
     screen,
     socket,
@@ -1039,11 +1098,14 @@ export async function createApp(session: DoorSession) {
   // Helper to get position for format picker based on selection
   const getSelectionPosition = (selection: any) => {
     // Position relative to input box and selection start
+    // Use absolute screen coordinates (aleft/atop)
     const inputLeft = (inputBox as any).aleft || 0;
     const inputTop = (inputBox as any).atop || 0;
+    
+    // Account for 1-cell border
     return {
-      x: inputLeft + 1 + (selection.start || 0),  // +1 for border
-      y: inputTop,  // Top of input box, dialog will appear above
+      x: inputLeft + 1 + (selection.start || 0),
+      y: inputTop + 1,
     };
   };
 
@@ -1053,12 +1115,15 @@ export async function createApp(session: DoorSession) {
       formatPicker.show(
         screen,
         (format: any) => {
-          // Wrap selected text with format tags (store formatted version)
-          // but display only the plain text in the input to avoid showing tags
+          // Wrap selected text with format tags
           const wrappedText = format.wrap(selection.text);
-          const displayText = stripTags(wrappedText);
-          (inputBox as any).replaceSelection?.(displayText);
-          // Store the wrapped text for sending (TODO: implement formatted message sending)
+          (inputBox as any).replaceSelection?.(wrappedText);
+          
+          // Update content immediately for live preview
+          if ((inputBox as any).options.tags) {
+            inputBox.setContent(inputBox.getValue());
+          }
+          
           inputBox.focus();
           screen.render();
         },
@@ -1078,12 +1143,15 @@ export async function createApp(session: DoorSession) {
       formatPicker.show(
         screen,
         (format: any) => {
-          // Wrap selected text with format tags (store formatted version)
-          // but display only the plain text in the input to avoid showing tags
+          // Wrap selected text with format tags
           const wrappedText = format.wrap(selection.text);
-          const displayText = stripTags(wrappedText);
-          (inputBox as any).replaceSelection?.(displayText);
-          // Store the wrapped text for sending (TODO: implement formatted message sending)
+          (inputBox as any).replaceSelection?.(wrappedText);
+          
+          // Update content immediately for live preview
+          if ((inputBox as any).options.tags) {
+            inputBox.setContent(inputBox.getValue());
+          }
+          
           inputBox.focus();
           screen.render();
         },
@@ -1517,7 +1585,6 @@ export async function createApp(session: DoorSession) {
   });
 
   socket.on('connect_error', (error: any) => {
-    console.error('[LiveChat] Connection error:', error.message);
     showConnectionErrorDialog(`Connection error: ${error.message}`);
   });
 
@@ -1657,6 +1724,11 @@ export async function createApp(session: DoorSession) {
     // Use setTimeout to get the updated value after the keypress
     setTimeout(() => {
       const currentValue = inputBox.getValue();
+      
+      // Update content to render tags if enabled
+      if ((inputBox as any).options.tags) {
+        inputBox.setContent(currentValue);
+      }
 
       if (currentValue.startsWith('/') && currentValue.length > 0) {
         // Show command suggestions
@@ -1665,6 +1737,8 @@ export async function createApp(session: DoorSession) {
         // Hide suggestions if not a command
         hideCommandSuggestions();
       }
+      
+      screen.render();
     }, 0);
   });
   // ========== GLOBAL KEYBOARD SHORTCUTS ==========
@@ -1688,6 +1762,12 @@ export async function createApp(session: DoorSession) {
         (format: any) => {
           const wrappedText = format.wrap(selection.text);
           (inputBox as any).replaceSelection?.(wrappedText);
+          
+          // Update content immediately for live preview
+          if ((inputBox as any).options.tags) {
+            inputBox.setContent(inputBox.getValue());
+          }
+          
           inputBox.focus();
           screen.render();
         },
