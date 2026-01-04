@@ -77,7 +77,6 @@ import {
   getCurrentBet,
   getPlayerBet,
   buildWeeklyBulletin,
-  buildBullHelpContent,
   renderCardLines,
   padColumn,
   mergeColumns,
@@ -180,7 +179,6 @@ class CardLobbyApp {
     await this.reloadState();
 
     loader.update(50, 'Setting up game tables...');
-    await this.writeBullHelpFile();
 
     loader.update(70, 'Checking weekly bulletins...');
     await this.writeWeeklyBulletinIfNeeded();
@@ -525,8 +523,19 @@ class CardLobbyApp {
     beforeStacks: Record<string, number>,
     startedAt?: number,
   ): void {
+    // CRITICAL: Sanitize snapshot to prevent recursive nesting
+    // The @pokertools/engine Snapshot includes `previousStates: Snapshot[]` which
+    // creates O(n^2) storage growth as each snapshot contains all prior snapshots.
+    // We strip previousStates (not needed for restore) and limit actionHistory.
+    const rawSnapshot = engine.snapshot as Snapshot;
+    const sanitizedSnapshot: Snapshot = {
+      ...rawSnapshot,
+      previousStates: [], // Clear recursive history - causes 481MB+ file bloat
+      actionHistory: (rawSnapshot.actionHistory || []).slice(-100), // Keep last 100 actions max
+    };
+
     table.hand = {
-      snapshot: engine.snapshot as Snapshot,
+      snapshot: sanitizedSnapshot,
       beforeStacks,
       startedAt: startedAt ?? table.hand?.startedAt ?? Date.now(),
       updatedAt: Date.now(),

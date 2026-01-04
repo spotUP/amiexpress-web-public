@@ -416,9 +416,9 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
     socket.emit('ansi-output', '\x1b[37m  \x1b[35m \\_____\\__\\__\\_____\\/ \\__\\/\\_____\\__\\__\\_____\\_____\\_____\\__\\__\\_____\\/\x1b[34mSdN\r\n');
     socket.emit('ansi-output', '\x1b[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     \x1b[0m\r\n');
     if (showLocation) {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME \x1b[37m          \x1b[36mLOCATION \x1b[37m             \x1b[36mDATE \x1b[30m \x1b[36mTIME ON BBS ACTIONS    UPL DWNL\r\n');
+      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mLOCATION             \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
     } else {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME \x1b[37m          \x1b[36mBBS \x1b[37m                  \x1b[36mDATE \x1b[30m \x1b[36mTIME ON BBS ACTIONS    UPL DWNL\r\n');
+      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mBBS                  \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
     }
   }
 
@@ -431,9 +431,9 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
     socket.emit('ansi-output', '\x1b[35m   \x1b[37m     \x1b[35m\\______/\x1b[37m:::::.::::::::::::::::::::::     \x1b[35m\\______/\x1b[37m:::::::::::::: ::::\r\n');
     socket.emit('ansi-output', '\x1b[1;44;33m                   GLOBAL LASTCALLERS! - (C) REBEL/qUARTEX                     \x1b[0m\r\n');
     if (showLocation) {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME \x1b[37m          \x1b[36mLOCATION \x1b[37m             \x1b[36mDATE \x1b[30m \x1b[36mTIME ON BBS ACTIONS    UPL  DWNL\r\n');
+      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mLOCATION             \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
     } else {
-      socket.emit('ansi-output', '\x1b[36mUSERNAME \x1b[37m          \x1b[36mBBS \x1b[37m                  \x1b[36mDATE \x1b[30m \x1b[36mTIME ON BBS ACTIONS    UPL  DWNL\r\n');
+      socket.emit('ansi-output', '\x1b[36mUSERNAME          \x1b[34m:\x1b[37mBBS                  \x1b[34m:\x1b[37mDATE \x1b[34m:\x1b[37mTIME ON BBS\x1b[34m:\x1b[36mACTIONS   \x1b[34m:\x1b[37mUPL \x1b[34m:\x1b[37mDWNL\r\n');
     }
   }
 
@@ -536,14 +536,5 @@ export async function runDoor(doorSession: any): Promise<void> {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-
-  // Wait for user input using proper door input handler
-  await new Promise<void>((resolve) => {
-    const inputHandler = (data: string) => {
-      delete bbsSession.doorInputHandler;
-      resolve();
-    };
-    bbsSession.doorInputHandler = inputHandler;
-  });
+  // BBS framework handles pause prompt - no need to emit here
 }

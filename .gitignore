@@ -146,6 +146,9 @@ data/*.db
 data/*.sqlite
 data/*.sqlite3
 
+# Door runtime data (can grow very large)
+web/backend/data/doors/
+
 # OS generated files
 Thumbs.db
 ehthumbs.db

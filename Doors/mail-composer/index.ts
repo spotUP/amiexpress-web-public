@@ -48,6 +48,22 @@ door.onStart(async (ctx: DoorContext) => {
     output: (data: string) => output.write(data),
   });
 
+  // CRITICAL: Set up input handler to route keyboard events to the screen
+  // Without this, the screen never receives keyboard input!
+  const bbsSession = (ctx as any).bbsSession;
+  if (bbsSession) {
+    bbsSession.doorInputHandler = (data: string) => {
+      (screen as any)._handleData(data);
+      return true;
+    };
+  }
+
+  // Enable mouse events
+  screen.enableMouse();
+  if ((bbs as any)?.enableMouseEvents) {
+    (bbs as any).enableMouseEvents();
+  }
+
   try {
     // Show composer
     await showComposer(screen, bbs, username, ctx);

@@ -18,7 +18,6 @@ import {
   pad,
   formatChips,
   buildWeeklyBulletin,
-  buildBullHelpContent,
 } from '../lib';
 
 export class DialogManager {
@@ -145,12 +144,6 @@ export class DialogManager {
     const content = await session.bbs.readFile(`Bulletins/bull${number}.txt`);
     if (!content) return null;
     return content.replace(/\r\n/g, '\n');
-  }
-
-  async writeBullHelpFile(session: DoorSession): Promise<void> {
-    if (!session.bbs?.writeFile) return;
-    const content = buildBullHelpContent();
-    await session.bbs.writeFile('Bulletins/BullHelp.txt', content);
   }
 
   async writeWeeklyBulletinIfNeeded(lobby: LobbyState | null, profiles: Record<string, PlayerProfile>, session: DoorSession): Promise<void> {

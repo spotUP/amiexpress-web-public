@@ -79,8 +79,8 @@ export class FormatPicker {
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 44, // Increased width to account for inner padding
-      height: 16,
+      width: 70, // Wide enough for both panels with content
+      height: 14,
       title: ' Format [Tab | Enter] ',
       border: { type: 'line', fg: 'yellow' },
       shadow: false,
@@ -158,7 +158,7 @@ export class FormatPicker {
     this.formatList = createList({
       parent: this.overlay,
       top: 0,
-      left: 14,
+      left: 16,
       right: 0,
       height: '100%-2',
       label: ' Options ',
@@ -169,9 +169,6 @@ export class FormatPicker {
       clickable: true,
       interactive: true,
       ch: ' ', // Opaque background
-      scrollbar: {
-        ch: ' ',
-      },
       style: {
         fg: 'white',
         bg: 'black',
@@ -230,27 +227,6 @@ export class FormatPicker {
       }
       this.hide();
     });
-
-    // Arrow keys for navigation (explicitly needed for some terminals)
-    this.categoryList.key(['up', 'k'], () => {
-      this.categoryList.up(1);
-      this.overlay.screen.render();
-    });
-
-    this.categoryList.key(['down', 'j'], () => {
-      this.categoryList.down(1);
-      this.overlay.screen.render();
-    });
-
-    this.formatList.key(['up', 'k'], () => {
-      this.formatList.up(1);
-      this.overlay.screen.render();
-    });
-
-    this.formatList.key(['down', 'j'], () => {
-      this.formatList.down(1);
-      this.overlay.screen.render();
-    });
   }
 
   private selectCurrentFormat() {
@@ -267,14 +243,8 @@ export class FormatPicker {
 
   private loadCategory(category: FormatCategory) {
     const formats = FORMATS[category];
-    const items = formats.map(f => {
-      // Show format name with color preview for colors
-      if (category === 'colors') {
-        const colorName = f.name.toLowerCase();
-        return `{${colorName}-fg}${f.name}{/}`;
-      }
-      return f.name;
-    });
+    // Use plain text to avoid blessed list item rendering issues with markup
+    const items = formats.map(f => f.name);
     this.formatList.setItems(items);
     if (this.overlay.screen) {
       this.overlay.screen.render();
@@ -290,7 +260,7 @@ export class FormatPicker {
     this.onSelect = onSelect;
     this.onCancel = onCancel;
 
-    this.modalBackground.show();
+    // Show overlay only (not as modal background)
     this.overlay.show();
     this.overlay.setFront();
 
@@ -313,7 +283,6 @@ export class FormatPicker {
       this._responsiveCleanup();
       this._responsiveCleanup = null;
     }
-    this.modalBackground.hide();
     this.overlay.hide();
     if (this.overlay.screen) {
       this.overlay.screen.render();

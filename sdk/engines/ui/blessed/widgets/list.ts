@@ -132,8 +132,11 @@ export class List extends Element {
         // Fast path: only works for unwrapped items (one line per item)
         // Wrapped items disabled due to complexity with variable line counts
         if (!this.wrapItemsEnabled && lines.length === this.items.length) {
-          lines[oldIdx] = '  ' + this.items[oldIdx];
-          lines[newIdx] = '> ' + this.items[newIdx];
+          // Parse tags to ANSI codes (since we're setting _lines directly)
+          const oldParsed = this.options.tags !== false ? parseTags(this.items[oldIdx]) : this.items[oldIdx];
+          const newParsed = this.options.tags !== false ? parseTags(this.items[newIdx]) : this.items[newIdx];
+          lines[oldIdx] = '  ' + oldParsed;
+          lines[newIdx] = '> ' + newParsed;
           return;
         }
       } else {
@@ -191,7 +194,7 @@ export class List extends Element {
 
       if (this.wrapItemsEnabled) {
         // Wrap long items to multiple lines
-        const parsed = this.options.tags ? parseTags(itemText) : itemText;
+        const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
         const wrapWidth = Math.max(1, this.getItemWrapWidth() - (this.interactive ? 2 : 0));
         const wrapped = this.wrapAnsiText(parsed, wrapWidth);
 
@@ -208,7 +211,9 @@ export class List extends Element {
         }
       } else {
         // Simple case: one line per item
-        newLines.push(marker + itemText);
+        // Parse tags to ANSI codes (since we're setting _lines directly, bypassing parseContent)
+        const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
+        newLines.push(marker + parsed);
         this.lineToItem.push(index);
       }
 
@@ -232,12 +237,18 @@ export class List extends Element {
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
       this.up();
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
       this.down();
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -245,12 +256,18 @@ export class List extends Element {
     // Home/End - jump to first/last item
     if (key.name === 'home' || (vi && key.name === 'g')) {
       this.select(0);
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }
 
     if (key.name === 'end' || (vi && key.name === 'G')) {
       this.select(this.items.length - 1);
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -259,6 +276,9 @@ export class List extends Element {
     if (key.name === 'pageup') {
       const jump = Math.min(10, this.selected);
       this.select(this.selected - jump);
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -266,6 +286,9 @@ export class List extends Element {
     if (key.name === 'pagedown') {
       const jump = Math.min(10, this.items.length - 1 - this.selected);
       this.select(this.selected + jump);
+      // Cancel debounced update and update immediately for responsive keyboard feedback
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+      this._updateContent();
       this.screen?.render();
       return;
     }

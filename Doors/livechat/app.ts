@@ -16,7 +16,10 @@ import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
 import { DockablePanel, Question } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { stripTags, cleanTags } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/helpers';
+// Local helper to strip blessed tags from text
+function stripTags(text: string): string {
+  return text.replace(/{[^}]+}/g, '');
+}
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 
 // Core state and services
@@ -1050,9 +1053,12 @@ export async function createApp(session: DoorSession) {
       formatPicker.show(
         screen,
         (format: any) => {
-          // Wrap selected text with format
+          // Wrap selected text with format tags (store formatted version)
+          // but display only the plain text in the input to avoid showing tags
           const wrappedText = format.wrap(selection.text);
-          (inputBox as any).replaceSelection?.(wrappedText);
+          const displayText = stripTags(wrappedText);
+          (inputBox as any).replaceSelection?.(displayText);
+          // Store the wrapped text for sending (TODO: implement formatted message sending)
           inputBox.focus();
           screen.render();
         },
@@ -1072,9 +1078,12 @@ export async function createApp(session: DoorSession) {
       formatPicker.show(
         screen,
         (format: any) => {
-          // Wrap selected text with format
+          // Wrap selected text with format tags (store formatted version)
+          // but display only the plain text in the input to avoid showing tags
           const wrappedText = format.wrap(selection.text);
-          (inputBox as any).replaceSelection?.(wrappedText);
+          const displayText = stripTags(wrappedText);
+          (inputBox as any).replaceSelection?.(displayText);
+          // Store the wrapped text for sending (TODO: implement formatted message sending)
           inputBox.focus();
           screen.render();
         },

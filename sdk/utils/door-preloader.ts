@@ -48,7 +48,7 @@ function createPreloaderFrame(doorName: string, progress: number): string {
     `${ANSI.CYAN}  │  ${ANSI.WHITE}Loading application: ${ANSI.YELLOW}${name.padEnd(30)}${ANSI.WHITE}           ${ANSI.CYAN}│${ANSI.RESET}`,
     `${ANSI.CYAN}  │  ${ANSI.GREEN}Please wait while the environment initializes...          ${ANSI.CYAN}│${ANSI.RESET}`,
     `${ANSI.CYAN}  │                                                            │${ANSI.RESET}`,
-    `${ANSI.CYAN}  │  [${ANSI.GREEN}${bar}${ANSI.CYAN}]  │${ANSI.RESET}`,
+    `${ANSI.CYAN}  │  [${ANSI.GREEN}${bar}${ANSI.CYAN}]${ANSI.CYAN}                                                     │${ANSI.RESET}`,
     `${ANSI.CYAN}  │                                                            │${ANSI.RESET}`,
     `${ANSI.CYAN}  └────────────────────────────────────────────────────────────┘${ANSI.RESET}`,
   ].join('\r\n');

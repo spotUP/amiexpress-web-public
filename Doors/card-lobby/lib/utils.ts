@@ -251,18 +251,3 @@ export const buildWeeklyBulletin = (state: LobbyState, data: Record<string, Play
 
   return lines.join('\r\n') + '\r\n';
 };
-
-export const buildBullHelpContent = (): string => {
-  const lines: string[] = [];
-  lines.push('CARD LOBBY BULLETINS');
-  lines.push('---------------------');
-  lines.push('');
-  LOBBY_BULLETINS.forEach((entry) => {
-    const number = `#${entry.number}`;
-    lines.push(`${pad(number, 5)} ${entry.title}`);
-    lines.push(`     ${entry.description}`);
-  });
-  lines.push('');
-  lines.push('Use the Card Lobby bulletin window to read bulletin numbers.');
-  return lines.join('\r\n') + '\r\n';
-};

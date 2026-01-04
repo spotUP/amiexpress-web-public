@@ -92,7 +92,7 @@ export class Element extends EventEmitter {
       clickable: false,
       keyable: false,
       scrollable: false,
-      tags: false,
+      tags: true, // Default to true - blessed tags like {red-fg} are parsed automatically
       padding: 0,
       ...options,
     };
@@ -836,7 +836,7 @@ export class Element extends EventEmitter {
       // Fallback: split by lines, will re-parse during render
       // Keep _contentDirty = true so getVisibleLines re-parses when dimensions are known
       let parsed = content;
-      if (this.options.tags) {
+      if (this.options.tags !== false) {
         parsed = parseTags(content);
       }
       this._lines = parsed.split(/\r?\n/);
@@ -886,7 +886,7 @@ export class Element extends EventEmitter {
 
     // Parse tags if enabled (convert {red-fg} to ANSI codes)
     let parsedLine = line;
-    if (this.options.tags) {
+    if (this.options.tags !== false) {
       parsedLine = parseTags(line);
     }
 
@@ -919,7 +919,7 @@ export class Element extends EventEmitter {
     // Parse tags if enabled (convert {red-fg} to ANSI codes)
     // This ensures {red-fg}text{/} becomes proper ANSI sequences
     let parsedLine = line;
-    if (this.options.tags) {
+    if (this.options.tags !== false) {
       parsedLine = parseTags(line);
     }
 
@@ -1049,9 +1049,9 @@ export class Element extends EventEmitter {
   parseContent(content?: string): string[] {
     const text = content !== undefined ? content : this.content;
 
-    // Parse tags if enabled
+    // Parse tags if enabled (default: true unless explicitly set to false)
     let parsed = text;
-    if (this.options.tags) {
+    if (this.options.tags !== false) {
       parsed = parseTags(text);
     }
 
@@ -2231,12 +2231,10 @@ export class Element extends EventEmitter {
     const pos = this._getCoords();
     if (!pos) return;
 
-    const labelStyle = border?.labelStyle || this.options.style;
-    const attr = this.sattr(labelStyle);
-
-    // Calculate label position
+    // Calculate label position using visual width (stripped of tags/ANSI)
     const labelText = ` ${label} `;
-    const labelWidth = textWidth(labelText);
+    const strippedLabel = stripAnsi(labelText.replace(/\{[^}]+\}/g, '')); // Remove tags for width calc
+    const labelWidth = textWidth(strippedLabel);
     let labelX = pos.xi + 2; // Default left
 
     if (border?.labelPosition === 'center') {
@@ -2245,11 +2243,14 @@ export class Element extends EventEmitter {
       labelX = pos.xl - labelWidth - 2;
     }
 
-    // Render label on top border
-    if (this.screen) {
-      for (let i = 0; i < labelText.length; i++) {
-        (this.screen as any).fillRegion(attr, labelText[i], labelX + i, labelX + i + 1, pos.yi, pos.yi + 1);
-      }
+    // Parse tags to ANSI codes if tags are enabled
+    const parsedLabel = this.options.tags !== false ? parseTags(labelText) : labelText;
+
+    // Render label on top border using direct output with ANSI codes
+    if (this.screen && (this.screen as any).program) {
+      const program = (this.screen as any).program;
+      // Position cursor and write the parsed label with ANSI codes
+      program.write(`\x1b[${pos.yi + 1};${labelX + 1}H${parsedLabel}\x1b[0m`);
     }
   }
 

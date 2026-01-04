@@ -4,12 +4,16 @@
 [36m==============================================================================[0m
 
 ~SS_BBS:Bulletins/bull1.txt
+~SP.
 
 ~SS_BBS:Bulletins/bull2.txt
+~SP.
 
 ~SS_BBS:Bulletins/bull3.txt
+~SP.
 
 ~SS_BBS:Bulletins/bull4.txt
+~SP.
 
 ~SS_BBS:Bulletins/bull5.txt
 
