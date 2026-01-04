@@ -14,5 +14,6 @@
 ## 3. Regression Safeguards
 - When adjusting wiring or security (Arexx access, command handler), log the change in `archive/CRITICAL_RULES.md` and rerun the door/test suite.
 - Extra logging (e.g., `DEBUG_XIM_OUTPUT=1`, `DEBUG_DOOR_IO=true`, `logs/backend.log`) is the first line of defense for nondeterministic bugs.
+- **XIM Critical Requirements:** Run `dev/scripts/verify-xim-critical.sh` before committing XIM-related changes to prevent regressions. See `XIM_CRITICAL_REQUIREMENTS.md` for details.
 
 **Need instructions to add new tests?** The archived testing docs include templates for manual checklists, CLI scaffolding, and candidate PR descriptions (`PR_DESCRIPTION.md`). Refer there once the summary is solid.
