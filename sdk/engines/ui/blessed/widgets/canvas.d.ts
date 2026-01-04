@@ -1,73 +1,53 @@
 /**
- * Canvas - Basic drawing canvas for custom rendering
+ * Canvas Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/canvas.js
+ * Provides a canvas widget with Braille-based drawing
  */
 import { Box } from './box';
+import { Canvas as InnerCanvas, Context } from '../utils/contrib-utils/drawille-canvas';
 import type { ElementOptions } from '../core/types';
 export interface CanvasOptions extends ElementOptions {
-    fillChar?: string;
-    clearChar?: string;
+    data?: any;
 }
+/**
+ * Canvas Widget
+ * Box with Braille-based drawing canvas
+ */
 export declare class Canvas extends Box {
-    private buffer;
-    private fillChar;
-    private clearChar;
-    private canvasWidth;
-    private canvasHeight;
-    private _dirty;
-    private _renderTimeout;
-    constructor(options?: CanvasOptions);
-    /**
-     * Initialize canvas buffer
-     * Accounts for borders and padding to use actual content area
-     */
-    private initializeBuffer;
-    /**
-     * Set pixel at coordinates
-     * @param autoRender - If true (default), schedules a debounced render. Set to false for batch operations.
-     */
-    setPixel(x: number, y: number, char?: string, autoRender?: boolean): void;
-    /**
-     * Schedule a debounced render (16ms = ~60fps)
-     */
-    private _scheduleRender;
-    /**
-     * Get pixel at coordinates
-     */
-    getPixel(x: number, y: number): string | undefined;
-    /**
-     * Clear the canvas
-     */
-    clearCanvas(): void;
-    /**
-     * Draw a line from (x1, y1) to (x2, y2)
-     */
-    drawLine(x1: number, y1: number, x2: number, y2: number, char?: string): void;
-    /**
-     * Draw a rectangle
-     */
-    drawRect(x: number, y: number, width: number, height: number, char?: string, filled?: boolean): void;
-    /**
-     * Draw a circle
-     */
-    drawCircle(cx: number, cy: number, radius: number, char?: string): void;
-    /**
-     * Draw text at position
-     */
-    drawText(x: number, y: number, text: string): void;
-    /**
-     * Fill area with character
-     */
-    fill(x: number, y: number, char?: string): void;
-    /**
-     * Render canvas to content
-     */
-    render(): void;
-    /**
-     * Get canvas dimensions
-     */
-    getCanvasSize(): {
+    options: CanvasOptions;
+    _canvas?: InnerCanvas;
+    ctx?: Context;
+    canvasSize?: {
         width: number;
         height: number;
     };
+    constructor(options?: CanvasOptions);
+    /**
+     * Calculate canvas size based on widget dimensions
+     * Braille characters are 2x4 pixels, so we multiply accordingly
+     * Width must be multiple of 2, height must be multiple of 4
+     */
+    calcSize(): void;
+    /**
+     * Clear the canvas
+     */
+    clear(): void;
+    /**
+     * Set data (override in subclasses)
+     */
+    setData(data: any): void;
+    /**
+     * Sync canvas content to element content
+     * Call this after drawing operations to make content visible
+     */
+    syncContent(): void;
+    /**
+     * Render the canvas
+     */
+    render(): any;
 }
-//# sourceMappingURL=canvas.d.ts.map
+/**
+ * Factory function
+ */
+export declare function canvas(options?: CanvasOptions): Canvas;

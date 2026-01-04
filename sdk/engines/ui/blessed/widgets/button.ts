@@ -49,14 +49,12 @@ export class Button extends Element {
 
     // Focus/blur handlers - trigger re-render to show focus style
     this.on('focus', () => {
-      console.log('[Button] Received focus event, this.focused:', this.focused);
       if (this.screen) {
         this.screen.render();
       }
     });
 
     this.on('blur', () => {
-      console.log('[Button] Received blur event');
       if (this.screen) {
         this.screen.render();
       }
@@ -64,25 +62,20 @@ export class Button extends Element {
   }
 
   private _onKeypress(ch: any, key: KeyEvent): void {
-    console.log('[Button._onKeypress] key:', key.name, 'this.focused:', this.focused);
     if (!this.focused) {
-      console.log('[Button._onKeypress] Ignoring because not focused');
       return;
     }
 
     if (key.name === 'enter' || key.name === 'space') {
-      console.log('[Button._onKeypress] Enter/Space detected, calling press()');
       this.press();
     }
   }
 
   private _onClick(): void {
-    console.log('[Button._onClick] Click detected, calling press()');
     this.press();
   }
 
   press(): void {
-    console.log('[Button.press] Emitting press and action events');
     this.emit('press');
     this.emit('action');
   }

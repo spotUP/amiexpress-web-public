@@ -5,6 +5,11 @@
 import { Element } from '../core/element';
 import type { TableOptions } from '../core/types';
 
+export interface TableData {
+  headers: string[];
+  data: string[][];
+}
+
 export class Table extends Element {
   private rows: string[][] = [];
   private headers: string[] = [];
@@ -83,8 +88,13 @@ export class Table extends Element {
     this._updateContent();
   }
 
-  setData(data: string[][]): void {
-    this.setRows(data);
+  setData(data: TableData | string[][]): void {
+    if (Array.isArray(data)) {
+      this.setRows(data);
+    } else {
+      this.headers = data.headers;
+      this.setRows(data.data);
+    }
   }
 
   setHeaders(headers: string[]): void {

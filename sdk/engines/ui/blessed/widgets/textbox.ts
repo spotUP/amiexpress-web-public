@@ -187,12 +187,9 @@ export class Textbox extends Element {
         }
         break;
 
-      case 'enter':
-        this.submit();
-        break;
-
       case 'escape':
         this.clearSelection();
+        this.blur();
         this.cancel();
         break;
     }
@@ -298,6 +295,7 @@ export class Textbox extends Element {
     const visibleText = text.slice(this.viewOffset, this.viewOffset + visibleWidth);
 
     let display: string;
+    const useTags = (this.options as any).tags;
 
     if (this.focused) {
       // Check if there's a selection
@@ -312,30 +310,30 @@ export class Textbox extends Element {
 
         if (visEnd > visStart && visStart < visibleText.length) {
           // Render selection with inverse video
-          // Escape user content so {} chars don't break blessed tags
-          const before = this._escapeForDisplay(visibleText.slice(0, visStart));
-          const selected = this._escapeForDisplay(visibleText.slice(visStart, visEnd));
-          const after = this._escapeForDisplay(visibleText.slice(visEnd));
+          // Escape user content if tags are NOT enabled so {} chars don't break blessed
+          const before = useTags ? visibleText.slice(0, visStart) : this._escapeForDisplay(visibleText.slice(0, visStart));
+          const selected = useTags ? visibleText.slice(visStart, visEnd) : this._escapeForDisplay(visibleText.slice(visStart, visEnd));
+          const after = useTags ? visibleText.slice(visEnd) : this._escapeForDisplay(visibleText.slice(visEnd));
           display = `${before}{inverse}${selected}{/inverse}${after}`;
         } else {
           // Selection not visible, show cursor
           const cursorPosInView = this.cursorPos - this.viewOffset;
-          const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-          const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
-          const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+          const beforeCursor = useTags ? visibleText.slice(0, cursorPosInView) : this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+          const atCursor = useTags ? (visibleText[cursorPosInView] || ' ') : this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
+          const afterCursor = useTags ? visibleText.slice(cursorPosInView + 1) : this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
           display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
         }
       } else {
         // No selection, show cursor as inverse video at cursor position
         const cursorPosInView = this.cursorPos - this.viewOffset;
-        const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-        const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');  // Space if at end
-        const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+        const beforeCursor = useTags ? visibleText.slice(0, cursorPosInView) : this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+        const atCursor = useTags ? (visibleText[cursorPosInView] || ' ') : this._escapeForDisplay(visibleText[cursorPosInView] || ' ');  // Space if at end
+        const afterCursor = useTags ? visibleText.slice(cursorPosInView + 1) : this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
         display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
       }
     } else {
-      // Not focused - still escape to display literal braces
-      display = this._escapeForDisplay(visibleText);
+      // Not focused - only escape if tags NOT enabled
+      display = useTags ? visibleText : this._escapeForDisplay(visibleText);
     }
 
     this.setContent(display);
@@ -721,6 +719,7 @@ export class Textarea extends Element {
 
       case 'escape':
         this.clearSelection();
+        this.blur();
         this.cancel();
         break;
 
@@ -888,6 +887,8 @@ export class Textarea extends Element {
       charPos += lines[i].length + 1; // +1 for newline
     }
 
+    const useTags = (this.options as any).tags;
+
     for (let i = 0; i < visibleLines.length; i++) {
       const lineIndex = this.viewOffsetY + i;
       const lineText = visibleLines[i];
@@ -899,8 +900,8 @@ export class Textarea extends Element {
         const isSelected = hasSelection && pos >= selStart && pos < selEnd;
         const isCursor = this.focused && !hasSelection && lineIndex === cursorLine && col === cursorCol;
 
-        // Escape character so {} don't break blessed tags
-        const escapedCh = this._escapeForDisplay(ch);
+        // Only escape if tags NOT enabled
+        const escapedCh = useTags ? ch : this._escapeForDisplay(ch);
 
         if (isSelected || isCursor) {
           lineDisplay += `{inverse}${escapedCh}{/inverse}`;

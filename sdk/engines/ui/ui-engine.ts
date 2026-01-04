@@ -570,7 +570,10 @@ export class UIEngine {
   /**
    * Render the screen and capture output
    */
-  render(): void {
+  render(force: boolean = false): void {
+    if (force) {
+      this.screen.forceFullRedraw();
+    }
     this.screen.render();
   }
 
@@ -579,11 +582,7 @@ export class UIEngine {
    * This captures the screen buffer as ANSI escape sequences
    */
   getOutput(): string {
-    // The screen's output is already written to the output stream
-    // For BBS usage, we need to capture this
-    // This is a simplified approach - in production, you'd want to
-    // pipe the output stream to a buffer
-    return '';
+    return this.screen.getOutput();
   }
 
   /**

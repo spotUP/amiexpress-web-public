@@ -271,6 +271,68 @@ const menubar = blessed.listbar({
 });
 ```
 
+## Integrated Contrib Widgets
+
+The `blessed-contrib` library is now integrated directly into Neo-Blessed.
+
+### Grid Layout
+
+```typescript
+const grid = new blessed.Grid({ rows: 12, cols: 12, screen: screen });
+
+const box = grid.set(0, 0, 6, 6, blessed.box, {
+  content: 'Top Left'
+});
+```
+
+### Line Chart
+
+```typescript
+const line = blessed.linechart({
+  parent: screen,
+  width: 80, height: 20,
+  label: ' Stats '
+});
+
+line.setData([{
+  title: 'Data',
+  x: ['A', 'B', 'C'],
+  y: [10, 20, 15]
+}]);
+```
+
+### Donut Chart
+
+```typescript
+const donut = blessed.donut({
+  parent: screen,
+  radius: 8,
+  arcWidth: 3
+});
+
+donut.setData([
+  { percent: 87, label: 'CPU', color: 'magenta' }
+]);
+
+```
+
+### Tree View
+
+```typescript
+const tree = blessed.tree({
+  parent: screen,
+  template: { lines: true }
+});
+
+tree.setData({
+  name: 'Root',
+  children: {
+    'Leaf 1': {},
+    'Leaf 2': { children: { 'Sub-leaf': {} } }
+  }
+});
+```
+
 ## Dialog Widgets
 
 ### Message

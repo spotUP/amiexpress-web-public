@@ -5,8 +5,12 @@
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
 
+export interface ScrollableBoxOptions extends ElementOptions {
+  alwaysScroll?: boolean;
+}
+
 export class ScrollableBox extends Box {
-  constructor(options: ElementOptions = {}) {
+  constructor(options: ScrollableBoxOptions = {}) {
     super({
       ...options,
       scrollable: true,
@@ -82,4 +86,11 @@ export class ScrollableBox extends Box {
       this.screen.render();
     }
   }
+}
+
+/**
+ * Factory function
+ */
+export function scrollablebox(options: ScrollableBoxOptions = {}): ScrollableBox {
+  return new ScrollableBox(options);
 }

@@ -8,8 +8,8 @@ A complete, production-ready port of neo-blessed for browser and Node.js environ
 - 🌐 **Browser Native** - No Node.js dependencies
 - 🖱️ **Full Mouse Support** - Click, hover, drag, wheel
 - ⌨️ **Keyboard Events** - Keys, shortcuts, navigation
-- 📦 **34 Widgets** - Complete widget library
-- 🎨 **ANSI Colors** - Full color palette support
+- 📦 **45+ Widgets** - Complete widget library including merged blessed-contrib
+- 📊 **Integrated Charts** - Native support for Line, Bar, Donut, and Gauges (from contrib)
 - 🔄 **Event System** - Robust event handling
 - 📜 **Scrolling** - Mouse wheel + keyboard
 - 🎯 **Focus Management** - Tab navigation, focus stack
@@ -110,6 +110,20 @@ screen.render();
 - **Button** - Clickable button
 - **Listbar** - Menu bar
 - **Canvas** - Drawing canvas
+
+### Extended / Contrib (12)
+- **Grid** - Grid layout system
+- **Carousel** - Multi-page navigation
+- **Tree** - Hierarchical tree view
+- **Line** (Chart) - Data line chart
+- **Bar** - Data bar chart
+- **StackedBar** - Stacked bar chart
+- **Donut** - Donut percentage chart
+- **Gauge** - Single progress gauge
+- **GaugeList** - Multiple progress gauges
+- **Map** - World map visualization
+- **Sparkline** - Compact mini-charts
+- **LCD** - Digital character display
 
 ### Dialog (5)
 - **Message** - Message box

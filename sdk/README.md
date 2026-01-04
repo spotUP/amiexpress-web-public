@@ -19,7 +19,7 @@ Always aim for modern, desktop-like doors using neo-blessed windows, panels, and
 - **Best for**: New doors, modern features, rapid development
 - **Language**: TypeScript/JavaScript
 - **Execution**: Native Node.js (fast, no emulation overhead)
-- **Libraries**: Full npm ecosystem (React, Tone.js, etc.)
+- **Libraries**: Full npm ecosystem (React, Tone.js, etc.) + **Native Contrib Widgets**
 - **Development**: Hot reload, modern debugging tools
 
 ### 2. 68K C SDK (`/sdk/68k/`)
@@ -225,6 +225,7 @@ sdk/
 
 ## Available Engines
 
+- **UIEngine (Neo-Blessed)** - Full-featured TUI library with **45+ widgets**. Now includes **blessed-contrib** natively (Charts, Grids, Trees, Maps). - See [Neo-Blessed Guide](./docs/NEO_BLESSED_GUIDE.md)
 - **AudioEngine** - Web Audio with **65 procedural sounds** (Tone.js) - See [Sound Library Reference](./docs/SOUND_LIBRARY_REFERENCE.md)
 - **AudioStreamingEngine** - Real-time voice chat with Opus codec, VAD, multi-party support - See [Audio Streaming Guide](../Documentation/4-Door-Developers/AUDIO_STREAMING.md)
 - **TrackerEngine** - MOD/XM/S3M/IT tracker music player (libopenmpt) - 50+ formats with authentic playback

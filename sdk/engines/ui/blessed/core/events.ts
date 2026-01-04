@@ -53,7 +53,6 @@ export class EventEmitter {
       try {
         handler(...args);
       } catch (err) {
-        console.error(`Error in event handler for "${event}":`, err);
       }
     }
 

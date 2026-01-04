@@ -46,7 +46,7 @@ interface SoundLibraryEntry {
   pattern: (params: Partial<SoundEffect>) => void;
 }
 
-export class AudioEngine {
+class AudioEngine {
   /** Audio configuration */
   private config: AudioConfig;
 
@@ -71,16 +71,21 @@ export class AudioEngine {
   /** Sound library (pre-defined effects) */
   private soundLibrary: Map<string, SoundLibraryEntry> = new Map();
 
+  /** Optional socket for remote triggering */
+  private socket: any = null;
+
   /** Is audio initialized? */
   private initialized: boolean = false;
 
-  constructor(config: Partial<AudioConfig> = {}) {
+  constructor(config: Partial<AudioConfig> = {}, socket?: any) {
     this.config = {
       masterVolume: config.masterVolume ?? 0.7,
       musicVolume: config.musicVolume ?? 0.5,
       sfxVolume: config.sfxVolume ?? 0.8,
       enabled: config.enabled ?? true,
     };
+
+    this.socket = socket;
 
     // Check if we're in a browser environment with AudioContext
     const isBrowser = typeof globalThis !== 'undefined' &&
@@ -89,7 +94,9 @@ export class AudioEngine {
 
     if (!isBrowser) {
       // Node.js environment - create placeholder gains that won't be used
-      console.warn('AudioEngine: Running in Node.js environment. Audio features disabled.');
+      if (!this.socket) {
+        console.warn('AudioEngine: Running in Node.js environment without socket. Audio features disabled.');
+      }
       this.masterGain = {} as Tone.Gain;
       this.musicGain = {} as Tone.Gain;
       this.sfxGain = {} as Tone.Gain;
@@ -119,7 +126,19 @@ export class AudioEngine {
   public async init(): Promise<void> {
     if (this.initialized) return;
 
-    await Tone.start();
+    // Check if we're in a browser environment with AudioContext
+    const isBrowser = typeof globalThis !== 'undefined' &&
+                       (globalThis as any).window !== undefined &&
+                       typeof (globalThis as any).window.AudioContext !== 'undefined';
+
+    if (isBrowser && Tone.context && Tone.context.state !== 'running') {
+      try {
+        await Tone.start();
+      } catch (e) {
+        console.error('Tone.js start failed:', e);
+      }
+    }
+    
     this.initialized = true;
   }
 
@@ -1037,12 +1056,53 @@ export class AudioEngine {
    * ```
    */
   public playSound(soundId: string, params: Partial<SoundEffect> = {}): void {
+    // If we're in Node.js and have a socket, relay the sound to the client
+    const isBrowser = typeof globalThis !== 'undefined' && (globalThis as any).window !== undefined;
+    if (!isBrowser && this.socket) {
+      this.socket.emit('audio:play-sfx', { type: 'library', soundId, params });
+      return;
+    }
+
     if (!this.config.enabled || !this.initialized) return;
 
     const sound = this.soundLibrary.get(soundId);
     if (sound) {
       sound.pattern(params);
     }
+  }
+
+  /**
+   * Play a single note
+   */
+  public playNote(note: string, duration: string | number = '8n'): void {
+    const isBrowser = typeof globalThis !== 'undefined' && (globalThis as any).window !== undefined;
+    if (!isBrowser && this.socket) {
+      this.socket.emit('audio:play-sfx', { type: 'note', note, duration });
+      return;
+    }
+
+    if (!this.config.enabled || !this.initialized) return;
+
+    const synth = new Tone.Synth().connect(this.sfxGain);
+    synth.triggerAttackRelease(note, duration);
+    setTimeout(() => synth.dispose(), 1000);
+  }
+
+  /**
+   * Play a chord (multiple notes)
+   */
+  public playChord(notes: string[], duration: string | number = '4n'): void {
+    const isBrowser = typeof globalThis !== 'undefined' && (globalThis as any).window !== undefined;
+    if (!isBrowser && this.socket) {
+      this.socket.emit('audio:play-sfx', { type: 'chord', notes, duration });
+      return;
+    }
+
+    if (!this.config.enabled || !this.initialized) return;
+
+    const synth = new Tone.PolySynth().connect(this.sfxGain);
+    synth.triggerAttackRelease(notes, duration);
+    setTimeout(() => synth.dispose(), 2000);
   }
 
   /**
@@ -1261,4 +1321,5 @@ export class AudioEngine {
   }
 }
 
+export { AudioEngine };
 export default AudioEngine;

@@ -21,6 +21,10 @@ export class Element extends EventEmitter {
   screen: any = null;  // Will be set by Screen
   children: Element[] = [];
 
+  // Style and Border (EXACT from neo-blessed element.js lines 104-105)
+  style: any;
+  border: Border | null = null;
+
   // Position cache
   position: Position = { xi: 0, xl: 0, yi: 0, yl: 0 };
   lpos?: Position;  // Last rendered position
@@ -41,6 +45,19 @@ export class Element extends EventEmitter {
   destroyed: boolean = false;
   disabled: boolean = false;
 
+  /**
+   * Check if this element or any of its descendants has focus
+   */
+  hasFocusedChild(): boolean {
+    if (!this.screen || !this.screen._focused) return false;
+    let current = this.screen._focused;
+    while (current) {
+      if (current === this) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
   // Scrolling
   private childBase: number = 0;
   private childOffset: number = 0;
@@ -49,7 +66,10 @@ export class Element extends EventEmitter {
   private clickable: boolean = false;
   private keyable: boolean = false;
   private input: boolean = false;
-  private _hovered: boolean = false;
+  protected _hovered: boolean = false;
+  protected _overBorder: boolean = false;
+  protected _resizing: boolean = false;
+  private _lastClickTime: number = 0;
 
   // Drag tracking (EXACT from neo-blessed element.js)
   private _draggable?: boolean;
@@ -93,9 +113,17 @@ export class Element extends EventEmitter {
       keyable: false,
       scrollable: false,
       tags: true, // Default to true - blessed tags like {red-fg} are parsed automatically
+      tabbable: true, // Default to true (if focusable)
+      tabIndex: 0,    // Default to natural tree order
       padding: 0,
       ...options,
     };
+
+    // Initialize style and border (EXACT from neo-blessed element.js lines 104-105)
+    this.style = this.options.style || {};
+    this.border = typeof this.options.border === 'string'
+      ? { type: this.options.border } as Border
+      : (this.options.border as Border) || null;
 
     // Initialize position from options (CRITICAL: position setters update this.position, not this.options)
     // _getCoords() reads from this.position, so we need to copy initial values here
@@ -263,6 +291,15 @@ export class Element extends EventEmitter {
       return Math.floor(parentSize * percent);
     }
 
+    // Center with offset (e.g., 'center-2', 'center+5')
+    const centerOffsetMatch = str.match(/^center([+-])(\d+)$/);
+    if (centerOffsetMatch) {
+      const operator = centerOffsetMatch[1];
+      const offset = parseInt(centerOffsetMatch[2], 10);
+      const baseValue = Math.floor((parentSize - max) / 2);
+      return operator === '-' ? baseValue - offset : baseValue + offset;
+    }
+
     // Center
     if (str === 'center') {
       return Math.floor((parentSize - max) / 2);
@@ -291,6 +328,20 @@ export class Element extends EventEmitter {
     const border = this.options.border as any;
     if (!border || border === 'none') return false;
     return true;
+  }
+
+  /**
+   * Invalidate coordinate cache for this element and all its children
+   * MUST be called whenever position or visibility changes
+   */
+  _invalidateCoords(): void {
+    this._coordsCacheValid = false;
+    this._coordsCache = null;
+    if (this.children) {
+      for (const child of this.children) {
+        child._invalidateCoords();
+      }
+    }
   }
 
   _getCoords(get?: boolean, noscroll?: boolean): Position | undefined {
@@ -341,9 +392,9 @@ export class Element extends EventEmitter {
     } else if (hasLeft && hasWidth) {
       // Left and width specified
       const elemWidth = this.calcPos(this.position.width!, 0, parentWidth);
-      // Handle 'center' positioning with width
-      if (this.position.left === 'center') {
-        xi = Math.floor((parentWidth - elemWidth) / 2);
+      // Handle 'center' positioning with width (including offsets)
+      if (typeof this.position.left === 'string' && this.position.left.startsWith('center')) {
+        xi = this.calcPos(this.position.left, elemWidth, parentWidth);
       } else {
         xi = this.calcPos(this.position.left!, 0, parentWidth);
       }
@@ -386,9 +437,9 @@ export class Element extends EventEmitter {
     } else if (hasTop && hasHeight) {
       // Top and height specified
       const elemHeight = this.calcPos(this.position.height!, 0, parentHeight);
-      // Handle 'center' positioning with height
-      if (this.position.top === 'center') {
-        yi = Math.floor((parentHeight - elemHeight) / 2);
+      // Handle 'center' positioning with height (including offsets)
+      if (typeof this.position.top === 'string' && this.position.top.startsWith('center')) {
+        yi = this.calcPos(this.position.top, elemHeight, parentHeight);
       } else {
         yi = this.calcPos(this.position.top!, 0, parentHeight);
       }
@@ -449,7 +500,7 @@ export class Element extends EventEmitter {
   set width(val: number | string) {
     if (this.position.width === val) return;
     this.position.width = val;
-    this._coordsCacheValid = false;
+    this._invalidateCoords();
     this.emit('resize');
   }
 
@@ -464,7 +515,7 @@ export class Element extends EventEmitter {
   set height(val: number | string) {
     if (this.position.height === val) return;
     this.position.height = val;
-    this._coordsCacheValid = false;
+    this._invalidateCoords();
     this.emit('resize');
   }
 
@@ -680,10 +731,9 @@ export class Element extends EventEmitter {
     if (!this.parent) return;
     val = (val as number) - this.parent.aleft;
     if (this.position.left === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
-    this.clearPos();
     this.position.left = val;
   }
 
@@ -695,10 +745,9 @@ export class Element extends EventEmitter {
     if (!this.parent) return;
     val -= this.parent.aright;
     if (this.position.right === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
-    this.clearPos();
     this.position.right = val;
   }
 
@@ -723,10 +772,9 @@ export class Element extends EventEmitter {
     if (!this.parent) return;
     val = (val as number) - this.parent.atop;
     if (this.position.top === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
-    this.clearPos();
     this.position.top = val;
   }
 
@@ -738,10 +786,9 @@ export class Element extends EventEmitter {
     if (!this.parent) return;
     val -= this.parent.abottom;
     if (this.position.bottom === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
-    this.clearPos();
     this.position.bottom = val;
   }
 
@@ -751,7 +798,7 @@ export class Element extends EventEmitter {
    */
   set rleft(val: number | string) {
     if (this.position.left === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     if (/^\d+$/.test(val as string)) val = +val;
     this.emit('move');
@@ -765,7 +812,7 @@ export class Element extends EventEmitter {
    */
   set rright(val: number) {
     if (this.position.right === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
     // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
@@ -778,7 +825,7 @@ export class Element extends EventEmitter {
    */
   set rtop(val: number | string) {
     if (this.position.top === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     if (/^\d+$/.test(val as string)) val = +val;
     this.emit('move');
@@ -792,7 +839,7 @@ export class Element extends EventEmitter {
    */
   set rbottom(val: number) {
     if (this.position.bottom === val) return;
-    this._coordsCacheValid = false;  // Opt #2: Invalidate cache
+    this._invalidateCoords();  // Opt #2: Invalidate cache
     this.screen?.invalidateMouseIndex?.();  // Invalidate mouse index on position change
     this.emit('move');
     // NOTE: clearPos() removed - screen.render() handles clearing/redrawing
@@ -1253,8 +1300,8 @@ export class Element extends EventEmitter {
     this.children.push(element);
 
     // Opt #2: Invalidate cache (tree structure changed)
-    this._coordsCacheValid = false;
-    element._coordsCacheValid = false;
+    this._invalidateCoords();
+    element._invalidateCoords();
 
     // Propagate screen to all descendants
     element._propagateScreen(this.screen);
@@ -1272,8 +1319,8 @@ export class Element extends EventEmitter {
     this.children.unshift(element);
 
     // Opt #2: Invalidate cache (tree structure changed)
-    this._coordsCacheValid = false;
-    element._coordsCacheValid = false;
+    this._invalidateCoords();
+    element._invalidateCoords();
 
     element._propagateScreen(this.screen);
 
@@ -1290,8 +1337,8 @@ export class Element extends EventEmitter {
       element.parent = null;
 
       // Opt #2: Invalidate cache (tree structure changed)
-      this._coordsCacheValid = false;
-      element._coordsCacheValid = false;
+      this._invalidateCoords();
+      element._invalidateCoords();
 
       element.emit('detach');
       this.emit('remove', element);
@@ -1307,8 +1354,8 @@ export class Element extends EventEmitter {
     this.children.splice(i, 0, element);
 
     // Opt #2: Invalidate cache (tree structure changed)
-    this._coordsCacheValid = false;
-    element._coordsCacheValid = false;
+    this._invalidateCoords();
+    element._invalidateCoords();
 
     element._propagateScreen(this.screen);
 
@@ -1481,6 +1528,7 @@ export class Element extends EventEmitter {
     if (this.hidden) {
       this.hidden = false;
       this.visible = true;
+      this._invalidateCoords();  // Ensure fresh coords when shown
       this.emit('show');
       // Emit overlay event for elements with opacity
       this._emitOverlayEvent(true);
@@ -1604,16 +1652,17 @@ export class Element extends EventEmitter {
    * Screen event listeners tracking
    * EXACT from neo-blessed element.js lines 267-297
    */
-  private _slisteners?: Array<{ type: string; handler: (...args: any[]) => void }>;
+  protected _slisteners: Array<{ type: string; handler: (...args: any[]) => void }> = [];
 
   /**
    * Register event listener on screen and track it for cleanup
    * EXACT from neo-blessed element.js lines 267-271
    */
   onScreenEvent(type: string, handler: (...args: any[]) => void): void {
-    this._slisteners = this._slisteners || [];
     this._slisteners.push({ type, handler });
-    this.screen.on(type, handler as any);
+    if (this.screen) {
+      this.screen.on(type, handler as any);
+    }
   }
 
   /**
@@ -1621,14 +1670,11 @@ export class Element extends EventEmitter {
    * EXACT from neo-blessed element.js lines 273-282
    */
   onceScreenEvent(type: string, handler: (...args: any[]) => void): void {
-    this._slisteners = this._slisteners || [];
-    const entry = { type, handler };
-    this._slisteners.push(entry);
-    this.screen.once(type, (...args: any[]) => {
-      const i = this._slisteners!.indexOf(entry);
-      if (i !== -1) this._slisteners!.splice(i, 1);
+    const wrapper = (...args: any[]) => {
+      this.removeScreenEvent(type, wrapper);
       return (handler as any).apply(this, args);
-    });
+    };
+    this.onScreenEvent(type, wrapper);
   }
 
   /**
@@ -1636,18 +1682,28 @@ export class Element extends EventEmitter {
    * EXACT from neo-blessed element.js lines 284-297
    */
   removeScreenEvent(type: string, handler: (...args: any[]) => void): void {
-    this._slisteners = this._slisteners || [];
-    // Remove ALL matching listeners, not just the first one (fixes memory leak)
+    // Remove matching listeners
     for (let i = this._slisteners.length - 1; i >= 0; i--) {
       const listener = this._slisteners[i];
       if (listener.type === type && listener.handler === handler) {
         this._slisteners.splice(i, 1);
+        if (this.screen) {
+          this.screen.removeListener(type, handler as any);
+        }
       }
     }
-    if (this._slisteners.length === 0) {
-      delete this._slisteners;
+  }
+
+  /**
+   * Unbind all screen events for this element
+   */
+  private _unbindScreenEvents(): void {
+    if (!this.screen) return;
+    
+    for (const listener of this._slisteners) {
+      this.screen.removeListener(listener.type, listener.handler as any);
     }
-    this.screen.removeListener(type, handler as any);
+    this._slisteners = [];
   }
 
   /**
@@ -1791,68 +1847,103 @@ export class Element extends EventEmitter {
 
   /**
    * Enable resizing for this element
-   * Resize by dragging the bottom-right corner (last 2 chars of bottom row)
+   * Allows resizing from all edges and corners
    */
   enableResize(callback?: (data: { width: number; height: number }) => void): void {
     this.enableMouse();
 
     let resizeState: {
+      edge: string;
       startX: number;
       startY: number;
+      startLeft: number;
+      startTop: number;
       startWidth: number;
       startHeight: number;
     } | null = null;
 
-    // Mouse down - start resize if in corner
+    // Mouse down - start resize if on any border edge
     this.on('mousedown', (data: any) => {
+      const edge = this.getResizeEdge(data.x, data.y);
+      if (!edge) return;
+
       const pos = this._getCoords();
       if (!pos) return;
 
-      // Check if click is in resize corner (bottom-right 2x2 area)
-      const isResizeCorner =
-        data.x >= pos.xl - 3 &&
-        data.x < pos.xl &&
-        data.y >= pos.yl - 2 &&
-        data.y < pos.yl;
-
-      if (isResizeCorner) {
-        resizeState = {
-          startX: data.x,
-          startY: data.y,
-          startWidth: (this.width as number) || (pos.xl - pos.xi),
-          startHeight: (this.height as number) || (pos.yl - pos.yi),
-        };
-        this.emit('resize start', data);
-      }
+      this._resizing = true;
+      resizeState = {
+        edge,
+        startX: data.x,
+        startY: data.y,
+        startLeft: this.aleft,
+        startTop: this.atop,
+        startWidth: this.width,
+        startHeight: this.height,
+      };
+      
+      this.setFront();
+      this.emit('resize start', data);
     });
 
     // Global mouse move handler for resize
-    if (this.screen) {
-      this.screen.on('mouse', (data: any) => {
-        if (!resizeState || data.action !== 'mousemove') return;
+    this.onScreenEvent('mouse', (data: any) => {
+      if (!resizeState || !this._resizing) return;
+      if (data.action !== 'mousemove') {
+        if (data.action === 'mouseup') {
+          this._resizing = false;
+          resizeState = null;
+          this.emit('resize end', data);
+        }
+        return;
+      }
 
-        const deltaX = data.x - resizeState.startX;
-        const deltaY = data.y - resizeState.startY;
+      const deltaX = data.x - resizeState.startX;
+      const deltaY = data.y - resizeState.startY;
 
-        const newWidth = Math.max(5, resizeState.startWidth + deltaX);
-        const newHeight = Math.max(3, resizeState.startHeight + deltaY);
+      let newWidth = resizeState.startWidth;
+      let newHeight = resizeState.startHeight;
+      let newLeft = resizeState.startLeft;
+      let newTop = resizeState.startTop;
 
-        this.options.width = newWidth;
-        this.options.height = newHeight;
+      const MIN_WIDTH = 5;
+      const MIN_HEIGHT = 3;
 
-        const resizeData = { width: newWidth, height: newHeight };
-        if (callback) callback(resizeData);
-        this.emit('resize', resizeData);
-        if (this.screen) this.screen.render();
-      });
-    }
+      // Vertical resizing
+      if (resizeState.edge.includes('top')) {
+        const potentialHeight = resizeState.startHeight - deltaY;
+        if (potentialHeight >= MIN_HEIGHT) {
+          newHeight = potentialHeight;
+          newTop = resizeState.startTop + deltaY;
+        }
+      } else if (resizeState.edge.includes('bottom')) {
+        newHeight = Math.max(MIN_HEIGHT, resizeState.startHeight + deltaY);
+      }
 
-    // Mouse up - end resize
-    this.on('mouseup', (data: any) => {
-      if (!resizeState) return;
+      // Horizontal resizing
+      if (resizeState.edge.includes('left')) {
+        const potentialWidth = resizeState.startWidth - deltaX;
+        if (potentialWidth >= MIN_WIDTH) {
+          newWidth = potentialWidth;
+          newLeft = resizeState.startLeft + deltaX;
+        }
+      } else if (resizeState.edge.includes('right')) {
+        newWidth = Math.max(MIN_WIDTH, resizeState.startWidth + deltaX);
+      }
 
-      resizeState = null;
-      this.emit('resize end', data);
+      // Update element properties
+      // NOTE: We must update position BEFORE dimensions if moving top/left 
+      // to avoid visual jumps between render passes
+      if (newTop !== this.atop) this.atop = newTop;
+      if (newLeft !== this.aleft) this.aleft = newLeft;
+      
+      this.width = newWidth;
+      this.height = newHeight;
+
+      const resizeData = { width: newWidth, height: newHeight };
+      if (callback) callback(resizeData);
+      this.emit('resize', resizeData);
+      
+      if (this.screen) this.screen.render();
     });
   }
 
@@ -1945,24 +2036,31 @@ export class Element extends EventEmitter {
 
   /**
    * Handle mouse event
+   * Returns true if the event was handled by this element
    */
-  onMouse(event: any): void {
+  onMouse(event: any): boolean {
     // Clear hover state and ignore mouse events on disabled elements
     if (this.disabled) {
       if (this._hovered) {
         this._hovered = false;
         this.screen?.render();
       }
-      return;
+      return false;
     }
 
     // Check if mouse is over this element
-    if (!this.hasMouseOver(event.x, event.y)) return;
+    if (!this.hasMouseOver(event.x, event.y)) return false;
 
     // Emit specific mouse events
     this.emit('mouse', event);
 
     if (event.action === 'mousedown') {
+      // Unlock audio on first interaction
+      if (this.screen && (this.screen as any)._audioUnlocked === undefined) {
+        (this.screen as any)._audioUnlocked = true;
+        this.screen.emit('user-interaction');
+      }
+
       // Check for scrollbar click first - this enables scrollbar dragging
       if (event.button === 'left' && this.isOnScrollbar(event.x, event.y)) {
         const geom = this._getScrollbarGeometry();
@@ -1981,7 +2079,7 @@ export class Element extends EventEmitter {
             // Start drag from new position
             this._startScrollbarDrag(event.y);
           }
-          return; // Don't process as normal click
+          return true; // Handled by scrollbar
         }
       }
 
@@ -1989,44 +2087,72 @@ export class Element extends EventEmitter {
       if (this.clickable) {
         this.emit('mousedown', event);
         if (event.button === 'left') {
-          this.emit('click', event);
+          // Double-click detection
+          const now = Date.now();
+          if (now - this._lastClickTime < 300) {
+            // DOUBLE CLICK detected
+            this.setFront();
+            this.emit('doubleclick', event);
+            this._lastClickTime = 0; // Reset
+          } else {
+            this._lastClickTime = now;
+            this.emit('click', event);
+          }
         } else if (event.button === 'right') {
           this.emit('rightclick', event);
         }
+        return true; // Handled by clickable element
       }
     } else if (event.action === 'mouseup') {
       if (this.clickable) {
         this.emit('mouseup', event);
+        return true;
       }
     } else if (event.action === 'mousemove') {
       this.emit('mousemove', event);
+      
+      // Track border hover state
+      const overBorder = this.isOnBorder(event.x, event.y);
+      if (this._overBorder !== overBorder) {
+        this._overBorder = overBorder;
+        this.screen?.render();
+      }
+
       // Update hover state for ALL elements (not just clickable)
       if (!this._hovered) {
         this._hovered = true;
         this.emit('mouseenter', event);
         this.screen?.render();  // Trigger render to show hover style
       }
+      // Mousemove usually doesn't stop propagation unless we're dragging,
+      // but let's return true if we're clickable to be safe
+      return this.clickable;
     } else if (event.action === 'wheelup') {
       this.emit('wheelup', event);
       // Default scroll behavior - widgets can override by handling wheelup event
       if (!this.listenerCount('wheelup')) {
         this.scroll(-1);
       }
+      return true; // Scroll handled
     } else if (event.action === 'wheeldown') {
       this.emit('wheeldown', event);
       // Default scroll behavior - widgets can override by handling wheeldown event
       if (!this.listenerCount('wheeldown')) {
         this.scroll(1);
       }
+      return true; // Scroll handled
     }
+
+    return false;
   }
 
   /**
    * Handle mouse leave
    */
   onMouseLeave(): void {
-    if (this._hovered) {
+    if (this._hovered || this._overBorder) {
       this._hovered = false;
+      this._overBorder = false;
       this.emit('mouseleave');
       this.screen?.render();  // Trigger render to remove hover style
     }
@@ -2155,8 +2281,17 @@ export class Element extends EventEmitter {
         // Default: gray foreground for border when disabled
         borderStyle = { ...borderStyle, fg: 'gray' };
       }
-    } else if (this.focused) {
-      // Focused state
+    } else if (this._overBorder) {
+      // Hover state for border (takes priority over focus when mouse is over)
+      const hoverStyle = (this.options.style as any)?.hover;
+      if (hoverStyle?.border) {
+        borderStyle = { ...borderStyle, ...hoverStyle.border };
+      } else {
+        // Default: white bold foreground for border when hovered
+        borderStyle = { ...borderStyle, fg: 'white', bold: true };
+      }
+    } else if (this.hasFocusedChild()) {
+      // Focused state (or a child is focused)
       const focusStyle = (this.options.style as any)?.focus;
       if (focusStyle?.border) {
         borderStyle = { ...borderStyle, ...focusStyle.border };
@@ -2263,6 +2398,47 @@ export class Element extends EventEmitter {
    */
   hasScrollbar(): boolean {
     return !!(this.options.scrollbar && this.options.scrollable);
+  }
+
+  /**
+   * Check if a point is on the element's border
+   */
+  isOnBorder(x: number, y: number): boolean {
+    if (!this.hasBorder()) return false;
+    const pos = this._getCoords();
+    if (!pos) return false;
+
+    return (
+      x === pos.xi ||
+      x === pos.xl - 1 ||
+      y === pos.yi ||
+      y === pos.yl - 1
+    );
+  }
+
+  /**
+   * Identify which edge or corner is at the given point for resizing
+   */
+  getResizeEdge(x: number, y: number): string | null {
+    if (!this.hasBorder()) return null;
+    const pos = this._getCoords();
+    if (!pos) return null;
+
+    const onLeft = x === pos.xi;
+    const onRight = x === pos.xl - 1;
+    const onTop = y === pos.yi;
+    const onBottom = y === pos.yl - 1;
+
+    if (onTop && onLeft) return 'top-left';
+    if (onTop && onRight) return 'top-right';
+    if (onBottom && onLeft) return 'bottom-left';
+    if (onBottom && onRight) return 'bottom-right';
+    if (onTop) return 'top';
+    if (onBottom) return 'bottom';
+    if (onLeft) return 'left';
+    if (onRight) return 'right';
+
+    return null;
   }
 
   /**
@@ -2775,8 +2951,7 @@ export class Element extends EventEmitter {
     this.parent.children.splice(newIndex, 0, this);
 
     // Opt #2: Invalidate cache (z-index changed)
-    this.parent._coordsCacheValid = false;
-    this._coordsCacheValid = false;
+    this.parent._invalidateCoords();
 
     this.emit('set index', index);
   }
@@ -3187,6 +3362,9 @@ export class Element extends EventEmitter {
 
     // End any active scrollbar drag
     this._endScrollbarDrag();
+
+    // Remove all screen-level event listeners
+    this._unbindScreenEvents();
 
     // Emit overlay hide event if element had opacity
     if (this.options.style?.opacity !== undefined) {

@@ -87,6 +87,8 @@
     },
     "./engines/audio/audio-engine": {
       "types": "./dist/engines/audio/audio-engine.d.ts",
+      "import": "./dist-esm/engines/audio/audio-engine.js",
+      "require": "./dist/engines/audio/audio-engine.js",
       "default": "./dist/engines/audio/audio-engine.js"
     },
     "./engines/network/network-engine": {

@@ -18,6 +18,8 @@ export interface PanelOptions extends ElementOptions {
 export class Panel extends Box {
   private panelIndex?: number;
   private _isActive: boolean = false;
+  private lastFocusedChild: any = null;
+  private _focusing: boolean = false;
 
   constructor(options: PanelOptions = {}) {
     super({
@@ -50,14 +52,35 @@ export class Panel extends Box {
       this.focus();
     });
 
+    // Handle focus redirection to last active child
+    this.on('focus', () => {
+      if (this._focusing) return;
+      
+      if (this.lastFocusedChild && !this.lastFocusedChild.destroyed && this.lastFocusedChild.visible) {
+        this._focusing = true;
+        // Use setImmediate/timeout to avoid recursive focus calls during tree walk
+        setTimeout(() => {
+          if (this.lastFocusedChild && !this.lastFocusedChild.destroyed) {
+            this.lastFocusedChild.focus();
+          }
+          this._focusing = false;
+        }, 0);
+      }
+    });
+
     // Track active state based on child focus
     if (this.screen) {
       this.screen.on('element focus', (el: any) => {
         // Check if focused element is a descendant of this panel
         const isDescendant = this._isDescendantOf(el, this);
-        if (isDescendant && !this._isActive) {
-          this._activate();
-        } else if (!isDescendant && this._isActive) {
+        if (isDescendant) {
+          if (el !== this) {
+            this.lastFocusedChild = el;
+          }
+          if (!this._isActive) {
+            this._activate();
+          }
+        } else if (this._isActive) {
           this._deactivate();
         }
       });
@@ -120,6 +143,13 @@ export class Panel extends Box {
   private _activate(): void {
     if (this._isActive) return;
     this._isActive = true;
+    
+    // Brighten style when active
+    if (this.style) {
+      this.style.fg = 'white';
+      if (this.style.border) this.style.border.fg = 'cyan';
+    }
+
     this.emit('activate');
     if (this.screen) {
       this.screen.render();
@@ -132,6 +162,13 @@ export class Panel extends Box {
   private _deactivate(): void {
     if (!this._isActive) return;
     this._isActive = false;
+
+    // Dim style when inactive
+    if (this.style) {
+      this.style.fg = 'gray';
+      if (this.style.border) this.style.border.fg = 'blue';
+    }
+
     this.emit('deactivate');
     if (this.screen) {
       this.screen.render();

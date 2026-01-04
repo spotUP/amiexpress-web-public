@@ -6,11 +6,12 @@
  */
 
 import { Socket } from 'socket.io';
-import { VideoAPI, VideoSource, VideoStreamOptions } from '../core/types';
+import { VideoAPI, VideoSource, VideoStreamOptions, VideoFrameHandler } from '../core/types';
 
 export class Video implements VideoAPI {
   private socket: Socket;
   private activeStreams: string[] = [];
+  private frameHandler: VideoFrameHandler | null = null;
 
   constructor(socket: Socket) {
     this.socket = socket;
@@ -21,6 +22,16 @@ export class Video implements VideoAPI {
     this.socket.on('video:streams-update', (streams: string[]) => {
       this.activeStreams = streams;
     });
+
+    this.socket.on('video:frame', (data: { frame: string }) => {
+      if (this.frameHandler) {
+        this.frameHandler(data.frame);
+      }
+    });
+  }
+
+  onFrame(handler: VideoFrameHandler): void {
+    this.frameHandler = handler;
   }
 
   async startStream(source: VideoSource, options?: VideoStreamOptions): Promise<string> {

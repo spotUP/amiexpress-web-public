@@ -1,0 +1,1 @@
+export function bresenham(o,t,a,r,h){const n=[];o=Math.floor(o),t=Math.floor(t),a=Math.floor(a),r=Math.floor(r);const s=Math.abs(a-o),f=Math.abs(r-t),M=o<a?1:-1,e=t<r?1:-1;let l=s-f,c=o,b=t;for(;n.push({x:c,y:b}),h&&h(c,b),c!==a||b!==r;){const o=2*l;o>-f&&(l-=f,c+=M),o<s&&(l+=s,b+=e)}return n}

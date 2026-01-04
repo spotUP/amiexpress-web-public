@@ -5,8 +5,12 @@
 import { Text } from './text';
 import type { ElementOptions } from '../core/types';
 
+export interface ScrollableTextOptions extends ElementOptions {
+  alwaysScroll?: boolean;
+}
+
 export class ScrollableText extends Text {
-  constructor(options: ElementOptions = {}) {
+  constructor(options: ScrollableTextOptions = {}) {
     super({
       ...options,
       scrollable: true,
@@ -23,16 +27,13 @@ export class ScrollableText extends Text {
     // Enable mouse wheel scrolling
     this.enableMouse();
 
-    // Set up key bindings for scrolling (scroll() auto-renders)
+    // Set up key bindings for scrolling
     this.key(['up', 'k'], () => this.scroll(-1));
     this.key(['down', 'j'], () => this.scroll(1));
     this.key(['pageup', 'C-b'], () => this.scroll(-this.iheight));
     this.key(['pagedown', 'C-f', 'space'], () => this.scroll(this.iheight));
     this.key(['home', 'g'], () => this.scrollTo(0));
     this.key(['end', 'G'], () => this.scrollTo(this.getScrollHeight()));
-
-    // Note: Mouse wheel scrolling is handled by Element.onMouse()
-    // which calls scroll() automatically for wheelup/wheeldown events
   }
 
   /**
@@ -48,4 +49,11 @@ export class ScrollableText extends Text {
   setScrollPercent(percent: number): void {
     this.setScrollPerc(percent);
   }
+}
+
+/**
+ * Factory function
+ */
+export function scrollabletext(options: ScrollableTextOptions = {}): ScrollableText {
+  return new ScrollableText(options);
 }

@@ -656,7 +656,8 @@ export { UIEngine } from '../engines/ui/ui-engine';
  */
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
-export { AudioEngine } from '../engines/audio/audio-engine';
+// AudioEngine removed from client export - it uses blessed (server-only)
+// Use Web Audio API directly in browser code instead
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
 export { InputEngine } from '../engines/input/input-engine';

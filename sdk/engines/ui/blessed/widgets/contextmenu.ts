@@ -177,10 +177,8 @@ export class ContextMenu extends Element {
       if (adjustedY > maxY) adjustedY = maxY;
     }
 
-    this.options.left = adjustedX;
-    this.options.top = adjustedY;
-    this.position.left = adjustedX;
-    this.position.top = adjustedY;
+    this.left = adjustedX;
+    this.top = adjustedY;
 
     this.show();
     this.focus();

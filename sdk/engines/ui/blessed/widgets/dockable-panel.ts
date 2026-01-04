@@ -14,6 +14,8 @@ import { Panel, PanelOptions } from './panel';
 import type { Element } from '../core/element';
 import type { Screen } from '../core/screen';
 
+const { Box } = require('./box');
+
 export type DockPosition = 'top' | 'bottom' | 'left' | 'right' | 'center' | 'float';
 
 export interface DockablePanelOptions extends PanelOptions {
@@ -32,6 +34,8 @@ export interface DockablePanelOptions extends PanelOptions {
   maxWidth?: number;
   maxHeight?: number;
   zIndex?: number;
+  persistenceKey?: string;
+  topConstraint?: number; // Minimum 'top' coordinate allowed
 }
 
 export interface PanelState {
@@ -51,6 +55,15 @@ export interface PanelState {
   originalDockPosition?: DockPosition;
 }
 
+interface ResizeNeighbor {
+  panel: DockablePanel;
+  edge: string; // Edge of the neighbor that touches our dragged edge
+  startLeft: number;
+  startTop: number;
+  startWidth: number;
+  startHeight: number;
+}
+
 /**
  * DockablePanel widget
  */
@@ -65,6 +78,7 @@ export class DockablePanel extends Panel {
   private dragStartTop: number = 0;
   private dragStartWidth: number = 0;
   private dragStartHeight: number = 0;
+  private resizeNeighbors: ResizeNeighbor[] = [];
   private minimizeButton?: Element;
   private closeButton?: Element;
   private titleBar?: Element;
@@ -76,6 +90,14 @@ export class DockablePanel extends Panel {
   private resizable: boolean;
   private allowAutoDock: boolean;
   private currentResizeEdge: string | null = null;
+  private ghostBox?: Element;
+  private persistenceKey?: string;
+  private topConstraint: number = 0;
+  private tabs: DockablePanel[] = [];
+  private activeTab: number = 0;
+  private tabButtons: any[] = [];
+  private preMaximizeState: Partial<PanelState> | null = null;
+  private mobileMode: boolean = false;
 
   private screenListenersBound: boolean = false;
 
@@ -107,11 +129,29 @@ export class DockablePanel extends Panel {
     this.maxHeight = options.maxHeight;
     this.resizable = options.resizable !== false;
     this.allowAutoDock = options.allowAutoDock !== false;  // Default: true (enabled)
+    this.persistenceKey = options.persistenceKey;
+    this.topConstraint = options.topConstraint || 0;
+
+    // Suppress the border label from the base Panel/Box class
+    // DockablePanel uses its own titleBar widget for the title
+    this.options.label = undefined;
+    if (this.style && (this as any)._originalBorderColor === undefined) {
+       (this as any)._originalBorderColor = this.style.border?.fg || 'blue';
+    }
 
     this.setupTitleBar(options);
     this.setupDocking();
     this.setupDragging();
     this.setupResizing();
+
+    // Automatic state persistence
+    if (this.persistenceKey) {
+      this.on('drag-end', () => this.saveState());
+      this.on('resize-end', () => this.saveState());
+      this.on('dock', () => this.saveState());
+      this.on('minimize', () => this.saveState());
+      this.on('maximize', () => this.saveState());
+    }
 
     // Focus panel when clicked anywhere on it (including when children are clicked)
     this.on('click', () => {
@@ -127,6 +167,11 @@ export class DockablePanel extends Panel {
     // The screen may not be available at construction time
     this.on('attach', () => {
       this.bindScreenEvents();
+      if (this.persistenceKey) {
+        this.loadState().then(() => {
+          if (this.screen) this.screen.render();
+        });
+      }
     });
 
     // Also try to bind immediately if screen is already available
@@ -190,12 +235,34 @@ export class DockablePanel extends Panel {
 
     // Screen resize handler - update docked panels and constrain floating panels
     this.screen.on('resize', () => {
-      if (this.dockPosition !== 'float') {
-        // Re-apply dock position to recalculate dimensions
+      // Check for mobile mode (Auto-Flow)
+      const breakpoint = this.screen.responsiveLayout.getBreakpoint();
+      const isMobile = breakpoint === 'xs';
+      
+      if (isMobile) {
+        this.mobileMode = true;
+        // In mobile mode, panels fill the available screen area
+        this.setState({
+          x: 0,
+          y: this.topConstraint,
+          width: this.screen.width,
+          height: this.screen.height - this.topConstraint - 1, // Leave space for status bar
+          position: 'float'
+        });
+      } else if (this.mobileMode) {
+        this.mobileMode = false;
+        // Restore from mobile mode (return to original position or dock)
         this.applyDockPosition(this.dockPosition);
-      } else {
-        // For floating panels, ensure they stay within screen bounds
-        this.constrainToScreen();
+      }
+
+      if (!isMobile) {
+        if (this.dockPosition !== 'float') {
+          // Re-apply dock position to recalculate dimensions
+          this.applyDockPosition(this.dockPosition);
+        } else {
+          // For floating panels, ensure they stay within screen bounds
+          this.constrainToScreen();
+        }
       }
     });
   }
@@ -227,18 +294,19 @@ export class DockablePanel extends Panel {
     this.position.top = newTop;
     this.position.width = newWidth;
     this.position.height = newHeight;
+
+    this._invalidateCoords();
   }
 
-  /**
-   * Setup title bar with minimize/close buttons
-   */
   private setupTitleBar(options: DockablePanelOptions): void {
-    if (!options.label && !options.showMinimizeButton && !options.showCloseButton) {
+    if (!options.label && !options.title && !options.showMinimizeButton && !options.showCloseButton) {
       return;
     }
 
+    // Ensure border label is suppressed
+    this.options.label = undefined;
+
     // Create title bar
-    const Box = require('./box').Box;
     this.titleBar = new Box({
       parent: this,
       top: 0,
@@ -341,9 +409,7 @@ export class DockablePanel extends Panel {
    * Setup docking behavior
    */
   private setupDocking(): void {
-    if (this.dockPosition !== 'float') {
-      this.applyDockPosition(this.dockPosition);
-    }
+    this.applyDockPosition(this.dockPosition);
   }
 
   /**
@@ -415,47 +481,104 @@ export class DockablePanel extends Panel {
     const width = panelRight - panelLeft + 1;
     const height = panelBottom - panelTop + 1;
 
-    // Top row (relY === 0) is reserved for title bar - not resizable
-    if (relY === 0) return null;
-
     const onLeft = relX === 0;
     const onRight = relX === width - 1;
+    const onTop = relY === 0;
     const onBottom = relY === height - 1;
 
-    // Detect corners first (higher priority)
-    if (onLeft && onBottom) return 'sw';
-    if (onRight && onBottom) return 'se';
+    // Detect corners (high priority)
+    if (onTop && onLeft) return 'nw';
+    if (onTop && onRight) return 'ne';
+    if (onBottom && onLeft) return 'sw';
+    if (onBottom && onRight) return 'se';
 
-    // Then edges
+    // Detect edges
+    if (onTop) return 'n';
+    if (onBottom) return 's';
     if (onLeft) return 'w';
     if (onRight) return 'e';
-    if (onBottom) return 's';
 
     return null;
+  }
+
+  /**
+   * Find sibling panels that share an edge with the edge we are dragging
+   */
+  private findResizeNeighbors(edge: string): ResizeNeighbor[] {
+    if (!this.parent) return [];
+
+    const neighbors: ResizeNeighbor[] = [];
+    const myPos = this._getCoords();
+    if (!myPos) return [];
+
+    // Increase tolerance to 2 to catch shared borders (overlap)
+    const TOLERANCE = 2;
+
+    for (const sibling of this.parent.children) {
+      if (!(sibling instanceof DockablePanel) || sibling === this) continue;
+      if (sibling.isMinimized()) continue;
+
+      const sPos = sibling._getCoords();
+      if (!sPos) continue;
+
+      let touches = false;
+      let touchingEdge = '';
+
+      // If we drag our RIGHT edge (xl), find neighbors whose LEFT edge (xi) is near our RIGHT
+      if (edge === 'e') {
+        if (Math.abs(sPos.xi - (myPos.xl - 1)) <= TOLERANCE || Math.abs(sPos.xi - myPos.xl) <= TOLERANCE) {
+          touches = true;
+          touchingEdge = 'w';
+        }
+      }
+      // If we drag our LEFT edge (xi), find neighbors whose RIGHT edge (xl-1) is near our LEFT
+      else if (edge === 'w') {
+        if (Math.abs((sPos.xl - 1) - myPos.xi) <= TOLERANCE || Math.abs(sPos.xl - myPos.xi) <= TOLERANCE) {
+          touches = true;
+          touchingEdge = 'e';
+        }
+      }
+      // If we drag our BOTTOM edge (yl), find neighbors whose TOP edge (yi) is near our BOTTOM
+      else if (edge === 's') {
+        if (Math.abs(sPos.yi - (myPos.yl - 1)) <= TOLERANCE || Math.abs(sPos.yi - myPos.yl) <= TOLERANCE) {
+          touches = true;
+          touchingEdge = 'n';
+        }
+      }
+      // If we drag our TOP edge (yi), find neighbors whose BOTTOM edge (yl-1) is near our TOP
+      else if (edge === 'n') {
+        if (Math.abs((sPos.yl - 1) - myPos.yi) <= TOLERANCE || Math.abs(sPos.yl - myPos.yi) <= TOLERANCE) {
+          touches = true;
+          touchingEdge = 's';
+        }
+      }
+
+      if (touches) {
+        neighbors.push({
+          panel: sibling,
+          edge: touchingEdge,
+          startLeft: sibling.aleft,
+          startTop: sibling.atop,
+          startWidth: sibling.width,
+          startHeight: sibling.height,
+        });
+      }
+    }
+
+    return neighbors;
   }
 
   /**
    * Update border color based on hover state
    */
   private updateBorderHover(edge: string | null): void {
-    const panel = this as any;
-    if (!panel.style || !panel.style.border) return;
-
-    const borderOptions = this.options.border as any;
-    const defaultColor = borderOptions?.fg || 'green';
-
-    if (edge) {
-      // Hovering over resize edge - highlight border
-      panel.style.border.fg = 'yellow';
-    } else {
-      // Not hovering - restore default (unless dragging/resizing)
-      if (!this.isDragging && !this.isResizing) {
-        panel.style.border.fg = defaultColor;
+    // Use the base class's _overBorder state for consistent rendering
+    const isOver = !!edge;
+    if ((this as any)._overBorder !== isOver) {
+      (this as any)._overBorder = isOver;
+      if (this.screen) {
+        this.screen.render();
       }
-    }
-
-    if (this.screen) {
-      this.screen.render();
     }
   }
 
@@ -486,12 +609,11 @@ export class DockablePanel extends Panel {
     this.dragStartTop = typeof this.top === 'number' ? this.top : 0;
 
     // Visual feedback: Change border color during drag
-    const panel = this as any;
-    if (panel.style && panel.style.border) {
-      panel.style.border.fg = 'yellow';
+    if (this.style && this.style.border) {
+      this.style.border.fg = 'yellow';
     }
-    if (this.titleBar && (this.titleBar as any).style) {
-      (this.titleBar as any).style.bg = 'cyan';
+    if (this.titleBar && this.titleBar.style) {
+      this.titleBar.style.bg = 'cyan';
     }
 
     // Bring to front
@@ -519,10 +641,16 @@ export class DockablePanel extends Panel {
     let newLeft = this.dragStartLeft + deltaX;
     let newTop = this.dragStartTop + deltaY;
 
-    // Constrain to screen bounds
+    // Constrain to screen bounds (ensure at least a 3x3 'handle' remains on screen)
     if (this.screen) {
-      newLeft = Math.max(0, Math.min(newLeft, this.screen.width - (this.width as number)));
-      newTop = Math.max(0, Math.min(newTop, this.screen.height - (this.height as number)));
+      const VISIBLE_HANDLE = 3;
+      const sw = this.screen.width;
+      const sh = this.screen.height;
+      const pw = this.width as number;
+      const ph = this.height as number;
+
+      newLeft = Math.max(VISIBLE_HANDLE - pw, Math.min(newLeft, sw - VISIBLE_HANDLE));
+      newTop = Math.max(this.topConstraint, Math.min(newTop, sh - VISIBLE_HANDLE)); // Respect topConstraint
     }
 
     // Use position.* for runtime updates (not options.* which is only read at construction)
@@ -532,31 +660,16 @@ export class DockablePanel extends Panel {
     this.panelState.y = newTop;
 
     // Invalidate coordinate cache for all children so they recalculate positions
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
-      // Force full redraw to ensure old position content is cleared
-      (this.screen as any).forceFullRedraw?.();
-      this.screen.render();
+      this.screen.lock();
+      // Show snap preview ghost area
+      this.updateSnapPreview(x, y);
+      this.screen.unlock();
     }
 
     this.emit('drag', { x: this.left, y: this.top });
-  }
-
-  /**
-   * Invalidate coordinate cache for this element and all descendants
-   * Required when position changes directly without using setters
-   */
-  private invalidateChildrenCache(): void {
-    const invalidate = (element: any) => {
-      element._coordsCacheValid = false;
-      if (element.children) {
-        for (const child of element.children) {
-          invalidate(child);
-        }
-      }
-    };
-    invalidate(this);
   }
 
   /**
@@ -566,19 +679,18 @@ export class DockablePanel extends Panel {
     this.isDragging = false;
 
     // Restore border color
-    const panel = this as any;
-    if (panel.style && panel.style.border) {
+    if (this.style && this.style.border) {
       const borderOptions = this.options.border as any;
-      panel.style.border.fg = borderOptions?.fg || 'green';
+      this.style.border.fg = borderOptions?.fg || 'green';
     }
-    if (this.titleBar && (this.titleBar as any).style) {
-      (this.titleBar as any).style.bg = 'blue';
+    if (this.titleBar && this.titleBar.style) {
+      this.titleBar.style.bg = 'blue';
     }
-
-    // Check for edge docking (only if enabled)
     if (this.allowAutoDock) {
       this.checkEdgeDocking();
     }
+
+    this.removeSnapPreview();
 
     if (this.screen) {
       this.screen.render();
@@ -601,13 +713,14 @@ export class DockablePanel extends Panel {
     this.dragStartWidth = typeof this.width === 'number' ? this.width : 40;
     this.dragStartHeight = typeof this.height === 'number' ? this.height : 20;
 
-    // Visual feedback: Change border color during resize
-    const panel = this as any;
-    if (panel.style && panel.style.border) {
-      panel.style.border.fg = 'yellow';
-    }
-    if (this.titleBar && (this.titleBar as any).style) {
-      (this.titleBar as any).style.bg = 'cyan';
+    // Find adjacent panels to resize together
+    this.resizeNeighbors = this.findResizeNeighbors(edge);
+
+    // Visual feedback: Use base _overBorder state for consistency
+    (this as any)._overBorder = true;
+
+    if (this.titleBar && this.titleBar.style) {
+      this.titleBar.style.bg = 'cyan';
     }
 
     this.emit('resize-start');
@@ -665,38 +778,43 @@ export class DockablePanel extends Panel {
     }
 
     // Apply min/max constraints
-    if (this.minWidth) {
-      if (newWidth < this.minWidth) {
-        // Prevent shrinking below minimum
-        if (edge.includes('w')) {
-          newLeft = this.dragStartLeft + (this.dragStartWidth - this.minWidth);
-        }
-        newWidth = this.minWidth;
+    const ABS_MIN_WIDTH = 5;
+    const ABS_MIN_HEIGHT = 3;
+    const effectiveMinWidth = Math.max(ABS_MIN_WIDTH, this.minWidth || 0);
+    const effectiveMinHeight = Math.max(ABS_MIN_HEIGHT, this.minHeight || 0);
+
+    if (newWidth < effectiveMinWidth) {
+      if (edge.includes('w')) {
+        newLeft = this.dragStartLeft + (this.dragStartWidth - effectiveMinWidth);
       }
+      newWidth = effectiveMinWidth;
     }
-    if (this.maxWidth) {
-      if (newWidth > this.maxWidth) {
-        if (edge.includes('w')) {
-          newLeft = this.dragStartLeft + (this.dragStartWidth - this.maxWidth);
-        }
-        newWidth = this.maxWidth;
+
+    if (this.maxWidth && newWidth > this.maxWidth) {
+      if (edge.includes('w')) {
+        newLeft = this.dragStartLeft + (this.dragStartWidth - this.maxWidth);
       }
+      newWidth = this.maxWidth;
     }
-    if (this.minHeight) {
-      if (newHeight < this.minHeight) {
-        if (edge.includes('n')) {
-          newTop = this.dragStartTop + (this.dragStartHeight - this.minHeight);
-        }
-        newHeight = this.minHeight;
+
+    if (newHeight < effectiveMinHeight) {
+      if (edge.includes('n')) {
+        newTop = this.dragStartTop + (this.dragStartHeight - effectiveMinHeight);
       }
+      newHeight = effectiveMinHeight;
     }
-    if (this.maxHeight) {
-      if (newHeight > this.maxHeight) {
-        if (edge.includes('n')) {
-          newTop = this.dragStartTop + (this.dragStartHeight - this.maxHeight);
-        }
-        newHeight = this.maxHeight;
+
+    if (this.maxHeight && newHeight > this.maxHeight) {
+      if (edge.includes('n')) {
+        newTop = this.dragStartTop + (this.dragStartHeight - this.maxHeight);
       }
+      newHeight = this.maxHeight;
+    }
+
+    // Constrain position to screen bounds
+    if (this.screen) {
+      newLeft = Math.max(0, Math.min(newLeft, this.screen.width - 1));
+      newTop = Math.max(this.topConstraint, Math.min(newTop, this.screen.height - 1));
     }
 
     // Use position.* for runtime updates (not options.* which is only read at construction)
@@ -705,17 +823,93 @@ export class DockablePanel extends Panel {
     this.position.left = newLeft;
     this.position.top = newTop;
 
-    this.panelState.width = newWidth;
-    this.panelState.height = newHeight;
-    this.panelState.x = newLeft;
-    this.panelState.y = newTop;
+    if (this.screen) {
+      this.screen.lock();
+    }
 
-    // Invalidate coordinate cache for all children so they recalculate positions
-    this.invalidateChildrenCache();
+    // ----- Adjacent Resizing Logic -----
+    for (const neighbor of this.resizeNeighbors) {
+      let nWidth = neighbor.startWidth;
+      let nHeight = neighbor.startHeight;
+      let nLeft = neighbor.startLeft;
+      let nTop = neighbor.startTop;
+
+      const nMinWidth = neighbor.panel.minWidth || 5;
+      const nMinHeight = neighbor.panel.minHeight || 3;
+
+      if (edge === 'e') { // Dragging my right edge -> Neighbor's left edge
+        const pWidth = neighbor.startWidth - deltaX;
+        if (pWidth >= nMinWidth) {
+          nWidth = pWidth;
+          nLeft = neighbor.startLeft + deltaX;
+        } else {
+          const maxDelta = neighbor.startWidth - nMinWidth;
+          this.position.width = this.dragStartWidth + maxDelta;
+          newWidth = this.position.width as number;
+          nWidth = nMinWidth;
+          nLeft = neighbor.startLeft + maxDelta;
+        }
+      } 
+      else if (edge === 'w') { // Dragging my left edge -> Neighbor's right edge
+        const pWidth = neighbor.startWidth + deltaX;
+        if (pWidth >= nMinWidth) {
+          nWidth = pWidth;
+        } else {
+          const maxDelta = nMinWidth - neighbor.startWidth; // deltaX is negative
+          this.aleft = this.dragStartLeft + maxDelta;
+          this.position.width = this.dragStartWidth - maxDelta;
+          newWidth = this.position.width as number;
+          newLeft = this.aleft;
+          nWidth = nMinWidth;
+        }
+      }
+      else if (edge === 's') { // Dragging my bottom edge -> Neighbor's top edge
+        const pHeight = neighbor.startHeight - deltaY;
+        if (pHeight >= nMinHeight) {
+          nHeight = pHeight;
+          nTop = neighbor.startTop + deltaY;
+        } else {
+          const maxDelta = neighbor.startHeight - nMinHeight;
+          this.position.height = this.dragStartHeight + maxDelta;
+          newHeight = this.position.height as number;
+          nHeight = nMinHeight;
+          nTop = neighbor.startTop + maxDelta;
+        }
+      }
+      else if (edge === 'n') { // Dragging my top edge -> Neighbor's bottom edge
+        const pHeight = neighbor.startHeight + deltaY;
+        if (pHeight >= nMinHeight) {
+          nHeight = pHeight;
+        } else {
+          const maxDelta = nMinHeight - neighbor.startHeight; // deltaY is negative
+          this.atop = this.dragStartTop + maxDelta;
+          this.position.height = this.dragStartHeight - maxDelta;
+          newHeight = this.position.height as number;
+          newTop = this.atop;
+          nHeight = nMinHeight;
+        }
+      }
+
+      neighbor.panel.width = nWidth;
+      neighbor.panel.height = nHeight;
+      neighbor.panel.aleft = nLeft;
+      neighbor.panel.atop = nTop;
+      neighbor.panel._invalidateCoords();
+    }
 
     if (this.screen) {
-      // Force full redraw to ensure old position content is cleared
-      (this.screen as any).forceFullRedraw?.();
+      this.screen.unlock();
+    }
+
+    this.panelState.width = this.position.width as number;
+    this.panelState.height = this.position.height as number;
+    this.panelState.x = this.position.left as number;
+    this.panelState.y = this.position.top as number;
+
+    // Invalidate coordinate cache for all children so they recalculate positions
+    this._invalidateCoords();
+
+    if (this.screen) {
       this.screen.render();
     }
 
@@ -729,14 +923,11 @@ export class DockablePanel extends Panel {
     this.isResizing = false;
     this.currentResizeEdge = null;
 
-    // Restore border color
-    const panel = this as any;
-    if (panel.style && panel.style.border) {
-      const borderOptions = this.options.border as any;
-      panel.style.border.fg = borderOptions?.fg || 'green';
-    }
-    if (this.titleBar && (this.titleBar as any).style) {
-      (this.titleBar as any).style.bg = 'blue';
+    // Reset visual feedback
+    (this as any)._overBorder = false;
+
+    if (this.titleBar && this.titleBar.style) {
+      this.titleBar.style.bg = 'blue';
     }
 
     this.hideResizeCursor();
@@ -754,39 +945,166 @@ export class DockablePanel extends Panel {
   private checkEdgeDocking(): void {
     if (!this.screen) return;
 
-    // Skip auto-docking for panels that were just undocked (user intentionally undocked them)
-    // Only auto-dock panels that were already floating before drag started
-    if (this.panelState.originalDockPosition) {
-      // This panel was docked before drag - user explicitly undocked it
-      // Clear the original position and don't auto-dock
+    const threshold = 5;
+    const x = this.aleft;
+    const y = this.atop;
+    const w = this.width;
+    const h = this.height;
+    const sw = this.screen.width;
+    const sh = this.screen.height;
+
+    // Check for swapping first
+    const swapped = this.checkPanelSwap();
+    if (swapped) {
       this.panelState.originalDockPosition = undefined;
       return;
     }
 
-    // Use a smaller threshold (5 cells) to avoid accidental docking
+    // Check for center merge (overlap > 50%)
+    for (const child of this.screen.children) {
+      if (!(child instanceof DockablePanel) || child === this) continue;
+      
+      const other = child as DockablePanel;
+      if (other.isMinimized()) continue;
+
+      const oPos = other._getCoords();
+      if (!oPos) continue;
+
+      const myCenterX = x + w / 2;
+      const myCenterY = y + h / 2;
+
+      // If our center is inside their inner area, merge
+      if (myCenterX > oPos.xi + 5 && myCenterX < oPos.xl - 5 &&
+          myCenterY > oPos.yi + 2 && myCenterY < oPos.yl - 2) {
+        other.mergeWith(this);
+        this.panelState.originalDockPosition = undefined;
+        return;
+      }
+    }
+
+    // Determine which edges are within threshold
+    const nearLeft = x <= threshold;
+    const nearRight = (x + w) >= sw - threshold;
+    const nearTop = y <= threshold;
+    const nearBottom = (y + h) >= sh - threshold;
+
+    // Calculate distances to find the "best" edge
+    const dists = [
+      { pos: 'left' as DockPosition, dist: x },
+      { pos: 'right' as DockPosition, dist: sw - (x + w) },
+      { pos: 'top' as DockPosition, dist: y },
+      { pos: 'bottom' as DockPosition, dist: sh - (y + h) }
+    ].filter(d => d.dist <= threshold)
+     .sort((a, b) => a.dist - b.dist);
+
+    if (dists.length > 0) {
+      const bestEdge = dists[0].pos;
+      
+      // Don't immediately re-snap to the SAME edge we just undocked from
+      // unless we've moved away and come back
+      if (bestEdge === this.panelState.originalDockPosition) {
+        // Only ignore if we are still very close to where we started
+        // (This prevents the 'snap-back' effect when trying to undock)
+        this.panelState.originalDockPosition = undefined;
+        return;
+      }
+
+      this.setDockPosition(bestEdge);
+    }
+
+    this.panelState.originalDockPosition = undefined;
+  }
+
+  /**
+   * Update the visual snap preview ghost area
+   */
+  private updateSnapPreview(mouseX: number, mouseY: number): void {
+    if (!this.screen || !this.allowAutoDock) return;
+
     const threshold = 5;
-    const x = this.left as number;
-    const y = this.top as number;
-    const w = this.width as number;
-    const h = this.height as number;
+    const sw = this.screen.width;
+    const sh = this.screen.height;
+    
+    // Check Proximity
+    const dists = [
+      { pos: 'left' as DockPosition, dist: mouseX },
+      { pos: 'right' as DockPosition, dist: sw - mouseX },
+      { pos: 'top' as DockPosition, dist: mouseY },
+      { pos: 'bottom' as DockPosition, dist: sh - mouseY }
+    ].filter(d => d.dist <= threshold)
+     .sort((a, b) => a.dist - b.dist);
 
-    // First check if we're overlapping with another docked panel and should swap
-    const swapped = this.checkPanelSwap();
-    if (swapped) return;
+    if (dists.length === 0 || dists[0].pos === this.panelState.originalDockPosition) {
+      this.removeSnapPreview();
+      return;
+    }
 
-    // Save current dimensions before docking so we can use them
-    const currentWidth = w;
-    const currentHeight = h;
+    const edge = dists[0].pos;
+    
+    // Create or update ghost box
+    if (!this.ghostBox) {
+      this.ghostBox = new Box({
+        parent: this.screen,
+        border: { type: 'line', fg: 'cyan' },
+        style: {
+          fg: 'cyan',
+          bg: 'cyan', // Use solid bg with opacity
+          opacity: 0.5,
+        },
+        zIndex: 9999,
+        ch: ' ', // Use simple space for fill
+        tags: true,
+      });
+    }
 
-    // Check edges for docking - only if panel edge is AT the screen edge (touching)
-    if (x <= threshold && x >= 0) {
-      this.setDockPositionPreservingSize('left', currentWidth, currentHeight);
-    } else if (x + w >= this.screen.width - threshold) {
-      this.setDockPositionPreservingSize('right', currentWidth, currentHeight);
-    } else if (y <= threshold && y >= 0) {
-      this.setDockPositionPreservingSize('top', currentWidth, currentHeight);
-    } else if (y + h >= this.screen.height - threshold) {
-      this.setDockPositionPreservingSize('bottom', currentWidth, currentHeight);
+    // Set preview dimensions based on edge
+    let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
+    
+    switch (edge) {
+      case 'left':
+        targetW = Math.floor(sw * 0.3);
+        targetH = sh;
+        break;
+      case 'right':
+        targetX = sw - Math.floor(sw * 0.3);
+        targetW = Math.floor(sw * 0.3);
+        targetH = sh;
+        break;
+      case 'top':
+        targetW = sw;
+        targetH = Math.floor(sh * 0.3);
+        break;
+      case 'bottom':
+        targetY = sh - Math.floor(sh * 0.3);
+        targetW = sw;
+        targetH = Math.floor(sh * 0.3);
+        break;
+    }
+
+    this.ghostBox!.aleft = targetX;
+    this.ghostBox!.atop = targetY;
+    this.ghostBox!.width = targetW;
+    this.ghostBox!.height = targetH;
+    
+    // Explicitly trigger overlay update for transparency in web client
+    if ((this.ghostBox as any)._emitOverlayEvent) {
+      (this.ghostBox as any)._emitOverlayEvent(true);
+    }
+
+    this.ghostBox!.show();
+    this.ghostBox!.setFront();
+  }
+
+  /**
+   * Remove snap preview ghost
+   */
+  private removeSnapPreview(): void {
+    if (this.ghostBox) {
+      if ((this.ghostBox as any)._emitOverlayEvent) {
+        (this.ghostBox as any)._emitOverlayEvent(false);
+      }
+      this.ghostBox.hide();
+      if (this.screen) this.screen.render();
     }
   }
 
@@ -797,13 +1115,10 @@ export class DockablePanel extends Panel {
   private checkPanelSwap(): boolean {
     if (!this.screen) return false;
 
-    // Can only swap if we had an original dock position (were docked before dragging)
-    if (!this.panelState.originalDockPosition) return false;
-
-    const myX = this.left as number;
-    const myY = this.top as number;
-    const myW = this.width as number;
-    const myH = this.height as number;
+    const myX = this.aleft;
+    const myY = this.atop;
+    const myW = this.width;
+    const myH = this.height;
     const myCenterX = myX + myW / 2;
     const myCenterY = myY + myH / 2;
 
@@ -817,31 +1132,126 @@ export class DockablePanel extends Panel {
       // Only swap with docked panels (not floating)
       if (otherPos === 'float') continue;
 
-      const otherX = (otherPanel.left as number) || 0;
-      const otherY = (otherPanel.top as number) || 0;
-      const otherW = (otherPanel.width as number) || 0;
-      const otherH = (otherPanel.height as number) || 0;
+      const otherX = otherPanel.aleft;
+      const otherY = otherPanel.atop;
+      const otherW = otherPanel.width;
+      const otherH = otherPanel.height;
 
       // Check if our center point is over the other panel
       if (myCenterX >= otherX && myCenterX <= otherX + otherW &&
           myCenterY >= otherY && myCenterY <= otherY + otherH) {
 
-        // Swap positions using the original position we saved before dragging
-        const myOriginalPosition = this.panelState.originalDockPosition;
-        const otherPosition = otherPanel.getDockPosition();
-
+        // If we came from a dock, swap them
+        const myOriginalPosition = this.panelState.originalDockPosition || 'float';
+        
         // Swap the dock positions
-        this.setDockPosition(otherPosition);
-        otherPanel.setDockPosition(myOriginalPosition);
-
-        // Clear the saved original position after successful swap
-        this.panelState.originalDockPosition = undefined;
-
+        if (myOriginalPosition !== 'float') {
+          otherPanel.setDockPosition(myOriginalPosition);
+        } else {
+          otherPanel.setDockPosition('float'); // Bump it to floating
+        }
+        
+        this.setDockPosition(otherPos);
         return true;
       }
     }
 
     return false;
+  }
+
+  /**
+   * Merge another panel into this one as a tab
+   */
+  public mergeWith(other: DockablePanel): void {
+    if (other === this || this.tabs.includes(other)) return;
+
+    // If this is the first merge, add ourselves as the first tab
+    if (this.tabs.length === 0) {
+      this.tabs.push(this);
+    }
+
+    // Add the other panel
+    this.tabs.push(other);
+    
+    // Setup the other panel to be a child of our container
+    other.detach();
+    other.parent = this;
+    // Remove border and title from child panel as it's now a tab
+    other.border = null;
+    if (other.options) other.options.border = undefined;
+    
+    // Position to fill our content area
+    other.position = { left: 0, top: 1, width: '100%', height: '100%-1' } as any;
+    other.hide();
+    
+    // Force coordinate recalculation for the entire merged tree
+    other._invalidateCoords();
+
+    this.updateTabs();
+    this.emit('merge', other);
+  }
+
+  /**
+   * Update the tab bar display
+   */
+  private updateTabs(): void {
+    if (this.tabs.length <= 1) return;
+
+    // Clear existing tab buttons
+    for (const btn of this.tabButtons) {
+      btn.destroy();
+    }
+    this.tabButtons = [];
+
+    const Button = require('./button').Button;
+    let currentX = 1;
+
+    this.tabs.forEach((panel, index) => {
+      const label = panel.options.label || (panel.options as any).title || `Tab ${index + 1}`;
+      const isActive = index === this.activeTab;
+
+      const btn = new Button({
+        parent: this,
+        top: 0,
+        left: currentX,
+        width: String(label).length + 2,
+        height: 1,
+        content: isActive ? `{white-bg}{black-fg}${label}{/}` : label,
+        tags: true,
+        style: {
+          bg: isActive ? 'white' : 'blue',
+          fg: isActive ? 'black' : 'white',
+        },
+      });
+
+      btn.on('press', () => {
+        this.switchTab(index);
+      });
+
+      this.tabButtons.push(btn);
+      currentX += String(label).length + 3;
+    });
+
+    // Hide/show correct content
+    this.tabs.forEach((panel, index) => {
+      if (index === this.activeTab) {
+        if (panel !== this) panel.show();
+      } else {
+        if (panel !== this) panel.hide();
+      }
+    });
+
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Switch to a specific tab
+   */
+  public switchTab(index: number): void {
+    if (index < 0 || index >= this.tabs.length) return;
+    this.activeTab = index;
+    this.updateTabs();
+    this.emit('tab-switch', index);
   }
 
   /**
@@ -913,7 +1323,7 @@ export class DockablePanel extends Panel {
     }
 
     // Invalidate coordinate cache for all children so they recalculate positions
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
       this.screen.render();
@@ -978,7 +1388,7 @@ export class DockablePanel extends Panel {
     this.panelState.y = this.position.top as number;
 
     // Invalidate coordinate cache for all children so they recalculate positions
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
       this.screen.render();
@@ -1016,7 +1426,7 @@ export class DockablePanel extends Panel {
     }
 
     // Invalidate coordinate cache for all children
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
       this.screen.render();
@@ -1046,7 +1456,7 @@ export class DockablePanel extends Panel {
     this.panelState.minimized = false;
 
     // Invalidate coordinate cache for all children
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
       this.screen.render();
@@ -1064,6 +1474,39 @@ export class DockablePanel extends Panel {
     } else {
       this.minimize();
     }
+  }
+
+  /**
+   * Toggle fullscreen maximization
+   */
+  public toggleMaximize(): void {
+    if (this.preMaximizeState) {
+      // Restore from maximized
+      this.setState(this.preMaximizeState);
+      this.preMaximizeState = null;
+    } else {
+      // Save current state
+      this.preMaximizeState = this.getState();
+      
+      // Expand to fill screen (respect topConstraint)
+      if (this.screen) {
+        this.setState({
+          x: 0,
+          y: this.topConstraint,
+          width: this.screen.width,
+          height: this.screen.height - this.topConstraint,
+          position: 'float'
+        });
+        this.bringToFront();
+      }
+    }
+  }
+
+  /**
+   * Check if panel is currently maximized to fullscreen
+   */
+  public isMaximized(): boolean {
+    return this.preMaximizeState !== null;
   }
 
   /**
@@ -1097,26 +1540,48 @@ export class DockablePanel extends Panel {
    * Restore panel state
    * Uses position.* for runtime updates (not options.* which is only read at construction)
    */
-  setState(state: Partial<PanelState>): void {
+  async setState(state: Partial<PanelState>): Promise<void> {
     if (state.position) {
       this.setDockPosition(state.position);
     }
-    if (state.x !== undefined) {
-      this.position.left = state.x;
-      this.panelState.x = state.x;
+
+    if (this.screen) {
+      const sw = this.screen.width;
+      const sh = this.screen.height;
+
+      if (state.width !== undefined) {
+        const newWidth = Math.max(5, Math.min(state.width, sw));
+        this.position.width = newWidth;
+        this.panelState.width = newWidth;
+      }
+      
+      if (state.height !== undefined) {
+        const newHeight = Math.max(3, Math.min(state.height, sh));
+        this.position.height = newHeight;
+        this.panelState.height = newHeight;
+      }
+
+      if (state.x !== undefined) {
+        const pw = (this.position.width as number) || 40;
+        const newLeft = Math.max(0, Math.min(state.x, sw - pw));
+        this.position.left = newLeft;
+        this.panelState.x = newLeft;
+      }
+      
+      if (state.y !== undefined) {
+        const ph = (this.position.height as number) || 20;
+        const newTop = Math.max(this.topConstraint, Math.min(state.y, sh - ph));
+        this.position.top = newTop;
+        this.panelState.y = newTop;
+      }
+    } else {
+      // Fallback if screen not available yet
+      if (state.x !== undefined) { this.position.left = state.x; this.panelState.x = state.x; }
+      if (state.y !== undefined) { this.position.top = state.y; this.panelState.y = state.y; }
+      if (state.width !== undefined) { this.position.width = state.width; this.panelState.width = state.width; }
+      if (state.height !== undefined) { this.position.height = state.height; this.panelState.height = state.height; }
     }
-    if (state.y !== undefined) {
-      this.position.top = state.y;
-      this.panelState.y = state.y;
-    }
-    if (state.width !== undefined) {
-      this.position.width = state.width;
-      this.panelState.width = state.width;
-    }
-    if (state.height !== undefined) {
-      this.position.height = state.height;
-      this.panelState.height = state.height;
-    }
+
     if (state.minimized !== undefined) {
       if (state.minimized) {
         this.minimize();
@@ -1126,7 +1591,7 @@ export class DockablePanel extends Panel {
     }
 
     // Invalidate coordinate cache for all children
-    this.invalidateChildrenCache();
+    this._invalidateCoords();
 
     if (this.screen) {
       this.screen.render();
@@ -1145,5 +1610,25 @@ export class DockablePanel extends Panel {
    */
   getDockPosition(): DockPosition {
     return this.dockPosition;
+  }
+
+  /**
+   * Save panel state to persistent storage
+   */
+  public async saveState(): Promise<void> {
+    if (!this.persistenceKey || !this.screen?.storage) return;
+    const state = this.getState();
+    await this.screen.storage.set(`layout:${this.persistenceKey}`, state);
+  }
+
+  /**
+   * Load panel state from persistent storage
+   */
+  public async loadState(): Promise<void> {
+    if (!this.persistenceKey || !this.screen?.storage) return;
+    const saved = await this.screen.storage.get(`layout:${this.persistenceKey}`);
+    if (saved) {
+      await this.setState(saved);
+    }
   }
 }

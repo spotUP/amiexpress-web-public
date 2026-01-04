@@ -1,6 +1,6 @@
 /**
  * Media Handler for BBSTerminal
- * 
+ *
  * Handles client-side microphone capture and audio playback for voice chat.
  */
 
@@ -42,6 +42,29 @@ export class MediaHandler {
     // Listen for mute status updates from other users (optional visual feedback)
     this.socket.on('audio:muted', (data: { userId: string | number, muted: boolean }) => {
       // Could be used to update UI
+    });
+
+    // Listen for procedural sound effects from the door
+    this.socket.on('audio:play-sfx', async (data: any) => {
+      console.log('[MediaHandler] Received audio:play-sfx:', data.type, data.soundId || data.note || data.notes);
+      if (this.isMuted) return;
+
+      // Initialize audio context on first sound (required by browsers)
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      switch (data.type) {
+        case 'library':
+          this.playSound(data.soundId, data.params);
+          break;
+        case 'note':
+          this.playNote(data.note, data.duration);
+          break;
+        case 'chord':
+          this.playChord(data.notes, data.duration);
+          break;
+      }
     });
   }
 
@@ -286,6 +309,55 @@ export class MediaHandler {
     } catch (err) {
       // Decode errors are common with partial stream chunks, ignore them
     }
+  }
+
+  /**
+   * Play a sound from the library (browser-compatible)
+   */
+  private playSound(soundId: string, params?: any): void {
+    console.log('[MediaHandler] Playing sound:', soundId, params);
+    // TODO: Implement sound library playback when needed
+    // For now, play a simple beep
+    this.playNote('C4', 100);
+  }
+
+  /**
+   * Play a musical note using Web Audio API
+   */
+  private playNote(note: string, duration: number = 200): void {
+    if (!this.audioContext) return;
+
+    // Simple note-to-frequency mapping
+    const noteFrequencies: { [key: string]: number } = {
+      'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
+      'G4': 392.00, 'A4': 440.00, 'B4': 493.88, 'C5': 523.25
+    };
+
+    const frequency = noteFrequencies[note] || 440;
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+
+    gainNode.gain.value = this.volume * 0.3; // Reduce volume for beeps
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.01,
+      this.audioContext.currentTime + duration / 1000
+    );
+
+    oscillator.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(this.audioContext.currentTime + duration / 1000);
+  }
+
+  /**
+   * Play a chord (multiple notes simultaneously)
+   */
+  private playChord(notes: string[], duration: number = 200): void {
+    notes.forEach(note => this.playNote(note, duration));
   }
 
   /**

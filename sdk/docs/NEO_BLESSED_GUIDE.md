@@ -4,6 +4,8 @@
 
 Neo-Blessed is a browser-compatible port of the blessed terminal UI library. It provides rich TUI widgets for creating interactive BBS door applications.
 
+**Note:** The `blessed-contrib` library has been fully merged into Neo-Blessed. All charts, maps, and advanced layouts are now available natively without needing a separate import.
+
 Modern Door Expectation
 
 Always aim for modern, desktop-like doors with windows, panels, and mouse support. We are building next-level doors, not 90's text menus.
@@ -58,7 +60,7 @@ Invalid TypeScript door: Must export Door instance or runDoor() function
 **app.ts** (main application):
 ```typescript
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
 
 export async function createApp(session: DoorSession) {
   const { bbs } = session;
@@ -459,7 +461,7 @@ Tree widget supports standard navigation keys:
 - **Enter/Space/+**: Toggle expand/collapse
 
 ```typescript
-const tree = contrib.tree({
+const tree = blessed.tree({
   parent: screen,
   keys: true,      // Enable keyboard navigation
   vi: true,        // Enable j/k for up/down
@@ -625,7 +627,7 @@ socket.on('room:created', (data: any) => {
 gaugeList.setData([{ percent: 75 }]);
 
 // CORRECT - Use gauges option in constructor
-const gaugeList = contrib.gaugeList({
+const gaugeList = blessed.gaugeList({
   parent: demoBox,
   gaugeSpacing: 1,
   gaugeHeight: 1,
@@ -865,6 +867,42 @@ screen.displayImage('/path/to/image.png', (err, success) => {
 ```
 
 **Browser Compatibility:** External program methods are stubbed with clear error messages in browser environment. Only `setEffects()` and `screenshot()` are fully functional across both browser and Node.js.
+
+### 11. Integrated Contrib Widgets
+
+The `blessed-contrib` widgets are now built directly into Neo-Blessed. You can use them via factory functions or class constructors just like core widgets.
+
+**Example - Using Grid and Line Chart:**
+
+```typescript
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// Create a grid layout
+const grid = new blessed.Grid({ rows: 12, cols: 12, screen: screen });
+
+// Add a line chart to the grid
+const line = grid.set(0, 0, 6, 6, blessed.linechart, {
+  style: { line: 'yellow', text: 'white', baseline: 'black' },
+  label: ' Network Latency ',
+  showLegend: true,
+});
+
+line.setData([
+  {
+    title: 'Node 1',
+    x: ['10:00', '10:10', '10:20', '10:30'],
+    y: [50, 80, 60, 90],
+    style: { line: 'red' }
+  }
+]);
+
+screen.render();
+```
+
+**Note on Factory Names:** To avoid naming collisions, some widgets have specific factory names:
+- Use `blessed.linechart()` for the Contrib Line widget (to distinguish from core `Line`).
+- Use `blessed.contribTable()` for the Contrib Table (to distinguish from core `Table`).
+- Use `blessed.contribLog()` for the Contrib Log.
 
 ## Best Practices
 

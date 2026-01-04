@@ -809,6 +809,11 @@ export interface BBSApi {
 }
 
 /**
+ * Event handler for video frames
+ */
+export type VideoFrameHandler = (frame: string) => void;
+
+/**
  * Video API - ASCII Video Streaming
  *
  * Provides real-time ASCII video streaming capabilities for doors.
@@ -822,6 +827,12 @@ export interface VideoAPI {
    * @returns Promise resolving to stream ID
    */
   startStream(source: VideoSource, options?: VideoStreamOptions): Promise<string>;
+
+  /**
+   * Register a handler for local video frames
+   * @param handler Function to call when a new frame is available
+   */
+  onFrame(handler: VideoFrameHandler): void;
 
   /**
    * Stop an active stream

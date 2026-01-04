@@ -88,8 +88,6 @@ export class Program extends EventEmitter {
     this.output = options.output || ((data: string) => {
       if (typeof process !== 'undefined' && process.stdout) {
         process.stdout.write(data);
-      } else {
-        console.log(data);
       }
     });
 

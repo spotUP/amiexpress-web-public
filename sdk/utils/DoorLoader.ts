@@ -29,7 +29,7 @@
  */
 
 import { Box } from '../engines/ui/blessed/widgets/box';
-import { Gauge } from '../engines/ui/blessed/contrib/widgets/gauge';
+import { Gauge } from '../engines/ui/blessed/widgets/gauge';
 import { Overlay } from '../engines/ui/blessed/widgets/overlay';
 import type { Screen } from '../engines/ui/blessed/core/screen';
 

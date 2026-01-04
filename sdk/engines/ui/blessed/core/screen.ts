@@ -23,11 +23,11 @@ export class Screen extends Element {
 
   // Focus history
   private focusHistory: Element[] = [];
+  private focusStack: Element[] = []; // Stack for pushing/popping focus (modals)
   private savedFocus: Element | null = null;
 
   // Focus trapping (for modals)
   private focusTrap: Element | null = null;
-  private focusTrapSavedFocus: Element | null = null;
 
   // Rendering state
   // Buffer format: [y][x] = [attr, char]
@@ -41,10 +41,10 @@ export class Screen extends Element {
   private _renderTimer: any = null;
 
   // Dirty region tracking (Opt #5: 50-60% reduction in diff cells)
-  private _dirtyMinX: number = 0;
-  private _dirtyMinY: number = 0;
-  private _dirtyMaxX: number = 79;  // Initialize to full screen (80x24)
-  private _dirtyMaxY: number = 23;
+  private _dirtyMinX: number = Infinity;
+  private _dirtyMinY: number = Infinity;
+  private _dirtyMaxX: number = -Infinity;
+  private _dirtyMaxY: number = -Infinity;
 
   // Spatial mouse index (Opt #7: O(1) vs O(n) mouse hit testing)
   private _mouseIndex: Element[][][] = [];  // [y][x] = elements at that position
@@ -79,6 +79,8 @@ export class Screen extends Element {
   // Responsive mode - allows wider than 80 columns
   private _responsive: boolean = false;
 
+  private _locked: boolean = false;
+
   constructor(options: ScreenOptions & { output?: (data: string) => void; responsive?: boolean } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
@@ -112,8 +114,6 @@ export class Screen extends Element {
     this.output = options.output || ((data: string) => {
       if (typeof process !== 'undefined' && process.stdout) {
         process.stdout.write(data);
-      } else {
-        console.log(data);
       }
     });
 
@@ -214,8 +214,16 @@ export class Screen extends Element {
    * Handle mouse event and route to appropriate elements
    */
   private handleMouseEvent(event: MouseEvent): void {
-    // Emit on screen first
+    // Emit on screen first (generic mouse event and specific action event)
     this.emit('mouse', event);
+    this.emit(event.action, event);
+
+    // If we're currently dragging an element, route events EXCLUSIVELY to it
+    // This prevents dragging foreground elements from triggering background hover/clicks
+    if (this._dragging) {
+      this._dragging.onMouse(event);
+      return;
+    }
 
     // Find all elements under the mouse cursor
     const elements = this.getElementsAt(event.x, event.y);
@@ -241,11 +249,12 @@ export class Screen extends Element {
 
     // Route event to elements (from top to bottom in z-order)
     // Use slice().reverse() to avoid mutating the elements array
-    // Note: We no longer stop propagation on the first clickable element.
-    // This allows parent elements (like panels) to receive click events when
-    // their children are clicked, enabling proper panel activation.
     for (const element of elements.slice().reverse()) {
-      element.onMouse(event);
+      if (element.onMouse(event)) {
+        // Event was handled by this element, stop propagation
+        // This prevents dragging foreground elements from also dragging background elements
+        break;
+      }
     }
   }
 
@@ -346,6 +355,15 @@ export class Screen extends Element {
     this.program.write(data);
   }
 
+  /**
+   * Get the rendered ANSI output from the program buffer
+   */
+  getOutput(): string {
+    const output = (this.program as any)._buf || '';
+    (this.program as any)._buf = ''; // Clear buffer after reading
+    return output;
+  }
+
   // ============================================================================
   // BBS Terminal Dimensions
   // ============================================================================
@@ -362,11 +380,9 @@ export class Screen extends Element {
   setDimensions(linesPerScreen?: number, width?: number): void {
     // Validate inputs
     if (linesPerScreen !== undefined && (!isFinite(linesPerScreen) || linesPerScreen <= 0)) {
-      console.error(`[Screen] Invalid linesPerScreen: ${linesPerScreen}, ignoring`);
       return;
     }
     if (width !== undefined && (!isFinite(width) || width <= 0)) {
-      console.error(`[Screen] Invalid width: ${width}, ignoring`);
       return;
     }
 
@@ -478,6 +494,21 @@ export class Screen extends Element {
         this.lastBuffer[y][x] = oline[y][x];
       }
     }
+  }
+
+  /**
+   * Lock the screen to prevent rendering during batch updates
+   */
+  lock(): void {
+    this._locked = true;
+  }
+
+  /**
+   * Unlock the screen and trigger a coordinated render
+   */
+  unlock(): void {
+    this._locked = false;
+    this.render();
   }
 
   /**
@@ -650,7 +681,7 @@ export class Screen extends Element {
   // ============================================================================
 
   render(): void {
-    if (this.destroyed) return;
+    if (this.destroyed || this._locked) return;
 
     // Opt #1: Batch renders - coalesce multiple render requests into single frame
     if (this._renderPending) return;
@@ -678,7 +709,6 @@ export class Screen extends Element {
     }
 
     // Mark entire screen as dirty since we're clearing the entire buffer
-    // This ensures that when elements move, their old positions get updated too
     this._markDirty(0, 0, this.width - 1, this.height - 1);
 
     // Clear buffer with default attribute
@@ -998,11 +1028,36 @@ export class Screen extends Element {
 
     const chars = borderChars[borderType] ?? borderChars.line;
 
-    // Get border style attribute
-    // EXACT from neo-blessed element.js line 2137: battr = this.sattr(this.style.border)
-    // If style.border is undefined, use empty object (NOT element.style) to get default colors
-    const borderStyle = (element.options.style as any)?.border;
-    const attr = this.styleToAttr(borderStyle || {});
+    // Determine border style with hover/focus/disabled support
+    let borderStyle = (element.options.style as any)?.border || {};
+    
+    if (element.disabled) {
+      const disabledStyle = (element.options.style as any)?.disabled;
+      if (disabledStyle?.border) {
+        borderStyle = { ...borderStyle, ...disabledStyle.border };
+      } else {
+        borderStyle = { ...borderStyle, fg: 'gray' };
+      }
+    } else if ((element as any)._overBorder) {
+      // HOVER HIGHLIGHT
+      const hoverStyle = (element.options.style as any)?.hover;
+      if (hoverStyle?.border) {
+        borderStyle = { ...borderStyle, ...hoverStyle.border };
+      } else {
+        // Default hover: bright white
+        borderStyle = { ...borderStyle, fg: 'white', bold: true };
+      }
+    } else if (element.hasFocusedChild()) {
+      const focusStyle = (element.options.style as any)?.focus;
+      if (focusStyle?.border) {
+        borderStyle = { ...borderStyle, ...focusStyle.border };
+      } else {
+        // Default focus: cyan
+        borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
+      }
+    }
+
+    const attr = this.styleToAttr(borderStyle);
 
     // Label uses border style if available, otherwise default
     const labelStyle = typeof border === 'object' && (border as any).labelStyle
@@ -1216,10 +1271,10 @@ export class Screen extends Element {
     }
 
     // Opt #5: Reset dirty region after rendering
-    this._dirtyMinX = this.width;
-    this._dirtyMinY = this.height;
-    this._dirtyMaxX = 0;
-    this._dirtyMaxY = 0;
+    this._dirtyMinX = Infinity;
+    this._dirtyMinY = Infinity;
+    this._dirtyMaxX = -Infinity;
+    this._dirtyMaxY = -Infinity;
   }
 
   draw(start: number, end: number): void {
@@ -1372,21 +1427,26 @@ export class Screen extends Element {
   // Focus Management
   // ============================================================================
 
+  /**
+   * Push current focus to stack and focus a new element
+   */
   focusPush(element: Element): void {
-    this.focusHistory.push(element);
+    if (this._focused) {
+      this.focusStack.push(this._focused);
+    }
     element.focus();
   }
 
+  /**
+   * Pop focus from stack and restore it
+   */
   focusPop(): Element | null {
-    const element = this.focusHistory.pop();
-    if (element) {
-      element.blur();
-    }
-    const prev = this.focusHistory[this.focusHistory.length - 1];
-    if (prev) {
+    const prev = this.focusStack.pop();
+    if (prev && !prev.destroyed) {
       prev.focus();
+      return prev;
     }
-    return element || null;
+    return null;
   }
 
   saveFocus(): Element | null {
@@ -1414,8 +1474,11 @@ export class Screen extends Element {
   trapFocus(container: Element): void {
     if (this.focusTrap === container) return;
 
-    // Save current focus before trapping
-    this.focusTrapSavedFocus = this._focused;
+    // Save current focus via stack
+    if (this._focused) {
+      this.focusStack.push(this._focused);
+    }
+    
     this.focusTrap = container;
 
     // Focus first element in trap
@@ -1433,11 +1496,8 @@ export class Screen extends Element {
 
     this.focusTrap = null;
 
-    // Restore focus to element that had it before trapping
-    if (this.focusTrapSavedFocus && !this.focusTrapSavedFocus.destroyed) {
-      this.focusTrapSavedFocus.focus();
-    }
-    this.focusTrapSavedFocus = null;
+    // Restore focus from stack
+    this.focusPop();
   }
 
   /**
@@ -1459,41 +1519,43 @@ export class Screen extends Element {
    * If focus is trapped, only returns elements within the trap container
    */
   private _getFocusable(element: Element = this): Element[] {
-    // If focus is trapped, only get focusable elements within the trap
     const root = this.focusTrap || element;
-    const focusable: Element[] = [];
+    const focusableList: Element[] = [];
 
     const traverse = (el: Element) => {
-      // Check if element is tabbable
-      const tabbable = el.options.tabbable !== false && el.options.tabIndex !== -1;
-      const isFocusable = el.options.focusable && tabbable;
-
-      // Skip disabled, hidden, or destroyed elements
-      if (isFocusable && !el.hidden && !el.destroyed && !(el as any).disabled) {
-        focusable.push(el);
+      if (el.hidden || !el.visible || (el as any).disabled || el.destroyed) {
+        return;
       }
-      for (const child of el.children) {
-        traverse(child);
+
+      // Check if element itself is focusable
+      const isFocusable = el.options && el.options.focusable && 
+                         el.options.tabbable !== false && 
+                         el.options.tabIndex !== -1;
+
+      if (isFocusable) {
+        focusableList.push(el);
+      }
+
+      // Continue to children
+      if (el.children) {
+        // Sort children by tabIndex if provided, otherwise natural tree order
+        const sortedChildren = [...el.children].sort((a, b) => {
+          const aIdx = (a.options && a.options.tabIndex) || 0;
+          const bIdx = (b.options && b.options.tabIndex) || 0;
+          if (aIdx > 0 && bIdx > 0) return aIdx - bIdx;
+          if (aIdx > 0) return -1;
+          if (bIdx > 0) return 1;
+          return 0;
+        });
+
+        for (const child of sortedChildren) {
+          traverse(child);
+        }
       }
     };
 
     traverse(root);
-
-    // Sort by tabIndex (0 = default, 1+ = explicit order, -1 = not tabbable - already filtered)
-    focusable.sort((a, b) => {
-      const aIndex = a.options.tabIndex ?? 0;
-      const bIndex = b.options.tabIndex ?? 0;
-
-      // Elements with tabIndex > 0 come first, sorted by tabIndex
-      if (aIndex > 0 && bIndex > 0) return aIndex - bIndex;
-      if (aIndex > 0) return -1;
-      if (bIndex > 0) return 1;
-
-      // Both have tabIndex 0 (or undefined) - maintain tree order
-      return 0;
-    });
-
-    return focusable;
+    return focusableList;
   }
 
   /**
@@ -1613,6 +1675,12 @@ export class Screen extends Element {
 
   // Called by external input handler
   _handleKey(ch: any, key: KeyEvent): void {
+    // Attempt to unlock audio on first interaction
+    if ((this as any)._audioUnlocked === undefined) {
+      (this as any)._audioUnlocked = true;
+      this.emit('user-interaction');
+    }
+
     // Respect key locking
     if (this._lockKeys) return;
 
@@ -1793,7 +1861,6 @@ export class Screen extends Element {
   set width(value: number) {
     // Validate width is a positive finite number
     if (!isFinite(value) || value <= 0) {
-      console.error(`[Screen] Invalid width: ${value}, ignoring`);
       return;
     }
     this._width = value;
@@ -1813,7 +1880,6 @@ export class Screen extends Element {
   set height(value: number) {
     // Validate height is a positive finite number
     if (!isFinite(value) || value <= 0) {
-      console.error(`[Screen] Invalid height: ${value}, ignoring`);
       return;
     }
     this._height = value;
@@ -1890,7 +1956,6 @@ export class Screen extends Element {
   resize(cols: number, rows: number): void {
     // Validate dimensions
     if (!isFinite(cols) || cols <= 0 || !isFinite(rows) || rows <= 0) {
-      console.error(`[Screen] Invalid resize dimensions: ${cols}x${rows}, ignoring`);
       return;
     }
 

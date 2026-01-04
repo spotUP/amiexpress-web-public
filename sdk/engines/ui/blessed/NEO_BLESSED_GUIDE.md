@@ -56,7 +56,7 @@ Invalid TypeScript door: Must export Door instance or runDoor() function
 **app.ts** (main application):
 ```typescript
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
 
 export async function createApp(session: DoorSession) {
   const { bbs } = session;
@@ -263,7 +263,7 @@ Tree widget supports standard navigation keys:
 - **Enter/Space/+**: Toggle expand/collapse
 
 ```typescript
-const tree = contrib.tree({
+const tree = blessed.tree({
   parent: screen,
   keys: true,      // Enable keyboard navigation
   vi: true,        // Enable j/k for up/down
@@ -508,7 +508,7 @@ screen.render();  // Will now show disabled style
 gaugeList.setData([{ percent: 75 }]);
 
 // CORRECT - Use gauges option in constructor
-const gaugeList = contrib.gaugeList({
+const gaugeList = blessed.gaugeList({
   parent: demoBox,
   gaugeSpacing: 1,
   gaugeHeight: 1,

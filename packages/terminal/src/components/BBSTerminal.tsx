@@ -109,9 +109,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   });
   const zmodemSentry = useRef<any | null>(null);
   const zmodemRef = useRef<any | null>(null);
-  const audioEngineRef = useRef<SDKClient.AudioEngine | null>(null);
   const mediaHandlerRef = useRef<MediaHandler | null>(null);
-  const audioReadyRef = useRef<boolean>(false);
   const sfxBufferRef = useRef<string>('');
 
   // RIP Graphics state
@@ -186,32 +184,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     return loaded;
   }, []);
 
-  const ensureAudioEngine = useCallback(async (): Promise<SDKClient.AudioEngine | null> => {
-    if (!audioEngineRef.current) {
-      audioEngineRef.current = new SDKClient.AudioEngine({
-        masterVolume: 0.7,
-        musicVolume: 0.4,
-        sfxVolume: 0.8,
-      });
-    }
-
-    if (!audioReadyRef.current) {
-      try {
-        await audioEngineRef.current.init();
-        audioReadyRef.current = true;
-      } catch {
-        return null;
-      }
-    }
-
-    return audioEngineRef.current;
-  }, []);
-
-  const playSfx = useCallback(async (soundId: string, params?: Record<string, unknown>) => {
-    const engine = await ensureAudioEngine();
-    if (!engine) return;
-    engine.playSound(soundId, params as any);
-  }, [ensureAudioEngine]);
+  // Sound effects are now handled by MediaHandler (see media-handler.ts)
+  // MediaHandler uses Web Audio API directly for browser-compatible audio playback
 
   const getStoredSharedToken = useCallback(() => {
     if (typeof window === 'undefined') return null;
@@ -1164,19 +1138,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       let sfxPayload = sfxBufferRef.current + data;
       sfxBufferRef.current = '';
 
+      // SFX commands are parsed but not executed client-side
+      // Audio playback now handled via MediaHandler and audio:play-sfx socket events from server
       const sfxRegex = /\x1b\]9999;sfx;({[^}]*})\x07/g;
-      let sfxMatch;
-      while ((sfxMatch = sfxRegex.exec(sfxPayload)) !== null) {
-        try {
-          const sfxData = JSON.parse(sfxMatch[1]);
-          if (sfxData?.id) {
-            void playSfx(String(sfxData.id), sfxData.params as Record<string, unknown> | undefined);
-          }
-        } catch (e) {
-          console.error('[SFX] Failed to parse sfx payload:', e);
-        }
-      }
 
+      // Strip SFX commands from output without executing them
       sfxPayload = sfxPayload.replace(sfxRegex, '');
       const sfxIncompleteIndex = sfxPayload.lastIndexOf(sfxPrefix);
       if (sfxIncompleteIndex !== -1 && sfxPayload.indexOf('\x07', sfxIncompleteIndex) === -1) {
@@ -1744,7 +1710,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Focus terminal when clicked
   const handleClick = () => {
     terminalInstance.current?.focus();
-    void ensureAudioEngine();
+    // Audio is now handled by MediaHandler (initialized on audio:play-sfx socket event)
   };
 
   // Calculate terminal cell coordinates from mouse event

@@ -24,6 +24,7 @@ export interface LayoutConstraints {
 
 export interface ResponsiveConfig {
   breakpoints?: {
+    xs?: number;       // < 50 cols (Mobile Auto-Flow)
     small?: number;    // < 80 cols
     medium?: number;   // < 120 cols
     large?: number;    // >= 120 cols
@@ -60,6 +61,7 @@ export class ResponsiveLayoutManager {
     this.screen = screen;
     this.config = {
       breakpoints: {
+        xs: 50,
         small: 80,
         medium: 120,
         large: 160,
@@ -195,10 +197,11 @@ export class ResponsiveLayoutManager {
   /**
    * Get current breakpoint
    */
-  getBreakpoint(): 'small' | 'medium' | 'large' {
+  getBreakpoint(): 'xs' | 'small' | 'medium' | 'large' {
     const width = this.screen.width;
-    const { small = 80, medium = 120 } = this.config.breakpoints || {};
+    const { xs = 50, small = 80, medium = 120 } = this.config.breakpoints || {};
 
+    if (width < xs) return 'xs';
     if (width < small) return 'small';
     if (width < medium) return 'medium';
     return 'large';

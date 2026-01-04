@@ -19,10 +19,10 @@ This is not a simple demo - this is a **comprehensive educational experience** t
 ```typescript
 import { Door, getTerminalDimensions } from '@amiexpress/bbs-door-sdk';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
 
 // Individual widget imports for advanced usage
-import { Grid, Carousel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import { Grid, Carousel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 ```
 
 ### BBS Terminal Constraints (CRITICAL)
@@ -211,7 +211,7 @@ const progressBar = blessed.progressbar({
 ### Implementation Notes
 ```typescript
 // Use Grid layout for this page
-const grid = new contrib.Grid({
+const grid = new Grid({
   rows: 3,
   cols: 2,
   screen: screen
@@ -892,7 +892,7 @@ Create a mini dashboard showing:
 ### Implementation Notes
 ```typescript
 // Create grid layout
-const grid = new contrib.Grid({
+const grid = new Grid({
   rows: 3,
   cols: 4,
   screen: screen
@@ -1244,7 +1244,7 @@ function logEvent(message: string) {
 ```typescript
 import { Door, getTerminalDimensions } from '@amiexpress/bbs-door-sdk';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
 
 class NeoBlessedShowcase extends Door {
   private screen: any;
@@ -1281,7 +1281,7 @@ class NeoBlessedShowcase extends Door {
     ];
 
     // Setup carousel
-    this.carousel = new contrib.Carousel(
+    this.carousel = new Carousel(
       this.pages.map((page, idx) => (screen: any) => page.call(this, screen, idx)),
       {
         screen: this.screen,

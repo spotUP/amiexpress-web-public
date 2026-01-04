@@ -11,12 +11,12 @@ export interface CanvasOptions extends ElementOptions {
 }
 
 export class Canvas extends Box {
-  private buffer: string[][] = [];
-  private fillChar: string;
-  private clearChar: string;
-  private canvasWidth: number = 0;
-  private canvasHeight: number = 0;
-  private _dirty: boolean = false;
+  protected buffer: string[][] = [];
+  protected fillChar: string;
+  protected clearChar: string;
+  protected canvasWidth: number = 0;
+  protected canvasHeight: number = 0;
+  protected _dirty: boolean = false;
   private _renderTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: CanvasOptions = {}) {

@@ -294,6 +294,15 @@ export interface LogOptions extends ElementOptions {
 
 export interface Element {
   options: ElementOptions;
+  style: Colors & {
+    border?: Colors;
+    scrollbar?: Colors;
+    focus?: Colors;
+    hover?: Colors;
+    active?: Colors;
+    disabled?: Colors;
+  };
+  border: Border | null;
   parent: Element | null;
   screen: Screen | null;
   children: Element[];
@@ -319,6 +328,9 @@ export interface Element {
   clearLine(i: number): void;
   insertTop(line: string): void;
   insertBottom(line: string): void;
+
+  // Mouse
+  onMouse(event: MouseEvent): boolean;
 
   // Tree
   append(element: Element): void;

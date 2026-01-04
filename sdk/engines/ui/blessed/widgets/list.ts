@@ -16,9 +16,6 @@ export class List extends Element {
   private itemLineStart: number[] = [];
   private itemLineCount: number[] = [];
 
-  // Opt #8: Debounce scroll rendering (60fps throttle for smooth scrolling)
-  private _scrollTimer: any = null;
-
   // Hover tracking for per-item hover effects
   private _hoveredItem: number = -1;
 
@@ -64,6 +61,17 @@ export class List extends Element {
       if (this.wrapItemsEnabled) {
         this._updateContent();
       }
+    });
+
+    // Handle focus/blur to update markers
+    this.on('focus', () => {
+      this._updateContent();
+      this.screen?.render();
+    });
+
+    this.on('blur', () => {
+      this._updateContent();
+      this.screen?.render();
     });
 
     // Key handlers
@@ -154,18 +162,20 @@ export class List extends Element {
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
       const isHovered = index === this._hoveredItem && !isSelected;
-      const marker = this.interactive ? (isSelected ? '> ' : '  ') : '';
+      // ONLY show the marker if the list IS INTERACTIVE AND FOCUSED
+      const marker = (this.interactive && this.focused) ? (isSelected ? '> ' : '  ') : (isSelected ? '  ' : '  ');
       const start = newLines.length;
 
-      // Get item styles
-      const itemSelectedStyle = (this.options.style as any)?.item?.selected;
-      const itemHoverStyle = (this.options.style as any)?.item?.hover;
+      // Get item styles - check both nested and top-level style properties
+      const itemSelectedStyle = (this.options.style as any)?.item?.selected || (this.options.style as any)?.selected;
+      const itemHoverStyle = (this.options.style as any)?.item?.hover || (this.options.style as any)?.hover;
 
       // Apply selected or hover style via blessed tags
       let itemText = item;
       let openTags = '';
       let closeTags = '';
 
+      // PRIORITY: Selected style (for keyboard/click selection) > Hover style (mouse over)
       if (this.interactive && isSelected && itemSelectedStyle) {
         // Apply selected style to selected item
         if (itemSelectedStyle.fg) {
@@ -176,6 +186,10 @@ export class List extends Element {
           openTags += `{${itemSelectedStyle.bg}-bg}`;
           closeTags = `{/${itemSelectedStyle.bg}-bg}` + closeTags;
         }
+        
+        // Ensure bold/underline from selected style is applied
+        if (itemSelectedStyle.bold) openTags += '{bold}';
+        if (itemSelectedStyle.underline) openTags += '{underline}';
       } else if (isHovered && itemHoverStyle) {
         // Apply hover style to hovered item (but not selected)
         if (itemHoverStyle.fg) {
@@ -237,18 +251,12 @@ export class List extends Element {
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
       this.up();
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
       this.down();
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -256,18 +264,12 @@ export class List extends Element {
     // Home/End - jump to first/last item
     if (key.name === 'home' || (vi && key.name === 'g')) {
       this.select(0);
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
 
     if (key.name === 'end' || (vi && key.name === 'G')) {
       this.select(this.items.length - 1);
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -276,9 +278,6 @@ export class List extends Element {
     if (key.name === 'pageup') {
       const jump = Math.min(10, this.selected);
       this.select(this.selected - jump);
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -286,9 +285,6 @@ export class List extends Element {
     if (key.name === 'pagedown') {
       const jump = Math.min(10, this.items.length - 1 - this.selected);
       this.select(this.selected + jump);
-      // Cancel debounced update and update immediately for responsive keyboard feedback
-      if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._updateContent();
       this.screen?.render();
       return;
     }
@@ -300,9 +296,11 @@ export class List extends Element {
       return;
     }
 
-    // Escape - cancel
+    // Escape - cancel/blur
     if (key.name === 'escape') {
+      this.blur();
       this.emit('cancel');
+      this.screen?.render();
       return;
     }
 
@@ -343,65 +341,57 @@ export class List extends Element {
     this.previousSelected = this.selected;
     this.selected = Math.max(0, Math.min(index, this.items.length - 1));
 
-    // Opt #8: Debounce content updates for smooth scrolling
-    // Cancel any pending update and schedule a new one
-    if (this._scrollTimer) clearTimeout(this._scrollTimer);
+    this._updateContent();
 
-    this._scrollTimer = setTimeout(() => {
-      this._scrollTimer = null;
+    // Scroll to keep selected item visible
+    // Get visible height - try multiple approaches for robustness
+    let visibleHeight = this.iheight;
 
-      this._updateContent();
+    // Fallback to direct position calculation
+    if (visibleHeight <= 0) {
+      const pos = this._getCoords();
+      if (pos) {
+        const border = this.options.border ? 2 : 0;
+        const padding = this.options.padding || 0;
+        const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
+        const padBottom = typeof padding === 'number' ? padding : (padding as any).bottom || 0;
+        visibleHeight = pos.yl - pos.yi - border - padTop - padBottom;
+      }
+    }
 
-      // Scroll to keep selected item visible
-      // Get visible height - try multiple approaches for robustness
-      let visibleHeight = this.iheight;
+    // Final fallback
+    if (visibleHeight <= 0) {
+      visibleHeight = 10; // Reasonable default
+    }
 
-      // Fallback to direct position calculation
-      if (visibleHeight <= 0) {
-        const pos = this._getCoords();
-        if (pos) {
-          const border = this.options.border ? 2 : 0;
-          const padding = this.options.padding || 0;
-          const padTop = typeof padding === 'number' ? padding : (padding as any).top || 0;
-          const padBottom = typeof padding === 'number' ? padding : (padding as any).bottom || 0;
-          visibleHeight = pos.yl - pos.yi - border - padTop - padBottom;
-        }
+    // Get total content lines
+    const totalLines = (this as any)._lines?.length || this.items.length;
+
+    // Only scroll if content exceeds visible area
+    if (totalLines > visibleHeight && this.items.length > 0) {
+      const currentScroll = this.getScroll();
+
+      // Validate selected index is within bounds
+      if (this.selected < 0 || this.selected >= this.items.length) {
+        return; // Invalid selection, don't scroll
       }
 
-      // Final fallback
-      if (visibleHeight <= 0) {
-        visibleHeight = 10; // Reasonable default
+      // Get line position for selected item
+      const lineStart = this.itemLineStart[this.selected] ?? this.selected;
+      const lineCount = this.itemLineCount[this.selected] ?? 1;
+      const lineEnd = lineStart + lineCount - 1;
+
+      // Scroll up if selection is above visible area
+      if (lineStart < currentScroll) {
+        this.setScroll(lineStart);
       }
-
-      // Get total content lines
-      const totalLines = (this as any)._lines?.length || this.items.length;
-
-      // Only scroll if content exceeds visible area
-      if (totalLines > visibleHeight && this.items.length > 0) {
-        const currentScroll = this.getScroll();
-
-        // Validate selected index is within bounds
-        if (this.selected < 0 || this.selected >= this.items.length) {
-          return; // Invalid selection, don't scroll
-        }
-
-        // Get line position for selected item
-        const lineStart = this.itemLineStart[this.selected] ?? this.selected;
-        const lineCount = this.itemLineCount[this.selected] ?? 1;
-        const lineEnd = lineStart + lineCount - 1;
-
-        // Scroll up if selection is above visible area
-        if (lineStart < currentScroll) {
-          this.setScroll(lineStart);
-        }
-        // Scroll down if selection is below visible area
-        else if (lineEnd >= currentScroll + visibleHeight) {
-          this.setScroll(lineEnd - visibleHeight + 1);
-        }
+      // Scroll down if selection is below visible area
+      else if (lineEnd >= currentScroll + visibleHeight) {
+        this.setScroll(lineEnd - visibleHeight + 1);
       }
+    }
 
-      this.emit('select item', this.items[this.selected], this.selected);
-    }, 0); // 0ms = next tick (use 16ms for ~60fps throttle if needed)
+    this.emit('select item', this.items[this.selected], this.selected);
   }
 
   up(amount: number = 1): void {
@@ -805,14 +795,14 @@ export class List extends Element {
   }
 
   // Override onMouse to track which item is hovered
-  onMouse(event: any): void {
-    super.onMouse(event);
+  onMouse(event: any): boolean {
+    const handled = super.onMouse(event);
 
-    if (event.action !== 'mousemove') return;
+    if (event.action !== 'mousemove') return handled;
 
     // Calculate which item the mouse is over
     const coords = this._getCoords();
-    if (!coords) return;
+    if (!coords) return handled;
 
     // Get relative y position within the list content area
     const border = this.options.border ? 1 : 0;
@@ -820,7 +810,7 @@ export class List extends Element {
 
     if (relY < 0) {
       this._hoveredItem = -1;
-      return;
+      return handled;
     }
 
     // Account for scroll position
@@ -835,6 +825,8 @@ export class List extends Element {
       this._updateContent();  // Redraw with new hover state
       this.screen?.render();
     }
+
+    return handled;
   }
 
   // Override onMouseLeave to clear hovered item
@@ -856,12 +848,8 @@ export class List extends Element {
     super.hide();
   }
 
-  // Override destroy to clean up scroll timer
+  // Override destroy
   destroy(): void {
-    if (this._scrollTimer) {
-      clearTimeout(this._scrollTimer);
-      this._scrollTimer = null;
-    }
     super.destroy();
   }
 }

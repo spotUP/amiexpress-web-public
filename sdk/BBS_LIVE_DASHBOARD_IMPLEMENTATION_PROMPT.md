@@ -20,12 +20,12 @@ Create the **definitive real-time BBS monitoring dashboard** for sysops. This is
 ```typescript
 import { Door, getTerminalDimensions } from '@amiexpress/bbs-door-sdk';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import contrib from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+
 import axios from 'axios'; // For API calls
 import type { AxiosInstance } from 'axios';
 
 // Individual widget imports
-import { Grid } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/contrib';
+import { Grid } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 ```
 
 ### BBS Terminal Constraints (CRITICAL)
@@ -1269,7 +1269,7 @@ export default class LiveDashboardDoor extends Door {
     this.apiClient = new DashboardAPIClient(this.context.token);
 
     // Create grid layout (24 rows × 12 cols)
-    this.grid = new contrib.Grid({
+    this.grid = new Grid({
       screen: this.screen,
       rows: 24,
       cols: 12

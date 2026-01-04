@@ -17,7 +17,7 @@ export class Line extends Box {
 
   constructor(options: LineOptions = {}) {
     const orientation = options.orientation || 'horizontal';
-
+    
     super({
       ...options,
       width: orientation === 'horizontal' ? options.width || '100%' : options.width || 1,
@@ -26,43 +26,49 @@ export class Line extends Box {
 
     this.orientation = orientation;
     this.lineChar = options.ch || this.getLineChar(options.type || 'line');
-
-    this.updateContent();
+    
+    this.on('attach', () => {
+      this.updateContent();
+    });
+    
+    if (this.screen) {
+      this.updateContent();
+    }
   }
 
   /**
    * Get line character based on type
    */
-  private getLineChar(type: 'line' | 'heavy' | 'double' | 'ascii'): string {
+  private getLineChar(type: string): string {
     if (this.orientation === 'horizontal') {
-      const chars = {
+      const chars: any = {
         line: '─',
         heavy: '━',
         double: '═',
         ascii: '-',
       };
-      return chars[type];
+      return chars[type] || chars.line;
     } else {
-      const chars = {
+      const chars: any = {
         line: '│',
         heavy: '┃',
         double: '║',
         ascii: '|',
       };
-      return chars[type];
+      return chars[type] || chars.line;
     }
   }
 
   /**
    * Update line content
    */
-  private updateContent(): void {
+  updateContent(): void {
     if (this.orientation === 'horizontal') {
-      const width = this.iwidth;
+      const width = this.iwidth || (typeof this.width === 'number' ? this.width : 0);
       this.setContent(this.lineChar.repeat(width));
     } else {
-      const height = this.iheight;
-      const lines: string[] = [];
+      const height = this.iheight || (typeof this.height === 'number' ? this.height : 0);
+      const lines = [];
       for (let i = 0; i < height; i++) {
         lines.push(this.lineChar);
       }
@@ -91,4 +97,11 @@ export class Line extends Box {
       this.screen.render();
     }
   }
+}
+
+/**
+ * Factory function
+ */
+export function line(options: LineOptions = {}): Line {
+  return new Line(options);
 }

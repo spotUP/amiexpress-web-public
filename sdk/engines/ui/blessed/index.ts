@@ -34,7 +34,10 @@ export { Message } from './widgets/message';
 export { Question } from './widgets/question';
 export { Prompt } from './widgets/prompt';
 export { Loading } from './widgets/loading';
-export { Line } from './widgets/line';
+export { Line as LineBase, line as lineBase } from './widgets/line';
+export type { LineOptions as LineBaseOptions } from './widgets/line';
+export { Line as LineChart, line as lineChart } from './widgets/line-chart';
+export type { LineData, LineOptions } from './widgets/line-chart';
 export { Listbar } from './widgets/listbar';
 export { BigText } from './widgets/bigtext';
 export { FileManager } from './widgets/filemanager';
@@ -57,6 +60,51 @@ export type { PanelOptions } from './widgets/panel';
 export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
 
+// Extended Widgets (Consolidated from Contrib)
+export { Bar, bar } from './widgets/bar';
+export type { BarData, BarOptions } from './widgets/bar';
+export { Donut, donut } from './widgets/donut';
+export type { DonutData, DonutOptions } from './widgets/donut';
+export { Gauge, gauge } from './widgets/gauge';
+export type { GaugeStack, GaugeOptions } from './widgets/gauge';
+export { GaugeList, gaugeList } from './widgets/gauge-list';
+export type { GaugeListStack, GaugeListItem, GaugeListOptions } from './widgets/gauge-list';
+export { LCD, lcd } from './widgets/lcd';
+export type { LCDOptions } from './widgets/lcd';
+export { Map, map } from './widgets/map';
+export type { MapMarker, MapOptions } from './widgets/map';
+export { Markdown, markdown } from './widgets/markdown';
+export type { MarkdownStyle, MarkdownOptions } from './widgets/markdown';
+export { Picture, picture } from './widgets/picture';
+export type { PictureOptions } from './widgets/picture';
+export { Sparkline, sparkline } from './widgets/sparkline';
+export type { SparklineOptions } from './widgets/sparkline';
+export { StackedBar, stackedBar } from './widgets/stacked-bar';
+export type { StackedBarData, StackedBarOptions } from './widgets/stacked-bar';
+export { Tree, tree } from './widgets/tree';
+export type { TreeNode, TreeTemplate, TreeOptions } from './widgets/tree';
+
+// Renamed extended widgets to avoid conflicts
+export { ContribCanvas, contribCanvas } from './widgets/contrib-canvas';
+export type { ContribCanvasOptions as CanvasOptions } from './widgets/contrib-canvas';
+export { ContribLog, contribLog } from './widgets/contrib-log';
+export type { ContribLogOptions as LogOptions } from './widgets/contrib-log';
+export { ContribTable, contribTable } from './widgets/contrib-table';
+export type { ContribTableOptions as TableOptions } from './widgets/contrib-table';
+
+// Layouts (Consolidated from Contrib)
+export { Grid, grid } from './layouts/grid';
+export type { GridOptions } from './layouts/grid';
+export { Carousel, carousel } from './layouts/carousel';
+export type { CarouselOptions, CarouselPage } from './layouts/carousel';
+
+// Utilities
+export {
+  abbreviateNumber,
+  getColorCode,
+  MergeRecursive
+} from './utils/contrib-utils/utils';
+
 // Factory functions (blessed-style API)
 import { Screen } from './core/screen';
 import { Program } from './core/program';
@@ -69,8 +117,8 @@ import { Button } from './widgets/button';
 import { ProgressBar } from './widgets/progressbar';
 import { Table } from './widgets/table';
 import { Log } from './widgets/log';
-import { ScrollableBox } from './widgets/scrollablebox';
-import { ScrollableText } from './widgets/scrollabletext';
+import { ScrollableBox, ScrollableBoxOptions } from './widgets/scrollablebox';
+import { ScrollableText, ScrollableTextOptions } from './widgets/scrollabletext';
 import { Checkbox, CheckboxOptions } from './widgets/checkbox';
 import { RadioButton, RadioButtonOptions } from './widgets/radiobutton';
 import { RadioSet, RadioSetOptions } from './widgets/radioset';
@@ -78,7 +126,8 @@ import { Message, MessageOptions } from './widgets/message';
 import { Question, QuestionOptions } from './widgets/question';
 import { Prompt, PromptOptions } from './widgets/prompt';
 import { Loading, LoadingOptions } from './widgets/loading';
-import { Line, LineOptions } from './widgets/line';
+import { Line as LineBaseClass, LineOptions as LineBaseOptions, line as lineBase } from './widgets/line';
+import { Line as LineClass, LineOptions, line as lineFn } from './widgets/line-chart';
 import { Listbar, ListbarOptions } from './widgets/listbar';
 import { BigText, BigTextOptions } from './widgets/bigtext';
 import { FileManager, FileManagerOptions } from './widgets/filemanager';
@@ -103,8 +152,8 @@ import type {
   TextboxOptions,
   ButtonOptions,
   ProgressBarOptions,
-  TableOptions,
-  LogOptions,
+  TableOptions as BaseTableOptions,
+  LogOptions as BaseLogOptions,
 } from './core/types';
 
 /**
@@ -178,14 +227,14 @@ export function progressbar(options?: ProgressBarOptions): ProgressBar {
 /**
  * Create a table widget (tags: true forced, cannot be overridden)
  */
-export function table(options?: TableOptions): Table {
+export function table(options?: BaseTableOptions): Table {
   return new Table({ ...options, tags: true });
 }
 
 /**
  * Create a log widget (tags: true forced, cannot be overridden)
  */
-export function log(options?: LogOptions): Log {
+export function log(options?: BaseLogOptions): Log {
   return new Log({ ...options, tags: true });
 }
 
@@ -255,8 +304,15 @@ export function loading(options?: LoadingOptions): Loading {
 /**
  * Create a line widget (tags: true forced, cannot be overridden)
  */
-export function line(options?: LineOptions): Line {
-  return new Line({ ...options, tags: true });
+export function line(options?: LineBaseOptions): LineBaseClass {
+  return new LineBaseClass({ ...options, tags: true });
+}
+
+/**
+ * Create a line chart widget
+ */
+export function linechart(options?: LineOptions): LineClass {
+  return new LineClass({ ...options, tags: true });
 }
 
 /**
@@ -392,7 +448,6 @@ import { Message as MessageClass } from './widgets/message';
 import { Question as QuestionClass } from './widgets/question';
 import { Prompt as PromptClass } from './widgets/prompt';
 import { Loading as LoadingClass } from './widgets/loading';
-import { Line as LineClass } from './widgets/line';
 import { Listbar as ListbarClass } from './widgets/listbar';
 import { BigText as BigTextClass } from './widgets/bigtext';
 import { FileManager as FileManagerClass } from './widgets/filemanager';
@@ -412,6 +467,26 @@ import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
 import { Panel as PanelClass } from './widgets/panel';
 import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
 import { ResponsiveLayoutManager as ResponsiveLayoutManagerClass } from './core/responsive-layout';
+
+// Import extended widgets
+import { Bar as BarClass } from './widgets/bar';
+import { Donut as DonutClass } from './widgets/donut';
+import { Gauge as GaugeClass } from './widgets/gauge';
+import { GaugeList as GaugeListClass } from './widgets/gauge-list';
+import { LCD as LCDClass } from './widgets/lcd';
+import { Map as MapClass } from './widgets/map';
+import { Markdown as MarkdownClass } from './widgets/markdown';
+import { Picture as PictureClass } from './widgets/picture';
+import { Sparkline as SparklineClass } from './widgets/sparkline';
+import { StackedBar as StackedBarClass } from './widgets/stacked-bar';
+import { Tree as TreeClass } from './widgets/tree';
+import { ContribCanvas as ContribCanvasClass } from './widgets/contrib-canvas';
+import { ContribLog as ContribLogClass } from './widgets/contrib-log';
+import { ContribTable as ContribTableClass } from './widgets/contrib-table';
+
+// Import layouts
+import { Grid as GridClass } from './layouts/grid';
+import { Carousel as CarouselClass } from './layouts/carousel';
 
 export default {
   // Core
@@ -444,6 +519,7 @@ export default {
   Prompt: PromptClass,
   Loading: LoadingClass,
   Line: LineClass,
+  LineBase: LineBaseClass,
   Listbar: ListbarClass,
   BigText: BigTextClass,
   FileManager: FileManagerClass,
@@ -463,6 +539,26 @@ export default {
   Panel: PanelClass,
   DockablePanel: DockablePanelClass,
   ResponsiveLayoutManager: ResponsiveLayoutManagerClass,
+
+  // Extended Widgets
+  Bar: BarClass,
+  Donut: DonutClass,
+  Gauge: GaugeClass,
+  GaugeList: GaugeListClass,
+  LCD: LCDClass,
+  Map: MapClass,
+  Markdown: MarkdownClass,
+  Picture: PictureClass,
+  Sparkline: SparklineClass,
+  StackedBar: StackedBarClass,
+  Tree: TreeClass,
+  ContribCanvas: ContribCanvasClass,
+  ContribLog: ContribLogClass,
+  ContribTable: ContribTableClass,
+
+  // Layouts
+  Grid: GridClass,
+  Carousel: CarouselClass,
 
   // Factory functions
   screen,
@@ -487,6 +583,8 @@ export default {
   prompt,
   loading,
   line,
+  linechart,
+  lineBase,
   listbar,
   bigtext,
   filemanager,
