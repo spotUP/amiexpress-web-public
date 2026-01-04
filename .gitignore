@@ -214,11 +214,19 @@ user.data
 user.keys
 user.misc
 .DS_Store
+Mini_Callerslog
+temp_batch
+.!*!*
 
 # Large backup files (>50MB, excluded to avoid GitHub limit)
 Node*/CLogBackup
 Node*/DLogBackup
 Node*/Answers
+*.backup
+*.backup-*
+bbsConfig.info.pre-*
+Conf*.info.backup*
+ConfConfig.info.backup*
 
 # Temporary door output files (still exclude)
 **/who/node*.txt
@@ -280,7 +288,7 @@ elf2hunk/
 lha/
 lha.run
 vbcc.tar.gz
-~/homebrew-lha/
+~/lha/
 ~/homebrew-local/
 
 # Temporary build files
@@ -290,6 +298,5 @@ a.out
 # Runtime bulletin updates - INCLUDE AS TEMPLATE DATA
 # (Commented out to include bulletins in git)
 # Bulletins/bull*.txt
-bbsConfig.info.backup
 bbsConfig.info.txt
 Node[0-9]*/
