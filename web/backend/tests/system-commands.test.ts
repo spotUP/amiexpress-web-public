@@ -1,6 +1,6 @@
 import { LoggedOnSubState, BBSState } from '../src/constants/bbs-states';
-import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../src/handlers/system-commands.handler';
-import { BatchDownloadHandler } from '../src/handlers/batch-download.handler';
+import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../src/handlers/commands/system-commands.handler';
+import { BatchDownloadHandler } from '../src/handlers/transfer/batch-download.handler';
 
 describe('system commands - goodbye flagged files', () => {
   test('prompts for flagged downloads when flagManager has entries', () => {
@@ -28,7 +28,7 @@ describe('system commands - goodbye flagged files', () => {
     jest.useFakeTimers();
     const socket: any = { emit: jest.fn(), disconnect: jest.fn() };
     setSystemCommandsDependencies({
-      displayScreen: () => true,
+      displayScreen: async () => true,
       findSecurityScreen: () => 'Logoff'
     });
 

@@ -45,7 +45,7 @@ describe('message scan mail parity', () => {
     }));
 
     const { messageIndexManager, MsgStatus } = require('../src/services/MessageIndexManager');
-    const { performConferenceScan, setMessageScanDependencies } = require('../src/handlers/message-scan.handler');
+    const { performConferenceScan, setMessageScanDependencies } = require('../src/handlers/message/message-scan.handler');
     const pointers = require('../src/utils/message-pointers.util');
 
     setMessageScanDependencies(
@@ -254,7 +254,7 @@ describe('file scan gating parity', () => {
       ...toolFlags
     }));
 
-    const { performConferenceScan, setMessageScanDependencies } = require('../src/handlers/message-scan.handler');
+    const { performConferenceScan, setMessageScanDependencies } = require('../src/handlers/message/message-scan.handler');
     setMessageScanDependencies(
       db,
       jest.fn(),

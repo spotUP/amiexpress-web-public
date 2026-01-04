@@ -54,7 +54,7 @@ async function runDoor(opts: RunnerOptions) {
     doorDropFileManager.createDoorSys(opts.nodeId, user, timeRemaining);
     doorDropFileManager.createDorInfo(opts.nodeId, user);
   } catch (err: any) {
-    console.warn('[run-amiga-door] Failed to create drop files:', err?.message || err);
+console.warn('[run-amiga-door] Failed to create drop files:', err?.message || err);
   }
 
   const debugEnabled = process.env.DEBUG_XIM_OUTPUT === '1';
@@ -155,8 +155,8 @@ async function runDoor(opts: RunnerOptions) {
 
 async function main() {
   const args = process.argv.slice(2);
-  console.log('[run-amiga-door] RAW process.argv:', JSON.stringify(process.argv, null, 2));
-  console.log('[run-amiga-door] RAW args:', JSON.stringify(args, null, 2));
+console.log('[run-amiga-door] RAW process.argv:', JSON.stringify(process.argv, null, 2));
+console.log('[run-amiga-door] RAW args:', JSON.stringify(args, null, 2));
   let assignsArg: Record<string, string> = {};
   let toolTypesArg: Record<string, string> = {};
   let doorTypeArg: string | undefined = undefined;
@@ -207,11 +207,11 @@ async function main() {
     doorArgsRaw.length > 0 && doorArgsRaw[0] === '--args'
       ? doorArgsRaw.slice(1)
       : doorArgsRaw;
-  console.log('[run-amiga-door] PARSED execPath:', execPathArg);
-  console.log('[run-amiga-door] PARSED nodeId:', positionalNodeArg);
-  console.log('[run-amiga-door] PARSED doorArgs:', JSON.stringify(doorArgs, null, 2));
+console.log('[run-amiga-door] PARSED execPath:', execPathArg);
+console.log('[run-amiga-door] PARSED nodeId:', positionalNodeArg);
+console.log('[run-amiga-door] PARSED doorArgs:', JSON.stringify(doorArgs, null, 2));
   if (!execPathArg) {
-    console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doorId CMD] [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
+console.error('Usage: ts-node run-amiga-door.ts <doorPath> <nodeId> [--doorId CMD] [--doortype TYPE] [--assigns JSON] [--tooltypes JSON] [args...]');
     process.exit(1);
   }
   const execPath = path.isAbsolute(execPathArg)
@@ -234,7 +234,7 @@ async function main() {
     });
     process.exit(0);
   } catch (err: any) {
-    console.error('[run-amiga-door] Failed:', err?.message || err);
+console.error('[run-amiga-door] Failed:', err?.message || err);
     process.exit(1);
   }
 }

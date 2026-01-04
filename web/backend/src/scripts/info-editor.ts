@@ -54,7 +54,7 @@ function parseArgs(): { file: string; command: string; args: string[]; options: 
 }
 
 function showHelp(): void {
-  console.log(`
+console.log(`
 [INFO EDITOR] - Amiga .info File Tooltype Editor
 
 USAGE:
@@ -97,7 +97,7 @@ NOTES:
 
 function log(options: Options, message: string): void {
   if (options.verbose) {
-    console.log(`[VERBOSE] ${message}`);
+console.log(`[VERBOSE] ${message}`);
   }
 }
 
@@ -112,22 +112,22 @@ function listTooltypes(filePath: string, options: Options): void {
   const info = parseInfoFile(filePath);
 
   if (options.json) {
-    console.log(JSON.stringify(info.tooltypes, null, 2));
+console.log(JSON.stringify(info.tooltypes, null, 2));
     return;
   }
 
-  console.log(`\n[INFO FILE] ${path.basename(filePath)}`);
-  console.log(`[TOOLTYPES] Found ${info.tooltypes.length} tooltypes:\n`);
+console.log(`\n[INFO FILE] ${path.basename(filePath)}`);
+console.log(`[TOOLTYPES] Found ${info.tooltypes.length} tooltypes:\n`);
 
   for (const tt of info.tooltypes) {
     const status = tt.commented ? '[DISABLED]' : '[ENABLED] ';
     const comment = tt.commented ? '!' : ' ';
-    console.log(`  ${status} ${comment}${tt.key}=${tt.value}`);
+console.log(`  ${status} ${comment}${tt.key}=${tt.value}`);
   }
 
-  console.log(`\n[DISK OBJECT] ${info.diskObject.length} bytes`);
-  console.log(`[ICON DATA] ${info.iconData.length} bytes`);
-  console.log(`[TOTAL SIZE] ${info.rawBuffer.length} bytes\n`);
+console.log(`\n[DISK OBJECT] ${info.diskObject.length} bytes`);
+console.log(`[ICON DATA] ${info.iconData.length} bytes`);
+console.log(`[TOTAL SIZE] ${info.rawBuffer.length} bytes\n`);
 }
 
 function getTooltype(filePath: string, key: string, options: Options): void {
@@ -136,17 +136,17 @@ function getTooltype(filePath: string, key: string, options: Options): void {
   const tt = info.tooltypes.find(t => t.key === upperKey);
 
   if (!tt) {
-    console.error(`[ERROR] Tooltype '${upperKey}' not found`);
+console.error(`[ERROR] Tooltype '${upperKey}' not found`);
     process.exit(1);
   }
 
   if (options.json) {
-    console.log(JSON.stringify(tt, null, 2));
+console.log(JSON.stringify(tt, null, 2));
     return;
   }
 
   const status = tt.commented ? 'DISABLED' : 'ENABLED';
-  console.log(`\n[${status}] ${tt.key}=${tt.value}\n`);
+console.log(`\n[${status}] ${tt.key}=${tt.value}\n`);
 }
 
 function setTooltype(filePath: string, key: string, value: string, options: Options): void {
@@ -163,7 +163,7 @@ function setTooltype(filePath: string, key: string, value: string, options: Opti
   const modifiedInfo = updateTooltype(info, upperKey, value, false);
 
   writeInfoFile(modifiedInfo);
-  console.log(`[OK] Tooltype ${upperKey} set to: ${value}`);
+console.log(`[OK] Tooltype ${upperKey} set to: ${value}`);
 
   // Verify
   const verifyInfo = parseInfoFile(filePath);
@@ -185,13 +185,13 @@ function deleteTooltype(filePath: string, key: string, options: Options): void {
 
   const ttIndex = info.tooltypes.findIndex(t => t.key === upperKey);
   if (ttIndex === -1) {
-    console.error(`[ERROR] Tooltype '${upperKey}' not found`);
+console.error(`[ERROR] Tooltype '${upperKey}' not found`);
     process.exit(1);
   }
 
   info.tooltypes.splice(ttIndex, 1);
   writeInfoFile(info);
-  console.log(`[OK] Tooltype ${upperKey} deleted`);
+console.log(`[OK] Tooltype ${upperKey} deleted`);
 }
 
 function enableTooltype(filePath: string, key: string, options: Options): void {
@@ -206,19 +206,19 @@ function enableTooltype(filePath: string, key: string, options: Options): void {
 
   const tt = info.tooltypes.find(t => t.key === upperKey);
   if (!tt) {
-    console.error(`[ERROR] Tooltype '${upperKey}' not found`);
+console.error(`[ERROR] Tooltype '${upperKey}' not found`);
     process.exit(1);
   }
 
   if (!tt.commented) {
-    console.log(`[INFO] Tooltype ${upperKey} is already enabled`);
+console.log(`[INFO] Tooltype ${upperKey} is already enabled`);
     return;
   }
 
   tt.commented = false;
   tt.originalLine = `${tt.key}=${tt.value}`;
   writeInfoFile(info);
-  console.log(`[OK] Tooltype ${upperKey} enabled`);
+console.log(`[OK] Tooltype ${upperKey} enabled`);
 }
 
 function disableTooltype(filePath: string, key: string, options: Options): void {
@@ -233,19 +233,19 @@ function disableTooltype(filePath: string, key: string, options: Options): void 
 
   const tt = info.tooltypes.find(t => t.key === upperKey);
   if (!tt) {
-    console.error(`[ERROR] Tooltype '${upperKey}' not found`);
+console.error(`[ERROR] Tooltype '${upperKey}' not found`);
     process.exit(1);
   }
 
   if (tt.commented) {
-    console.log(`[INFO] Tooltype ${upperKey} is already disabled`);
+console.log(`[INFO] Tooltype ${upperKey} is already disabled`);
     return;
   }
 
   tt.commented = true;
   tt.originalLine = `!${tt.key}=${tt.value}`;
   writeInfoFile(info);
-  console.log(`[OK] Tooltype ${upperKey} disabled`);
+console.log(`[OK] Tooltype ${upperKey} disabled`);
 }
 
 function toggleTooltype(filePath: string, key: string, options: Options): void {
@@ -262,7 +262,7 @@ function toggleTooltype(filePath: string, key: string, options: Options): void {
   const tt = modifiedInfo.tooltypes.find(t => t.key === upperKey);
   if (tt) {
     const newStatus = tt.commented ? 'disabled' : 'enabled';
-    console.log(`[OK] Tooltype ${upperKey} is now ${newStatus}`);
+console.log(`[OK] Tooltype ${upperKey} is now ${newStatus}`);
   }
 }
 
@@ -270,12 +270,12 @@ function restoreBackup(filePath: string, options: Options): void {
   const backupPath = filePath + '.backup';
 
   if (!fs.existsSync(backupPath)) {
-    console.error(`[ERROR] Backup file not found: ${backupPath}`);
+console.error(`[ERROR] Backup file not found: ${backupPath}`);
     process.exit(1);
   }
 
   fs.copyFileSync(backupPath, filePath);
-  console.log(`[OK] Restored from backup: ${backupPath}`);
+console.log(`[OK] Restored from backup: ${backupPath}`);
 }
 
 function main(): void {
@@ -284,13 +284,13 @@ function main(): void {
 
     // Validate file exists (except for restore command)
     if (command !== 'restore' && !fs.existsSync(file)) {
-      console.error(`[ERROR] File not found: ${file}`);
+console.error(`[ERROR] File not found: ${file}`);
       process.exit(1);
     }
 
     // Validate file extension
     if (!file.toLowerCase().endsWith('.info')) {
-      console.error(`[ERROR] File must have .info extension: ${file}`);
+console.error(`[ERROR] File must have .info extension: ${file}`);
       process.exit(1);
     }
 
@@ -303,7 +303,7 @@ function main(): void {
 
       case 'get':
         if (args.length < 1) {
-          console.error('[ERROR] get command requires KEY argument');
+console.error('[ERROR] get command requires KEY argument');
           process.exit(1);
         }
         getTooltype(file, args[0], options);
@@ -311,7 +311,7 @@ function main(): void {
 
       case 'set':
         if (args.length < 2) {
-          console.error('[ERROR] set command requires KEY and VALUE arguments');
+console.error('[ERROR] set command requires KEY and VALUE arguments');
           process.exit(1);
         }
         setTooltype(file, args[0], args.slice(1).join(' '), options);
@@ -320,7 +320,7 @@ function main(): void {
       case 'delete':
       case 'remove':
         if (args.length < 1) {
-          console.error('[ERROR] delete command requires KEY argument');
+console.error('[ERROR] delete command requires KEY argument');
           process.exit(1);
         }
         deleteTooltype(file, args[0], options);
@@ -328,7 +328,7 @@ function main(): void {
 
       case 'enable':
         if (args.length < 1) {
-          console.error('[ERROR] enable command requires KEY argument');
+console.error('[ERROR] enable command requires KEY argument');
           process.exit(1);
         }
         enableTooltype(file, args[0], options);
@@ -336,7 +336,7 @@ function main(): void {
 
       case 'disable':
         if (args.length < 1) {
-          console.error('[ERROR] disable command requires KEY argument');
+console.error('[ERROR] disable command requires KEY argument');
           process.exit(1);
         }
         disableTooltype(file, args[0], options);
@@ -344,7 +344,7 @@ function main(): void {
 
       case 'toggle':
         if (args.length < 1) {
-          console.error('[ERROR] toggle command requires KEY argument');
+console.error('[ERROR] toggle command requires KEY argument');
           process.exit(1);
         }
         toggleTooltype(file, args[0], options);
@@ -352,7 +352,7 @@ function main(): void {
 
       case 'backup':
         createBackup(file, options);
-        console.log(`[OK] Backup created: ${file}.backup`);
+console.log(`[OK] Backup created: ${file}.backup`);
         break;
 
       case 'restore':
@@ -360,15 +360,15 @@ function main(): void {
         break;
 
       default:
-        console.error(`[ERROR] Unknown command: ${command}`);
+console.error(`[ERROR] Unknown command: ${command}`);
         showHelp();
         process.exit(1);
     }
 
   } catch (error) {
-    console.error('\n[ERROR] Operation failed:', (error as Error).message);
+console.error('\n[ERROR] Operation failed:', (error as Error).message);
     if (process.argv.includes('--verbose')) {
-      console.error((error as Error).stack);
+console.error((error as Error).stack);
     }
     process.exit(1);
   }

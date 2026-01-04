@@ -3,7 +3,7 @@ jest.mock('../src/utils/conference-tooltypes.util', () => ({
 }));
 
 import { checkDownloadRatios, updateDownloadStats } from '../src/utils/download-ratios.util';
-import { DownloadHandler } from '../src/handlers/download.handler';
+import { DownloadHandler } from '../src/handlers/file/download.handler';
 import { User } from '../src/types';
 
 function makeUser(overrides: Partial<User> = {}): User {

@@ -1,6 +1,6 @@
 import { db as singletonDb } from '../src/database';
 import { ConferenceRepository } from '../src/database/conference-repository';
-import { DownloadHandler as RawDownloadHandler } from '../src/handlers/download.handler';
+import { DownloadHandler as RawDownloadHandler } from '../src/handlers/file/download.handler';
 
 // Access private method for testing
 const DownloadHandler: any = RawDownloadHandler;
