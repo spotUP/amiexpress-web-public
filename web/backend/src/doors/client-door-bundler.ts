@@ -60,11 +60,11 @@ export class ClientDoorBundler {
     const cacheKey = this.getCacheKey(doorPath, minify, sourcemap);
     const cached = this.bundleCache.get(cacheKey);
     if (cached && this.isCacheValid(cached, doorPath)) {
-      console.log(`[ClientDoorBundler] Using cached bundle for ${doorId}`);
+console.log(`[ClientDoorBundler] Using cached bundle for ${doorId}`);
       return cached;
     }
 
-    console.log(`[ClientDoorBundler] Bundling door: ${doorId} from ${doorPath}`);
+console.log(`[ClientDoorBundler] Bundling door: ${doorId} from ${doorPath}`);
 
     try {
       // Resolve absolute path
@@ -119,9 +119,9 @@ export class ClientDoorBundler {
       const sdkCommon = resolveSdkPath('dist/common/index.js');
       const sdkNodeModules = path.join(bbsRoot, 'node_modules');
 
-      console.log(`[ClientDoorBundler] BBS root: ${bbsRoot}`);
-      console.log(`[ClientDoorBundler] SDK path: ${sdkPath}`);
-      console.log(`[ClientDoorBundler] SDK client: ${sdkClient}`);
+console.log(`[ClientDoorBundler] BBS root: ${bbsRoot}`);
+console.log(`[ClientDoorBundler] SDK path: ${sdkPath}`);
+console.log(`[ClientDoorBundler] SDK client: ${sdkClient}`);
 
       // Create shim files for Node.js modules
       const fsShimPath = this.createFsShim();
@@ -228,7 +228,7 @@ export class ClientDoorBundler {
           }
         } else {
           if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[neo-blessed] missing widget module', file, err);
+console.warn('[neo-blessed] missing widget module', file, err);
           }
           widget[name] = widget[file] = () => ({});
         }
@@ -345,16 +345,16 @@ export class ClientDoorBundler {
       // Cache the result
       this.bundleCache.set(cacheKey, bundleResult);
 
-      console.log(`[ClientDoorBundler] Bundle complete: ${doorId} (${(size / 1024).toFixed(2)} KB)`);
+console.log(`[ClientDoorBundler] Bundle complete: ${doorId} (${(size / 1024).toFixed(2)} KB)`);
 
       if (result.warnings.length > 0) {
-        console.warn(`[ClientDoorBundler] Warnings:`, result.warnings);
+console.warn(`[ClientDoorBundler] Warnings:`, result.warnings);
       }
 
       return bundleResult;
 
     } catch (error) {
-      console.error(`[ClientDoorBundler] Failed to bundle ${doorId}:`, error);
+console.error(`[ClientDoorBundler] Failed to bundle ${doorId}:`, error);
       throw new Error(`Failed to bundle door: ${(error as Error).message}`);
     }
   }
@@ -391,7 +391,7 @@ export default {
     try {
       localStorage.setItem(\`fs:\${path}\`, String(data));
     } catch (err) {
-      console.warn('writeFileSync failed:', err);
+console.warn('writeFileSync failed:', err);
     }
   },
   mkdirSync: (path, options) => {
@@ -855,7 +855,7 @@ class EventEmitter {
       try {
         listener(...args);
       } catch (err) {
-        console.error(\`Error in event listener for \${event}:\`, err);
+console.error(\`Error in event listener for \${event}:\`, err);
       }
     }
     return true;
@@ -980,7 +980,7 @@ export default {
       }
     }
 
-    console.log('[ClientDoorBundler] Cache cleared');
+console.log('[ClientDoorBundler] Cache cleared');
   }
 
   /**

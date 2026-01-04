@@ -329,7 +329,7 @@ export class BBSApi {
    */
   enableGameMode(): void {
     this.socket.emit('game-mode', true);
-    console.log('[BBSApi] Game mode enabled');
+console.log('[BBSApi] Game mode enabled');
   }
 
   /**
@@ -341,7 +341,7 @@ export class BBSApi {
     if (this.session.keyState) {
       this.session.keyState = {};
     }
-    console.log('[BBSApi] Game mode disabled');
+console.log('[BBSApi] Game mode disabled');
   }
 
   /**
@@ -351,7 +351,7 @@ export class BBSApi {
    */
   enableMouseEvents(): void {
     this.session.mouseEventsEnabled = true;
-    console.log('[BBSApi] Mouse events enabled');
+console.log('[BBSApi] Mouse events enabled');
   }
 
   /**
@@ -359,7 +359,7 @@ export class BBSApi {
    */
   disableMouseEvents(): void {
     this.session.mouseEventsEnabled = false;
-    console.log('[BBSApi] Mouse events disabled');
+console.log('[BBSApi] Mouse events disabled');
   }
 
   /**
@@ -369,7 +369,7 @@ export class BBSApi {
    */
   setTerminalMode(mode: 'fixed' | 'wide'): void {
     this.socket.emit('terminal-mode', mode);
-    console.log(`[BBSApi] Terminal mode set to: ${mode}`);
+console.log(`[BBSApi] Terminal mode set to: ${mode}`);
   }
 
   /**
@@ -538,18 +538,47 @@ export class BBSApi {
    * Join a conference by number
    */
   async joinConference(confNum: number): Promise<boolean> {
-    // TODO: Implement conference join logic
-    // For now, just update session
-    this.session.currentConf = confNum;
-    return true;
+    try {
+      // Check if conference exists
+      const conferences = await db.getConferences();
+      const targetConf = conferences.find(c => c.id === confNum);
+
+      if (!targetConf) {
+console.warn(`[BBSApi] Conference ${confNum} not found`);
+        return false;
+      }
+
+      // Check if user has access to this conference
+      // In express.e, this is done via checkConfAccess() which checks confaccess string
+      // For now, allow access (doors typically have their own access checks)
+
+      // Update session
+      this.session.currentConf = confNum;
+      this.session.currentConfName = targetConf.name;
+
+      return true;
+    } catch (error) {
+console.error('[BBSApi] Error joining conference:', error);
+      return false;
+    }
   }
 
   /**
    * List available conferences
    */
   async listConferences(): Promise<BBSConference[]> {
-    // TODO: Query database for conferences
-    return [];
+    try {
+      const conferences = await db.getConferences();
+      return conferences.map((conf: any) => ({
+        id: conf.id,
+        name: conf.name,
+        description: conf.description || '',
+        accessLevel: conf.accessLevel ?? conf.access_level ?? 0
+      }));
+    } catch (error) {
+console.error('[BBSApi] Error listing conferences:', error);
+      return [];
+    }
   }
 
   // ========================================
@@ -580,16 +609,31 @@ export class BBSApi {
    * Get information about all nodes (for WHO doors)
    */
   async getNodes(): Promise<BBSNode[]> {
-    // TODO: Query active sessions
-    return [
-      {
-        nodeId: this.getNodeNumber(),
-        username: this.session.user?.username,
-        location: 'In door',
-        activity: 'Running door',
+    try {
+      // Import NodeStatusManager (avoid circular dependency by lazy loading)
+      const { nodeStatusManager } = await import('../nodes/NodeStatusManager');
+      const activeNodes = nodeStatusManager.getActiveNodes();
+
+      return activeNodes.map(node => ({
+        nodeId: node.nodeId,
+        username: node.handle || 'Unknown',
+        location: node.location || '',
+        activity: node.misc1 || 'Online',
         online: true
-      }
-    ];
+      }));
+    } catch (error) {
+console.error('[BBSApi] Error getting nodes:', error);
+      // Fallback: return current node only
+      return [
+        {
+          nodeId: this.getNodeNumber(),
+          username: this.session.user?.username || 'Unknown',
+          location: 'In door',
+          activity: 'Running door',
+          online: true
+        }
+      ];
+    }
   }
 
   // ========================================
@@ -615,7 +659,7 @@ export class BBSApi {
       const content = amigafs.readFileSync(fullPath, 'utf8');
       return content.toString();
     } catch (error) {
-      console.error(`[BBSApi] Error reading file ${filename}:`, error);
+console.error(`[BBSApi] Error reading file ${filename}:`, error);
       return null;
     }
   }
@@ -635,7 +679,7 @@ export class BBSApi {
       amigafs.writeFileSync(fullPath, content, 'utf8');
       return true;
     } catch (error) {
-      console.error(`[BBSApi] Error writing file ${filename}:`, error);
+console.error(`[BBSApi] Error writing file ${filename}:`, error);
       return false;
     }
   }
@@ -683,7 +727,7 @@ export class BBSApi {
         commented: tt.commented
       }));
     } catch (error) {
-      console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
+console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
       return null;
     }
   }
@@ -722,7 +766,7 @@ export class BBSApi {
       writeInfoFile(infoFile);
       return true;
     } catch (error) {
-      console.error(`[BBSApi] Error writing .info file ${filename}:`, error);
+console.error(`[BBSApi] Error writing .info file ${filename}:`, error);
       return false;
     }
   }
@@ -752,7 +796,7 @@ export class BBSApi {
 
       return files;
     } catch (error) {
-      console.error(`[BBSApi] Error listing directory ${directory}:`, error);
+console.error(`[BBSApi] Error listing directory ${directory}:`, error);
       return [];
     }
   }
@@ -766,9 +810,30 @@ export class BBSApi {
    * Equivalent to AEDoor JH_PM command
    */
   async sendMessage(toUsername: string, subject: string, body: string): Promise<boolean> {
-    // TODO: Implement message sending via database
-    console.log(`[BBSApi] Sending message to ${toUsername}: ${subject}`);
-    return true;
+    try {
+      const messageData = {
+        subject,
+        body,
+        author: this.session.user?.username || 'Unknown',
+        timestamp: new Date(),
+        conferenceId: this.getCurrentConference(),
+        messageBaseId: 1, // Default to first message base
+        isPrivate: true,
+        toUser: toUsername,
+        parentId: undefined,
+        attachments: [],
+        edited: false,
+        editedBy: undefined,
+        editedAt: undefined
+      };
+
+      await db.createMessage(messageData);
+console.log(`[BBSApi] Sent private message to ${toUsername}: ${subject}`);
+      return true;
+    } catch (error) {
+console.error('[BBSApi] Error sending message:', error);
+      return false;
+    }
   }
 
   /**
@@ -776,9 +841,30 @@ export class BBSApi {
    * Equivalent to AEDoor JH_SM command
    */
   async postMessage(subject: string, body: string): Promise<boolean> {
-    // TODO: Implement conference message posting
-    console.log(`[BBSApi] Posting message to conference ${this.getCurrentConference()}: ${subject}`);
-    return true;
+    try {
+      const messageData = {
+        subject,
+        body,
+        author: this.session.user?.username || 'Unknown',
+        timestamp: new Date(),
+        conferenceId: this.getCurrentConference(),
+        messageBaseId: 1, // Default to first message base
+        isPrivate: false,
+        toUser: undefined,
+        parentId: undefined,
+        attachments: [],
+        edited: false,
+        editedBy: undefined,
+        editedAt: undefined
+      };
+
+      await db.createMessage(messageData);
+console.log(`[BBSApi] Posted message to conference ${this.getCurrentConference()}: ${subject}`);
+      return true;
+    } catch (error) {
+console.error('[BBSApi] Error posting message:', error);
+      return false;
+    }
   }
 
   // ========================================
@@ -891,7 +977,7 @@ export class BBSApi {
 
       return { success: false, error: 'Failed to join room' };
     } catch (error) {
-      console.error('[BBSApi] Error joining room:', error);
+console.error('[BBSApi] Error joining room:', error);
       return { success: false, error: (error as Error).message };
     }
   }
@@ -905,7 +991,7 @@ export class BBSApi {
       await handleRoomLeave(this.socket, this.session);
       return true;
     } catch (error) {
-      console.error('[BBSApi] Error leaving room:', error);
+console.error('[BBSApi] Error leaving room:', error);
       return false;
     }
   }
@@ -919,7 +1005,7 @@ export class BBSApi {
       await handleRoomMessage(this.socket, this.session, { message });
       return true;
     } catch (error) {
-      console.error('[BBSApi] Error sending room message:', error);
+console.error('[BBSApi] Error sending room message:', error);
       return false;
     }
   }
@@ -957,7 +1043,7 @@ export class BBSApi {
 
       return { success: false, error: 'Failed to create room' };
     } catch (error) {
-      console.error('[BBSApi] Error creating room:', error);
+console.error('[BBSApi] Error creating room:', error);
       return { success: false, error: (error as Error).message };
     }
   }
@@ -971,7 +1057,7 @@ export class BBSApi {
       const rooms = await db.listChatRooms(!showPrivate);
       return rooms || [];
     } catch (error) {
-      console.error('[BBSApi] Error listing rooms:', error);
+console.error('[BBSApi] Error listing rooms:', error);
       return [];
     }
   }
@@ -1035,7 +1121,7 @@ export class BBSApi {
         this.session.pendingDoorCommands = [];
       }
       this.session.pendingDoorCommands.push(commandLine);
-      console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${commandLine}`);
+console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${commandLine}`);
       return;
     }
 
@@ -1088,11 +1174,11 @@ export class BBSApi {
    * @returns Result object with success status and message
    */
   async deleteDoor(identifier: string, isTypeScriptDoor?: boolean): Promise<{ success: boolean; message: string }> {
-    console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
+console.log(`[BBSApi.deleteDoor] Called with identifier="${identifier}", isTypeScriptDoor=${isTypeScriptDoor}`);
 
     // Check if user has sysop access
     if (this.session.user && this.session.user.secLevel < 250) {
-      console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.user?.secLevel}`);
+console.log(`[BBSApi.deleteDoor] Access denied: user secLevel=${this.session.user?.secLevel}`);
       return {
         success: false,
         message: 'Access denied: SysOp access required to delete doors'
@@ -1102,9 +1188,9 @@ export class BBSApi {
     try {
       const { getAmigaDoorManager, refreshDoorCache } = await import('./amigaDoorManager');
       const manager = getAmigaDoorManager();
-      console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
+console.log(`[BBSApi.deleteDoor] Calling manager.deleteDoor("${identifier}", ${isTypeScriptDoor})`);
       const result = await manager.deleteDoor(identifier, isTypeScriptDoor);
-      console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
+console.log(`[BBSApi.deleteDoor] Result: ${JSON.stringify(result)}`);
 
       if (result.success) {
         // Refresh door cache so the deleted door is removed from listings
@@ -1113,7 +1199,7 @@ export class BBSApi {
 
       return result;
     } catch (error) {
-      console.error('[BBSApi.deleteDoor] Error:', error);
+console.error('[BBSApi.deleteDoor] Error:', error);
       return {
         success: false,
         message: `Delete failed: ${(error as Error).message}`

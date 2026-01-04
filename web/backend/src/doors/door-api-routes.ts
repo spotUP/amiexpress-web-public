@@ -22,7 +22,7 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
   const { doorId } = req.params;
 
   try {
-    console.log(`[DoorAPI] Serving bundle for door: ${doorId}`);
+console.log(`[DoorAPI] Serving bundle for door: ${doorId}`);
 
     // Look up door manifest and path
     const result = await loadDoorManifest(doorId);
@@ -45,8 +45,8 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
       return res.status(500).json({ error: 'Door entry point not configured' });
     }
 
-    console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
-    console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
+console.log(`[DoorAPI] Entry point for ${doorId}: ${entryPoint}`);
+console.log(`[DoorAPI] Door base path: ${doorBasePath}`);
 
     // Resolve door path - use actual door base path from registry, not doorId
     const doorPath = path.join(doorBasePath, entryPoint);
@@ -69,7 +69,7 @@ doorApiRouter.get('/doors/:doorId/bundle.js', async (req: Request, res: Response
     res.send(bundle.bundleCode);
 
   } catch (error) {
-    console.error(`[DoorAPI] Error serving bundle for ${doorId}:`, error);
+console.error(`[DoorAPI] Error serving bundle for ${doorId}:`, error);
     res.status(500).json({
       error: 'Failed to bundle door',
       message: (error as Error).message,
@@ -106,7 +106,7 @@ doorApiRouter.get('/doors/:doorId/manifest', async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
+console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
     res.status(500).json({
       error: 'Failed to load manifest',
       message: (error as Error).message,
@@ -123,7 +123,7 @@ doorApiRouter.get('/doors/list', async (req: Request, res: Response) => {
     const doors = await listAvailableDoors();
     res.json({ doors });
   } catch (error) {
-    console.error('[DoorAPI] Error listing doors:', error);
+console.error('[DoorAPI] Error listing doors:', error);
     res.status(500).json({
       error: 'Failed to list doors',
       message: (error as Error).message,
@@ -146,7 +146,7 @@ doorApiRouter.post('/doors/clear-cache', async (req: Request, res: Response) => 
 
     res.json({ message: 'Cache cleared successfully' });
   } catch (error) {
-    console.error('[DoorAPI] Error clearing cache:', error);
+console.error('[DoorAPI] Error clearing cache:', error);
     res.status(500).json({
       error: 'Failed to clear cache',
       message: (error as Error).message,
@@ -188,7 +188,7 @@ async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBa
 
     return null;
   } catch (error) {
-    console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
+console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
     return null;
   }
 }
@@ -247,7 +247,7 @@ async function listAvailableDoors(): Promise<any[]> {
             description: manifest.description || '',
           });
         } catch (error) {
-          console.error(`Error loading manifest for ${entry}:`, error);
+console.error(`Error loading manifest for ${entry}:`, error);
         }
       }
     }

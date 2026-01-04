@@ -122,17 +122,14 @@ export class AmigaDoorManager {
    */
   async populateCache(): Promise<void> {
     const startTime = Date.now();
-    console.log('[DoorCache] Populating door cache...');
     this.doorCache = await this.scanInstalledDoorsInternal();
     this.cacheTimestamp = Date.now();
-    console.log(`[DoorCache] Cache populated with ${this.doorCache.length} doors in ${Date.now() - startTime}ms`);
   }
 
   /**
    * Refresh the door cache (call after installing/uninstalling doors)
    */
   async refreshCache(): Promise<void> {
-    console.log('[DoorCache] Refreshing door cache...');
     this.doorCache = null;
     await this.populateCache();
   }
@@ -291,7 +288,7 @@ export class AmigaDoorManager {
 
       return metadata;
     } catch (error) {
-      console.error(`Error parsing .info file ${infoPath}:`, error);
+console.error(`Error parsing .info file ${infoPath}:`, error);
       return null;
     }
   }
@@ -303,12 +300,10 @@ export class AmigaDoorManager {
   async scanInstalledDoors(): Promise<DoorInfo[]> {
     // Return cached data if available
     if (this.doorCache !== null) {
-      console.log(`[scanInstalledDoors] Returning ${this.doorCache.length} cached doors (instant)`);
       return this.doorCache;
     }
 
     // Cache not populated, do a full scan
-    console.log('[scanInstalledDoors] Cache miss - performing full scan...');
     return this.scanInstalledDoorsInternal();
   }
 
@@ -320,12 +315,8 @@ export class AmigaDoorManager {
     const doors: DoorInfo[] = [];
     const commandsPath = path.join(this.bbsRoot, 'Commands', 'BBSCmd');
 
-    console.log(`[scanInstalledDoors] ========== SCANNING FOR INSTALLED DOORS ==========`);
-    console.log(`[scanInstalledDoors] BBS Root: ${this.bbsRoot}`);
-    console.log(`[scanInstalledDoors] Commands Path: ${commandsPath}`);
 
     if (!amigafs.existsSync(commandsPath)) {
-      console.log(`[scanInstalledDoors] Commands directory does not exist: ${commandsPath}`);
       return doors;
     }
 
@@ -335,35 +326,18 @@ export class AmigaDoorManager {
       // Filter out files like "BESTCONF.INFO" - command names shouldn't contain dots
       const commandName = path.basename(f, '.info');
       if (commandName.includes('.')) {
-        console.log(`[scanInstalledDoors] Skipping ${f} - command name contains dot`);
         return false;
       }
       return true;
     });
 
-    console.log(`[scanInstalledDoors] Found ${infoFiles.length} valid .info files in ${commandsPath}:`);
-    infoFiles.forEach(f => console.log(`[scanInstalledDoors]   - ${f}`));
 
     for (const infoFile of infoFiles) {
       const infoPath = path.join(commandsPath, infoFile);
-      console.log(`
-[scanInstalledDoors] --- Processing ${infoFile} ---`);
-      console.log(`[scanInstalledDoors] Info file path: ${infoPath}`);
-
       const metadata = this.parseInfoFile(infoPath);
 
       if (metadata && metadata.location && metadata.resolvedPath) {
-        console.log(`[scanInstalledDoors] Metadata parsed successfully:`);
-        console.log(`[scanInstalledDoors]   Command: ${metadata.command}`);
-        console.log(`[scanInstalledDoors]   Location (from .info): ${metadata.location}`);
-        console.log(`[scanInstalledDoors]   Resolved Path: ${metadata.resolvedPath}`);
-        console.log(`[scanInstalledDoors]   Type: ${metadata.type}`);
-        console.log(`[scanInstalledDoors]   Access Level: ${metadata.access}`);
-        console.log(`[scanInstalledDoors]   Door Name: ${metadata.doorName}`);
-
         const executableExists = amigafs.existsSync(metadata.resolvedPath);
-        console.log(`[scanInstalledDoors] Checking if executable exists at: ${metadata.resolvedPath}`);
-        console.log(`[scanInstalledDoors] Executable exists: ${executableExists}`);
 
         // Get file/directory size if path exists
         let fileSize = 0;
@@ -377,7 +351,7 @@ export class AmigaDoorManager {
               fileSize = stats.size;
             }
           } catch (err) {
-            console.log(`[scanInstalledDoors] Could not get file size: ${err}`);
+            // Ignore stat errors
           }
         }
 
@@ -407,17 +381,10 @@ export class AmigaDoorManager {
           installed: executableExists,
           size: fileSize,
         });
-
-        console.log(`[scanInstalledDoors] Added door to list: ${metadata.command} (${executableExists ? 'INSTALLED' : 'NOT INSTALLED'})`);
-      } else {
-        console.log(`[scanInstalledDoors] Failed to parse metadata or missing location/resolvedPath:`);
-        console.log(`[scanInstalledDoors]   metadata: ${metadata} `);
       }
     }
 
-    console.log(`
-[scanInstalledDoors] ========== SCAN COMPLETE ==========`);
-    console.log(`[scanInstalledDoors] Total doors found: ${doors.length}`);
+    process.stdout.write(`[AmigaDoorManager] Scanned ${infoFiles.length} door definitions, ${doors.length} active\n`);
     return doors;
   }
 
@@ -470,9 +437,8 @@ export class AmigaDoorManager {
             accessLevel: packageJson.accessLevel || 0,
           });
 
-          console.log(`Loaded TypeScript door: ${packageJson.name || entry} (${exists ? 'INSTALLED' : 'MISSING'})`);
         } catch (error) {
-          console.error(`Error reading package.json for ${entry}:`, error);
+console.error(`Error reading package.json for ${entry}:`, error);
         }
       } else {
         // Check for loose .ts/.js files
@@ -490,7 +456,6 @@ export class AmigaDoorManager {
             accessLevel: 0,
           });
 
-          console.log(`Loaded TypeScript door (no package.json): ${entry}`);
         }
       }
     }
@@ -530,10 +495,9 @@ export class AmigaDoorManager {
       // Extract filenames
       const files = entries.map((e: any) => e.name);
 
-      console.log(`[LHA] JavaScript extractor found ${files.length} files`);
       return files;
     } catch (error) {
-      console.error('[LHA] Error:', error);
+console.error('[LHA] Error:', error);
       return [];
     }
   }
@@ -547,10 +511,9 @@ export class AmigaDoorManager {
       const { listLzxFiles } = require('../utils/lzx-extractor');
       const files = await listLzxFiles(archivePath);
 
-      console.log(`[LZX] JavaScript extractor found ${files.length} files`);
       return files;
     } catch (error) {
-      console.error('[LZX] Error:', error);
+console.error('[LZX] Error:', error);
       return [];
     }
   }
@@ -586,7 +549,7 @@ export class AmigaDoorManager {
             const content = packageEntry.getData().toString('utf8');
             packageJson = JSON.parse(content);
           } catch (e) {
-            console.error('Error parsing package.json:', e);
+console.error('Error parsing package.json:', e);
           }
         }
 
@@ -601,17 +564,15 @@ export class AmigaDoorManager {
                 const content = doorPackageEntry.getData().toString('utf8');
                 packageJson = JSON.parse(content);
               } catch (e) {
-                console.error('Error parsing door package.json:', e);
+console.error('Error parsing door package.json:', e);
               }
             }
           }
         }
       } else if (isLha) {
         files = await this.listLhaContents(archivePath);
-        console.log(`[AnalyzeDoorArchive] LHA files found (${files.length}):`, files);
       } else if (isLzx) {
         files = await this.listLzxContents(archivePath);
-        console.log(`[AnalyzeDoorArchive] LZX files found (${files.length}):`, files);
       }
 
       // Detect standard AmiExpress door structure
@@ -620,7 +581,6 @@ export class AmigaDoorManager {
       const hasDoorsDir = files.some(f => f.match(/^[^/\\]*Doors[/\\]/i));
       const isStandardDoorStructure = hasCommandsDir && hasDoorsDir;
 
-      console.log(`[AnalyzeDoorArchive] hasCommandsDir: ${hasCommandsDir}, hasDoorsDir: ${hasDoorsDir}, isStandard: ${isStandardDoorStructure}`);
 
       // Extract BBS commands from Commands/BBSCmd/*.info
       const bbsCommands: string[] = [];
@@ -769,10 +729,9 @@ export class AmigaDoorManager {
             }
           } else if (isLha) {
             // For LHA, we'd need to extract - skip for now, will handle in installDoor
-            console.log('[AmigaDoorManager] file_id.diz found in LHA:', fileidDizPath);
           }
         } catch (e) {
-          console.error('Error parsing file_id.diz:', e);
+console.error('Error parsing file_id.diz:', e);
         }
       }
 
@@ -805,7 +764,7 @@ export class AmigaDoorManager {
         },
       };
     } catch (error) {
-      console.error('Error analyzing archive:', error);
+console.error('Error analyzing archive:', error);
       return null;
     }
   }
@@ -820,7 +779,6 @@ export class AmigaDoorManager {
       const doorName = analysis.packageJson?.name || path.basename(archivePath, path.extname(archivePath));
       const doorInstallPath = path.join(this.bbsRoot, 'Doors', doorName);
 
-      console.log(`Installing TypeScript door: ${doorName}`);
 
       // Remove existing installation if present
       if (amigafs.existsSync(doorInstallPath)) {
@@ -883,7 +841,6 @@ export class AmigaDoorManager {
         amigafs.writeFileSync(packageJsonPath, JSON.stringify(minimalPackage, null, 2));
       }
 
-      console.log(`TypeScript door installed: ${doorName} → doors/${doorName}/`);
 
       return {
         success: true,
@@ -891,7 +848,7 @@ export class AmigaDoorManager {
         doorPath: doorInstallPath
       };
     } catch (error) {
-      console.error('TypeScript door installation error:', error);
+console.error('TypeScript door installation error:', error);
       return {
         success: false,
         message: `Installation failed: ${(error as Error).message}`
@@ -922,7 +879,6 @@ export class AmigaDoorManager {
       const tempDir = path.join(__dirname, '../../temp/door-install', crypto.randomBytes(8).toString('hex'));
       fs.mkdirSync(tempDir, { recursive: true });
 
-      console.log(`Extracting archive to temp: ${tempDir}`);
 
       if (analysis.format === 'ZIP') {
         const AdmZip = require('adm-zip');
@@ -930,7 +886,6 @@ export class AmigaDoorManager {
         zip.extractAllTo(tempDir, true);
       } else if (analysis.format === 'LHA') {
         // Use JavaScript LHA extractor
-        console.log('[LHA] Extracting using JavaScript LHA library...');
         const LHA = require('../utils/lha.js');
 
         // Read archive
@@ -939,46 +894,37 @@ export class AmigaDoorManager {
 
         // Parse and extract all files
         const entries = LHA.read(data);
-        console.log(`[LHA] Found ${entries.length} files to extract`);
 
         for (const entry of entries) {
           const filename = entry.name;
           const decompressed = LHA.unpack(entry);
 
           if (!decompressed) {
-            console.warn(`[LHA] Failed to decompress: ${filename}`);
+console.warn(`[LHA] Failed to decompress: ${filename}`);
             continue;
           }
 
           // Normalize path separators (convert backslash to forward slash for Linux compatibility)
           const normalizedFilename = filename.replace(/\\/g, '/');
-          console.log(`[LHA] Normalizing path: "${filename}" => "${normalizedFilename}"`);
 
           // Create directory structure
           const filePath = path.join(tempDir, normalizedFilename);
           const fileDir = path.dirname(filePath);
-          console.log(`[LHA] File path: ${filePath}`);
-          console.log(`[LHA] File dir: ${fileDir}`);
 
           if (!fs.existsSync(fileDir)) {
             fs.mkdirSync(fileDir, { recursive: true });
-            console.log(`[LHA] Created directory: ${fileDir}`);
           }
 
           // Write file
           fs.writeFileSync(filePath, Buffer.from(decompressed));
-          console.log(`[LHA] Extracted: ${filename} => ${filePath} (${decompressed.length} bytes)`);
         }
 
-        console.log(`[LHA] Extraction complete`);
       } else if (analysis.format === 'LZX') {
         // Use JavaScript LZX extractor
-        console.log('[LZX] Extracting using JavaScript LZX library...');
         const { extractFileFromLzx, listLzxFiles } = require('../utils/lzx-extractor');
 
         // List all files in archive
         const fileList = await listLzxFiles(archivePath);
-        console.log(`[LZX] Found ${fileList.length} files to extract`);
 
         // Extract each file
         for (const filename of fileList) {
@@ -996,23 +942,17 @@ export class AmigaDoorManager {
           const success = await extractFileFromLzx(archivePath, filename, outputPath);
 
           if (!success) {
-            console.warn(`[LZX] Failed to extract: ${filename}`);
+console.warn(`[LZX] Failed to extract: ${filename}`);
           } else {
-            console.log(`[LZX] Extracted: ${filename}`);
           }
         }
 
-        console.log(`[LZX] Extraction complete`);
       }
 
       // Analyze extracted structure
       const extractedFiles = this.getFilesRecursive(tempDir);
-      console.log(`[installDoor] Found ${extractedFiles.length} extracted files:`);
-      extractedFiles.forEach(f => console.log(`[installDoor]   - ${f}`));
 
       const infoFiles = extractedFiles.filter(f => f.toLowerCase().endsWith('.info'));
-      console.log(`[installDoor] Found ${infoFiles.length} .info files:`);
-      infoFiles.forEach(f => console.log(`[installDoor]   - ${f}`));
 
       if (infoFiles.length === 0) {
         this.cleanup(tempDir);
@@ -1104,7 +1044,6 @@ export class AmigaDoorManager {
         return { success: false, message: `TypeScript door validation failed:\n- ${tsIssues.join('\n- ')}` };
       }
 
-      console.log(`Found ${infoFiles.length} .info files in extracted archive`);
 
       // Process each .info file
       let installedCount = 0;
@@ -1124,7 +1063,6 @@ export class AmigaDoorManager {
 
         // Only process .info files that are in Commands/BBSCmd/ directory
         if (!hasCommandsDir) {
-          console.log(`Skipping .info file not in Commands/BBSCmd/: ${relativePath}`);
           continue;
         }
 
@@ -1139,7 +1077,6 @@ export class AmigaDoorManager {
         // Copy .info file
         amigafs.mkdirSync(infoDestDir, { recursive: true });
         amigafs.copyFileSync(infoFile, infoDestPath);
-        console.log(`Installed command: ${commandName} (${infoFileName} → Commands/BBSCmd/)`);
 
         // Find corresponding door in Doors/ directory
         const doorDirFromLocation = getDoorDirFromLocation(metadata?.location);
@@ -1159,18 +1096,15 @@ export class AmigaDoorManager {
         }
 
         if (!doorName || !doorSourceDir || !fs.existsSync(doorSourceDir)) {
-          console.log(`Warning: Could not find door directory for command ${commandName}`);
           continue;
         }
 
         // Copy door files
         const doorDestDir = path.join(this.assigns['Doors:'], doorName);
         amigafs.mkdirSync(doorDestDir, { recursive: true });
-        console.log(`Installing door: ${doorName} → Doors/${doorName}/`);
 
         // Copy all door files
         if (fs.existsSync(doorSourceDir)) {
-          console.log(`  Copying door files from ${doorSourceDir}`);
           this.copyRecursive(doorSourceDir, doorDestDir, { skipNames: copySkipNames });
         }
 
@@ -1192,12 +1126,10 @@ export class AmigaDoorManager {
           const libsDir = this.assigns['Libs:'];
           amigafs.mkdirSync(libsDir, { recursive: true });
 
-          console.log(`Installing ${libraryFiles.length} Amiga library file(s):`);
           for (const libraryFile of libraryFiles) {
             const libraryName = path.basename(libraryFile);
             const destPath = path.join(libsDir, libraryName);
             amigafs.copyFileSync(libraryFile, destPath);
-            console.log(`  → Libs/${libraryName}`);
           }
         }
 
@@ -1232,10 +1164,7 @@ export class AmigaDoorManager {
 
       // Reload command cache so the new door(s) are immediately available
       // This ensures installed doors take priority over internal commands
-      console.log('[installDoor] Reloading command cache to pick up new door(s)...');
-      console.log('[installDoor] BBS root path:', this.bbsRoot);
       loadCommands(this.bbsRoot, 1, 0); // Conference 1, Node 0
-      console.log('[installDoor] Command cache reloaded - door(s) now available');
 
       const baseMessage = `Installed ${installedCount} door command(s)`;
       const message = dependencyWarnings.length > 0
@@ -1249,7 +1178,7 @@ export class AmigaDoorManager {
       };
 
     } catch (error) {
-      console.error('Door installation error:', error);
+console.error('Door installation error:', error);
       return {
         success: false,
         message: `Installation failed: ${(error as Error).message}`,
@@ -1373,7 +1302,7 @@ export class AmigaDoorManager {
         fs.rmSync(dir, { recursive: true, force: true });
       }
     } catch (error) {
-      console.error('Cleanup error:', error);
+console.error('Cleanup error:', error);
     }
   }
 
@@ -1409,12 +1338,10 @@ export class AmigaDoorManager {
 
       // Delete .info file
       amigafs.unlinkSync(infoPath);
-      console.log(`Deleted command file: ${infoPath}`);
 
       // Delete door directory if it exists
       if (amigafs.existsSync(doorPath)) {
         amigafs.rmSync(doorPath, { recursive: true, force: true });
-        console.log(`Deleted door files: ${doorPath}`);
       }
 
       return {
@@ -1422,7 +1349,7 @@ export class AmigaDoorManager {
         message: `Door '${command}' deleted successfully`
       };
     } catch (error) {
-      console.error('Door deletion error:', error);
+console.error('Door deletion error:', error);
       return {
         success: false,
         message: `Deletion failed: ${(error as Error).message}`
@@ -1505,11 +1432,10 @@ export class AmigaDoorManager {
               const infoPath = path.join(commandsPath, file);
               amigafs.unlinkSync(infoPath);
               deletedFiles.push(infoPath);
-              console.log(`Deleted command file: ${infoPath}`);
             }
           }
         } catch (e) {
-          console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
+console.warn(`Could not clean up Commands/BBSCmd: ${(e as Error).message}`);
         }
       }
 
@@ -1525,25 +1451,23 @@ export class AmigaDoorManager {
               const infoPath = path.join(sysCmdPath, file);
               amigafs.unlinkSync(infoPath);
               deletedFiles.push(infoPath);
-              console.log(`Deleted command file: ${infoPath}`);
             }
           }
         } catch (e) {
-          console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
+console.warn(`Could not clean up Commands/SysCmd: ${(e as Error).message}`);
         }
       }
 
       // Delete door directory
       amigafs.rmSync(doorPath, { recursive: true, force: true });
       deletedFiles.push(doorPath);
-      console.log(`Deleted TypeScript door: ${doorPath}`);
 
       return {
         success: true,
         message: `Door '${doorName}' deleted successfully (${deletedFiles.length} items removed)`
       };
     } catch (error) {
-      console.error('TypeScript door deletion error:', error);
+console.error('TypeScript door deletion error:', error);
       return {
         success: false,
         message: `Deletion failed: ${(error as Error).message}`

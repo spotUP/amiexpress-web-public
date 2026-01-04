@@ -126,27 +126,27 @@ export class DoorManager {
    */
   async start(): Promise<void> {
     try {
-      console.log('[Door Manager] start() called, clearing screen...');
+console.log('[Door Manager] start() called, clearing screen...');
       this.socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
 
-      console.log('[Door Manager] Scanning doors...');
+console.log('[Door Manager] Scanning doors...');
       await this.scanDoors();
-      console.log('[Door Manager] Found', this.state.doors.length, 'doors');
+console.log('[Door Manager] Found', this.state.doors.length, 'doors');
 
-      console.log('[Door Manager] Showing list...');
+console.log('[Door Manager] Showing list...');
       this.showList();
 
-      console.log('[Door Manager] Setting up input handlers...');
+console.log('[Door Manager] Setting up input handlers...');
       this.setupInputHandlers();
-      console.log('[Door Manager] Input handlers setup complete');
+console.log('[Door Manager] Input handlers setup complete');
 
-      console.log('[Door Manager] Current state:', JSON.stringify({
+console.log('[Door Manager] Current state:', JSON.stringify({
         mode: this.state.mode,
         inDoorManager: this.session?.inDoorManager,
         hasInputHandler: !!this.inputHandler
       }));
     } catch (error) {
-      console.error('[Door Manager] Error starting:', error);
+console.error('[Door Manager] Error starting:', error);
       this.socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
       this.socket.emit('ansi-output', `${(error as Error).message}\r\n\r\n`);
       this.socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
@@ -170,7 +170,7 @@ export class DoorManager {
 
     // Use cached doors from door.handler.ts (same as DOORS command - fast!)
     const cachedDoors = getDoors();
-    console.log(`[Door Manager] Using ${cachedDoors.length} cached doors from door.handler`);
+console.log(`[Door Manager] Using ${cachedDoors.length} cached doors from door.handler`);
 
     for (const door of cachedDoors) {
       if (!door.enabled) continue;
@@ -213,7 +213,7 @@ export class DoorManager {
       const amigaDoorMgr = getAmigaDoorManager();
       const amigaDoors = await amigaDoorMgr.scanInstalledDoors();
 
-      console.log(`[Door Manager] Found ${amigaDoors.length} installed Amiga door(s)`);
+console.log(`[Door Manager] Found ${amigaDoors.length} installed Amiga door(s)`);
 
       for (const amigaDoor of amigaDoors) {
         // Skip if already added from cached doors
@@ -232,7 +232,7 @@ export class DoorManager {
               doorSize = stats.size;
             }
           } catch (error) {
-            console.error(`[Door Manager] Error getting size for ${amigaDoor.resolvedPath}:`, error);
+console.error(`[Door Manager] Error getting size for ${amigaDoor.resolvedPath}:`, error);
           }
         }
 
@@ -251,13 +251,13 @@ export class DoorManager {
         } as any);
       }
     } catch (error) {
-      console.error('[Door Manager] Error scanning Amiga doors:', error);
+console.error('[Door Manager] Error scanning Amiga doors:', error);
     }
 
     // Scan archives directory for uninstalled archives (with timeout protection)
     if (amigafs.existsSync(this.archivesPath)) {
       const archives = amigafs.readdirSync(this.archivesPath);
-      console.log(`[Door Manager] Scanning ${archives.length} files in archives directory`);
+console.log(`[Door Manager] Scanning ${archives.length} files in archives directory`);
 
       for (const archive of archives) {
         const fullPath = path.join(this.archivesPath, archive);
@@ -281,7 +281,7 @@ export class DoorManager {
                 timeoutPromise
               ]);
             } catch (extractError) {
-              console.warn(`[Door Manager] Skipping archive ${archive}: ${(extractError as Error).message}`);
+console.warn(`[Door Manager] Skipping archive ${archive}: ${(extractError as Error).message}`);
             }
 
             const ext = path.extname(archive);
@@ -298,11 +298,11 @@ export class DoorManager {
             });
           }
         } catch (statError) {
-          console.warn(`[Door Manager] Skipping file ${archive}: ${(statError as Error).message}`);
+console.warn(`[Door Manager] Skipping file ${archive}: ${(statError as Error).message}`);
         }
       }
     }
-    console.log('[Door Manager] Archive scan complete');
+console.log('[Door Manager] Archive scan complete');
 
     // Sort by name
     this.state.doors = doors.sort((a, b) => a.name.localeCompare(b.name));
@@ -418,7 +418,7 @@ export class DoorManager {
       }
 
     } catch (error) {
-      console.error('Error extracting door info:', error);
+console.error('Error extracting door info:', error);
     }
 
     return info;
@@ -979,7 +979,7 @@ export class DoorManager {
         throw new Error(`Uploaded file not found: ${archivePath}`);
       }
 
-      console.log('[Door Manager] Analyzing archive:', archivePath);
+console.log('[Door Manager] Analyzing archive:', archivePath);
 
       // 🎯 SMART ANALYSIS: Use AmigaDoorManager to analyze archive
       const amigaDoorMgr = getAmigaDoorManager();
@@ -988,8 +988,8 @@ export class DoorManager {
       try {
         analysis = await amigaDoorMgr.analyzeDoorArchive(archivePath);
       } catch (analyzeError: any) {
-        console.error('[Door Manager] analyzeDoorArchive CRASHED:', analyzeError);
-        console.error('[Door Manager] Error stack:', analyzeError.stack);
+console.error('[Door Manager] analyzeDoorArchive CRASHED:', analyzeError);
+console.error('[Door Manager] Error stack:', analyzeError.stack);
         throw new Error(`Archive analysis crashed: ${analyzeError.message}`);
       }
 
@@ -997,7 +997,7 @@ export class DoorManager {
         throw new Error('Failed to analyze archive');
       }
 
-      console.log('[Door Manager] Analysis completed successfully');
+console.log('[Door Manager] Analysis completed successfully');
 
       // Display analysis results
       this.socket.emit('ansi-output', '\r\n\x1b[36m━━━ Archive Analysis ━━━\x1b[0m\r\n');
@@ -1147,9 +1147,9 @@ export class DoorManager {
       }
 
     } catch (error) {
-      console.error('[Door Manager] processUpload ERROR:', error);
-      console.error('[Door Manager] Error stack:', (error as Error).stack);
-      console.error('[Door Manager] Error details:', {
+console.error('[Door Manager] processUpload ERROR:', error);
+console.error('[Door Manager] Error stack:', (error as Error).stack);
+console.error('[Door Manager] Error details:', {
         message: (error as Error).message,
         name: (error as Error).name,
         toString: error?.toString()
@@ -1316,38 +1316,38 @@ export class DoorManager {
    * Setup input handlers
    */
   private setupInputHandlers(): void {
-    console.log('[Door Manager] setupInputHandlers() called');
+console.log('[Door Manager] setupInputHandlers() called');
 
     // Check how many listeners are already registered
     const commandListenerCount = this.socket.listenerCount('command');
-    console.log('[Door Manager] Existing command listeners:', commandListenerCount);
+console.log('[Door Manager] Existing command listeners:', commandListenerCount);
 
     // Store the handler so we can remove it later
     this.inputHandler = (data: string) => {
-      console.log('[Door Manager] *** INPUT HANDLER FIRED ***');
-      console.log('[Door Manager] Received input:', JSON.stringify(data), 'mode:', this.state.mode);
+console.log('[Door Manager] *** INPUT HANDLER FIRED ***');
+console.log('[Door Manager] Received input:', JSON.stringify(data), 'mode:', this.state.mode);
       this.handleInput(data);
     };
 
-    console.log('[Door Manager] Registering command listener...');
+console.log('[Door Manager] Registering command listener...');
     this.socket.on('command', this.inputHandler);
 
     const newListenerCount = this.socket.listenerCount('command');
-    console.log('[Door Manager] command listeners after adding:', newListenerCount);
+console.log('[Door Manager] command listeners after adding:', newListenerCount);
 
     // Handle file uploads from frontend
     this.socket.on('file-uploaded', (data: { filename: string; originalname: string; size: number }) => {
       this.processUpload(data);
     });
 
-    console.log('[Door Manager] Input handler setup complete');
+console.log('[Door Manager] Input handler setup complete');
   }
 
   /**
    * Handle keyboard input
    */
   private handleInput(data: string): void {
-    console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
+console.log('[Door Manager] handleInput called with:', JSON.stringify(data));
     const key = data.toLowerCase();
 
     // Handle based on current mode
@@ -1834,11 +1834,11 @@ export class DoorManager {
    * Cleanup when exiting Door Manager
    */
   private cleanup(): void {
-    console.log('[Door Manager] Cleaning up...');
+console.log('[Door Manager] Cleaning up...');
 
     // Remove input handler
     if (this.inputHandler) {
-      console.log('[Door Manager] Removing command listener');
+console.log('[Door Manager] Removing command listener');
       this.socket.off('command', this.inputHandler);
       this.inputHandler = undefined;
     }
@@ -1859,7 +1859,7 @@ export async function executeDoor(socket: Socket, session?: any): Promise<void> 
     const manager = new DoorManager(socket, session);
     await manager.start();
   } catch (error) {
-    console.error('[Door Manager] Fatal error:', error);
+console.error('[Door Manager] Fatal error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mFatal error in Door Manager\x1b[0m\r\n');
     socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
     socket.emit('ansi-output', 'Press any key to return to main menu...\r\n');

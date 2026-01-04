@@ -562,10 +562,20 @@ mv /app/data/db/recovered.db /app/data/db/amiexpress.db
 
 ## Security Checklist
 
-- [ ] Changed all default secrets (JWT_SECRET, SESSION_SECRET)
+**IMPORTANT:** Review `SECURITY_AUDIT.md` for detailed security analysis and remediation steps.
+
+**Critical Security Fixes (MUST complete before production):**
+- [ ] Fixed SQL injection vulnerability (file-maintenance.handler.ts:701) - ✅ FIXED
+- [ ] Configured CORS to restrict allowed origins - ✅ FIXED
+- [ ] Set ALLOWED_ORIGIN environment variable in production
+- [ ] Implemented CSRF protection for REST API endpoints
+- [ ] Changed all default secrets (JWT_SECRET, SESSION_SECRET - use 64+ byte values)
+- [ ] Added rate limiting middleware
+- [ ] Configured security headers (via helmet or nginx)
+
+**Additional Security Requirements:**
 - [ ] SSL/TLS certificate installed and auto-renewal configured
 - [ ] Nginx reverse proxy with security headers
-- [ ] Rate limiting configured
 - [ ] Firewall configured (UFW/iptables)
 - [ ] Backups automated and tested
 - [ ] Monitoring/alerting configured

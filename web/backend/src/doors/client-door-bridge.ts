@@ -123,7 +123,7 @@ export class ClientDoorBridge {
   startSession(socket: Socket, session: BBSSession, doorId: string): string {
     const sessionId = `client-door-${this.nextSessionId++}-${Date.now()}`;
 
-    console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}`);
+console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}`);
 
     // Create session
     const doorSession: ClientDoorSession = {
@@ -197,17 +197,17 @@ export class ClientDoorBridge {
 
     // Listen for user input and forward to door
     const inputHandler = (data: string) => {
-      console.log(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
-      console.log(`[ClientDoorBridge] doorSession.active:`, doorSession.active);
+console.log(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
+console.log(`[ClientDoorBridge] doorSession.active:`, doorSession.active);
 
       if (!doorSession.active) {
-        console.log(`[ClientDoorBridge] Session not active, ignoring input`);
+console.log(`[ClientDoorBridge] Session not active, ignoring input`);
         return;
       }
 
       // Parse key data and create enhanced key event
       const parsedKey = this.parseKeyInput(data);
-      console.log(`[ClientDoorBridge] Parsed key:`, parsedKey);
+console.log(`[ClientDoorBridge] Parsed key:`, parsedKey);
 
       // Send to door
       this.sendMessage(doorSession, {
@@ -215,10 +215,10 @@ export class ClientDoorBridge {
         data: parsedKey,
         timestamp: Date.now(),
       });
-      console.log(`[ClientDoorBridge] Sent INPUT message to door`);
+console.log(`[ClientDoorBridge] Sent INPUT message to door`);
     };
 
-    console.log(`[ClientDoorBridge] Registering 'command' listener for session ${sessionId}`);
+console.log(`[ClientDoorBridge] Registering 'command' listener for session ${sessionId}`);
     socket.on('command', inputHandler);
 
     // Store handler reference for cleanup
@@ -227,7 +227,7 @@ export class ClientDoorBridge {
     // Mouse event handlers for client doors
     const mouseClickHandler = (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
       if (!doorSession.active) return;
-      console.log(`[ClientDoorBridge] mouse-click received:`, data);
+console.log(`[ClientDoorBridge] mouse-click received:`, data);
       this.sendMessage(doorSession, {
         type: MessageType.INPUT,
         data: { key: JSON.stringify({ type: 'mouse-click', ...data }) },
@@ -340,7 +340,7 @@ export class ClientDoorBridge {
         break;
 
       default:
-        console.warn(`[ClientDoorBridge] Unknown message type: ${message.type}`);
+console.warn(`[ClientDoorBridge] Unknown message type: ${message.type}`);
     }
   }
 
@@ -401,7 +401,7 @@ export class ClientDoorBridge {
     }
 
     session.rpcHandlers.set(method, handler);
-    console.log(`[ClientDoorBridge] Registered RPC handler: ${method} for session ${sessionId}`);
+console.log(`[ClientDoorBridge] Registered RPC handler: ${method} for session ${sessionId}`);
   }
 
   /**
@@ -443,7 +443,7 @@ export class ClientDoorBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    console.log(`[ClientDoorBridge] Ending session ${sessionId}`);
+console.log(`[ClientDoorBridge] Ending session ${sessionId}`);
 
     // Mark as inactive
     session.active = false;
@@ -506,7 +506,7 @@ export class ClientDoorBridge {
     session.bbsSession.subState = LoggedOnSubState.DISPLAY_MENU;
     session.bbsSession.menuPause = true;
 
-    console.log(`[ClientDoorBridge] Session ${sessionId} ended`);
+console.log(`[ClientDoorBridge] Session ${sessionId} ended`);
 
     // Resolve any waiters after cleanup is complete
     const resolvers = this.sessionEndResolvers.get(sessionId);
