@@ -238,10 +238,11 @@ console.log("[DoorMessageHandler] checkForPause: waiting for user input");
   // follow-up messages. For these, we use a 500ms fallback timer to detect and
   // send INIT/STAT if needed (see processCommand JH_REGISTER case).
   sendStartupMessage(): void {
-console.log("[DoorMessageHandler] Skipping startup messages - door will initiate with JH_REGISTER");
-    // REMOVED: this.sendInitAndStatusMessages();
-    // Real protocol: Door sends JH_REGISTER, then BBS responds to requests
-    this.sentInitialMessage = true; // Mark as sent to prevent further attempts
+console.log("[DoorMessageHandler] Sending INIT/STAT startup messages for XIM door");
+    // CRITICAL: Many XIM doors (AquaScan, JoinCnf, etc.) expect INIT/STAT messages BEFORE
+    // sending JH_REGISTER. Without these, doors sit in tight polling loops waiting forever.
+    // See express.e:3343-3355 for AEDoor protocol initialization.
+    this.sendInitAndStatusMessages();
   }
 
   /**
