@@ -506,6 +506,10 @@ See `Documentation/1-Users/IMPORT_USER_GUIDE.md`
 
 `cd web/backend && npx tsc --noEmit` before commits. Emergency: `SKIP_TS_CHECK=1 git commit`
 
+**FIX ALL TypeScript errors when encountered.** Pre-existing errors are NOT acceptable. If you encounter TypeScript compilation errors (even from previous sessions or other developers), fix them immediately before continuing with your current task. The codebase must always compile cleanly.
+
+**Why:** TypeScript errors cascade and accumulate. One ignored error today becomes ten tomorrow. A non-compiling codebase blocks all developers and breaks CI/CD. Zero tolerance for TypeScript errors.
+
 ---
 
 ## NO STUBS

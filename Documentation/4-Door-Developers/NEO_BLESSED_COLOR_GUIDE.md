@@ -1,23 +1,37 @@
 # Neo-Blessed Color System Guide
 
-## Good News: Colors Now Work By Default!
+## Colors Work By Default
 
-As of Dec 2024, neo-blessed has been refactored so colors work automatically:
-- **All `blessed.*()` factory functions now default to `tags: true`**
-- **`setLine()` and `insertLine()` now parse tags correctly**
-- You no longer need to use helpers - `blessed.box()` works fine
+As of Jan 2025, neo-blessed defaults to `tags: true` on ALL elements. Colors work automatically.
 
-Neo-blessed doors will only have **broken colors** if you:
+```typescript
+import { Box, Text, Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+// Tags work automatically - no configuration needed
+const box = new Box({
+  parent: screen,
+  content: '{red-fg}Hello{/} {cyan-fg}World{/}',
+});
+
+// Style colors also work
+const text = new Text({
+  parent: screen,
+  style: { fg: 'yellow', bg: 'blue' },
+  content: '{green-fg}Colored text{/}',
+});
+```
+
+**Colors will ONLY break if you:**
 1. Use raw ANSI codes like `\x1b[31m` or `\x1b[38;5;196m` (use blessed tags instead)
 2. Explicitly set `tags: false` on an element (don't do this)
 
 ---
 
-## The Three Color Mistakes (And How They're Now Prevented)
+## The Two Color Mistakes
 
 ### Mistake 1: Using Raw ANSI Codes
 
-**WRONG - Raw ANSI codes get stripped/mangled:**
+**WRONG - Raw ANSI codes, especially 256-color, get mangled:**
 ```typescript
 // DON'T DO THIS - 256-color codes are NOT SUPPORTED
 function colorAnsi(color: number): string {
@@ -27,63 +41,33 @@ const content = `${colorAnsi(196)}Hello\x1b[0m`;
 box.setContent(content);  // Colors lost!
 ```
 
-**PREVENTION:** The helpers now detect 256-color codes and log a warning:
-```
-[neo-blessed] 256-color ANSI codes detected in createBox. Neo-blessed only supports 16 colors. Use blessed tags like {red-fg} instead.
-```
-
-**CORRECT - Use blessed tags or style properties:**
+**CORRECT - Use blessed tags:**
 ```typescript
-// Option 1: Blessed tags in content
+// Use blessed tags in content
 box.setContent('{red-fg}Hello{/}');
 
-// Option 2: Style properties
-const box = createBox({
+// Or use style properties
+const box = new Box({
   style: { fg: 'red', bg: 'black' },
   content: 'Hello'
 });
-
-// Option 3: colorize helper
-import { colorize } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-box.setContent(colorize('Hello', 'red'));
 ```
 
 ### Mistake 2: Setting `tags: false`
 
 **WRONG:**
 ```typescript
-const box = createBox({
+const box = new Box({
   tags: false,  // DISABLES tag parsing!
   content: '{red-fg}Hello{/}'  // Shows literal text: {red-fg}Hello{/}
 });
 ```
 
-**PREVENTION:** The helpers now IGNORE `tags: false` and log a warning:
-```
-[neo-blessed] tags: false is not allowed in createBox. Tags are required for color support. Ignoring tags: false.
-```
-
-**CORRECT:** Don't set tags at all - it's forced to true:
+**CORRECT:** Don't override tags - it defaults to true:
 ```typescript
-const box = createBox({
+const box = new Box({
   content: '{red-fg}Hello{/}'  // Rendered as red text
 });
-```
-
-### Mistake 3: Using blessed.* Directly
-
-**WRONG:**
-```typescript
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-const box = blessed.box({ content: '{red-fg}Hi{/}' });  // tags not enabled!
-```
-
-**PREVENTION:** None - you must use the helpers. ALWAYS import from blessed-helpers:
-
-**CORRECT:**
-```typescript
-import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-const box = createBox({ content: '{red-fg}Hi{/}' });  // tags auto-enabled
 ```
 
 ---
@@ -133,15 +117,15 @@ function formatUserMessage(username: string, message: string, colorIndex: number
 ## Complete Working Example
 
 ```typescript
-import { createScreen, createBox, createList, colorize } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, Box, List } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 // Create screen with BBS output
-const screen = createScreen({
+const screen = new Screen({
   output: (data) => bbs.write(data)
 });
 
-// Panel with style colors
-const panel = createBox({
+// Panel with style colors - tags: true is the default
+const panel = new Box({
   parent: screen,
   top: 0,
   left: 0,
@@ -152,21 +136,15 @@ const panel = createBox({
     bg: 'black',
     border: { fg: 'cyan' }
   },
-  border: { type: 'line' },
-  label: ' My Panel ',
+  border: 'line',
+  label: ' {cyan-fg}My Panel{/} ',  // Tags work in labels too
 });
 
 // Content with tag colors
 panel.setContent(
-  '{yellow-fg}{bold}Welcome!{/bold}{/yellow-fg}\n\n' +
-  '{gray-fg}Press any key to continue...{/gray-fg}'
+  '{yellow-fg}{bold}Welcome!{/}\n\n' +
+  '{gray-fg}Press any key to continue...{/}'
 );
-
-// Using colorize helper
-const errorBox = createBox({
-  parent: screen,
-  content: colorize('Error: Something went wrong', 'red'),
-});
 
 screen.render();
 ```
@@ -177,18 +155,17 @@ screen.render();
 
 If colors aren't working, check these IN ORDER:
 
-1. [ ] Are you importing from `@amiexpress/bbs-door-sdk/utils/blessed-helpers`?
-2. [ ] Are you using `createBox()`, `createScreen()`, etc. (NOT `blessed.box()`)?
-3. [ ] Check console for `[neo-blessed]` warnings about tags or ANSI codes
-4. [ ] Are you using blessed tags `{red-fg}` (NOT raw ANSI `\x1b[31m`)?
-5. [ ] Are you using the 16 standard colors (NOT 256-color codes)?
-6. [ ] Did you rebuild the door? `cd sdk/doors/{name} && npm run build`
+1. [ ] Are you using blessed tags `{red-fg}` (NOT raw ANSI `\x1b[31m`)?
+2. [ ] Are you using the 16 standard colors (NOT 256-color codes)?
+3. [ ] Did you accidentally set `tags: false`?
+4. [ ] Did you rebuild the door? `cd Doors/{name} && npm run build`
+5. [ ] Did you rebuild the SDK? `cd sdk && npm run build`
 
 ---
 
 ## See Also
 
-- `sdk/utils/blessed-helpers.ts` - Helper functions (source code)
+- `sdk/engines/ui/blessed/core/element.ts` - Element base class (tags default)
 - `sdk/doors/grandmaster/` - Working color example
-- `sdk/docs/NEO_BLESSED_GUIDE.md` - Full neo-blessed documentation
-- `CLAUDE.md` Rule #4 - Quick reference
+- `Documentation/4-Door-Developers/NEO_BLESSED_BEST_PRACTICES.md` - Full guide
+- `CLAUDE.md` Rule #6 - Quick reference

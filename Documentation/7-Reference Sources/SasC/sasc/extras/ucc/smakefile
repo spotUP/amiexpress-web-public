@@ -1,4 +1,0 @@
-ucc: ucc.o
-   sc link ucc.o
-
-ucc.o: ucc.c
