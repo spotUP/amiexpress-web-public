@@ -2233,10 +2233,13 @@ console.log(`[executeAmigaDoor] Setting doorCommand="${door.command}" on session
 console.log(`[executeAmigaDoor] Verified session.doorCommand="${(session as any).doorCommand}"`);
 
     // Set door parameters for EXPRESS_VERSION to return (XIM doors need this)
+    // CRITICAL: Must return FULL command line (command + params), not just params
+    // AquaScan expects "N S U", not just "S U" - see AQUASCAN_NSU_DEBUG_SESSION.md
     const paramString = door.parameters ? door.parameters.join(' ') : '';
-    (session as any).doorParams = paramString;
-    (session as any).commandParams = paramString;
-console.log(`[executeAmigaDoor] Set doorParams="${paramString}" for EXPRESS_VERSION`);
+    const fullCommandLine = door.command + (paramString ? ' ' + paramString : '');
+    (session as any).doorParams = fullCommandLine;
+    (session as any).commandParams = fullCommandLine;
+console.log(`[executeAmigaDoor] Set doorParams="${fullCommandLine}" for EXPRESS_VERSION`);
 
     // Set bbsRoot on session so XIMProtocol can find command .info files
     (session as any).bbsRoot = bbsRoot;
