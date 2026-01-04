@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { db } from '../database';
 import { config } from '../config';
+import { loadConferenceFileAreas } from '../services/file-areas-loader';
 
 interface QuickNewSection {
   title: string;
@@ -204,8 +205,68 @@ export function parseQuickNewConfigFile(configPath: string): QuickNewConfig | nu
 }
 
 /**
+ * Parse classic DIR1 file format
+ * Format: filename     P sizeK  datestr  description
+ */
+export function parseDirFile(dirPath: string): Array<{ filename: string; uploadDate: Date; size: number }> {
+  if (!fs.existsSync(dirPath)) return [];
+
+  const MONTHS: { [key: string]: number } = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+  };
+
+  try {
+    const content = fs.readFileSync(dirPath, 'latin1');
+    const lines = content.split('\n');
+    const entries: Array<{ filename: string; uploadDate: Date; size: number }> = [];
+
+    for (const line of lines) {
+      // Basic heuristic for a file line: starts with non-space and has a date pattern
+      // Example: "AQUASCAN.EXE  P   12K  07-Dec-92  Cool scanner"
+      // Example: "-Z-B&GE1.DMS P 549027  10-15-95  ..."
+      if (line.length > 30 && !line.startsWith(' ')) {
+        const filename = line.substring(0, 13).trim();
+        const rawSizeStr = line.substring(14, 22).trim();
+        const dateStr = line.substring(23, 32).trim(); // "07-Dec-92" or "10-15-95"
+
+        if (filename && dateStr.includes('-')) {
+          const isKB = rawSizeStr.toUpperCase().endsWith('K');
+          const sizeVal = parseInt(rawSizeStr.replace(/K$/i, ''), 10) || 0;
+          const size = isKB ? sizeVal * 1024 : sizeVal;
+
+          // Parse date DD-MMM-YY or MM-DD-YY (Amiga formats vary)
+          const dateParts = dateStr.split('-');
+          let day, month, year;
+
+          if (isNaN(parseInt(dateParts[1], 10))) {
+            // DD-MMM-YY
+            day = parseInt(dateParts[0], 10);
+            month = MONTHS[dateParts[1]] || 0;
+            year = parseInt(dateParts[2], 10);
+          } else {
+            // MM-DD-YY
+            month = parseInt(dateParts[0], 10) - 1;
+            day = parseInt(dateParts[1], 10);
+            year = parseInt(dateParts[2], 10);
+          }
+          
+          year += year < 80 ? 2000 : 1900; // Y2K heuristic
+          const uploadDate = new Date(year, month, day);
+
+          entries.push({ filename, uploadDate, size });
+        }
+      }
+    }
+    return entries;
+  } catch (error) {
+    console.error(`[QuickNew] Error parsing DIR file ${dirPath}:`, error);
+    return [];
+  }
+}
+
+/**
  * Generate QuickNew screen from config file (68K compatible)
- * This function reads a QuickNew config file and generates output matching the original format
  */
 export async function generateQuickNewFromConfig(
   configPath: string,
@@ -218,7 +279,7 @@ export async function generateQuickNewFromConfig(
   }
 
   const now = new Date();
-  const cutoff = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
+  const cutoff = new Date(now.getTime() - (daysBack + 1) * 24 * 60 * 60 * 1000); // +1 day buffer
   const yesterdayStart = new Date(now);
   yesterdayStart.setHours(0, 0, 0, 0);
   const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
@@ -240,8 +301,20 @@ export async function generateQuickNewFromConfig(
     const dirNum = match[2] ? parseInt(match[2], 10) : 1;
 
     try {
-      // Get file areas for this conference
-      const areas = await db.getFileAreas(confId);
+      // Get file areas for this conference (prefer database, fallback to disk)
+      let areas = await db.getFileAreas(confId);
+      const bbsRoot = config.getConfig().dataDir;
+
+      if (areas.length === 0) {
+        const diskAreas = loadConferenceFileAreas(bbsRoot, confId);
+        // Map disk areas to match the expected structure
+        areas = diskAreas.map(a => ({
+          id: a.dirNumber, // Use dirNumber as ID for lookup
+          name: a.name,
+          description: a.description || ''
+        }));
+      }
+
       const area = areas.find(a => a.id === dirNum) || areas[dirNum - 1];
 
       if (!area) {
@@ -249,7 +322,24 @@ export async function generateQuickNewFromConfig(
         continue;
       }
 
-      const files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
+      // Get file entries (prefer database, fallback to parsing DIR1 file)
+      let files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
+      
+      if (files.length === 0) {
+        const dirFilePath = path.join(bbsRoot, `Conf${confId}`, `DIR${dirNum}`);
+        const diskFiles = parseDirFile(dirFilePath);
+        files = diskFiles.map(f => ({
+          ...f,
+          id: 0,
+          description: '',
+          uploader: 'sysop',
+          downloads: 0,
+          areaId: area.id,
+          status: 'active',
+          checked: 'P'
+        } as any));
+      }
+
       const recent = files.filter(f => f.uploadDate >= cutoff);
       const yesterdayFiles = files.filter(
         f => f.uploadDate >= yesterdayStart && f.uploadDate < yesterdayEnd
@@ -319,8 +409,10 @@ function replacePlaceholders(template: string, section: QuickNewSection, daysBac
     .replace(/@D/g, daysBack.toString().padStart(2, '0'))
     .replace(/@N/g, section.filesCount.toString().padStart(2, '0'))
     .replace(/@F/g, '00') // Fakes always 00
-    .replace(/@M/g, section.megs.toFixed(1))
+    .replace(/@M\.0/g, section.megs.toFixed(1))
+    .replace(/@M/g, Math.floor(section.megs).toString())
     .replace(/@Y/g, section.yesterdayCount.toString().padStart(2, '0'))
     .replace(/@Z/g, '00') // Yesterday fakes always 00
-    .replace(/@B/g, section.yesterdayMegs.toFixed(1));
+    .replace(/@B\.0/g, section.yesterdayMegs.toFixed(1))
+    .replace(/@B/g, Math.floor(section.yesterdayMegs).toString());
 }

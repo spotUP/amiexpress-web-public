@@ -267,32 +267,16 @@ function formatString(str: string, width: number): string {
 /**
  * Replace placeholders in template
  *
- * User placeholders: %NN-WWXX
+ * User placeholders: %NN-WWXX or %NN.WWXX
  *   NN = user number (01-99)
+ *   -/. = alignment (- left, . right)
  *   WW = width (number of characters)
- *   XX = field code:
- *     UN = username
- *     LT = location
- *     UB = uploaded bytes
- *     UF = uploaded files
- *     DB = downloaded bytes
- *     DF = downloaded files
- *     MS = messages
- *     TC = total calls
- *     CU = CPS upload
- *     CD = CPS download
+ *   XX = field code
  *
- * Global placeholders: %WW.XX
+ * Global placeholders: %-WWXX or %.WWXX
+ *   -/. = alignment
  *   WW = width
- *   XX = field code:
- *     UB = total uploaded bytes
- *     UF = total uploaded files
- *     DB = total downloaded bytes
- *     DF = total downloaded files
- *     TM = total messages
- *     TC = total calls
- *     AU = active users
- *     VT = version/timestamp
+ *   XX = field code
  */
 function replacePlaceholders(
   template: string,
@@ -301,9 +285,10 @@ function replacePlaceholders(
 ): string {
   let result = template;
 
-  // Replace user placeholders (%NN-WWXX)
-  const userRegex = /%(\d{2})-(\d+)(\w{2})/g;
-  result = result.replace(userRegex, (match, userNum, width, field) => {
+  // Replace user placeholders (%NN[-.]WWXX)
+  // Note: we use [.-] to match either dot or minus
+  const userRegex = /%(\d{2})([.-])(\d+)(\w{2})/g;
+  result = result.replace(userRegex, (match, userNum, align, width, field) => {
     const userIndex = parseInt(userNum, 10) - 1;
     const w = parseInt(width, 10);
 
@@ -313,61 +298,121 @@ function replacePlaceholders(
     }
 
     const user = users[userIndex];
+    let val = '';
 
     switch (field.toUpperCase()) {
       case 'UN':
-        return formatString(user.userName, w);
+        val = user.userName;
+        break;
       case 'LT':
-        return formatString(user.location, w);
+        val = user.location;
+        break;
       case 'UB':
-        return formatBytes(user.uploadedBytes, w);
+        val = user.uploadedBytes.toLocaleString();
+        break;
+      case 'UK':
+        val = Math.floor(user.uploadedBytes / 1024).toString();
+        break;
+      case 'UM':
+        val = (user.uploadedBytes / (1024 * 1024)).toFixed(1);
+        break;
       case 'UF':
-        return formatNumber(user.uploadedFiles, w);
+        val = user.uploadedFiles.toString();
+        break;
       case 'DB':
-        return formatBytes(user.downloadedBytes, w);
+        val = user.downloadedBytes.toLocaleString();
+        break;
+      case 'DK':
+        val = Math.floor(user.downloadedBytes / 1024).toString();
+        break;
+      case 'DM':
+        val = (user.downloadedBytes / (1024 * 1024)).toFixed(1);
+        break;
       case 'DF':
-        return formatNumber(user.downloadedFiles, w);
+        val = user.downloadedFiles.toString();
+        break;
       case 'MS':
-        return formatNumber(user.messages, w);
+        val = user.messages.toString();
+        break;
+      case 'CS':
       case 'TC':
-        return formatNumber(user.calls, w);
+        val = user.calls.toString();
+        break;
       case 'CU':
-        return formatNumber(user.cpsUp, w);
+      case 'UC':
+        val = user.cpsUp.toString();
+        break;
       case 'CD':
-        return formatNumber(user.cpsDown, w);
+      case 'DC':
+        val = user.cpsDown.toString();
+        break;
       default:
         return match;
     }
+
+    return align === '-' ? val.padEnd(w, ' ') : val.padStart(w, ' ');
   });
 
-  // Replace global placeholders (%WW.XX)
-  const globalRegex = /%(\d+)\.(\w{2})/g;
-  result = result.replace(globalRegex, (match, width, field) => {
-    const w = parseInt(width, 10);
+  // Replace global placeholders (%[-.]WWXX or %WW[-.]XX)
+  // This matches both formats: %-10VT and %42-VT
+  const globalRegex = /%(?:([.-])(\d+)|(\d+)([.-]))(\w{2})/g;
+  result = result.replace(globalRegex, (match, align1, width1, width2, align2, field) => {
+    const align = align1 || align2;
+    const widthStr = width1 || width2;
+    const w = parseInt(widthStr, 10);
+    let val = '';
 
     switch (field.toUpperCase()) {
       case 'UB':
-        return formatBytes(globalStats.totalBytesUp, w);
+        val = globalStats.totalBytesUp.toLocaleString();
+        break;
+      case 'UK':
+        val = Math.floor(globalStats.totalBytesUp / 1024).toString();
+        break;
+      case 'UM':
+        val = (globalStats.totalBytesUp / (1024 * 1024)).toFixed(1);
+        break;
       case 'UF':
-        return formatNumber(globalStats.totalFilesUp, w);
+        val = globalStats.totalFilesUp.toString();
+        break;
       case 'DB':
-        return formatBytes(globalStats.totalBytesDown, w);
+        val = globalStats.totalBytesDown.toLocaleString();
+        break;
+      case 'DK':
+        val = Math.floor(globalStats.totalBytesDown / 1024).toString();
+        break;
+      case 'DM':
+        val = (globalStats.totalBytesDown / (1024 * 1024)).toFixed(1);
+        break;
       case 'DF':
-        return formatNumber(globalStats.totalFilesDown, w);
+        val = globalStats.totalFilesDown.toString();
+        break;
       case 'TM':
-        return formatNumber(globalStats.totalMessages, w);
+        val = globalStats.totalMessages.toString();
+        break;
       case 'TC':
-        return formatNumber(globalStats.totalCalls, w);
+      case 'SC':
+        val = globalStats.totalCalls.toString();
+        break;
       case 'AU':
-        return formatNumber(globalStats.activeUsers, w);
-      case 'VT':
-        // Version/timestamp string
+      case 'TU':
+        val = globalStats.activeUsers.toString();
+        break;
+      case 'LD':
         const now = new Date();
-        const dateStr = now.toISOString().substring(0, 10);
-        return formatString(`Generated ${dateStr}`, w);
+        val = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
+        break;
+      case 'LT':
+        val = new Date().toTimeString().split(' ')[0];
+        break;
+      case 'VT':
+        val = 'MultiTop v2.1';
+        break;
       default:
         return match;
     }
+
+    return align === '-' ? val.padEnd(w, ' ') : val.padStart(w, ' ');
   });
 
   return result;
