@@ -63,7 +63,7 @@ export async function checkForFile(
     for (const candidatePath of lcfilesPaths) {
       try {
         await fs.access(candidatePath);
-        console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
+console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
         return true; // File exists in LCFILES
       } catch {
         // File doesn't exist in this LCFILES candidate, continue checking
@@ -79,7 +79,7 @@ export async function checkForFile(
       const dlPath = path.join(bbsDataPath, row.value, filename);
       try {
         await fs.access(dlPath);
-        console.log(`[checkForFile] Duplicate found in DLPATH: ${filename}`);
+console.log(`[checkForFile] Duplicate found in DLPATH: ${filename}`);
         return true; // File exists in download path
       } catch {
         // File doesn't exist in this path, continue
@@ -95,7 +95,7 @@ export async function checkForFile(
       const ulPath = path.join(bbsDataPath, row.value, filename);
       try {
         await fs.access(ulPath);
-        console.log(`[checkForFile] Duplicate found in ULPATH: ${filename}`);
+console.log(`[checkForFile] Duplicate found in ULPATH: ${filename}`);
         return true; // File exists in upload path
       } catch {
         // File doesn't exist in this path, continue

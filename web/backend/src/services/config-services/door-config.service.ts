@@ -128,9 +128,9 @@ export class DoorConfigService {
       if (door.door_args) lines.push(`ARGS=${door.door_args}`);
 
       fs.writeFileSync(infoPath, lines.join('\r\n') + '\r\n');
-      console.log(`[DoorConfigService] Wrote ${infoPath}`);
+console.log(`[DoorConfigService] Wrote ${infoPath}`);
     } catch (error) {
-      console.error(`[DoorConfigService] Failed to write ${infoPath}:`, error);
+console.error(`[DoorConfigService] Failed to write ${infoPath}:`, error);
     }
   }
 
@@ -142,9 +142,9 @@ export class DoorConfigService {
     if (fs.existsSync(infoPath)) {
       try {
         fs.unlinkSync(infoPath);
-        console.log(`[DoorConfigService] Deleted ${infoPath}`);
+console.log(`[DoorConfigService] Deleted ${infoPath}`);
       } catch (error) {
-        console.error(`[DoorConfigService] Failed to delete ${infoPath}:`, error);
+console.error(`[DoorConfigService] Failed to delete ${infoPath}:`, error);
       }
     }
   }

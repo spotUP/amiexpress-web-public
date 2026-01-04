@@ -42,7 +42,7 @@ export class ModemEmulator {
     this.startTime = process.hrtime.bigint();
     this.bytesSent = 0;
 
-    console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.enabled}, bytesPerSecond=${this.bytesPerSecond}`);
+console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.enabled}, bytesPerSecond=${this.bytesPerSecond}`);
   }
 
   /**
@@ -200,11 +200,11 @@ export class ModemEmulator {
 
     // Only wrap if not already wrapped
     if ((this.socket as any)._modemEmulatorInstalled) {
-      console.log(`[ModemEmulator] install() skipped - already installed`);
+console.log(`[ModemEmulator] install() skipped - already installed`);
       return;
     }
 
-    console.log(`[ModemEmulator] install() - wrapping socket.emit`);
+console.log(`[ModemEmulator] install() - wrapping socket.emit`);
 
     // We use directEmit which was stored at construction time
     // This ensures we always send to the real socket
@@ -214,7 +214,7 @@ export class ModemEmulator {
         if (typeof data === 'string') {
           // Log first intercept to confirm it's working (don't spam logs)
           if (!self.processing) {
-            console.log(`[ModemEmulator] Intercepting ansi-output (${data.length} bytes), throttling at ${self.bps} bps`);
+console.log(`[ModemEmulator] Intercepting ansi-output (${data.length} bytes), throttling at ${self.bps} bps`);
           }
           self.write(data);
           return true;
@@ -225,7 +225,7 @@ export class ModemEmulator {
 
     (this.socket as any)._modemEmulatorInstalled = true;
     (this.socket as any)._modemEmulator = this;
-    console.log(`[ModemEmulator] install() complete`);
+console.log(`[ModemEmulator] install() complete`);
   }
 }
 

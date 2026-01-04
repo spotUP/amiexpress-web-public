@@ -78,7 +78,7 @@ export class XIMIOHandler {
    * Update key state for simultaneous input (from keys:state event)
    */
   updateKeyState(data: { key: string; pressed: boolean; keyState: Record<string, boolean> }): void {
-    console.log(`[XIMIOHandler] Key state update: ${data.key} = ${data.pressed}`);
+console.log(`[XIMIOHandler] Key state update: ${data.key} = ${data.pressed}`);
     this.keyState = data.keyState;
   }
 
@@ -104,21 +104,21 @@ export class XIMIOHandler {
    * xterm.js sends arrow keys as escape sequences: \x1b[A (up), \x1b[B (down), etc.
    */
   queueInput(data: string): void {
-    console.log(`[XIMIOHandler] Queuing input: "${data}" (len=${data.length})`);
+console.log(`[XIMIOHandler] Queuing input: "${data}" (len=${data.length})`);
 
     if (this.state.carrierDropped) {
-      console.warn('[XIMIOHandler] Carrier already dropped, ignoring input');
+console.warn('[XIMIOHandler] Carrier already dropped, ignoring input');
       return;
     }
 
     // Parse input into tokens, preserving ANSI escape sequences
     const tokens = this.parseInputTokens(data);
-    console.log(`[XIMIOHandler] Parsed into ${tokens.length} token(s)`);
+console.log(`[XIMIOHandler] Parsed into ${tokens.length} token(s)`);
 
     for (const token of tokens) {
       // Handle input during pause
       if (this.waitingForPause) {
-        console.log('[XIMIOHandler] Accumulating pause input');
+console.log('[XIMIOHandler] Accumulating pause input');
         this.pauseInputBuffer += token;
         
         // Check for completion (Enter or space typically resumes)
@@ -136,7 +136,7 @@ export class XIMIOHandler {
 
       if (this.waitingForLineInput) {
         if (token === '\r' || token === '\n') {
-          console.log(
+console.log(
             `[XIMIOHandler] Enter pressed, completing line input: "${this.lineInputBuffer}"`
           );
           this.completeLineInput();
@@ -146,7 +146,7 @@ export class XIMIOHandler {
         if (token === '\b' || token === '\x7f') {
           if (this.lineInputBuffer.length > 0) {
             this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
-            console.log(
+console.log(
               `[XIMIOHandler] Backspace, buffer now: "${this.lineInputBuffer}"`
             );
             // Echo backspace to terminal
@@ -158,7 +158,7 @@ export class XIMIOHandler {
         // For line input, add token to buffer (even if it's an escape sequence)
         if (this.lineInputBuffer.length < this.lineInputMaxLen) {
           this.lineInputBuffer += token;
-          console.log(
+console.log(
             `[XIMIOHandler] Token added, buffer now: "${this.lineInputBuffer}"`
           );
           // Echo typed character (only for single visible characters)
@@ -172,11 +172,11 @@ export class XIMIOHandler {
       // Not waiting for special input - queue for GETKEY/quick key
       // Keep entire token as single queue entry (preserves escape sequences)
       this.inputQueue.push(token);
-      console.log(`[XIMIOHandler] Queued token: "${token}" (len=${token.length})`);
+console.log(`[XIMIOHandler] Queued token: "${token}" (len=${token.length})`);
     }
 
     if (!this.waitingForLineInput) {
-      console.log(`[XIMIOHandler] Input queue size: ${this.inputQueue.length}`);
+console.log(`[XIMIOHandler] Input queue size: ${this.inputQueue.length}`);
     }
   }
 
@@ -200,7 +200,7 @@ export class XIMIOHandler {
           // Include the terminating character
           const seq = data.slice(i, end + 1);
           tokens.push(seq);
-          console.log(`[XIMIOHandler] Parsed escape sequence: ${JSON.stringify(seq)}`);
+console.log(`[XIMIOHandler] Parsed escape sequence: ${JSON.stringify(seq)}`);
           i = end + 1;
           continue;
         }
@@ -220,7 +220,7 @@ export class XIMIOHandler {
    * IMPORTANT: Pause emulator to wait for user input.
    */
   handleLineInput(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] Door requesting line input');
+console.log('[XIMIOHandler] Door requesting line input');
 
     if (this.state.carrierDropped) {
       this.reply(msg, -1, '');
@@ -242,7 +242,7 @@ export class XIMIOHandler {
     this.lineInputBuffer = defaultText;
     this.lineInputMaxLen = maxLen;
 
-    console.log(
+console.log(
       `[XIMIOHandler] Waiting for user to type line (max ${maxLen} chars), pausing emulator`
     );
     this.emulator.pause();
@@ -253,14 +253,14 @@ export class XIMIOHandler {
    */
   private completeLineInput(): void {
     if (!this.lineInputMessage) {
-      console.log('[XIMIOHandler] ERROR: completeLineInput called but no pending message!');
+console.log('[XIMIOHandler] ERROR: completeLineInput called but no pending message!');
       return;
     }
 
     const msg = this.lineInputMessage;
     const result = this.lineInputBuffer.slice(0, this.lineInputMaxLen);
 
-    console.log(
+console.log(
       `[XIMIOHandler] Completing line input with: "${result}"`
     );
 
@@ -287,7 +287,7 @@ export class XIMIOHandler {
     this.lineInputBuffer = '';
     this.lineInputMaxLen = DoorConstants.MESSAGE_STRING_CAPACITY;
 
-    console.log('[XIMIOHandler] Line input completed, resuming emulator');
+console.log('[XIMIOHandler] Line input completed, resuming emulator');
     this.emulator.resume();
   }
 
@@ -299,7 +299,7 @@ export class XIMIOHandler {
     const text = this.getMessageString(msg);
     const addNewline = msg.data === 1;
 
-    console.log(
+console.log(
       '[XIMIOHandler] Door writing to terminal (JH_WRITE):',
       JSON.stringify(text)
     );
@@ -308,7 +308,7 @@ export class XIMIOHandler {
     // aePuts does NOT increment lineCount or check for pause.
     const bytesWritten = this.emitText(text, addNewline, false, false, msg);
 
-    console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
+console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
     this.reply(msg, bytesWritten);
   }
 
@@ -322,7 +322,7 @@ export class XIMIOHandler {
       const char = this.inputQueue.shift()!;
       const charCode = char.charCodeAt(0);
 
-      console.log(`[XIMIOHandler] GETKEY: Returning key '${char}' (0x${charCode.toString(16)})`);
+console.log(`[XIMIOHandler] GETKEY: Returning key '${char}' (0x${charCode.toString(16)})`);
 
       // Write "1<char>\0" to embedded string buffer (E sources format)
       this.messageParser.writeMessageString(
@@ -332,7 +332,7 @@ export class XIMIOHandler {
 
       this.reply(msg, 1);
     } else {
-      console.log('[XIMIOHandler] GETKEY: No input queued');
+console.log('[XIMIOHandler] GETKEY: No input queued');
 
       // Write "0\0" to string buffer
       this.messageParser.writeMessageString(msg.msgAddr, '0');
@@ -358,10 +358,10 @@ export class XIMIOHandler {
       rawBytes.push(byte);
     }
     const rawStr = rawBytes.map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : `.`).join('');
-    console.log(`[XIMIOHandler] JH_SM DEBUG: msgAddr=0x${msg.msgAddr.toString(16)} stringAddr=0x${stringAddr.toString(16)}`);
-    console.log(`[XIMIOHandler] JH_SM DEBUG: rawBytes[0..${rawBytes.length}] = "${rawStr}"`);
-    console.log(`[XIMIOHandler] JH_SM DEBUG: msg.string="${msg.string}" msg.stringPtr=0x${(msg.stringPtr || 0).toString(16)}`);
-    console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, len=${text.length})`);
+console.log(`[XIMIOHandler] JH_SM DEBUG: msgAddr=0x${msg.msgAddr.toString(16)} stringAddr=0x${stringAddr.toString(16)}`);
+console.log(`[XIMIOHandler] JH_SM DEBUG: rawBytes[0..${rawBytes.length}] = "${rawStr}"`);
+console.log(`[XIMIOHandler] JH_SM DEBUG: msg.string="${msg.string}" msg.stringPtr=0x${(msg.stringPtr || 0).toString(16)}`);
+console.log(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, len=${text.length})`);
 
     // express.e:3406-3411: IF msg.data THEN aePuts('\b\n'); checkForPause()
     this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
@@ -387,7 +387,7 @@ export class XIMIOHandler {
 
     const shouldAddNewline = msg.data !== 0;
 
-    console.log(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
+console.log(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
 
     // express.e:3412-3417: IF msg.data THEN aePuts('\b\n'); checkForPause()
     this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
@@ -413,13 +413,13 @@ export class XIMIOHandler {
       return;
     }
 
-    console.log('[XIMIOHandler] JH_PM: Prompt message with line input');
+console.log('[XIMIOHandler] JH_PM: Prompt message with line input');
     if (prompt.length > 0) {
-      console.log(`[XIMIOHandler] JH_PM: Prompt: "${prompt}"`);
+console.log(`[XIMIOHandler] JH_PM: Prompt: "${prompt}"`);
       this.emitText(prompt, false, false, false, msg);
     }
 
-    console.log(
+console.log(
       `[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars), pausing emulator`
     );
     this.waitingForLineInput = true;
@@ -459,14 +459,14 @@ export class XIMIOHandler {
 
     if (arrowMap[token] !== undefined) {
       const arrowCode = arrowMap[token];
-      console.log(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode}`);
+console.log(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode}`);
       return String.fromCharCode(arrowCode);
     }
 
     // For other escape sequences, return just first char
     // (shouldn't happen in normal operation, but be safe)
     if (token.length > 1) {
-      console.log(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0)}`);
+console.log(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0)}`);
     }
     return token[0];
   }
@@ -486,7 +486,7 @@ export class XIMIOHandler {
   handleHotkey(msg: XIMMessage): void {
     const prompt = this.getMessageString(msg);
 
-    console.log('[XIMIOHandler] JH_HK: Hotkey input request');
+console.log('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
     if (this.state.carrierDropped) {
@@ -496,7 +496,7 @@ export class XIMIOHandler {
 
     // Express.e (line 3438): aePuts(msg.string) - display prompt before reading input
     if (prompt.length > 0) {
-      console.log(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
+console.log(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       this.emitText(prompt, false, false, false, msg);
     }
 
@@ -507,7 +507,7 @@ export class XIMIOHandler {
       this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
       const keyCode = keyData.charCodeAt(0);
       const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
-      console.log(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
+console.log(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
       this.reply(msg, 1, keyData);
       return;
     }
@@ -515,7 +515,7 @@ export class XIMIOHandler {
     // No input available - pause emulator and wait for user input
     // express.e:3438-3448 shows readChar(doorTimeout) which BLOCKS until input
     // Returning -1 immediately breaks doors that expect blocking behavior
-    console.log('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
+console.log('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
     this.waitingForHotkey = true;
     this.hotkeyMessage = msg;
     this.emulator.pause();
@@ -537,13 +537,13 @@ export class XIMIOHandler {
     const keyCode = keyData.charCodeAt(0);
     const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
 
-    console.log('========================================');
-    console.log(`[XIMIOHandler] JH_HK COMPLETE:`);
-    console.log(`  Input char: ${JSON.stringify(char)} (charCode=${char.charCodeAt(0)})`);
-    console.log(`  Processed keyData: ${JSON.stringify(keyData)} (charCode=${keyCode})`);
-    console.log(`  Key name: ${keyName}`);
-    console.log(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
-    console.log('========================================');
+console.log('========================================');
+console.log(`[XIMIOHandler] JH_HK COMPLETE:`);
+console.log(`  Input char: ${JSON.stringify(char)} (charCode=${char.charCodeAt(0)})`);
+console.log(`  Processed keyData: ${JSON.stringify(keyData)} (charCode=${keyCode})`);
+console.log(`  Key name: ${keyName}`);
+console.log(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
+console.log('========================================');
 
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
     this.reply(msg, this.state.carrierDropped ? -1 : 1, keyData);
@@ -552,7 +552,7 @@ export class XIMIOHandler {
     this.hotkeyMessage = null;
 
     // Resume emulator execution now that we have input
-    console.log('[XIMIOHandler] JH_HK: Resuming emulator');
+console.log('[XIMIOHandler] JH_HK: Resuming emulator');
     this.emulator.resume();
   }
 
@@ -561,19 +561,19 @@ export class XIMIOHandler {
    * From E sources (express.e:3432-3435)
    */
   handleExtendedHotkey(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal');
+console.log('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal');
     this.state.lineCount = 0;
 
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
       this.messageParser.writeMessageString(msg.msgAddr, char);
-      console.log(`  [READ] Extended hotkey: '${char}'`);
+console.log(`  [READ] Extended hotkey: '${char}'`);
       this.reply(msg, 1);
     } else {
       this.messageParser.writeCommand(msg.msgAddr, 0);
       this.messageParser.writeMessageString(msg.msgAddr, '');
-      console.log('  [TIMEOUT] No input available');
+console.log('  [TIMEOUT] No input available');
       this.reply(msg, -1);
     }
   }
@@ -583,7 +583,7 @@ export class XIMIOHandler {
    * From E sources (express.e:3465-3472)
    */
   handleFetchKey(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] JH_FetchKey - Non-blocking key check');
+console.log('[XIMIOHandler] JH_FetchKey - Non-blocking key check');
 
     if (this.state.carrierDropped) {
       this.messageParser.writeCommand(msg.msgAddr, 0);
@@ -594,13 +594,13 @@ export class XIMIOHandler {
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
-      console.log(`  [READ] Key available: '${char}'`);
+console.log(`  [READ] Key available: '${char}'`);
       this.reply(msg, 1, char);
       return;
     }
 
     this.messageParser.writeCommand(msg.msgAddr, 0);
-    console.log('  [NO INPUT] No key available');
+console.log('  [NO INPUT] No key available');
     this.reply(msg, 1, '');
   }
 
@@ -609,7 +609,7 @@ export class XIMIOHandler {
    * From express.e JH_CK case
    */
   handleCheckKey(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] JH_CK - QuicKey check');
+console.log('[XIMIOHandler] JH_CK - QuicKey check');
 
     if (this.state.carrierDropped) {
       this.messageParser.writeCommand(msg.msgAddr, 0);
@@ -620,13 +620,13 @@ export class XIMIOHandler {
     if (this.inputQueue.length > 0) {
       const char = this.inputQueue.shift()!;
       this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
-      console.log(`  [READ] QuicKey: '${char}'`);
+console.log(`  [READ] QuicKey: '${char}'`);
       this.reply(msg, 1, char);
       return;
     }
 
     this.messageParser.writeCommand(msg.msgAddr, 0);
-    console.log('  [NO INPUT] No key available');
+console.log('  [NO INPUT] No key available');
     this.reply(msg, 1, '');
   }
 
@@ -635,7 +635,7 @@ export class XIMIOHandler {
    * From E sources (express.e:3448-3455)
    */
   handleQuickKey(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] QUICK_KEY - Quick key input');
+console.log('[XIMIOHandler] QUICK_KEY - Quick key input');
 
     if (this.state.carrierDropped) {
       this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
@@ -648,10 +648,10 @@ export class XIMIOHandler {
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
 
     if (char) {
-      console.log(`  [READ] Quick key: '${char}' (code ${charCode})`);
+console.log(`  [READ] Quick key: '${char}' (code ${charCode})`);
       this.reply(msg, charCode);
     } else {
-      console.log('  [TIMEOUT] No input available');
+console.log('  [TIMEOUT] No input available');
       this.reply(msg, -1);
     }
   }
@@ -676,7 +676,7 @@ export class XIMIOHandler {
   handleSerialOutput(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
-    console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
+console.log(`[XIMIOHandler] JH_SO (Serial): "${text}"`);
 
     // express.e:3401-3405: IF msg.data THEN serPuts('\b\n') (No checkForPause!)
     this.emitText(text, msg.data !== 0, false, false, msg);
@@ -711,7 +711,7 @@ export class XIMIOHandler {
 
     const target = this.findFirstExisting(candidates);
     if (!target) {
-      console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
+console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
       this.reply(msg, 0);
       return;
     }
@@ -753,7 +753,7 @@ export class XIMIOHandler {
 
     const target = this.findFirstExisting(candidates);
     if (!target) {
-      console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
+console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
       this.reply(msg, 0);
       return;
     }
@@ -790,7 +790,7 @@ export class XIMIOHandler {
    * From E sources (express.e:3456-3462)
    */
   async handleMCI(msg: XIMMessage): Promise<void> {
-    console.log(`[XIMIOHandler] JH_MCI: Processing MCI codes`);
+console.log(`[XIMIOHandler] JH_MCI: Processing MCI codes`);
 
     const inputString = this.getMessageString(msg).trim();
 
@@ -813,10 +813,10 @@ export class XIMIOHandler {
         this.emitText('', true, true, true, msg);
       }
 
-      console.log(`[XIMIOHandler] JH_MCI: Processed successfully`);
+console.log(`[XIMIOHandler] JH_MCI: Processed successfully`);
       this.reply(msg, 1);
     } catch (error: any) {
-      console.error(`[XIMIOHandler] JH_MCI: Error processing MCI codes:`, error.message || error);
+console.error(`[XIMIOHandler] JH_MCI: Error processing MCI codes:`, error.message || error);
       this.reply(msg, 0);
     }
   }
@@ -829,7 +829,7 @@ export class XIMIOHandler {
   handleUserData(msg: XIMMessage, bbsSession: any): void {
     let resultData = 0;
 
-    console.log(`[XIMIOHandler] PG_UD: Request type ${msg.data}`);
+console.log(`[XIMIOHandler] PG_UD: Request type ${msg.data}`);
 
     // express.e:4445-4463 - Map data field to user info
     switch (msg.data) {
@@ -864,7 +864,7 @@ export class XIMIOHandler {
         resultData = 0;
     }
 
-    console.log(`[XIMIOHandler] PG_UD: Returning ${resultData}`);
+console.log(`[XIMIOHandler] PG_UD: Returning ${resultData}`);
     this.reply(msg, resultData);
   }
 
@@ -876,7 +876,7 @@ export class XIMIOHandler {
   handleUserString(msg: XIMMessage, bbsSession: any): void {
     let resultString = '';
 
-    console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
+console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
 
     // express.e:4465-4494 - Map data field to user string
     switch (msg.data) {
@@ -926,7 +926,7 @@ export class XIMIOHandler {
         resultString = '';
     }
 
-    console.log(`[XIMIOHandler] PG_US: Returning "${resultString}"`);
+console.log(`[XIMIOHandler] PG_US: Returning "${resultString}"`);
 
     this.messageParser.writeMessageString(
       msg.msgAddr,
@@ -942,7 +942,7 @@ export class XIMIOHandler {
    * Displays message to both serial and console (web: same as PG_SO)
    */
   handleScreenMessage(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
+console.log('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // In web version, screen and serial are the same (both go to socket)
     this.handleSerialOutput(msg);
   }
@@ -963,7 +963,7 @@ export class XIMIOHandler {
     const hadBuffer = this.ansiBuffer.length > 0;
     let fullText = this.ansiBuffer + text;
     if (hadBuffer) {
-      console.log(`[emitText] Prepending buffered ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" to text starting with "${text.substring(0, 10).replace(/\x1b/g, 'ESC')}..."`);
+console.log(`[emitText] Prepending buffered ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" to text starting with "${text.substring(0, 10).replace(/\x1b/g, 'ESC')}..."`);
     }
     this.ansiBuffer = '';
 
@@ -990,10 +990,10 @@ export class XIMIOHandler {
       // Store the incomplete sequence and remove from current output
       this.ansiBuffer = incompleteAnsiMatch[0];
       converted = converted.slice(0, -this.ansiBuffer.length);
-      console.log(`[emitText] Buffering incomplete ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" (${this.ansiBuffer.length} chars)`);
+console.log(`[emitText] Buffering incomplete ANSI: "${this.ansiBuffer.replace(/\x1b/g, 'ESC')}" (${this.ansiBuffer.length} chars)`);
       // If nothing left to emit after buffering, return early
       if (converted.length === 0) {
-        console.log(`[emitText] Nothing left to emit after buffering, returning early`);
+console.log(`[emitText] Nothing left to emit after buffering, returning early`);
         return 0;
       }
     }
@@ -1047,7 +1047,7 @@ export class XIMIOHandler {
         // DEBUG: Log first 50 chars of what we're actually emitting
         if (output.length > 0 && output.length < 200) {
           const displayOutput = output.replace(/\x1b/g, 'ESC').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-          console.log(`[emitText] EMIT: "${displayOutput}"`);
+console.log(`[emitText] EMIT: "${displayOutput}"`);
         }
         this.socket.emit('ansi-output', output);
         bytesSent += output.length;
@@ -1179,7 +1179,7 @@ export class XIMIOHandler {
         const autoPause = !forceNonStop;
         this.emitText(result.parsed, false, true, autoPause, msg);
       } catch (mciError: any) {
-        console.warn(`[XIMIOHandler] MCI processing failed, displaying raw: ${mciError.message}`);
+console.warn(`[XIMIOHandler] MCI processing failed, displaying raw: ${mciError.message}`);
         // Fallback to raw display if MCI processing fails
         const autoPause = !forceNonStop;
         this.emitText(content, false, true, autoPause, msg);
@@ -1188,7 +1188,7 @@ export class XIMIOHandler {
       return true;
     } catch (err) {
       SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', filePath, err as Error);
-      console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
+console.error(`[XIMIOHandler] Failed to display file ${filePath}:`, err);
       return false;
     }
   }
@@ -1279,7 +1279,7 @@ export class XIMIOHandler {
     }
 
     if (this.state.lineCount >= this.state.pauseLines) {
-      console.log(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
+console.log(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
       this.waitingForPause = true;
       this.pauseReply = { msg: pendingMsg, data: 1 };
       this.pauseInputBuffer = '';
@@ -1301,7 +1301,7 @@ export class XIMIOHandler {
   private completePauseInput(): void {
     if (!this.waitingForPause || !this.pauseReply) return;
 
-    console.log('[XIMIOHandler] Pause acknowledged, resuming');
+console.log('[XIMIOHandler] Pause acknowledged, resuming');
     
     const { msg, data } = this.pauseReply;
     this.waitingForPause = false;
@@ -1333,9 +1333,9 @@ export class XIMIOHandler {
    * Send reply to door via ReplyMsg
    */
   private reply(msg: XIMMessage, data: number, stringValue?: string): void {
-    console.log('[XIMIOHandler] Sending reply to door:');
-    console.log(`  Message: 0x${msg.msgAddr.toString(16)}`);
-    console.log(`  Data: ${data}`);
+console.log('[XIMIOHandler] Sending reply to door:');
+console.log(`  Message: 0x${msg.msgAddr.toString(16)}`);
+console.log(`  Data: ${data}`);
 
     if (typeof stringValue === 'string') {
       this.messageParser.writeMessageString(msg.msgAddr, stringValue);
@@ -1357,7 +1357,7 @@ export class XIMIOHandler {
 
     this.execLibrary.replyMsg(msg.msgAddr);
 
-    console.log('[XIMIOHandler] Reply sent via ReplyMsg');
+console.log('[XIMIOHandler] Reply sent via ReplyMsg');
   }
 
   /**
@@ -1394,26 +1394,26 @@ export class XIMIOHandler {
    * - BB_PURGELINEEND (524): clears buffer only
    */
   handlePurgeLine(msg: XIMMessage): void {
-    console.log('[XIMIOHandler] Purge line command');
+console.log('[XIMIOHandler] Purge line command');
 
     let requestMoreInput = false;
 
     switch (msg.command) {
       case XIMCommand.BB_PURGELINE:
         // Aborts serial input, flushes buffer, requests more input
-        console.log('  BB_PURGELINE: Abort input, flush buffer, request more');
+console.log('  BB_PURGELINE: Abort input, flush buffer, request more');
         requestMoreInput = true;
         break;
 
       case XIMCommand.BB_PURGELINESTART:
         // Clear buffer, request more input
-        console.log('  BB_PURGELINESTART: Clear buffer, request more');
+console.log('  BB_PURGELINESTART: Clear buffer, request more');
         requestMoreInput = true;
         break;
 
       case XIMCommand.BB_PURGELINEEND:
         // Clear buffer only
-        console.log('  BB_PURGELINEEND: Clear buffer only');
+console.log('  BB_PURGELINEEND: Clear buffer only');
         requestMoreInput = false;
         break;
     }
@@ -1427,7 +1427,7 @@ export class XIMIOHandler {
    * Called by handlePurgeLine
    */
   private clearInputBuffer(requestMoreInput: boolean = false): void {
-    console.log(`[XIMIOHandler] Clearing input buffer (requestMore=${requestMoreInput})`);
+console.log(`[XIMIOHandler] Clearing input buffer (requestMore=${requestMoreInput})`);
 
     // Clear the input queue
     const queueSize = this.inputQueue.length;
@@ -1438,30 +1438,30 @@ export class XIMIOHandler {
 
     // If we were waiting for input, we need to abort it
     if (this.waitingForLineInput && this.lineInputMessage) {
-      console.log('[XIMIOHandler] Aborting pending line input');
+console.log('[XIMIOHandler] Aborting pending line input');
       this.waitingForLineInput = false;
       this.lineInputMessage = null;
     }
 
     if (this.waitingForHotkey && this.hotkeyMessage) {
-      console.log('[XIMIOHandler] Aborting pending hotkey');
+console.log('[XIMIOHandler] Aborting pending hotkey');
       this.waitingForHotkey = false;
       this.hotkeyMessage = null;
     }
 
     if (this.waitingForPause) {
-      console.log('[XIMIOHandler] Aborting pending pause');
+console.log('[XIMIOHandler] Aborting pending pause');
       this.waitingForPause = false;
       this.pauseInputBuffer = '';
       this.pauseReply = null;
     }
 
-    console.log(`[XIMIOHandler] Cleared ${queueSize} queued inputs`);
+console.log(`[XIMIOHandler] Cleared ${queueSize} queued inputs`);
 
     // On a real Amiga BBS, "request more input" would signal the serial port
     // In our web context, the frontend is always ready to send more input
     if (requestMoreInput) {
-      console.log('[XIMIOHandler] Ready for more input');
+console.log('[XIMIOHandler] Ready for more input');
     }
   }
 }

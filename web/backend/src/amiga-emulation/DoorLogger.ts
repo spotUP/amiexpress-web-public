@@ -19,7 +19,7 @@ export class DoorLogger {
   private enabled: boolean = true;
 
   constructor(doorName: string, nodeId?: number | string) {
-    console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`);
+console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`);
     this.doorName = doorName.replace(/[^a-zA-Z0-9_-]/g, '_');
     this.startTime = new Date();
 
@@ -35,7 +35,7 @@ export class DoorLogger {
     // __dirname = .../web/backend/src/amiga-emulation
     const projectRoot = path.resolve(__dirname, '../../../..');
     const logsDir = path.join(projectRoot, 'logs');
-    console.log(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
+console.log(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
     if (!amigafs.existsSync(logsDir)) {
       amigafs.mkdirSync(logsDir, { recursive: true });
     }

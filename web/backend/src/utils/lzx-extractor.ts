@@ -680,7 +680,7 @@ class UnLZX {
       }
 
       if (this.sum !== entry.crc) {
-        console.log(`[LZX] CRC mismatch (expected ${entry.crc}, got ${this.sum})`);
+console.log(`[LZX] CRC mismatch (expected ${entry.crc}, got ${this.sum})`);
         return false;
       }
 
@@ -728,13 +728,13 @@ class UnLZX {
     try {
       this.decrunch();
     } catch (error: any) {
-      console.error(`[LZX] Decompression failed: ${error.message}`);
+console.error(`[LZX] Decompression failed: ${error.message}`);
       return false;
     }
 
     // Verify size
     if (this.destPos !== entry.unpackSize) {
-      console.log(`[LZX] Size mismatch (expected ${entry.unpackSize}, got ${this.destPos})`);
+console.log(`[LZX] Size mismatch (expected ${entry.unpackSize}, got ${this.destPos})`);
       return false;
     }
 
@@ -742,7 +742,7 @@ class UnLZX {
     this.crcCalc(this.decrunchBuffer, this.destPos);
 
     if (this.sum !== entry.crc) {
-      console.log(`[LZX] CRC mismatch (expected ${entry.crc}, got ${this.sum})`);
+console.log(`[LZX] CRC mismatch (expected ${entry.crc}, got ${this.sum})`);
       return false;
     }
 
@@ -773,7 +773,7 @@ export async function extractFileFromLzx(
   let file: fs.FileHandle | null = null;
 
   try {
-    console.log(`[LZX] Extracting ${filename} from ${path.basename(lzxPath)}`);
+console.log(`[LZX] Extracting ${filename} from ${path.basename(lzxPath)}`);
 
     // Open archive
     file = await fs.open(lzxPath, 'r');
@@ -791,7 +791,7 @@ export async function extractFileFromLzx(
       throw new Error('Invalid LZX archive: bad signature');
     }
 
-    console.log(`[LZX] Archive signature OK`);
+console.log(`[LZX] Archive signature OK`);
 
     // Create UnLZX instance
     const unlzx = new UnLZX();
@@ -806,18 +806,18 @@ export async function extractFileFromLzx(
 
     // Read all archive entries
     const entries = await unlzx.readArchive(file);
-    console.log(`[LZX] Found ${entries.length} entries in archive`);
+console.log(`[LZX] Found ${entries.length} entries in archive`);
 
     // Find target file (case-insensitive)
     const lowerFilename = filename.toLowerCase();
     const entry = entries.find(e => e.filename.toLowerCase() === lowerFilename);
 
     if (!entry) {
-      console.log(`[LZX] File not found: ${filename}`);
+console.log(`[LZX] File not found: ${filename}`);
       return false;
     }
 
-    console.log(`[LZX] Found: ${entry.filename} (mode ${entry.packMode}, ${entry.packSize} → ${entry.unpackSize} bytes)`);
+console.log(`[LZX] Found: ${entry.filename} (mode ${entry.packMode}, ${entry.packSize} → ${entry.unpackSize} bytes)`);
 
     // Reopen and position at file data
     await file.close();
@@ -850,27 +850,27 @@ export async function extractFileFromLzx(
 
     switch (entry.packMode) {
       case 0: // Stored (uncompressed)
-        console.log(`[LZX] Extracting stored file...`);
+console.log(`[LZX] Extracting stored file...`);
         success = await unlzx.extractStored(file, entry, outputPath);
         break;
 
       case 2: // Normal (compressed)
-        console.log(`[LZX] Decompressing file...`);
+console.log(`[LZX] Decompressing file...`);
         success = await unlzx.extractNormal(file, entry, outputPath);
         break;
 
       default:
-        console.log(`[LZX] Unsupported pack mode: ${entry.packMode}`);
+console.log(`[LZX] Unsupported pack mode: ${entry.packMode}`);
         return false;
     }
 
     if (success) {
-      console.log(`[LZX] ✓ Extracted to ${outputPath}`);
+console.log(`[LZX] ✓ Extracted to ${outputPath}`);
     }
 
     return success;
   } catch (error: any) {
-    console.error(`[LZX] Error: ${error.message}`);
+console.error(`[LZX] Error: ${error.message}`);
     return false;
   } finally {
     if (file !== null) {
@@ -896,7 +896,7 @@ export async function listLzxFiles(lzxPath: string): Promise<string[]> {
   let file: fs.FileHandle | null = null;
 
   try {
-    console.log(`[LZX] Listing files in ${path.basename(lzxPath)}`);
+console.log(`[LZX] Listing files in ${path.basename(lzxPath)}`);
 
     // Open archive
     file = await fs.open(lzxPath, 'r');
@@ -920,7 +920,7 @@ export async function listLzxFiles(lzxPath: string): Promise<string[]> {
 
     return entries.map(e => e.filename);
   } catch (error: any) {
-    console.error(`[LZX] Error: ${error.message}`);
+console.error(`[LZX] Error: ${error.message}`);
     return [];
   } finally {
     if (file !== null) {

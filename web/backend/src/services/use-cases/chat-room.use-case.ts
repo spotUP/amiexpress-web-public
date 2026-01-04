@@ -28,7 +28,7 @@ export class ChatRoomUseCase {
       const members = await this.db.getRoomMembers(roomId);
       return members || [];
     } catch (error) {
-      console.error('[ChatRoomUseCase] Error getting room members:', error);
+console.error('[ChatRoomUseCase] Error getting room members:', error);
       return [];
     }
   }

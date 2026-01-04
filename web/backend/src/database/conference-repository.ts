@@ -72,10 +72,10 @@ export class ConferenceRepository extends BaseRepository<any> {
         updated: new Date()
       };
       conferenceFileManager.writeConferenceFile(fullConf, slotNumber);
-      console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);
+console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);
     } catch (error) {
       if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
-        console.error(`[Database] Failed to sync conference to disk:`, error);
+console.error(`[Database] Failed to sync conference to disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
@@ -97,7 +97,7 @@ export class ConferenceRepository extends BaseRepository<any> {
 
   async getConferences(): Promise<Conference[]> {
 
-    console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);
+console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);
 
     const stmt = this.prepare('SELECT * FROM conferences ORDER BY id');
     const rows = stmt.all() as any[];
@@ -174,12 +174,12 @@ export class ConferenceRepository extends BaseRepository<any> {
 
         if (slotNumber >= 0) {
           conferenceFileManager.updateConferenceFile(fullConf, slotNumber);
-          console.log(`[Database] Synced updated conference "${row.name}" to Conf.DB (slot ${slotNumber})`);
+console.log(`[Database] Synced updated conference "${row.name}" to Conf.DB (slot ${slotNumber})`);
         }
       }
     } catch (error) {
       if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
-        console.error(`[Database] Failed to sync updated conference to disk:`, error);
+console.error(`[Database] Failed to sync updated conference to disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
@@ -201,9 +201,9 @@ export class ConferenceRepository extends BaseRepository<any> {
     // CRITICAL: Ensure Messages directory exists for Amiga door compatibility
     try {
       messageFileManager.initializeMessageDirs();  // Creates Conf{n}/Messages/ if needed
-      console.log(`[Database] Ensured Messages directory for conference ${mb.conferenceId}`);
+console.log(`[Database] Ensured Messages directory for conference ${mb.conferenceId}`);
     } catch (error) {
-      console.error(`[Database] Failed to create Messages directory:`, error);
+console.error(`[Database] Failed to create Messages directory:`, error);
       SysopDebugUtil.debug(
         null,
         null,

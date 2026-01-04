@@ -35,7 +35,7 @@ export class IntuitionLibrary {
    */
   OpenWindow(): void {
     const newWindowPtr = this.emulator.getRegister(CPURegister.A0);
-    console.log(`[intuition.library] OpenWindow(newWindow=0x${newWindowPtr.toString(16)}) - returning dummy handle`);
+console.log(`[intuition.library] OpenWindow(newWindow=0x${newWindowPtr.toString(16)}) - returning dummy handle`);
 
     // Return dummy window handle
     const handle = this.nextWindowHandle++;
@@ -48,7 +48,7 @@ export class IntuitionLibrary {
    */
   CloseWindow(): void {
     const window = this.emulator.getRegister(CPURegister.A0);
-    console.log(`[intuition.library] CloseWindow(window=0x${window.toString(16)}) - no-op`);
+console.log(`[intuition.library] CloseWindow(window=0x${window.toString(16)}) - no-op`);
   }
 
   /**
@@ -58,7 +58,7 @@ export class IntuitionLibrary {
    */
   OpenScreen(): void {
     const newScreenPtr = this.emulator.getRegister(CPURegister.A0);
-    console.log(`[intuition.library] OpenScreen(newScreen=0x${newScreenPtr.toString(16)}) - returning dummy handle`);
+console.log(`[intuition.library] OpenScreen(newScreen=0x${newScreenPtr.toString(16)}) - returning dummy handle`);
 
     // Return dummy screen handle
     const handle = this.nextScreenHandle++;
@@ -72,7 +72,7 @@ export class IntuitionLibrary {
    */
   CloseScreen(): void {
     const screen = this.emulator.getRegister(CPURegister.A0);
-    console.log(`[intuition.library] CloseScreen(screen=0x${screen.toString(16)}) - no-op`);
+console.log(`[intuition.library] CloseScreen(screen=0x${screen.toString(16)}) - no-op`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -97,7 +97,7 @@ export class IntuitionLibrary {
       screenTitle = this.readString(screenTitlePtr);
     }
 
-    console.log(`[intuition.library] SetWindowTitles(window="${windowTitle}", screen="${screenTitle}") - no-op`);
+console.log(`[intuition.library] SetWindowTitles(window="${windowTitle}", screen="${screenTitle}") - no-op`);
   }
 
   /**
@@ -107,7 +107,7 @@ export class IntuitionLibrary {
    * A2 = requester pointer
    */
   RefreshGadgets(): void {
-    console.log('[intuition.library] RefreshGadgets() - no-op');
+console.log('[intuition.library] RefreshGadgets() - no-op');
   }
 
   /**
@@ -115,7 +115,7 @@ export class IntuitionLibrary {
    * Returns: D0 = screen pointer
    */
   OpenWorkBench(): void {
-    console.log('[intuition.library] OpenWorkBench() - returning dummy screen handle');
+console.log('[intuition.library] OpenWorkBench() - returning dummy screen handle');
     // Use screen handle range (0x09A000+) to avoid door code range (0x1000-0x80000)
     this.emulator.setRegister(CPURegister.D0, 0x09A000);
   }
@@ -154,7 +154,7 @@ export class IntuitionLibrary {
       }
     }
 
-    console.log(`[intuition.library] AutoRequest(window=0x${window.toString(16)}, body="${bodyText}") - returning FALSE (no GUI)`);
+console.log(`[intuition.library] AutoRequest(window=0x${window.toString(16)}, body="${bodyText}") - returning FALSE (no GUI)`);
 
     // Return FALSE (0) to indicate user "cancelled" the dialog
     // This allows the door to continue with error handling
@@ -205,14 +205,14 @@ export class IntuitionLibrary {
         return true;
       default:
         // COMPREHENSIVE STUB IMPLEMENTATION FOR ALL UNIMPLEMENTED FUNCTIONS
-        console.warn(`[intuition.library] STUB: Unimplemented function at LVO ${offset}`);
+console.warn(`[intuition.library] STUB: Unimplemented function at LVO ${offset}`);
         this.emulator.setRegister(CPURegister.D0, 0);
 
         const d0 = this.emulator.getRegister(CPURegister.D0);
         const d1 = this.emulator.getRegister(CPURegister.D1);
         const a0 = this.emulator.getRegister(CPURegister.A0);
-        console.warn(`[intuition.library]   Context: D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} A0=0x${a0.toString(16)}`);
-        console.warn(`[intuition.library]   Returning D0=0 (failure) - door should handle gracefully`);
+console.warn(`[intuition.library]   Context: D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} A0=0x${a0.toString(16)}`);
+console.warn(`[intuition.library]   Returning D0=0 (failure) - door should handle gracefully`);
 
         return true; // Return true to indicate we handled it (with a stub)
     }

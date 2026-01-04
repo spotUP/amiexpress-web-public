@@ -628,10 +628,10 @@ export class BBSHealthCheckService {
         try {
           await this.autoFixIssue(issue);
           fixed++;
-          console.log(`[HealthCheck] Fixed: ${issue.description}`);
+console.log(`[HealthCheck] Fixed: ${issue.description}`);
         } catch (error) {
           failed++;
-          console.error(`[HealthCheck] Failed to fix: ${issue.description}`, error);
+console.error(`[HealthCheck] Failed to fix: ${issue.description}`, error);
         }
       }
     }

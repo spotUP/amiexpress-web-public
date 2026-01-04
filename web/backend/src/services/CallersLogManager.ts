@@ -27,8 +27,8 @@ export class CallersLogManager {
   constructor() {
     // BBS: points to project root
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
-    console.log('[CallersLogManager] Initialized');
-    console.log(`  BBS root: ${this.bbsRoot}`);
+console.log('[CallersLogManager] Initialized');
+console.log(`  BBS root: ${this.bbsRoot}`);
   }
 
   /**
@@ -45,7 +45,7 @@ export class CallersLogManager {
     const nodeDir = path.join(this.bbsRoot, `Node${nodeId}`);
     if (!fs.existsSync(nodeDir)) {
       fs.mkdirSync(nodeDir, { recursive: true });
-      console.log(`[CallersLog] Created directory: Node${nodeId}/`);
+console.log(`[CallersLog] Created directory: Node${nodeId}/`);
     }
   }
 
@@ -78,9 +78,9 @@ export class CallersLogManager {
       const logLine = `${timestamp} ${entry}\n`;
 
       fs.appendFileSync(logPath, logLine, 'utf8');
-      console.log(`[CallersLog] Node${nodeId}: ${entry}`);
+console.log(`[CallersLog] Node${nodeId}: ${entry}`);
     } catch (error) {
-      console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
+console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
     }
   }
 
@@ -192,7 +192,7 @@ export class CallersLogManager {
       }
       return null;
     } catch (error) {
-      console.error(`[CallersLog] Error getting last caller:`, error);
+console.error(`[CallersLog] Error getting last caller:`, error);
       return null;
     }
   }
@@ -208,7 +208,7 @@ export class CallersLogManager {
       }
       return fs.readFileSync(logPath, 'utf8');
     } catch (error) {
-      console.error(`[CallersLog] Error reading Node${nodeId}/CallersLog:`, error);
+console.error(`[CallersLog] Error reading Node${nodeId}/CallersLog:`, error);
       return null;
     }
   }
@@ -221,10 +221,10 @@ export class CallersLogManager {
       const logPath = this.getLogPath(nodeId);
       if (fs.existsSync(logPath)) {
         fs.unlinkSync(logPath);
-        console.log(`[CallersLog] Cleared Node${nodeId}/CallersLog`);
+console.log(`[CallersLog] Cleared Node${nodeId}/CallersLog`);
       }
     } catch (error) {
-      console.error(`[CallersLog] Error clearing Node${nodeId}/CallersLog:`, error);
+console.error(`[CallersLog] Error clearing Node${nodeId}/CallersLog:`, error);
     }
   }
 
@@ -235,7 +235,7 @@ export class CallersLogManager {
     for (let i = 0; i < maxNodes; i++) {
       this.ensureNodeDir(i);
     }
-    console.log(`[CallersLog] Initialized ${maxNodes} node directories`);
+console.log(`[CallersLog] Initialized ${maxNodes} node directories`);
   }
 }
 

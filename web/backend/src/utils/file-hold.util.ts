@@ -53,14 +53,14 @@ export async function moveToHold(
   try {
     // Move file from playpen to HOLD
     await fs.rename(sourcePath, targetPath);
-    console.log(`[HOLD] Moved ${filename} to HOLD directory`);
+console.log(`[HOLD] Moved ${filename} to HOLD directory`);
 
     // Update HOLD/HELD tracking file (express.e:19488)
     await updateHeldTracking(conferencePath, filename, 'add');
 
     return targetPath;
   } catch (error: any) {
-    console.error(`[HOLD] Error moving file to HOLD: ${error.message}`);
+console.error(`[HOLD] Error moving file to HOLD: ${error.message}`);
     throw error;
   }
 }
@@ -88,11 +88,11 @@ export async function moveToLCFiles(
   try {
     // Move file from playpen to LCFILES
     await fs.rename(sourcePath, targetPath);
-    console.log(`[LCFILES] Moved ${filename} to LCFILES directory`);
+console.log(`[LCFILES] Moved ${filename} to LCFILES directory`);
 
     return targetPath;
   } catch (error: any) {
-    console.error(`[LCFILES] Error moving file: ${error.message}`);
+console.error(`[LCFILES] Error moving file: ${error.message}`);
     throw error;
   }
 }
@@ -135,9 +135,9 @@ async function updateHeldTracking(
 
     // Write updated count
     await fs.writeFile(heldFile, count.toString());
-    console.log(`[HOLD] Updated HELD tracking: ${count} files`);
+console.log(`[HOLD] Updated HELD tracking: ${count} files`);
   } catch (error: any) {
-    console.error(`[HOLD] Error updating HELD tracking: ${error.message}`);
+console.error(`[HOLD] Error updating HELD tracking: ${error.message}`);
   }
 }
 
@@ -221,10 +221,10 @@ export async function moveToFileArea(
   try {
     // Move file from playpen to file area
     await fs.rename(sourcePath, targetPath);
-    console.log(`[FileArea] Moved ${filename} to file area ${fileAreaId}`);
+console.log(`[FileArea] Moved ${filename} to file area ${fileAreaId}`);
     return targetPath;
   } catch (error: any) {
-    console.error(`[FileArea] Error moving file to file area: ${error.message}`);
+console.error(`[FileArea] Error moving file to file area: ${error.message}`);
     throw error;
   }
 }
@@ -252,10 +252,10 @@ export async function moveToFiles(
   try {
     // Move file from playpen to Files
     await fs.rename(sourcePath, targetPath);
-    console.log(`[Files] Moved ${filename} to ${filesDir}`);
+console.log(`[Files] Moved ${filename} to ${filesDir}`);
     return targetPath;
   } catch (error: any) {
-    console.error(`[Files] Error moving file: ${error.message}`);
+console.error(`[Files] Error moving file: ${error.message}`);
     throw error;
   }
 }

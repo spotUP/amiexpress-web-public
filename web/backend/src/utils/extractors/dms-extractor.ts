@@ -32,9 +32,9 @@ export async function extractFileDizFromDms(
   dmsPath: string,
   outputPath: string
 ): Promise<boolean> {
-  console.log(`[DMS] FILE_ID.DIZ extraction from DMS not yet implemented`);
-  console.log(`[DMS] Reason: Requires Amiga OFS/FFS filesystem parser`);
-  console.log(`[DMS] Note: DMS files are very rare for BBS uploads`);
+console.log(`[DMS] FILE_ID.DIZ extraction from DMS not yet implemented`);
+console.log(`[DMS] Reason: Requires Amiga OFS/FFS filesystem parser`);
+console.log(`[DMS] Note: DMS files are very rare for BBS uploads`);
   return false;
 }
 
@@ -47,7 +47,7 @@ export async function decompressDmsToAdf(
   const SAEO_DMS = require('../dms.js');
 
   try {
-    console.log(`[DMS] Decompressing ${path.basename(dmsPath)} to ADF...`);
+console.log(`[DMS] Decompressing ${path.basename(dmsPath)} to ADF...`);
 
     const dmsData = await fs.readFile(dmsPath);
     const dmsArray = new Uint8Array(dmsData);
@@ -55,15 +55,15 @@ export async function decompressDmsToAdf(
     const result = dms.unpack(dmsArray);
 
     if (!result || !result.data) {
-      console.log(`[DMS] Decompression failed`);
+console.log(`[DMS] Decompression failed`);
       return false;
     }
 
     await fs.writeFile(adfPath, Buffer.from(result.data));
-    console.log(`[DMS] ✓ Decompressed to ${adfPath} (${result.data.length} bytes)`);
+console.log(`[DMS] ✓ Decompressed to ${adfPath} (${result.data.length} bytes)`);
     return true;
   } catch (error: any) {
-    console.error(`[DMS] Error: ${error.message}`);
+console.error(`[DMS] Error: ${error.message}`);
     return false;
   }
 }

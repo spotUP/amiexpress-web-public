@@ -24,7 +24,7 @@ export class ProtocolConfigService {
     const xprTypesPath = path.join(bbsRoot, 'Protocols', 'XprTypes.info');
 
     if (!fs.existsSync(xprTypesPath)) {
-      console.warn('[ProtocolConfigService] Protocols/XprTypes.info not found');
+console.warn('[ProtocolConfigService] Protocols/XprTypes.info not found');
       return this.configRepo.getProtocols();
     }
 
@@ -70,10 +70,10 @@ export class ProtocolConfigService {
         if (protocolNum > 50) break;
       }
 
-      console.log(`[ProtocolConfigService] Loaded ${protocols.length} protocols`);
+console.log(`[ProtocolConfigService] Loaded ${protocols.length} protocols`);
       return protocols;
     } catch (error) {
-      console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', error);
+console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', error);
       return this.configRepo.getProtocols();
     }
   }
@@ -186,9 +186,9 @@ export class ProtocolConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(xprTypesPath, infoData);
 
-      console.log(`[ProtocolConfigService] Wrote ${xprTypesPath} with ${protocolNum - 1} protocols`);
+console.log(`[ProtocolConfigService] Wrote ${xprTypesPath} with ${protocolNum - 1} protocols`);
     } catch (error) {
-      console.error(`[ProtocolConfigService] Failed to write ${xprTypesPath}:`, error);
+console.error(`[ProtocolConfigService] Failed to write ${xprTypesPath}:`, error);
     }
   }
 }

@@ -206,10 +206,10 @@ export async function loadMsgPointers(
 export async function saveMsgPointers(confBase: ConfBase): Promise<void> {
   // Validate pointers (express.e:4933-4945)
   if (confBase.lastMsgReadConf === 0) {
-    console.warn(`saveMsgPointers: lastMsgReadConf is 0 for conf ${confBase.conferenceId}`);
+console.warn(`saveMsgPointers: lastMsgReadConf is 0 for conf ${confBase.conferenceId}`);
   }
   if (confBase.lastNewReadConf === 0) {
-    console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferenceId}`);
+console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferenceId}`);
   }
 
   const sqlite = getSqliteDb();
@@ -268,13 +268,13 @@ export function validatePointers(confBase: ConfBase, mailStat: MailStat): ConfBa
 
   // Upper bound validation (express.e:5040-5049)
   if (lastMsgReadConf > mailStat.highMsgNum) {
-    console.error(
+console.error(
       `validatePointers: lastMsgReadConf ${lastMsgReadConf} > highMsgNum ${mailStat.highMsgNum}`
     );
     lastMsgReadConf = 0;
   }
   if (lastNewReadConf > mailStat.highMsgNum) {
-    console.error(
+console.error(
       `validatePointers: lastNewReadConf ${lastNewReadConf} > highMsgNum ${mailStat.highMsgNum}`
     );
     lastNewReadConf = 0;

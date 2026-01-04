@@ -24,7 +24,7 @@ export class ComputerConfigService {
     const computerListPath = path.join(bbsRoot, 'ComputerList.info');
 
     if (!fs.existsSync(computerListPath)) {
-      console.warn('[ComputerConfigService] ComputerList.info not found');
+console.warn('[ComputerConfigService] ComputerList.info not found');
       return this.configRepo.getAllComputerTypes();
     }
 
@@ -56,10 +56,10 @@ export class ComputerConfigService {
         }
       }
 
-      console.log(`[ComputerConfigService] Loaded ${computers.length} computer types`);
+console.log(`[ComputerConfigService] Loaded ${computers.length} computer types`);
       return computers;
     } catch (error) {
-      console.error('[ComputerConfigService] Error reading ComputerList.info:', error);
+console.error('[ComputerConfigService] Error reading ComputerList.info:', error);
       return this.configRepo.getAllComputerTypes();
     }
   }
@@ -152,9 +152,9 @@ export class ComputerConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(computerListPath, infoData);
 
-      console.log(`[ComputerConfigService] Wrote ${computerListPath} with ${computerNum} types`);
+console.log(`[ComputerConfigService] Wrote ${computerListPath} with ${computerNum} types`);
     } catch (error) {
-      console.error(`[ComputerConfigService] Failed to write ${computerListPath}:`, error);
+console.error(`[ComputerConfigService] Failed to write ${computerListPath}:`, error);
     }
   }
 }

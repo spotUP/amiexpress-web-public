@@ -102,18 +102,18 @@ export class XIMMessageParser {
       DoorConstants.MESSAGE_STRING_CAPACITY
     );
 
-    console.log("[XIMMessageParser] Parsed jhMessage:");
-    console.log(`  Address: 0x${msgAddr.toString(16)}`);
-    console.log(`  Length: ${messageLength}`);
-    console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
-    console.log(`  Command: ${command} (${this.getCommandName(command)})`);
-    console.log(`  Data: ${data} (0x${data.toString(16)})`);
-    console.log(`  Node: ${nodeId}, Line: ${lineNumber}`);
-    console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
-    console.log(`  Semi: ${this.formatHex(semaphore)}`);
-    console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
-    console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
-    console.log(`  String: "${messageString}"`);
+console.log("[XIMMessageParser] Parsed jhMessage:");
+console.log(`  Address: 0x${msgAddr.toString(16)}`);
+console.log(`  Length: ${messageLength}`);
+console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
+console.log(`  Command: ${command} (${this.getCommandName(command)})`);
+console.log(`  Data: ${data} (0x${data.toString(16)})`);
+console.log(`  Node: ${nodeId}, Line: ${lineNumber}`);
+console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
+console.log(`  Semi: ${this.formatHex(semaphore)}`);
+console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
+console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
+console.log(`  String: "${messageString}"`);
 
     return {
       msgAddr,

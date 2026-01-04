@@ -347,7 +347,7 @@ export class ImportValidationService {
     };
     conflicts: ConflictReport;
   }> {
-    console.log('[ImportValidation] Running comprehensive validation...');
+console.log('[ImportValidation] Running comprehensive validation...');
 
     const results = {
       structure: await this.validateArchiveStructure(importData.extractedPath),
@@ -364,12 +364,12 @@ export class ImportValidationService {
       results.conferences.valid &&
       results.config.valid;
 
-    console.log('[ImportValidation] Validation complete:');
-    console.log(`  Structure: ${results.structure.valid ? 'PASS' : 'FAIL'}`);
-    console.log(`  Users: ${results.users.valid ? 'PASS' : 'FAIL'}`);
-    console.log(`  Conferences: ${results.conferences.valid ? 'PASS' : 'FAIL'}`);
-    console.log(`  Config: ${results.config.valid ? 'PASS' : 'FAIL'}`);
-    console.log(`  Conflicts: ${conflicts.userConflicts.length + conflicts.conferenceConflicts.length}`);
+console.log('[ImportValidation] Validation complete:');
+console.log(`  Structure: ${results.structure.valid ? 'PASS' : 'FAIL'}`);
+console.log(`  Users: ${results.users.valid ? 'PASS' : 'FAIL'}`);
+console.log(`  Conferences: ${results.conferences.valid ? 'PASS' : 'FAIL'}`);
+console.log(`  Config: ${results.config.valid ? 'PASS' : 'FAIL'}`);
+console.log(`  Conflicts: ${conflicts.userConflicts.length + conflicts.conferenceConflicts.length}`);
 
     return { valid, results, conflicts };
   }

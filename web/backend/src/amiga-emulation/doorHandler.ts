@@ -21,7 +21,7 @@ const activeSessions = new Map<string, DoorSession>();
  * Set up door-related Socket.io event handlers
  */
 export function setupDoorHandlers(socket: Socket): void {
-  console.log(`[DoorHandler] Setting up handlers for socket ${socket.id}`);
+console.log(`[DoorHandler] Setting up handlers for socket ${socket.id}`);
 
   /**
    * Launch a door
@@ -31,11 +31,11 @@ export function setupDoorHandlers(socket: Socket): void {
     "door:launch",
     async (payload: { doorId: string; doorPath?: string }) => {
       try {
-        console.log(`[DoorHandler] Launch request for door: ${payload.doorId}`);
+console.log(`[DoorHandler] Launch request for door: ${payload.doorId}`);
 
         // Check if session already exists
         if (activeSessions.has(socket.id)) {
-          console.warn(
+console.warn(
             `[DoorHandler] Session already active for socket ${socket.id}`
           );
           socket.emit("door:error", { message: "Door session already active" });
@@ -61,7 +61,7 @@ export function setupDoorHandlers(socket: Socket): void {
           executablePath = resolved;
         }
 
-        console.log(`[DoorHandler] Executable path: ${executablePath}`);
+console.log(`[DoorHandler] Executable path: ${executablePath}`);
 
         // Determine door type by file extension
         const ext = path.extname(executablePath).toLowerCase();
@@ -69,21 +69,21 @@ export function setupDoorHandlers(socket: Socket): void {
 
         if (ext === ".py") {
           // Python door
-          console.log("[DoorHandler] Launching Python door");
+console.log("[DoorHandler] Launching Python door");
           session = new PythonDoorSession(socket, {
             executablePath,
             timeout: 600, // 10 minutes
           });
         } else if (ext === ".rexx") {
           // AREXX door
-          console.log("[DoorHandler] Launching AREXX door");
+console.log("[DoorHandler] Launching AREXX door");
           session = new AREXXDoorSession(socket, {
             executablePath,
             timeout: 600, // 10 minutes
           });
         } else {
           // Amiga/native door (default)
-          console.log("[DoorHandler] Launching Amiga door");
+console.log("[DoorHandler] Launching Amiga door");
           session = new AmigaDoorSession(socket, {
             executablePath,
             doorType: "XIM",
@@ -96,7 +96,7 @@ export function setupDoorHandlers(socket: Socket): void {
         // Start the door
         await session.start();
       } catch (error) {
-        console.error("[DoorHandler] Error launching door:", error);
+console.error("[DoorHandler] Error launching door:", error);
         socket.emit("door:error", {
           message:
             error instanceof Error ? error.message : "Failed to launch door",
@@ -126,10 +126,10 @@ export function setupDoorHandlers(socket: Socket): void {
    * Cleanup on disconnect
    */
   socket.on("disconnect", () => {
-    console.log(`[DoorHandler] Socket ${socket.id} disconnected`);
+console.log(`[DoorHandler] Socket ${socket.id} disconnected`);
     const session = activeSessions.get(socket.id);
     if (session) {
-      console.log(`[DoorHandler] Terminating session for ${socket.id}`);
+console.log(`[DoorHandler] Terminating session for ${socket.id}`);
       session.terminate();
       activeSessions.delete(socket.id);
     }
@@ -147,7 +147,7 @@ export function getActiveSessionCount(): number {
  * Terminate all sessions (for shutdown)
  */
 export function terminateAllSessions(): void {
-  console.log(
+console.log(
     `[DoorHandler] Terminating ${activeSessions.size} active sessions`
   );
   for (const [socketId, session] of activeSessions) {

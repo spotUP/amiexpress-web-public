@@ -49,7 +49,7 @@ const clientVersion = `Multi Relay Chat Client v${VERSION} [sf]`;
 function logger(message: string): void {
   const now = new Date();
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 19);
-  console.log(`${timestamp}  ${message.trim()}`);
+console.log(`${timestamp}  ${message.trim()}`);
 
   if (DEBUG_FLAG) {
     const logFile = path.join(process.cwd(), 'mrcchat.dbg');
@@ -452,24 +452,24 @@ function checkStartup(): boolean {
   let failed = false;
 
   if (config.bbsName.length < 5) {
-    console.log("Config: 'bbsname' should be set to something sensible");
+console.log("Config: 'bbsname' should be set to something sensible");
     failed = true;
   }
 
   if (config.bbsName.length > 40) {
-    console.log("Config: 'bbsname' cannot be longer than 40 characters after PIPE codes evaluation");
+console.log("Config: 'bbsname' cannot be longer than 40 characters after PIPE codes evaluation");
     failed = true;
   }
 
   for (const param of params) {
     if (param.length > 64) {
-      console.log(`Config: '${param}' cannot be longer than 64 characters`);
+console.log(`Config: '${param}' cannot be longer than 64 characters`);
       failed = true;
     }
   }
 
   if (failed) {
-    console.log('This must be fixed in mrc_client.cfg');
+console.log('This must be fixed in mrc_client.cfg');
   }
 
   return !failed;
@@ -479,8 +479,8 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length < 2) {
-    console.log('run this with your machine hostname, port as a parameter');
-    console.log('node mrc-client.js <hostname> <port>');
+console.log('run this with your machine hostname, port as a parameter');
+console.log('node mrc-client.js <hostname> <port>');
     process.exit(1);
   }
 
@@ -488,7 +488,7 @@ async function main(): Promise<void> {
   const port = parseInt(args[1], 10);
 
   if (isNaN(port)) {
-    console.log('Port must be a number');
+console.log('Port must be a number');
     process.exit(1);
   }
 

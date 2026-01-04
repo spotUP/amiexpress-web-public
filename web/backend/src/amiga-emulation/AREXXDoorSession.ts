@@ -64,12 +64,12 @@ export class AREXXDoorSession {
    * Set up Socket.io event handlers for user input
    */
   private setupSocketHandlers(): void {
-    console.log('[AREXXDoorSession] Setting up socket handlers');
+console.log('[AREXXDoorSession] Setting up socket handlers');
 
     // Handle user input
     this.socket.on('door:input', (data: string) => {
       if (this.isRunning && this.interpreter) {
-        console.log(`[AREXXDoorSession] Received input: "${data}"`);
+console.log(`[AREXXDoorSession] Received input: "${data}"`);
 
         // Store input for BBSREAD() to retrieve
         if (this.interpreter['context']) {
@@ -80,7 +80,7 @@ export class AREXXDoorSession {
 
     // Handle disconnection
     this.socket.on('disconnect', () => {
-      console.log('[AREXXDoorSession] Socket disconnected, terminating door');
+console.log('[AREXXDoorSession] Socket disconnected, terminating door');
       this.terminate();
     });
   }
@@ -90,7 +90,7 @@ export class AREXXDoorSession {
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.warn('[AREXXDoorSession] Door already running');
+console.warn('[AREXXDoorSession] Door already running');
       return;
     }
 
@@ -101,7 +101,7 @@ export class AREXXDoorSession {
       throw new Error(`AREXX door not found: ${executablePath}`);
     }
 
-    console.log('[AREXXDoorSession] Starting AREXX door:', executablePath);
+console.log('[AREXXDoorSession] Starting AREXX door:', executablePath);
 
     // Create drop files if user provided
     if (this.config.user && this.config.nodeId) {
@@ -126,14 +126,14 @@ export class AREXXDoorSession {
     // Set execution timeout
     if (this.config.timeout) {
       this.executionTimer = setTimeout(() => {
-        console.log('[AREXXDoorSession] Door timeout, terminating');
+console.log('[AREXXDoorSession] Door timeout, terminating');
         this.terminate();
       }, this.config.timeout * 1000);
     }
 
     // Execute script
     try {
-      console.log('[AREXXDoorSession] Executing AREXX script');
+console.log('[AREXXDoorSession] Executing AREXX script');
       const result = await this.interpreter.execute(scriptContent);
 
       // Send output to user
@@ -143,11 +143,11 @@ export class AREXXDoorSession {
         }
       }
 
-      console.log('[AREXXDoorSession] AREXX door completed successfully');
+console.log('[AREXXDoorSession] AREXX door completed successfully');
       this.socket.emit('door:exit', { code: 0 });
 
     } catch (error) {
-      console.error('[AREXXDoorSession] AREXX execution error:', error);
+console.error('[AREXXDoorSession] AREXX execution error:', error);
       this.socket.emit('door:error', {
         message: error instanceof Error ? error.message : 'AREXX execution failed'
       });
@@ -204,7 +204,7 @@ export class AREXXDoorSession {
       return;
     }
 
-    console.log('[AREXXDoorSession] Terminating door');
+console.log('[AREXXDoorSession] Terminating door');
     this.cleanup();
   }
 
@@ -228,14 +228,14 @@ export class AREXXDoorSession {
       try {
         doorDropFileManager.cleanupDropFiles(this.config.nodeId);
       } catch (error) {
-        console.error('[AREXXDoorSession] Error cleaning up drop files:', error);
+console.error('[AREXXDoorSession] Error cleaning up drop files:', error);
       }
     }
 
     // Null out interpreter reference
     this.interpreter = null;
 
-    console.log('[AREXXDoorSession] Cleanup complete');
+console.log('[AREXXDoorSession] Cleanup complete');
   }
 
   /**

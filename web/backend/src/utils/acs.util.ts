@@ -124,7 +124,7 @@ function writeEnvStatus(nodeId: number, username: string, envStat: EnvStat): voi
   const status = `${paddedName}-${code}`;
   const filePath = path.join(envDir, `STATS@${nodeId}`);
 
-  console.log(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
+console.log(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
   fs.writeFileSync(filePath, status, { encoding: 'ascii' });
 }
 
@@ -399,7 +399,7 @@ export function setEnvStat(session: any, envStat: EnvStat): void {
   try {
     writeEnvStatus(nodeId, username, envStat);
   } catch (error) {
-    console.error(`[EnvStat] Failed to write STATS@${nodeId}:`, error);
+console.error(`[EnvStat] Failed to write STATS@${nodeId}:`, error);
   }
 }
 

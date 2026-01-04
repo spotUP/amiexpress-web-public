@@ -120,7 +120,7 @@ export class MessageIndexManager {
     // Create empty HeaderFile if it doesn't exist
     if (!fs.existsSync(headerPath)) {
       fs.writeFileSync(headerPath, Buffer.alloc(0));
-      console.log(`[MessageIndexManager] Created HeaderFile for Conf${confNumber}`);
+console.log(`[MessageIndexManager] Created HeaderFile for Conf${confNumber}`);
     }
 
     // Create initial MailStats if it doesn't exist
@@ -132,13 +132,13 @@ export class MessageIndexManager {
         pad: Buffer.alloc(6, 0)
       };
       this.writeMailStats(confNumber, initialStats);
-      console.log(`[MessageIndexManager] Created MailStats for Conf${confNumber}`);
+console.log(`[MessageIndexManager] Created MailStats for Conf${confNumber}`);
     }
 
     // Create empty MailLock if it doesn't exist
     if (!fs.existsSync(lockPath)) {
       fs.writeFileSync(lockPath, '');
-      console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
+console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
     }
   }
 
@@ -266,7 +266,7 @@ export class MessageIndexManager {
     const buffer = this.serializeMsgHeader(header);
 
     fs.appendFileSync(headerPath, buffer);
-    console.log(`[MessageIndexManager] Appended header for msg ${header.msgNumb} to HeaderFile`);
+console.log(`[MessageIndexManager] Appended header for msg ${header.msgNumb} to HeaderFile`);
 
     // Update MailStats
     this.updateMailStatsAfterAdd(confNumber, header.msgNumb);
@@ -280,7 +280,7 @@ export class MessageIndexManager {
     const index = headers.findIndex(h => h.msgNumb === msgNumber);
 
     if (index < 0) {
-      console.error(`[MessageIndexManager] Message ${msgNumber} not found in HeaderFile`);
+console.error(`[MessageIndexManager] Message ${msgNumber} not found in HeaderFile`);
       return;
     }
 
@@ -289,7 +289,7 @@ export class MessageIndexManager {
 
     // Rewrite entire HeaderFile
     this.rewriteHeaderFile(confNumber, headers);
-    console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in HeaderFile`);
+console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in HeaderFile`);
   }
 
   /**
@@ -426,7 +426,7 @@ export class MessageIndexManager {
     }
 
     this.writeMailStats(confNumber, stats);
-    console.log(`[MessageIndexManager] Updated MailStats: high=${stats.highMsgNum}, low=${stats.lowestKey}`);
+console.log(`[MessageIndexManager] Updated MailStats: high=${stats.highMsgNum}, low=${stats.lowestKey}`);
   }
 
   /**
@@ -451,7 +451,7 @@ export class MessageIndexManager {
 
     stats.lowestNotDel = lowestNotDel;
     this.writeMailStats(confNumber, stats);
-    console.log(`[MessageIndexManager] Updated MailStats after delete: lowestNotDel=${lowestNotDel}`);
+console.log(`[MessageIndexManager] Updated MailStats after delete: lowestNotDel=${lowestNotDel}`);
   }
 
   /**
@@ -471,7 +471,7 @@ export class MessageIndexManager {
 
         // If lock is older than 30 seconds, consider it stale
         if (!isNaN(timestamp) && (now - timestamp) < 30000) {
-          console.log(`[MessageIndexManager] MailLock already held for Conf${confNumber}`);
+console.log(`[MessageIndexManager] MailLock already held for Conf${confNumber}`);
           return false;
         }
       } catch (err) {
@@ -482,7 +482,7 @@ export class MessageIndexManager {
     // Acquire lock
     const lockData = `${Date.now()}`;
     fs.writeFileSync(lockPath, lockData);
-    console.log(`[MessageIndexManager] MailLock acquired for Conf${confNumber} by node ${nodeId}`);
+console.log(`[MessageIndexManager] MailLock acquired for Conf${confNumber} by node ${nodeId}`);
     return true;
   }
 
@@ -494,7 +494,7 @@ export class MessageIndexManager {
 
     if (fs.existsSync(lockPath)) {
       fs.unlinkSync(lockPath);
-      console.log(`[MessageIndexManager] MailLock released for Conf${confNumber} by node ${nodeId}`);
+console.log(`[MessageIndexManager] MailLock released for Conf${confNumber} by node ${nodeId}`);
     }
   }
 

@@ -20,6 +20,16 @@ export enum DebugSeverity {
 }
 
 export class SysopDebugUtil {
+  private static loggingSilenced = false;
+
+  /**
+   * Set global logging silence state
+   * When true, raw console.log/error calls wrapped by this util are suppressed
+   */
+  static setSilence(silenced: boolean): void {
+    this.loggingSilenced = silenced;
+  }
+
   /**
    * Get ANSI color code for severity level
    */
@@ -86,8 +96,10 @@ export class SysopDebugUtil {
     const errorMsg = typeof error === 'string' ? error : error.message;
     const debugMsg = `[SYSOP DEBUG] File ${operation} failed: ${filePath}\n  Error: ${errorMsg}`;
 
-    // Always log to backend
-    console.error(debugMsg);
+    // Always log to backend unless globally silenced
+    if (!this.loggingSilenced) {
+      console.error(debugMsg);
+    }
 
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
@@ -110,8 +122,10 @@ export class SysopDebugUtil {
     const debugMsg = `[SYSOP DEBUG] Door '${doorName}': ${issue}`;
     const detailsMsg = details ? `\n  Details: ${JSON.stringify(details, null, 2)}` : '';
 
-    // Always log to backend
-    console.error(debugMsg + detailsMsg);
+    // Always log to backend unless globally silenced
+    if (!this.loggingSilenced) {
+      console.error(debugMsg + detailsMsg);
+    }
 
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
@@ -143,8 +157,10 @@ export class SysopDebugUtil {
       detailsMsg = `\r\n  ${formattedDetails}`;
     }
 
-    // Always log to backend
-    console.log(debugMsg + (details ? `\n${JSON.stringify(details, null, 2)}` : ''));
+    // Always log to backend unless globally silenced
+    if (!this.loggingSilenced) {
+      console.log(debugMsg + (details ? `\n${JSON.stringify(details, null, 2)}` : ''));
+    }
 
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
@@ -164,8 +180,10 @@ export class SysopDebugUtil {
   ): void {
     const warnMsg = `[SYSOP WARNING] ${category}: ${message}`;
 
-    // Always log to backend
-    console.warn(warnMsg);
+    // Always log to backend unless globally silenced
+    if (!this.loggingSilenced) {
+      console.warn(warnMsg);
+    }
 
     // Send to terminal if sysop
     if (this.isSysop(session) && socket) {
@@ -292,10 +310,12 @@ export class SysopDebugUtil {
 
     const fullMsg = crashMsg + details;
 
-    // Always log to backend (use \n for console)
-    console.error(fullMsg.replace(/\r\n/g, '\n'));
-    if (crashInfo.stack) {
-      console.error('  JavaScript stack:', crashInfo.stack);
+    // Always log to backend (use \n for console) unless globally silenced
+    if (!this.loggingSilenced) {
+      console.error(fullMsg.replace(/\r\n/g, '\n'));
+      if (crashInfo.stack) {
+        console.error('  JavaScript stack:', crashInfo.stack);
+      }
     }
 
     // Send to terminal if sysop (use \r\n for ANSI terminal)

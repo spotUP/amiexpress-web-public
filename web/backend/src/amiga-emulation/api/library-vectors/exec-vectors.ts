@@ -16,7 +16,7 @@ function logTrap(message: string): void {
     const line = `[TrapDebug] ${new Date().toISOString()} ${message}\n`;
     fs.appendFileSync(logFile, line, { encoding: "utf8" });
   } catch (e) {
-    console.error(`[TrapDebug] Failed to write log: ${e}`);
+console.error(`[TrapDebug] Failed to write log: ${e}`);
   }
 }
 
@@ -102,7 +102,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     name: "Alert",
     handler: (emu, lib: ExecLibrary) => {
       const code = emu.getRegister(0); // D0
-      console.warn(
+console.warn(
         `[ExecLibrary] Alert() called (code=0x${code.toString(16)})`
       );
       return lib.handleRomInitAlert();
@@ -112,7 +112,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     offset: -132, // LVO -132 (0xFF7C)
     name: "Forbid",
     handler: (emu, lib: ExecLibrary) => {
-      console.log("[ExecLibrary] Forbid() - stub (no-op)");
+console.log("[ExecLibrary] Forbid() - stub (no-op)");
       // Preserve D0/condition flags; Forbid has no return value
       return emu.getRegister(0);
     },
@@ -121,7 +121,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     offset: -138, // LVO -138 (0xFF76)
     name: "Permit",
     handler: (emu, lib: ExecLibrary) => {
-      console.log("[ExecLibrary] Permit() - stub (no-op)");
+console.log("[ExecLibrary] Permit() - stub (no-op)");
       return emu.getRegister(0);
     },
   },
@@ -148,7 +148,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
         const spAfterPop = emu.getRegister(15);
         const exitTrapAddr = 0x1ff000;
         emu.writeMemory32(spAfterPop, exitTrapAddr);
-        console.log(
+console.log(
           `[ExecLibrary] FreeMem exit fix: seeded exit trap 0x${exitTrapAddr.toString(
             16
           )} at SP=0x${spAfterPop.toString(16)}`
@@ -208,7 +208,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       const portAddr = emu.getRegister(8); // A0
       const portName = portAddr ? lib.getPortName(portAddr) : "";
       logTrap(`GetMsg TRAP HIT! port=0x${portAddr.toString(16)} name=${portName}`);
-      console.log(
+console.log(
         `[ExecLibrary][Trap][GetMsg] port=0x${portAddr.toString(
           16
         )} name=${portName}`
@@ -229,11 +229,11 @@ export const EXEC_VECTORS: LibraryVector[] = [
           if (ch === 0) break;
           str += String.fromCharCode(ch);
         }
-        console.log(`[ExecLibrary][GetMsg] Door received message:`);
-        console.log(`  ln_Type=${msgType} (6=NT_REPLYMSG)`);
-        console.log(`  Command=${command} (at 0xE0)`);
-        console.log(`  Data=${data} (at 0xDC)`);
-        console.log(`  String="${str}" (at 0x14)`);
+console.log(`[ExecLibrary][GetMsg] Door received message:`);
+console.log(`  ln_Type=${msgType} (6=NT_REPLYMSG)`);
+console.log(`  Command=${command} (at 0xE0)`);
+console.log(`  Data=${data} (at 0xDC)`);
+console.log(`  String="${str}" (at 0x14)`);
       }
 
       return result;
@@ -244,9 +244,9 @@ export const EXEC_VECTORS: LibraryVector[] = [
     name: "Wait",
     handler: (emu, lib: ExecLibrary) => {
       const signalMask = emu.getRegister(0); // D0
-      console.log(`[ExecLibrary][Trap][Wait] signalMask=0x${signalMask.toString(16)}`);
+console.log(`[ExecLibrary][Trap][Wait] signalMask=0x${signalMask.toString(16)}`);
       const result = lib.wait(signalMask);
-      console.log(`[ExecLibrary][Trap][Wait] returned 0x${result.toString(16)}`);
+console.log(`[ExecLibrary][Trap][Wait] returned 0x${result.toString(16)}`);
       return result;
     },
   },
@@ -270,7 +270,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       // Returns: D0 = result from supervisor function
 
       const a5 = emu.getRegister(13); // A5 - supervisor function pointer
-      console.log(
+console.log(
         `[LibraryTraps] Supervisor: calling function at 0x${a5.toString(
           16
         )}, returnAddr=0x${returnAddr.toString(16)}`
@@ -288,7 +288,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       emu.writeMemory32(sp - 4, returnAddr);
       emu.setRegister(15, sp - 4);
 
-      console.log(
+console.log(
         `[LibraryTraps] Supervisor: PC set to 0x${a5.toString(
           16
         )}, return will go to 0x${returnAddr.toString(16)}`
@@ -331,7 +331,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const portAddr = emu.getRegister(8); // A0
       const portName = portAddr ? lib.getPortName(portAddr) : "";
-      console.log(
+console.log(
         `[ExecLibrary][Trap][WaitPort] port=0x${portAddr.toString(
           16
         )} name=${portName}`
@@ -345,7 +345,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(8); // A0 = name pointer
       const priority = emu.getRegister(0); // D0 = priority
-      console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
+console.log(`[ExecLibrary][Trap][CreatePort] nameAddr=0x${nameAddr.toString(16)}, priority=${priority}`);
       return lib.createPort(nameAddr, priority);
     },
   },
@@ -371,7 +371,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const byteSize = emu.getRegister(0); // D0
       const requirements = emu.getRegister(1); // D1
-      console.log(
+console.log(
         `[ExecLibrary] AllocVec(${byteSize}, ${requirements}) - using AllocMem`
       );
       return lib.allocMem(byteSize, requirements);
@@ -383,7 +383,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const memPtr = emu.getRegister(9); // A1
       const size = emu.getRegister(0); // D0
-      console.log(`[ExecLibrary] FreeVec(0x${memPtr.toString(16)}, ${size})`);
+console.log(`[ExecLibrary] FreeVec(0x${memPtr.toString(16)}, ${size})`);
       lib.freeMem(memPtr, size);
       return 0;
     },
@@ -395,7 +395,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       const requirements = emu.getRegister(0); // D0
       const puddleSize = emu.getRegister(1); // D1
       const threshSize = emu.getRegister(2); // D2
-      console.log(
+console.log(
         `[ExecLibrary] CreatePool(${requirements}, ${puddleSize}, ${threshSize}) - REAL IMPLEMENTATION`
       );
 
@@ -406,7 +406,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       if (poolAddr !== 0) {
         // Initialize PoolHeader structure
         // This is a simplified AmigaOS PoolHeader structure
-        console.log(
+console.log(
           `[ExecLibrary] Created pool at 0x${poolAddr.toString(
             16
           )}, size ${puddleSize}`
@@ -421,7 +421,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
         emu.writeMemory32(poolInfoAddr + 12, poolAddr + 32); // available memory start
         emu.writeMemory32(poolInfoAddr + 16, poolAddr + poolSize); // available memory end
       } else {
-        console.log(`[ExecLibrary] CreatePool FAILED - returned NULL`);
+console.log(`[ExecLibrary] CreatePool FAILED - returned NULL`);
       }
 
       return poolAddr;
@@ -432,10 +432,10 @@ export const EXEC_VECTORS: LibraryVector[] = [
     name: "DeletePool",
     handler: (emu, lib: ExecLibrary) => {
       const pool = emu.getRegister(9); // A1
-      console.log(`[ExecLibrary] DeletePool(0x${pool.toString(16)})`);
+console.log(`[ExecLibrary] DeletePool(0x${pool.toString(16)})`);
       if (pool !== 0) {
         // For now, just log - actual implementation would free all pool allocations
-        console.log(
+console.log(
           `[ExecLibrary] Pool 0x${pool.toString(16)} marked for deletion`
         );
       }
@@ -448,27 +448,27 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const pool = emu.getRegister(9); // A1
       const size = emu.getRegister(0); // D0
-      console.log(
+console.log(
         `[ExecLibrary] AllocPooled(0x${pool.toString(
           16
         )}, ${size}) - REAL IMPLEMENTATION`
       );
 
       if (pool === 0) {
-        console.log(`[ExecLibrary] AllocPooled FAILED - NULL pool pointer`);
+console.log(`[ExecLibrary] AllocPooled FAILED - NULL pool pointer`);
         return 0;
       }
 
       // Check if allocation size is reasonable
       if (size > 0x1000) {
-        console.log(
+console.log(
           `[ExecLibrary] AllocPooled - Large allocation ${size}, may fail`
         );
       }
 
       // Allocate memory using our pool management
       const allocation = lib.allocMem(size, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
-      console.log(
+console.log(
         `[ExecLibrary] AllocPooled allocated 0x${allocation.toString(
           16
         )} from pool 0x${pool.toString(16)}`
@@ -484,7 +484,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
       const pool = emu.getRegister(9); // A1
       const mem = emu.getRegister(0); // D0
       const size = emu.getRegister(1); // D1
-      console.log(
+console.log(
         `[ExecLibrary] FreePooled(0x${pool.toString(16)}, 0x${mem.toString(
           16
         )}, ${size})`
@@ -492,7 +492,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
 
       if (mem !== 0) {
         lib.freeMem(mem, size);
-        console.log(
+console.log(
           `[ExecLibrary] Freed memory at 0x${mem.toString(
             16
           )} back to pool 0x${pool.toString(16)}`
@@ -512,7 +512,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
         const stNew = emu.readMemory32(structAddr + 4); // stk_Lower
         const stUpper = emu.readMemory32(structAddr + 8); // stk_Upper
         const stSP = emu.readMemory32(structAddr + 12); // stk_Pointer
-        console.log(
+console.log(
           `[StackSwap] struct=0x${structAddr.toString(
             16
           )} ln=0x${ln.toString(16)} lower=0x${stNew.toString(
@@ -522,7 +522,7 @@ export const EXEC_VECTORS: LibraryVector[] = [
           )} oldSP=0x${oldSP.toString(16)}`
         );
       } catch (err) {
-        console.log(`[StackSwap] failed to read struct at 0x${structAddr.toString(16)}`);
+console.log(`[StackSwap] failed to read struct at 0x${structAddr.toString(16)}`);
       }
       lib.stackSwap(structAddr);
       return 0;

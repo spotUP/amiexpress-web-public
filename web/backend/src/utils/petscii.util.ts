@@ -511,19 +511,19 @@ export function convertPetsciiToAnsi(buffer: Buffer): string {
 export async function readPetsciiSeqFile(filePath: string): Promise<string | null> {
   try {
     if (!fs.existsSync(filePath)) {
-      console.log(`[PETSCII] File not found: ${filePath}`);
+console.log(`[PETSCII] File not found: ${filePath}`);
       return null;
     }
 
     const buffer = fs.readFileSync(filePath);
-    console.log(`[PETSCII] Read ${buffer.length} bytes from ${filePath}`);
+console.log(`[PETSCII] Read ${buffer.length} bytes from ${filePath}`);
 
     const converted = convertPetsciiToPetMe64(buffer);
-    console.log(`[PETSCII] Converted to ${converted.length} chars for PetMe64`);
+console.log(`[PETSCII] Converted to ${converted.length} chars for PetMe64`);
 
     return converted;
   } catch (error: any) {
-    console.error(`[PETSCII] Error reading file ${filePath}:`, error.message);
+console.error(`[PETSCII] Error reading file ${filePath}:`, error.message);
     return null;
   }
 }
@@ -585,10 +585,10 @@ export function writePetsciiSeqFile(filePath: string, text: string): boolean {
   try {
     const buffer = convertAnsiToPetscii(text);
     fs.writeFileSync(filePath, buffer);
-    console.log(`[PETSCII] Wrote ${buffer.length} bytes to ${filePath}`);
+console.log(`[PETSCII] Wrote ${buffer.length} bytes to ${filePath}`);
     return true;
   } catch (error: any) {
-    console.error(`[PETSCII] Error writing file ${filePath}:`, error.message);
+console.error(`[PETSCII] Error writing file ${filePath}:`, error.message);
     return false;
   }
 }

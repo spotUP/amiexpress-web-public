@@ -64,7 +64,7 @@ export async function updateSysopUploadStats(
 
       // Write updated count
       await fs.writeFile(numULsPath, `${count}\n`);
-      console.log(`[UploadStats] Conference ${conferenceId} NumULs: ${count}`);
+console.log(`[UploadStats] Conference ${conferenceId} NumULs: ${count}`);
     }
 
     // Update SysopStats counter (express.e:18770-18790)
@@ -93,9 +93,9 @@ export async function updateSysopUploadStats(
 
     // Write updated count
     await fs.writeFile(statsPath, `${statsCount}\n`);
-    console.log(`[UploadStats] Sysop stats ${statsFilename}: ${statsCount}`);
+console.log(`[UploadStats] Sysop stats ${statsFilename}: ${statsCount}`);
   } catch (error: any) {
-    console.error(`[UploadStats] Error updating stats: ${error.message}`);
+console.error(`[UploadStats] Error updating stats: ${error.message}`);
   }
 }
 
@@ -122,10 +122,10 @@ export async function doUploadNotify(
     try {
       await runExecuteOn('UPLOAD', nodeId, { username, location });
     } catch (error: any) {
-      console.error(`[UploadNotify] EXECUTE_ON_UPLOAD failed: ${error.message}`);
+console.error(`[UploadNotify] EXECUTE_ON_UPLOAD failed: ${error.message}`);
     }
 
-    console.log(`[UploadNotify] Upload event triggered for ${username}`);
+console.log(`[UploadNotify] Upload event triggered for ${username}`);
 
     // Trigger NEW_UPLOAD webhook if webhook service is available
     if (webhookService) {
@@ -135,9 +135,9 @@ export async function doUploadNotify(
           location,
           timestamp: new Date().toISOString(),
         });
-        console.log(`[UploadNotify] NEW_UPLOAD webhook triggered`);
+console.log(`[UploadNotify] NEW_UPLOAD webhook triggered`);
       } catch (webhookError: any) {
-        console.error(`[UploadNotify] Webhook error: ${webhookError.message}`);
+console.error(`[UploadNotify] Webhook error: ${webhookError.message}`);
       }
     }
 
@@ -146,10 +146,10 @@ export async function doUploadNotify(
     try {
       await mailOnUpload(username, location);
     } catch (error: any) {
-      console.error(`[UploadNotify] MAIL_ON_UPLOAD failed: ${error.message}`);
+console.error(`[UploadNotify] MAIL_ON_UPLOAD failed: ${error.message}`);
     }
   } catch (error: any) {
-    console.error(`[UploadNotify] Error sending notification: ${error.message}`);
+console.error(`[UploadNotify] Error sending notification: ${error.message}`);
   }
 }
 
@@ -202,7 +202,7 @@ export async function getUploadStatsSummary(
       }
     }
   } catch (error: any) {
-    console.error(`[UploadStats] Error reading stats: ${error.message}`);
+console.error(`[UploadStats] Error reading stats: ${error.message}`);
   }
 
   return summary;

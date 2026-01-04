@@ -47,15 +47,20 @@ export class DoorMessageHandler {
   private lineCount: number = 0;
   private nonStopDisplayFlag: boolean = false;
   private waitingForPause: boolean = false;
+
+  // Old-style door compatibility fallback
+  private oldStyleDoorTimer: NodeJS.Timeout | null = null;
+  private receivedPostRegisterMessage: boolean = false;
+
   private logMessageRequest(
     msgAddr: number,
     command: number,
     data: number,
     str: string
   ): void {
-    console.log(`[DoorMessageHandler] msg request: ${command}`);
-    console.log(`[DoorMessageHandler] data: ${data}`);
-    console.log(`[DoorMessageHandler] string: ${str ?? ""}`);
+console.log(`[DoorMessageHandler] msg request: ${command}`);
+console.log(`[DoorMessageHandler] data: ${data}`);
+console.log(`[DoorMessageHandler] string: ${str ?? ""}`);
   }
 
   // Shared references (managed by parent)
@@ -124,12 +129,12 @@ export class DoorMessageHandler {
   private setupInputHandler(): void {
     this.socket.on("door:input", (data: string) => {
       if (!this.activeInput) {
-        console.log("[DoorMessageHandler] door:input received but no active input request");
+console.log("[DoorMessageHandler] door:input received but no active input request");
         return;
       }
 
       const { msgAddr, maxlen, command, replyPortAddr, resumeCallback, onInput } = this.activeInput;
-      console.log(`[DoorMessageHandler] door:input: "${data}" for command ${command}`);
+console.log(`[DoorMessageHandler] door:input: "${data}" for command ${command}`);
 
       // Trim to maxlen
       const trimmed = data.slice(0, maxlen);
@@ -149,13 +154,13 @@ export class DoorMessageHandler {
         1
       );
 
-      console.log(`[DoorMessageHandler] Wrote input "${trimmed}" to message`);
+console.log(`[DoorMessageHandler] Wrote input "${trimmed}" to message`);
 
       // Reply to door (express.e:4232 - ReplyMsg after processing)
       this.execLibrary.putMsg(replyPortAddr, msgAddr, {
         suppressDoorCallback: true,
       });
-      console.log(`[DoorMessageHandler] Sent reply to door at port 0x${replyPortAddr.toString(16)}`);
+console.log(`[DoorMessageHandler] Sent reply to door at port 0x${replyPortAddr.toString(16)}`);
 
       // Clear active input and resume
       this.activeInput = null;
@@ -217,7 +222,7 @@ export class DoorMessageHandler {
         },
       };
       this.emulator.pause();
-      console.log("[DoorMessageHandler] checkForPause: waiting for user input");
+console.log("[DoorMessageHandler] checkForPause: waiting for user input");
     });
   }
 
@@ -228,8 +233,12 @@ export class DoorMessageHandler {
   // - AquaScan sends JH_REGISTER (cmd=1) first
   // The BBS does NOT send INIT (0) or STAT (1) - doors start the conversation.
   // Previous implementation was backwards and caused doors to hang waiting.
+  //
+  // HOWEVER: Some old doors (WALL, JoinCnf) expect old protocol and don't send
+  // follow-up messages. For these, we use a 500ms fallback timer to detect and
+  // send INIT/STAT if needed (see processCommand JH_REGISTER case).
   sendStartupMessage(): void {
-    console.log("[DoorMessageHandler] Skipping startup messages - door will initiate with JH_REGISTER");
+console.log("[DoorMessageHandler] Skipping startup messages - door will initiate with JH_REGISTER");
     // REMOVED: this.sendInitAndStatusMessages();
     // Real protocol: Door sends JH_REGISTER, then BBS responds to requests
     this.sentInitialMessage = true; // Mark as sent to prevent further attempts
@@ -278,7 +287,7 @@ export class DoorMessageHandler {
       sysopName,
     });
     if (!this.doorInfoAddr || !this.nodeStatusAddr) {
-      console.warn(
+console.warn(
         "[DoorMessageHandler] Cannot send init/status messages: missing doorInfo or nodeStatus"
       );
       return;
@@ -307,12 +316,12 @@ export class DoorMessageHandler {
     }
 
     const enqueue = (msgAddr: number, label: string) => {
-      console.log(
+console.log(
         `[DoorMessageHandler] Sending ${label} message (data=0x${this.emulator.readMemory32(
           msgAddr + DoorConstants.MESSAGE_DATA_OFFSET
         ).toString(16)})`
       );
-      console.log(
+console.log(
         `[DoorMessageHandler]   port=0x${portAddr.toString(
           16
         )} msg=0x${msgAddr.toString(
@@ -321,7 +330,7 @@ export class DoorMessageHandler {
           16
         )} len=${DoorConstants.MESSAGE_TOTAL_LENGTH}`
       );
-      console.log(
+console.log(
         `[DoorMessageHandler]   header: cmd=0x${this.emulator
           .readMemory32(msgAddr + 20)
           .toString(16)} data=0x${this.emulator
@@ -358,8 +367,8 @@ export class DoorMessageHandler {
     messageText: string
   ): number | null {
     if (!this.doorInfoAddr) {
-      console.error("[DoorMessageHandler] Cannot create message without DoorInfo");
-      console.error("[DoorMessageHandler] Failed to create reply port");
+console.error("[DoorMessageHandler] Cannot create message without DoorInfo");
+console.error("[DoorMessageHandler] Failed to create reply port");
       return null;
     }
 
@@ -376,7 +385,7 @@ export class DoorMessageHandler {
       DoorConstants.MEMF_PUBLIC_CLEAR
     );
     if (!msgAddr) {
-      console.error("[DoorMessageHandler] Failed to allocate AEDoor message buffer");
+console.error("[DoorMessageHandler] Failed to allocate AEDoor message buffer");
       return null;
     }
     const replyPortAddr =
@@ -458,23 +467,23 @@ export class DoorMessageHandler {
 
     // Log in AmiExpress format (matches express.e logging)
     const commandName = this.getCommandName(command);
-    console.log(`msg request: ${command} (${commandName})`);
-    console.log(`data: ${data}`);
-    console.log(`string: ${str}`);
+console.log(`msg request: ${command} (${commandName})`);
+console.log(`data: ${data}`);
+console.log(`string: ${str}`);
 
     // Use XIM Protocol handler to process and respond
     if (this.ximProtocol) {
       const ximMessage = this.ximProtocol.parseMessage(msgAddr);
       await this.ximProtocol.handleMessage(ximMessage);
     } else {
-      console.log(
+console.log(
         `[DoorMessageHandler] WARNING: XIM Protocol not initialized!`
       );
       // Fall back to command processor
       await this.processCommand(command, data, str, msgAddr, mn_ReplyPort);
     }
 
-    console.log(
+console.log(
       `[DoorMessageHandler] ===============================================`
     );
   }
@@ -490,8 +499,17 @@ export class DoorMessageHandler {
     msgAddr: number,
     replyPortAddr: number
   ): Promise<void> {
-    console.log(`[DoorMessageHandler] Processing command ${command}...`);
+console.log(`[DoorMessageHandler] Processing command ${command}...`);
     this.logMessageRequest(msgAddr, command, data, str);
+
+    // Cancel old-style door timer if we receive any message other than JH_REGISTER
+    // This indicates it's a modern door that sends follow-up requests
+    if (command !== XIMCommand.JH_REGISTER && this.oldStyleDoorTimer) {
+console.log(`[DoorMessageHandler] Received post-register message (cmd=${command}) - canceling old-style fallback`);
+      clearTimeout(this.oldStyleDoorTimer);
+      this.oldStyleDoorTimer = null;
+      this.receivedPostRegisterMessage = true;
+    }
 
     // If the incoming message uses a different reply port, honor it (express.e ReplyMsg behavior)
     if (replyPortAddr && replyPortAddr !== this.doorReplyPortAddr) {
@@ -501,7 +519,7 @@ export class DoorMessageHandler {
     switch (command) {
       case XIMCommand.JH_REGISTER:
         // express.e:3379-3381: msg.command := IF loggedOnUser<>NIL THEN userLineLen ELSE 29
-        console.log(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
+console.log(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
         const rawLineLen =
           (this.config.bbsSession as any)?.user?.linesPerScreen ??
           (this.config.bbsSession as any)?.user?.lineLength ??
@@ -515,18 +533,33 @@ export class DoorMessageHandler {
           msgAddr + DoorConstants.MESSAGE_LINE_OFFSET,
           0
         );
-        console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}`);
+console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}`);
+
+        // Compatibility fallback for old-style doors (WALL, JoinCnf, etc.)
+        // Modern doors (Bulls, AquaScan) send follow-up requests immediately after JH_REGISTER.
+        // Old doors expect INIT/STAT messages from BBS first.
+        // Wait 500ms - if no follow-up messages arrive, assume old-style and send INIT/STAT.
+        this.receivedPostRegisterMessage = false;
+        this.oldStyleDoorTimer = setTimeout(() => {
+          if (!this.receivedPostRegisterMessage) {
+console.log(`[DoorMessageHandler] No post-register messages received - assuming old-style door`);
+console.log(`[DoorMessageHandler] Sending INIT/STAT messages for compatibility`);
+            // Temporarily clear sentInitialMessage flag to allow INIT/STAT to be sent
+            this.sentInitialMessage = false;
+            this.sendInitAndStatusMessages();
+          }
+        }, 500);
         break;
 
       case XIMCommand.JH_WRITE:
         // express.e:3382-3385: IF (transfering=FALSE) AND (doorSilent=FALSE) THEN aePuts(msg.string)
-        console.log(`[DoorMessageHandler]   JH_WRITE: "${str}"`);
+console.log(`[DoorMessageHandler]   JH_WRITE: "${str}"`);
         this.socket.emit("ansi-output", str);
         break;
 
       case XIMCommand.JH_SHUTDOWN:
         // express.e:3388-3394: Decrement nodes counter and set exit flag
-        console.log(`[DoorMessageHandler]   JH_SHUTDOWN: Door shutting down`);
+console.log(`[DoorMessageHandler]   JH_SHUTDOWN: Door shutting down`);
         this.execLibrary.putMsg(replyPortAddr, msgAddr, {
           suppressDoorCallback: true,
         });
@@ -534,7 +567,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.JH_CO:
         // express.e:3395-3400: conPuts(msg.string) + optional newline + checkForPause
-        console.log(`[DoorMessageHandler]   JH_CO: Console output "${str}"`);
+console.log(`[DoorMessageHandler]   JH_CO: Console output "${str}"`);
         let coOutput = str;
         if (data) {
           coOutput += "\r\n";
@@ -545,7 +578,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.JH_SO:
         // express.e:3401-3405: serPuts(msg.string) + optional newline
-        console.log(`[DoorMessageHandler]   JH_SO: Serial output "${str}"`);
+console.log(`[DoorMessageHandler]   JH_SO: Serial output "${str}"`);
         let soOutput = str;
         if (data) {
           soOutput += "\r\n";
@@ -555,7 +588,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.JH_SM:
         // express.e:3406-3411: aePuts(msg.string) + optional newline + checkForPause
-        console.log(`[DoorMessageHandler]   JH_SM: Send message "${str}"`);
+console.log(`[DoorMessageHandler]   JH_SM: Send message "${str}"`);
         let smOutput = str;
         if (data) {
           smOutput += "\r\n";
@@ -568,7 +601,7 @@ export class DoorMessageHandler {
         // lineCount:=0
         // msg.command:=readChar(doorTimeout,Shl(1,msg.signal))
         // IF (msg.command<0) THEN msg.data:=-1 ELSE msg.data:=1
-        console.log(`[DoorMessageHandler]   JH_ExtHK: Extended hotkey (non-blocking)`);
+console.log(`[DoorMessageHandler]   JH_ExtHK: Extended hotkey (non-blocking)`);
         // For now, just acknowledge with no key available
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 0);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
@@ -577,7 +610,7 @@ export class DoorMessageHandler {
       case XIMCommand.JH_PM:
         // express.e:3418-3424: lineInput() with prompt, return user input
         // data=-1 = timeout/carrier lost, data=1 = success
-        console.log(`[DoorMessageHandler]   JH_PM: Prompt message "${str}", maxlen=${data}`);
+console.log(`[DoorMessageHandler]   JH_PM: Prompt message "${str}", maxlen=${data}`);
         // Display prompt
         this.socket.emit("ansi-output", str);
         // Pause emulator and wait for user input via door:input event
@@ -587,17 +620,17 @@ export class DoorMessageHandler {
           command: XIMCommand.JH_PM,
           replyPortAddr: this.doorReplyPortAddr,
           resumeCallback: () => {
-            console.log(`[DoorMessageHandler]   JH_PM: Resuming after input`);
+console.log(`[DoorMessageHandler]   JH_PM: Resuming after input`);
             this.emulator.resume();
           },
         };
         this.emulator.pause();
-        console.log(`[DoorMessageHandler]   JH_PM: Emulator paused, waiting for user input`);
+console.log(`[DoorMessageHandler]   JH_PM: Emulator paused, waiting for user input`);
         return; // Don't reply yet - will reply when input arrives via setupInputHandler
 
       case XIMCommand.JH_LI:
         // express.e:3425-3431: lineInput() without prompt
-        console.log(`[DoorMessageHandler]   JH_LI: Line input, maxlen=${data}`);
+console.log(`[DoorMessageHandler]   JH_LI: Line input, maxlen=${data}`);
         // Pause emulator and wait for user input via door:input event
         this.activeInput = {
           msgAddr,
@@ -605,17 +638,17 @@ export class DoorMessageHandler {
           command: XIMCommand.JH_LI,
           replyPortAddr: this.doorReplyPortAddr,
           resumeCallback: () => {
-            console.log(`[DoorMessageHandler]   JH_LI: Resuming after input`);
+console.log(`[DoorMessageHandler]   JH_LI: Resuming after input`);
             this.emulator.resume();
           },
         };
         this.emulator.pause();
-        console.log(`[DoorMessageHandler]   JH_LI: Emulator paused, waiting for user input`);
+console.log(`[DoorMessageHandler]   JH_LI: Emulator paused, waiting for user input`);
         return; // Don't reply yet - will reply when input arrives via setupInputHandler
 
       case XIMCommand.JH_HK:
         // express.e:3436-3447: readChar() and return key code
-        console.log(`[DoorMessageHandler]   JH_HK: Hot key, prompt="${str}"`);
+console.log(`[DoorMessageHandler]   JH_HK: Hot key, prompt="${str}"`);
         this.socket.emit("ansi-output", str);
         // Pause emulator and wait for user input via door:input event
         // For hot key, we just need a single character
@@ -625,144 +658,144 @@ export class DoorMessageHandler {
           command: XIMCommand.JH_HK,
           replyPortAddr: this.doorReplyPortAddr,
           resumeCallback: () => {
-            console.log(`[DoorMessageHandler]   JH_HK: Resuming after input`);
+console.log(`[DoorMessageHandler]   JH_HK: Resuming after input`);
             this.emulator.resume();
           },
         };
         this.emulator.pause();
-        console.log(`[DoorMessageHandler]   JH_HK: Emulator paused, waiting for user input`);
+console.log(`[DoorMessageHandler]   JH_HK: Emulator paused, waiting for user input`);
         return; // Don't reply yet - will reply when input arrives via setupInputHandler
 
       case XIMCommand.JH_SG:
         // express.e:3473-3474: findSecurityScreen() and displayFile()
-        console.log(`[DoorMessageHandler]   JH_SG: Show GFile "${str}"`);
+console.log(`[DoorMessageHandler]   JH_SG: Show GFile "${str}"`);
         const secFilePath = this.findSecurityScreen(str);
         if (secFilePath) {
           await this.displayFile(secFilePath);
-          console.log(`[DoorMessageHandler]   Displayed security screen: ${secFilePath}`);
+console.log(`[DoorMessageHandler]   Displayed security screen: ${secFilePath}`);
         } else {
-          console.log(`[DoorMessageHandler]   Security screen not found: ${str}`);
+console.log(`[DoorMessageHandler]   Security screen not found: ${str}`);
         }
         break;
 
       case XIMCommand.JH_SF:
         // express.e:3475-3476: displayFile()
-        console.log(`[DoorMessageHandler]   JH_SF: Show File "${str}"`);
+console.log(`[DoorMessageHandler]   JH_SF: Show File "${str}"`);
         const bbsRoot = this.config.bbsSession?.bbsRoot || this.config.bbsSession?.dataDir || "";
         const fullPath = path.join(bbsRoot, str);
         if (await this.displayFile(fullPath)) {
-          console.log(`[DoorMessageHandler]   Displayed file: ${fullPath}`);
+console.log(`[DoorMessageHandler]   Displayed file: ${fullPath}`);
         } else {
-          console.log(`[DoorMessageHandler]   File not found: ${fullPath}`);
+console.log(`[DoorMessageHandler]   File not found: ${fullPath}`);
         }
         break;
 
       case XIMCommand.JH_EF:
         // express.e:3477-3485: Edit file with message editor
-        console.log(`[DoorMessageHandler]   JH_EF: Edit File "${str}"`);
+console.log(`[DoorMessageHandler]   JH_EF: Edit File "${str}"`);
         // Message editor requires full editor integration
         this.emulator.writeMemory32(
           msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
           -1
         );
-        console.log(`[DoorMessageHandler]   Editor not yet supported`);
+console.log(`[DoorMessageHandler]   Editor not yet supported`);
         break;
 
       case XIMCommand.JH_BBSNAME:
         // express.e:3486-3487: Return BBS name
-        console.log(`[DoorMessageHandler]   JH_BBSNAME: Request for BBS name`);
+console.log(`[DoorMessageHandler]   JH_BBSNAME: Request for BBS name`);
         const bbsName = this.config.bbsSession?.bbsName || "AmiExpress Web BBS";
         this.writeStringToMessage(msgAddr, bbsName);
-        console.log(`[DoorMessageHandler]   Replied with BBS name: "${bbsName}"`);
+console.log(`[DoorMessageHandler]   Replied with BBS name: "${bbsName}"`);
         break;
 
       case XIMCommand.JH_SYSOP:
         // express.e:3488-3489: Return sysop name
-        console.log(`[DoorMessageHandler]   JH_SYSOP: Request for sysop name`);
+console.log(`[DoorMessageHandler]   JH_SYSOP: Request for sysop name`);
         const sysopName = this.config.bbsSession?.sysopName || "Sysop";
         this.writeStringToMessage(msgAddr, sysopName);
-        console.log(`[DoorMessageHandler]   Replied with sysop name: "${sysopName}"`);
+console.log(`[DoorMessageHandler]   Replied with sysop name: "${sysopName}"`);
         break;
 
       case XIMCommand.DT_NAME:
         // express.e:3494-3499: Get/Set user name
-        console.log(`[DoorMessageHandler]   DT_NAME: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_NAME: data=${data}`);
         if (data) {
           // Get name
           const userName = this.config.bbsSession?.user?.username || "Sysop";
           this.writeStringToMessage(msgAddr, userName);
-          console.log(`[DoorMessageHandler]   Replied with name: "${userName}"`);
+console.log(`[DoorMessageHandler]   Replied with name: "${userName}"`);
         } else {
           // Set name - update session user
           const newName = str?.trim();
           if (newName && this.config.bbsSession?.user) {
             const oldName = this.config.bbsSession.user.username;
             this.config.bbsSession.user.username = newName;
-            console.log(`[DoorMessageHandler]   Set name: "${oldName}" -> "${newName}"`);
+console.log(`[DoorMessageHandler]   Set name: "${oldName}" -> "${newName}"`);
           } else {
-            console.log(`[DoorMessageHandler]   Set name: no value or no user`);
+console.log(`[DoorMessageHandler]   Set name: no value or no user`);
           }
         }
         break;
 
       case XIMCommand.DT_LOCATION:
         // express.e:3512-3517: Get/Set user location
-        console.log(`[DoorMessageHandler]   DT_LOCATION: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_LOCATION: data=${data}`);
         if (data) {
           // Get location
           const location = this.config.bbsSession?.user?.location || "Unknown";
           this.writeStringToMessage(msgAddr, location);
-          console.log(`[DoorMessageHandler]   Replied with location: "${location}"`);
+console.log(`[DoorMessageHandler]   Replied with location: "${location}"`);
         } else {
           // Set location - update session user
           const newLocation = str?.trim();
           if (newLocation && this.config.bbsSession?.user) {
             const oldLocation = this.config.bbsSession.user.location;
             this.config.bbsSession.user.location = newLocation;
-            console.log(`[DoorMessageHandler]   Set location: "${oldLocation}" -> "${newLocation}"`);
+console.log(`[DoorMessageHandler]   Set location: "${oldLocation}" -> "${newLocation}"`);
           } else {
-            console.log(`[DoorMessageHandler]   Set location: no value or no user`);
+console.log(`[DoorMessageHandler]   Set location: no value or no user`);
           }
         }
         break;
 
       case XIMCommand.DT_PHONENUMBER:
         // express.e:3518-3523: Get/Set phone number
-        console.log(`[DoorMessageHandler]   DT_PHONENUMBER: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_PHONENUMBER: data=${data}`);
         if (data) {
           const phone = this.config.bbsSession?.user?.phone || "000-000-0000";
           this.writeStringToMessage(msgAddr, phone);
-          console.log(`[DoorMessageHandler]   Replied with phone: "${phone}"`);
+console.log(`[DoorMessageHandler]   Replied with phone: "${phone}"`);
         } else {
           // Set phone - update session user
           const newPhone = str?.trim();
           if (newPhone && this.config.bbsSession?.user) {
             const oldPhone = this.config.bbsSession.user.phone;
             this.config.bbsSession.user.phone = newPhone;
-            console.log(`[DoorMessageHandler]   Set phone: "${oldPhone}" -> "${newPhone}"`);
+console.log(`[DoorMessageHandler]   Set phone: "${oldPhone}" -> "${newPhone}"`);
           } else {
-            console.log(`[DoorMessageHandler]   Set phone: no value or no user`);
+console.log(`[DoorMessageHandler]   Set phone: no value or no user`);
           }
         }
         break;
 
       case XIMCommand.DT_SECSTATUS:
         // express.e: Security status / Access level (DT_SECLEVEL was an alias for DT_SECSTATUS=105)
-        console.log(`[DoorMessageHandler]   DT_SECSTATUS: Request for security level`);
+console.log(`[DoorMessageHandler]   DT_SECSTATUS: Request for security level`);
         const secLevel = this.config.bbsSession?.user?.secLevel || 100;
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, secLevel);
-        console.log(`[DoorMessageHandler]   Replied with sec level: ${secLevel}`);
+console.log(`[DoorMessageHandler]   Replied with sec level: ${secLevel}`);
         break;
 
       case XIMCommand.GETKEY:
-        console.log(`[DoorMessageHandler]   GETKEY: Request for user input`);
+console.log(`[DoorMessageHandler]   GETKEY: Request for user input`);
         this.waitForKeypress(msgAddr, replyPortAddr);
         return; // Don't send reply - waitForKeypress will handle it
 
       // Additional JH_* commands
       case XIMCommand.JH_SMPTR:
         // express.e:3412-3417: Send Message using pointer
-        console.log(`[DoorMessageHandler]   JH_SMPTR: Send message (pointer)`);
+console.log(`[DoorMessageHandler]   JH_SMPTR: Send message (pointer)`);
         this.socket.emit("ansi-output", str);
         if (data) {
           this.socket.emit("ansi-output", "\r\n");
@@ -771,7 +804,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.JH_ExtHK:
         // express.e:3432-3435: Extended HotKey with signal
-        console.log(`[DoorMessageHandler]   JH_ExtHK: Extended hot key`);
+console.log(`[DoorMessageHandler]   JH_ExtHK: Extended hot key`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, -1);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, -1);
         break;
@@ -779,33 +812,33 @@ export class DoorMessageHandler {
       case XIMCommand.JH_20:
       case XIMCommand.QUICK_KEY:
         // express.e:3448-3455: Quick key read
-        console.log(`[DoorMessageHandler]   JH_20/QUICK_KEY: Quick key read`);
+console.log(`[DoorMessageHandler]   JH_20/QUICK_KEY: Quick key read`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, -1);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 0);
         break;
 
       case XIMCommand.JH_SIGBIT:
         // express.e:3463-3464: Return door signal bit
-        console.log(`[DoorMessageHandler]   JH_SIGBIT: Signal bit request`);
+console.log(`[DoorMessageHandler]   JH_SIGBIT: Signal bit request`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.JH_FetchKey:
         // express.e:3465-3472: Fetch key non-blocking
-        console.log(`[DoorMessageHandler]   JH_FetchKey: Non-blocking key fetch`);
+console.log(`[DoorMessageHandler]   JH_FetchKey: Non-blocking key fetch`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET, 0);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
         break;
 
       case XIMCommand.JH_FLAGFILE:
         // express.e:3490-3491: Flag file for download
-        console.log(`[DoorMessageHandler]   JH_FLAGFILE: Flag file "${str}"`);
+console.log(`[DoorMessageHandler]   JH_FLAGFILE: Flag file "${str}"`);
         // File flagging requires file system integration
         break;
 
       case XIMCommand.JH_MCI:
         // express.e:3456-3462: Process MCI codes
-        console.log(`[DoorMessageHandler]   JH_MCI: Process MCI codes for "${str}"`);
+console.log(`[DoorMessageHandler]   JH_MCI: Process MCI codes for "${str}"`);
         try {
           // Get BBS session info for MCI processing
           const bbsSession = (this.config as any)?.bbsSession || {};
@@ -825,31 +858,31 @@ export class DoorMessageHandler {
             // Note: checkForPause() not implemented yet
           }
 
-          console.log(`[DoorMessageHandler]   JH_MCI: Processed successfully`);
+console.log(`[DoorMessageHandler]   JH_MCI: Processed successfully`);
         } catch (error: any) {
-          console.error(`[DoorMessageHandler]   JH_MCI: Error processing MCI codes:`, error.message || error);
+console.error(`[DoorMessageHandler]   JH_MCI: Error processing MCI codes:`, error.message || error);
         }
         break;
 
       case XIMCommand.CHAIN:
         // express.e:3386-3387: Chain command (node counter)
-        console.log(`[DoorMessageHandler]   CHAIN: Chain command`);
+console.log(`[DoorMessageHandler]   CHAIN: Chain command`);
         break;
 
       case XIMCommand.RETURNCOMMAND:
         // express.e:3492-3493: Store command to run on exit
-        console.log(`[DoorMessageHandler]   RETURNCOMMAND: "${str}"`);
+console.log(`[DoorMessageHandler]   RETURNCOMMAND: "${str}"`);
         break;
 
       case XIMCommand.RETURNCOMMAND2:
         // express.e:4064-4065: Store second command to run on exit
-        console.log(`[DoorMessageHandler]   RETURNCOMMAND2: "${str}"`);
+console.log(`[DoorMessageHandler]   RETURNCOMMAND2: "${str}"`);
         break;
 
       // DT_* commands (user data)
       case XIMCommand.DT_PASSWORD:
         // express.e:3500-3511: Get/Set password
-        console.log(`[DoorMessageHandler]   DT_PASSWORD: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_PASSWORD: data=${data}`);
         if (data) {
           // Don't allow doors to read password
           this.writeStringToMessage(msgAddr, "");
@@ -858,7 +891,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.DT_SLOTNUMBER:
         // express.e:3524-3530: Get/Set slot number
-        console.log(`[DoorMessageHandler]   DT_SLOTNUMBER: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_SLOTNUMBER: data=${data}`);
         if (data) {
           const slotNum = this.config.bbsSession?.user?.id || 1;
           this.writeStringToMessage(msgAddr, String(slotNum));
@@ -867,201 +900,201 @@ export class DoorMessageHandler {
 
       case XIMCommand.DT_SECSTATUS:
         // express.e:3531-3538: Get/Set security status
-        console.log(`[DoorMessageHandler]   DT_SECSTATUS: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_SECSTATUS: data=${data}`);
         if (data) {
           const secStatus = this.config.bbsSession?.user?.secLevel || 100;
           this.writeStringToMessage(msgAddr, String(secStatus));
         } else {
           // Set security status from string
           const newSec = parseInt(str) || 100;
-          console.log(`[DoorMessageHandler]   Set security status to ${newSec}`);
+console.log(`[DoorMessageHandler]   Set security status to ${newSec}`);
         }
         break;
 
       case XIMCommand.DT_SECBOARD:
         // express.e:3539-3545: Get/Set message board security
-        console.log(`[DoorMessageHandler]   DT_SECBOARD: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_SECBOARD: data=${data}`);
         if (data) {
           const secBoard = this.config.bbsSession?.user?.secLevel || 100;
           this.writeStringToMessage(msgAddr, String(secBoard));
         } else {
-          console.log(`[DoorMessageHandler]   Set board security from: ${str}`);
+console.log(`[DoorMessageHandler]   Set board security from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_SECLIBRARY:
         // express.e:3546-3552: Get/Set library security
-        console.log(`[DoorMessageHandler]   DT_SECLIBRARY: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_SECLIBRARY: data=${data}`);
         if (data) {
           const secLib = this.config.bbsSession?.user?.secLevel || 100;
           this.writeStringToMessage(msgAddr, String(secLib));
         } else {
-          console.log(`[DoorMessageHandler]   Set library security from: ${str}`);
+console.log(`[DoorMessageHandler]   Set library security from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_SECBULLETIN:
         // express.e:3553-3559: Get/Set bulletin security
-        console.log(`[DoorMessageHandler]   DT_SECBULLETIN: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_SECBULLETIN: data=${data}`);
         if (data) {
           const secBull = this.config.bbsSession?.user?.secLevel || 100;
           this.writeStringToMessage(msgAddr, String(secBull));
         } else {
-          console.log(`[DoorMessageHandler]   Set bulletin security from: ${str}`);
+console.log(`[DoorMessageHandler]   Set bulletin security from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_MESSAGESPOSTED:
         // express.e:3560-3566: Get/Set messages posted (masked with $FFFF)
-        console.log(`[DoorMessageHandler]   DT_MESSAGESPOSTED: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_MESSAGESPOSTED: data=${data}`);
         if (data) {
           const msgPosted = (this.config.bbsSession?.user?.messagesPosted || 0) & 0xFFFF;
           this.writeStringToMessage(msgAddr, String(msgPosted));
         } else {
-          console.log(`[DoorMessageHandler]   Set messages posted from: ${str}`);
+console.log(`[DoorMessageHandler]   Set messages posted from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_UPLOADS:
         // express.e:3567-3573: Get/Set uploads count (masked with $FFFF)
-        console.log(`[DoorMessageHandler]   DT_UPLOADS: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_UPLOADS: data=${data}`);
         if (data) {
           const uploads = (this.config.bbsSession?.user?.uploads || 0) & 0xFFFF;
           this.writeStringToMessage(msgAddr, String(uploads));
         } else {
-          console.log(`[DoorMessageHandler]   Set uploads from: ${str}`);
+console.log(`[DoorMessageHandler]   Set uploads from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_DOWNLOADS:
         // express.e:3574-3580: Get/Set downloads count (masked with $FFFF)
-        console.log(`[DoorMessageHandler]   DT_DOWNLOADS: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_DOWNLOADS: data=${data}`);
         if (data) {
           const downloads = (this.config.bbsSession?.user?.downloads || 0) & 0xFFFF;
           this.writeStringToMessage(msgAddr, String(downloads));
         } else {
-          console.log(`[DoorMessageHandler]   Set downloads from: ${str}`);
+console.log(`[DoorMessageHandler]   Set downloads from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_TIMESCALLED:
         // express.e:3581-3587: Get/Set times called (masked with $FFFF)
-        console.log(`[DoorMessageHandler]   DT_TIMESCALLED: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMESCALLED: data=${data}`);
         if (data) {
           const calls = (this.config.bbsSession?.user?.calls || 0) & 0xFFFF;
           this.writeStringToMessage(msgAddr, String(calls));
         } else {
-          console.log(`[DoorMessageHandler]   Set times called from: ${str}`);
+console.log(`[DoorMessageHandler]   Set times called from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_TIMELASTON:
         // express.e:3588-3594: Get/Set time last on (in seconds)
-        console.log(`[DoorMessageHandler]   DT_TIMELASTON: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMELASTON: data=${data}`);
         if (data) {
           const lastOn = this.config.bbsSession?.user?.lastLogin
             ? Math.floor(new Date(this.config.bbsSession.user.lastLogin).getTime() / 1000)
             : 0;
           this.writeStringToMessage(msgAddr, String(lastOn));
         } else {
-          console.log(`[DoorMessageHandler]   Set time last on from: ${str}`);
+console.log(`[DoorMessageHandler]   Set time last on from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_TIMEUSED:
         // express.e:3595-3601: Get/Set time used (in seconds)
-        console.log(`[DoorMessageHandler]   DT_TIMEUSED: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMEUSED: data=${data}`);
         if (data) {
           const timeUsed = this.config.bbsSession?.user?.timeUsed || 0;
           this.writeStringToMessage(msgAddr, String(timeUsed));
         } else {
-          console.log(`[DoorMessageHandler]   Set time used from: ${str}`);
+console.log(`[DoorMessageHandler]   Set time used from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_TIMELIMIT:
         // express.e:3602-3608: Get/Set time limit (in seconds)
-        console.log(`[DoorMessageHandler]   DT_TIMELIMIT: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMELIMIT: data=${data}`);
         if (data) {
           const timeLimit = this.config.bbsSession?.user?.timeLimit || 3600;
           this.writeStringToMessage(msgAddr, String(timeLimit));
         } else {
-          console.log(`[DoorMessageHandler]   Set time limit from: ${str}`);
+console.log(`[DoorMessageHandler]   Set time limit from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_TIMETOTAL:
         // express.e:3609-3615: Get/Set time total (in seconds)
-        console.log(`[DoorMessageHandler]   DT_TIMETOTAL: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMETOTAL: data=${data}`);
         if (data) {
           const timeTotal = this.config.bbsSession?.user?.timeTotal || 0;
           this.writeStringToMessage(msgAddr, String(timeTotal));
         } else {
-          console.log(`[DoorMessageHandler]   Set time total from: ${str}`);
+console.log(`[DoorMessageHandler]   Set time total from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_BYTESUPLOAD:
         // express.e:3616-3623: Get/Set bytes uploaded (BCD format in express.e)
-        console.log(`[DoorMessageHandler]   DT_BYTESUPLOAD: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_BYTESUPLOAD: data=${data}`);
         if (data) {
           const bytesUp = this.config.bbsSession?.user?.bytesUpload || 0;
           this.writeStringToMessage(msgAddr, String(bytesUp));
         } else {
-          console.log(`[DoorMessageHandler]   Set bytes upload from: ${str}`);
+console.log(`[DoorMessageHandler]   Set bytes upload from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_BYTEDOWNLOAD:
         // express.e:3624-3631: Get/Set bytes downloaded (BCD format in express.e)
-        console.log(`[DoorMessageHandler]   DT_BYTEDOWNLOAD: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_BYTEDOWNLOAD: data=${data}`);
         if (data) {
           const bytesDown = this.config.bbsSession?.user?.bytesDownload || 0;
           this.writeStringToMessage(msgAddr, String(bytesDown));
         } else {
-          console.log(`[DoorMessageHandler]   Set bytes download from: ${str}`);
+console.log(`[DoorMessageHandler]   Set bytes download from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_DAILYBYTELIMIT:
         // express.e:3632-3638: Get/Set daily byte limit (formatUnsignedLong)
-        console.log(`[DoorMessageHandler]   DT_DAILYBYTELIMIT: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_DAILYBYTELIMIT: data=${data}`);
         if (data) {
           const dailyLimit = this.config.bbsSession?.user?.byteLimit || 10485760;
           this.writeStringToMessage(msgAddr, String(dailyLimit));
         } else {
-          console.log(`[DoorMessageHandler]   Set daily byte limit from: ${str}`);
+console.log(`[DoorMessageHandler]   Set daily byte limit from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_DAILYBYTEDLD:
         // express.e:3639-3645: Get/Set daily bytes downloaded (formatUnsignedLong)
-        console.log(`[DoorMessageHandler]   DT_DAILYBYTEDLD: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_DAILYBYTEDLD: data=${data}`);
         if (data) {
           const dailyDld = this.config.bbsSession?.user?.dailyBytesDld || 0;
           this.writeStringToMessage(msgAddr, String(dailyDld));
         } else {
-          console.log(`[DoorMessageHandler]   Set daily bytes downloaded from: ${str}`);
+console.log(`[DoorMessageHandler]   Set daily bytes downloaded from: ${str}`);
         }
         break;
 
       case XIMCommand.DT_EXPERT:
         // express.e:3646-3652: Get/Set expert mode (single char: Y/N)
-        console.log(`[DoorMessageHandler]   DT_EXPERT: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_EXPERT: data=${data}`);
         if (data) {
           const expert = this.config.bbsSession?.user?.expert || "N";
           this.writeStringToMessage(msgAddr, String(expert).charAt(0));
         } else {
           // Set expert mode from first character of string
           const newExpert = str.charAt(0).toUpperCase();
-          console.log(`[DoorMessageHandler]   Set expert mode to: ${newExpert}`);
+console.log(`[DoorMessageHandler]   Set expert mode to: ${newExpert}`);
         }
         break;
 
       case XIMCommand.DT_LINELENGTH:
         // express.e:3653-3660: Get/Set line length (userLineLen = screen HEIGHT in lines)
         // Note: "lineLength" is misleading - this is SCREEN HEIGHT not character width
-        console.log(`[DoorMessageHandler]   DT_LINELENGTH: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_LINELENGTH: data=${data}`);
         if (data) {
           const lineLen = this.config.bbsSession?.pauseLines ||
                           this.config.bbsSession?.user?.linesPerScreen ||
@@ -1071,26 +1104,26 @@ export class DoorMessageHandler {
         } else {
           // Set line length from string
           const newLineLen = parseInt(str) || 24;
-          console.log(`[DoorMessageHandler]   Set line length to: ${newLineLen}`);
+console.log(`[DoorMessageHandler]   Set line length to: ${newLineLen}`);
         }
         break;
 
       case XIMCommand.DT_TIMEOUT:
         // express.e:3686-3692: Get/Set door timeout (in seconds)
-        console.log(`[DoorMessageHandler]   DT_TIMEOUT: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_TIMEOUT: data=${data}`);
         if (data) {
           // Return current door timeout (default 300 seconds = 5 minutes)
           this.writeStringToMessage(msgAddr, "300");
         } else {
           // Set door timeout from string
           const newTimeout = parseInt(str) || 300;
-          console.log(`[DoorMessageHandler]   Set door timeout to: ${newTimeout}`);
+console.log(`[DoorMessageHandler]   Set door timeout to: ${newTimeout}`);
         }
         break;
 
       case XIMCommand.DT_CONFACCESS:
         // express.e:3777-3778: Conference access string
-        console.log(`[DoorMessageHandler]   DT_CONFACCESS: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_CONFACCESS: data=${data}`);
         if (data) {
           this.writeStringToMessage(msgAddr, "111111111"); // All conferences
         }
@@ -1099,7 +1132,7 @@ export class DoorMessageHandler {
       case XIMCommand.DT_STAMP_LASTON:
       case XIMCommand.DT_STAMP_CTIME:
         // express.e:3768-3776: Timestamps
-        console.log(`[DoorMessageHandler]   DT_STAMP: Timestamp, data=${data}`);
+console.log(`[DoorMessageHandler]   DT_STAMP: Timestamp, data=${data}`);
         if (data) {
           const now = Math.floor(Date.now() / 1000);
           this.writeStringToMessage(msgAddr, String(now));
@@ -1108,14 +1141,14 @@ export class DoorMessageHandler {
 
       case XIMCommand.DT_CURR_TIME:
         // express.e:3771-3773: Current time
-        console.log(`[DoorMessageHandler]   DT_CURR_TIME`);
+console.log(`[DoorMessageHandler]   DT_CURR_TIME`);
         const currTime = Math.floor(Date.now() / 1000);
         this.writeStringToMessage(msgAddr, String(currTime));
         break;
 
       case XIMCommand.DT_REALNAME:
         // express.e:3976-3981: Real name
-        console.log(`[DoorMessageHandler]   DT_REALNAME: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_REALNAME: data=${data}`);
         if (data) {
           const realname = this.config.bbsSession?.user?.realname || "";
           this.writeStringToMessage(msgAddr, realname);
@@ -1124,7 +1157,7 @@ export class DoorMessageHandler {
 
       case XIMCommand.DT_INTERNETNAME:
         // express.e:4088-4093: Internet name
-        console.log(`[DoorMessageHandler]   DT_INTERNETNAME: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_INTERNETNAME: data=${data}`);
         if (data) {
           this.writeStringToMessage(msgAddr, "");
         }
@@ -1132,39 +1165,39 @@ export class DoorMessageHandler {
 
       case XIMCommand.DT_HOSTNAME:
         // express.e:4109-4110: Hostname
-        console.log(`[DoorMessageHandler]   DT_HOSTNAME`);
+console.log(`[DoorMessageHandler]   DT_HOSTNAME`);
         this.writeStringToMessage(msgAddr, "localhost");
         break;
 
       case XIMCommand.DT_HOSTIP:
         // express.e:4111-4112: Host IP
-        console.log(`[DoorMessageHandler]   DT_HOSTIP`);
+console.log(`[DoorMessageHandler]   DT_HOSTIP`);
         this.writeStringToMessage(msgAddr, "127.0.0.1");
         break;
 
       case XIMCommand.DT_ANSICOLOR:
         // express.e:3904-3906: ANSI color mode
-        console.log(`[DoorMessageHandler]   DT_ANSICOLOR: data=${data}`);
+console.log(`[DoorMessageHandler]   DT_ANSICOLOR: data=${data}`);
         // Set ANSI mode (web BBS is always ANSI)
         break;
 
       case XIMCommand.DT_ISANSI:
         // express.e:3907-3908: Check if ANSI mode
-        console.log(`[DoorMessageHandler]   DT_ISANSI`);
+console.log(`[DoorMessageHandler]   DT_ISANSI`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
         break;
 
       // BB_* commands (BBS info)
       case XIMCommand.BB_CONFNAME:
         // express.e:3693-3700: Get/Set conference name
-        console.log(`[DoorMessageHandler]   BB_CONFNAME: data=${data}`);
+console.log(`[DoorMessageHandler]   BB_CONFNAME: data=${data}`);
         if (data) {
           // Get current conference name
           const confName = this.config.bbsSession?.conferenceName || "Main";
           this.writeStringToMessage(msgAddr, confName);
         } else {
           // Set conference name
-          console.log(`[DoorMessageHandler]   Set conference name to: ${str}`);
+console.log(`[DoorMessageHandler]   Set conference name to: ${str}`);
         }
         break;
 
@@ -1172,47 +1205,47 @@ export class DoorMessageHandler {
         // express.e:3701-3707: Get/Set conference location (directory)
         // Returns currentConfDir which is the full Amiga-style path with assign
         // Real express.e uses paths like "BBS:Conf1/" or relative like "255/"
-        console.log(`[DoorMessageHandler]   BB_CONFLOCAL: data=${data}`);
+console.log(`[DoorMessageHandler]   BB_CONFLOCAL: data=${data}`);
         if (data) {
           // Get current conference directory with BBS: assign and trailing slash
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
           const confDir = `BBS:Conf${confNum}/`;
-          console.log(`[DoorMessageHandler]   BB_CONFLOCAL returning: "${confDir}" (from currentConf=${confNum})`);
+console.log(`[DoorMessageHandler]   BB_CONFLOCAL returning: "${confDir}" (from currentConf=${confNum})`);
           this.writeStringToMessage(msgAddr, confDir);
         } else {
           // Set conference location
-          console.log(`[DoorMessageHandler]   Set conference location to: ${str}`);
+console.log(`[DoorMessageHandler]   Set conference location to: ${str}`);
         }
         break;
 
       case XIMCommand.BB_LOCAL:
         // express.e:3708-3709: BBS local directory (Amiga-style assign "BBS:")
-        console.log(`[DoorMessageHandler]   BB_LOCAL: returning "BBS:"`);
+console.log(`[DoorMessageHandler]   BB_LOCAL: returning "BBS:"`);
         this.writeStringToMessage(msgAddr, "BBS:");
         break;
 
       case XIMCommand.BB_TASKPRI:
         // express.e:3744-3746: Task priority
-        console.log(`[DoorMessageHandler]   BB_TASKPRI`);
+console.log(`[DoorMessageHandler]   BB_TASKPRI`);
         this.writeStringToMessage(msgAddr, "0");
         break;
 
       case XIMCommand.BB_CHATFLAG:
         // express.e:3750-3755: Sysop available flag
-        console.log(`[DoorMessageHandler]   BB_CHATFLAG`);
+console.log(`[DoorMessageHandler]   BB_CHATFLAG`);
         this.writeStringToMessage(msgAddr, "OFF");
         break;
 
       case XIMCommand.BB_CHATSET:
         // express.e:3756-3767: Get/Set chat paged flag
-        console.log(`[DoorMessageHandler]   BB_CHATSET: data=${data}`);
+console.log(`[DoorMessageHandler]   BB_CHATSET: data=${data}`);
         if (data) {
           // Get current paged flag
           this.writeStringToMessage(msgAddr, "0");
         } else {
           // Set paged flag from string
           const pagedFlag = parseInt(str) || 0;
-          console.log(`[DoorMessageHandler]   Set paged flag to: ${pagedFlag}`);
+console.log(`[DoorMessageHandler]   Set paged flag to: ${pagedFlag}`);
           // express.e:3764-3766: IF pagedFlag AND Not(temp) THEN sysopPaged()
         }
         break;
@@ -1232,27 +1265,27 @@ export class DoorMessageHandler {
             '';
           const trimmedParams = typeof params === 'string' ? params.trim() : '';
           const mainLine = trimmedParams ? `${command} ${trimmedParams}` : `${command}`;
-          console.log(`[DoorMessageHandler]   BB_MAINLINE: "${mainLine}"`);
+console.log(`[DoorMessageHandler]   BB_MAINLINE: "${mainLine}"`);
           this.writeStringToMessage(msgAddr, mainLine);
         }
         break;
 
       case XIMCommand.BB_NODEID:
         // express.e:3801-3803: Node ID
-        console.log(`[DoorMessageHandler]   BB_NODEID`);
+console.log(`[DoorMessageHandler]   BB_NODEID`);
         const nodeId = this.config.bbsSession?.nodeId || 1;
         this.writeStringToMessage(msgAddr, String(nodeId));
         break;
 
       case XIMCommand.BB_CONFNUM:
         // express.e:3831-3833: Conference number
-        console.log(`[DoorMessageHandler]   BB_CONFNUM`);
+console.log(`[DoorMessageHandler]   BB_CONFNUM`);
         this.writeStringToMessage(msgAddr, "0");
         break;
 
       case XIMCommand.BB_LOGONTYPE:
         // express.e:3859-3860: Logon type
-        console.log(`[DoorMessageHandler]   BB_LOGONTYPE`);
+console.log(`[DoorMessageHandler]   BB_LOGONTYPE`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
         break;
 
@@ -1260,12 +1293,12 @@ export class DoorMessageHandler {
         // express.e:3877-3882: Get/Set line count (for pause tracking)
         if (data) {
           // Get current line count - return as string
-          console.log(`[DoorMessageHandler]   BB_LINECOUNT GET: ${this.lineCount}`);
+console.log(`[DoorMessageHandler]   BB_LINECOUNT GET: ${this.lineCount}`);
           this.writeStringToMessage(msgAddr, String(this.lineCount));
         } else {
           // Set line count from string
           this.lineCount = parseInt(str) || 0;
-          console.log(`[DoorMessageHandler]   BB_LINECOUNT SET: ${this.lineCount}`);
+console.log(`[DoorMessageHandler]   BB_LINECOUNT SET: ${this.lineCount}`);
         }
         break;
 
@@ -1274,32 +1307,32 @@ export class DoorMessageHandler {
         // express.e:3808-3810: Returns getExpressMajorVer() string
         {
           const version = this.getExpressMajorVersion();
-          console.log(`[DoorMessageHandler]   EXPRESS_VERSION: "${version}"`);
+console.log(`[DoorMessageHandler]   EXPRESS_VERSION: "${version}"`);
           this.writeStringToMessage(msgAddr, version);
         }
         break;
 
       case XIMCommand.RAWARROW:
         // express.e:3814-3815: Toggle raw arrow mode
-        console.log(`[DoorMessageHandler]   RAWARROW`);
+console.log(`[DoorMessageHandler]   RAWARROW`);
         break;
 
       case XIMCommand.ACTIVE_NODES:
         // express.e:3661-3666: Active nodes bitmap
-        console.log(`[DoorMessageHandler]   ACTIVE_NODES`);
+console.log(`[DoorMessageHandler]   ACTIVE_NODES`);
         this.writeStringToMessage(msgAddr, "X               ");
         break;
 
       case XIMCommand.MULTICOM:
         // express.e:3909-3910: Multi-node master node
-        console.log(`[DoorMessageHandler]   MULTICOM`);
+console.log(`[DoorMessageHandler]   MULTICOM`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.NODE_BAUD:
       case XIMCommand.NODE_BAUDRATE:
         // express.e:3842-3847: Baud rate
-        console.log(`[DoorMessageHandler]   NODE_BAUD*`);
+console.log(`[DoorMessageHandler]   NODE_BAUD*`);
         this.writeStringToMessage(msgAddr, "115200");
         break;
 
@@ -1308,14 +1341,14 @@ export class DoorMessageHandler {
       case XIMCommand.BATCHZMODEMSEND:
       case XIMCommand.ZMODEMRECEIVE:
         // express.e:3710-3739: File transfer
-        console.log(`[DoorMessageHandler]   ZMODEM: Transfer not supported`);
+console.log(`[DoorMessageHandler]   ZMODEM: Transfer not supported`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, -1);
         break;
 
       case XIMCommand.AXNET_SEND:
       case XIMCommand.AXNET_RECEIVE:
         // express.e:3986-4014: AXNet transfer
-        console.log(`[DoorMessageHandler]   AXNET: Transfer not supported`);
+console.log(`[DoorMessageHandler]   AXNET: Transfer not supported`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, -1);
         break;
 
@@ -1323,24 +1356,24 @@ export class DoorMessageHandler {
       case XIMCommand.LOAD_ACCOUNT:
       case XIMCommand.EXT_LOAD_ACCOUNT:
         // express.e:3911-3912: Load user account
-        console.log(`[DoorMessageHandler]   LOAD_ACCOUNT: data=${data}`);
+console.log(`[DoorMessageHandler]   LOAD_ACCOUNT: data=${data}`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.SAVE_ACCOUNT:
         // express.e:3927-3928: Save user account
-        console.log(`[DoorMessageHandler]   SAVE_ACCOUNT: data=${data}`);
+console.log(`[DoorMessageHandler]   SAVE_ACCOUNT: data=${data}`);
         break;
 
       case XIMCommand.SEARCH_ACCOUNT:
         // express.e:3913-3914: Search for account
-        console.log(`[DoorMessageHandler]   SEARCH_ACCOUNT: data=${data}`);
+console.log(`[DoorMessageHandler]   SEARCH_ACCOUNT: data=${data}`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.LAST_ACCOUNTNUM:
         // express.e:3925-3926: Last account number
-        console.log(`[DoorMessageHandler]   LAST_ACCOUNTNUM`);
+console.log(`[DoorMessageHandler]   LAST_ACCOUNTNUM`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1);
         break;
 
@@ -1353,13 +1386,13 @@ export class DoorMessageHandler {
           msgAddr + DoorConstants.MESSAGE_DATA_OFFSET,
           this.nonStopDisplayFlag ? 1 : 0
         );
-        console.log(`[DoorMessageHandler]   GET_GNSFLAG: ${this.nonStopDisplayFlag ? 1 : 0}`);
+console.log(`[DoorMessageHandler]   GET_GNSFLAG: ${this.nonStopDisplayFlag ? 1 : 0}`);
         break;
 
       case XIMCommand.GET_XIMPORT:
         // express.e:4047-4048: Get XIM import port number
         // Default XIM port is 2324
-        console.log(`[DoorMessageHandler]   GET_XIMPORT: 2324`);
+console.log(`[DoorMessageHandler]   GET_XIMPORT: 2324`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 2324);
         break;
 
@@ -1374,7 +1407,7 @@ export class DoorMessageHandler {
 
           // Check bounds
           if (confNum < 0 || confNum >= 256) {
-            console.log(`[DoorMessageHandler]   CONF_ACCESS: Invalid conf ${confNum}, returning 2`);
+console.log(`[DoorMessageHandler]   CONF_ACCESS: Invalid conf ${confNum}, returning 2`);
             this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 2);
           } else {
             // express.e:8504-8508: Check conferenceAccess string
@@ -1386,7 +1419,7 @@ export class DoorMessageHandler {
               hasAccess = confAccess.charAt(confNum).toUpperCase() === 'X';
             }
             const accessStatus = hasAccess ? 1 : 0;
-            console.log(`[DoorMessageHandler]   CONF_ACCESS: conf=${confNum}, confAccess="${confAccess}", status=${accessStatus}`);
+console.log(`[DoorMessageHandler]   CONF_ACCESS: conf=${confNum}, confAccess="${confAccess}", status=${accessStatus}`);
             this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, accessStatus);
           }
         }
@@ -1396,13 +1429,13 @@ export class DoorMessageHandler {
       case XIMCommand.ICONIFYQUERY:
         // express.e:4199-4200: Check if iconified
         // Web BBS is never iconified
-        console.log(`[DoorMessageHandler]   ICONIFYQUERY: NO (web BBS)`);
+console.log(`[DoorMessageHandler]   ICONIFYQUERY: NO (web BBS)`);
         this.writeStringToMessage(msgAddr, "NO");
         break;
 
       case XIMCommand.QUIET_DOWNLOAD:
         // Various query commands
-        console.log(`[DoorMessageHandler]   Misc query command: ${command}`);
+console.log(`[DoorMessageHandler]   Misc query command: ${command}`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
@@ -1410,23 +1443,23 @@ export class DoorMessageHandler {
       case XIMCommand.BB_NONSTOPTEXT:
         // express.e:3875-3876: Enable/disable non-stop text (pagination)
         this.nonStopDisplayFlag = data !== 0;
-        console.log(`[DoorMessageHandler]   BB_NONSTOPTEXT: ${this.nonStopDisplayFlag ? 'ENABLED' : 'DISABLED'}`);
+console.log(`[DoorMessageHandler]   BB_NONSTOPTEXT: ${this.nonStopDisplayFlag ? 'ENABLED' : 'DISABLED'}`);
         break;
 
       case XIMCommand.BB_PURGELINE:
         // express.e:3869-3870,1914-1924: Clear input buffer
-        console.log(`[DoorMessageHandler]   BB_PURGELINE: Clearing input buffer (no-op in web)`);
+console.log(`[DoorMessageHandler]   BB_PURGELINE: Clearing input buffer (no-op in web)`);
         // In web environment, no serial buffer to clear
         break;
 
       case XIMCommand.BB_PURGELINESTART:
         // express.e:3871-3872,1906-1912: Clear buffer and restart read
-        console.log(`[DoorMessageHandler]   BB_PURGELINESTART: Clear and restart (no-op in web)`);
+console.log(`[DoorMessageHandler]   BB_PURGELINESTART: Clear and restart (no-op in web)`);
         break;
 
       case XIMCommand.BB_PURGELINEEND:
         // express.e:3873-3874,1889-1904: Abort and clear buffer
-        console.log(`[DoorMessageHandler]   BB_PURGELINEEND: Abort and clear (no-op in web)`);
+console.log(`[DoorMessageHandler]   BB_PURGELINEEND: Abort and clear (no-op in web)`);
         break;
 
       case XIMCommand.BB_DROPDTR:
@@ -1459,12 +1492,12 @@ export class DoorMessageHandler {
         {
           const confNum = parseInt(str) || 0;
           if (confNum < 1 || confNum > 9) {
-            console.log(`[DoorMessageHandler]   BB_PCONFNAME: Invalid conf ${confNum}, returning ERROR`);
+console.log(`[DoorMessageHandler]   BB_PCONFNAME: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
             // Return generic conference name (requires conference system integration)
             const confName = `Conference ${confNum}`;
-            console.log(`[DoorMessageHandler]   BB_PCONFNAME: ${confNum} -> "${confName}"`);
+console.log(`[DoorMessageHandler]   BB_PCONFNAME: ${confNum} -> "${confName}"`);
             this.writeStringToMessage(msgAddr, confName);
           }
         }
@@ -1473,32 +1506,32 @@ export class DoorMessageHandler {
       case XIMCommand.BB_PCONFLOCAL:
       case XIMCommand.BB_CALLERSLOG:
         // express.e:3804-3805: Log to callers log
-        console.log(`[DoorMessageHandler]   BB_CALLERSLOG: "${str}"`);
+console.log(`[DoorMessageHandler]   BB_CALLERSLOG: "${str}"`);
         // Callers log would write to Node1/CallersLog file
         break;
 
       case XIMCommand.BB_UDLOG:
         // express.e:3806-3807: Log to upload/download log
-        console.log(`[DoorMessageHandler]   BB_UDLOG: "${str}"`);
+console.log(`[DoorMessageHandler]   BB_UDLOG: "${str}"`);
         // U/D log would write to appropriate file
         break;
 
       case XIMCommand.BB_GETTASK:
       case XIMCommand.BB_SCRLEFT:
         // express.e:3861-3862: Screen left edge (0 for terminals)
-        console.log(`[DoorMessageHandler]   BB_SCRLEFT: 0`);
+console.log(`[DoorMessageHandler]   BB_SCRLEFT: 0`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.BB_SCRTOP:
         // express.e:3863-3864: Screen top edge (0 for terminals)
-        console.log(`[DoorMessageHandler]   BB_SCRTOP: 0`);
+console.log(`[DoorMessageHandler]   BB_SCRTOP: 0`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
       case XIMCommand.BB_SCRWIDTH:
         // express.e:3865-3866: Screen width (80 columns standard)
-        console.log(`[DoorMessageHandler]   BB_SCRWIDTH: 80`);
+console.log(`[DoorMessageHandler]   BB_SCRWIDTH: 80`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 80);
         break;
 
@@ -1510,7 +1543,7 @@ export class DoorMessageHandler {
                                (this.config.bbsSession as any)?.user?.linesPerScreen ||
                                (this.config.bbsSession as any)?.user?.pageLength ||
                                24;
-          console.log(`[DoorMessageHandler]   BB_SCRHEIGHT: ${screenHeight}`);
+console.log(`[DoorMessageHandler]   BB_SCRHEIGHT: ${screenHeight}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, screenHeight);
         }
         break;
@@ -1523,7 +1556,7 @@ export class DoorMessageHandler {
           const cmdName = this.config.doorId ||
                           this.config.bbsSession?.doorCommand ||
                           "";
-          console.log(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
+console.log(`[DoorMessageHandler]   GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
           this.writeStringToMessage(msgAddr, cmdName);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, cmdName.length);
         }
@@ -1552,45 +1585,45 @@ export class DoorMessageHandler {
       case XIMCommand.PASSWORD_HASH:
         // express.e:4029-4035: Get password hash
         // Returns empty hash for now (requires user session integration)
-        console.log(`[DoorMessageHandler]   PASSWORD_HASH: Returning empty hash`);
+console.log(`[DoorMessageHandler]   PASSWORD_HASH: Returning empty hash`);
         this.writeStringToMessage(msgAddr, "");
         break;
 
       case XIMCommand.GET_MENU_COMMAND_CHAR:
         // express.e:4049-4050: Get message menu command character
         // Default is '/' for AmiExpress
-        console.log(`[DoorMessageHandler]   GET_MENU_COMMAND_CHAR: 47 ('/')`);
+console.log(`[DoorMessageHandler]   GET_MENU_COMMAND_CHAR: 47 ('/')`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 47); // ASCII '/'
         break;
 
       case XIMCommand.DISPLAY_FILE:
         // express.e:4038-4039: Display file by path
-        console.log(`[DoorMessageHandler]   DISPLAY_FILE: ${str}`);
+console.log(`[DoorMessageHandler]   DISPLAY_FILE: ${str}`);
         await this.displayFile(str);
         break;
 
       case XIMCommand.CHECK_TO_DISPLAY:
         // express.e:4040-4041: Find and display security screen if it exists
-        console.log(`[DoorMessageHandler]   CHECK_TO_DISPLAY: ${str}`);
+console.log(`[DoorMessageHandler]   CHECK_TO_DISPLAY: ${str}`);
         try {
           const screenPath = this.findSecurityScreen(str);
           if (screenPath) {
             await this.displayFile(screenPath);
           }
         } catch (error: any) {
-          console.error(`[DoorMessageHandler]   CHECK_TO_DISPLAY error:`, error.message);
+console.error(`[DoorMessageHandler]   CHECK_TO_DISPLAY error:`, error.message);
         }
         break;
 
       case XIMCommand.SET_FILEATTACH:
         // express.e:4042-4043: Enable/disable file attach mode
-        console.log(`[DoorMessageHandler]   SET_FILEATTACH: ${data !== 0 ? 'ENABLED' : 'DISABLED'}`);
+console.log(`[DoorMessageHandler]   SET_FILEATTACH: ${data !== 0 ? 'ENABLED' : 'DISABLED'}`);
         // File attach mode would be stored in session state
         break;
 
       case XIMCommand.INTERPRET_MCI:
         // express.e:4044-4046: Process MCI codes and return result in msg.string
-        console.log(`[DoorMessageHandler]   INTERPRET_MCI: "${str}"`);
+console.log(`[DoorMessageHandler]   INTERPRET_MCI: "${str}"`);
         try {
           const bbsSession = (this.config as any)?.bbsSession || {};
           const bbsName = bbsSession.bbsName || 'AmiExpress-Web';
@@ -1598,9 +1631,9 @@ export class DoorMessageHandler {
           const location = bbsSession.user?.location || 'The Internet';
           const result = await parseMciCodes(str, bbsSession, bbsName, sysopName, location);
           this.writeStringToMessage(msgAddr, result.parsed);
-          console.log(`[DoorMessageHandler]   INTERPRET_MCI result: "${result.parsed}"`);
+console.log(`[DoorMessageHandler]   INTERPRET_MCI result: "${result.parsed}"`);
         } catch (error: any) {
-          console.error(`[DoorMessageHandler]   INTERPRET_MCI error:`, error.message);
+console.error(`[DoorMessageHandler]   INTERPRET_MCI error:`, error.message);
           this.writeStringToMessage(msgAddr, str); // Return original on error
         }
         break;
@@ -1608,24 +1641,24 @@ export class DoorMessageHandler {
       case XIMCommand.FILE_REQUEST:
         // express.e:4051-4052: ASL file requester
         // Not applicable in web environment - return empty path
-        console.log(`[DoorMessageHandler]   FILE_REQUEST: Not supported in web (returning empty)`);
+console.log(`[DoorMessageHandler]   FILE_REQUEST: Not supported in web (returning empty)`);
         this.writeStringToMessage(msgAddr, "");
         break;
 
       case XIMCommand.DISABLE_FILE_ATTACH:
         // express.e:4053-4054: Disable file attach
-        console.log(`[DoorMessageHandler]   DISABLE_FILE_ATTACH: ${data !== 0 ? 'DISABLED' : 'ENABLED'}`);
+console.log(`[DoorMessageHandler]   DISABLE_FILE_ATTACH: ${data !== 0 ? 'DISABLED' : 'ENABLED'}`);
         // File attach disallow flag would be stored in session state
         break;
 
       case XIMCommand.QWKZOOM_REC:
         // express.e:4055-4059: QWK zoom record number
-        console.log(`[DoorMessageHandler]   QWKZOOM_REC: Not implemented`);
+console.log(`[DoorMessageHandler]   QWKZOOM_REC: Not implemented`);
         break;
 
       case XIMCommand.REL_CONF:
         // express.e:4062-4063: Release conference
-        console.log(`[DoorMessageHandler]   REL_CONF: conf=${data}`);
+console.log(`[DoorMessageHandler]   REL_CONF: conf=${data}`);
         // Returns conference number after release
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, data);
         break;
@@ -1635,7 +1668,7 @@ export class DoorMessageHandler {
         {
           const filePath = str || "";
           const exists = fs.existsSync(filePath) ? 1 : 0;
-          console.log(`[DoorMessageHandler]   CHECK_PLAYPEN_EXISTS: "${filePath}" exists=${exists}`);
+console.log(`[DoorMessageHandler]   CHECK_PLAYPEN_EXISTS: "${filePath}" exists=${exists}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, exists);
         }
         break;
@@ -1649,7 +1682,7 @@ export class DoorMessageHandler {
           const miscPtr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET);
           const searchName = str.toLowerCase();
 
-          console.log(`[DoorMessageHandler]   CHOOSE_NAME: searching for "${searchName}"`);
+console.log(`[DoorMessageHandler]   CHOOSE_NAME: searching for "${searchName}"`);
 
           // Search for user by name in database
           const user = this.config.bbsSession?.user;
@@ -1684,10 +1717,10 @@ export class DoorMessageHandler {
                 this.emulator.writeMemory(miscPtr + i, miscBuf[i]);
               }
             }
-            console.log(`[DoorMessageHandler]   CHOOSE_NAME: Found user ${user.username}`);
+console.log(`[DoorMessageHandler]   CHOOSE_NAME: Found user ${user.username}`);
             this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 1); // Success
           } else {
-            console.log(`[DoorMessageHandler]   CHOOSE_NAME: User not found`);
+console.log(`[DoorMessageHandler]   CHOOSE_NAME: User not found`);
             this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0); // Not found
           }
         }
@@ -1703,7 +1736,7 @@ export class DoorMessageHandler {
           // Find next available slot (use simple counter for now)
           const slot = Date.now() % 10000; // Simple slot assignment
 
-          console.log(`[DoorMessageHandler]   APPEND_ACCOUNT: Creating account slot ${slot}`);
+console.log(`[DoorMessageHandler]   APPEND_ACCOUNT: Creating account slot ${slot}`);
 
           // Initialize user buffers with slot number
           if (userPtr) {
@@ -1730,46 +1763,46 @@ export class DoorMessageHandler {
             }
           }
 
-          console.log(`[DoorMessageHandler]   APPEND_ACCOUNT: Account slot ${slot} initialized`);
+console.log(`[DoorMessageHandler]   APPEND_ACCOUNT: Account slot ${slot} initialized`);
         }
         break;
 
       case XIMCommand.XNET_OUTBOUND:
         // express.e:4107-4108: Set XNet outbound directory
-        console.log(`[DoorMessageHandler]   XNET_OUTBOUND: "${str}"`);
+console.log(`[DoorMessageHandler]   XNET_OUTBOUND: "${str}"`);
         // XNet outbound directory for mail
         break;
 
       case XIMCommand.CON_CURSOR:
         // express.e:4121-4126: Console cursor control
-        console.log(`[DoorMessageHandler]   CON_CURSOR: ${data ? 'ON' : 'OFF'}`);
+console.log(`[DoorMessageHandler]   CON_CURSOR: ${data ? 'ON' : 'OFF'}`);
         // Cursor visibility handled by terminal emulator
         break;
 
       case XIMCommand.TELNET_CONNECT:
         // express.e:4127-4128: Connect to telnet host
-        console.log(`[DoorMessageHandler]   TELNET_CONNECT: "${str}" port=${data}`);
+console.log(`[DoorMessageHandler]   TELNET_CONNECT: "${str}" port=${data}`);
         // Telnet connectivity handled by telnet-connect door
         break;
 
       case XIMCommand.TELNET_USERNAME_PROMPT:
         // express.e:4129-4130: Set telnet username prompt
-        console.log(`[DoorMessageHandler]   TELNET_USERNAME_PROMPT: "${str}"`);
+console.log(`[DoorMessageHandler]   TELNET_USERNAME_PROMPT: "${str}"`);
         break;
 
       case XIMCommand.TELNET_USERNAME:
         // express.e:4131-4132: Set telnet username
-        console.log(`[DoorMessageHandler]   TELNET_USERNAME: "${str}"`);
+console.log(`[DoorMessageHandler]   TELNET_USERNAME: "${str}"`);
         break;
 
       case XIMCommand.TELNET_PASSWORD_PROMPT:
         // express.e:4133-4134: Set telnet password prompt
-        console.log(`[DoorMessageHandler]   TELNET_PASSWORD_PROMPT: "${str}"`);
+console.log(`[DoorMessageHandler]   TELNET_PASSWORD_PROMPT: "${str}"`);
         break;
 
       case XIMCommand.TELNET_PASSWORD:
         // express.e:4135-4136: Set telnet password
-        console.log(`[DoorMessageHandler]   TELNET_PASSWORD: (hidden)`);
+console.log(`[DoorMessageHandler]   TELNET_PASSWORD: (hidden)`);
         break;
       case XIMCommand.GET_CMD_TOOLTYPE:
         // express.e:4137-4140: Read tooltype from command file
@@ -1781,7 +1814,7 @@ export class DoorMessageHandler {
           const cmdName = this.config.doorId ||
                           this.config.bbsSession?.doorCommand ||
                           "";
-          console.log(`[DoorMessageHandler]   GET_CMD_TOOLTYPE: key="${tooltypeKey}", command="${cmdName}"`);
+console.log(`[DoorMessageHandler]   GET_CMD_TOOLTYPE: key="${tooltypeKey}", command="${cmdName}"`);
 
           let tooltypeValue = "";
           let found = 0;
@@ -1801,17 +1834,17 @@ export class DoorMessageHandler {
                 if (tooltypes.has(tooltypeKey)) {
                   tooltypeValue = tooltypes.get(tooltypeKey) || "";
                   found = 1;
-                  console.log(`[DoorMessageHandler]     Found: ${tooltypeKey}="${tooltypeValue}" in ${infoPath}`);
+console.log(`[DoorMessageHandler]     Found: ${tooltypeKey}="${tooltypeValue}" in ${infoPath}`);
                   break;
                 }
               } catch (err) {
-                console.log(`[DoorMessageHandler]     Error parsing ${infoPath}: ${err}`);
+console.log(`[DoorMessageHandler]     Error parsing ${infoPath}: ${err}`);
               }
             }
           }
 
           if (!found) {
-            console.log(`[DoorMessageHandler]     Tooltype "${tooltypeKey}" not found`);
+console.log(`[DoorMessageHandler]     Tooltype "${tooltypeKey}" not found`);
           }
 
           this.writeStringToMessage(msgAddr, tooltypeValue);
@@ -1824,24 +1857,24 @@ export class DoorMessageHandler {
         {
           const nodeId = this.config.bbsSession?.nodeId || 1;
           const playpenPath = `Node${nodeId}/Playpen/`;
-          console.log(`[DoorMessageHandler]   SIG_PLAYPEN: "${playpenPath}"`);
+console.log(`[DoorMessageHandler]   SIG_PLAYPEN: "${playpenPath}"`);
           this.writeStringToMessage(msgAddr, playpenPath);
         }
         break;
 
       case XIMCommand.LOGON_UNAME:
         // express.e:4201-4202: Auto-login username (not supported)
-        console.log(`[DoorMessageHandler]   LOGON_UNAME: Not supported`);
+console.log(`[DoorMessageHandler]   LOGON_UNAME: Not supported`);
         break;
 
       case XIMCommand.LOGON_UPASS:
         // express.e:4203-4204: Auto-login password (not supported)
-        console.log(`[DoorMessageHandler]   LOGON_UPASS: Not supported`);
+console.log(`[DoorMessageHandler]   LOGON_UPASS: Not supported`);
         break;
 
       case XIMCommand.SIG_LI:
         // express.e:4205-4207: Get password input
-        console.log(`[DoorMessageHandler]   SIG_LI: Password input`);
+console.log(`[DoorMessageHandler]   SIG_LI: Password input`);
         // Password input would be handled via Socket.IO
         this.writeStringToMessage(msgAddr, "");
         break;
@@ -1849,7 +1882,7 @@ export class DoorMessageHandler {
         // express.e:3848-3849: Get serial device name
         {
           const deviceName = this.config.bbsSession?.connectionType || 'websocket';
-          console.log(`[DoorMessageHandler]   NODE_DEVICE: "${deviceName}"`);
+console.log(`[DoorMessageHandler]   NODE_DEVICE: "${deviceName}"`);
           this.writeStringToMessage(msgAddr, deviceName);
         }
         break;
@@ -1858,14 +1891,14 @@ export class DoorMessageHandler {
         // express.e:3850-3852: Get serial device unit number
         {
           const unitNumber = this.config.bbsSession?.nodeId || 0;
-          console.log(`[DoorMessageHandler]   NODE_UNIT: ${unitNumber}`);
+console.log(`[DoorMessageHandler]   NODE_UNIT: ${unitNumber}`);
           this.writeStringToMessage(msgAddr, String(unitNumber));
         }
         break;
 
       case XIMCommand.UNKNOWN4:
         // Unknown/undocumented command
-        console.log(`[DoorMessageHandler]   UNKNOWN4: Not implemented`);
+console.log(`[DoorMessageHandler]   UNKNOWN4: Not implemented`);
         break;
 
       // NOTE: CONF_ACCESS is handled earlier in the switch statement (around line 1285)
@@ -1877,7 +1910,7 @@ export class DoorMessageHandler {
           // Read from ConfConfig.info NAME.n tooltypes
           const confNum = data || parseInt(str) || 0;
           if (confNum < 1) {
-            console.log(`[DoorMessageHandler]   BB_PCONFNAME: Invalid conf ${confNum}, returning ERROR`);
+console.log(`[DoorMessageHandler]   BB_PCONFNAME: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
             const fs = require('fs');
@@ -1897,9 +1930,9 @@ export class DoorMessageHandler {
                 }
               }
             } catch (e) {
-              console.log(`[DoorMessageHandler]   BB_PCONFNAME: Error reading ConfConfig.info: ${e}`);
+console.log(`[DoorMessageHandler]   BB_PCONFNAME: Error reading ConfConfig.info: ${e}`);
             }
-            console.log(`[DoorMessageHandler]   BB_PCONFNAME(${confNum}): "${confName}"`);
+console.log(`[DoorMessageHandler]   BB_PCONFNAME(${confNum}): "${confName}"`);
             this.writeStringToMessage(msgAddr, confName);
           }
         }
@@ -1910,11 +1943,11 @@ export class DoorMessageHandler {
           // express.e:3786-3792: Get conference directory by conference number
           const confNum = data || parseInt(str) || 0;
           if (confNum < 1) {
-            console.log(`[DoorMessageHandler]   BB_PCONFLOCAL: Invalid conf ${confNum}, returning ERROR`);
+console.log(`[DoorMessageHandler]   BB_PCONFLOCAL: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
             const confDir = `BBS:Conf${confNum}/`;
-            console.log(`[DoorMessageHandler]   BB_PCONFLOCAL(${confNum}): "${confDir}"`);
+console.log(`[DoorMessageHandler]   BB_PCONFLOCAL(${confNum}): "${confDir}"`);
             this.writeStringToMessage(msgAddr, confDir);
           }
         }
@@ -1925,7 +1958,7 @@ export class DoorMessageHandler {
           // express.e:3831-3833: Conference number
           const confNum = (this.config.bbsSession as any)?.currentConf ||
                          (this.config.bbsSession as any)?.conferenceId || 1;
-          console.log(`[DoorMessageHandler]   BB_CONFNUM(510): ${confNum}`);
+console.log(`[DoorMessageHandler]   BB_CONFNUM(510): ${confNum}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, confNum);
         }
         break;
@@ -1933,7 +1966,7 @@ export class DoorMessageHandler {
       case XIMCommand.BB_CONFNAME: // BB_CONFNAME=126 - Current conference name
         {
           const confName = this.config.bbsSession?.conferenceName || "Main";
-          console.log(`[DoorMessageHandler]   BB_CONFNAME(126): "${confName}"`);
+console.log(`[DoorMessageHandler]   BB_CONFNAME(126): "${confName}"`);
           this.writeStringToMessage(msgAddr, confName);
         }
         break;
@@ -1942,7 +1975,7 @@ export class DoorMessageHandler {
         {
           const confNum = (this.config.bbsSession as any)?.currentConf || 1;
           const confDir = `BBS:Conf${confNum}/`;
-          console.log(`[DoorMessageHandler]   BB_CONFLOCAL(127): "${confDir}"`);
+console.log(`[DoorMessageHandler]   BB_CONFLOCAL(127): "${confDir}"`);
           this.writeStringToMessage(msgAddr, confDir);
         }
         break;
@@ -1954,14 +1987,14 @@ export class DoorMessageHandler {
           // bbsSession.confAccess comes from disk (user.data) via door.handler.ts
           // Do NOT fall back to user?.confAccess - that's SQLite database data
           const confAccess = (this.config.bbsSession as any)?.confAccess || '';
-          console.log(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}" (from disk)`);
+console.log(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}" (from disk)`);
           this.writeStringToMessage(msgAddr, confAccess);
         }
         break;
 
       default:
-        console.log(`[DoorMessageHandler]   Unknown command: ${command}`);
-        console.log(`[DoorMessageHandler]   Returning unchanged message`);
+console.log(`[DoorMessageHandler]   Unknown command: ${command}`);
+console.log(`[DoorMessageHandler]   Returning unchanged message`);
         break;
     }
 
@@ -1969,7 +2002,7 @@ export class DoorMessageHandler {
     this.execLibrary.putMsg(replyPortAddr, msgAddr, {
       suppressDoorCallback: true,
     });
-    console.log(
+console.log(
       `[DoorMessageHandler]   Sent reply to door at port 0x${replyPortAddr.toString(16)}`
     );
   }
@@ -1991,7 +2024,7 @@ export class DoorMessageHandler {
       });
       this.socket.off("door:keypress", handler);
       this.socket.off("keypress", handler);
-      console.log(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
+console.log(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
     };
 
     // Listen for keypress events from the client; support both legacy and door-specific
@@ -2074,7 +2107,7 @@ export class DoorMessageHandler {
       str += String.fromCharCode(ch);
     }
 
-    console.log(
+console.log(
       `[DoorMessageHandler] ${label}: msg=0x${msgAddr.toString(
         16
       )}, len=${length}, cmd=${command}, data=${data}, reply=0x${replyPort.toString(
@@ -2091,7 +2124,7 @@ export class DoorMessageHandler {
     msgAddr: number,
     returnAddr?: number
   ): void {
-    console.log(
+console.log(
       `[DoorMessageHandler] >>> Host handling PutMsg(port=0x${portAddr.toString(
         16
       )}, msg=0x${msgAddr.toString(16)})`
@@ -2104,7 +2137,7 @@ export class DoorMessageHandler {
     this.emulator.setRegister(16, resumePc);
     this.emulator.refillPrefetch();
 
-    console.log(
+console.log(
       `[DoorMessageHandler] <<< PutMsg emulation complete, returning to 0x${resumePc.toString(
         16
       )}`
@@ -2237,7 +2270,7 @@ export class DoorMessageHandler {
   private async displayFile(filePath: string): Promise<boolean> {
     try {
       if (!fs.existsSync(filePath)) {
-        console.log(`[DoorMessageHandler] File not found: ${filePath}`);
+console.log(`[DoorMessageHandler] File not found: ${filePath}`);
         return false;
       }
 
@@ -2256,9 +2289,9 @@ export class DoorMessageHandler {
         const displayContents = result.parsed.replace(/\n/g, "\r\n");
         this.socket.emit("ansi-output", displayContents);
 
-        console.log(`[DoorMessageHandler] Displayed file with MCI: ${filePath} (${contents.length} bytes)`);
+console.log(`[DoorMessageHandler] Displayed file with MCI: ${filePath} (${contents.length} bytes)`);
       } catch (mciError: any) {
-        console.warn(`[DoorMessageHandler] MCI processing failed, displaying raw: ${mciError.message}`);
+console.warn(`[DoorMessageHandler] MCI processing failed, displaying raw: ${mciError.message}`);
         // Fallback to raw display if MCI processing fails
         const displayContents = contents.replace(/\n/g, "\r\n");
         this.socket.emit("ansi-output", displayContents);
@@ -2266,7 +2299,7 @@ export class DoorMessageHandler {
 
       return true;
     } catch (error: any) {
-      console.error(`[DoorMessageHandler] Error reading file ${filePath}:`, error?.message);
+console.error(`[DoorMessageHandler] Error reading file ${filePath}:`, error?.message);
       return false;
     }
   }

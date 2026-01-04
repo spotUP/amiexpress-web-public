@@ -543,6 +543,96 @@ export class UserDatabaseManager {
       unused: Buffer.alloc(86, 0),
     };
   }
+
+  /**
+   * Find user slot by username (case-insensitive)
+   * Returns 0-based slot index or -1 if not found
+   */
+  findUserSlotByName(username: string): number {
+    if (!fs.existsSync(this.userDataPath)) return -1;
+    const userCount = this.getUserCount();
+    const searchName = username.toLowerCase();
+    for (let i = 0; i < userCount; i++) {
+      const userData = this.readUserFromDisk(i);
+      if (userData && userData.user.name.toLowerCase() === searchName) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Read user stats from disk for 68K door compatibility
+   * Returns stats object or null if not found
+   */
+  readUserStatsFromDisk(slotNumber: number): {
+    messagesPosted: number;
+    uploads: number;
+    downloads: number;
+    timesCalled: number;
+    timeUsed: number;
+    timeLimit: number;
+    timeTotal: number;
+    bytesDownload: number;
+    bytesUpload: number;
+  } | null {
+    const data = this.readUserFromDisk(slotNumber);
+    if (!data) return null;
+    return {
+      messagesPosted: data.user.messagesPosted,
+      uploads: data.user.uploads,
+      downloads: data.user.downloads,
+      timesCalled: data.user.timesCalled,
+      timeUsed: data.user.timeUsed,
+      timeLimit: data.user.timeLimit,
+      timeTotal: data.user.timeTotal,
+      bytesDownload: data.user.bytesDownload,
+      bytesUpload: data.user.bytesUpload,
+    };
+  }
+
+  /**
+   * Write a single user stat to disk
+   * Field offsets in user.data structure (232 bytes per user)
+   */
+  writeUserStatToDisk(slotNumber: number, field: string, value: number): void {
+    if (!fs.existsSync(this.userDataPath)) return;
+
+    // Field offsets within the 232-byte user record
+    const fieldOffsets: Record<string, { offset: number; size: number }> = {
+      messagesPosted: { offset: 94, size: 2 },
+      uploads: { offset: 146, size: 2 },
+      downloads: { offset: 148, size: 2 },
+      timesCalled: { offset: 152, size: 2 },
+      timeUsed: { offset: 158, size: 4 },
+      timeLimit: { offset: 162, size: 4 },
+      timeTotal: { offset: 166, size: 4 },
+      bytesDownload: { offset: 170, size: 4 },
+      bytesUpload: { offset: 174, size: 4 },
+    };
+
+    const fieldInfo = fieldOffsets[field];
+    if (!fieldInfo) {
+console.warn(`[UserDatabaseManager] Unknown field: ${field}`);
+      return;
+    }
+
+    const fileOffset = slotNumber * this.USER_SIZE + fieldInfo.offset;
+    const buffer = Buffer.alloc(fieldInfo.size);
+
+    if (fieldInfo.size === 2) {
+      buffer.writeInt16BE(value, 0);
+    } else {
+      buffer.writeInt32BE(value, 0);
+    }
+
+    const fd = fs.openSync(this.userDataPath, "r+");
+    try {
+      fs.writeSync(fd, buffer, 0, fieldInfo.size, fileOffset);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
 }
 
 export const userDatabaseManager = new UserDatabaseManager();

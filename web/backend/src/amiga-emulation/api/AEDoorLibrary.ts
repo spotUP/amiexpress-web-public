@@ -146,18 +146,18 @@ export class AEDoorLibrary {
    */
   createComm(): number {
     const nodeId = this.resolveNodeId();
-    console.log(`[AEDoorLibrary] CreateComm for node ${nodeId}`);
+console.log(`[AEDoorLibrary] CreateComm for node ${nodeId}`);
     const bbsPortAddr = this.findBbsPort(nodeId);
 
     if (bbsPortAddr === 0) {
-      console.warn(`[AEDoorLibrary] CreateComm: AEDoorPort${nodeId} not found`);
+console.warn(`[AEDoorLibrary] CreateComm: AEDoorPort${nodeId} not found`);
       this.emulator.setRegister(0, 0);
       return 0;
     }
 
     const difaceAddr = this.execLibrary.allocMem(DIFACE_SIZE, MEMF_CLEAR);
     if (difaceAddr === 0) {
-      console.warn("[AEDoorLibrary] CreateComm: AllocMem failed");
+console.warn("[AEDoorLibrary] CreateComm: AllocMem failed");
       this.emulator.setRegister(0, 0);
       return 0;
     }
@@ -169,7 +169,7 @@ export class AEDoorLibrary {
 
     const replyPortAddr = this.execLibrary.createPort(replyNameAddr, 0);
     if (replyPortAddr === 0) {
-      console.warn("[AEDoorLibrary] CreateComm: CreatePort failed");
+console.warn("[AEDoorLibrary] CreateComm: CreatePort failed");
       this.execLibrary.freeMem(difaceAddr, DIFACE_SIZE);
       this.emulator.setRegister(0, 0);
       return 0;
@@ -274,7 +274,7 @@ export class AEDoorLibrary {
    * @param difaceAddr - Address of DIFace structure
    */
   private populateBBSInfo(difaceAddr: number): void {
-    console.log(`[AEDoorLibrary] Populating BBSInfo at DIFace 0x${difaceAddr.toString(16)}`);
+console.log(`[AEDoorLibrary] Populating BBSInfo at DIFace 0x${difaceAddr.toString(16)}`);
 
     // BBSInfo is at DIFace + 0x46
     const bbsInfoAddr = difaceAddr + 0x46;
@@ -302,7 +302,7 @@ export class AEDoorLibrary {
     // RTW reads node number from offset 0xf to format "AEDoorPort%d" port name
     const nodeId = this.resolveNodeId();
     this.emulator.writeMemory(bbsInfoAddr + 0xf, nodeId); // Node ID as byte at +0xf
-    console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
+console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
 
     // Write to BBSInfo structure at known offsets
     // Based on AEDoor.library disassembly and XIM system-commands.ts
@@ -316,22 +316,22 @@ export class AEDoorLibrary {
     this.emulator.writeMemory32(difaceAddr + 0x1c, bbsInfoAddr + 0xdc);  // Location ptr
     this.emulator.writeMemory32(difaceAddr + 0x20, bbsInfoAddr + 0x14);  // User name ptr
 
-    console.log(`[AEDoorLibrary] BBSInfo populated:`);
-    console.log(`[AEDoorLibrary]   Username: "${username}" at 0x${(bbsInfoAddr + 0x14).toString(16)}`);
-    console.log(`[AEDoorLibrary]   Location: "${location}" at 0x${(bbsInfoAddr + 0xdc).toString(16)}`);
-    console.log(`[AEDoorLibrary]   BBS Name: "${bbsName}" at 0x${(bbsInfoAddr + 0x120).toString(16)}`);
-    console.log(`[AEDoorLibrary]   Date: "${dateStr}" at 0x${(bbsInfoAddr + 0x150).toString(16)}`);
-    console.log(`[AEDoorLibrary]   Time: "${timeStr}" at 0x${(bbsInfoAddr + 0x170).toString(16)}`);
+console.log(`[AEDoorLibrary] BBSInfo populated:`);
+console.log(`[AEDoorLibrary]   Username: "${username}" at 0x${(bbsInfoAddr + 0x14).toString(16)}`);
+console.log(`[AEDoorLibrary]   Location: "${location}" at 0x${(bbsInfoAddr + 0xdc).toString(16)}`);
+console.log(`[AEDoorLibrary]   BBS Name: "${bbsName}" at 0x${(bbsInfoAddr + 0x120).toString(16)}`);
+console.log(`[AEDoorLibrary]   Date: "${dateStr}" at 0x${(bbsInfoAddr + 0x150).toString(16)}`);
+console.log(`[AEDoorLibrary]   Time: "${timeStr}" at 0x${(bbsInfoAddr + 0x170).toString(16)}`);
 
     // Read back verification
     const verifyUser = this.readCString(bbsInfoAddr + 0x14, 198);
     const verifyLoc = this.readCString(bbsInfoAddr + 0xdc, 60);
     const verifyBbs = this.readCString(bbsInfoAddr + 0x120, 40);
 
-    console.log(`[AEDoorLibrary] Verification read-back:`);
-    console.log(`[AEDoorLibrary]   Username: "${verifyUser}"`);
-    console.log(`[AEDoorLibrary]   Location: "${verifyLoc}"`);
-    console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
+console.log(`[AEDoorLibrary] Verification read-back:`);
+console.log(`[AEDoorLibrary]   Username: "${verifyUser}"`);
+console.log(`[AEDoorLibrary]   Location: "${verifyLoc}"`);
+console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
   }
 
   /**
@@ -466,7 +466,7 @@ export class AEDoorLibrary {
     const promptAddr = this.emulator.getRegister(10);
     const promptText = promptAddr ? this.readCString(promptAddr, 200) : "";
 
-    console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
+console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
 
     if (promptText.length > 0) {
       this.socket.emit("ansi-output", promptText);
@@ -493,7 +493,7 @@ export class AEDoorLibrary {
     if (!state) {
       const stringAddr = this.emulator.getRegister(8); // A0 = text pointer
       const text = this.readCString(stringAddr, 4096);
-      console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
+console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
       this.socket.emit("ansi-output", text);
       this.emulator.setRegister(0, 0); // Success
       return 0;
@@ -651,11 +651,11 @@ export class AEDoorLibrary {
    */
   preCreateComm(): number {
     const nodeNum = this.emulator.getRegister(0);
-    console.log(`[AEDoorLibrary] PreCreateComm(node=${nodeNum})`);
+console.log(`[AEDoorLibrary] PreCreateComm(node=${nodeNum})`);
 
     // Basic validation - could add more setup logic here
     if (nodeNum < 1 || nodeNum > 99) {
-      console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
+console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
       this.emulator.setRegister(0, 0);
       return -1; // Error
     }
@@ -670,11 +670,11 @@ export class AEDoorLibrary {
    */
   postDeleteComm(): number {
     const nodeNum = this.emulator.getRegister(0);
-    console.log(`[AEDoorLibrary] PostDeleteComm(node=${nodeNum})`);
+console.log(`[AEDoorLibrary] PostDeleteComm(node=${nodeNum})`);
 
     // Basic cleanup validation
     if (nodeNum < 1 || nodeNum > 99) {
-      console.warn(`[AEDoorLibrary] PostDeleteComm: Invalid node number ${nodeNum}`);
+console.warn(`[AEDoorLibrary] PostDeleteComm: Invalid node number ${nodeNum}`);
       this.emulator.setRegister(0, 0);
       return -1; // Error
     }
@@ -704,7 +704,7 @@ export class AEDoorLibrary {
     // Write data to BBSInfo+0xdc (location area)
     this.emulator.writeMemory32(bbsInfoAddr + 0xdc, dataValue);
 
-    console.log(`[AEDoorLibrary] SetNodeData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
+console.log(`[AEDoorLibrary] SetNodeData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
   }
 
   /**
@@ -724,7 +724,7 @@ export class AEDoorLibrary {
     // Write data to BBSInfo+0xdc
     this.emulator.writeMemory32(bbsInfoAddr + 0xdc, dataValue);
 
-    console.log(`[AEDoorLibrary] SetStringData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
+console.log(`[AEDoorLibrary] SetStringData: wrote 0x${dataValue.toString(16)} to BBSInfo+0xdc`);
   }
 
   /**
@@ -746,7 +746,7 @@ export class AEDoorLibrary {
       // Copy string from source to BBSInfo+0x14
       const sourceStr = this.readCString(sourceAddr, 198);
       this.writeCString(destAddr, sourceStr, 198);
-      console.log(`[AEDoorLibrary] CopyUserString: copied "${sourceStr}" to BBSInfo+0x14`);
+console.log(`[AEDoorLibrary] CopyUserString: copied "${sourceStr}" to BBSInfo+0x14`);
     }
   }
 
@@ -770,7 +770,7 @@ export class AEDoorLibrary {
     // Send message to BBS port
     this.execLibrary.putMsg(state.bbsPortAddr, state.messageAddr);
 
-    console.log(`[AEDoorLibrary] SendControlMessage: command=0x${command.toString(16)}`);
+console.log(`[AEDoorLibrary] SendControlMessage: command=0x${command.toString(16)}`);
   }
 
   /**
@@ -791,7 +791,7 @@ export class AEDoorLibrary {
     const ptr = this.emulator.readMemory32(state.difaceAddr + 0x1c);
     this.emulator.setRegister(0, ptr);
 
-    console.log(`[AEDoorLibrary] GetUserPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x1c`);
+console.log(`[AEDoorLibrary] GetUserPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x1c`);
     return ptr;
   }
 
@@ -813,7 +813,7 @@ export class AEDoorLibrary {
     const ptr = this.emulator.readMemory32(state.difaceAddr + 0x20);
     this.emulator.setRegister(0, ptr);
 
-    console.log(`[AEDoorLibrary] GetLocationPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x20`);
+console.log(`[AEDoorLibrary] GetLocationPtr: returning 0x${ptr.toString(16)} from DoorInfo+0x20`);
     return ptr;
   }
 
@@ -844,7 +844,7 @@ export class AEDoorLibrary {
       if (checkValue === 0xffffffff) {
         // Invalid - return 0
         this.emulator.setRegister(0, 0);
-        console.log(`[AEDoorLibrary] GetUserName: invalid data (0xffffffff), returning 0`);
+console.log(`[AEDoorLibrary] GetUserName: invalid data (0xffffffff), returning 0`);
         return 0;
       }
     }
@@ -853,7 +853,7 @@ export class AEDoorLibrary {
     const userNamePtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
     this.emulator.setRegister(0, userNamePtr);
 
-    console.log(`[AEDoorLibrary] GetUserName: returning 0x${userNamePtr.toString(16)}`);
+console.log(`[AEDoorLibrary] GetUserName: returning 0x${userNamePtr.toString(16)}`);
     return userNamePtr;
   }
 
@@ -876,7 +876,7 @@ export class AEDoorLibrary {
     const userPtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
     this.writeCString(userPtr, text, 198);
 
-    console.log(`[AEDoorLibrary] WriteUserData: wrote "${text}" with flags=0x${flags.toString(16)}`);
+console.log(`[AEDoorLibrary] WriteUserData: wrote "${text}" with flags=0x${flags.toString(16)}`);
   }
 
   /**
@@ -895,7 +895,7 @@ export class AEDoorLibrary {
     this.emulator.setRegister(1, 0);
     this.setStringData();
 
-    console.log(`[AEDoorLibrary] FlushBuffer: flushed buffer`);
+console.log(`[AEDoorLibrary] FlushBuffer: flushed buffer`);
   }
 
   /**
@@ -915,7 +915,7 @@ export class AEDoorLibrary {
     this.emulator.setRegister(0, 7);
     this.copyUserString();
 
-    console.log(`[AEDoorLibrary] SetBBSName: set BBS name`);
+console.log(`[AEDoorLibrary] SetBBSName: set BBS name`);
   }
 
   /**
@@ -935,7 +935,7 @@ export class AEDoorLibrary {
     this.emulator.setRegister(0, 8);
     this.copyUserString();
 
-    console.log(`[AEDoorLibrary] SetDateTime: set date/time`);
+console.log(`[AEDoorLibrary] SetDateTime: set date/time`);
   }
 
   /**
@@ -953,7 +953,7 @@ export class AEDoorLibrary {
     this.emulator.setRegister(1, 0);
     this.setStringData();
 
-    console.log(`[AEDoorLibrary] ClearNodeFlags: cleared flags`);
+console.log(`[AEDoorLibrary] ClearNodeFlags: cleared flags`);
   }
 
   /**
@@ -971,7 +971,7 @@ export class AEDoorLibrary {
     this.emulator.setRegister(1, 1);
     this.setStringData();
 
-    console.log(`[AEDoorLibrary] SetNodeFlags: set flags`);
+console.log(`[AEDoorLibrary] SetNodeFlags: set flags`);
   }
 
   /**
@@ -1001,7 +1001,7 @@ export class AEDoorLibrary {
       if (checkValue === 0xffffffff) {
         // Invalid - return 0
         this.emulator.setRegister(0, 0);
-        console.log(`[AEDoorLibrary] GetNodeStatus: invalid data, returning 0`);
+console.log(`[AEDoorLibrary] GetNodeStatus: invalid data, returning 0`);
         return 0;
       }
     }
@@ -1010,7 +1010,7 @@ export class AEDoorLibrary {
     const statusPtr = this.emulator.readMemory32(state.difaceAddr + 0x20);
     this.emulator.setRegister(0, statusPtr);
 
-    console.log(`[AEDoorLibrary] GetNodeStatus: returning 0x${statusPtr.toString(16)}`);
+console.log(`[AEDoorLibrary] GetNodeStatus: returning 0x${statusPtr.toString(16)}`);
     return statusPtr;
   }
 
@@ -1045,7 +1045,7 @@ export class AEDoorLibrary {
     const sourceStr = this.readCString(sourcePtr, 198);
     this.writeCString(outputAddr, sourceStr, 198);
 
-    console.log(`[AEDoorLibrary] CopyLocationString: copied "${sourceStr}" to 0x${outputAddr.toString(16)}`);
+console.log(`[AEDoorLibrary] CopyLocationString: copied "${sourceStr}" to 0x${outputAddr.toString(16)}`);
   }
 
   /**
@@ -1078,7 +1078,7 @@ export class AEDoorLibrary {
         // Negative - return -1
         this.emulator.setRegister(0, -1);
         this.emulator.setRegister(1, 0);
-        console.log(`[AEDoorLibrary] GetNodeInput: no input, returning -1`);
+console.log(`[AEDoorLibrary] GetNodeInput: no input, returning -1`);
         return -1;
       }
     }
@@ -1089,7 +1089,7 @@ export class AEDoorLibrary {
       const charCode = this.emulator.readMemory(userPtr);
       this.emulator.setRegister(0, charCode);
       this.emulator.setRegister(1, 0);
-      console.log(`[AEDoorLibrary] GetNodeInput: returning character 0x${charCode.toString(16)}`);
+console.log(`[AEDoorLibrary] GetNodeInput: returning character 0x${charCode.toString(16)}`);
       return charCode;
     }
 
@@ -1106,7 +1106,7 @@ export class AEDoorLibrary {
    * Output: D0 = DoorInfo pointer, A1 = DoorInfo pointer
    */
   initNewDoor(): number {
-    console.log(`[AEDoorLibrary] InitNewDoor: calling CreateComm`);
+console.log(`[AEDoorLibrary] InitNewDoor: calling CreateComm`);
 
     // Call CreateComm
     const difaceAddr = this.createComm();
@@ -1126,7 +1126,7 @@ export class AEDoorLibrary {
    * Output: D0 = DoorInfo pointer, A1 = DoorInfo pointer
    */
   initAndSendStatus(): number {
-    console.log(`[AEDoorLibrary] InitAndSendStatus: calling CreateComm`);
+console.log(`[AEDoorLibrary] InitAndSendStatus: calling CreateComm`);
 
     // Call CreateComm
     const difaceAddr = this.createComm();
@@ -1151,7 +1151,7 @@ export class AEDoorLibrary {
     const msgSize = 256; // Enough for full AEDoor message structure
     const msgAddr = this.execLibrary.allocMem(msgSize, MEMF_CLEAR);
     if (msgAddr === 0) {
-      console.warn("[AEDoorLibrary] Failed to allocate JH message");
+console.warn("[AEDoorLibrary] Failed to allocate JH message");
       return;
     }
 
@@ -1188,7 +1188,7 @@ export class AEDoorLibrary {
     // Put message in door's reply port to trigger GetMsg() return
     this.execLibrary.putMsg(state.replyPortAddr, msgAddr);
 
-    console.log(`[AEDoorLibrary] Sent JH message: command=${command}, data=0x${data.toString(16)}`);
+console.log(`[AEDoorLibrary] Sent JH message: command=${command}, data=0x${data.toString(16)}`);
   }
 
   /**
@@ -1206,10 +1206,10 @@ export class AEDoorLibrary {
     // Data points to DoorInfo+0xE4 (nodeStateAddr) containing node status
     this.sendJHMessage(state, 1, state.nodeStateAddr, ""); // JH_STAT with pointer to node state data
 
-    console.log(`[AEDoorLibrary] ✅ Sent both AEDoor startup messages:`);
-    console.log(`[AEDoorLibrary]   1. JH_INIT (0) - Basic initialization`);
-    console.log(`[AEDoorLibrary]   2. JH_STAT (1) - Node status data at 0x${state.nodeStateAddr.toString(16)}`);
-    console.log(`[AEDoorLibrary] XIM door should now receive both messages and proceed`);
+console.log(`[AEDoorLibrary] ✅ Sent both AEDoor startup messages:`);
+console.log(`[AEDoorLibrary]   1. JH_INIT (0) - Basic initialization`);
+console.log(`[AEDoorLibrary]   2. JH_STAT (1) - Node status data at 0x${state.nodeStateAddr.toString(16)}`);
+console.log(`[AEDoorLibrary] XIM door should now receive both messages and proceed`);
   }
 
   /**
@@ -1264,7 +1264,7 @@ export class AEDoorLibrary {
       const portAddr = this.execLibrary.findPort(addr);
       this.execLibrary.freeMem(addr, name.length + 1);
       if (portAddr !== 0) {
-        console.log(`[AEDoorLibrary] Found BBS port "${name}" at 0x${portAddr.toString(16)}`);
+console.log(`[AEDoorLibrary] Found BBS port "${name}" at 0x${portAddr.toString(16)}`);
         return portAddr;
       }
     }
@@ -1325,12 +1325,12 @@ export class AEDoorLibrary {
   private getStateFromA1(): DoorInterfaceState | null {
     const difaceAddr = this.emulator.getRegister(9); // A1
     if (difaceAddr === 0) {
-      console.warn("[AEDoorLibrary] Missing DIFace pointer in A1");
+console.warn("[AEDoorLibrary] Missing DIFace pointer in A1");
       return null;
     }
     const state = this.interfaces.get(difaceAddr);
     if (!state) {
-      console.warn(
+console.warn(
         `[AEDoorLibrary] Unknown DIFace 0x${difaceAddr.toString(16)}`
       );
       return null;
@@ -1385,7 +1385,7 @@ export class AEDoorLibrary {
         return true;
       }
     }
-    console.warn(`[AEDoorLibrary] No reply for command ${command}`);
+console.warn(`[AEDoorLibrary] No reply for command ${command}`);
     return false;
   }
 

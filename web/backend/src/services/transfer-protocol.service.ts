@@ -156,7 +156,7 @@ export class TransferProtocolManager extends EventEmitter {
     this.completedFiles = [];
     this.bytesTransferred = 0;
 
-    console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
+console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
 
     // Mark session as in raw transfer mode
     (this.session as any).transferRawActive = true;
@@ -385,7 +385,7 @@ export class TransferProtocolManager extends EventEmitter {
       error
     };
 
-    console.log(`[TRANSFER] ${this.protocol} ${this.direction} ${success ? 'complete' : 'failed'}:`, result);
+console.log(`[TRANSFER] ${this.protocol} ${this.direction} ${success ? 'complete' : 'failed'}:`, result);
 
     if (this.options.onComplete) {
       this.options.onComplete(success, this.completedFiles);

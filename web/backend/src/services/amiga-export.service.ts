@@ -267,7 +267,7 @@ export class AmigaExportService {
           allMessages.push(...messages);
         }
       } catch (error) {
-        console.error(`Failed to get messages from conference ${conf.id}:`, error);
+console.error(`Failed to get messages from conference ${conf.id}:`, error);
       }
     }
 
@@ -297,7 +297,7 @@ export class AmigaExportService {
           allFiles.push(...files);
         }
       } catch (error) {
-        console.error(`Failed to get files from conference ${conf.id}:`, error);
+console.error(`Failed to get files from conference ${conf.id}:`, error);
       }
     }
 
@@ -428,7 +428,7 @@ export class AmigaExportService {
       const zip = new AdmZip();
       zip.addLocalFolder(exportDir);
       zip.writeZip(archivePath);
-      console.log(`[Export] ZIP archive created: ${archivePath}`);
+console.log(`[Export] ZIP archive created: ${archivePath}`);
       return archivePath;
     } else if (format === 'lha') {
       // Create LHA archive using lha binary
@@ -449,7 +449,7 @@ export class AmigaExportService {
         verbose: true,
       });
 
-      console.log(`[Export] LHA archive created: ${archivePath}`);
+console.log(`[Export] LHA archive created: ${archivePath}`);
       return archivePath;
     } else {
       throw new Error(`Format ${format} not supported. Supported formats: zip, lha`);

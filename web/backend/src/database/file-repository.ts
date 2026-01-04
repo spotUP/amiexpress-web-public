@@ -39,10 +39,10 @@ export class FileRepository extends BaseRepository<any> {
           id: fileId
         };
         fileAreaManager.addFileEntry(fullEntry, area);
-        console.log(`[Database] Synced file entry "${file.filename}" to ${area.name}.dir`);
+console.log(`[Database] Synced file entry "${file.filename}" to ${area.name}.dir`);
       }
     } catch (error) {
-      console.error(`[Database] Failed to sync file entry to disk:`, error);
+console.error(`[Database] Failed to sync file entry to disk:`, error);
       SysopDebugUtil.debug(
         null,
         null,
@@ -158,11 +158,11 @@ export class FileRepository extends BaseRepository<any> {
             comment: row.comment
           };
           fileAreaManager.updateFileEntry(fullEntry, area);
-          console.log(`[Database] Synced updated file entry "${row.filename}" to ${area.name}.dir`);
+console.log(`[Database] Synced updated file entry "${row.filename}" to ${area.name}.dir`);
         }
       }
     } catch (error) {
-      console.error(`[Database] Failed to sync updated file entry to disk:`, error);
+console.error(`[Database] Failed to sync updated file entry to disk:`, error);
       SysopDebugUtil.debug(
         null,
         null,
@@ -218,10 +218,10 @@ export class FileRepository extends BaseRepository<any> {
         const area = await this.getFileAreaById(row.areaid);
         if (area) {
           fileAreaManager.deleteFileEntry(row.filename, area);
-          console.log(`[Database] Deleted file entry "${row.filename}" from ${area.name}.dir`);
+console.log(`[Database] Deleted file entry "${row.filename}" from ${area.name}.dir`);
         }
       } catch (error) {
-        console.error(`[Database] Failed to delete file entry from disk:`, error);
+console.error(`[Database] Failed to delete file entry from disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
@@ -269,9 +269,9 @@ export class FileRepository extends BaseRepository<any> {
         updated: new Date()
       };
       fileAreaManager.createAreaDirFile(fullArea);
-      console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);
+console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);
     } catch (error) {
-      console.error(`[Database] Failed to create .dir file:`, error);
+console.error(`[Database] Failed to create .dir file:`, error);
       SysopDebugUtil.debug(
         null,
         null,

@@ -183,20 +183,20 @@ async function postCallerEntry(
         if (statusCode >= 200 && statusCode < 300) {
           resolve(true);
         } else {
-          console.error(`[GLCUpdater] Server returned status ${statusCode}`);
+console.error(`[GLCUpdater] Server returned status ${statusCode}`);
           resolve(false);
         }
       });
     });
 
     req.on('error', (err) => {
-      console.error(`[GLCUpdater] HTTP request failed: ${err.message}`);
+console.error(`[GLCUpdater] HTTP request failed: ${err.message}`);
       resolve(false);
     });
 
     req.on('timeout', () => {
       req.destroy();
-      console.error('[GLCUpdater] HTTP request timed out');
+console.error('[GLCUpdater] HTTP request timed out');
       resolve(false);
     });
 
@@ -218,7 +218,7 @@ function getLastProcessedLine(callersLog: string): number {
       return isNaN(lineNum) ? 0 : lineNum;
     }
   } catch (err) {
-    console.error(`[GLCUpdater] Error reading tracking file: ${err}`);
+console.error(`[GLCUpdater] Error reading tracking file: ${err}`);
   }
 
   return 0;
@@ -233,7 +233,7 @@ function saveLastProcessedLine(callersLog: string, lineNum: number): void {
   try {
     fs.writeFileSync(trackingFile, lineNum.toString(), 'utf-8');
   } catch (err) {
-    console.error(`[GLCUpdater] Error writing tracking file: ${err}`);
+console.error(`[GLCUpdater] Error writing tracking file: ${err}`);
   }
 }
 
@@ -246,7 +246,7 @@ export async function processCallersLog(options: GLCUpdaterOptions): Promise<num
     : path.join(PROJECT_ROOT, options.callersLog);
 
   if (!fs.existsSync(callersLogPath)) {
-    console.error(`[GLCUpdater] Callers log not found: ${callersLogPath}`);
+console.error(`[GLCUpdater] Callers log not found: ${callersLogPath}`);
     return 0;
   }
 
@@ -282,14 +282,14 @@ export async function processCallersLog(options: GLCUpdaterOptions): Promise<num
       sent++;
       saveLastProcessedLine(callersLogPath, i + 1);
     } else {
-      console.error(`[GLCUpdater] Failed to send entry for ${entry.username}`);
+console.error(`[GLCUpdater] Failed to send entry for ${entry.username}`);
     }
 
     // Small delay to avoid overwhelming server
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  console.log(`[GLCUpdater] Processed ${processed} entries, sent ${sent} to server`);
+console.log(`[GLCUpdater] Processed ${processed} entries, sent ${sent} to server`);
 
   return sent;
 }
@@ -329,7 +329,7 @@ export async function runGLCUpdater(args: string[]): Promise<void> {
   }
 
   if (!options.bbsName || !options.callersLog) {
-    console.error('[GLCUpdater] Usage: GLCUpdater BBSNAME CALLERSLOG [IGNORELOCAL] [IGNORESYSOP] [IGNORESYSOPUSER] [PROCESSALL] [TIMEZONE=zone]');
+console.error('[GLCUpdater] Usage: GLCUpdater BBSNAME CALLERSLOG [IGNORELOCAL] [IGNORESYSOP] [IGNORESYSOPUSER] [PROCESSALL] [TIMEZONE=zone]');
     return;
   }
 

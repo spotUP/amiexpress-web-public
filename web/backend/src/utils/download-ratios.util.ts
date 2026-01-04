@@ -317,7 +317,7 @@ export async function updateDownloadStats(
   const currentTopCPS = user.topDownloadCPS || 0;
   if (downloadCPS > currentTopCPS) {
     user.topDownloadCPS = downloadCPS;
-    console.log(`[DOWNLOAD] New top download CPS for ${user.username}: ${downloadCPS} (was ${currentTopCPS})`);
+console.log(`[DOWNLOAD] New top download CPS for ${user.username}: ${downloadCPS} (was ${currentTopCPS})`);
   }
 }
 
@@ -366,6 +366,6 @@ export async function updateUploadStats(
   const currentTopCPS = user.topUploadCPS || 0;
   if (uploadCPS > currentTopCPS) {
     user.topUploadCPS = uploadCPS;
-    console.log(`[UPLOAD] New top upload CPS for ${user.username}: ${uploadCPS} (was ${currentTopCPS})`);
+console.log(`[UPLOAD] New top upload CPS for ${user.username}: ${uploadCPS} (was ${currentTopCPS})`);
   }
 }

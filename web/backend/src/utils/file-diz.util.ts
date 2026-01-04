@@ -43,7 +43,7 @@ async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<
   try {
     let files: string[] = [];
 
-    console.log(`[FILE_ID.DIZ] Listing archive contents with JavaScript extractor`);
+console.log(`[FILE_ID.DIZ] Listing archive contents with JavaScript extractor`);
 
     if (ext === '.zip') {
       // Use adm-zip (JavaScript)
@@ -62,22 +62,22 @@ async function findDizInArchive(uploadedFilePath: string, ext: string): Promise<
       return null;
     }
 
-    console.log(`[FILE_ID.DIZ] Archive contains ${files.length} files`);
+console.log(`[FILE_ID.DIZ] Archive contains ${files.length} files`);
 
     // Search for FILE_ID.DIZ case-insensitively
     // Match any variation: FILE_ID.DIZ, file_id.diz, File_Id.Diz, etc.
     for (const file of files) {
       const filename = path.basename(file).toLowerCase();
       if (filename === 'file_id.diz') {
-        console.log(`[FILE_ID.DIZ] Found in archive: ${file}`);
+console.log(`[FILE_ID.DIZ] Found in archive: ${file}`);
         return file; // Return full path as it appears in archive
       }
     }
 
-    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive (searched ${files.length} files)`);
+console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive (searched ${files.length} files)`);
     return null;
   } catch (error: any) {
-    console.log(`[FILE_ID.DIZ] Failed to list archive: ${error.message}`);
+console.log(`[FILE_ID.DIZ] Failed to list archive: ${error.message}`);
     return null;
   }
 }
@@ -129,15 +129,15 @@ export async function extractFileDizBuiltin(
 
         if (lines.length > 0) {
           await fs.writeFile(dizPath, lines.join('\n'), 'latin1');
-          console.log(`[FILE_ID.DIZ] Extracted FILE_ID.DIZ from .txt file (${lines.length} lines)`);
+console.log(`[FILE_ID.DIZ] Extracted FILE_ID.DIZ from .txt file (${lines.length} lines)`);
           return true;
         }
       }
 
-      console.log(`[FILE_ID.DIZ] No @BEGIN_FILE_ID.DIZ/@END_FILE_ID.DIZ tags found in .txt file`);
+console.log(`[FILE_ID.DIZ] No @BEGIN_FILE_ID.DIZ/@END_FILE_ID.DIZ tags found in .txt file`);
       return false;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] Failed to read .txt file: ${error.message}`);
+console.log(`[FILE_ID.DIZ] Failed to read .txt file: ${error.message}`);
       return false;
     }
   }
@@ -150,78 +150,78 @@ export async function extractFileDizBuiltin(
     if (await fileExists(checkPath)) {
       try {
         await fs.copyFile(checkPath, dizPath);
-        console.log(`[FILE_ID.DIZ] Found companion .diz file: ${checkPath}`);
+console.log(`[FILE_ID.DIZ] Found companion .diz file: ${checkPath}`);
         return true;
       } catch (error: any) {
-        console.log(`[FILE_ID.DIZ] Failed to copy companion .diz: ${error.message}`);
+console.log(`[FILE_ID.DIZ] Failed to copy companion .diz: ${error.message}`);
       }
     }
   }
 
   // First, try to find FILE_ID.DIZ in archive (case-insensitive search)
-  console.log(`[FILE_ID.DIZ] Attempting extraction from ${ext} file`);
-  console.log(`[FILE_ID.DIZ] Upload path: ${uploadedFilePath}`);
-  console.log(`[FILE_ID.DIZ] Work dir: ${nodeWorkDir}`);
+console.log(`[FILE_ID.DIZ] Attempting extraction from ${ext} file`);
+console.log(`[FILE_ID.DIZ] Upload path: ${uploadedFilePath}`);
+console.log(`[FILE_ID.DIZ] Work dir: ${nodeWorkDir}`);
 
   const actualDizFilename = await findDizInArchive(uploadedFilePath, ext);
   if (!actualDizFilename) {
-    console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive - skipping extraction`);
+console.log(`[FILE_ID.DIZ] No FILE_ID.DIZ found in archive - skipping extraction`);
     return false;
   }
 
   // Use JavaScript/TypeScript extractors for all supported formats
   if (ext === '.zip') {
     // Extract FILE_ID.DIZ from zip archive using pure TypeScript library
-    console.log(`[FILE_ID.DIZ] Using TypeScript ZIP extractor`);
+console.log(`[FILE_ID.DIZ] Using TypeScript ZIP extractor`);
     try {
       const success = await extractFileDizFromZip(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript ZIP extractor failed: ${error.message}`);
+console.log(`[FILE_ID.DIZ] TypeScript ZIP extractor failed: ${error.message}`);
       return false;
     }
   } else if (ext === '.lha' || ext === '.lzh') {
     // Extract FILE_ID.DIZ from lha/lzh archive using pure TypeScript library
-    console.log(`[FILE_ID.DIZ] Using TypeScript LHA extractor`);
+console.log(`[FILE_ID.DIZ] Using TypeScript LHA extractor`);
     try {
       const success = await extractFileDizFromLha(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript LHA extractor failed: ${error.message}`);
+console.log(`[FILE_ID.DIZ] TypeScript LHA extractor failed: ${error.message}`);
       return false;
     }
   } else if (ext === '.lzx') {
     // Extract FILE_ID.DIZ from lzx archive using pure TypeScript library
-    console.log(`[FILE_ID.DIZ] Using TypeScript LZX extractor`);
+console.log(`[FILE_ID.DIZ] Using TypeScript LZX extractor`);
     try {
       const success = await extractFileDizFromLzx(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript LZX extractor failed: ${error.message}`);
+console.log(`[FILE_ID.DIZ] TypeScript LZX extractor failed: ${error.message}`);
       return false;
     }
   } else if (ext === '.dms') {
     // Extract FILE_ID.DIZ from DMS disk image using TypeScript library
-    console.log(`[FILE_ID.DIZ] Using TypeScript DMS extractor`);
+console.log(`[FILE_ID.DIZ] Using TypeScript DMS extractor`);
     try {
       const success = await extractFileDizFromDms(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript DMS extractor failed: ${error.message}`);
+console.log(`[FILE_ID.DIZ] TypeScript DMS extractor failed: ${error.message}`);
       return false;
     }
   } else if (ext === '.tar' || ext === '.tgz' || ext === '.gz') {
     // Extract FILE_ID.DIZ from tar/gzip archive using pure TypeScript library
-    console.log(`[FILE_ID.DIZ] Using TypeScript TAR/GZ extractor`);
+console.log(`[FILE_ID.DIZ] Using TypeScript TAR/GZ extractor`);
     try {
       const success = await extractFileDizFromTarAuto(uploadedFilePath, dizPath);
       return success;
     } catch (error: any) {
-      console.log(`[FILE_ID.DIZ] TypeScript TAR/GZ extractor failed: ${error.message}`);
+console.log(`[FILE_ID.DIZ] TypeScript TAR/GZ extractor failed: ${error.message}`);
       return false;
     }
   } else {
-    console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
+console.log(`[FILE_ID.DIZ] File type ${ext} not supported for DIZ extraction`);
     return false;
   }
 }
@@ -273,10 +273,10 @@ export async function readFileDiz(
     // Truncate lines to 44 characters (express.e lineInput limit)
     lines = lines.map(line => line.slice(0, 44));
 
-    console.log(`[FILE_ID.DIZ] Read ${lines.length} lines from FILE_ID.DIZ`);
+console.log(`[FILE_ID.DIZ] Read ${lines.length} lines from FILE_ID.DIZ`);
     return lines;
   } catch (error: any) {
-    console.error(`[FILE_ID.DIZ] Error reading FILE_ID.DIZ: ${error.message}`);
+console.error(`[FILE_ID.DIZ] Error reading FILE_ID.DIZ: ${error.message}`);
     return null;
   }
 }
@@ -291,10 +291,10 @@ export async function cleanupDizFiles(nodeWorkDir: string): Promise<void> {
     const dizPath = path.join(nodeWorkDir, 'FILE_ID.DIZ');
     if (await fileExists(dizPath)) {
       await fs.unlink(dizPath);
-      console.log(`[FILE_ID.DIZ] Cleaned up FILE_ID.DIZ`);
+console.log(`[FILE_ID.DIZ] Cleaned up FILE_ID.DIZ`);
     }
   } catch (error: any) {
-    console.error(`[FILE_ID.DIZ] Cleanup error: ${error.message}`);
+console.error(`[FILE_ID.DIZ] Cleanup error: ${error.message}`);
   }
 }
 

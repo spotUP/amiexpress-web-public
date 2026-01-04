@@ -37,7 +37,7 @@ export async function logDownload(
     : `[${timestamp}] ${username} - Downloading ${filename} ${fileSize} bytes`;
 
   // Log to console (in web version, console is our primary log)
-  console.log(`[DOWNLOAD] ${message}`);
+console.log(`[DOWNLOAD] ${message}`);
 
   // Write to UDLog file if logging is enabled
   // express.e:9489 - udLog(tempStr)
@@ -73,7 +73,7 @@ export async function logUpload(
     ? `[${timestamp}] ${username} - Resuming upload ${filename} ${fileSize} bytes`
     : `[${timestamp}] ${username} - Uploading ${filename} ${fileSize} bytes`;
 
-  console.log(`[UPLOAD] ${message}`);
+console.log(`[UPLOAD] ${message}`);
 
   await writeToUDLog(message, nodeId);
   await writeToCallersLog(username, message, nodeId);
@@ -100,7 +100,7 @@ async function writeToUDLog(message: string, nodeId: number): Promise<void> {
     // Append to log file
     fs.appendFileSync(logFile, message + '\n');
   } catch (error) {
-    console.error('[UDLOG] Error writing to log:', error);
+console.error('[UDLOG] Error writing to log:', error);
   }
 }
 
@@ -124,7 +124,7 @@ async function writeToCallersLog(username: string, message: string, nodeId: numb
     // Append to log file
     fs.appendFileSync(logFile, `${username}: ${message}\n`);
   } catch (error) {
-    console.error('[CALLERSLOG] Error writing to log:', error);
+console.error('[CALLERSLOG] Error writing to log:', error);
   }
 }
 

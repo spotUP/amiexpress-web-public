@@ -80,7 +80,7 @@ export class FileHandle {
       this.openMode = mode;
       if (this.memoryBuffer) {
         if (mode === 'w' || mode === 'rw') {
-          console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" for writing`);
+console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" for writing`);
           return false;
         }
         this.isMemoryHandle = true;
@@ -115,7 +115,7 @@ export class FileHandle {
       this.position = 0;
       return true;
     } catch (error) {
-      console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
+console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
       return false;
     }
   }
@@ -153,7 +153,7 @@ export class FileHandle {
       return buffer.slice(0, bytesRead);
     } catch (error) {
       // Only log errors, not every read operation
-      console.error(`[FileHandle] Read error on ${this.sysPath}:`, error);
+console.error(`[FileHandle] Read error on ${this.sysPath}:`, error);
       return Buffer.alloc(0);
     }
   }
@@ -168,7 +168,7 @@ export class FileHandle {
     }
 
     if (this.isMemoryHandle) {
-      console.error('[FileHandle] Attempted write on memory-backed handle');
+console.error('[FileHandle] Attempted write on memory-backed handle');
       return { bytesWritten: -1 };
     }
 
@@ -189,7 +189,7 @@ export class FileHandle {
     }
 
     try {
-      console.log(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
+console.log(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
       try {
         // Mirror to door log for debugging batch outputs (stable path to repo logs)
         const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
@@ -207,7 +207,7 @@ export class FileHandle {
 
       return { bytesWritten };
     } catch (error) {
-      console.error(`[FileHandle] Write error:`, error);
+console.error(`[FileHandle] Write error:`, error);
       return { bytesWritten: -1 };
     }
   }
@@ -228,7 +228,7 @@ export class FileHandle {
       }
       // Guard runaway seeks on read-only memory-backed handles to avoid tight loops
       if (this.openMode === 'r' && targetPos > size) {
-        console.warn(
+console.warn(
           `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${size})`
         );
         return -1;
@@ -257,7 +257,7 @@ export class FileHandle {
 
       // If opened read-only, prevent runaway seeks far past EOF
       if (this.openMode === 'r' && targetPos > fileSize) {
-        console.warn(
+console.warn(
           `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${fileSize})`
         );
         return -1;
@@ -266,7 +266,7 @@ export class FileHandle {
       this.position = targetPos;
       return this.position;
     } catch (error) {
-      console.error(`[FileHandle] Seek error:`, error);
+console.error(`[FileHandle] Seek error:`, error);
       return -1;
     }
   }
@@ -286,7 +286,7 @@ export class FileHandle {
       try {
         fs.closeSync(this.fd);
       } catch (error) {
-        console.error(`[FileHandle] Close error:`, error);
+console.error(`[FileHandle] Close error:`, error);
       }
     }
     this.fd = null;

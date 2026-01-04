@@ -130,7 +130,7 @@ export class DebugMonitor {
                 .map((v) => (v === null ? "<err>" : `0x${v.toString(16)}`))
                 .join(",")
             : "<none>";
-        console.log(
+console.log(
           `[DebugMonitor] FLOW probe pc=0x${pc.toString(
             16
           )} instr=0x${instrWord.toString(
@@ -188,7 +188,7 @@ export class DebugMonitor {
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
-      console.log(
+console.log(
         `[DebugMonitor] A6 change pc=0x${pc.toString(
           16
         )} newA6=0x${a6.toString(16)} allowed=${isAllowed} lastPCs=[${lastPcTrace}]`
@@ -213,7 +213,7 @@ export class DebugMonitor {
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
-      console.log(
+console.log(
         `[DebugMonitor] ExecBase pointer changed at pc=0x${pc.toString(
           16
         )}: 0x${this.lastExecBasePointer.toString(
@@ -247,7 +247,7 @@ export class DebugMonitor {
         const memA4_8b8 = this.safeRead32Global(a4 + 0x8b8);
         const memA4_8bc = this.safeRead32Global(a4 + 0x8bc);
         const memA4_6c88 = this.safeRead32Global(a4 + 0x6c88);
-        console.log(
+console.log(
           `[DebugMonitor] PC probe hit range 0x${range.start.toString(
             16
           )}-0x${range.end.toString(16)} pc=0x${pc.toString(
@@ -284,7 +284,7 @@ export class DebugMonitor {
       const val = this.emulator.readMemory32(addr);
       const prev = this.lastWatchedValues.get(off);
       if (prev === undefined || prev !== val) {
-        console.log(
+console.log(
           `[DebugMonitor][WATCH] A4+0x${off.toString(
             16
           )} (0x${addr.toString(16)}) changed: 0x${(prev ?? 0).toString(

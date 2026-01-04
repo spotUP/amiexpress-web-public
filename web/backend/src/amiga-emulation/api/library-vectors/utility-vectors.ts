@@ -22,7 +22,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const tagList = emu.getRegister(8);   // A0
 
       const result = findTagItemImpl(emu, tagValue, tagList);
-      console.log(`[UtilityLibrary] FindTagItem(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${result.toString(16)}`);
+console.log(`[UtilityLibrary] FindTagItem(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${result.toString(16)}`);
       return result;
     },
   },
@@ -40,12 +40,12 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       if (tagItemAddr !== 0) {
         const tag = readTagItem(emu, tagItemAddr);
         if (tag) {
-          console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${tag.ti_Data.toString(16)} (found)`);
+console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${tag.ti_Data.toString(16)} (found)`);
           return tag.ti_Data;
         }
       }
 
-      console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${defaultVal.toString(16)} (default)`);
+console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList=0x${tagList.toString(16)}) = 0x${defaultVal.toString(16)} (default)`);
       return defaultVal;
     },
   },
@@ -91,7 +91,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(`[UtilityLibrary] PackBoolTags(init=0x${initialFlags.toString(16)}) = 0x${flags.toString(16)}`);
+console.log(`[UtilityLibrary] PackBoolTags(init=0x${initialFlags.toString(16)}) = 0x${flags.toString(16)}`);
       return flags;
     },
   },
@@ -109,9 +109,9 @@ export const UTILITY_VECTORS: LibraryVector[] = [
 
       if (result !== 0) {
         const tag = readTagItem(emu, result);
-        console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = 0x${result.toString(16)} (tag=0x${tag?.ti_Tag.toString(16)})`);
+console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = 0x${result.toString(16)} (tag=0x${tag?.ti_Tag.toString(16)})`);
       } else {
-        console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = NULL (end of list)`);
+console.log(`[UtilityLibrary] NextTagItem(ptr=0x${tagItemPtrAddr.toString(16)}) = NULL (end of list)`);
       }
       return result;
     },
@@ -128,7 +128,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const apply = emu.getRegister(0);     // D0 (TRUE = apply changes, FALSE = filter only)
 
       if (newList === 0) {
-        console.log("[UtilityLibrary] FilterTagChanges - NULL newList");
+console.log("[UtilityLibrary] FilterTagChanges - NULL newList");
         return 0;
       }
 
@@ -160,7 +160,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(`[UtilityLibrary] FilterTagChanges(new=0x${newList.toString(16)}, orig=0x${origList.toString(16)}) filtered ${filtered}`);
+console.log(`[UtilityLibrary] FilterTagChanges(new=0x${newList.toString(16)}, orig=0x${origList.toString(16)}) filtered ${filtered}`);
       return 0;
     },
   },
@@ -168,7 +168,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
     offset: -58, // Non-standard offset - some doors call this
     name: "Utility_-58_Stub",
     handler: (emu) => {
-      console.log("[UtilityLibrary] WARNING: Called non-standard offset -58 - stub");
+console.log("[UtilityLibrary] WARNING: Called non-standard offset -58 - stub");
       return 0;
     },
   },
@@ -184,7 +184,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const includeMask = emu.getRegister(0); // D0
 
       if (tagList === 0 || mapList === 0) {
-        console.log("[UtilityLibrary] MapTags - NULL list");
+console.log("[UtilityLibrary] MapTags - NULL list");
         return 0;
       }
 
@@ -213,7 +213,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(`[UtilityLibrary] MapTags(tags=0x${tagList.toString(16)}, map=0x${mapList.toString(16)}) mapped ${mapped}`);
+console.log(`[UtilityLibrary] MapTags(tags=0x${tagList.toString(16)}, map=0x${mapList.toString(16)}) mapped ${mapped}`);
       return 0;
     },
   },
@@ -226,7 +226,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const numItems = emu.getRegister(0);
 
       if (numItems === 0) {
-        console.log("[UtilityLibrary] AllocateTagItems(0) = NULL");
+console.log("[UtilityLibrary] AllocateTagItems(0) = NULL");
         return 0;
       }
 
@@ -241,7 +241,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         emu.writeMemory32(allocAddr + i * 8 + 4, 0);
       }
 
-      console.log(`[UtilityLibrary] AllocateTagItems(${numItems}) = 0x${allocAddr.toString(16)}`);
+console.log(`[UtilityLibrary] AllocateTagItems(${numItems}) = 0x${allocAddr.toString(16)}`);
       return allocAddr;
     },
   },
@@ -258,7 +258,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         const emptyAddr = 0x1F8000 + (Math.random() * 0x1000) | 0;
         emu.writeMemory32(emptyAddr, TAG_DONE);
         emu.writeMemory32(emptyAddr + 4, 0);
-        console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.toString(16)}`);
+console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.toString(16)}`);
         return emptyAddr;
       }
 
@@ -292,7 +292,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       emu.writeMemory32(cloneAddr + idx * 8, TAG_DONE);
       emu.writeMemory32(cloneAddr + idx * 8 + 4, 0);
 
-      console.log(`[UtilityLibrary] CloneTagItems(0x${original.toString(16)}) = 0x${cloneAddr.toString(16)} (${count} tags)`);
+console.log(`[UtilityLibrary] CloneTagItems(0x${original.toString(16)}) = 0x${cloneAddr.toString(16)} (${count} tags)`);
       return cloneAddr;
     },
   },
@@ -304,7 +304,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // Output: void
       const tagList = emu.getRegister(8); // A0
       // For our simple allocator, we just log and don't actually free
-      console.log(`[UtilityLibrary] FreeTagItems(0x${tagList.toString(16)})`);
+console.log(`[UtilityLibrary] FreeTagItems(0x${tagList.toString(16)})`);
       return 0;
     },
   },
@@ -319,7 +319,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const original = emu.getRegister(9); // A1
 
       if (clone === 0 || original === 0) {
-        console.log("[UtilityLibrary] RefreshTagItemClones - NULL pointer");
+console.log("[UtilityLibrary] RefreshTagItemClones - NULL pointer");
         return 0;
       }
 
@@ -347,7 +347,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(`[UtilityLibrary] RefreshTagItemClones(clone=0x${clone.toString(16)}, orig=0x${original.toString(16)}) refreshed ${refreshed}`);
+console.log(`[UtilityLibrary] RefreshTagItemClones(clone=0x${clone.toString(16)}, orig=0x${original.toString(16)}) refreshed ${refreshed}`);
       return 0;
     },
   },
@@ -361,7 +361,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const tagArray = emu.getRegister(8); // A0
 
       if (tagArray === 0) {
-        console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, NULL) = FALSE`);
+console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, NULL) = FALSE`);
         return 0;
       }
 
@@ -372,13 +372,13 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         const tag = emu.readMemory32(addr);
         if (tag === TAG_DONE) break;
         if (tag === tagValue) {
-          console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = TRUE`);
+console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = TRUE`);
           return 1; // TRUE
         }
         addr += 4; // Next ULONG
       }
 
-      console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = FALSE`);
+console.log(`[UtilityLibrary] TagInArray(0x${tagValue.toString(16)}, 0x${tagArray.toString(16)}) = FALSE`);
       return 0; // FALSE
     },
   },
@@ -395,7 +395,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const logic = emu.getRegister(0);       // D0
 
       if (tagList === 0) {
-        console.log("[UtilityLibrary] FilterTagItems(NULL) = 0");
+console.log("[UtilityLibrary] FilterTagItems(NULL) = 0");
         return 0;
       }
 
@@ -440,7 +440,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(`[UtilityLibrary] FilterTagItems(tags=0x${tagList.toString(16)}, logic=${logic}) kept ${remaining}, filtered ${filtered}`);
+console.log(`[UtilityLibrary] FilterTagItems(tags=0x${tagList.toString(16)}, logic=${logic}) kept ${remaining}, filtered ${filtered}`);
       return remaining;
     },
   },
@@ -456,7 +456,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const packetAddr = emu.getRegister(9);  // A1
 
       if (!hookAddr) {
-        console.log("[UtilityLibrary] CallHookPkt: NULL hook, returning 0");
+console.log("[UtilityLibrary] CallHookPkt: NULL hook, returning 0");
         return 0;
       }
 
@@ -465,14 +465,14 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const h_SubEntry = emu.readMemory32(hookAddr + 4);
       const h_Data = emu.readMemory32(hookAddr + 8);
 
-      console.log(
+console.log(
         `[UtilityLibrary] CallHookPkt(hook=0x${hookAddr.toString(16)}, ` +
         `object=0x${objectAddr.toString(16)}, packet=0x${packetAddr.toString(16)}) ` +
         `entry=0x${h_Entry.toString(16)}`
       );
 
       if (!h_Entry) {
-        console.log("[UtilityLibrary] CallHookPkt: NULL entry point, returning 0");
+console.log("[UtilityLibrary] CallHookPkt: NULL entry point, returning 0");
         return 0;
       }
 
@@ -513,10 +513,10 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         // Get return value from D0
         const result = emu.getRegister(0);
 
-        console.log(`[UtilityLibrary] CallHookPkt: Hook returned ${result}`);
+console.log(`[UtilityLibrary] CallHookPkt: Hook returned ${result}`);
         return result;
       } catch (error) {
-        console.error(`[UtilityLibrary] CallHookPkt: Hook execution failed:`, error);
+console.error(`[UtilityLibrary] CallHookPkt: Hook execution failed:`, error);
         return 0;
       }
     },
@@ -532,7 +532,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const clockDataAddr = emu.getRegister(8);      // A0
 
       if (clockDataAddr === 0) {
-        console.log("[UtilityLibrary] Amiga2Date - NULL ClockData pointer");
+console.log("[UtilityLibrary] Amiga2Date - NULL ClockData pointer");
         return 0;
       }
 
@@ -560,7 +560,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       emu.writeMemory16(clockDataAddr + 10, year);
       emu.writeMemory16(clockDataAddr + 12, wday);
 
-      console.log(`[UtilityLibrary] Amiga2Date(${amigaSeconds}) = ${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`);
+console.log(`[UtilityLibrary] Amiga2Date(${amigaSeconds}) = ${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`);
       return 0;
     },
   },
@@ -573,7 +573,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const clockDataAddr = emu.getRegister(8); // A0
 
       if (clockDataAddr === 0) {
-        console.log("[UtilityLibrary] Date2Amiga - NULL ClockData pointer");
+console.log("[UtilityLibrary] Date2Amiga - NULL ClockData pointer");
         return 0;
       }
 
@@ -593,7 +593,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const AMIGA_EPOCH_OFFSET = 252288000;
       const amigaSeconds = unixSeconds - AMIGA_EPOCH_OFFSET;
 
-      console.log(`[UtilityLibrary] Date2Amiga(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}) = ${amigaSeconds}`);
+console.log(`[UtilityLibrary] Date2Amiga(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}) = ${amigaSeconds}`);
       return amigaSeconds >>> 0; // Return as unsigned
     },
   },
@@ -606,7 +606,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const clockDataAddr = emu.getRegister(8); // A0
 
       if (clockDataAddr === 0) {
-        console.log("[UtilityLibrary] CheckDate - NULL ClockData pointer");
+console.log("[UtilityLibrary] CheckDate - NULL ClockData pointer");
         return -1;
       }
 
@@ -620,15 +620,15 @@ export const UTILITY_VECTORS: LibraryVector[] = [
 
       // Validate ranges
       if (sec > 59 || min > 59 || hour > 23) {
-        console.log(`[UtilityLibrary] CheckDate - invalid time: ${hour}:${min}:${sec}`);
+console.log(`[UtilityLibrary] CheckDate - invalid time: ${hour}:${min}:${sec}`);
         return -1;
       }
       if (month < 1 || month > 12 || mday < 1 || mday > 31) {
-        console.log(`[UtilityLibrary] CheckDate - invalid date: ${year}-${month}-${mday}`);
+console.log(`[UtilityLibrary] CheckDate - invalid date: ${year}-${month}-${mday}`);
         return -1;
       }
       if (year < 1978 || year > 2099) {
-        console.log(`[UtilityLibrary] CheckDate - invalid year: ${year}`);
+console.log(`[UtilityLibrary] CheckDate - invalid year: ${year}`);
         return -1;
       }
 
@@ -639,7 +639,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         daysInMonth[2] = 29;
       }
       if (mday > daysInMonth[month]) {
-        console.log(`[UtilityLibrary] CheckDate - invalid day: ${year}-${month}-${mday} (max ${daysInMonth[month]})`);
+console.log(`[UtilityLibrary] CheckDate - invalid day: ${year}-${month}-${mday} (max ${daysInMonth[month]})`);
         return -1;
       }
 
@@ -650,7 +650,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // Also update wday in the structure
       emu.writeMemory16(clockDataAddr + 12, wday);
 
-      console.log(`[UtilityLibrary] CheckDate(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')}) = ${wday} (valid)`);
+console.log(`[UtilityLibrary] CheckDate(${year}-${month.toString().padStart(2,'0')}-${mday.toString().padStart(2,'0')}) = ${wday} (valid)`);
       return wday;
     },
   },
@@ -672,13 +672,13 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const dividend = emu.getRegister(0); // D0
       const divisor = emu.getRegister(1);  // D1
       if (divisor === 0) {
-        console.log("[UtilityLibrary] SDivMod32() - division by zero!");
+console.log("[UtilityLibrary] SDivMod32() - division by zero!");
         return 0;
       }
       const quotient = Math.trunc(dividend / divisor);
       const remainder = dividend % divisor;
       emu.setRegister(1, remainder); // D1 = remainder
-      console.log(`[UtilityLibrary] SDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
+console.log(`[UtilityLibrary] SDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
       return quotient; // D0 = quotient
     },
   },
@@ -689,13 +689,13 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const dividend = emu.getRegister(0) >>> 0; // D0 unsigned
       const divisor = emu.getRegister(1) >>> 0;  // D1 unsigned
       if (divisor === 0) {
-        console.log("[UtilityLibrary] UDivMod32() - division by zero!");
+console.log("[UtilityLibrary] UDivMod32() - division by zero!");
         return 0;
       }
       const quotient = Math.trunc(dividend / divisor);
       const remainder = dividend % divisor;
       emu.setRegister(1, remainder); // D1 = remainder
-      console.log(`[UtilityLibrary] UDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
+console.log(`[UtilityLibrary] UDivMod32(${dividend}/${divisor}) = ${quotient} rem ${remainder}`);
       return quotient; // D0 = quotient
     },
   },
@@ -725,7 +725,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
     offset: -186, // LVO -186: ApplyTagChanges
     name: "ApplyTagChanges",
     handler: (emu) => {
-      console.log("[UtilityLibrary] ApplyTagChanges() - stub");
+console.log("[UtilityLibrary] ApplyTagChanges() - stub");
       return 0;
     },
   },
@@ -741,7 +741,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const hi = Number((result >> BigInt(32)) & BigInt(0xFFFFFFFF));
       emu.setRegister(0, lo); // D0 = low 32 bits
       emu.setRegister(1, hi); // D1 = high 32 bits
-      console.log(`[UtilityLibrary] SMult64(${a} * ${b}) = ${hi}:${lo}`);
+console.log(`[UtilityLibrary] SMult64(${a} * ${b}) = ${hi}:${lo}`);
       return lo;
     },
   },
@@ -757,7 +757,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const hi = Number((result >> BigInt(32)) & BigInt(0xFFFFFFFF));
       emu.setRegister(0, lo); // D0 = low 32 bits
       emu.setRegister(1, hi); // D1 = high 32 bits
-      console.log(`[UtilityLibrary] UMult64(${a} * ${b}) = ${hi}:${lo}`);
+console.log(`[UtilityLibrary] UMult64(${a} * ${b}) = ${hi}:${lo}`);
       return lo;
     },
   },
@@ -771,7 +771,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const tableAddr = emu.getRegister(9);  // A1
       const tagAddr = emu.getRegister(10);   // A2
 
-      console.log(
+console.log(
         `[UtilityLibrary] PackStructureTags(pack=0x${packAddr.toString(16)}, ` +
         `table=0x${tableAddr.toString(16)}, tags=0x${tagAddr.toString(16)})`
       );
@@ -792,7 +792,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const tableAddr = emu.getRegister(9);  // A1
       const tagAddr = emu.getRegister(10);   // A2
 
-      console.log(
+console.log(
         `[UtilityLibrary] UnpackStructureTags(pack=0x${packAddr.toString(16)}, ` +
         `table=0x${tableAddr.toString(16)}, tags=0x${tagAddr.toString(16)})`
       );
@@ -813,7 +813,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const objectAddr = emu.getRegister(9);     // A1
 
       if (!objectAddr) {
-        console.log("[UtilityLibrary] AddNamedObject: NULL object");
+console.log("[UtilityLibrary] AddNamedObject: NULL object");
         return 0; // FALSE
       }
 
@@ -829,7 +829,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
         }
       }
 
-      console.log(
+console.log(
         `[UtilityLibrary] AddNamedObject(nameSpace=0x${nameSpaceAddr.toString(16)}, ` +
         `object=0x${objectAddr.toString(16)}, name="${name}")`
       );
@@ -867,7 +867,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // Write name pointer at offset +12
       emu.writeMemory32(objAddr + 12, namePtr);
 
-      console.log(
+console.log(
         `[UtilityLibrary] AllocNamedObjectA(name="${name}") -> 0x${objAddr.toString(16)}`
       );
 
@@ -881,7 +881,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // AttemptRemNamedObject(object) - A0 = object
       const objectAddr = emu.getRegister(8);  // A0
 
-      console.log(
+console.log(
         `[UtilityLibrary] AttemptRemNamedObject(object=0x${objectAddr.toString(16)})`
       );
 
@@ -889,7 +889,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       for (const [name, addr] of namedObjectRegistry.entries()) {
         if (addr === objectAddr) {
           namedObjectRegistry.delete(name);
-          console.log(`[UtilityLibrary] Removed named object "${name}"`);
+console.log(`[UtilityLibrary] Removed named object "${name}"`);
           return -1; // SUCCESS
         }
       }
@@ -916,7 +916,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       }
 
       const objectAddr = namedObjectRegistry.get(name) || 0;
-      console.log(
+console.log(
         `[UtilityLibrary] FindNamedObject(name="${name}") -> 0x${objectAddr.toString(16)}`
       );
 
@@ -930,7 +930,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // FreeNamedObject(object) - A0 = object
       const objectAddr = emu.getRegister(8);  // A0
 
-      console.log(
+console.log(
         `[UtilityLibrary] FreeNamedObject(object=0x${objectAddr.toString(16)})`
       );
 
@@ -954,7 +954,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
 
       // Read name pointer at offset +12
       const namePtr = emu.readMemory32(objectAddr + 12);
-      console.log(
+console.log(
         `[UtilityLibrary] NamedObjectName(object=0x${objectAddr.toString(16)}) -> 0x${namePtr.toString(16)}`
       );
 
@@ -968,7 +968,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       // ReleaseNamedObject(object) - A0 = object
       const objectAddr = emu.getRegister(8);  // A0
 
-      console.log(
+console.log(
         `[UtilityLibrary] ReleaseNamedObject(object=0x${objectAddr.toString(16)})`
       );
 
@@ -984,7 +984,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       const objectAddr = emu.getRegister(8);  // A0
       const messageAddr = emu.getRegister(9); // A1
 
-      console.log(
+console.log(
         `[UtilityLibrary] RemNamedObject(object=0x${objectAddr.toString(16)})`
       );
 
@@ -992,7 +992,7 @@ export const UTILITY_VECTORS: LibraryVector[] = [
       for (const [name, addr] of namedObjectRegistry.entries()) {
         if (addr === objectAddr) {
           namedObjectRegistry.delete(name);
-          console.log(`[UtilityLibrary] Removed named object "${name}"`);
+console.log(`[UtilityLibrary] Removed named object "${name}"`);
           break;
         }
       }

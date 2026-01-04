@@ -72,7 +72,7 @@ class WebhookService {
       const promises = webhooks.map(webhook => this.sendToWebhook(webhook, eventData));
       await Promise.allSettled(promises); // Don't fail if one webhook fails
     } catch (error) {
-      console.error(`[Webhook] Error sending webhook for trigger ${trigger}:`, error);
+console.error(`[Webhook] Error sending webhook for trigger ${trigger}:`, error);
     }
   }
 
@@ -92,9 +92,9 @@ class WebhookService {
         timeout: 5000
       });
 
-      console.log(`[Webhook] Sent ${eventData.trigger} to ${webhook.name} (${webhook.type})`);
+console.log(`[Webhook] Sent ${eventData.trigger} to ${webhook.name} (${webhook.type})`);
     } catch (error: any) {
-      console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
+console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
     }
   }
 

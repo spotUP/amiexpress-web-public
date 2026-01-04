@@ -205,7 +205,7 @@ export class HunkLoader {
           });
 
           if (bssLongs * 4 !== declaredSize) {
-            console.warn(
+console.warn(
               `[HunkLoader] BSS size mismatch for segment ${activeSegmentIndex}: ` +
               `header=${declaredSize} bytes, hunk=${bssLongs * 4} bytes`
             );
@@ -254,7 +254,7 @@ export class HunkLoader {
           if (activeSegmentIndex < 0) {
             throw new HunkLoaderError("HUNK_ABSRELOC16 without active segment");
           }
-          console.warn("[HunkLoader] HUNK_ABSRELOC16 found - using standard relocation semantics");
+console.warn("[HunkLoader] HUNK_ABSRELOC16 found - using standard relocation semantics");
           const relocs = relocations.get(activeSegmentIndex) ?? [];
           this.readReloc32ShortBlock(relocs);
           relocations.set(activeSegmentIndex, relocs);
@@ -276,7 +276,7 @@ export class HunkLoader {
         case HunkType.HUNK_OVERLAY:
         case HunkType.HUNK_BREAK: {
           // Overlay hunks are rare but valid - skip them
-          console.warn(`[HunkLoader] Skipping HUNK_${hunkType === HunkType.HUNK_OVERLAY ? 'OVERLAY' : 'BREAK'}`);
+console.warn(`[HunkLoader] Skipping HUNK_${hunkType === HunkType.HUNK_OVERLAY ? 'OVERLAY' : 'BREAK'}`);
           this.skipOverlayBlock(hunkType);
           break;
         }
@@ -311,7 +311,7 @@ export class HunkLoader {
         default:
           // Per AmigaDOS v31+: unknown hunks > HUNK_ABSRELOC16 treated as debug
           if (hunkType > HunkType.HUNK_ABSRELOC16) {
-            console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as debug block`);
+console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as debug block`);
             this.skipDebugBlock();
           } else {
             throw new HunkLoaderError(`Unknown hunk type 0x${hunkType.toString(16)}`);
@@ -361,13 +361,13 @@ export class HunkLoader {
     for (const relocs of hunkFile.relocations.values()) {
       totalRelocs += relocs.length;
     }
-    console.log(`[HunkLoader] Applying ${totalRelocs} relocations to ${hunkFile.relocations.size} segments`);
+console.log(`[HunkLoader] Applying ${totalRelocs} relocations to ${hunkFile.relocations.size} segments`);
 
     for (const [segmentIndex, relocs] of hunkFile.relocations.entries()) {
       const segment = hunkFile.segments[segmentIndex];
       if (!segment) continue;
 
-      console.log(
+console.log(
         `[HunkLoader] Segment ${segmentIndex} (${segment.type.toUpperCase()}) ` +
         `at 0x${segment.address.toString(16)}: ${relocs.length} relocations`
       );
@@ -376,7 +376,7 @@ export class HunkLoader {
         const reloc = relocs[i];
         const targetSegment = hunkFile.segments[reloc.targetSegment];
         if (!targetSegment) {
-          console.warn(`[HunkLoader] Relocation target segment ${reloc.targetSegment} not found`);
+console.warn(`[HunkLoader] Relocation target segment ${reloc.targetSegment} not found`);
           continue;
         }
 
@@ -403,7 +403,7 @@ export class HunkLoader {
 
         // Log first few relocations for debugging
         if (i < 5) {
-          console.log(
+console.log(
             `  [${i}] offset=0x${offset.toString(16)} addr=0x${address.toString(16)} ` +
             `before=0x${currentValue.toString(16)} after=0x${relocatedValue.toString(16)} ` +
             `target=seg${reloc.targetSegment}(0x${targetSegment.address.toString(16)})` +

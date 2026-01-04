@@ -73,10 +73,10 @@ export class NodeConfigService {
         });
       }
 
-      console.log(`[NodeConfigService] Loaded ${nodeConfigs.length} node configs from disk`);
+console.log(`[NodeConfigService] Loaded ${nodeConfigs.length} node configs from disk`);
       return nodeConfigs;
     } catch (error) {
-      console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
+console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
       return this.configRepo.getNodeConfigs();
     }
   }
@@ -136,7 +136,7 @@ export class NodeConfigService {
         updated_at: stats.mtime
       };
     } catch (error) {
-      console.error(`[NodeConfigService] Error reading Node${nodeNum}.info:`, error);
+console.error(`[NodeConfigService] Error reading Node${nodeNum}.info:`, error);
       return this.configRepo.getNodeConfig(nodeNum);
     }
   }
@@ -177,11 +177,11 @@ export class NodeConfigService {
 
     if (!fs.existsSync(nodeDir)) {
       try {
-        console.log(`[NodeConfigService] Creating directory ${nodeDir}`);
+console.log(`[NodeConfigService] Creating directory ${nodeDir}`);
         fs.mkdirSync(nodeDir, { recursive: true });
 
         if (fs.existsSync(templateDir) && nodeNum !== 1) {
-          console.log(`[NodeConfigService] Populating ${nodeDir} from template ${templateDir}`);
+console.log(`[NodeConfigService] Populating ${nodeDir} from template ${templateDir}`);
           // Using cp -a for reliability (preserves permissions and subdirs)
           execSync(`cp -a "${templateDir}/." "${nodeDir}/"`);
           
@@ -209,7 +209,7 @@ export class NodeConfigService {
           }
         }
       } catch (error) {
-        console.error(`[NodeConfigService] Failed to initialize node directory ${nodeDir}:`, error);
+console.error(`[NodeConfigService] Failed to initialize node directory ${nodeDir}:`, error);
       }
     }
   }
@@ -264,9 +264,9 @@ export class NodeConfigService {
     if (fs.existsSync(nodeInfoPath)) {
       try {
         fs.unlinkSync(nodeInfoPath);
-        console.log(`[NodeConfigService] Deleted ${nodeInfoPath}`);
+console.log(`[NodeConfigService] Deleted ${nodeInfoPath}`);
       } catch (error) {
-        console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
+console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       }
     }
 
@@ -306,9 +306,9 @@ export class NodeConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(nodeInfoPath, infoData);
 
-      console.log(`[NodeConfigService] Wrote ${nodeInfoPath} with ${toolTypes.size} tooltypes`);
+console.log(`[NodeConfigService] Wrote ${nodeInfoPath} with ${toolTypes.size} tooltypes`);
     } catch (error) {
-      console.error(`[NodeConfigService] Failed to write ${nodeInfoPath}:`, error);
+console.error(`[NodeConfigService] Failed to write ${nodeInfoPath}:`, error);
     }
   }
 }

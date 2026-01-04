@@ -68,7 +68,7 @@ class BBSEventEmitter {
    */
   setIO(io: SocketIOServer): void {
     this.io = io;
-    console.log('[BBSEventEmitter] Initialized with Socket.IO server');
+console.log('[BBSEventEmitter] Initialized with Socket.IO server');
   }
 
   /**
@@ -154,18 +154,33 @@ class BBSEventEmitter {
   }
 
   /**
+   * Emit import progress event to admin clients
+   */
+  emitImportProgress(data: { sessionId: string; progress: number; message: string }): void {
+    if (!this.io) {
+console.warn('[BBSEventEmitter] Cannot emit import progress - Socket.IO not initialized');
+      return;
+    }
+
+    // Broadcast to admin room (only connected admin clients)
+    this.io.to('admin').emit('import:progress', data);
+
+console.log(`[BBSEventEmitter] Import progress (${data.sessionId}): ${data.progress}% - ${data.message}`);
+  }
+
+  /**
    * Internal method to broadcast event to all LiveChat sockets
    */
   private emit(eventType: BBSEventType, payload: BBSEventPayload): void {
     if (!this.io) {
-      console.warn('[BBSEventEmitter] Cannot emit - Socket.IO not initialized');
+console.warn('[BBSEventEmitter] Cannot emit - Socket.IO not initialized');
       return;
     }
 
     // Broadcast to all sockets listening to 'bbs:event' channel
     this.io.emit('bbs:event', payload);
 
-    console.log(`[BBSEventEmitter] Emitted ${eventType}: ${payload.username} (node ${payload.nodeId})`);
+console.log(`[BBSEventEmitter] Emitted ${eventType}: ${payload.username} (node ${payload.nodeId})`);
   }
 }
 

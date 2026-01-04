@@ -66,15 +66,15 @@ export class KickstartRom {
       if (!romPath) {
         return false;
       }
-      console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
+console.log(`[ROM] Loading Kickstart ROM from: ${romPath}`);
       const romBuffer = amigafs.readFileSync(romPath) as Buffer;
       this.romSize = romBuffer.length;
       if (this.romSize !== this.ROM_SIZE) {
-        console.warn(`[ROM] Warning: ROM size ${this.romSize} doesn't match expected ${this.ROM_SIZE}`);
+console.warn(`[ROM] Warning: ROM size ${this.romSize} doesn't match expected ${this.ROM_SIZE}`);
       }
       this.romData = new Uint8Array(romBuffer);
-      console.log(`[ROM] Kickstart 3.1 loaded successfully`);
-      console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+console.log(`[ROM] Kickstart 3.1 loaded successfully`);
+console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
       return true;
     };
 
@@ -84,18 +84,18 @@ export class KickstartRom {
         const arosExtFile = path.join(basePath, 'aros-ext.bin');
 
         if (amigafs.existsSync(arosRomFile) && amigafs.existsSync(arosExtFile)) {
-          console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
+console.log(`[ROM] Loading AROS ROM (open-source) from: ${basePath}`);
           const arosRom = amigafs.readFileSync(arosRomFile) as Buffer;
           const arosExt = amigafs.readFileSync(arosExtFile) as Buffer;
           this.romSize = arosRom.length + arosExt.length;
           this.romData = new Uint8Array(this.romSize);
           this.romData.set(new Uint8Array(arosRom), 0);
           this.romData.set(new Uint8Array(arosExt), arosRom.length);
-          console.log(`[ROM] Loaded AROS ROM: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
-          console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes`);
-          console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes`);
-          console.log(`[ROM] AROS ROM loaded successfully`);
-          console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
+console.log(`[ROM] Loaded AROS ROM: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
+console.log(`[ROM]   - aros-rom.bin: ${arosRom.length} bytes`);
+console.log(`[ROM]   - aros-ext.bin: ${arosExt.length} bytes`);
+console.log(`[ROM] AROS ROM loaded successfully`);
+console.log(`[ROM] Mapped to memory range: 0x${this.ROM_START.toString(16).toUpperCase()} - 0x${this.ROM_END.toString(16).toUpperCase()}`);
           return true;
         }
       }
@@ -119,12 +119,12 @@ export class KickstartRom {
       }
     }
 
-    console.error('[ROM] No ROM found. Tried paths:');
-    console.error('[ROM] AROS ROM:');
+console.error('[ROM] No ROM found. Tried paths:');
+console.error('[ROM] AROS ROM:');
     arosRomPaths.forEach(p => {
-      console.error(`  - ${path.join(p, 'aros-rom.bin')} + ${path.join(p, 'aros-ext.bin')}`);
+console.error(`  - ${path.join(p, 'aros-rom.bin')} + ${path.join(p, 'aros-ext.bin')}`);
     });
-    console.error('[ROM] Kickstart ROM:');
+console.error('[ROM] Kickstart ROM:');
     kickPaths.forEach(p => console.error(`  - ${p}`));
     try {
       const globalAny: any = global as any;
@@ -224,18 +224,18 @@ export class KickstartRom {
    */
   public dumpInfo(): void {
     if (!this.romData) {
-      console.log('[ROM] No ROM loaded');
+console.log('[ROM] No ROM loaded');
       return;
     }
 
-    console.log('[ROM] ===== Kickstart ROM Info =====');
-    console.log(`[ROM] Size: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
-    console.log(`[ROM] Mapped: 0x${this.ROM_START.toString(16)} - 0x${this.ROM_END.toString(16)}`);
-    console.log(`[ROM] Initial SSP: 0x${this.getInitialSSP().toString(16).padStart(8, '0')}`);
-    console.log(`[ROM] Initial PC:  0x${this.getInitialPC().toString(16).padStart(8, '0')}`);
+console.log('[ROM] ===== Kickstart ROM Info =====');
+console.log(`[ROM] Size: ${this.romSize} bytes (${this.romSize / 1024}KB)`);
+console.log(`[ROM] Mapped: 0x${this.ROM_START.toString(16)} - 0x${this.ROM_END.toString(16)}`);
+console.log(`[ROM] Initial SSP: 0x${this.getInitialSSP().toString(16).padStart(8, '0')}`);
+console.log(`[ROM] Initial PC:  0x${this.getInitialPC().toString(16).padStart(8, '0')}`);
 
     // Show first few exception vectors
-    console.log('[ROM] Exception Vectors:');
+console.log('[ROM] Exception Vectors:');
     for (let i = 0; i < 8; i++) {
       const vector = this.getExceptionVector(i);
       const vectorNames = [
@@ -248,7 +248,7 @@ export class KickstartRom {
         'CHK Instruction',
         'TRAPV Instruction'
       ];
-      console.log(`[ROM]   Vector ${i} (${vectorNames[i]}): 0x${vector.toString(16).padStart(8, '0')}`);
+console.log(`[ROM]   Vector ${i} (${vectorNames[i]}): 0x${vector.toString(16).padStart(8, '0')}`);
     }
 
     // Show ROM version string (typically at 0xFC0000 + 12)
@@ -260,8 +260,8 @@ export class KickstartRom {
       versionBytes.push(byte);
     }
     const versionString = String.fromCharCode(...versionBytes);
-    console.log(`[ROM] Version: ${versionString}`);
-    console.log('[ROM] ================================');
+console.log(`[ROM] Version: ${versionString}`);
+console.log('[ROM] ================================');
   }
 
   /**

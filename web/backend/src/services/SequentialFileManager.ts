@@ -57,7 +57,7 @@ export class SequentialFileManager {
         }
       }
     } catch (error) {
-      console.error(`[SequentialFileManager] Error reading counter for ${basePath}:`, error);
+console.error(`[SequentialFileManager] Error reading counter for ${basePath}:`, error);
     }
 
     return -1; // Counter doesn't exist
@@ -73,7 +73,7 @@ export class SequentialFileManager {
       fs.writeFileSync(counterFile, value.toString(), 'utf-8');
       this.counters.set(basePath, value);
     } catch (error) {
-      console.error(`[SequentialFileManager] Error writing counter for ${basePath}:`, error);
+console.error(`[SequentialFileManager] Error writing counter for ${basePath}:`, error);
     }
   }
 

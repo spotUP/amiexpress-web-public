@@ -9,7 +9,7 @@ function ensureDoorLogLine(line: string) {
   try {
     appendFileSync(doorLogPath, line + '\n', { encoding: 'utf8' });
   } catch (error) {
-    console.error('[DoorLogging] Failed to write door log:', error);
+console.error('[DoorLogging] Failed to write door log:', error);
   }
 }
 

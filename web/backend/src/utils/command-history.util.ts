@@ -95,7 +95,7 @@ export function clearHistory(session: BBSSession): void {
  * @param userId - User ID (string for database)
  */
 export async function loadHistory(session: BBSSession, userId: number | string): Promise<void> {
-  console.log(`[CommandHistory] loadHistory called for userId=${userId}`);
+console.log(`[CommandHistory] loadHistory called for userId=${userId}`);
   
   // CRITICAL: Clear existing history before loading
   session.commandHistory = [];
@@ -105,10 +105,10 @@ export async function loadHistory(session: BBSSession, userId: number | string):
   try {
     const db = getDatabase();
     if (!db) {
-      console.log('[CommandHistory] Database not available for loadHistory');
+console.log('[CommandHistory] Database not available for loadHistory');
       return;
     }
-    console.log('[CommandHistory] Database available, querying...');
+console.log('[CommandHistory] Database available, querying...');
 
     // Query command history from database
     const userIdStr = String(userId);
@@ -116,11 +116,11 @@ export async function loadHistory(session: BBSSession, userId: number | string):
       'SELECT history_num, history_cycle, commands FROM command_history WHERE user_id = ?',
       [userIdStr]
     );
-    console.log(`[CommandHistory] Query result: ${result?.rows?.length || 0} rows`);
+console.log(`[CommandHistory] Query result: ${result?.rows?.length || 0} rows`);
 
     if (!result.rows || result.rows.length === 0) {
       // No history for this user yet - normal for new users
-      console.log(`[CommandHistory] No history found for user ${userIdStr}`);
+console.log(`[CommandHistory] No history found for user ${userIdStr}`);
       return;
     }
 
@@ -143,18 +143,18 @@ export async function loadHistory(session: BBSSession, userId: number | string):
           session.historyCycle = Math.max(0, Math.min(length - 1, rawCycle));
         }
 
-        console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${userIdStr}`);
+console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${userIdStr}`);
       }
     } catch {
       // Invalid JSON - reset history
       session.commandHistory = [];
       session.historyIndex = 0;
       session.historyCycle = 0;
-      console.log(`[CommandHistory] Invalid JSON for user ${userIdStr}, resetting history`);
+console.log(`[CommandHistory] Invalid JSON for user ${userIdStr}, resetting history`);
     }
   } catch (error) {
     // Database error - no history to load
-    console.error('[CommandHistory] Error loading history:', error);
+console.error('[CommandHistory] Error loading history:', error);
   }
 }
 
@@ -165,14 +165,14 @@ export async function loadHistory(session: BBSSession, userId: number | string):
  * @param userId - User ID (string for database)
  */
 export async function saveHistory(session: BBSSession, userId: number | string): Promise<void> {
-  console.log(`[CommandHistory] saveHistory called for userId=${userId}, historyLen=${session.commandHistory?.length || 0}`);
+console.log(`[CommandHistory] saveHistory called for userId=${userId}, historyLen=${session.commandHistory?.length || 0}`);
   try {
     const db = getDatabase();
     if (!db) {
-      console.log('[CommandHistory] Database not available for saveHistory');
+console.log('[CommandHistory] Database not available for saveHistory');
       return;
     }
-    console.log('[CommandHistory] Database available, saving...');
+console.log('[CommandHistory] Database available, saving...');
 
     const userIdStr = String(userId);
     const trimmed = session.commandHistory.slice(-MAX_HISTORY_SIZE);
@@ -189,7 +189,7 @@ export async function saveHistory(session: BBSSession, userId: number | string):
     const now = Math.floor(Date.now() / 1000);
 
     // Upsert command history (insert or replace)
-    console.log(`[CommandHistory] Running upsert for user ${userIdStr} with ${trimmed.length} commands`);
+console.log(`[CommandHistory] Running upsert for user ${userIdStr} with ${trimmed.length} commands`);
     await db.run(
       `INSERT INTO command_history (user_id, history_num, history_cycle, commands, updated_at)
        VALUES (?, ?, ?, ?, ?)
@@ -200,9 +200,9 @@ export async function saveHistory(session: BBSSession, userId: number | string):
          updated_at = excluded.updated_at`,
       [userIdStr, session.historyIndex, session.historyCycle, commandsJson, now]
     );
-    console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${userIdStr}`);
+console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${userIdStr}`);
   } catch (error) {
-    console.error('[CommandHistory] Error saving history:', error);
+console.error('[CommandHistory] Error saving history:', error);
     // Don't throw - history save failures shouldn't break logout
   }
 }

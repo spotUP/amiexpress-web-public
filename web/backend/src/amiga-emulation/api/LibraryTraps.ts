@@ -264,7 +264,7 @@ export class LibraryTraps {
       this.libraryMap.set(address, library);
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Registered custom trap '${name}' at 0x${address.toString(16)}`
     );
   }
@@ -286,25 +286,25 @@ export class LibraryTraps {
         } else {
           failed++;
           failedAddrs.push(addr);
-          console.error(
+console.error(
             `[LibraryTraps] VERIFICATION FAILED at 0x${addr.toString(16)}: expected 0x4AFC, got 0x${opcode.toString(16)}`
           );
         }
       } catch (e) {
         failed++;
         failedAddrs.push(addr);
-        console.error(
+console.error(
           `[LibraryTraps] VERIFICATION ERROR at 0x${addr.toString(16)}: ${e}`
         );
       }
     }
 
     if (failed > 0) {
-      console.error(
+console.error(
         `[LibraryTraps] VERIFICATION: ${verified} OK, ${failed} FAILED!`
       );
     } else {
-      console.log(
+console.log(
         `[LibraryTraps] VERIFICATION: All ${verified} ILLEGAL instructions verified OK`
       );
     }
@@ -331,7 +331,7 @@ export class LibraryTraps {
       count++;
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Synced ${count} trap addresses to MOIRA for batch execution`
     );
   }
@@ -351,7 +351,7 @@ export class LibraryTraps {
    */
   installExecVectors(): void {
     const execBase = this.execLibrary.getExecBaseAddress();
-    console.log(
+console.log(
       `[LibraryTraps] Installing Exec.library vectors at base 0x${execBase.toString(
         16
       )}`
@@ -368,7 +368,7 @@ export class LibraryTraps {
       // Verify the write succeeded
       const verify = this.emulator.readMemory16(trapAddr);
       if (verify !== 0x4AFC) {
-        console.error(`[LibraryTraps] FAILED to write ILLEGAL at 0x${trapAddr.toString(16)}: got 0x${verify.toString(16)}`);
+console.error(`[LibraryTraps] FAILED to write ILLEGAL at 0x${trapAddr.toString(16)}: got 0x${verify.toString(16)}`);
       }
 
       // Store mapping of address to handler
@@ -387,14 +387,14 @@ export class LibraryTraps {
         vector.name ||
         EXEC_LVO_MAP[vector.offset] ||
         `exec@${vector.offset.toString(16)}`;
-      console.log(
+console.log(
         `  [${name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installed ${EXEC_VECTORS.length} Exec.library vectors`
     );
 
@@ -411,7 +411,7 @@ export class LibraryTraps {
    */
   installDOSVectors(): void {
     if (!this.dosLibrary) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install DOS vectors: library not set"
       );
       return;
@@ -419,13 +419,13 @@ export class LibraryTraps {
 
     const dosBase = this.execLibrary.getLibraryBase("dos.library");
     if (dosBase === 0) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install DOS vectors: library not opened"
       );
       return;
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installing dos.library vectors at base 0x${dosBase.toString(
         16
       )}`
@@ -453,14 +453,14 @@ export class LibraryTraps {
         vector.name ||
         DOS_LVO_MAP[vector.offset] ||
         `dos@${vector.offset.toString(16)}`;
-      console.log(
+console.log(
         `  [${name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installed ${DOS_VECTORS.length} dos.library vectors`
     );
 
@@ -486,22 +486,22 @@ export class LibraryTraps {
   installAEDoorVectors(): void {
     const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
 
-    console.log(
+console.log(
       `[LibraryTraps] ============================================`
     );
-    console.log(
+console.log(
       `[LibraryTraps] AEDoor.library vectors: NATIVE MODE (no traps)`
     );
-    console.log(
+console.log(
       `[LibraryTraps] Base address: 0x${aedoorBase.toString(16)}`
     );
-    console.log(
+console.log(
       `[LibraryTraps] JMP table created by ExecLibrary.loadRealAEDoorLibrary()`
     );
-    console.log(
+console.log(
       `[LibraryTraps] Native 68K code will execute for all AEDoor calls`
     );
-    console.log(
+console.log(
       `[LibraryTraps] ============================================`
     );
 
@@ -520,7 +520,7 @@ export class LibraryTraps {
    */
   installIconVectors(): void {
     if (!this.iconLibrary) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install icon vectors: library not set"
       );
       return;
@@ -528,13 +528,13 @@ export class LibraryTraps {
 
     const iconBase = this.execLibrary.getLibraryBase("icon.library");
     if (iconBase === 0) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install icon vectors: library not opened"
       );
       return;
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installing icon.library vectors at base 0x${iconBase.toString(
         16
       )}`
@@ -558,16 +558,16 @@ export class LibraryTraps {
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.iconLibrary);
 
-      console.log(
+console.log(
         `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
     }
 
-    console.log(`[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***`);
+console.log(`[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***`);
 
-    console.log(
+console.log(
       `[LibraryTraps] Installed ${ICON_VECTORS.length} icon.library vectors`
     );
   }
@@ -577,7 +577,7 @@ export class LibraryTraps {
    */
   installIntuitionVectors(): void {
     if (!this.intuitionLibrary) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install intuition vectors: library not set"
       );
       return;
@@ -585,13 +585,13 @@ export class LibraryTraps {
 
     const intuitionBase = this.execLibrary.getLibraryBase("intuition.library");
     if (intuitionBase === 0) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install intuition vectors: library not opened"
       );
       return;
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installing intuition.library vectors at base 0x${intuitionBase.toString(
         16
       )}`
@@ -615,14 +615,14 @@ export class LibraryTraps {
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.intuitionLibrary);
 
-      console.log(
+console.log(
         `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installed ${INTUITION_VECTORS.length} intuition.library vectors`
     );
   }
@@ -632,7 +632,7 @@ export class LibraryTraps {
    */
   installUtilityVectors(): void {
     if (!this.utilityLibrary) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install utility vectors: library not set"
       );
       return;
@@ -640,13 +640,13 @@ export class LibraryTraps {
 
     const utilityBase = this.execLibrary.getLibraryBase("utility.library");
     if (utilityBase === 0) {
-      console.error(
+console.error(
         "[LibraryTraps] Cannot install utility vectors: library not opened"
       );
       return;
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installing utility.library vectors at base 0x${utilityBase.toString(
         16
       )}`
@@ -669,14 +669,14 @@ export class LibraryTraps {
       this.offsetMap.get(vector.offset)!.push(vector);
       this.offsetLibraryMap.get(vector.offset)!.push(this.utilityLibrary);
 
-      console.log(
+console.log(
         `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
         })`
       );
     }
 
-    console.log(
+console.log(
       `[LibraryTraps] Installed ${UTILITY_VECTORS.length} utility.library vectors`
     );
 
@@ -693,17 +693,17 @@ export class LibraryTraps {
    */
   installMathFFPVectors(): void {
     if (!this.mathFFPLibrary) {
-      console.error("[LibraryTraps] Cannot install mathffp vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathffp vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathffp.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathffp vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathffp vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathffp.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathffp.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHFFP_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -719,7 +719,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathFFPLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHFFP_VECTORS.length} mathffp.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHFFP_VECTORS.length} mathffp.library vectors`);
   }
 
   /**
@@ -727,17 +727,17 @@ export class LibraryTraps {
    */
   installMathTransVectors(): void {
     if (!this.mathTransLibrary) {
-      console.error("[LibraryTraps] Cannot install mathtrans vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathtrans vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathtrans.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathtrans vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathtrans vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathtrans.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathtrans.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHTRANS_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -753,7 +753,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathTransLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHTRANS_VECTORS.length} mathtrans.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHTRANS_VECTORS.length} mathtrans.library vectors`);
   }
 
   /**
@@ -761,17 +761,17 @@ export class LibraryTraps {
    */
   installMathIEEEDoubBasVectors(): void {
     if (!this.mathIEEEDoubBasLibrary) {
-      console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathieeedoubbas.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathieeedoubbas vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathieeedoubbas.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathieeedoubbas.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHIEEEDOUBBAS_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -787,7 +787,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEEDoubBasLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBBAS_VECTORS.length} mathieeedoubbas.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBBAS_VECTORS.length} mathieeedoubbas.library vectors`);
   }
 
   /**
@@ -795,17 +795,17 @@ export class LibraryTraps {
    */
   installMathIEEEDoubTransVectors(): void {
     if (!this.mathIEEEDoubTransLibrary) {
-      console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathieeedoubtrans.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathieeedoubtrans vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathieeedoubtrans.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathieeedoubtrans.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHIEEEDOUBTRANS_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -821,7 +821,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEEDoubTransLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBTRANS_VECTORS.length} mathieeedoubtrans.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHIEEEDOUBTRANS_VECTORS.length} mathieeedoubtrans.library vectors`);
   }
 
   /**
@@ -829,17 +829,17 @@ export class LibraryTraps {
    */
   installMathIEEESingBasVectors(): void {
     if (!this.mathIEEESingBasLibrary) {
-      console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathieeesingbas.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathieeesingbas vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathieeesingbas.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathieeesingbas.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHIEEESINGBAS_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -855,7 +855,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEESingBasLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHIEEESINGBAS_VECTORS.length} mathieeesingbas.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHIEEESINGBAS_VECTORS.length} mathieeesingbas.library vectors`);
   }
 
   /**
@@ -863,17 +863,17 @@ export class LibraryTraps {
    */
   installMathIEEESingTransVectors(): void {
     if (!this.mathIEEESingTransLibrary) {
-      console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not set");
+console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not set");
       return;
     }
 
     const mathBase = this.execLibrary.getLibraryBase("mathieeesingtrans.library");
     if (mathBase === 0) {
-      console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not opened");
+console.error("[LibraryTraps] Cannot install mathieeesingtrans vectors: library not opened");
       return;
     }
 
-    console.log(`[LibraryTraps] Installing mathieeesingtrans.library vectors at base 0x${mathBase.toString(16)}`);
+console.log(`[LibraryTraps] Installing mathieeesingtrans.library vectors at base 0x${mathBase.toString(16)}`);
 
     for (const vector of MATHIEEESINGTRANS_VECTORS) {
       const trapAddr = mathBase + vector.offset;
@@ -889,7 +889,7 @@ export class LibraryTraps {
       this.offsetLibraryMap.get(vector.offset)!.push(this.mathIEEESingTransLibrary);
     }
 
-    console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathieeesingtrans.library vectors`);
+console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathieeesingtrans.library vectors`);
   }
 
   /**
@@ -920,7 +920,7 @@ export class LibraryTraps {
         offset,
         name: `${normalized}-stub`,
         handler: (emu: MoiraEmulator) => {
-          console.log(
+console.log(
             `[LibraryTraps] Stubbed ${normalized} offset ${offset} at PC=0x${trapAddr.toString(
               16
             )}`
@@ -941,7 +941,7 @@ export class LibraryTraps {
     }
 
     if (added > 0) {
-      console.log(
+console.log(
         `[LibraryTraps] Stubbed ${added} LVOs for ${normalized} from LVOs.i`
       );
     }
@@ -972,16 +972,16 @@ export class LibraryTraps {
       // Only trigger if PC is in the ACTUAL library vector range, not ROM space
       // Exec.library vectors are roughly from -700 to -30 from ExecBase
       if (pc >= execBase - 700 && pc < execBase && execOffset <= -30) {
-        console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION ***`);
-        console.error(`[LibraryTraps]   PC: 0x${pc.toString(16)}`);
-        console.error(`[LibraryTraps]   ExecBase: 0x${execBase.toString(16)}`);
-        console.error(`[LibraryTraps]   LVO offset: ${execOffset}`);
-        console.error(
+console.error(`[LibraryTraps] *** UNIMPLEMENTED EXEC FUNCTION ***`);
+console.error(`[LibraryTraps]   PC: 0x${pc.toString(16)}`);
+console.error(`[LibraryTraps]   ExecBase: 0x${execBase.toString(16)}`);
+console.error(`[LibraryTraps]   LVO offset: ${execOffset}`);
+console.error(
           `[LibraryTraps]   This is likely a missing Exec.library function!`
         );
 
         // DETAILED TRACING: Show door execution context
-        console.error(`[LibraryTraps] *** DOOR EXECUTION CONTEXT ***`);
+console.error(`[LibraryTraps] *** DOOR EXECUTION CONTEXT ***`);
 
         // Get door execution context
         const d0 = this.emulator.getRegister(0);
@@ -994,36 +994,36 @@ export class LibraryTraps {
         const a7 = this.emulator.getRegister(15); // SP (FIXED: was 7, should be 15)
         const sp = this.emulator.getRegister(15);
 
-        console.error(`[LibraryTraps]   Registers:`);
-        console.error(
+console.error(`[LibraryTraps]   Registers:`);
+console.error(
           `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(
             16
           )}`
         );
-        console.error(
+console.error(
           `[LibraryTraps]     A0: 0x${a0.toString(16)}, A1: 0x${a1.toString(
             16
           )}`
         );
-        console.error(
+console.error(
           `[LibraryTraps]     A4: 0x${a4.toString(16)} (data segment)`
         );
-        console.error(
+console.error(
           `[LibraryTraps]     A5: 0x${a5.toString(16)}, A6: 0x${a6.toString(
             16
           )}`
         );
-        console.error(`[LibraryTraps]     A7(SP): 0x${a7.toString(16)}`);
+console.error(`[LibraryTraps]     A7(SP): 0x${a7.toString(16)}`);
 
         if (pc >= execBase && pc <= execBase + 0x1000) {
           const libOffset = pc - execBase;
-          console.error(
+console.error(
             `[LibraryTraps]   ROM/Exec space: PC=0x${pc.toString(
               16
             )} (offset +0x${libOffset.toString(16)})`
           );
         } else {
-          console.error(
+console.error(
             `[LibraryTraps]   OTHER space: PC=0x${pc.toString(16)}`
           );
         }
@@ -1034,7 +1034,7 @@ export class LibraryTraps {
         this.emulator.setRegister(15, sp + 4);
         this.emulator.setRegister(16, returnAddr);
         this.emulator.refillPrefetch(); // CRITICAL: Refill prefetch after changing PC
-        console.error(
+console.error(
           `[LibraryTraps]   Simulated RTS with D0=0, returning to 0x${returnAddr.toString(
             16
           )}`
@@ -1045,8 +1045,8 @@ export class LibraryTraps {
       // DOS.library check - more restrictive range
       if (dosBase && pc >= dosBase - 300 && pc < dosBase && dosOffset <= -30) {
         const offset = pc - dosBase;
-        console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION ***`);
-        console.error(
+console.error(`[LibraryTraps] *** UNIMPLEMENTED DOS FUNCTION ***`);
+console.error(
           `[LibraryTraps]   PC: 0x${pc.toString(16)}, LVO: ${offset}`
         );
         // Simulate RTS with D0=0
@@ -1067,7 +1067,7 @@ export class LibraryTraps {
     const libraryName = this.getLibraryName(library);
 
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(
+console.log(
         `[LibraryTraps] *** INTERCEPTED: ${libraryName}.${vector.name}() at PC=0x${pc.toString(
           16
         )} ***`
@@ -1088,12 +1088,12 @@ export class LibraryTraps {
         const a4 = this.emulator.getRegister(12); // A4 = data segment
         const a6 = this.emulator.getRegister(14);
 
-        console.log(`[LibraryTraps]   Door state during ${vector.name}():`);
-        console.log(`[LibraryTraps]     A4: 0x${a4.toString(16)}`);
-        console.log(
+console.log(`[LibraryTraps]   Door state during ${vector.name}():`);
+console.log(`[LibraryTraps]     A4: 0x${a4.toString(16)}`);
+console.log(
           `[LibraryTraps]     D0: 0x${d0.toString(16)}, D1: 0x${d1.toString(16)}`
         );
-        console.log(
+console.log(
           `[LibraryTraps]     A0: 0x${a0.toString(16)}, A1: 0x${a1.toString(16)}`
         );
       }
@@ -1104,7 +1104,7 @@ export class LibraryTraps {
         vector.name === "Prompt" ||
         vector.name === "SendCmd"
       ) {
-        console.log(
+console.log(
           `[LibraryTraps] OUTPUT FUNCTION: ${vector.name}() - this should produce terminal output`
         );
       }
@@ -1116,7 +1116,7 @@ export class LibraryTraps {
         const a0 = this.emulator.getRegister(8);
         const a1 = this.emulator.getRegister(9);
         const a4 = this.emulator.getRegister(4);
-        console.log(
+console.log(
           `[LibraryTraps][AEDoor] offset=${vector.offset} d0=0x${d0.toString(
             16
           )} d1=0x${d1.toString(16)} a0=0x${a0.toString(
@@ -1142,21 +1142,21 @@ export class LibraryTraps {
     const spAfter = this.emulator.getRegister(15);
 
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(
+console.log(
         `[LibraryTraps]   SP before pop: 0x${sp.toString(
           16
         )}, A6: 0x${a6.toString(16)}`
       );
-      console.log(
+console.log(
         `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
       );
-      console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
 
       // DEBUG: Dump stack contents where A6 should be saved
       // MOVEM.L (SP)+,D0-D7/A0-A6 reads A6 from SP+56
       // (D0-D7 = 8 regs = 32 bytes, A0-A5 = 6 regs = 24 bytes, total offset = 56)
       const a6OnStack = this.emulator.readMemory32(spAfter + 56);
-      console.log(
+console.log(
         `[LibraryTraps]   A6 value saved on stack at SP+56 (0x${(
           spAfter + 56
         ).toString(16)}): 0x${a6OnStack.toString(16)}`
@@ -1165,11 +1165,11 @@ export class LibraryTraps {
 
     // Also dump the surrounding stack to see the pattern
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(`[LibraryTraps]   Stack dump (after return address pop):`);
+console.log(`[LibraryTraps]   Stack dump (after return address pop):`);
       for (let i = 0; i < 15; i++) {
         const regValue = this.emulator.readMemory32(spAfter + i * 4);
         const regName = i < 8 ? `D${i}` : `A${i - 8}`;
-        console.log(
+console.log(
           `[LibraryTraps]     SP+${i * 4} (${regName}): 0x${regValue.toString(
             16
           )}`
@@ -1196,20 +1196,20 @@ export class LibraryTraps {
       // Keep PC at the current trap address so Wait() is called again after Signal()
       this.emulator.setRegister(16, pc);
       this.emulator.refillPrefetch();
-      console.log(`[LibraryTraps] Wait() BLOCKING - PC stays at trap 0x${pc.toString(16)}, returnAddr pushed back`);
+console.log(`[LibraryTraps] Wait() BLOCKING - PC stays at trap 0x${pc.toString(16)}, returnAddr pushed back`);
       return true;
     }
 
     // CRITICAL: Check for SP corruption immediately after handler
     const spAfterHandler = this.emulator.getRegister(15);
     if (spAfterHandler === 0xfffffffa || spAfterHandler < 0x1000) {
-      console.error(`\n*** SP CORRUPTION DETECTED ***`);
-      console.error(`  Function: ${vector.name}()`);
-      console.error(`  SP before handler: 0x${spBeforeHandler.toString(16)}`);
-      console.error(`  SP after handler:  0x${spAfterHandler.toString(16)} *** CORRUPTED ***`);
-      console.error(`  Return address: 0x${returnAddr.toString(16)}`);
-      console.error(`  D0 result: 0x${result.toString(16)}`);
-      console.error(`  THIS IS THE BUG! ${vector.name}() corrupted SP!`);
+console.error(`\n*** SP CORRUPTION DETECTED ***`);
+console.error(`  Function: ${vector.name}()`);
+console.error(`  SP before handler: 0x${spBeforeHandler.toString(16)}`);
+console.error(`  SP after handler:  0x${spAfterHandler.toString(16)} *** CORRUPTED ***`);
+console.error(`  Return address: 0x${returnAddr.toString(16)}`);
+console.error(`  D0 result: 0x${result.toString(16)}`);
+console.error(`  THIS IS THE BUG! ${vector.name}() corrupted SP!`);
     }
 
     // Set return value in D0 unless the call should preserve the caller state
@@ -1239,13 +1239,13 @@ export class LibraryTraps {
     this.emulator.setRegister(14, properA6);
     if (DEBUG_LIBRARY_TRAPS) {
       const a6AfterRestore = this.emulator.getRegister(14);
-      console.log(
+console.log(
         `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
           16
         )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
       );
       if (a6AfterRestore !== properA6) {
-        console.log(
+console.log(
           `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
             16
           )}, Got: 0x${a6AfterRestore.toString(16)}`
@@ -1261,7 +1261,7 @@ export class LibraryTraps {
     if (preserveRegs) {
       this.emulator.setRegister(17, prevSr); // Preserve SR for void calls
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] ${vector.name}() preserved SR: 0x${prevSr
             .toString(16)
             .padStart(4, "0")}`
@@ -1288,17 +1288,17 @@ export class LibraryTraps {
       if (DEBUG_LIBRARY_TRAPS) {
         // Verify SR was actually set
         const verifySr = this.emulator.getRegister(17);
-        console.log(
+console.log(
           `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
         );
-        console.log(
+console.log(
           `[LibraryTraps]   Set SR to: 0x${newSr
             .toString(16)
             .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
             newSr & 0x08 ? 1 : 0
           })`
         );
-        console.log(
+console.log(
           `[LibraryTraps]   Verified SR: 0x${verifySr
             .toString(16)
             .padStart(4, "0")} (Z=${verifySr & 0x04 ? 1 : 0})`
@@ -1315,7 +1315,7 @@ export class LibraryTraps {
     const currentPC = this.emulator.getRegister(16);
     if (forcedReturn) {
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] ExecLibrary forced return to 0x${currentPC.toString(16)}`
         );
       }
@@ -1330,7 +1330,7 @@ export class LibraryTraps {
       this.emulator.setRegister(16, execJumpPc);
       this.emulator.refillPrefetch();
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] ExecLibrary jump to 0x${execJumpPc.toString(
             16
           )} with return 0x${returnAddr.toString(16)}`
@@ -1339,7 +1339,7 @@ export class LibraryTraps {
     } else if (vector.name === "Supervisor") {
       // Supervisor already set PC to the supervisor function, don't overwrite it
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
             16
           )}, not setting return address`
@@ -1348,7 +1348,7 @@ export class LibraryTraps {
     } else if (vector.name === "Exit") {
       // Exit() already set PC to exit trap address (0xFFFF00), don't overwrite it
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
             16
           )} (exit trap), not setting return address`
@@ -1356,7 +1356,7 @@ export class LibraryTraps {
       }
     } else {
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] Setting PC to return address 0x${returnAddr.toString(
             16
           )}`
@@ -1368,7 +1368,7 @@ export class LibraryTraps {
       this.emulator.refillPrefetch();
       if (DEBUG_LIBRARY_TRAPS) {
         const verifyPC = this.emulator.getRegister(16);
-        console.log(
+console.log(
           `[LibraryTraps] Verified PC is now: 0x${verifyPC.toString(16)}`
         );
 
@@ -1376,7 +1376,7 @@ export class LibraryTraps {
         const op0 = this.emulator.readMemory(returnAddr);
         const op1 = this.emulator.readMemory(returnAddr + 1);
         const opcode = (op0 << 8) | op1;
-        console.log(
+console.log(
           `[LibraryTraps] Instruction at return address: 0x${opcode
             .toString(16)
             .padStart(4, "0")}`
@@ -1395,8 +1395,8 @@ export class LibraryTraps {
       const finalSp = this.emulator.getRegister(15);
       const finalA6 = this.emulator.getRegister(14);
 
-      console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
-      console.log(
+console.log(`[LibraryTraps] Returning to 0x${returnAddr.toString(16)}`);
+console.log(
         `[LibraryTraps]   Final SP: 0x${finalSp.toString(
           16
         )}, Final A6: 0x${finalA6.toString(16)}`
@@ -1430,7 +1430,7 @@ export class LibraryTraps {
     const libraries = this.offsetLibraryMap.get(offset);
 
     if (!vectors || vectors.length === 0) {
-      console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
+console.error(`[LibraryTraps] *** NO HANDLER for offset ${offset} ***`);
       return false;
     }
 
@@ -1442,7 +1442,7 @@ export class LibraryTraps {
     const libraryName = this.getLibraryName(library);
 
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(
+console.log(
         `[LibraryTraps] Intercepted: ${libraryName}.${vector.name}() at offset ${offset} (A6=0x${baseAddr.toString(
           16
         )})`
@@ -1463,15 +1463,15 @@ export class LibraryTraps {
     const spAfter = this.emulator.getRegister(15);
 
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(
+console.log(
         `[LibraryTraps]   SP before pop: 0x${sp.toString(
           16
         )}, A6: 0x${a6.toString(16)}`
       );
-      console.log(
+console.log(
         `[LibraryTraps]   Return address at SP: 0x${returnAddr.toString(16)}`
       );
-      console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
+console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
     }
 
     // Call the handler
@@ -1500,13 +1500,13 @@ export class LibraryTraps {
     this.emulator.setRegister(14, properA6);
     if (DEBUG_LIBRARY_TRAPS) {
       const a6After = this.emulator.getRegister(14);
-      console.log(
+console.log(
         `[LibraryTraps]   A6 restored: 0x${a6Before.toString(
           16
         )} -> 0x${properA6.toString(16)} (${vector.name} library base)`
       );
       if (a6After !== properA6) {
-        console.log(
+console.log(
           `[LibraryTraps]   *** WARNING: A6 restoration failed! Expected: 0x${properA6.toString(
             16
           )}, Got: 0x${a6After.toString(16)}`
@@ -1531,10 +1531,10 @@ export class LibraryTraps {
     this.emulator.setRegister(17, newSr);
 
     if (DEBUG_LIBRARY_TRAPS) {
-      console.log(
+console.log(
         `[LibraryTraps] ${vector.name}() returned 0x${result.toString(16)}`
       );
-      console.log(
+console.log(
         `[LibraryTraps]   Set SR to: 0x${newSr
           .toString(16)
           .padStart(4, "0")} (Z=${newSr & 0x04 ? 1 : 0} N=${
@@ -1548,7 +1548,7 @@ export class LibraryTraps {
     const currentPC = this.emulator.getRegister(16);
     if (vector.name === "Supervisor") {
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] Supervisor: PC already set to 0x${currentPC.toString(
             16
           )}, not setting return address`
@@ -1556,7 +1556,7 @@ export class LibraryTraps {
       }
     } else if (vector.name === "Exit") {
       if (DEBUG_LIBRARY_TRAPS) {
-        console.log(
+console.log(
           `[LibraryTraps] Exit: PC already set to 0x${currentPC.toString(
             16
           )} (exit trap), not setting return address`
@@ -1587,7 +1587,7 @@ export class LibraryTraps {
       try {
         if (amigafs.existsSync(candidate)) {
           data = amigafs.readFileSync(candidate, "utf8") as string;
-          console.log(`[LibraryTraps] Loaded LVOs from ${candidate}`);
+console.log(`[LibraryTraps] Loaded LVOs from ${candidate}`);
           break;
         }
       } catch {
@@ -1596,7 +1596,7 @@ export class LibraryTraps {
     }
 
     if (!data) {
-      console.warn("[LibraryTraps] LVOs.i not found; stub vectors disabled");
+console.warn("[LibraryTraps] LVOs.i not found; stub vectors disabled");
       return;
     }
 

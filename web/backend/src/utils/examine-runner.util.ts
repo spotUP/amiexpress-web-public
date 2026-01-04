@@ -84,14 +84,14 @@ export async function runExamineCommands(
         .replace(/%w/g, workDir)
         .replace(/%n/g, basename);
 
-      console.log(`[EXAMINE] Running: ${command}`);
+console.log(`[EXAMINE] Running: ${command}`);
       await execAsync(command, { timeout });
 
       // Run custom validation if provided
       if (validator) {
         const isValid = await validator();
         if (isValid) {
-          console.log(`[EXAMINE] Validation succeeded`);
+console.log(`[EXAMINE] Validation succeeded`);
           return true; // Success!
         }
       } else {
@@ -99,7 +99,7 @@ export async function runExamineCommands(
         anySuccess = true;
       }
     } catch (error: any) {
-      console.error(`[EXAMINE] Command failed: ${examineCmd}, error: ${error.message}`);
+console.error(`[EXAMINE] Command failed: ${examineCmd}, error: ${error.message}`);
 
       if (stopOnFailure) {
         // Testing mode: stop on first failure (express.e behavior)
@@ -147,7 +147,7 @@ export async function runExamineCommandsForDiz(
   const validator: ExamineValidator = async () => {
     const exists = await fileExists(dizPath);
     if (exists) {
-      console.log(`[FILE_ID.DIZ] Successfully extracted to ${dizPath}`);
+console.log(`[FILE_ID.DIZ] Successfully extracted to ${dizPath}`);
     }
     return exists;
   };

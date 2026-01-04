@@ -37,7 +37,7 @@ export class UtilityLibrary {
     const str1 = this.emulator.readString(string1Addr).toLowerCase();
     const str2 = this.emulator.readString(string2Addr).toLowerCase();
 
-    console.log(`[UtilityLibrary] Stricmp("${str1}", "${str2}")`);
+console.log(`[UtilityLibrary] Stricmp("${str1}", "${str2}")`);
 
     if (str1 === str2) return 0;
     return str1 < str2 ? -1 : 1;
@@ -63,7 +63,7 @@ export class UtilityLibrary {
     const str1 = this.emulator.readString(string1Addr).substring(0, length).toLowerCase();
     const str2 = this.emulator.readString(string2Addr).substring(0, length).toLowerCase();
 
-    console.log(`[UtilityLibrary] Strnicmp("${str1}", "${str2}", ${length})`);
+console.log(`[UtilityLibrary] Strnicmp("${str1}", "${str2}", ${length})`);
 
     if (str1 === str2) return 0;
     return str1 < str2 ? -1 : 1;
@@ -83,7 +83,7 @@ export class UtilityLibrary {
     const ch = this.emulator.getRegister(0) & 0xFF;  // D0
     const upper = String.fromCharCode(ch).toUpperCase().charCodeAt(0);
 
-    console.log(`[UtilityLibrary] ToUpper('${String.fromCharCode(ch)}') = '${String.fromCharCode(upper)}'`);
+console.log(`[UtilityLibrary] ToUpper('${String.fromCharCode(ch)}') = '${String.fromCharCode(upper)}'`);
 
     return upper;
   }
@@ -102,7 +102,7 @@ export class UtilityLibrary {
     const ch = this.emulator.getRegister(0) & 0xFF;  // D0
     const lower = String.fromCharCode(ch).toLowerCase().charCodeAt(0);
 
-    console.log(`[UtilityLibrary] ToLower('${String.fromCharCode(ch)}') = '${String.fromCharCode(lower)}'`);
+console.log(`[UtilityLibrary] ToLower('${String.fromCharCode(ch)}') = '${String.fromCharCode(lower)}'`);
 
     return lower;
   }
@@ -124,7 +124,7 @@ export class UtilityLibrary {
 
     const result = (arg1 * arg2) | 0;  // Keep as 32-bit signed
 
-    console.log(`[UtilityLibrary] SMult32(${arg1}, ${arg2}) = ${result}`);
+console.log(`[UtilityLibrary] SMult32(${arg1}, ${arg2}) = ${result}`);
 
     return result >>> 0;  // Return as unsigned for register
   }
@@ -146,7 +146,7 @@ export class UtilityLibrary {
 
     const result = (arg1 * arg2) >>> 0;
 
-    console.log(`[UtilityLibrary] UMult32(${arg1}, ${arg2}) = ${result}`);
+console.log(`[UtilityLibrary] UMult32(${arg1}, ${arg2}) = ${result}`);
 
     return result;
   }
@@ -162,7 +162,7 @@ export class UtilityLibrary {
     // Simple implementation: use timestamp + counter
     const id = Date.now() & 0xFFFFFFFF;
 
-    console.log(`[UtilityLibrary] GetUniqueID() = 0x${id.toString(16)}`);
+console.log(`[UtilityLibrary] GetUniqueID() = 0x${id.toString(16)}`);
 
     return id;
   }
@@ -171,7 +171,7 @@ export class UtilityLibrary {
    * Stub for unimplemented functions
    */
   stub(functionName: string, offset: number): number {
-    console.log(`[UtilityLibrary] STUB: ${functionName} (offset ${offset}) - returning 0`);
+console.log(`[UtilityLibrary] STUB: ${functionName} (offset ${offset}) - returning 0`);
     return 0;
   }
 }

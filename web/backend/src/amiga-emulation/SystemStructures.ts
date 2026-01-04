@@ -36,7 +36,7 @@ export class SystemStructures {
    * This gives doors the basic structures they expect
    */
   public initializeSystem(): void {
-    console.log('[SystemStructures] Initializing Amiga system environment...');
+console.log('[SystemStructures] Initializing Amiga system environment...');
 
     // 1. Create ExecBase structure
     this.createExecBase();
@@ -47,7 +47,7 @@ export class SystemStructures {
     // 3. Set up safe exception handlers
     this.setupExceptionHandlers();
 
-    console.log('[SystemStructures] System environment initialized');
+console.log('[SystemStructures] System environment initialized');
   }
 
   /**
@@ -64,13 +64,13 @@ export class SystemStructures {
    * We create a minimal version with just what doors need
    */
   private createExecBase(): void {
-    console.log('[SystemStructures] Creating ExecBase structure...');
+console.log('[SystemStructures] Creating ExecBase structure...');
 
     // Write ExecBase pointer at 0x000004
     // This is THE most important pointer on the Amiga
     // Programs do: MOVE.L 4.W,A6 to get ExecBase
     this.writeLong(this.EXECBASE_ADDR, this.EXECBASE_STRUCT);
-    console.log(`[SystemStructures] ExecBase pointer at 0x${this.EXECBASE_ADDR.toString(16)} → 0x${this.EXECBASE_STRUCT.toString(16)}`);
+console.log(`[SystemStructures] ExecBase pointer at 0x${this.EXECBASE_ADDR.toString(16)} → 0x${this.EXECBASE_STRUCT.toString(16)}`);
 
     // Create minimal ExecBase structure at 0x010000
     // Structure layout (simplified):
@@ -123,9 +123,9 @@ export class SystemStructures {
     this.writeLong(offset + 0x18, idOffset);
     this.writeString(idOffset, "exec 40.63 (30 Oct 2025)");
 
-    console.log('[SystemStructures] ExecBase structure created');
-    console.log(`[SystemStructures]   Version: 40.63 (Kickstart 3.1)`);
-    console.log(`[SystemStructures]   Name: "exec.library"`);
+console.log('[SystemStructures] ExecBase structure created');
+console.log(`[SystemStructures]   Version: 40.63 (Kickstart 3.1)`);
+console.log(`[SystemStructures]   Name: "exec.library"`);
   }
 
   /**
@@ -133,7 +133,7 @@ export class SystemStructures {
    * Programs expect these to be set by ROM boot code
    */
   private initializeLibraryPointers(): void {
-    console.log('[SystemStructures] Initializing library base pointers...');
+console.log('[SystemStructures] Initializing library base pointers...');
 
     // These are the "magic" addresses our library trap system uses
     // When doors do JSR -xxx(A6), A6 contains one of these bases
@@ -146,14 +146,14 @@ export class SystemStructures {
     // They're just values that doors load into A6 before calling libraries
     // Our trap handler recognizes these magic addresses
 
-    console.log(`[SystemStructures]   exec.library base:   0x${this.EXEC_BASE.toString(16)}`);
-    console.log(`[SystemStructures]   dos.library base:    0x${this.DOS_BASE.toString(16)}`);
-    console.log(`[SystemStructures]   AEDoor.library base: 0x${this.AEDOOR_BASE.toString(16)}`);
+console.log(`[SystemStructures]   exec.library base:   0x${this.EXEC_BASE.toString(16)}`);
+console.log(`[SystemStructures]   dos.library base:    0x${this.DOS_BASE.toString(16)}`);
+console.log(`[SystemStructures]   AEDoor.library base: 0x${this.AEDOOR_BASE.toString(16)}`);
 
     // However, some doors may call OpenLibrary() to get library bases
     // In that case, our exec.library OpenLibrary() stub will return these addresses
 
-    console.log('[SystemStructures] Library base pointers ready');
+console.log('[SystemStructures] Library base pointers ready');
   }
 
   /**
@@ -164,13 +164,13 @@ export class SystemStructures {
    * ROM already has exception handlers, we just leave them as-is
    */
   private setupExceptionHandlers(): void {
-    console.log('[SystemStructures] Setting up exception handlers...');
+console.log('[SystemStructures] Setting up exception handlers...');
 
     // DON'T replace exception vectors - ROM already has them
     // The issue isn't exception handling, it's unimplemented library functions
     // Let ROM exception handlers work as designed
 
-    console.log('[SystemStructures] Using ROM exception handlers (vectors unchanged)');
+console.log('[SystemStructures] Using ROM exception handlers (vectors unchanged)');
   }
 
   /**
@@ -206,26 +206,26 @@ export class SystemStructures {
    * Dump system structure information for debugging
    */
   public dumpInfo(): void {
-    console.log('[SystemStructures] ===== System Environment =====');
+console.log('[SystemStructures] ===== System Environment =====');
 
     // Read ExecBase pointer
     const execBasePtr = this.readLong(this.EXECBASE_ADDR);
-    console.log(`[SystemStructures] ExecBase pointer (0x000004): 0x${execBasePtr.toString(16)}`);
+console.log(`[SystemStructures] ExecBase pointer (0x000004): 0x${execBasePtr.toString(16)}`);
 
     if (execBasePtr !== 0) {
       // Read ExecBase structure
       const version = this.readWord(execBasePtr + 0x14);
       const revision = this.readWord(execBasePtr + 0x16);
-      console.log(`[SystemStructures] exec.library version: ${version}.${revision}`);
+console.log(`[SystemStructures] exec.library version: ${version}.${revision}`);
     }
 
-    console.log('[SystemStructures] Library bases:');
-    console.log(`[SystemStructures]   exec.library:   0x${this.EXEC_BASE.toString(16)}`);
-    console.log(`[SystemStructures]   dos.library:    0x${this.DOS_BASE.toString(16)}`);
-    console.log(`[SystemStructures]   AEDoor.library: 0x${this.AEDOOR_BASE.toString(16)}`);
+console.log('[SystemStructures] Library bases:');
+console.log(`[SystemStructures]   exec.library:   0x${this.EXEC_BASE.toString(16)}`);
+console.log(`[SystemStructures]   dos.library:    0x${this.DOS_BASE.toString(16)}`);
+console.log(`[SystemStructures]   AEDoor.library: 0x${this.AEDOOR_BASE.toString(16)}`);
 
-    console.log('[SystemStructures] Exception handlers: All vectors → 0x000400 (RTE)');
-    console.log('[SystemStructures] ================================');
+console.log('[SystemStructures] Exception handlers: All vectors → 0x000400 (RTE)');
+console.log('[SystemStructures] ================================');
   }
 
   /**

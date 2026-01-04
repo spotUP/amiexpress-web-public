@@ -83,9 +83,9 @@ export async function createLhaArchive(
   args.push('*');
 
   if (verbose) {
-    console.log(`[LHA] Creating archive: ${path.basename(archivePath)}`);
-    console.log(`[LHA] Working directory: ${sourceDir}`);
-    console.log(`[LHA] Command: ${LHA_BINARY} ${args.join(' ')}`);
+console.log(`[LHA] Creating archive: ${path.basename(archivePath)}`);
+console.log(`[LHA] Working directory: ${sourceDir}`);
+console.log(`[LHA] Command: ${LHA_BINARY} ${args.join(' ')}`);
   }
 
   return new Promise((resolve, reject) => {
@@ -122,7 +122,7 @@ export async function createLhaArchive(
         try {
           const stats = await fs.stat(archivePath);
           if (verbose) {
-            console.log(`[LHA] Archive created successfully: ${stats.size} bytes`);
+console.log(`[LHA] Archive created successfully: ${stats.size} bytes`);
           }
           resolve();
         } catch (error: any) {
@@ -182,7 +182,7 @@ export async function createLhaArchiveFromFiles(
   args.push(...files);
 
   if (verbose) {
-    console.log(`[LHA] Creating archive with ${files.length} files`);
+console.log(`[LHA] Creating archive with ${files.length} files`);
   }
 
   return new Promise((resolve, reject) => {

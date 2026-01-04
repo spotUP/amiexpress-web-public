@@ -84,32 +84,32 @@ export class Database {
     const dbFile = process.env.DATABASE_FILE || 'amiexpress.db';
     this.dbPath = path.join(dbDir, dbFile);
 
-    console.log('Initializing SQLite database connection...');
-    console.log(`Database directory: ${dbDir}`);
-    console.log(`Database file: ${dbFile}`);
-    console.log(`Full path: ${this.dbPath}`);
+console.log('Initializing SQLite database connection...');
+console.log(`Database directory: ${dbDir}`);
+console.log(`Database file: ${dbFile}`);
+console.log(`Full path: ${this.dbPath}`);
 
     try {
       // Ensure database directory exists
       if (!amigafs.existsSync(dbDir)) {
-        console.log(`Creating database directory: ${dbDir}`);
+console.log(`Creating database directory: ${dbDir}`);
         amigafs.mkdirSync(dbDir, { recursive: true });
-        console.log(`✓ Directory created`);
+console.log(`✓ Directory created`);
       } else {
-        console.log(`✓ Directory exists: ${dbDir}`);
+console.log(`✓ Directory exists: ${dbDir}`);
       }
 
-      console.log('Opening SQLite database...');
+console.log('Opening SQLite database...');
       this.db = new BetterSqlite3(this.dbPath);
-      console.log('✓ Database opened');
+console.log('✓ Database opened');
 
-      console.log('Setting WAL mode...');
+console.log('Setting WAL mode...');
       this.db.pragma('journal_mode = WAL');
-      console.log('✓ WAL mode set');
+console.log('✓ WAL mode set');
 
-      console.log('Enabling foreign keys...');
+console.log('Enabling foreign keys...');
       this.db.pragma('foreign_keys = ON');
-      console.log('✓ Foreign keys enabled');
+console.log('✓ Foreign keys enabled');
 
       this.isConnected = true;
 
@@ -128,13 +128,13 @@ export class Database {
       const { OperatorChatRepository } = require('./database/operator-chat.repository');
       this.operatorChatRepo = new OperatorChatRepository(this.db);
 
-      console.log('✅ Connected to SQLite database');
+console.log('✅ Connected to SQLite database');
     } catch (error) {
-      console.error('❌ Failed to connect to SQLite database:');
-      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
+console.error('❌ Failed to connect to SQLite database:');
+console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+console.error('Error message:', error instanceof Error ? error.message : String(error));
       if (error instanceof Error && error.stack) {
-        console.error('Stack trace:', error.stack.substring(0, 500));
+console.error('Stack trace:', error.stack.substring(0, 500));
       }
       throw error;
     }
@@ -148,6 +148,108 @@ export class Database {
   // Check if database is connected
   public isHealthy(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Get database file path
+   * Used for backup/restore operations
+   */
+  public getDatabasePath(): string {
+    return this.dbPath;
+  }
+
+  /**
+   * Create database backup
+   * Uses SQLite backup API for consistent snapshot
+   * @param backupPath - Full path where backup should be created
+   */
+  public async backupDatabase(backupPath: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    // Ensure backup directory exists
+    const backupDir = path.dirname(backupPath);
+    if (!amigafs.existsSync(backupDir)) {
+      amigafs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    // Use SQLite backup API for consistent backup
+    // BetterSqlite3 provides backup() method for online backups
+    const backupDb = new BetterSqlite3(backupPath);
+    try {
+      this.db.backup(backupDb);
+console.log(`[Database] Backup created: ${backupPath}`);
+    } finally {
+      backupDb.close();
+    }
+  }
+
+  /**
+   * Restore database from backup
+   * Closes current connection, replaces database file, reopens
+   * @param backupPath - Full path to backup file
+   */
+  public async restoreDatabase(backupPath: string): Promise<void> {
+    if (!amigafs.existsSync(backupPath)) {
+      throw new Error(`Backup file not found: ${backupPath}`);
+    }
+
+    // Close current database connection
+    if (this.db) {
+      this.db.close();
+      this.db = undefined;
+      this.isConnected = false;
+    }
+
+    // Replace current database with backup
+    const currentDbPath = this.dbPath;
+    const tempPath = `${currentDbPath}.temp`;
+
+    try {
+      // Move current database to temp location (in case restore fails)
+      if (amigafs.existsSync(currentDbPath)) {
+        fs.renameSync(currentDbPath, tempPath);
+      }
+
+      // Copy backup to database location
+      fs.copyFileSync(backupPath, currentDbPath);
+
+      // Remove temp file on success
+      if (amigafs.existsSync(tempPath)) {
+        fs.unlinkSync(tempPath);
+      }
+
+console.log(`[Database] Restored from backup: ${backupPath}`);
+
+      // Reopen database
+      this.db = new BetterSqlite3(this.dbPath);
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('foreign_keys = ON');
+      this.isConnected = true;
+
+      // Reinitialize repositories
+      this.userRepo = new UserRepository(this.db);
+      this.conferenceRepo = new ConferenceRepository(this.db);
+      this.messageRepo = new MessageRepository(this.db);
+      this.fileRepo = new FileRepository(this.db);
+      this.sessionRepo = new SessionRepository(this.db);
+      this.chatRepo = new ChatRepository(this.db);
+      this.bulletinRepo = new BulletinRepository(this.db);
+      this.webhookRepo = new WebhookRepository(this.db);
+      this.configRepo = new ConfigRepository(this.db);
+
+      const { OperatorChatRepository } = require('./database/operator-chat.repository');
+      this.operatorChatRepo = new OperatorChatRepository(this.db);
+
+    } catch (error) {
+      // Restore failed - try to recover from temp
+      if (amigafs.existsSync(tempPath)) {
+        fs.renameSync(tempPath, currentDbPath);
+console.error('[Database] Restore failed, recovered original database');
+      }
+      throw error;
+    }
   }
 
   // Get configuration repository
@@ -176,7 +278,7 @@ export class Database {
       const rows = stmt.all(...params);
       return { rows };
     } catch (error) {
-      console.error('Database query error:', error);
+console.error('Database query error:', error);
       throw error;
     }
   }
@@ -196,54 +298,54 @@ export class Database {
       const stmt = this.db.prepare(convertedSql);
       stmt.run(...params);
     } catch (error) {
-      console.error('Database run error:', error);
+console.error('Database run error:', error);
       throw error;
     }
   }
 
   private async initDatabase(): Promise<void> {
     try {
-      console.log('Creating database tables...');
+console.log('Creating database tables...');
       await this.createTables();
-      console.log('Database tables created successfully');
+console.log('Database tables created successfully');
 
-      console.log('Running database migrations...');
+console.log('Running database migrations...');
       await this.runMigrations();
-      console.log('Database migrations completed');
+console.log('Database migrations completed');
 
       await this.initializeDefaultData();
-      console.log('Default data initialized');
+console.log('Default data initialized');
 
       // CRITICAL: Initialize disk files for Amiga door compatibility
-      console.log('Initializing user disk files...');
+console.log('Initializing user disk files...');
       userFileManager.initializeUserFiles();
-      console.log('User disk files initialized');
+console.log('User disk files initialized');
 
-      console.log('Initializing message directories...');
+console.log('Initializing message directories...');
       messageFileManager.initializeMessageDirs();
-      console.log('Message directories initialized');
+console.log('Message directories initialized');
 
-      console.log('Initializing conference database...');
+console.log('Initializing conference database...');
       conferenceFileManager.initializeConfDB();
-      console.log('Conference database initialized');
+console.log('Conference database initialized');
 
-      console.log('Initializing file area directories...');
+console.log('Initializing file area directories...');
       fileAreaManager.initializeFileAreaDirs();
-      console.log('File area directories initialized');
+console.log('File area directories initialized');
 
-      console.log('Initializing message index files (HeaderFile, MailStats, MailLock)...');
+console.log('Initializing message index files (HeaderFile, MailStats, MailLock)...');
       // Initialize for conferences 1-10
       for (let i = 1; i <= 10; i++) {
         messageIndexManager.initializeMessageIndex(i);
       }
-      console.log('Message index files initialized');
+console.log('Message index files initialized');
 
-      console.log('Initializing user database files (user.data, user.keys, user.misc)...');
+console.log('Initializing user database files (user.data, user.keys, user.misc)...');
       userDatabaseManager.initializeUserDatabase();
-      console.log('User database files initialized');
+console.log('User database files initialized');
     } catch (error) {
-      console.error('Failed to initialize database:', error);
-      console.log('Continuing with server startup despite database initialization error');
+console.error('Failed to initialize database:', error);
+console.log('Continuing with server startup despite database initialization error');
     }
   }
 
@@ -251,7 +353,7 @@ export class Database {
     if (!this.db) throw new Error('Database not initialized');
 
     try {
-      console.log('Checking for missing columns in users table...');
+console.log('Checking for missing columns in users table...');
 
       // Check and add columns if they don't exist
       const tableInfo = this.db.prepare('PRAGMA table_info(users)').all() as any[];
@@ -259,108 +361,108 @@ export class Database {
 
       if (!columnNames.includes('availableforchat')) {
         this.db.exec('ALTER TABLE users ADD COLUMN availableforchat INTEGER DEFAULT 1');
-        console.log('✓ Added availableforchat column');
+console.log('✓ Added availableforchat column');
       }
 
       if (!columnNames.includes('quietnode')) {
         this.db.exec('ALTER TABLE users ADD COLUMN quietnode INTEGER DEFAULT 0');
-        console.log('✓ Added quietnode column');
+console.log('✓ Added quietnode column');
       }
 
       if (!columnNames.includes('autorejoin')) {
         this.db.exec('ALTER TABLE users ADD COLUMN autorejoin INTEGER DEFAULT 1');
-        console.log('✓ Added autorejoin column');
+console.log('✓ Added autorejoin column');
       }
 
       if (!columnNames.includes('fontpreference')) {
         this.db.exec('ALTER TABLE users ADD COLUMN fontpreference TEXT DEFAULT \'mosoul\'');
-        console.log('✓ Added fontpreference column');
+console.log('✓ Added fontpreference column');
       }
 
       if (!columnNames.includes('baud')) {
         this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 0');
-        console.log('✓ Added baud column');
+console.log('✓ Added baud column');
       }
 
       // Check and add missing columns to system_config table
-      console.log('Checking for missing columns in system_config table...');
+console.log('Checking for missing columns in system_config table...');
       const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
       const systemConfigColumns = systemConfigInfo.map(col => col.name);
 
       if (!systemConfigColumns.includes('smtp_username')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_username TEXT DEFAULT \'\'');
-        console.log('✓ Added smtp_username column');
+console.log('✓ Added smtp_username column');
       }
 
       if (!systemConfigColumns.includes('smtp_password')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_password TEXT DEFAULT \'\'');
-        console.log('✓ Added smtp_password column');
+console.log('✓ Added smtp_password column');
       }
 
       if (!systemConfigColumns.includes('smtp_ssl')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_ssl INTEGER DEFAULT 0');
-        console.log('✓ Added smtp_ssl column');
+console.log('✓ Added smtp_ssl column');
       }
 
       if (!systemConfigColumns.includes('smtp_from_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN smtp_from_email TEXT DEFAULT \'\'');
-        console.log('✓ Added smtp_from_email column');
+console.log('✓ Added smtp_from_email column');
       }
 
       if (!systemConfigColumns.includes('sysop_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN sysop_email TEXT DEFAULT \'\'');
-        console.log('✓ Added sysop_email column');
+console.log('✓ Added sysop_email column');
       }
 
       if (!systemConfigColumns.includes('bbs_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN bbs_email TEXT DEFAULT \'\'');
-        console.log('✓ Added bbs_email column');
+console.log('✓ Added bbs_email column');
       }
 
       if (!systemConfigColumns.includes('ftp_enabled')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_enabled INTEGER DEFAULT 0');
-        console.log('✓ Added ftp_enabled column');
+console.log('✓ Added ftp_enabled column');
       }
 
       if (!systemConfigColumns.includes('ftp_host')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_host TEXT DEFAULT \'\'');
-        console.log('✓ Added ftp_host column');
+console.log('✓ Added ftp_host column');
       }
 
       if (!systemConfigColumns.includes('ftp_port')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_port INTEGER DEFAULT 21');
-        console.log('✓ Added ftp_port column');
+console.log('✓ Added ftp_port column');
       }
 
       if (!systemConfigColumns.includes('ftp_data_ports')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN ftp_data_ports TEXT DEFAULT \'\'');
-        console.log('✓ Added ftp_data_ports column');
+console.log('✓ Added ftp_data_ports column');
       }
 
       if (!systemConfigColumns.includes('http_enabled')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN http_enabled INTEGER DEFAULT 0');
-        console.log('✓ Added http_enabled column');
+console.log('✓ Added http_enabled column');
       }
 
       if (!systemConfigColumns.includes('http_host')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN http_host TEXT DEFAULT \'\'');
-        console.log('✓ Added http_host column');
+console.log('✓ Added http_host column');
       }
 
       if (!systemConfigColumns.includes('http_port')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN http_port INTEGER DEFAULT 80');
-        console.log('✓ Added http_port column');
+console.log('✓ Added http_port column');
       }
 
       // Conferences table migrations (per-conference accounting)
-      console.log('Checking for missing columns in conferences table...');
+console.log('Checking for missing columns in conferences table...');
       const confInfo = this.db.prepare('PRAGMA table_info(conferences)').all() as any[];
       const confColumns = confInfo.map(col => col.name);
 
       const addConfColumn = (name: string, definition: string) => {
         if (!confColumns.includes(name)) {
           this.db.exec(`ALTER TABLE conferences ADD COLUMN ${name} ${definition}`);
-          console.log(`✓ Added ${name} column to conferences`);
+console.log(`✓ Added ${name} column to conferences`);
         }
       };
 
@@ -370,25 +472,26 @@ export class Database {
       addConfColumn('downloads', 'INTEGER DEFAULT 0');
       addConfColumn('bytesupload', 'INTEGER DEFAULT 0');
       addConfColumn('bytesdownload', 'INTEGER DEFAULT 0');
+      addConfColumn('max_users', 'INTEGER DEFAULT 1000'); // Conference capacity - express.e:22851-22859
 
       if (!systemConfigColumns.includes('telnet_port')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN telnet_port INTEGER DEFAULT 64128 CHECK (telnet_port >= 1 AND telnet_port <= 65535)');
-        console.log('✓ Added telnet_port column');
+console.log('✓ Added telnet_port column');
       }
 
       if (!systemConfigColumns.includes('ssh_port')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN ssh_port INTEGER DEFAULT 31337 CHECK (ssh_port >= 1 AND ssh_port <= 65535)');
-        console.log('✓ Added ssh_port column');
+console.log('✓ Added ssh_port column');
       }
 
       if (!systemConfigColumns.includes('default_time_limit')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN default_time_limit INTEGER DEFAULT -1');
-        console.log('✓ Added default_time_limit column');
+console.log('✓ Added default_time_limit column');
       }
 
       if (!systemConfigColumns.includes('max_session_time')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN max_session_time INTEGER DEFAULT -1');
-        console.log('✓ Added max_session_time column');
+console.log('✓ Added max_session_time column');
       }
 
       // One-time migration: set legacy time limits to unlimited (-1) if still on defaults
@@ -397,208 +500,208 @@ export class Database {
         if (cfg) {
           if (cfg.default_time_limit === 60) {
             this.db.exec('UPDATE system_config SET default_time_limit = -1 WHERE id = 1');
-            console.log('✓ Migrated default_time_limit to unlimited (-1)');
+console.log('✓ Migrated default_time_limit to unlimited (-1)');
           }
           if (cfg.max_session_time === 120) {
             this.db.exec('UPDATE system_config SET max_session_time = -1 WHERE id = 1');
-            console.log('✓ Migrated max_session_time to unlimited (-1)');
+console.log('✓ Migrated max_session_time to unlimited (-1)');
           }
           if (cfg.telnet_port === 2323) {
             this.db.exec('UPDATE system_config SET telnet_port = 64128 WHERE id = 1');
-            console.log('✓ Migrated telnet_port to 64128');
+console.log('✓ Migrated telnet_port to 64128');
           }
           if (cfg.ssh_port === 2222) {
             this.db.exec('UPDATE system_config SET ssh_port = 31337 WHERE id = 1');
-            console.log('✓ Migrated ssh_port to 31337');
+console.log('✓ Migrated ssh_port to 31337');
           }
           if (cfg.max_nodes === 8) {
             this.db.exec('UPDATE system_config SET max_nodes = 255 WHERE id = 1');
-            console.log('✓ Migrated max_nodes to 255');
+console.log('✓ Migrated max_nodes to 255');
           }
         }
       } catch (err) {
-        console.warn('⚠️ Could not run time-limit migration:', err);
+console.warn('⚠️ Could not run time-limit migration:', err);
       }
 
       if (!systemConfigColumns.includes('quiet_join')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN quiet_join INTEGER DEFAULT 0');
-        console.log('✓ Added quiet_join column');
+console.log('✓ Added quiet_join column');
       }
 
       if (!systemConfigColumns.includes('convert_to_mb')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN convert_to_mb INTEGER DEFAULT 0');
-        console.log('✓ Added convert_to_mb column');
+console.log('✓ Added convert_to_mb column');
       }
 
       if (!systemConfigColumns.includes('reg_key')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN reg_key TEXT DEFAULT \'\'');
-        console.log('✓ Added reg_key column');
+console.log('✓ Added reg_key column');
       }
 
       if (!systemConfigColumns.includes('sysop_debug_enabled')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN sysop_debug_enabled INTEGER DEFAULT 0');
-        console.log('✓ Added sysop_debug_enabled column');
+console.log('✓ Added sysop_debug_enabled column');
       }
 
       // New user defaults (security/time/flags)
       if (!systemConfigColumns.includes('new_user_sec_level')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_sec_level INTEGER DEFAULT 10 CHECK (new_user_sec_level >= 1 AND new_user_sec_level <= 255)');
-        console.log('✓ Added new_user_sec_level column');
+console.log('✓ Added new_user_sec_level column');
       }
 
       if (!systemConfigColumns.includes('new_user_time_limit')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_time_limit INTEGER DEFAULT 60 CHECK (new_user_time_limit >= 1 AND new_user_time_limit <= 1440)');
-        console.log('✓ Added new_user_time_limit column');
+console.log('✓ Added new_user_time_limit column');
       }
 
       if (!systemConfigColumns.includes('new_user_chat_limit')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_chat_limit INTEGER DEFAULT 30 CHECK (new_user_chat_limit >= 0 AND new_user_chat_limit <= 1440)');
-        console.log('✓ Added new_user_chat_limit column');
+console.log('✓ Added new_user_chat_limit column');
       }
 
       if (!systemConfigColumns.includes('new_user_lines_per_screen')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_lines_per_screen INTEGER DEFAULT 23 CHECK (new_user_lines_per_screen >= 10 AND new_user_lines_per_screen <= 100)');
-        console.log('✓ Added new_user_lines_per_screen column');
+console.log('✓ Added new_user_lines_per_screen column');
       }
 
       if (!systemConfigColumns.includes('new_user_expert')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_expert INTEGER DEFAULT 0');
-        console.log('✓ Added new_user_expert column');
+console.log('✓ Added new_user_expert column');
       }
 
       if (!systemConfigColumns.includes('new_user_ansi')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_ansi INTEGER DEFAULT 1');
-        console.log('✓ Added new_user_ansi column');
+console.log('✓ Added new_user_ansi column');
       }
 
       if (!systemConfigColumns.includes('new_user_protocol')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_protocol TEXT DEFAULT \'ZMODEM\'');
-        console.log('✓ Added new_user_protocol column');
+console.log('✓ Added new_user_protocol column');
       }
 
       if (!systemConfigColumns.includes('new_user_screen_type')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_screen_type TEXT DEFAULT \'ANSI\'');
-        console.log('✓ Added new_user_screen_type column');
+console.log('✓ Added new_user_screen_type column');
       }
 
       if (!systemConfigColumns.includes('new_user_editor')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_editor TEXT DEFAULT \'FULL\'');
-        console.log('✓ Added new_user_editor column');
+console.log('✓ Added new_user_editor column');
       }
 
       if (!systemConfigColumns.includes('new_user_conf_access')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_conf_access TEXT DEFAULT \'XXX\'');
-        console.log('✓ Added new_user_conf_access column');
+console.log('✓ Added new_user_conf_access column');
       }
 
       if (!systemConfigColumns.includes('new_user_available_chat')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_available_chat INTEGER DEFAULT 1');
-        console.log('✓ Added new_user_available_chat column');
+console.log('✓ Added new_user_available_chat column');
       }
 
       if (!systemConfigColumns.includes('new_user_quiet_node')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_quiet_node INTEGER DEFAULT 0');
-        console.log('✓ Added new_user_quiet_node column');
+console.log('✓ Added new_user_quiet_node column');
       }
 
       if (!systemConfigColumns.includes('new_user_auto_rejoin')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN new_user_auto_rejoin INTEGER DEFAULT 1');
-        console.log('✓ Added new_user_auto_rejoin column');
+console.log('✓ Added new_user_auto_rejoin column');
       }
 
       // VAPID Push Notification keys
       if (!systemConfigColumns.includes('vapid_public_key')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_public_key TEXT DEFAULT \'\'');
-        console.log('✓ Added vapid_public_key column');
+console.log('✓ Added vapid_public_key column');
       }
 
       if (!systemConfigColumns.includes('vapid_private_key')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_private_key TEXT DEFAULT \'\'');
-        console.log('✓ Added vapid_private_key column');
+console.log('✓ Added vapid_private_key column');
       }
 
       if (!systemConfigColumns.includes('vapid_contact_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_contact_email TEXT DEFAULT \'\'');
-        console.log('[+] Added vapid_contact_email column');
+console.log('[+] Added vapid_contact_email column');
       }
 
       // Mail Notification Settings (MAIL_ON_* flags from express.e)
       if (!systemConfigColumns.includes('mail_on_upload')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_upload INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_upload column');
+console.log('[+] Added mail_on_upload column');
       }
       if (!systemConfigColumns.includes('mail_on_sysop_comment')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_sysop_comment INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_sysop_comment column');
+console.log('[+] Added mail_on_sysop_comment column');
       }
       if (!systemConfigColumns.includes('mail_on_logon')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_logon INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_logon column');
+console.log('[+] Added mail_on_logon column');
       }
       if (!systemConfigColumns.includes('mail_on_new_user')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_new_user INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_new_user column');
+console.log('[+] Added mail_on_new_user column');
       }
       if (!systemConfigColumns.includes('mail_on_logoff')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_logoff INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_logoff column');
+console.log('[+] Added mail_on_logoff column');
       }
       if (!systemConfigColumns.includes('mail_on_sysop_page')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_sysop_page INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_sysop_page column');
+console.log('[+] Added mail_on_sysop_page column');
       }
       if (!systemConfigColumns.includes('mail_on_pwd_fail')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN mail_on_pwd_fail INTEGER DEFAULT 0');
-        console.log('[+] Added mail_on_pwd_fail column');
+console.log('[+] Added mail_on_pwd_fail column');
       }
 
       // Auto-Validation Settings (express.e:29677-29688, 30063-30076)
       if (!systemConfigColumns.includes('autoval_delay')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_delay INTEGER DEFAULT -1');
-        console.log('[+] Added autoval_delay column');
+console.log('[+] Added autoval_delay column');
       }
       if (!systemConfigColumns.includes('autoval_preset')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_preset TEXT DEFAULT \'\'');
-        console.log('[+] Added autoval_preset column');
+console.log('[+] Added autoval_preset column');
       }
       if (!systemConfigColumns.includes('autoval_password')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN autoval_password TEXT DEFAULT \'\'');
-        console.log('[+] Added autoval_password column');
+console.log('[+] Added autoval_password column');
       }
 
       // Password Expiry (express.e:29785)
       if (!systemConfigColumns.includes('password_expiry_days')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN password_expiry_days INTEGER DEFAULT 0');
-        console.log('[+] Added password_expiry_days column');
+console.log('[+] Added password_expiry_days column');
       }
 
       // User Management (express.e:31952)
       if (!systemConfigColumns.includes('auto_deactivate_days')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN auto_deactivate_days INTEGER DEFAULT 0');
-        console.log('[+] Added auto_deactivate_days column');
+console.log('[+] Added auto_deactivate_days column');
       }
 
       // File Management (express.e:19258, 31801, 31804)
       if (!systemConfigColumns.includes('filediz_syscmd')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN filediz_syscmd TEXT DEFAULT \'\'');
-        console.log('[+] Added filediz_syscmd column');
+console.log('[+] Added filediz_syscmd column');
       }
       if (!systemConfigColumns.includes('max_desclines')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN max_desclines INTEGER DEFAULT 25');
-        console.log('[+] Added max_desclines column');
+console.log('[+] Added max_desclines column');
       }
       if (!systemConfigColumns.includes('hold_access_level')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN hold_access_level INTEGER DEFAULT 100');
-        console.log('[+] Added hold_access_level column');
+console.log('[+] Added hold_access_level column');
       }
       if (!systemConfigColumns.includes('local_upload_path')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN local_upload_path TEXT DEFAULT \'\'');
-        console.log('[+] Added local_upload_path column');
+console.log('[+] Added local_upload_path column');
       }
 
-      console.log('All migrations completed successfully');
+console.log('All migrations completed successfully');
     } catch (error) {
-      console.error('Error running migrations:', error);
+console.error('Error running migrations:', error);
       throw error;
     }
   }
@@ -1652,6 +1755,65 @@ export class Database {
         )
       `);
 
+      // QWK/REP Offline Mail Support - express.e QWK support
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS qwk_packets (
+          id TEXT PRIMARY KEY,
+          filename TEXT NOT NULL,
+          size INTEGER NOT NULL,
+          created INTEGER DEFAULT (strftime('%s', 'now')),
+          from_bbs TEXT NOT NULL,
+          to_bbs TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'downloaded', 'error')) DEFAULT 'pending',
+          error TEXT,
+          processed_at INTEGER,
+          user_id TEXT REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS qwk_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          packet_id TEXT NOT NULL REFERENCES qwk_packets(id) ON DELETE CASCADE,
+          conference INTEGER NOT NULL,
+          subject TEXT NOT NULL,
+          from_user TEXT NOT NULL,
+          to_user TEXT NOT NULL,
+          date INTEGER NOT NULL,
+          body TEXT NOT NULL,
+          is_private INTEGER DEFAULT 0,
+          is_reply INTEGER DEFAULT 0,
+          parent_id INTEGER REFERENCES qwk_messages(id) ON DELETE SET NULL
+        )
+      `);
+
+      // FTN (FidoNet Technology Network) Support
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ftn_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          from_address TEXT NOT NULL,
+          to_address TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          body TEXT NOT NULL,
+          date INTEGER NOT NULL,
+          area TEXT NOT NULL,
+          msgid TEXT,
+          reply_to TEXT,
+          attributes INTEGER DEFAULT 0,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'received', 'error', 'archived')) DEFAULT 'pending',
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          processed_at INTEGER
+        )
+      `);
+
+      // Create indexes for QWK/FTN tables
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_qwk_packets_status ON qwk_packets(status)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_qwk_packets_user ON qwk_packets(user_id)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_qwk_messages_packet ON qwk_messages(packet_id)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_qwk_messages_conference ON qwk_messages(conference)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_ftn_messages_status ON ftn_messages(status)`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_ftn_messages_area ON ftn_messages(area)`);
+
       // Create triggers for automatic timestamp updates
       this.db.exec(`
         CREATE TRIGGER IF NOT EXISTS update_system_config_timestamp
@@ -1760,7 +1922,7 @@ export class Database {
       // Create indexes
       await this.createIndexes();
     } catch (error) {
-      console.error('Error creating tables:', error);
+console.error('Error creating tables:', error);
       throw error;
     }
   }
@@ -1846,7 +2008,7 @@ export class Database {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_config_audit_timestamp ON config_audit_log(timestamp DESC)');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_config_audit_user ON config_audit_log(user_id)');
     } catch (error) {
-      console.error('Error creating indexes:', error);
+console.error('Error creating indexes:', error);
       // Don't throw - indexes are not critical
     }
   }
@@ -1875,7 +2037,7 @@ export class Database {
   async updateUserPassword(userId: string, newPassword: string): Promise<void> {
     const hashedPassword = await this.hashPassword(newPassword);
     await this.userRepo!.updateUser(userId, { passwordHash: hashedPassword });
-    console.log(`[Database] Password updated for user ${userId}`);
+console.log(`[Database] Password updated for user ${userId}`);
   }
 
   async getUsers(...args: Parameters<UserRepository['getUsers']>) {
@@ -2213,7 +2375,7 @@ export class Database {
   }): Promise<void> {
     // Since we don't have a system_logs table in the simplified version,
     // we'll just console.log for now
-    console.log(`[${level.toUpperCase()}] ${message}`, context);
+console.log(`[${level.toUpperCase()}] ${message}`, context);
   }
 
   // Utility methods
@@ -2233,7 +2395,7 @@ export class Database {
     try {
       return await bcrypt.compare(password, hash);
     } catch (error) {
-      console.warn('Password verification error:', error);
+console.warn('Password verification error:', error);
       return false;
     }
   }
@@ -2301,10 +2463,10 @@ export class Database {
 
   async close(): Promise<void> {
     if (this.db) {
-      console.log('🔌 Closing database connection...');
+console.log('🔌 Closing database connection...');
       this.db.close();
       this.isConnected = false;
-      console.log('✅ Database connection closed');
+console.log('✅ Database connection closed');
     }
   }
 
@@ -2313,14 +2475,14 @@ export class Database {
     if (!this.db) throw new Error('Database not initialized');
 
     try {
-      console.log('[DB Init] Creating default data...');
+console.log('[DB Init] Creating default data...');
 
       // Check if conferences already exist
       const confStmt = this.db.prepare('SELECT COUNT(*) as count FROM conferences');
       const confCount = (confStmt.get() as any).count;
 
       if (confCount > 0) {
-        console.log('[DB Init] Default data already exists, skipping initialization');
+console.log('[DB Init] Default data already exists, skipping initialization');
         return;
       }
 
@@ -2335,7 +2497,7 @@ export class Database {
       for (const conf of conferences) {
         const id = await this.createConference(conf);
         confIds[conf.name] = id;
-        console.log(`  ✓ Created conference: ${conf.name} (ID: ${id})`);
+console.log(`  ✓ Created conference: ${conf.name} (ID: ${id})`);
       }
 
       // Create message bases
@@ -2351,7 +2513,7 @@ export class Database {
           name: mb.name,
           conferenceId: confIds[mb.conferenceName]
         });
-        console.log(`  ✓ Created message base: ${mb.name} in ${mb.conferenceName}`);
+console.log(`  ✓ Created message base: ${mb.name} in ${mb.conferenceName}`);
       }
 
       // Create file areas
@@ -2373,7 +2535,7 @@ export class Database {
           uploadAccess: area.uploadAccess,
           downloadAccess: area.downloadAccess
         });
-        console.log(`  ✓ Created file area: ${area.name}`);
+console.log(`  ✓ Created file area: ${area.name}`);
       }
 
       // Create sysop user
@@ -2420,7 +2582,7 @@ export class Database {
         byteLimit: 0,
         userFlags: 0
       });
-      console.log('  ✓ Created sysop user');
+console.log('  ✓ Created sysop user');
 
       // Create default transfer protocols
       const protocols = [
@@ -2532,26 +2694,269 @@ export class Database {
           proto.enabled,
           proto.is_default
         );
-        console.log(`  ✓ Created protocol: ${proto.protocol_name}`);
+console.log(`  ✓ Created protocol: ${proto.protocol_name}`);
       }
 
-      console.log('✓ Database initialization completed successfully');
+console.log('✓ Database initialization completed successfully');
     } catch (error) {
-      console.error('✗ Database initialization failed:', error);
+console.error('✗ Database initialization failed:', error);
     }
   }
 
   // Stub methods for compatibility - implement as needed
   async getAREXXScripts(): Promise<AREXXScript[]> { return []; }
   async executeAREXXScript(scriptId: string, context: AREXXContext): Promise<any> { return { success: true }; }
-  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> { return crypto.randomUUID(); }
-  async createQWKMessage(message: Omit<QWKMessage, 'id'>): Promise<number> { return 0; }
-  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {}
-  async getQWKPacket(id: string): Promise<QWKPacket | null> { return null; }
-  async deleteQWKPacket(id: string): Promise<void> {}
-  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> { return 0; }
-  async getFTNMessages(conferenceId: number, messageBaseId: number): Promise<FTNMessage[]> { return []; }
-  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {}
+  /**
+   * QWK/REP Offline Mail Methods
+   */
+
+  async createQWKPacket(packet: Omit<QWKPacket, 'id'>): Promise<string> {
+    if (!this.db) throw new Error('Database not initialized');
+    const id = crypto.randomUUID();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO qwk_packets (id, filename, size, from_bbs, to_bbs, status, error, processed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      packet.filename,
+      packet.size,
+      packet.fromBBS,
+      packet.toBBS,
+      packet.status,
+      packet.error || null,
+      packet.processedAt ? Math.floor(packet.processedAt.getTime() / 1000) : null
+    );
+
+    return id;
+  }
+
+  async createQWKMessage(message: Omit<QWKMessage, 'id'> & { packetId: string }): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO qwk_messages (packet_id, conference, subject, from_user, to_user, date, body, is_private, is_reply, parent_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      (message as any).packetId,
+      message.conference,
+      message.subject,
+      message.from,
+      message.to,
+      Math.floor(message.date.getTime() / 1000),
+      message.body,
+      message.isPrivate ? 1 : 0,
+      message.isReply ? 1 : 0,
+      message.parentId || null
+    );
+
+    return result.lastInsertRowid as number;
+  }
+
+  async updateQWKPacket(id: string, updates: Partial<QWKPacket>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.filename !== undefined) {
+      fields.push('filename = ?');
+      values.push(updates.filename);
+    }
+    if (updates.size !== undefined) {
+      fields.push('size = ?');
+      values.push(updates.size);
+    }
+    if (updates.fromBBS !== undefined) {
+      fields.push('from_bbs = ?');
+      values.push(updates.fromBBS);
+    }
+    if (updates.toBBS !== undefined) {
+      fields.push('to_bbs = ?');
+      values.push(updates.toBBS);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.error !== undefined) {
+      fields.push('error = ?');
+      values.push(updates.error);
+    }
+    if (updates.processedAt !== undefined) {
+      fields.push('processed_at = ?');
+      values.push(updates.processedAt ? Math.floor(updates.processedAt.getTime() / 1000) : null);
+    }
+
+    if (fields.length === 0) return;
+
+    values.push(id);
+    const stmt = this.db.prepare(`UPDATE qwk_packets SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(...values);
+  }
+
+  async getQWKPacket(id: string): Promise<QWKPacket | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT id, filename, size, created, from_bbs, to_bbs, status, error, processed_at
+      FROM qwk_packets
+      WHERE id = ?
+    `);
+
+    const row: any = stmt.get(id);
+    if (!row) return null;
+
+    // Get associated messages
+    const msgStmt = this.db.prepare(`
+      SELECT id, conference, subject, from_user, to_user, date, body, is_private, is_reply, parent_id
+      FROM qwk_messages
+      WHERE packet_id = ?
+    `);
+
+    const messages = msgStmt.all(id).map((msg: any) => ({
+      id: msg.id,
+      conference: msg.conference,
+      subject: msg.subject,
+      from: msg.from_user,
+      to: msg.to_user,
+      date: new Date(msg.date * 1000),
+      body: msg.body,
+      isPrivate: msg.is_private === 1,
+      isReply: msg.is_reply === 1,
+      parentId: msg.parent_id
+    }));
+
+    return {
+      id: row.id,
+      filename: row.filename,
+      size: row.size,
+      created: new Date(row.created * 1000),
+      fromBBS: row.from_bbs,
+      toBBS: row.to_bbs,
+      messages,
+      status: row.status,
+      error: row.error,
+      processedAt: row.processed_at ? new Date(row.processed_at * 1000) : undefined
+    };
+  }
+
+  async deleteQWKPacket(id: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const stmt = this.db.prepare('DELETE FROM qwk_packets WHERE id = ?');
+    stmt.run(id);
+  }
+
+  /**
+   * FTN (FidoNet Technology Network) Methods
+   */
+
+  async createFTNMessage(message: Omit<FTNMessage, 'id'>): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT INTO ftn_messages (from_address, to_address, subject, body, date, area, msgid, reply_to, attributes, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      message.fromAddress,
+      message.toAddress,
+      message.subject,
+      message.body,
+      Math.floor(message.date.getTime() / 1000),
+      message.area,
+      message.msgid || null,
+      message.replyTo || null,
+      message.attributes,
+      message.status
+    );
+
+    return result.lastInsertRowid as number;
+  }
+
+  async getFTNMessages(status?: string, area?: string): Promise<FTNMessage[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let query = 'SELECT * FROM ftn_messages WHERE 1=1';
+    const params: any[] = [];
+
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+
+    if (area) {
+      query += ' AND area = ?';
+      params.push(area);
+    }
+
+    query += ' ORDER BY date DESC';
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params);
+
+    return rows.map((row: any) => ({
+      id: row.id.toString(),
+      fromAddress: row.from_address,
+      toAddress: row.to_address,
+      subject: row.subject,
+      body: row.body,
+      date: new Date(row.date * 1000),
+      area: row.area,
+      msgid: row.msgid,
+      replyTo: row.reply_to,
+      attributes: row.attributes,
+      status: row.status
+    }));
+  }
+
+  async updateFTNMessage(id: number, updates: Partial<FTNMessage>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.fromAddress !== undefined) {
+      fields.push('from_address = ?');
+      values.push(updates.fromAddress);
+    }
+    if (updates.toAddress !== undefined) {
+      fields.push('to_address = ?');
+      values.push(updates.toAddress);
+    }
+    if (updates.subject !== undefined) {
+      fields.push('subject = ?');
+      values.push(updates.subject);
+    }
+    if (updates.body !== undefined) {
+      fields.push('body = ?');
+      values.push(updates.body);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.attributes !== undefined) {
+      fields.push('attributes = ?');
+      values.push(updates.attributes);
+    }
+
+    if (updates.status === 'sent' || updates.status === 'archived') {
+      fields.push('processed_at = ?');
+      values.push(Math.floor(Date.now() / 1000));
+    }
+
+    if (fields.length === 0) return;
+
+    values.push(id);
+    const stmt = this.db.prepare(`UPDATE ftn_messages SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(...values);
+  }
   async createTransferSession(session: Omit<TransferSession, 'id'>): Promise<string> { return crypto.randomUUID(); }
   async updateTransferSession(id: string, updates: Partial<TransferSession>): Promise<void> {}
 

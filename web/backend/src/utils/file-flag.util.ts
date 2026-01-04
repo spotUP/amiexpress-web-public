@@ -234,10 +234,10 @@ export class FileFlagManager {
 
       // Notify user if flags exist
       if (this.flaggedFiles.length > 0) {
-        console.log(`Loaded ${this.flaggedFiles.length} flagged files`);
+console.log(`Loaded ${this.flaggedFiles.length} flagged files`);
       }
     } catch (error) {
-      console.error('Error loading flagged files:', error);
+console.error('Error loading flagged files:', error);
     }
   }
 
@@ -270,7 +270,7 @@ export class FileFlagManager {
         fs.writeFileSync(flaggedPath, lines.join('\n') + '\n', 'utf-8');
       }
     } catch (error) {
-      console.error('Error saving flagged files:', error);
+console.error('Error saving flagged files:', error);
     }
   }
 

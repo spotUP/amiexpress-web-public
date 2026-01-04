@@ -67,7 +67,7 @@ export class ZmodemTransferManager {
       this.sentry.consume(data);
     } catch (err) {
       const preview = data.slice(0, 32).toString('hex');
-      console.error('[ZMODEM] Sentry consume failed:', err, 'data(hex)=', preview);
+console.error('[ZMODEM] Sentry consume failed:', err, 'data(hex)=', preview);
       this.finish(false);
     }
   }
@@ -83,7 +83,7 @@ export class ZmodemTransferManager {
       const hdr = Zmodem.Header.build('ZRQINIT');
       this.transport.send(Buffer.from(hdr.to_hex()));
     } catch (err) {
-      console.error('[ZMODEM] Failed to send ZRQINIT:', err);
+console.error('[ZMODEM] Failed to send ZRQINIT:', err);
     }
   }
 
@@ -102,7 +102,7 @@ export class ZmodemTransferManager {
     try {
       zsession = det.confirm();
     } catch (err) {
-      console.error('[ZMODEM] Failed to confirm detection:', err);
+console.error('[ZMODEM] Failed to confirm detection:', err);
       this.finish(false);
       return;
     }
@@ -122,7 +122,7 @@ export class ZmodemTransferManager {
     } else if (role === 'receive') {
       this.startReceive(zsession);
     } else {
-      console.warn('[ZMODEM] Unknown session role:', role);
+console.warn('[ZMODEM] Unknown session role:', role);
       this.finish(false);
     }
   }
@@ -174,7 +174,7 @@ export class ZmodemTransferManager {
 
       await zsession.close();
     } catch (err) {
-      console.error('[ZMODEM] Send failed:', err);
+console.error('[ZMODEM] Send failed:', err);
       this.finish(false);
     }
   }
@@ -187,7 +187,7 @@ export class ZmodemTransferManager {
     try {
       fs.mkdirSync(targetDir, { recursive: true });
     } catch (err) {
-      console.error('[ZMODEM] Failed to create target dir:', targetDir, err);
+console.error('[ZMODEM] Failed to create target dir:', targetDir, err);
       this.finish(false);
       return;
     }
@@ -208,7 +208,7 @@ export class ZmodemTransferManager {
         writer.end();
         this.receivedFiles.push(dest);
       }).catch((err: any) => {
-        console.error('[ZMODEM] Offer accept failed:', err);
+console.error('[ZMODEM] Offer accept failed:', err);
         writer.end();
       });
     });

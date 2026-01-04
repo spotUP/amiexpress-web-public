@@ -24,7 +24,7 @@ export class FileCheckerConfigService {
     const fcheckDir = path.join(bbsRoot, 'Fcheck');
 
     if (!fs.existsSync(fcheckDir)) {
-      console.warn('[FileCheckerConfigService] Fcheck/ directory not found');
+console.warn('[FileCheckerConfigService] Fcheck/ directory not found');
       return this.configRepo.getAllFileCheckers();
     }
 
@@ -89,10 +89,10 @@ export class FileCheckerConfigService {
         });
       }
 
-      console.log(`[FileCheckerConfigService] Loaded ${fileCheckers.length} file checkers`);
+console.log(`[FileCheckerConfigService] Loaded ${fileCheckers.length} file checkers`);
       return fileCheckers;
     } catch (error) {
-      console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', error);
+console.error('[FileCheckerConfigService] Error reading Fcheck/ directory:', error);
       return this.configRepo.getAllFileCheckers();
     }
   }
@@ -199,9 +199,9 @@ export class FileCheckerConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(infoPath, infoData);
 
-      console.log(`[FileCheckerConfigService] Wrote ${infoPath}`);
+console.log(`[FileCheckerConfigService] Wrote ${infoPath}`);
     } catch (error) {
-      console.error(`[FileCheckerConfigService] Failed to write ${infoPath}:`, error);
+console.error(`[FileCheckerConfigService] Failed to write ${infoPath}:`, error);
     }
   }
 
@@ -212,9 +212,9 @@ export class FileCheckerConfigService {
     if (fs.existsSync(infoPath)) {
       try {
         fs.unlinkSync(infoPath);
-        console.log(`[FileCheckerConfigService] Deleted ${infoPath}`);
+console.log(`[FileCheckerConfigService] Deleted ${infoPath}`);
       } catch (error) {
-        console.error(`[FileCheckerConfigService] Failed to delete ${infoPath}:`, error);
+console.error(`[FileCheckerConfigService] Failed to delete ${infoPath}:`, error);
       }
     }
   }

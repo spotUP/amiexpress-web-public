@@ -38,7 +38,6 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
       const confInfoPath = path.join(bbsRoot, `Conf${conf.id}.info`);
 
       if (!fs.existsSync(confInfoPath)) {
-        console.warn(`[FileAreas] Conf${conf.id}.info not found, skipping file areas`);
         continue;
       }
 
@@ -57,7 +56,6 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
       const ndirs = ndirsStr ? parseInt(ndirsStr, 10) || 0 : 0;
 
       if (ndirs === 0) {
-        console.log(`[FileAreas] Conf${conf.id} has NDIRS=0, no file areas`);
         continue;
       }
 
@@ -70,7 +68,6 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
         const ulPath = toolTypes.get(ulPathKey) || '';
 
         if (!dlPath && !ulPath) {
-          console.warn(`[FileAreas] Conf${conf.id} dir ${dirNum}: No DLPATH or ULPATH defined`);
           continue;
         }
 
@@ -83,15 +80,13 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
           ulPath: ulPath || dlPath, // Fallback to dlPath if ulPath missing
           description: `File area ${dirNum} for ${conf.name}`
         });
-
-        console.log(`[FileAreas] Loaded Conf${conf.id} Dir${dirNum}: DL=${dlPath} UL=${ulPath}`);
       }
     } catch (error) {
-      console.error(`[FileAreas] Error loading file areas for Conf${conf.id}:`, error);
+      // Silent catch to prevent terminal pollution during speculative scan
     }
   }
 
-  console.log(`[FileAreas] Loaded ${allAreas.length} file areas from ${conferences.length} conferences`);
+  process.stdout.write(`[FileAreas] Loaded ${allAreas.length} file areas from ${conferences.length} conferences\n`);
   return allAreas;
 }
 
@@ -111,7 +106,7 @@ async function touchFile(filePath: string): Promise<void> {
     const handle = await fs.promises.open(filePath, 'a');
     await handle.close();
   } catch (error) {
-    console.error(`[FileAreas] Failed to touch file ${filePath}:`, error);
+console.error(`[FileAreas] Failed to touch file ${filePath}:`, error);
     throw error;
   }
 }
@@ -166,10 +161,7 @@ export async function ensureConferenceStructure(
         }
         // If it's already a directory, nothing to do
       } catch (error: any) {
-        // Only log unexpected errors
-        if (error.code !== 'EEXIST' && error.code !== 'ENOENT') {
-          console.error(`[FileAreas] Failed to ensure directory ${target}:`, error.message);
-        }
+        // Silent catch to prevent terminal pollution
       }
     }
   }
@@ -227,7 +219,6 @@ export async function ensureRootScreens(bbsRoot: string): Promise<void> {
   try {
     await fs.promises.mkdir(screensDir, { recursive: true });
   } catch (error) {
-    console.error(`[FileAreas] Failed to ensure Screens directory ${screensDir}:`, error);
     return;
   }
 
@@ -236,7 +227,7 @@ export async function ensureRootScreens(bbsRoot: string): Promise<void> {
     const entries = await fs.promises.readdir(screensDir);
     existingScreens = new Set(entries.map((entry) => entry.toLowerCase()));
   } catch (error) {
-    console.warn(`[FileAreas] Unable to read Screens directory ${screensDir}:`, error);
+    // Silent catch
   }
 
   for (const screenName of requiredScreens) {
@@ -246,9 +237,8 @@ export async function ensureRootScreens(bbsRoot: string): Promise<void> {
     const targetPath = path.join(screensDir, screenName);
     try {
       await touchFile(targetPath);
-      console.log(`[FileAreas] Created placeholder root screen: ${screenName}`);
     } catch (error) {
-      console.error(`[FileAreas] Failed to create placeholder root screen ${screenName}:`, error);
+      // Silent catch
     }
   }
 }

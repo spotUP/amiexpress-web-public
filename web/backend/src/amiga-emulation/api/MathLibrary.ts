@@ -159,7 +159,7 @@ export class MathFFPLibrary {
   spFix(): number {
     const ffp = this.emulator.getRegister(0);
     const result = Math.trunc(ffpToNumber(ffp));
-    console.log(`[MathFFP] SPFix(0x${ffp.toString(16)}) = ${result}`);
+console.log(`[MathFFP] SPFix(0x${ffp.toString(16)}) = ${result}`);
     return result;
   }
 
@@ -171,7 +171,7 @@ export class MathFFPLibrary {
   spFlt(): number {
     const inum = this.emulator.getRegister(0) | 0; // Signed
     const result = numberToFfp(inum);
-    console.log(`[MathFFP] SPFlt(${inum}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPFlt(${inum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -192,7 +192,7 @@ export class MathFFPLibrary {
     // Set condition codes for fnum2 vs fnum1 comparison
     setMathConditionCodes(this.emulator, fnum2 - fnum1);
 
-    console.log(`[MathFFP] SPCmp(${fnum1}, ${fnum2}) = ${result}`);
+console.log(`[MathFFP] SPCmp(${fnum1}, ${fnum2}) = ${result}`);
     return result;
   }
 
@@ -211,7 +211,7 @@ export class MathFFPLibrary {
 
     setMathConditionCodes(this.emulator, fnum);
 
-    console.log(`[MathFFP] SPTst(${fnum}) = ${result}`);
+console.log(`[MathFFP] SPTst(${fnum}) = ${result}`);
     return result;
   }
 
@@ -224,7 +224,7 @@ export class MathFFPLibrary {
     const ffp = this.emulator.getRegister(0);
     // Just clear the sign bit (bit 7 of low byte)
     const result = ffp & 0xffffff7f;
-    console.log(`[MathFFP] SPAbs(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPAbs(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -238,7 +238,7 @@ export class MathFFPLibrary {
     if (ffp === 0) return 0;
     // Toggle the sign bit (bit 7 of low byte)
     const result = ffp ^ 0x80;
-    console.log(`[MathFFP] SPNeg(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPNeg(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -251,7 +251,7 @@ export class MathFFPLibrary {
     const fnum1 = ffpToNumber(this.emulator.getRegister(1));
     const fnum2 = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(fnum1 + fnum2);
-    console.log(`[MathFFP] SPAdd(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPAdd(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -264,7 +264,7 @@ export class MathFFPLibrary {
     const fnum1 = ffpToNumber(this.emulator.getRegister(1));
     const fnum2 = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(fnum1 - fnum2);
-    console.log(`[MathFFP] SPSub(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPSub(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -277,7 +277,7 @@ export class MathFFPLibrary {
     const fnum1 = ffpToNumber(this.emulator.getRegister(1));
     const fnum2 = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(fnum1 * fnum2);
-    console.log(`[MathFFP] SPMul(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPMul(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -290,11 +290,11 @@ export class MathFFPLibrary {
     const fnum1 = ffpToNumber(this.emulator.getRegister(1));
     const fnum2 = ffpToNumber(this.emulator.getRegister(0));
     if (fnum2 === 0) {
-      console.log(`[MathFFP] SPDiv - division by zero!`);
+console.log(`[MathFFP] SPDiv - division by zero!`);
       return 0;
     }
     const result = numberToFfp(fnum1 / fnum2);
-    console.log(`[MathFFP] SPDiv(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPDiv(${fnum1}, ${fnum2}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -306,7 +306,7 @@ export class MathFFPLibrary {
   spFloor(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.floor(fnum));
-    console.log(`[MathFFP] SPFloor(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPFloor(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -318,7 +318,7 @@ export class MathFFPLibrary {
   spCeil(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.ceil(fnum));
-    console.log(`[MathFFP] SPCeil(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathFFP] SPCeil(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 }
@@ -333,7 +333,7 @@ export class MathTransLibrary {
   spAtan(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.atan(fnum));
-    console.log(`[MathTrans] SPAtan(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPAtan(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -341,7 +341,7 @@ export class MathTransLibrary {
   spSin(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.sin(fnum));
-    console.log(`[MathTrans] SPSin(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPSin(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -349,7 +349,7 @@ export class MathTransLibrary {
   spCos(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.cos(fnum));
-    console.log(`[MathTrans] SPCos(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPCos(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -357,7 +357,7 @@ export class MathTransLibrary {
   spTan(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.tan(fnum));
-    console.log(`[MathTrans] SPTan(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPTan(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -377,7 +377,7 @@ export class MathTransLibrary {
       this.emulator.writeMemory32(cosPtr, cosResult);
     }
 
-    console.log(`[MathTrans] SPSincos(${fnum}) = sin:0x${sinResult.toString(16)}, cos:0x${cosResult.toString(16)}`);
+console.log(`[MathTrans] SPSincos(${fnum}) = sin:0x${sinResult.toString(16)}, cos:0x${cosResult.toString(16)}`);
     return sinResult;
   }
 
@@ -385,7 +385,7 @@ export class MathTransLibrary {
   spSinh(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.sinh(fnum));
-    console.log(`[MathTrans] SPSinh(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPSinh(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -393,7 +393,7 @@ export class MathTransLibrary {
   spCosh(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.cosh(fnum));
-    console.log(`[MathTrans] SPCosh(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPCosh(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -401,7 +401,7 @@ export class MathTransLibrary {
   spTanh(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.tanh(fnum));
-    console.log(`[MathTrans] SPTanh(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPTanh(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -409,7 +409,7 @@ export class MathTransLibrary {
   spExp(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.exp(fnum));
-    console.log(`[MathTrans] SPExp(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPExp(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -417,7 +417,7 @@ export class MathTransLibrary {
   spLog(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.log(fnum));
-    console.log(`[MathTrans] SPLog(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPLog(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -428,7 +428,7 @@ export class MathTransLibrary {
     const base = ffpToNumber(this.emulator.getRegister(0));
     const exp = ffpToNumber(this.emulator.getRegister(1));
     const result = numberToFfp(Math.pow(base, exp));
-    console.log(`[MathTrans] SPPow(${base}, ${exp}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPPow(${base}, ${exp}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -436,7 +436,7 @@ export class MathTransLibrary {
   spSqrt(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.sqrt(fnum));
-    console.log(`[MathTrans] SPSqrt(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPSqrt(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -445,7 +445,7 @@ export class MathTransLibrary {
     const ffp = this.emulator.getRegister(0);
     const num = ffpToNumber(ffp);
     const result = numberToIeeeSp(num);
-    console.log(`[MathTrans] SPTieee(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPTieee(0x${ffp.toString(16)}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -454,7 +454,7 @@ export class MathTransLibrary {
     const ieee = this.emulator.getRegister(0);
     const num = ieeeSpToNumber(ieee);
     const result = numberToFfp(num);
-    console.log(`[MathTrans] SPFieee(0x${ieee.toString(16)}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPFieee(0x${ieee.toString(16)}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -462,7 +462,7 @@ export class MathTransLibrary {
   spAsin(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.asin(fnum));
-    console.log(`[MathTrans] SPAsin(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPAsin(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -470,7 +470,7 @@ export class MathTransLibrary {
   spAcos(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.acos(fnum));
-    console.log(`[MathTrans] SPAcos(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPAcos(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -478,7 +478,7 @@ export class MathTransLibrary {
   spLog10(): number {
     const fnum = ffpToNumber(this.emulator.getRegister(0));
     const result = numberToFfp(Math.log10(fnum));
-    console.log(`[MathTrans] SPLog10(${fnum}) = 0x${result.toString(16)}`);
+console.log(`[MathTrans] SPLog10(${fnum}) = 0x${result.toString(16)}`);
     return result;
   }
 }
@@ -495,7 +495,7 @@ export class MathIEEEDoubBasLibrary {
     const low = this.emulator.getRegister(1);
     const num = ieeeDpToNumber(high, low);
     const result = Math.trunc(num);
-    console.log(`[MathIEEEDP] IEEEDPFix(${num}) = ${result}`);
+console.log(`[MathIEEEDP] IEEEDPFix(${num}) = ${result}`);
     return result;
   }
 
@@ -504,7 +504,7 @@ export class MathIEEEDoubBasLibrary {
     const inum = this.emulator.getRegister(0) | 0;
     const { high, low } = numberToIeeeDp(inum);
     this.emulator.setRegister(1, low); // D1 = low
-    console.log(`[MathIEEEDP] IEEEDPFlt(${inum}) = 0x${high.toString(16)}:0x${low.toString(16)}`);
+console.log(`[MathIEEEDP] IEEEDPFlt(${inum}) = 0x${high.toString(16)}:0x${low.toString(16)}`);
     return high; // D0 = high
   }
 
@@ -524,7 +524,7 @@ export class MathIEEEDoubBasLibrary {
     else result = 0;
 
     setMathConditionCodes(this.emulator, num2 - num1);
-    console.log(`[MathIEEEDP] IEEEDPCmp(${num1}, ${num2}) = ${result}`);
+console.log(`[MathIEEEDP] IEEEDPCmp(${num1}, ${num2}) = ${result}`);
     return result;
   }
 
@@ -540,7 +540,7 @@ export class MathIEEEDoubBasLibrary {
     else result = 0;
 
     setMathConditionCodes(this.emulator, num);
-    console.log(`[MathIEEEDP] IEEEDPTst(${num}) = ${result}`);
+console.log(`[MathIEEEDP] IEEEDPTst(${num}) = ${result}`);
     return result;
   }
 
@@ -551,7 +551,7 @@ export class MathIEEEDoubBasLibrary {
     // Clear sign bit (bit 31 of high word)
     const resultHigh = high & 0x7fffffff;
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPAbs() = 0x${resultHigh.toString(16)}:0x${low.toString(16)}`);
+console.log(`[MathIEEEDP] IEEEDPAbs() = 0x${resultHigh.toString(16)}:0x${low.toString(16)}`);
     return resultHigh;
   }
 
@@ -562,7 +562,7 @@ export class MathIEEEDoubBasLibrary {
     // Toggle sign bit
     const resultHigh = high ^ 0x80000000;
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPNeg() = 0x${resultHigh.toString(16)}:0x${low.toString(16)}`);
+console.log(`[MathIEEEDP] IEEEDPNeg() = 0x${resultHigh.toString(16)}:0x${low.toString(16)}`);
     return resultHigh;
   }
 
@@ -578,7 +578,7 @@ export class MathIEEEDoubBasLibrary {
     const { high, low } = numberToIeeeDp(num1 + num2);
 
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPAdd(${num1}, ${num2}) = ${num1 + num2}`);
+console.log(`[MathIEEEDP] IEEEDPAdd(${num1}, ${num2}) = ${num1 + num2}`);
     return high;
   }
 
@@ -594,7 +594,7 @@ export class MathIEEEDoubBasLibrary {
     const { high, low } = numberToIeeeDp(num1 - num2);
 
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPSub(${num1}, ${num2}) = ${num1 - num2}`);
+console.log(`[MathIEEEDP] IEEEDPSub(${num1}, ${num2}) = ${num1 - num2}`);
     return high;
   }
 
@@ -610,7 +610,7 @@ export class MathIEEEDoubBasLibrary {
     const { high, low } = numberToIeeeDp(num1 * num2);
 
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPMul(${num1}, ${num2}) = ${num1 * num2}`);
+console.log(`[MathIEEEDP] IEEEDPMul(${num1}, ${num2}) = ${num1 * num2}`);
     return high;
   }
 
@@ -625,14 +625,14 @@ export class MathIEEEDoubBasLibrary {
     const num2 = ieeeDpToNumber(high2, low2);
 
     if (num2 === 0) {
-      console.log(`[MathIEEEDP] IEEEDPDiv - division by zero!`);
+console.log(`[MathIEEEDP] IEEEDPDiv - division by zero!`);
       this.emulator.setRegister(1, 0);
       return 0;
     }
 
     const { high, low } = numberToIeeeDp(num1 / num2);
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDP] IEEEDPDiv(${num1}, ${num2}) = ${num1 / num2}`);
+console.log(`[MathIEEEDP] IEEEDPDiv(${num1}, ${num2}) = ${num1 / num2}`);
     return high;
   }
 
@@ -643,7 +643,7 @@ export class MathIEEEDoubBasLibrary {
     const num = ieeeDpToNumber(high, low);
     const { high: rh, low: rl } = numberToIeeeDp(Math.floor(num));
     this.emulator.setRegister(1, rl);
-    console.log(`[MathIEEEDP] IEEEDPFloor(${num}) = ${Math.floor(num)}`);
+console.log(`[MathIEEEDP] IEEEDPFloor(${num}) = ${Math.floor(num)}`);
     return rh;
   }
 
@@ -654,7 +654,7 @@ export class MathIEEEDoubBasLibrary {
     const num = ieeeDpToNumber(high, low);
     const { high: rh, low: rl } = numberToIeeeDp(Math.ceil(num));
     this.emulator.setRegister(1, rl);
-    console.log(`[MathIEEEDP] IEEEDPCeil(${num}) = ${Math.ceil(num)}`);
+console.log(`[MathIEEEDP] IEEEDPCeil(${num}) = ${Math.ceil(num)}`);
     return rh;
   }
 }
@@ -679,7 +679,7 @@ export class MathIEEEDoubTransLibrary {
   ieeeDpAtan(): number {
     const num = this.getDouble();
     const result = Math.atan(num);
-    console.log(`[MathIEEEDPTrans] IEEEDPAtan(${num}) = ${result}`);
+console.log(`[MathIEEEDPTrans] IEEEDPAtan(${num}) = ${result}`);
     return this.setDouble(result);
   }
 
@@ -687,7 +687,7 @@ export class MathIEEEDoubTransLibrary {
   ieeeDpSin(): number {
     const num = this.getDouble();
     const result = Math.sin(num);
-    console.log(`[MathIEEEDPTrans] IEEEDPSin(${num}) = ${result}`);
+console.log(`[MathIEEEDPTrans] IEEEDPSin(${num}) = ${result}`);
     return this.setDouble(result);
   }
 
@@ -695,7 +695,7 @@ export class MathIEEEDoubTransLibrary {
   ieeeDpCos(): number {
     const num = this.getDouble();
     const result = Math.cos(num);
-    console.log(`[MathIEEEDPTrans] IEEEDPCos(${num}) = ${result}`);
+console.log(`[MathIEEEDPTrans] IEEEDPCos(${num}) = ${result}`);
     return this.setDouble(result);
   }
 
@@ -703,7 +703,7 @@ export class MathIEEEDoubTransLibrary {
   ieeeDpTan(): number {
     const num = this.getDouble();
     const result = Math.tan(num);
-    console.log(`[MathIEEEDPTrans] IEEEDPTan(${num}) = ${result}`);
+console.log(`[MathIEEEDPTrans] IEEEDPTan(${num}) = ${result}`);
     return this.setDouble(result);
   }
 
@@ -721,7 +721,7 @@ export class MathIEEEDoubTransLibrary {
     }
 
     this.emulator.setRegister(1, sinResult.low);
-    console.log(`[MathIEEEDPTrans] IEEEDPSincos(${num})`);
+console.log(`[MathIEEEDPTrans] IEEEDPSincos(${num})`);
     return sinResult.high;
   }
 
@@ -772,7 +772,7 @@ export class MathIEEEDoubTransLibrary {
   ieeeDpTieee(): number {
     const num = this.getDouble();
     const result = numberToIeeeSp(num);
-    console.log(`[MathIEEEDPTrans] IEEEDPTieee(${num}) = 0x${result.toString(16)}`);
+console.log(`[MathIEEEDPTrans] IEEEDPTieee(${num}) = 0x${result.toString(16)}`);
     return result;
   }
 
@@ -782,7 +782,7 @@ export class MathIEEEDoubTransLibrary {
     const num = ieeeSpToNumber(ieee);
     const { high, low } = numberToIeeeDp(num);
     this.emulator.setRegister(1, low);
-    console.log(`[MathIEEEDPTrans] IEEEDPFieee(0x${ieee.toString(16)}) = ${num}`);
+console.log(`[MathIEEEDPTrans] IEEEDPFieee(0x${ieee.toString(16)}) = ${num}`);
     return high;
   }
 

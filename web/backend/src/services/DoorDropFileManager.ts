@@ -81,10 +81,10 @@ export class DoorDropFileManager {
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
     // Load BBS name and sysop name from disk (bbsConfig.info)
     this.loadConfigFromDisk();
-    console.log('[DoorDropFile] Initialized');
-    console.log(`  BBS root: ${this.bbsRoot}`);
-    console.log(`  BBS name: ${this.bbsName} (from bbsConfig.info)`);
-    console.log(`  Sysop: ${this.sysopName} (from bbsConfig.info)`);
+console.log('[DoorDropFile] Initialized');
+console.log(`  BBS root: ${this.bbsRoot}`);
+console.log(`  BBS name: ${this.bbsName} (from bbsConfig.info)`);
+console.log(`  Sysop: ${this.sysopName} (from bbsConfig.info)`);
   }
 
   private loadConfigFromDisk(): void {
@@ -97,8 +97,8 @@ export class DoorDropFileManager {
     this.bbsRoot = bbsRoot;
     // Reload config when BBS root changes
     this.loadConfigFromDisk();
-    console.log(`[DoorDropFile] Root updated -> ${bbsRoot}`);
-    console.log(`[DoorDropFile] Config reloaded: bbsName="${this.bbsName}" sysopName="${this.sysopName}"`);
+console.log(`[DoorDropFile] Root updated -> ${bbsRoot}`);
+console.log(`[DoorDropFile] Config reloaded: bbsName="${this.bbsName}" sysopName="${this.sysopName}"`);
   }
 
   /**
@@ -142,7 +142,7 @@ export class DoorDropFileManager {
       }
     } catch (err) {
       // Silent fail - use defaults
-      console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
+console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
     }
 
     // Cache the result
@@ -303,7 +303,7 @@ export class DoorDropFileManager {
     // Write file
     const content = lines.join('\r\n') + '\r\n';
     fs.writeFileSync(doorSysPath, content, 'utf8');
-    console.log(`[DoorDropFile] Created DOOR.SYS for Node${nodeId}`);
+console.log(`[DoorDropFile] Created DOOR.SYS for Node${nodeId}`);
   }
 
   /**
@@ -337,7 +337,7 @@ export class DoorDropFileManager {
 
     const content = lines.join('\r\n') + '\r\n';
     fs.writeFileSync(dorInfoPath, content, 'utf8');
-    console.log(`[DoorDropFile] Created DORINFO${nodeId}.DEF for Node${nodeId}`);
+console.log(`[DoorDropFile] Created DORINFO${nodeId}.DEF for Node${nodeId}`);
   }
 
   /**
@@ -350,14 +350,14 @@ export class DoorDropFileManager {
     const doorSysPath = path.join(nodeDir, 'DOOR.SYS');
     if (fs.existsSync(doorSysPath)) {
       fs.unlinkSync(doorSysPath);
-      console.log(`[DoorDropFile] Deleted DOOR.SYS for Node${nodeId}`);
+console.log(`[DoorDropFile] Deleted DOOR.SYS for Node${nodeId}`);
     }
 
     // Delete DORINFOx.DEF
     const dorInfoPath = path.join(nodeDir, `DORINFO${nodeId}.DEF`);
     if (fs.existsSync(dorInfoPath)) {
       fs.unlinkSync(dorInfoPath);
-      console.log(`[DoorDropFile] Deleted DORINFO${nodeId}.DEF for Node${nodeId}`);
+console.log(`[DoorDropFile] Deleted DORINFO${nodeId}.DEF for Node${nodeId}`);
     }
   }
 

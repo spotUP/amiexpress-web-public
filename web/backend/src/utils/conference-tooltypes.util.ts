@@ -69,7 +69,7 @@ function readFlagsFromDb(confNumber: number): Partial<ConferenceToolFlags> {
 
     return result;
   } catch (error) {
-    console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
+console.error(`[ConferenceTooltypes] Error reading DB config for conference ${confNumber}:`, error);
     SysopDebugUtil.debug(
       null,
       null,
@@ -91,24 +91,28 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
       return {};
     }
 
-    const output = execSync(`strings "${iconPath}"`, { encoding: 'utf8' });
+    const buffer = fs.readFileSync(iconPath);
     const flagSet = new Set<string>();
+    let currentString = '';
 
-    for (const rawLine of output.split('\n')) {
-      const cleaned = rawLine.replace(/[^\x20-\x7E]/g, '').trim();
-      if (!cleaned) {
-        continue;
-      }
-
-      // Strip common AmiExpress prefixes
-      let token = cleaned;
-      if (token.startsWith('#') || token.startsWith('+') || token.startsWith("'")) {
-        token = token.substring(1);
-      }
-
-      const key = token.split('=')[0]?.trim().toUpperCase();
-      if (key) {
-        flagSet.add(key);
+    for (let i = 0; i < buffer.length; i++) {
+      const charCode = buffer[i];
+      if (charCode >= 32 && charCode <= 126) {
+        currentString += String.fromCharCode(charCode);
+      } else {
+        if (currentString.length >= 2) {
+          const cleaned = currentString.replace(/^[^a-zA-Z0-9+(%#']+/g, '').trim();
+          if (cleaned) {
+            // Strip common AmiExpress prefixes
+            let token = cleaned;
+            if (token.startsWith('#') || token.startsWith('+') || token.startsWith("'")) {
+              token = token.substring(1);
+            }
+            const key = token.split('=')[0]?.trim().toUpperCase();
+            if (key) flagSet.add(key);
+          }
+        }
+        currentString = '';
       }
     }
 
@@ -140,7 +144,7 @@ function readFlagsFromIcon(confNumber: number): Partial<ConferenceToolFlags> {
 
     return result;
   } catch (error) {
-    console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);
+console.error(`[ConferenceTooltypes] Error parsing Conf${confNumber}.info:`, error);
     SysopDebugUtil.debug(
       null,
       null,

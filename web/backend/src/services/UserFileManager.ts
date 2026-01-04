@@ -136,11 +136,11 @@ export class UserFileManager {
     this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
     this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));
 
-    console.log('[UserFileManager] Initialized');
-    console.log(`  BBS root: ${this.bbsRoot}`);
-    console.log(`  user.data: ${this.userDataPath}`);
-    console.log(`  user.keys: ${this.userKeysPath}`);
-    console.log(`  user.misc: ${this.userMiscPath}`);
+console.log('[UserFileManager] Initialized');
+console.log(`  BBS root: ${this.bbsRoot}`);
+console.log(`  user.data: ${this.userDataPath}`);
+console.log(`  user.keys: ${this.userKeysPath}`);
+console.log(`  user.misc: ${this.userMiscPath}`);
   }
  
   private normalizeTargetPath(targetPath: string): string {
@@ -161,7 +161,7 @@ export class UserFileManager {
       secBoard: user.ratioType,
       secLibrary: user.ratio,
       secBulletin: 0, // Computer type
-      messagesPosted: 0, // TODO: Count from messages table
+      messagesPosted: user.messagesPosted || 0, // From user record (tracked by BBS)
       newSinceDate: Math.floor((user.lastLogin?.getTime() || Date.now()) / 1000),
       pwdHash: 0, // Old hash format not used
       confRead2: 0,
@@ -180,7 +180,7 @@ export class UserFileManager {
       conferenceAccess: user.confAccess || 'XXX',
       uploads: user.uploads,
       downloads: user.downloads,
-      confRJoin: 0, // TODO: Get from session
+      confRJoin: user.confRJoin || user.autoRejoin || 1, // Auto-rejoin conference (default to 1)
       timesCalled: user.calls,
       timeLastOn: Math.floor((user.lastLogin?.getTime() || 0) / 1000),
       timeUsed: user.timeUsed,
@@ -200,7 +200,7 @@ export class UserFileManager {
       creditTotalDate: 0,
       creditTracking: 0,
       translatorID: 0,
-      msgBaseRJoin: 0, // TODO: Get from session
+      msgBaseRJoin: 1, // Default to first message base (not stored in user record, only in session)
       confYM9: 0,
       todaysBytesLimit: user.byteLimit,
       protocol: 0,
@@ -356,9 +356,9 @@ export class UserFileManager {
 
     // Offset should now be exactly 232 bytes (matching mtop expectations)
     if (offset !== this.USER_STRUCT_SIZE) {
-      console.warn(`[UserFileManager] User struct size mismatch: ${offset} bytes, expected ${this.USER_STRUCT_SIZE}`);
+console.warn(`[UserFileManager] User struct size mismatch: ${offset} bytes, expected ${this.USER_STRUCT_SIZE}`);
     }
-    console.log(`[UserFileManager] Serialized user struct: ${offset} bytes (expected ${this.USER_STRUCT_SIZE})`);
+console.log(`[UserFileManager] Serialized user struct: ${offset} bytes (expected ${this.USER_STRUCT_SIZE})`);
     return buffer;
   }
 
@@ -393,9 +393,9 @@ export class UserFileManager {
     offset = this.writeInt16(buffer, offset, struct.timesOnToday);
 
     if (offset !== this.USERKEYS_STRUCT_SIZE) {
-      console.warn(`[UserFileManager] UserKeys struct size mismatch: ${offset} bytes, expected ${this.USERKEYS_STRUCT_SIZE}`);
+console.warn(`[UserFileManager] UserKeys struct size mismatch: ${offset} bytes, expected ${this.USERKEYS_STRUCT_SIZE}`);
     }
-    console.log(`[UserFileManager] Serialized userKeys struct: ${offset} bytes (expected ${this.USERKEYS_STRUCT_SIZE})`);
+console.log(`[UserFileManager] Serialized userKeys struct: ${offset} bytes (expected ${this.USERKEYS_STRUCT_SIZE})`);
     return buffer;
   }
 
@@ -426,10 +426,10 @@ export class UserFileManager {
 
     // Offset should now be exactly 248 bytes (matching mtop expectations)
     if (offset !== this.USERMISC_STRUCT_SIZE) {
-      console.warn(`[UserFileManager] UserMisc struct size mismatch: ${offset} bytes, expected ${this.USERMISC_STRUCT_SIZE}`);
+console.warn(`[UserFileManager] UserMisc struct size mismatch: ${offset} bytes, expected ${this.USERMISC_STRUCT_SIZE}`);
     }
 
-    console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expected ${this.USERMISC_STRUCT_SIZE})`);
+console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expected ${this.USERMISC_STRUCT_SIZE})`);
     return buffer;
   }
 
@@ -924,9 +924,9 @@ export class UserFileManager {
       fs.appendFileSync(this.userKeysPath, keysBuffer);
       fs.appendFileSync(this.userMiscPath, miscBuffer);
 
-      console.log(`[UserFileManager] Wrote user files for ${user.username} (slot ${slotNumber})`);
+console.log(`[UserFileManager] Wrote user files for ${user.username} (slot ${slotNumber})`);
     } catch (error) {
-      console.error(`[UserFileManager] Error writing user files:`, error);
+console.error(`[UserFileManager] Error writing user files:`, error);
       throw error;
     }
   }
@@ -939,7 +939,7 @@ export class UserFileManager {
     try {
       this.ensureUserFilesReady();
       if (!fs.existsSync(this.userDataPath)) {
-        console.log('[UserFileManager] user.data does not exist, returning empty array');
+console.log('[UserFileManager] user.data does not exist, returning empty array');
         return [];
       }
 
@@ -947,7 +947,7 @@ export class UserFileManager {
       const numUsers = Math.floor(buffer.length / this.USER_STRUCT_SIZE);
 
       if (buffer.length % this.USER_STRUCT_SIZE !== 0) {
-        console.warn(`[UserFileManager] user.data file size ${buffer.length} is not a multiple of ${this.USER_STRUCT_SIZE}`);
+console.warn(`[UserFileManager] user.data file size ${buffer.length} is not a multiple of ${this.USER_STRUCT_SIZE}`);
       }
 
       const users: UserFileStruct[] = [];
@@ -957,10 +957,10 @@ export class UserFileManager {
         users.push(userStruct);
       }
 
-      console.log(`[UserFileManager] Read ${users.length} user records from user.data`);
+console.log(`[UserFileManager] Read ${users.length} user records from user.data`);
       return users;
     } catch (error) {
-      console.error('[UserFileManager] Error reading user.data:', error);
+console.error('[UserFileManager] Error reading user.data:', error);
       return [];
     }
   }
@@ -975,15 +975,15 @@ export class UserFileManager {
 
       // Check if all three files exist
       if (!fs.existsSync(this.userDataPath)) {
-        console.log('[UserFileManager] user.data does not exist, returning empty array');
+console.log('[UserFileManager] user.data does not exist, returning empty array');
         return [];
       }
       if (!fs.existsSync(this.userKeysPath)) {
-        console.log('[UserFileManager] user.keys does not exist, returning empty array');
+console.log('[UserFileManager] user.keys does not exist, returning empty array');
         return [];
       }
       if (!fs.existsSync(this.userMiscPath)) {
-        console.log('[UserFileManager] user.misc does not exist, returning empty array');
+console.log('[UserFileManager] user.misc does not exist, returning empty array');
         return [];
       }
 
@@ -999,7 +999,7 @@ export class UserFileManager {
 
       // All three files should have same number of records
       if (numUsersData !== numUsersKeys || numUsersData !== numUsersMisc) {
-        console.warn(
+console.warn(
           `[UserFileManager] File record count mismatch: data=${numUsersData}, keys=${numUsersKeys}, misc=${numUsersMisc}`
         );
       }
@@ -1023,10 +1023,10 @@ export class UserFileManager {
         users.push(user);
       }
 
-      console.log(`[UserFileManager] Read ${users.length} users from disk files (${numUsers} total slots)`);
+console.log(`[UserFileManager] Read ${users.length} users from disk files (${numUsers} total slots)`);
       return users;
     } catch (error) {
-      console.error('[UserFileManager] Error reading user files:', error);
+console.error('[UserFileManager] Error reading user files:', error);
       return [];
     }
   }
@@ -1058,9 +1058,9 @@ export class UserFileManager {
       this.updateFileAtOffset(this.userKeysPath, keysBuffer, keysOffset);
       this.updateFileAtOffset(this.userMiscPath, miscBuffer, miscOffset);
 
-      console.log(`[UserFileManager] Updated user files for ${user.username} (slot ${slotNumber})`);
+console.log(`[UserFileManager] Updated user files for ${user.username} (slot ${slotNumber})`);
     } catch (error) {
-      console.error('[UserFileManager] Error updating user files:', error);
+console.error('[UserFileManager] Error updating user files:', error);
       throw error;
     }
   }
@@ -1114,7 +1114,7 @@ export class UserFileManager {
       const userId = `user-${slotNumber}`;
       return this.fileStructsToUser(userStruct, keysStruct, miscStruct, userId, userDataStats.mtime);
     } catch (error) {
-      console.error(`[UserFileManager] Error reading user at slot ${slotNumber}:`, error);
+console.error(`[UserFileManager] Error reading user at slot ${slotNumber}:`, error);
       return null;
     }
   }
@@ -1147,9 +1147,9 @@ export class UserFileManager {
       this.updateFileAtOffset(this.userKeysPath, zeroKeysBuffer, keysOffset);
       this.updateFileAtOffset(this.userMiscPath, zeroMiscBuffer, miscOffset);
 
-      console.log(`[UserFileManager] Deleted user at slot ${slotNumber} (zeroed out slot)`);
+console.log(`[UserFileManager] Deleted user at slot ${slotNumber} (zeroed out slot)`);
     } catch (error) {
-      console.error('[UserFileManager] Error deleting user slot:', error);
+console.error('[UserFileManager] Error deleting user slot:', error);
       throw error;
     }
   }
@@ -1183,7 +1183,7 @@ export class UserFileManager {
       fs.writeSync(fd, buffer, 0, buffer.length, offset);
       fs.closeSync(fd);
     } catch (error) {
-      console.error(`[UserFileManager] Error updating file ${filePath} at offset ${offset}:`, error);
+console.error(`[UserFileManager] Error updating file ${filePath} at offset ${offset}:`, error);
       throw error;
     }
   }
@@ -1197,7 +1197,7 @@ export class UserFileManager {
       this.ensureBinaryFile(this.userKeysPath, 'user.keys');
       this.ensureBinaryFile(this.userMiscPath, 'user.misc');
     } catch (error) {
-      console.error('[UserFileManager] Error initializing user files:', error);
+console.error('[UserFileManager] Error initializing user files:', error);
       throw error;
     }
   }
@@ -1212,16 +1212,16 @@ export class UserFileManager {
             fs.rmSync(backupPath, { recursive: true, force: true });
           }
           fs.renameSync(filePath, backupPath);
-          console.warn(`[UserFileManager] ${label} was a directory, moved to ${backupPath}`);
+console.warn(`[UserFileManager] ${label} was a directory, moved to ${backupPath}`);
         }
       }
 
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, Buffer.alloc(0));
-        console.log(`[UserFileManager] Created empty ${label}`);
+console.log(`[UserFileManager] Created empty ${label}`);
       }
     } catch (error) {
-      console.error(`[UserFileManager] Error ensuring ${label}:`, error);
+console.error(`[UserFileManager] Error ensuring ${label}:`, error);
       throw error;
     }
   }

@@ -96,7 +96,7 @@ export function findSecurityScreen(
       const ripPath = `${basePath}.RIP`;
       const resolved = resolveCaseInsensitivePath(ripPath);
       if (resolved) {
-        console.log(`[SCREEN] Found RIP screen: ${resolved}`);
+console.log(`[SCREEN] Found RIP screen: ${resolved}`);
         return resolved;
       }
     }
@@ -107,7 +107,7 @@ export function findSecurityScreen(
       const userTypePath = `${basePath}${normalized}`;
       const resolved = resolveCaseInsensitivePath(userTypePath);
       if (resolved) {
-        console.log(`[SCREEN] Found user screen type: ${resolved}`);
+console.log(`[SCREEN] Found user screen type: ${resolved}`);
         return resolved;
       }
     }
@@ -117,7 +117,7 @@ export function findSecurityScreen(
       const txtPath = `${basePath}${txtExt}`;
       const resolved = resolveCaseInsensitivePath(txtPath);
       if (resolved) {
-        console.log(`[SCREEN] Found text screen: ${resolved}`);
+console.log(`[SCREEN] Found text screen: ${resolved}`);
         return resolved;
       }
     }
@@ -159,7 +159,7 @@ export function findSecurityScreen(
   }
 
   // express.e:6308 - No screen found
-  console.warn(`[SCREEN] Not found: ${screenDirAndName} (checked levels ${userSecLevel} down to ${minLevel})`);
+console.warn(`[SCREEN] Not found: ${screenDirAndName} (checked levels ${userSecLevel} down to ${minLevel})`);
   return null;
 }
 

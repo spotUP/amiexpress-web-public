@@ -237,7 +237,7 @@ export async function findFileIdDizInLzh(filepath: string): Promise<string | nul
 
     return null;
   } catch (error) {
-    console.error('[LZH] Error reading archive:', error);
+console.error('[LZH] Error reading archive:', error);
     return null;
   }
 }

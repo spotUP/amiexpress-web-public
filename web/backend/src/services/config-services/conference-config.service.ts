@@ -33,7 +33,7 @@ export class ConferenceConfigService {
     const confConfig = loadConfConfig(bbsRoot);
 
     if (!confConfig || confConfig.confCount === 0) {
-      console.warn('[ConferenceConfigService] ConfConfig.info not found or empty');
+console.warn('[ConferenceConfigService] ConfConfig.info not found or empty');
       return this.configRepo.getConferenceConfigs();
     }
 
@@ -44,7 +44,7 @@ export class ConferenceConfigService {
       const confInfoPath = path.join(bbsRoot, `Conf${i}.info`);
 
       if (!fs.existsSync(confInfoPath)) {
-        console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
+console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
         continue;
       }
 
@@ -117,11 +117,11 @@ export class ConferenceConfigService {
 
         configs.push(config);
       } catch (error) {
-        console.error(`[ConferenceConfigService] Error reading Conf${i}.info:`, error);
+console.error(`[ConferenceConfigService] Error reading Conf${i}.info:`, error);
       }
     }
 
-    console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
+console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
     return configs;
   }
 
@@ -151,9 +151,9 @@ export class ConferenceConfigService {
         privateConf: validated.private_conf || false,
         readOnly: validated.read_only || false
       });
-      console.log(`[ConferenceConfigService] Created Conf${newConfig.conference_id}.info`);
+console.log(`[ConferenceConfigService] Created Conf${newConfig.conference_id}.info`);
     } catch (error) {
-      console.error(`[ConferenceConfigService] Failed to create disk structure:`, error);
+console.error(`[ConferenceConfigService] Failed to create disk structure:`, error);
     }
 
     this.configRepo.logConfigChange('conference_config', newConfig.id, 'CREATE',
@@ -221,9 +221,9 @@ export class ConferenceConfigService {
     if (fs.existsSync(confInfoPath)) {
       try {
         fs.unlinkSync(confInfoPath);
-        console.log(`[ConferenceConfigService] Deleted ${confInfoPath}`);
+console.log(`[ConferenceConfigService] Deleted ${confInfoPath}`);
       } catch (error) {
-        console.error(`[ConferenceConfigService] Failed to delete ${confInfoPath}:`, error);
+console.error(`[ConferenceConfigService] Failed to delete ${confInfoPath}:`, error);
       }
     }
 

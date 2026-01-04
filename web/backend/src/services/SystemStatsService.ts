@@ -89,7 +89,7 @@ class SystemStatsService {
         };
       }
     } catch (error) {
-      console.error('[SystemStats] Error loading today stats:', error);
+console.error('[SystemStats] Error loading today stats:', error);
       // Initialize with defaults
       this.todayStats = {
         date: this.currentDate,
@@ -113,7 +113,7 @@ class SystemStatsService {
     try {
       await db.saveDailyStats(this.todayStats);
     } catch (error) {
-      console.error('[SystemStats] Error saving stats:', error);
+console.error('[SystemStats] Error saving stats:', error);
     }
   }
 
@@ -219,7 +219,7 @@ class SystemStatsService {
     try {
       return await db.getDailyStats(date);
     } catch (error) {
-      console.error('[SystemStats] Error getting stats for date:', error);
+console.error('[SystemStats] Error getting stats for date:', error);
       return null;
     }
   }
@@ -231,7 +231,7 @@ class SystemStatsService {
     try {
       return await db.getDailyStatsRange(startDate, endDate);
     } catch (error) {
-      console.error('[SystemStats] Error getting stats range:', error);
+console.error('[SystemStats] Error getting stats range:', error);
       return [];
     }
   }

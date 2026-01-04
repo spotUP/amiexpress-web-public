@@ -46,7 +46,7 @@ function loadFileCheckersFromDisk(): Map<string, FileCheckerInfo> {
   const fcheckDir = path.join(bbsRoot, 'Fcheck');
 
   if (!fsSync.existsSync(fcheckDir)) {
-    console.log('[FileTest] Fcheck/ directory not found, using built-in checkers only');
+console.log('[FileTest] Fcheck/ directory not found, using built-in checkers only');
     cachedFileCheckers = checkers;
     checkersCacheTime = now;
     return checkers;
@@ -85,12 +85,12 @@ function loadFileCheckersFromDisk(): Map<string, FileCheckerInfo> {
       };
 
       checkers.set(ext, checkerInfo);
-      console.log(`[FileTest] Loaded checker for .${ext}: ${checkerPath}`);
+console.log(`[FileTest] Loaded checker for .${ext}: ${checkerPath}`);
     }
 
-    console.log(`[FileTest] Loaded ${checkers.size} file checkers from Fcheck/`);
+console.log(`[FileTest] Loaded ${checkers.size} file checkers from Fcheck/`);
   } catch (error: any) {
-    console.error(`[FileTest] Error loading file checkers: ${error.message}`);
+console.error(`[FileTest] Error loading file checkers: ${error.message}`);
   }
 
   cachedFileCheckers = checkers;
@@ -118,7 +118,7 @@ export async function testFile(filepath: string, nodeWorkDir: string): Promise<T
   const filename = path.basename(filepath);
   const ext = path.extname(filename).toLowerCase().replace('.', '');
 
-  console.log(`[testFile] Testing ${filename} (extension: ${ext})`);
+console.log(`[testFile] Testing ${filename} (extension: ${ext})`);
 
   // Express.e:18645-18648 - Try FILECHECK system command first
   // Check if FILECHECK system command exists in config
@@ -128,7 +128,7 @@ export async function testFile(filepath: string, nodeWorkDir: string): Promise<T
       return filecheckResult;
     }
   } catch (error: any) {
-    console.log(`[testFile] FILECHECK command error: ${error.message}`);
+console.log(`[testFile] FILECHECK command error: ${error.message}`);
   }
 
   // Express.e:18650-18672 - Extract extension and run checker for that type
@@ -137,7 +137,7 @@ export async function testFile(filepath: string, nodeWorkDir: string): Promise<T
   }
 
   // No extension or unsupported
-  console.log(`[testFile] No valid extension, file not tested`);
+console.log(`[testFile] No valid extension, file not tested`);
   return TestResult.NOT_TESTED;
 }
 
@@ -159,12 +159,12 @@ async function tryFilecheckCommand(filepath: string, nodeWorkDir: string): Promi
   );
 
   if (syscmdResult.rows.length === 0) {
-    console.log(`[testFile] FILECHECK system command not configured`);
+console.log(`[testFile] FILECHECK system command not configured`);
     return null;
   }
 
   const commandString = syscmdResult.rows[0].commandstring;
-  console.log(`[testFile] Running FILECHECK command: ${commandString}`);
+console.log(`[testFile] Running FILECHECK command: ${commandString}`);
 
   try {
     // Replace placeholders: %f = filename, %p = filepath
@@ -185,14 +185,14 @@ async function tryFilecheckCommand(filepath: string, nodeWorkDir: string): Promi
     // Check for error indicators in output
     const output = `${stdout} ${stderr}`.toLowerCase();
     if (output.includes('error') || output.includes('failed') || output.includes('corrupt')) {
-      console.log(`[testFile] FILECHECK command reported failure`);
+console.log(`[testFile] FILECHECK command reported failure`);
       return TestResult.FAILURE;
     }
 
-    console.log(`[testFile] FILECHECK command succeeded`);
+console.log(`[testFile] FILECHECK command succeeded`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    console.error(`[testFile] FILECHECK command execution error: ${error.message}`);
+console.error(`[testFile] FILECHECK command execution error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }
@@ -220,18 +220,18 @@ async function checkFileByExtension(
   const diskChecker = diskCheckers.get(extUpper);
 
   if (diskChecker) {
-    console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
+console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
     const diskResult = await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir);
     // If disk checker returned a result (not null), use it
     // null means the checker wasn't available, so fall through to built-in
     if (diskResult !== null) {
       return diskResult;
     }
-    console.log(`[FileTest] Disk checker not available, trying built-in checker`);
+console.log(`[FileTest] Disk checker not available, trying built-in checker`);
   }
 
   // FALLBACK: Built-in JavaScript checkers for common archive formats
-  console.log(`[FileTest] Using built-in checker for .${extUpper}`);
+console.log(`[FileTest] Using built-in checker for .${extUpper}`);
   switch (extUpper) {
     case 'ZIP':
       return await testZipFile(filepath, nodeWorkDir);
@@ -246,7 +246,7 @@ async function checkFileByExtension(
     case 'TAR':
       return await testTarFile(filepath, nodeWorkDir);
     default:
-      console.log(`[testFile] No checker for extension: ${extension}`);
+console.log(`[testFile] No checker for extension: ${extension}`);
       return TestResult.NOT_TESTED;
   }
 }
@@ -270,14 +270,14 @@ async function runDiskBasedChecker(
   // Check if the checker path looks like an Amiga path (contains : like "DOORS:" or "DH0:")
   // These won't work on macOS/Linux, so skip disk checker and fall back to built-in
   if (checker.checker.includes(':') && !checker.checker.startsWith('/')) {
-    console.log(`[FileTest] Disk checker "${checker.checker}" appears to be Amiga path, skipping`);
+console.log(`[FileTest] Disk checker "${checker.checker}" appears to be Amiga path, skipping`);
     return null; // Signal to fall back to built-in checker
   }
 
   // Check if the checker executable actually exists
   const checkerPath = checker.checker.split(' ')[0]; // Get just the executable, not arguments
   if (!fsSync.existsSync(checkerPath)) {
-    console.log(`[FileTest] Disk checker "${checkerPath}" not found, skipping`);
+console.log(`[FileTest] Disk checker "${checkerPath}" not found, skipping`);
     return null; // Signal to fall back to built-in checker
   }
 
@@ -304,7 +304,7 @@ async function runDiskBasedChecker(
       command = `${command} "${filepath}"`;
     }
 
-    console.log(`[FileTest] Running disk checker: ${command}`);
+console.log(`[FileTest] Running disk checker: ${command}`);
 
     const { stdout, stderr } = await execAsync(command, {
       timeout: 60000, // 60 second timeout
@@ -318,22 +318,22 @@ async function runDiskBasedChecker(
     const output = `${stdout} ${stderr}`.toLowerCase();
     if (output.includes('error') || output.includes('failed') || output.includes('corrupt') ||
         output.includes('bad') || output.includes('invalid')) {
-      console.log(`[FileTest] Disk checker reported failure for ${filename}`);
+console.log(`[FileTest] Disk checker reported failure for ${filename}`);
       return TestResult.FAILURE;
     }
 
-    console.log(`[FileTest] Disk checker succeeded for ${filename}`);
+console.log(`[FileTest] Disk checker succeeded for ${filename}`);
     return TestResult.SUCCESS;
   } catch (error: any) {
     // Command execution failed (non-zero exit code or timeout)
-    console.error(`[FileTest] Disk checker error: ${error.message}`);
+console.error(`[FileTest] Disk checker error: ${error.message}`);
 
     // Check if error is due to command not found (ENOENT) or permission denied
     const errMsg = error.message?.toLowerCase() || '';
     if (errMsg.includes('enoent') || errMsg.includes('not found') ||
         errMsg.includes('no such file') || errMsg.includes('permission denied') ||
         errMsg.includes('command not found')) {
-      console.log(`[FileTest] Disk checker not available, falling back to built-in`);
+console.log(`[FileTest] Disk checker not available, falling back to built-in`);
       return null; // Signal to fall back to built-in checker
     }
 
@@ -365,10 +365,10 @@ async function testZipFile(filepath: string, nodeWorkDir: string): Promise<TestR
     const output = `ZIP file integrity test\nFiles: ${entries.length}\nStatus: OK`;
     await fs.writeFile(outputFile, output);
 
-    console.log(`[testFile] ZIP file passed integrity test (${entries.length} files)`);
+console.log(`[testFile] ZIP file passed integrity test (${entries.length} files)`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    console.error(`[testFile] ZIP test error: ${error.message}`);
+console.error(`[testFile] ZIP test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }
@@ -405,16 +405,16 @@ async function testLhaFile(filepath: string, nodeWorkDir: string): Promise<TestR
       // Valid LHA magic bytes - return NOT_TESTED since we don't have a full validator
       const output = `LHA file has valid magic bytes: ${methodId}\nNo full validation available - configure external checker for detailed testing`;
       await fs.writeFile(outputFile, output);
-      console.log(`[testFile] LHA file has valid magic (${methodId}), marking as not tested`);
+console.log(`[testFile] LHA file has valid magic (${methodId}), marking as not tested`);
       return TestResult.NOT_TESTED;
     }
 
     // Doesn't look like LHA despite the extension
-    console.log(`[testFile] File has .lha extension but invalid magic: "${methodId}"`);
+console.log(`[testFile] File has .lha extension but invalid magic: "${methodId}"`);
     await fs.writeFile(outputFile, `Invalid LHA magic bytes: ${methodId}`);
     return TestResult.FAILURE;
   } catch (error: any) {
-    console.error(`[testFile] LHA test error: ${error.message}`);
+console.error(`[testFile] LHA test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }
@@ -435,10 +435,10 @@ async function testLzxFile(filepath: string, nodeWorkDir: string): Promise<TestR
     const output = `LZX file integrity test\nFiles: ${files.length}\nStatus: OK`;
     await fs.writeFile(outputFile, output);
 
-    console.log(`[testFile] LZX file passed integrity test (${files.length} files)`);
+console.log(`[testFile] LZX file passed integrity test (${files.length} files)`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    console.error(`[testFile] LZX test error: ${error.message}`);
+console.error(`[testFile] LZX test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }
@@ -460,14 +460,14 @@ async function testGzipFile(filepath: string, nodeWorkDir: string): Promise<Test
 
     const output = `${stdout} ${stderr}`.toLowerCase();
     if (output.includes('error') || output.includes('invalid') || output.includes('corrupt')) {
-      console.log(`[testFile] GZIP file failed integrity test`);
+console.log(`[testFile] GZIP file failed integrity test`);
       return TestResult.FAILURE;
     }
 
-    console.log(`[testFile] GZIP file passed integrity test`);
+console.log(`[testFile] GZIP file passed integrity test`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    console.error(`[testFile] GZIP test error: ${error.message}`);
+console.error(`[testFile] GZIP test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }
@@ -487,10 +487,10 @@ async function testTarFile(filepath: string, nodeWorkDir: string): Promise<TestR
 
     await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
 
-    console.log(`[testFile] TAR file passed integrity test`);
+console.log(`[testFile] TAR file passed integrity test`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    console.error(`[testFile] TAR test error: ${error.message}`);
+console.error(`[testFile] TAR test error: ${error.message}`);
     await fs.writeFile(outputFile, `ERROR: ${error.message}`);
     return TestResult.FAILURE;
   }

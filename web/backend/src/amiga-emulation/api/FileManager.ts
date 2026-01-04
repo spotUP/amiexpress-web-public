@@ -128,7 +128,7 @@ export class FileManager {
       case 'EEXIST': // File exists
         return this.ERROR_OBJECT_IN_USE;
       default:
-        console.warn(`[FileManager] Unmapped Node.js error: ${err.code}`);
+console.warn(`[FileManager] Unmapped Node.js error: ${err.code}`);
         return this.ERROR_NO_ERROR;
     }
   }
@@ -168,9 +168,9 @@ export class FileManager {
     this.handles.set(2, stdout);
     this.stdoutBptr = 2;
 
-    console.log('[FileManager] Initialized standard handles:');
-    console.log(`  BPTR 1 (stdin):  ${stdin.toString()}`);
-    console.log(`  BPTR 2 (stdout): ${stdout.toString()}`);
+console.log('[FileManager] Initialized standard handles:');
+console.log(`  BPTR 1 (stdin):  ${stdin.toString()}`);
+console.log(`  BPTR 2 (stdout): ${stdout.toString()}`);
   }
 
   /**
@@ -190,7 +190,7 @@ export class FileManager {
    * @returns BPTR (Byte Pointer) or 0 on failure
    */
   open(amiPath: string, mode: number): number {
-    console.log(`[FileManager] Open: "${amiPath}" mode=${mode}`);
+console.log(`[FileManager] Open: "${amiPath}" mode=${mode}`);
     const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
     const logToFile = (msg: string) => {
       try {
@@ -206,7 +206,7 @@ export class FileManager {
     if (specialDevice.isSpecial) {
       if (specialDevice.type === 'console') {
         // Return stdout BPTR for console output (use the actual allocated BPTR)
-        console.log(`[FileManager] Console device, returning stdout BPTR=0x${this.stdoutBptr.toString(16)}`);
+console.log(`[FileManager] Console device, returning stdout BPTR=0x${this.stdoutBptr.toString(16)}`);
         return this.stdoutBptr;
       } else if (specialDevice.type === 'nil') {
         // Create NIL device handle
@@ -220,7 +220,7 @@ export class FileManager {
         fh.bAddr = bptr;
         fh.open('w');
         this.handles.set(bptr, fh);
-        console.log(`[FileManager] Created NIL device: ${fh.toString()}`);
+console.log(`[FileManager] Created NIL device: ${fh.toString()}`);
         return bptr;
       }
     }
@@ -228,7 +228,7 @@ export class FileManager {
     // Map AmigaDOS path to system path
     let sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
     if (!sysPath) {
-      console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
+console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
       logToFile(`Resolve failed for "${amiPath}"`);
       this.emitDebug(`[68K] Path resolve failed: "${amiPath}"`, 'error');
       this.lastErrorCode = this.ERROR_OBJECT_NOT_FOUND;
@@ -238,10 +238,10 @@ export class FileManager {
     // Check if file exists and log it (use amigafs for case-insensitive matching)
     const fileExists = amigafs.existsSync(sysPath);
     if (fileExists) {
-      console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
+console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (EXISTS)`);
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (exists)`);
     } else {
-      console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
+console.log(`[FileManager] Open: "${amiPath}" -> "${sysPath}" (NOT FOUND - will fail with IoErr=205)`);
       logToFile(`Resolved "${amiPath}" -> "${sysPath}" (not found)`);
       // Emit to sysop terminal for visibility
       this.emitDebug(`[68K] File not found: "${amiPath}"`, 'warn');
@@ -256,7 +256,7 @@ export class FileManager {
     } else if (mode === 1004) {
       fileMode = 'rw'; // MODE_READWRITE - read/write
     } else {
-      console.error(`[FileManager] Unknown mode: ${mode}`);
+console.error(`[FileManager] Unknown mode: ${mode}`);
       this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
       return 0; // Failed
     }
@@ -265,7 +265,7 @@ export class FileManager {
     if (fileMode === 'r' && this.fileCache) {
       const cached = this.fileCache.load(amiPath, this.currentDirSysPath);
       if (cached && cached.isDirectory) {
-        console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
+console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
         this.lastErrorCode = this.ERROR_OBJECT_WRONG_TYPE;
         return 0;
       }
@@ -286,7 +286,7 @@ export class FileManager {
 
     // Try to open the file
     if (!fh.open(fileMode)) {
-      console.error(`[FileManager] Failed to open file: ${sysPath}`);
+console.error(`[FileManager] Failed to open file: ${sysPath}`);
       logToFile(`Failed to open "${sysPath}"`);
       // Map file system error if available
       const fsError = (fh as any).lastError; // FileHandle may store error
@@ -304,7 +304,7 @@ export class FileManager {
     fh.bAddr = bptr;
     this.handles.set(bptr, fh);
 
-    console.log(`[FileManager] Opened file: ${fh.toString()}`);
+console.log(`[FileManager] Opened file: ${fh.toString()}`);
     this.lastErrorCode = this.ERROR_NO_ERROR; // Success
     return bptr;
   }
@@ -316,23 +316,23 @@ export class FileManager {
    * @returns true on success, false on failure
    */
   close(bptr: number): boolean {
-    console.log(`[FileManager] Close BPTR=${bptr}`);
+console.log(`[FileManager] Close BPTR=${bptr}`);
 
     // Don't close stdin/stdout
     if (bptr === 1 || bptr === 2) {
-      console.log(`[FileManager] Cannot close standard handle BPTR=${bptr}`);
+console.log(`[FileManager] Cannot close standard handle BPTR=${bptr}`);
       return true; // Not an error
     }
 
     const fh = this.handles.get(bptr);
     if (!fh) {
-      console.error(`[FileManager] Invalid BPTR: ${bptr}`);
+console.error(`[FileManager] Invalid BPTR: ${bptr}`);
       return false;
     }
 
     fh.close();
     this.handles.delete(bptr);
-    console.log(`[FileManager] Closed: ${fh.toString()}`);
+console.log(`[FileManager] Closed: ${fh.toString()}`);
     return true;
   }
 
@@ -346,7 +346,7 @@ export class FileManager {
   read(bptr: number, length: number): Buffer {
     const fh = this.handles.get(bptr);
     if (!fh) {
-      console.error(`[FileManager] Read from invalid BPTR: ${bptr}`);
+console.error(`[FileManager] Read from invalid BPTR: ${bptr}`);
       return Buffer.alloc(0);
     }
 
@@ -367,11 +367,11 @@ export class FileManager {
       const text = data.toString('latin1');
       const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
       const previewLines = lines.slice(0, 5).map((line) => line.slice(0, 120));
-      console.log(
+console.log(
         `[FileManager] Dir1 read BPTR=${bptr} bytes=${data.length} CR=${crCount} LF=${lfCount} ` +
           `sample="${printable}" hex=${hex}`
       );
-      console.log(
+console.log(
         `[FileManager][Dir1] lines=${lines.length} preview=${previewLines.join(' | ')}`
       );
 
@@ -390,7 +390,7 @@ export class FileManager {
   write(bptr: number, data: Buffer): { bytesWritten: number; consoleData?: Buffer } {
     const fh = this.handles.get(bptr);
     if (!fh) {
-      console.error(`[FileManager] Write to invalid BPTR: ${bptr}`);
+console.error(`[FileManager] Write to invalid BPTR: ${bptr}`);
       return { bytesWritten: -1 };
     }
 
@@ -412,7 +412,7 @@ export class FileManager {
   seek(bptr: number, position: number, whence: number): number {
     const fh = this.handles.get(bptr);
     if (!fh) {
-      console.error(`[FileManager] Seek on invalid BPTR: ${bptr}`);
+console.error(`[FileManager] Seek on invalid BPTR: ${bptr}`);
       return -1;
     }
 
@@ -428,7 +428,7 @@ export class FileManager {
   tell(bptr: number): number {
     const fh = this.handles.get(bptr);
     if (!fh) {
-      console.error(`[FileManager] Tell on invalid BPTR: ${bptr}`);
+console.error(`[FileManager] Tell on invalid BPTR: ${bptr}`);
       return -1;
     }
 
@@ -475,10 +475,10 @@ export class FileManager {
       this.handles.delete(oldBptr);
       stdinHandle.bAddr = bptr;
       this.handles.set(bptr, stdinHandle);
-      console.log(`[FileManager] stdin re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
+console.log(`[FileManager] stdin re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
     }
     this.stdinBptr = bptr;
-    console.log(`[FileManager] stdin BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
+console.log(`[FileManager] stdin BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
   }
 
   /**
@@ -493,10 +493,10 @@ export class FileManager {
       this.handles.delete(oldBptr);
       stdoutHandle.bAddr = bptr;
       this.handles.set(bptr, stdoutHandle);
-      console.log(`[FileManager] stdout re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
+console.log(`[FileManager] stdout re-registered: BPTR 0x${oldBptr.toString(16)} -> 0x${bptr.toString(16)}`);
     }
     this.stdoutBptr = bptr;
-    console.log(`[FileManager] stdout BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
+console.log(`[FileManager] stdout BPTR set to 0x${bptr.toString(16)} (addr 0x${(bptr << 2).toString(16)})`);
   }
 
   /**
@@ -514,9 +514,9 @@ export class FileManager {
     if (sysPath) {
       this.currentDirAmi = amiPath;
       this.currentDirSysPath = sysPath;
-      console.log(`[FileManager] Changed directory to: ${amiPath} (${sysPath})`);
+console.log(`[FileManager] Changed directory to: ${amiPath} (${sysPath})`);
     } else {
-      console.error(`[FileManager] Failed to change directory to: ${amiPath}`);
+console.error(`[FileManager] Failed to change directory to: ${amiPath}`);
     }
   }
 
@@ -535,11 +535,11 @@ export class FileManager {
    * Close all open file handles (cleanup on session end)
    */
   closeAll(): void {
-    console.log('[FileManager] Closing all file handles...');
+console.log('[FileManager] Closing all file handles...');
     for (const [bptr, fh] of this.handles) {
       if (bptr !== 1 && bptr !== 2) { // Don't close stdin/stdout
         fh.close();
-        console.log(`[FileManager] Closed: ${fh.toString()}`);
+console.log(`[FileManager] Closed: ${fh.toString()}`);
       }
     }
     this.handles.clear();

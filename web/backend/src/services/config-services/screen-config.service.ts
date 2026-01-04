@@ -24,7 +24,7 @@ export class ScreenConfigService {
     const screenTypesPath = path.join(bbsRoot, 'ScreenTypes.info');
 
     if (!fs.existsSync(screenTypesPath)) {
-      console.warn('[ScreenConfigService] ScreenTypes.info not found');
+console.warn('[ScreenConfigService] ScreenTypes.info not found');
       return this.configRepo.getAllScreenTypes();
     }
 
@@ -64,10 +64,10 @@ export class ScreenConfigService {
         if (typeNum > 50) break;
       }
 
-      console.log(`[ScreenConfigService] Loaded ${screenTypes.length} screen types`);
+console.log(`[ScreenConfigService] Loaded ${screenTypes.length} screen types`);
       return screenTypes;
     } catch (error) {
-      console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
+console.error('[ScreenConfigService] Error reading ScreenTypes.info:', error);
       return this.configRepo.getAllScreenTypes();
     }
   }
@@ -160,9 +160,9 @@ export class ScreenConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(screenTypesPath, infoData);
 
-      console.log(`[ScreenConfigService] Wrote ${screenTypesPath} with ${typeNum} types`);
+console.log(`[ScreenConfigService] Wrote ${screenTypesPath} with ${typeNum} types`);
     } catch (error) {
-      console.error(`[ScreenConfigService] Failed to write ${screenTypesPath}:`, error);
+console.error(`[ScreenConfigService] Failed to write ${screenTypesPath}:`, error);
     }
   }
 }

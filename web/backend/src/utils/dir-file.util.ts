@@ -205,9 +205,9 @@ export async function writeDirEntry(
     // Use 'latin1' encoding to preserve Amiga ASCII art characters (e.g., ¬ = \xac)
     await fs.appendFile(dirFilePath, entry, 'latin1');
 
-    console.log(`[DIR] Wrote entry to ${path.basename(dirFilePath)}: ${filename}`);
+console.log(`[DIR] Wrote entry to ${path.basename(dirFilePath)}: ${filename}`);
   } catch (error: any) {
-    console.error(`[DIR] Error writing DIR entry: ${error.message}`);
+console.error(`[DIR] Error writing DIR entry: ${error.message}`);
     throw error;
   }
 }

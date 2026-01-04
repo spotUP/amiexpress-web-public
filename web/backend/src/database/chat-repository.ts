@@ -302,7 +302,7 @@ export class ChatRepository extends BaseRepository<any> {
       `);
       ftsStmt.run(messageId, message.message, message.senderUsername, message.roomId);
     } catch (e) {
-      console.error('[ChatRepository] FTS index update failed:', e);
+console.error('[ChatRepository] FTS index update failed:', e);
     }
 
     return messageId;

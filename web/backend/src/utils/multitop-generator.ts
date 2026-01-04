@@ -62,7 +62,7 @@ interface GlobalStats {
 export function parseDesignFile(designPath: string): DesignConfig | null {
   try {
     if (!fs.existsSync(designPath)) {
-      console.error(`[MultiTop] Design file not found: ${designPath}`);
+console.error(`[MultiTop] Design file not found: ${designPath}`);
       return null;
     }
 
@@ -96,7 +96,7 @@ export function parseDesignFile(designPath: string): DesignConfig | null {
       template: templateLines.join('\n')
     };
   } catch (error) {
-    console.error('[MultiTop] Error parsing design file:', error);
+console.error('[MultiTop] Error parsing design file:', error);
     return null;
   }
 }
@@ -142,14 +142,14 @@ async function getAllUserStats(ignoreSysop: boolean = false): Promise<UserStats[
         downloadedFiles: user.downloads || 0,
         messages: messageCount,
         calls: user.timesCalled || user.calls || 0,
-        cpsUp: 0, // TODO: Get from user.keys equivalent if available
-        cpsDown: 0 // TODO: Get from user.keys equivalent if available
+        cpsUp: user.topUploadCPS || 0,
+        cpsDown: user.topDownloadCPS || 0
       });
     }
 
     return stats;
   } catch (error) {
-    console.error('[MultiTop] Error getting user stats:', error);
+console.error('[MultiTop] Error getting user stats:', error);
     return [];
   }
 }
@@ -430,7 +430,7 @@ export async function generateMultiTop(
   } = {}
 ): Promise<string | null> {
   try {
-    console.log(`[MultiTop] Generating from design: ${designPath}`);
+console.log(`[MultiTop] Generating from design: ${designPath}`);
 
     // Parse design file
     const design = parseDesignFile(designPath);
@@ -443,11 +443,11 @@ export async function generateMultiTop(
       design.sortField = options.sortField.toUpperCase() as SortField;
     }
 
-    console.log(`[MultiTop] Sort field: ${design.sortField}`);
+console.log(`[MultiTop] Sort field: ${design.sortField}`);
 
     // Get all user stats
     const allUsers = await getAllUserStats(options.ignoreSysop || false);
-    console.log(`[MultiTop] Found ${allUsers.length} users`);
+console.log(`[MultiTop] Found ${allUsers.length} users`);
 
     // Sort users
     const sortedUsers = sortUsers(allUsers, design.sortField);
@@ -466,12 +466,12 @@ export async function generateMultiTop(
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(fullPath, output, 'utf-8');
-      console.log(`[MultiTop] Wrote output to ${fullPath}`);
+console.log(`[MultiTop] Wrote output to ${fullPath}`);
     }
 
     return output;
   } catch (error) {
-    console.error('[MultiTop] Error generating MultiTop:', error);
+console.error('[MultiTop] Error generating MultiTop:', error);
     return null;
   }
 }

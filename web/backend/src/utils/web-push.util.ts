@@ -31,7 +31,7 @@ export function initWebPush(dbConfig?: { vapid_public_key?: string; vapid_privat
   }
 
   if (!publicKey || !privateKey) {
-    console.log('[Web Push] VAPID keys not configured - push notifications disabled');
+console.log('[Web Push] VAPID keys not configured - push notifications disabled');
     webPushConfigured = false;
     currentVapidPublicKey = null;
     return false;
@@ -45,10 +45,10 @@ export function initWebPush(dbConfig?: { vapid_public_key?: string; vapid_privat
     webPush.setVapidDetails(contactEmail, publicKey, privateKey);
     webPushConfigured = true;
     currentVapidPublicKey = publicKey;
-    console.log('[Web Push] Initialized with VAPID credentials');
+console.log('[Web Push] Initialized with VAPID credentials');
     return true;
   } catch (error) {
-    console.error('[Web Push] Failed to initialize:', error);
+console.error('[Web Push] Failed to initialize:', error);
     webPushConfigured = false;
     currentVapidPublicKey = null;
     return false;
@@ -121,7 +121,7 @@ export async function sendPushNotification(
   payload: PushNotificationPayload
 ): Promise<boolean> {
   if (!webPushConfigured) {
-    console.warn('[Web Push] Not configured - cannot send notification');
+console.warn('[Web Push] Not configured - cannot send notification');
     return false;
   }
 
@@ -137,15 +137,15 @@ export async function sendPushNotification(
         urgency: 'high'
       }
     );
-    console.log('[Web Push] Notification sent successfully');
+console.log('[Web Push] Notification sent successfully');
     return true;
   } catch (error: any) {
     // Handle expired/invalid subscriptions
     if (error.statusCode === 410 || error.statusCode === 404) {
-      console.log('[Web Push] Subscription expired or invalid:', subscription.endpoint);
+console.log('[Web Push] Subscription expired or invalid:', subscription.endpoint);
       return false;
     }
-    console.error('[Web Push] Failed to send notification:', error);
+console.error('[Web Push] Failed to send notification:', error);
     return false;
   }
 }
@@ -167,7 +167,7 @@ export async function sendPushNotifications(
 
   const succeeded = results.filter(r => r.success).length;
   const failed = results.filter(r => !r.success).length;
-  console.log(`[Web Push] Sent to ${succeeded} subscriptions, ${failed} failed`);
+console.log(`[Web Push] Sent to ${succeeded} subscriptions, ${failed} failed`);
 
   return results;
 }

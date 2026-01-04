@@ -52,9 +52,9 @@ export class QWKManager {
         fromBBS: messages[0]?.from || 'UNKNOWN'
       });
 
-      console.log(`Processed QWK packet ${filename} with ${messages.length} messages`);
+console.log(`Processed QWK packet ${filename} with ${messages.length} messages`);
     } catch (error) {
-      console.error(`Error processing QWK packet ${filename}:`, error);
+console.error(`Error processing QWK packet ${filename}:`, error);
       // Update packet status to error
       const packetId = await db.createQWKPacket({
         filename,
@@ -135,7 +135,7 @@ export class QWKManager {
       }
 
     } catch (error) {
-      console.error('Error parsing QWK packet:', error);
+console.error('Error parsing QWK packet:', error);
       // Return empty array on parse error
     }
 
@@ -234,7 +234,7 @@ export class QWKManager {
       };
 
     } catch (error) {
-      console.error('Error parsing QWK message:', error);
+console.error('Error parsing QWK message:', error);
       return null;
     }
   }
@@ -466,11 +466,11 @@ export class QWKManager {
         try {
           await this.processIncomingPacket(path.basename(filePath));
         } catch (error) {
-          console.error(`Failed to process QWK packet ${filePath}:`, error);
+console.error(`Failed to process QWK packet ${filePath}:`, error);
         }
       }
     } catch (error) {
-      console.error('Error processing incoming QWK packets:', error);
+console.error('Error processing incoming QWK packets:', error);
     }
   }
 
@@ -496,7 +496,7 @@ export class QWKManager {
         // Delete database record
         await db.deleteQWKPacket(packet.id);
       } catch (error) {
-        console.error(`Failed to cleanup QWK packet ${packet.id}:`, error);
+console.error(`Failed to cleanup QWK packet ${packet.id}:`, error);
       }
     }
   }
@@ -534,7 +534,7 @@ export class FTNManager {
           path.join(this.inboundPath, 'processed', file)
         );
       } catch (error) {
-        console.error(`Error processing FTN packet ${file}:`, error);
+console.error(`Error processing FTN packet ${file}:`, error);
       }
     }
   }
@@ -553,9 +553,9 @@ export class FTNManager {
         await db.createFTNMessage(message);
       }
 
-      console.log(`Processed FTN packet with ${messages.length} messages`);
+console.log(`Processed FTN packet with ${messages.length} messages`);
     } catch (error) {
-      console.error('Error processing FTN packet:', error);
+console.error('Error processing FTN packet:', error);
       throw error;
     }
   }
@@ -589,7 +589,7 @@ export class FTNManager {
       }
 
     } catch (error) {
-      console.error('Error parsing FTN packet:', error);
+console.error('Error parsing FTN packet:', error);
       // Return empty array on parse error
     }
 
@@ -690,7 +690,7 @@ export class FTNManager {
       };
 
     } catch (error) {
-      console.error('Error parsing FTN message:', error);
+console.error('Error parsing FTN message:', error);
       return null;
     }
   }
@@ -715,7 +715,7 @@ export class FTNManager {
       return new Date(fullYear, monthIndex, parseInt(day),
                      parseInt(hours), parseInt(minutes), parseInt(seconds));
     } catch (error) {
-      console.error('Error parsing FTN date:', dateStr, error);
+console.error('Error parsing FTN date:', dateStr, error);
       return new Date();
     }
   }
@@ -913,11 +913,11 @@ export class FTNManager {
           const filename = path.basename(filePath);
           fs.renameSync(filePath, path.join(processedDir, filename));
         } catch (error) {
-          console.error(`Failed to process FTN packet ${filePath}:`, error);
+console.error(`Failed to process FTN packet ${filePath}:`, error);
         }
       }
     } catch (error) {
-      console.error('Error processing incoming FTN packets:', error);
+console.error('Error processing incoming FTN packets:', error);
     }
   }
 
@@ -936,7 +936,7 @@ export class FTNManager {
       try {
         await db.updateFTNMessage(message.id as any, { status: 'archived' });
       } catch (error) {
-        console.error(`Failed to archive FTN message ${message.id}:`, error);
+console.error(`Failed to archive FTN message ${message.id}:`, error);
       }
     }
   }

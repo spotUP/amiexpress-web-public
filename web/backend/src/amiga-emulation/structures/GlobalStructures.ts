@@ -49,7 +49,7 @@ export class CommandsStructure {
   static readonly SIZE = 1976; // 0x7B8 bytes
 
   static writeToMemory(emulator: MoiraEmulator, addr: number, session: any): void {
-    console.log(`[CommandsStructure] Writing commands at 0x${addr.toString(16)}`);
+console.log(`[CommandsStructure] Writing commands at 0x${addr.toString(16)}`);
 
     // +0x00: acLvl[100] - access levels (fill with defaults)
     for (let i = 0; i < 100; i++) {
@@ -174,7 +174,7 @@ export class CommandsStructure {
       emulator.writeMemory(addr + 0x7A2 + i, 0);
     }
 
-    console.log(`[CommandsStructure] Wrote BBS config: "${process.env.BBS_NAME || 'AmiExpress Web BBS'}"`);
+console.log(`[CommandsStructure] Wrote BBS config: "${process.env.BBS_NAME || 'AmiExpress Web BBS'}"`);
   }
 
   private static writeString(emulator: MoiraEmulator, addr: number, str: string, maxLen: number): void {
@@ -228,7 +228,7 @@ export class StartOptionStructure {
   static readonly SIZE = 888; // 0x378 bytes
 
   static writeToMemory(emulator: MoiraEmulator, addr: number, session: any): void {
-    console.log(`[StartOptionStructure] Writing startOption at 0x${addr.toString(16)}`);
+console.log(`[StartOptionStructure] Writing startOption at 0x${addr.toString(16)}`);
 
     // +0x00: leftEdge (INT)
     emulator.writeMemory16(addr + 0x00, 0);
@@ -322,7 +322,7 @@ export class StartOptionStructure {
     // +0x374: acpWindow (PTR) - null pointer
     emulator.writeMemory32(addr + 0x374, 0);
 
-    console.log(`[StartOptionStructure] Wrote node settings`);
+console.log(`[StartOptionStructure] Wrote node settings`);
   }
 
   private static writeString(emulator: MoiraEmulator, addr: number, str: string, maxLen: number): void {
@@ -371,10 +371,10 @@ export class NodeStateGlobals {
     const expertAddr = baseAddr + 21;
     emulator.writeMemory(expertAddr, session.user?.expert ? 1 : 0);
 
-    console.log(`[NodeStateGlobals] Wrote node state at 0x${baseAddr.toString(16)}`);
-    console.log(`  currentConf: ${session.currentConference || 0}`);
-    console.log(`  node: ${session.nodeId || 1}`);
-    console.log(`  timeLimit: ${session.user?.timeLimit || 3600}`);
+console.log(`[NodeStateGlobals] Wrote node state at 0x${baseAddr.toString(16)}`);
+console.log(`  currentConf: ${session.currentConference || 0}`);
+console.log(`  node: ${session.nodeId || 1}`);
+console.log(`  timeLimit: ${session.user?.timeLimit || 3600}`);
   }
 }
 
@@ -396,10 +396,10 @@ export class SharedBBSData {
     this.soptAddr = baseAddr + CommandsStructure.SIZE;
     this.nodeStateAddr = baseAddr + CommandsStructure.SIZE + StartOptionStructure.SIZE;
 
-    console.log('[SharedBBSData] Allocated shared BBS memory:');
-    console.log(`  cmds:       0x${this.cmdsAddr.toString(16)} (${CommandsStructure.SIZE} bytes)`);
-    console.log(`  sopt:       0x${this.soptAddr.toString(16)} (${StartOptionStructure.SIZE} bytes)`);
-    console.log(`  nodeState:  0x${this.nodeStateAddr.toString(16)} (32 bytes)`);
+console.log('[SharedBBSData] Allocated shared BBS memory:');
+console.log(`  cmds:       0x${this.cmdsAddr.toString(16)} (${CommandsStructure.SIZE} bytes)`);
+console.log(`  sopt:       0x${this.soptAddr.toString(16)} (${StartOptionStructure.SIZE} bytes)`);
+console.log(`  nodeState:  0x${this.nodeStateAddr.toString(16)} (32 bytes)`);
   }
 
   /**

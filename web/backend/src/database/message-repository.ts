@@ -45,7 +45,7 @@ export class MessageRepository extends BaseRepository<any> {
 
       // Write .msg file (message text)
       messageFileManager.writeMessageFile(fullMessage, message.conferenceId, msgNumber);
-      console.log(`[Database] Synced message ${messageId} to ${msgNumber}.msg (conf ${message.conferenceId})`);
+console.log(`[Database] Synced message ${messageId} to ${msgNumber}.msg (conf ${message.conferenceId})`);
 
       // Write to HeaderFile (message index) and update MailStats
       const timestamp = Math.floor(message.timestamp.getTime() / 1000);
@@ -59,9 +59,9 @@ export class MessageRepository extends BaseRepository<any> {
         recv: 0,  // Not received yet
         extMsgNum: msgNumber
       });
-      console.log(`[Database] Synced message ${messageId} to HeaderFile and MailStats (conf ${message.conferenceId})`);
+console.log(`[Database] Synced message ${messageId} to HeaderFile and MailStats (conf ${message.conferenceId})`);
     } catch (error) {
-      console.error(`[Database] Failed to sync message to disk:`, error);
+console.error(`[Database] Failed to sync message to disk:`, error);
       SysopDebugUtil.debug(
         null,
         null,
@@ -201,10 +201,10 @@ export class MessageRepository extends BaseRepository<any> {
           msgDate: timestamp
         });
 
-        console.log(`[Database] Synced updated message ${id} to .msg and HeaderFile`);
+console.log(`[Database] Synced updated message ${id} to .msg and HeaderFile`);
       }
     } catch (error) {
-      console.error(`[Database] Failed to sync updated message to disk:`, error);
+console.error(`[Database] Failed to sync updated message to disk:`, error);
       SysopDebugUtil.debug(
         null,
         null,
@@ -236,9 +236,9 @@ export class MessageRepository extends BaseRepository<any> {
         // Mark as deleted in HeaderFile (don't remove, just mark status)
         messageIndexManager.deleteMessageHeader(row.conferenceid, msgNumber);
 
-        console.log(`[Database] Deleted message ${id} from .msg and marked in HeaderFile`);
+console.log(`[Database] Deleted message ${id} from .msg and marked in HeaderFile`);
       } catch (error) {
-        console.error(`[Database] Failed to delete message file from disk:`, error);
+console.error(`[Database] Failed to delete message file from disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,

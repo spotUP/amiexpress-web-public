@@ -70,6 +70,8 @@ export interface BBSConfigData {
   file_check_enabled?: boolean;
   upload_check_virus?: boolean;
   upload_check_dupe?: boolean;
+  hold_access_level?: number; // express.e:346 - Security level required to access HOLD directory (default 201)
+  capitalize_filenames?: boolean; // express.e:19253 - Convert uploaded filenames to uppercase (LVL_CAPITOLS_in_FILE)
 
   // Mail & SMTP
   allow_internet_email?: boolean;
@@ -169,6 +171,8 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'FILE_CHECK_ENABLED': 'file_check_enabled',
   'UPLOAD_CHECK_VIRUS': 'upload_check_virus',
   'UPLOAD_CHECK_DUPE': 'upload_check_dupe',
+  'HOLD_ACCESS_LEVEL': 'hold_access_level',
+  'LVL_CAPITOLS_in_FILE': 'capitalize_filenames',
 
   // Mail & SMTP
   'ALLOW_INTERNET_EMAIL': 'allow_internet_email',
@@ -256,7 +260,7 @@ function parseTooltypesTextFile(filePath: string): Map<string, string> {
       toolTypes.set(key, value);
     }
   } catch (error) {
-    console.error('[BBSConfig] Failed to read bbsConfig.info.txt:', error);
+console.error('[BBSConfig] Failed to read bbsConfig.info.txt:', error);
   }
 
   return toolTypes;
@@ -288,9 +292,9 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
         const key = normalizeTooltypeKey(rawKey);
         mergedToolTypes.set(key, rawValue);
       }
-      console.log('[BBSConfig] Loaded configuration from bbsConfig.info');
+console.log('[BBSConfig] Loaded configuration from bbsConfig.info');
     } catch (error) {
-      console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
+console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
     }
   }
 
@@ -299,11 +303,11 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
     for (const [key, value] of textToolTypes.entries()) {
       mergedToolTypes.set(key, value);
     }
-    console.log('[BBSConfig] Loaded configuration overrides from bbsConfig.info.txt');
+console.log('[BBSConfig] Loaded configuration overrides from bbsConfig.info.txt');
   }
 
   if (mergedToolTypes.size === 0) {
-    console.log('[BBSConfig] bbsConfig.info not found, using defaults');
+console.log('[BBSConfig] bbsConfig.info not found, using defaults');
     return getDefaultConfig();
   }
 
@@ -338,7 +342,7 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
 
     return { ...getDefaultConfig(), ...config };
   } catch (error) {
-    console.error('[BBSConfig] Failed to parse configuration:', error);
+console.error('[BBSConfig] Failed to parse configuration:', error);
     return getDefaultConfig();
   }
 }
@@ -432,15 +436,15 @@ export function saveBBSConfig(bbsRoot: string, config: Partial<BBSConfigData>): 
 
     if (infoFile) {
       writeInfoFile(infoFile);
-      console.log('[BBSConfig] Saved configuration to bbsConfig.info');
+console.log('[BBSConfig] Saved configuration to bbsConfig.info');
     } else {
-      console.warn('[BBSConfig] bbsConfig.info not found; skipping .info update');
+console.warn('[BBSConfig] bbsConfig.info not found; skipping .info update');
     }
 
     fs.writeFileSync(configTextPath, content, 'utf-8');
-    console.log('[BBSConfig] Saved configuration to bbsConfig.info.txt');
+console.log('[BBSConfig] Saved configuration to bbsConfig.info.txt');
   } catch (error) {
-    console.error('[BBSConfig] Failed to save bbsConfig.info:', error);
+console.error('[BBSConfig] Failed to save bbsConfig.info:', error);
     throw error;
   }
 }
@@ -491,6 +495,8 @@ function getDefaultConfig(): BBSConfigData {
     file_check_enabled: true,
     upload_check_virus: false,
     upload_check_dupe: true,
+    hold_access_level: 201, // express.e:346 - Default security level for HOLD directory access
+    capitalize_filenames: false, // express.e:19253 - Convert uploaded filenames to uppercase
     allow_internet_email: false,
     smtp_server: '',
     smtp_port: 25,
@@ -558,7 +564,7 @@ export function stripSecretsFromConfigFile(bbsRoot: string): {
     if (fs.existsSync(configPath)) {
       const backupPath = `${configPath}.pre-strip-${backupTime}.backup`;
       fs.copyFileSync(configPath, backupPath);
-      console.log(`[BBSConfig] Created backup: ${backupPath}`);
+console.log(`[BBSConfig] Created backup: ${backupPath}`);
 
       const infoFile = parseInfoFile(configPath);
       if (infoFile) {
@@ -569,7 +575,7 @@ export function stripSecretsFromConfigFile(bbsRoot: string): {
           if (index !== -1) {
             infoFile.tooltypes.splice(index, 1);
             strippedCount++;
-            console.log(`[BBSConfig] Stripped ${sensitiveKey} from bbsConfig.info`);
+console.log(`[BBSConfig] Stripped ${sensitiveKey} from bbsConfig.info`);
           }
         }
         writeInfoFile(infoFile);
@@ -597,7 +603,7 @@ export function stripSecretsFromConfigFile(bbsRoot: string): {
 
         if (isSensitive && trimmed) {
           strippedCount++;
-          console.log(`[BBSConfig] Stripped ${key} from bbsConfig.info.txt`);
+console.log(`[BBSConfig] Stripped ${key} from bbsConfig.info.txt`);
           // Add comment indicating field was moved to database
           filteredLines.push(`; ${key}=<MOVED TO DATABASE - ENCRYPTED>`);
         } else {
@@ -614,7 +620,7 @@ export function stripSecretsFromConfigFile(bbsRoot: string): {
       backupPath: `${configPath}.pre-strip-${backupTime}.backup`,
     };
   } catch (error: any) {
-    console.error('[BBSConfig] Failed to strip secrets:', error);
+console.error('[BBSConfig] Failed to strip secrets:', error);
     return {
       success: false,
       strippedCount,

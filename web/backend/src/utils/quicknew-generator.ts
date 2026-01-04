@@ -95,7 +95,7 @@ export async function generateQuickNewScreen(confId: number, daysBack = 7): Prom
       });
     }
   } catch (error) {
-    console.error('[QuickNew] Error generating QuickNew screen:', error);
+console.error('[QuickNew] Error generating QuickNew screen:', error);
   }
 
   const output: string[] = [];
@@ -131,7 +131,7 @@ export async function writeQuickNewScreen(confId: number, daysBack = 7): Promise
   try {
     fs.writeFileSync(screenPath, content, 'utf-8');
   } catch (error) {
-    console.error('[QuickNew] Failed to write quicknew screen:', error);
+console.error('[QuickNew] Failed to write quicknew screen:', error);
   }
 }
 
@@ -150,7 +150,7 @@ export async function writeQuickNewScreen(confId: number, daysBack = 7): Promise
 export function parseQuickNewConfigFile(configPath: string): QuickNewConfig | null {
   try {
     if (!fs.existsSync(configPath)) {
-      console.error(`[QuickNew] Config file not found: ${configPath}`);
+console.error(`[QuickNew] Config file not found: ${configPath}`);
       return null;
     }
 
@@ -158,7 +158,7 @@ export function parseQuickNewConfigFile(configPath: string): QuickNewConfig | nu
     const lines = content.split('\n').map(l => l.replace(/\r$/, ''));
 
     if (lines.length < 4) {
-      console.error('[QuickNew] Config file too short');
+console.error('[QuickNew] Config file too short');
       return null;
     }
 
@@ -196,10 +196,10 @@ export function parseQuickNewConfigFile(configPath: string): QuickNewConfig | nu
       i += 4;
     }
 
-    console.log(`[QuickNew] Parsed ${sections.length} sections from config`);
+console.log(`[QuickNew] Parsed ${sections.length} sections from config`);
     return { ansiReset, colorCode, sections };
   } catch (error) {
-    console.error('[QuickNew] Error parsing config:', error);
+console.error('[QuickNew] Error parsing config:', error);
     return null;
   }
 }
@@ -260,7 +260,7 @@ export function parseDirFile(dirPath: string): Array<{ filename: string; uploadD
     }
     return entries;
   } catch (error) {
-    console.error(`[QuickNew] Error parsing DIR file ${dirPath}:`, error);
+console.error(`[QuickNew] Error parsing DIR file ${dirPath}:`, error);
     return [];
   }
 }
@@ -293,7 +293,7 @@ export async function generateQuickNewFromConfig(
     // Parse BBS:ConfX/DirY format
     const match = sectionCfg.dirPath.match(/BBS:Conf(\d+)(?:\/Dir(\d+))?/i);
     if (!match) {
-      console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
+console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
       continue;
     }
 
@@ -307,18 +307,25 @@ export async function generateQuickNewFromConfig(
 
       if (areas.length === 0) {
         const diskAreas = loadConferenceFileAreas(bbsRoot, confId);
-        // Map disk areas to match the expected structure
+        // Map disk areas to match the expected structure (only need id for lookup)
         areas = diskAreas.map(a => ({
           id: a.dirNumber, // Use dirNumber as ID for lookup
           name: a.name,
-          description: a.description || ''
+          description: a.description || '',
+          path: a.dlPath || a.ulPath || '',
+          conferenceId: confId,
+          maxFiles: 0,
+          uploadAccess: 0,
+          downloadAccess: 0,
+          created: new Date(),
+          updated: new Date()
         }));
       }
 
       const area = areas.find(a => a.id === dirNum) || areas[dirNum - 1];
 
       if (!area) {
-        console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}`);
+console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}`);
         continue;
       }
 
@@ -370,7 +377,7 @@ export async function generateQuickNewFromConfig(
         output.push('');
       }
     } catch (error) {
-      console.error(`[QuickNew] Error processing section ${sectionCfg.dirPath}:`, error);
+console.error(`[QuickNew] Error processing section ${sectionCfg.dirPath}:`, error);
     }
   }
 
@@ -395,9 +402,9 @@ export async function generateQuickNewFromConfig(
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(fullPath, result, 'utf-8');
-      console.log(`[QuickNew] Wrote output to ${fullPath}`);
+console.log(`[QuickNew] Wrote output to ${fullPath}`);
     } catch (error) {
-      console.error(`[QuickNew] Error writing to ${outputPath}:`, error);
+console.error(`[QuickNew] Error writing to ${outputPath}:`, error);
     }
   }
 

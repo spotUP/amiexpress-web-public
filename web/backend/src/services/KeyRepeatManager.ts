@@ -45,7 +45,7 @@ export class KeyRepeatManager {
    */
   start(): void {
     this.active = true;
-    console.log('[KeyRepeatManager] Started');
+console.log('[KeyRepeatManager] Started');
   }
 
   /**
@@ -54,7 +54,7 @@ export class KeyRepeatManager {
   stop(): void {
     this.active = false;
     this.clearAllKeys();
-    console.log('[KeyRepeatManager] Stopped');
+console.log('[KeyRepeatManager] Stopped');
   }
 
   /**

@@ -64,7 +64,7 @@ export class EnvironmentManager {
     this.emulator.writeMemory32(listAddr + 4, 0);              // lh_Tail (NULL)
     this.emulator.writeMemory32(listAddr + 8, listAddr + 0);  // lh_TailPred → Head
 
-    console.log(`[EnvironmentManager] Initialized LocalVars list at 0x${listAddr.toString(16)}`);
+console.log(`[EnvironmentManager] Initialized LocalVars list at 0x${listAddr.toString(16)}`);
   }
 
   /**
@@ -78,7 +78,7 @@ export class EnvironmentManager {
    */
   public setVar(name: string, value: string, flags: number = 0): boolean {
     try {
-      console.log(`[EnvironmentManager] SetVar("${name}", "${value}", flags=${flags})`);
+console.log(`[EnvironmentManager] SetVar("${name}", "${value}", flags=${flags})`);
 
       // Delete existing variable if present
       if (this.variables.has(name)) {
@@ -125,10 +125,10 @@ export class EnvironmentManager {
         nodeAddr
       });
 
-      console.log(`[EnvironmentManager] Created LocalVar at 0x${nodeAddr.toString(16)}`);
+console.log(`[EnvironmentManager] Created LocalVar at 0x${nodeAddr.toString(16)}`);
       return true;
     } catch (error) {
-      console.error(`[EnvironmentManager] SetVar error:`, error);
+console.error(`[EnvironmentManager] SetVar error:`, error);
       return false;
     }
   }
@@ -151,10 +151,10 @@ export class EnvironmentManager {
   public findVar(name: string): number {
     const varData = this.variables.get(name);
     if (varData) {
-      console.log(`[EnvironmentManager] FindVar("${name}") → 0x${varData.nodeAddr.toString(16)}`);
+console.log(`[EnvironmentManager] FindVar("${name}") → 0x${varData.nodeAddr.toString(16)}`);
       return varData.nodeAddr;
     }
-    console.log(`[EnvironmentManager] FindVar("${name}") → not found`);
+console.log(`[EnvironmentManager] FindVar("${name}") → not found`);
     return 0;
   }
 
@@ -169,7 +169,7 @@ export class EnvironmentManager {
   public findVarPointer(name: string, flags: number): number {
     const varData = this.variables.get(name);
     if (!varData) {
-      console.log(`[EnvironmentManager] FindVarPointer("${name}", flags=${flags}) → not found`);
+console.log(`[EnvironmentManager] FindVarPointer("${name}", flags=${flags}) → not found`);
       return 0;
     }
 
@@ -180,7 +180,7 @@ export class EnvironmentManager {
 
     // If GVF_GLOBAL_ONLY is set, only return global variables
     if (globalOnly && !isGlobalVar) {
-      console.log(`[EnvironmentManager] FindVarPointer("${name}") → skipped (not global)`);
+console.log(`[EnvironmentManager] FindVarPointer("${name}") → skipped (not global)`);
       return 0;
     }
 
@@ -188,7 +188,7 @@ export class EnvironmentManager {
     // But in practice, most code doesn't set this explicitly, so we're lenient
     // and return any variable unless GVF_GLOBAL_ONLY is explicitly set
 
-    console.log(`[EnvironmentManager] FindVarPointer("${name}", flags=${flags}) → 0x${varData.nodeAddr.toString(16)}`);
+console.log(`[EnvironmentManager] FindVarPointer("${name}", flags=${flags}) → 0x${varData.nodeAddr.toString(16)}`);
     return varData.nodeAddr;
   }
 
@@ -202,11 +202,11 @@ export class EnvironmentManager {
   public deleteVar(name: string): boolean {
     const varData = this.variables.get(name);
     if (!varData) {
-      console.log(`[EnvironmentManager] DeleteVar("${name}") → not found`);
+console.log(`[EnvironmentManager] DeleteVar("${name}") → not found`);
       return false;
     }
 
-    console.log(`[EnvironmentManager] DeleteVar("${name}")`);
+console.log(`[EnvironmentManager] DeleteVar("${name}")`);
 
     // Remove from linked list
     if (this.localVarsListAddr !== 0) {
@@ -227,7 +227,7 @@ export class EnvironmentManager {
    * Called at session initialization
    */
   public populateStandardVars(bbsRoot: string, nodeId: number, confId: number, username: string, secLevel: number): void {
-    console.log(`[EnvironmentManager] Populating standard environment variables`);
+console.log(`[EnvironmentManager] Populating standard environment variables`);
 
     // Standard AmigaDOS variables
     this.setVar('PATH', 'Work:,S:,C:,Doors:', EnvironmentManager.GVF_LOCAL_VAR);
@@ -246,7 +246,7 @@ export class EnvironmentManager {
     this.setVar('USER_NAME', username, EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('USER_LEVEL', String(secLevel), EnvironmentManager.GVF_LOCAL_VAR);
 
-    console.log(`[EnvironmentManager] Populated ${this.variables.size} standard variables`);
+console.log(`[EnvironmentManager] Populated ${this.variables.size} standard variables`);
   }
 
   /**
@@ -257,7 +257,7 @@ export class EnvironmentManager {
   public setDoorUseVar(doorName: string, doorUse: string): void {
     const varName = `DOORUSE.${doorName.toUpperCase()}`;
     this.setVar(varName, doorUse, EnvironmentManager.GVF_LOCAL_VAR);
-    console.log(`[EnvironmentManager] Set ${varName}=${doorUse}`);
+console.log(`[EnvironmentManager] Set ${varName}=${doorUse}`);
   }
 
   /**
@@ -312,6 +312,6 @@ export class EnvironmentManager {
    */
   public clear(): void {
     this.variables.clear();
-    console.log(`[EnvironmentManager] Cleared all environment variables`);
+console.log(`[EnvironmentManager] Cleared all environment variables`);
   }
 }

@@ -63,7 +63,7 @@ class BackgroundCheckQueue {
    * @param task Background check task
    */
   async enqueue(task: BackgroundCheckTask): Promise<void> {
-    console.log(`[BgCheck] Enqueued: ${task.filename}`);
+console.log(`[BgCheck] Enqueued: ${task.filename}`);
     this.queue.push(task);
 
     // Start processing if not already running
@@ -85,13 +85,13 @@ class BackgroundCheckQueue {
       if (!task) continue;
 
       task.status = 'running';
-      console.log(`[BgCheck] Processing: ${task.filename}`);
+console.log(`[BgCheck] Processing: ${task.filename}`);
 
       try {
         const result = await this.performBackgroundCheck(task);
         task.result = result;
         task.status = 'completed';
-        console.log(`[BgCheck] Completed: ${task.filename}, status: ${result.finalStatus}`);
+console.log(`[BgCheck] Completed: ${task.filename}, status: ${result.finalStatus}`);
       } catch (error: any) {
         task.status = 'failed';
         task.result = {
@@ -100,7 +100,7 @@ class BackgroundCheckQueue {
           finalStatus: 'hold',
           error: error.message
         };
-        console.error(`[BgCheck] Failed: ${task.filename}, error: ${error.message}`);
+console.error(`[BgCheck] Failed: ${task.filename}, error: ${error.message}`);
       }
     }
 
@@ -129,20 +129,20 @@ class BackgroundCheckQueue {
       if (dizLines && dizLines.length > 0) {
         result.dizExtracted = true;
         result.dizContent = dizLines;
-        console.log(`[BgCheck] Extracted FILE_ID.DIZ for ${task.filename}`);
+console.log(`[BgCheck] Extracted FILE_ID.DIZ for ${task.filename}`);
       }
     } catch (error: any) {
-      console.log(`[BgCheck] No FILE_ID.DIZ for ${task.filename}`);
+console.log(`[BgCheck] No FILE_ID.DIZ for ${task.filename}`);
     }
 
     // 2. Test file integrity (express.e:19609-19610)
     try {
       const nodeWorkDir = `/tmp/bbs-bg-check-${task.taskId}`;
       result.testStatus = await testFile(task.filepath, nodeWorkDir);
-      console.log(`[BgCheck] Test result for ${task.filename}: ${result.testStatus}`);
+console.log(`[BgCheck] Test result for ${task.filename}: ${result.testStatus}`);
     } catch (error: any) {
       result.testStatus = TestResult.FAILURE;
-      console.error(`[BgCheck] Test error for ${task.filename}: ${error.message}`);
+console.error(`[BgCheck] Test error for ${task.filename}: ${error.message}`);
     }
 
     // 3. Determine final status (express.e:19614-19636)

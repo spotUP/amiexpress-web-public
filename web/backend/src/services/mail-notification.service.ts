@@ -78,7 +78,7 @@ async function getMailOptions(): Promise<MailOptions | null> {
     cacheTime = now;
     return cachedMailOptions;
   } catch (error) {
-    console.error('[MailService] Error getting mail options:', error);
+console.error('[MailService] Error getting mail options:', error);
     return null;
   }
 }
@@ -153,10 +153,10 @@ async function sendMail(
       text: body
     });
 
-    console.log(`[MailService] Email sent to ${to}: ${subject}`);
+console.log(`[MailService] Email sent to ${to}: ${subject}`);
     return true;
   } catch (error: any) {
-    console.error(`[MailService] Failed to send email: ${error.message}`);
+console.error(`[MailService] Failed to send email: ${error.message}`);
     return false;
   }
 }
@@ -345,10 +345,10 @@ export async function testSmtpConnection(): Promise<{ success: boolean; error?: 
       text: `This is a test email from your AmiExpress BBS SMTP configuration.\n\nSent at: ${now}\n\nIf you received this email, your SMTP settings are working correctly.`
     });
 
-    console.log(`[MailService] SMTP test successful - email sent to ${options.sysopEmail}`);
+console.log(`[MailService] SMTP test successful - email sent to ${options.sysopEmail}`);
     return { success: true };
   } catch (error: any) {
-    console.error(`[MailService] SMTP test failed: ${error.message}`);
+console.error(`[MailService] SMTP test failed: ${error.message}`);
     return { success: false, error: error.message };
   }
 }

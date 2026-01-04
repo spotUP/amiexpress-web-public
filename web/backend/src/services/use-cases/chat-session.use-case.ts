@@ -62,7 +62,7 @@ export class ChatSessionUseCase {
     this.chatState.activeSessions.push(session);
     this.chatState.pagingUsers.push(userId);
 
-    console.log(`Chat session created: ${session.id} for user ${username}`);
+console.log(`Chat session created: ${session.id} for user ${username}`);
     return session;
   }
 
@@ -83,7 +83,7 @@ export class ChatSessionUseCase {
       this.chatState.pagingUsers.splice(pagingIndex, 1);
     }
 
-    console.log(`Chat session accepted: ${sessionId} by sysop ${sysopId}`);
+console.log(`Chat session accepted: ${sessionId} by sysop ${sysopId}`);
     return session;
   }
 
@@ -107,7 +107,7 @@ export class ChatSessionUseCase {
       this.chatState.pagingUsers.splice(pagingIndex, 1);
     }
 
-    console.log(`Chat session ended: ${sessionId}`);
+console.log(`Chat session ended: ${sessionId}`);
   }
 
   /**
@@ -174,7 +174,7 @@ export class ChatSessionUseCase {
    */
   toggleSysopAvailable(): boolean {
     this.chatState.sysopAvailable = !this.chatState.sysopAvailable;
-    console.log(`Sysop availability toggled: ${this.chatState.sysopAvailable}`);
+console.log(`Sysop availability toggled: ${this.chatState.sysopAvailable}`);
     return this.chatState.sysopAvailable;
   }
 

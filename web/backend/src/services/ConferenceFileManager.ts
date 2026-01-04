@@ -195,7 +195,7 @@ export class ConferenceFileManager {
     if (!fs.existsSync(this.confDBPath)) {
       // Create empty file
       fs.writeFileSync(this.confDBPath, Buffer.alloc(0));
-      console.log(`[ConferenceFileManager] Created empty Conf.DB at ${this.confDBPath}`);
+console.log(`[ConferenceFileManager] Created empty Conf.DB at ${this.confDBPath}`);
     }
   }
 
@@ -232,7 +232,7 @@ export class ConferenceFileManager {
       return headers;
     } catch (error) {
       if (!this.suppressConfDbErrors) {
-        console.error('[ConferenceFileManager] Error reading Conf.DB headers:', error);
+console.error('[ConferenceFileManager] Error reading Conf.DB headers:', error);
       }
       return [];
     }
@@ -251,10 +251,10 @@ export class ConferenceFileManager {
       // Append to file
       fs.appendFileSync(this.confDBPath, buffer);
 
-      console.log(`[ConferenceFileManager] Wrote conference "${conf.name}" (slot ${slotNumber}) to Conf.DB`);
+console.log(`[ConferenceFileManager] Wrote conference "${conf.name}" (slot ${slotNumber}) to Conf.DB`);
     } catch (error) {
       if (!this.suppressConfDbErrors) {
-        console.error(`[ConferenceFileManager] Error writing conference "${conf.name}":`, error);
+console.error(`[ConferenceFileManager] Error writing conference "${conf.name}":`, error);
         throw error;
       }
     }
@@ -266,7 +266,7 @@ export class ConferenceFileManager {
   updateConferenceFile(conf: Conference, slotNumber: number): void {
     try {
       if (!fs.existsSync(this.confDBPath)) {
-        console.warn(`[ConferenceFileManager] Conf.DB does not exist, creating new`);
+console.warn(`[ConferenceFileManager] Conf.DB does not exist, creating new`);
         this.initializeConfDB();
       }
 
@@ -281,13 +281,13 @@ export class ConferenceFileManager {
       try {
         // Write at specific offset
         fs.writeSync(fd, buffer, 0, this.CONFBASE_SIZE, offset);
-        console.log(`[ConferenceFileManager] Updated conference "${conf.name}" (slot ${slotNumber}) in Conf.DB`);
+console.log(`[ConferenceFileManager] Updated conference "${conf.name}" (slot ${slotNumber}) in Conf.DB`);
       } finally {
         fs.closeSync(fd);
       }
     } catch (error) {
       if (!this.suppressConfDbErrors) {
-        console.error(`[ConferenceFileManager] Error updating conference "${conf.name}":`, error);
+console.error(`[ConferenceFileManager] Error updating conference "${conf.name}":`, error);
         throw error;
       }
     }
@@ -396,7 +396,7 @@ export class ConferenceFileManager {
         fs.closeSync(fd);
       }
     } catch (error) {
-      console.error(`[ConferenceFileManager] Error reading conference slot ${slotNumber}:`, error);
+console.error(`[ConferenceFileManager] Error reading conference slot ${slotNumber}:`, error);
       return null;
     }
   }
@@ -413,7 +413,7 @@ export class ConferenceFileManager {
       const stats = fs.statSync(this.confDBPath);
       return Math.floor(stats.size / this.CONFBASE_SIZE);
     } catch (error) {
-      console.error(`[ConferenceFileManager] Error getting conference count:`, error);
+console.error(`[ConferenceFileManager] Error getting conference count:`, error);
       return 0;
     }
   }

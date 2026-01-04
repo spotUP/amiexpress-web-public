@@ -88,7 +88,7 @@ export class AmigaDosEnvironment {
     this.useNativeLibraries = options?.useNativeLibraries ?? true;
     const bbsSession = options?.user ? options : null; // If it has a user, it's a session
 
-    console.log(
+console.log(
       `[AmigaDosEnvironment] 🔧 Constructor - native libraries default: ${
         options?.useNativeLibraries === undefined
           ? "ENABLED (default)"
@@ -119,14 +119,14 @@ export class AmigaDosEnvironment {
     if (bbsSession?.user) {
       const nodeNumber = bbsSession.node || 1;
       const portName = `AEDoorPort${nodeNumber}`;
-      console.log(`[AmigaDosEnvironment] Creating message port: ${portName}`);
+console.log(`[AmigaDosEnvironment] Creating message port: ${portName}`);
       this.createAEDoorPort(portName, bbsSession);
     }
 
     // Set up trap handler
     this.setupTrapHandler();
 
-    console.log(
+console.log(
       `[AmigaDosEnvironment] ✅ Initialized (native libraries: ${
         this.useNativeLibraries ? "enabled" : "disabled"
       })`
@@ -137,7 +137,7 @@ export class AmigaDosEnvironment {
    * Create AEDoorPort for BBS door communication
    */
   private createAEDoorPort(portName: string, session: any): void {
-    console.log(
+console.log(
       `[AmigaDosEnvironment] Creating AEDoorPort for user: ${session.user.username}`
     );
 
@@ -150,14 +150,14 @@ export class AmigaDosEnvironment {
     const portAddr = (this.execLibrary as any).createPublicPort(portName, undefined, AEDOORPORT_SIGBIT);
 
     if (!portAddr || portAddr === 0) {
-      console.error(`[AmigaDosEnvironment] Failed to create ${portName}!`);
+console.error(`[AmigaDosEnvironment] Failed to create ${portName}!`);
       return;
     }
 
-    console.log(
+console.log(
       `[AmigaDosEnvironment] ${portName} created at 0x${portAddr.toString(16)}`
     );
-    console.log(
+console.log(
       `[AmigaDosEnvironment] Doors can now FindPort("${portName}") to communicate with BBS`
     );
 
@@ -171,7 +171,7 @@ export class AmigaDosEnvironment {
    * This handles incoming door messages and responds with BBS data
    */
   private setupAEDoorPortHandler(portName: string, session: any): void {
-    console.log(
+console.log(
       `[AmigaDosEnvironment] Setting up message handler for ${portName}`
     );
 
@@ -184,7 +184,7 @@ export class AmigaDosEnvironment {
     // 4. WaitPort(replyPort) - waits for response
     // 5. GetMsg(replyPort) - gets our response
 
-    console.log(
+console.log(
       `[AmigaDosEnvironment] Handler ready - waiting for door to send messages`
     );
   }
@@ -194,20 +194,20 @@ export class AmigaDosEnvironment {
    */
   private setupTrapHandler(): void {
     // The trap handler will be called when a JSR to negative address is detected
-    console.log("[AmigaDosEnvironment] Setting up trap handler...");
+console.log("[AmigaDosEnvironment] Setting up trap handler...");
     const setTrap = (this.emulator as any).setTrapHandler;
     if (typeof setTrap === 'function') {
       setTrap.call(this.emulator, (offset: number) => {
-        console.log(
+console.log(
           `[AmigaDOS] *** TRAP HANDLER CALLED *** offset=${offset} (0x${offset.toString(
             16
           )})`
         );
         this.handleLibraryCall(offset);
       });
-      console.log("[AmigaDosEnvironment] Trap handler configured successfully");
+console.log("[AmigaDosEnvironment] Trap handler configured successfully");
     } else {
-      console.warn("[AmigaDosEnvironment] Emulator lacks setTrapHandler; skipping trap setup");
+console.warn("[AmigaDosEnvironment] Emulator lacks setTrapHandler; skipping trap setup");
     }
   }
 
@@ -216,7 +216,7 @@ export class AmigaDosEnvironment {
    * This is called for STUB libraries only (when native code isn't available)
    */
   private handleLibraryCall(trapAddress: number): void {
-    console.log(
+console.log(
       `[AmigaDOS] Stub library call: trapAddress=${trapAddress} (0x${trapAddress.toString(
         16
       )})`
@@ -224,14 +224,14 @@ export class AmigaDosEnvironment {
 
     // Get the library base from A6 register (standard Amiga convention)
     let libraryBase = this.emulator.getRegister(CPURegister.A6);
-    console.log(`[AmigaDOS] Library base in A6: 0x${libraryBase.toString(16)}`);
+console.log(`[AmigaDOS] Library base in A6: 0x${libraryBase.toString(16)}`);
 
     // XIM-DOOR FIX: When A6=0, default to DosBase
     // XIM doors overwrite A6 with ExecBase, then call dos.library functions with A6=0
     // We detect this and route to dos.library automatically
     if (libraryBase === 0) {
       libraryBase = 0xffff0000; // DosBase
-      console.log(
+console.log(
         `[AmigaDOS] XIM-DOOR: A6=0 detected, defaulting to DosBase (0x${libraryBase.toString(
           16
         )})`
@@ -258,7 +258,7 @@ export class AmigaDosEnvironment {
     if (trapAddress >= 0xfe000000) {
       // Convert to signed 32-bit to handle negative offsets correctly
       offset = (trapAddress | 0) - (libraryBase | 0);
-      console.log(
+console.log(
         `[AmigaDOS] Calculated offset from trap address: 0x${trapAddress.toString(
           16
         )} - 0x${libraryBase.toString(16)} = ${offset}`
@@ -270,14 +270,14 @@ export class AmigaDosEnvironment {
     let normalizedOffset = offset;
     if (this.magicAddressMap.has(trapAddress)) {
       normalizedOffset = this.magicAddressMap.get(trapAddress)!;
-      console.log(
+console.log(
         `[AmigaDOS] Mapped magic address 0x${trapAddress.toString(
           16
         )} to offset ${normalizedOffset}`
       );
     } else if (this.magicAddressMap.has(offset)) {
       normalizedOffset = this.magicAddressMap.get(offset)!;
-      console.log(
+console.log(
         `[AmigaDOS] Mapped calculated offset ${offset} to ${normalizedOffset}`
       );
     }
@@ -290,28 +290,28 @@ export class AmigaDosEnvironment {
 
     if (libraryBase === 0xff4000) {
       // AEDoor.library - BBS door I/O functions
-      console.log(`[AmigaDOS] Routing to AEDoor.library (base=0xFF4000)`);
+console.log(`[AmigaDOS] Routing to AEDoor.library (base=0xFF4000)`);
       handled = this.amiexpressLibrary.handleCall(offset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by AEDoor.library (AmiExpressLibrary)`);
+console.log(`[AmigaDOS] Handled by AEDoor.library (AmiExpressLibrary)`);
       }
     } else if (libraryBase === 0xff8000) {
       // exec.library - System executive functions
       // NOTE: Some doors also call BBS functions from ExecBase (non-standard)
-      console.log(`[AmigaDOS] Routing to exec.library (base=0xFF8000)`);
+console.log(`[AmigaDOS] Routing to exec.library (base=0xFF8000)`);
       handled = (this.execLibrary as any).handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by exec.library`);
+console.log(`[AmigaDOS] Handled by exec.library`);
       }
 
       // Fallback: Try AmiExpress BBS functions (some doors use ExecBase for BBS calls)
       if (!handled) {
-        console.log(
+console.log(
           `[AmigaDOS] exec.library didn't handle offset ${normalizedOffset}, trying AEDoor functions...`
         );
         handled = this.amiexpressLibrary.handleCall(offset);
         if (handled) {
-          console.log(
+console.log(
             `[AmigaDOS] Handled by AEDoor functions via ExecBase (non-standard but common)`
           );
         }
@@ -319,39 +319,39 @@ export class AmigaDosEnvironment {
 
       // Fallback 2: Try dos.library (some XIM doors call DOS functions via ExecBase)
       if (!handled) {
-        console.log(
+console.log(
           `[AmigaDOS] ExecBase didn't handle offset ${normalizedOffset}, trying dos.library...`
         );
         handled = this.dosLibrary.handleCall(normalizedOffset);
         if (handled) {
-          console.log(
+console.log(
             `[AmigaDOS] Handled by dos.library via ExecBase (XIM-door pattern)`
           );
         }
       }
     } else if (libraryBase === 0xffff0000) {
       // dos.library - DOS functions
-      console.log(`[AmigaDOS] Routing to dos.library (base=0xFFFF0000)`);
+console.log(`[AmigaDOS] Routing to dos.library (base=0xFFFF0000)`);
       handled = this.dosLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by dos.library`);
+console.log(`[AmigaDOS] Handled by dos.library`);
       }
     } else if (libraryBase === 0xffff1000) {
       // intuition.library - GUI functions
       handled = this.intuitionLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by intuition.library`);
+console.log(`[AmigaDOS] Handled by intuition.library`);
       }
     } else if (libraryBase === 0xffff9000) {
       // icon.library - Icon/tooltype functions
-      console.log(`[AmigaDOS] Routing to icon.library (base=0xFFFF9000)`);
+console.log(`[AmigaDOS] Routing to icon.library (base=0xFFFF9000)`);
       handled = this.iconLibrary.handleCall(normalizedOffset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by icon.library`);
+console.log(`[AmigaDOS] Handled by icon.library`);
       }
     } else {
       // Unknown library base - try all libraries as fallback
-      console.log(
+console.log(
         `[AmigaDOS] Unknown library base 0x${libraryBase.toString(
           16
         )}, trying all libraries...`
@@ -360,45 +360,45 @@ export class AmigaDosEnvironment {
       // Try in priority order
       handled = this.amiexpressLibrary.handleCall(offset);
       if (handled) {
-        console.log(`[AmigaDOS] Handled by AmiExpress BBS library (fallback)`);
+console.log(`[AmigaDOS] Handled by AmiExpress BBS library (fallback)`);
       }
 
       if (!handled) {
         handled = (this.execLibrary as any).handleCall(normalizedOffset);
         if (handled) {
-          console.log(`[AmigaDOS] Handled by exec.library (fallback)`);
+console.log(`[AmigaDOS] Handled by exec.library (fallback)`);
         }
       }
 
       if (!handled) {
         handled = this.dosLibrary.handleCall(normalizedOffset);
         if (handled) {
-          console.log(`[AmigaDOS] Handled by dos.library (fallback)`);
+console.log(`[AmigaDOS] Handled by dos.library (fallback)`);
         }
       }
 
       if (!handled) {
         handled = this.intuitionLibrary.handleCall(normalizedOffset);
         if (handled) {
-          console.log(`[AmigaDOS] Handled by intuition.library (fallback)`);
+console.log(`[AmigaDOS] Handled by intuition.library (fallback)`);
         }
       }
 
       if (!handled) {
         handled = this.iconLibrary.handleCall(normalizedOffset);
         if (handled) {
-          console.log(`[AmigaDOS] Handled by icon.library (fallback)`);
+console.log(`[AmigaDOS] Handled by icon.library (fallback)`);
         }
       }
     }
 
     if (!handled) {
-      console.warn(`[AmigaDOS] ⚠️ UNIMPLEMENTED FUNCTION CALL`);
-      console.warn(
+console.warn(`[AmigaDOS] ⚠️ UNIMPLEMENTED FUNCTION CALL`);
+console.warn(
         `[AmigaDOS]   Offset: ${offset} (normalized: ${normalizedOffset})`
       );
-      console.warn(`[AmigaDOS]   Library base: 0x${libraryBase.toString(16)}`);
-      console.warn(`[AmigaDOS]   Trap address: 0x${trapAddress.toString(16)}`);
+console.warn(`[AmigaDOS]   Library base: 0x${libraryBase.toString(16)}`);
+console.warn(`[AmigaDOS]   Trap address: 0x${trapAddress.toString(16)}`);
 
       // Get CPU state for debugging
       const pc = this.emulator.getRegister(16); // Program counter
@@ -406,7 +406,7 @@ export class AmigaDosEnvironment {
       const d0 = this.emulator.getRegister(0); // D0 (often return value)
       const sp = this.emulator.getRegister(15); // Stack pointer
 
-      console.warn(
+console.warn(
         `[AmigaDOS]   PC: 0x${pc.toString(16)}, A6: 0x${a6.toString(
           16
         )}, D0: 0x${d0.toString(16)}, SP: 0x${sp.toString(16)}`
@@ -417,7 +417,7 @@ export class AmigaDosEnvironment {
       // We return 0 to let the door continue
       this.emulator.setRegister(0, 0); // D0 = 0 (success)
 
-      console.warn(`[AmigaDOS]   Returning D0=0 (stubbed success)`);
+console.warn(`[AmigaDOS]   Returning D0=0 (stubbed success)`);
     }
 
     // Note: We don't need to modify PC here!
@@ -451,7 +451,7 @@ export class AmigaDosEnvironment {
           // Certain doors specifically read these addresses
           // Return a safe RTS address (0x4E75) instruction address
           this.emulator.setRegister(CPURegister.D0, 0xffff0004); // Safe RTS address
-          console.log(
+console.log(
             `[ROM Read] Address 0x${address.toString(
               16
             )} (door read): returning safe RTS address 0xFFFF0004`
@@ -462,7 +462,7 @@ export class AmigaDosEnvironment {
         case 0xff0006:
           // Additional defensive reads - return safe values
           this.emulator.setRegister(CPURegister.D0, 0xffff0008);
-          console.log(
+console.log(
             `[ROM Read] Address 0x${address.toString(16)}: returning 0xFFFF0008`
           );
           break;
@@ -471,7 +471,7 @@ export class AmigaDosEnvironment {
           // For other ROM reads, return version info or safe values
           // 0xFF0008-0xFF0010: ROM version and revision
           this.emulator.setRegister(CPURegister.D0, 0x00000000);
-          console.log(
+console.log(
             `[ROM Read] Address 0x${address.toString(
               16
             )} (ROM space): returning 0`
@@ -484,7 +484,7 @@ export class AmigaDosEnvironment {
     // For other ROM space reads (0xFF0100-0xFFFFFF)
     // Return 0 for version/checksum reads, safe values for potential pointers
     this.emulator.setRegister(CPURegister.D0, 0);
-    console.log(
+console.log(
       `[ROM Read] Address 0x${address.toString(16)} (ROM space): returning 0`
     );
   }

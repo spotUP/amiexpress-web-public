@@ -49,29 +49,29 @@ export class BbsApiLibrary {
       const sp = this.emulator.getRegister(15); // A7/SP
       const paramBlockPtr = this.emulator.readMemory32(sp + 4);
 
-      console.log(`\n[BBS API] Dispatcher called`);
-      console.log(`[BBS API] Parameter block at: 0x${paramBlockPtr.toString(16)}`);
-      console.log(`[BBS API] Stack pointer: 0x${sp.toString(16)}`);
+console.log(`\n[BBS API] Dispatcher called`);
+console.log(`[BBS API] Parameter block at: 0x${paramBlockPtr.toString(16)}`);
+console.log(`[BBS API] Stack pointer: 0x${sp.toString(16)}`);
 
       // Read and log parameter block contents (32 bytes = 8 longs)
-      console.log(`[BBS API] Parameter block contents:`);
+console.log(`[BBS API] Parameter block contents:`);
       for (let i = 0; i < 8; i++) {
         const offset = i * 4;
         const value = this.emulator.readMemory32(paramBlockPtr + offset);
-        console.log(`[BBS API]   [+0x${offset.toString(16).padStart(2, '0')}] = 0x${value.toString(16).padStart(8, '0')}`);
+console.log(`[BBS API]   [+0x${offset.toString(16).padStart(2, '0')}] = 0x${value.toString(16).padStart(8, '0')}`);
       }
 
       // Also try reading as words (might be function code in first word)
       const word0 = this.emulator.readMemory16(paramBlockPtr + 0);
       const word1 = this.emulator.readMemory16(paramBlockPtr + 2);
-      console.log(`[BBS API] First words: 0x${word0.toString(16).padStart(4, '0')}, 0x${word1.toString(16).padStart(4, '0')}`);
+console.log(`[BBS API] First words: 0x${word0.toString(16).padStart(4, '0')}, 0x${word1.toString(16).padStart(4, '0')}`);
 
       // Return success for now
-      console.log(`[BBS API] Returning success (D0 = 1)\n`);
+console.log(`[BBS API] Returning success (D0 = 1)\n`);
       return 1;
 
     } catch (error) {
-      console.error(`[BBS API] Error in dispatcher:`, error);
+console.error(`[BBS API] Error in dispatcher:`, error);
       return 0; // Failure
     }
   }
@@ -85,7 +85,7 @@ export class BbsApiLibrary {
     const BBS_PARAM_BLOCK_1 = 0x794;
     const BBS_PARAM_BLOCK_2 = 0x79c;
 
-    console.log(`[BBS API] Setting up low-memory region 0x790-0x800`);
+console.log(`[BBS API] Setting up low-memory region 0x790-0x800`);
 
     // Initialize parameter blocks with zeros (32 bytes each)
     for (let i = 0; i < 32; i += 4) {
@@ -96,6 +96,6 @@ export class BbsApiLibrary {
     // Note: Function pointer at 0x790 will be set by LibraryManager
     // when it allocates the TRAP handler
 
-    console.log(`[BBS API] Low-memory setup complete`);
+console.log(`[BBS API] Low-memory setup complete`);
   }
 }

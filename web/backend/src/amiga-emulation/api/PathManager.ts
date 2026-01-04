@@ -90,9 +90,9 @@ export class PathManager {
     this.assigns.set('ram:', this.normalizeAssignPath('/tmp/ram/'));
     this.assigns.set('t:', this.normalizeAssignPath('/tmp/'));
 
-    console.log('[PathManager] Initialized assigns:');
+console.log('[PathManager] Initialized assigns:');
     for (const [assign, sysPath] of this.assigns) {
-      console.log(`  ${assign} => ${sysPath}`);
+console.log(`  ${assign} => ${sysPath}`);
     }
   }
 
@@ -107,7 +107,7 @@ export class PathManager {
     name = name.toLowerCase();
 
     this.assigns.set(name, this.normalizeAssignPath(sysPath));
-    console.log(`[PathManager] Added assign: ${name} => ${sysPath}`);
+console.log(`[PathManager] Added assign: ${name} => ${sysPath}`);
   }
 
   /**
@@ -116,7 +116,7 @@ export class PathManager {
   setProgDir(sysPath: string): void {
     const normalized = this.normalizeAssignPath(sysPath);
     this.assigns.set('progdir:', normalized);
-    console.log(`[PathManager] PROGDIR: assigned to ${normalized}`);
+console.log(`[PathManager] PROGDIR: assigned to ${normalized}`);
   }
 
   /**
@@ -130,7 +130,7 @@ export class PathManager {
 
     const existed = this.assigns.delete(name);
     if (existed) {
-      console.log(`[PathManager] Removed assign: ${name}`);
+console.log(`[PathManager] Removed assign: ${name}`);
     }
     return existed;
   }
@@ -154,7 +154,7 @@ export class PathManager {
     // POSIX absolute paths should bypass assigns and map directly
     if (amiPath.startsWith('/')) {
       const normalized = path.normalize(amiPath);
-      console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`);
+console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`);
       return normalized;
     }
 
@@ -178,18 +178,18 @@ export class PathManager {
         const normalizedComponents = this.normalizeComponents(relativePath);
 
         if (normalizedComponents.length === 0) {
-          console.log(`[PathManager] Mapped assign root: "${amiPath}" => "${sysPath}"`);
+console.log(`[PathManager] Mapped assign root: "${amiPath}" => "${sysPath}"`);
           return sysPath;
         }
 
         const fullPath = path.join(sysPath, ...normalizedComponents);
         const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
         if (caseInsensitivePath) {
-          console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
+console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
           return caseInsensitivePath;
         }
 
-        console.log(`[PathManager] Mapped: "${amiPath}" => "${fullPath}"`);
+console.log(`[PathManager] Mapped: "${amiPath}" => "${fullPath}"`);
         return fullPath;
       }
     }
@@ -201,11 +201,11 @@ export class PathManager {
       const fullPath = path.join(currentDir, ...normalizedComponents);
       const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
       if (caseInsensitivePath) {
-        console.log(`[PathManager] Relative (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
+console.log(`[PathManager] Relative (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
         return caseInsensitivePath;
       }
 
-      console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
+console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
       return fullPath;
     }
 
@@ -215,12 +215,12 @@ export class PathManager {
     const fullBasePath = path.join(this.baseDir, ...normalizedComponents);
     const basePath = resolveCaseInsensitivePath(fullBasePath);
     if (basePath) {
-      console.log(`[PathManager] Base relative (case-insensitive): "${amiPath}" => "${basePath}"`);
+console.log(`[PathManager] Base relative (case-insensitive): "${amiPath}" => "${basePath}"`);
       return basePath;
     }
 
     const fullPath = path.join(this.baseDir, amiPath);
-    console.log(`[PathManager] Base relative: "${amiPath}" => "${fullPath}"`);
+console.log(`[PathManager] Base relative: "${amiPath}" => "${fullPath}"`);
     return fullPath;
   }
 

@@ -28,6 +28,10 @@ export class XIMSystemCommandsHandler {
   private ximPortAddr: number;
   private transferRawActive = false;
 
+  // Old-style door compatibility fallback
+  private oldStyleDoorTimer: NodeJS.Timeout | null = null;
+  private receivedPostRegisterMessage: boolean = false;
+
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
@@ -54,7 +58,7 @@ export class XIMSystemCommandsHandler {
    * From E sources (express.e:3379)
    */
   handleRegister(msg: XIMMessage): void {
-    console.log('[XIMSystem] Door registering with BBS');
+console.log('[XIMSystem] Door registering with BBS');
 
     // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
     const rawLineLen =
@@ -66,14 +70,14 @@ export class XIMSystemCommandsHandler {
     this.messageParser.writeCommand(msg.msgAddr, lineLen);
     const parsedFinal = this.messageParser.parseMessage(msg.msgAddr);
     if (!parsedFinal.messageLength) {
-      console.warn('[XIMSystem][RegisterReply] mn_Length is 0; optional fields disabled');
+console.warn('[XIMSystem][RegisterReply] mn_Length is 0; optional fields disabled');
     }
-    console.log(
+console.log(
       `[XIMSystem][RegisterReply] cmd=${parsedFinal.command} data=${parsedFinal.data} node=${parsedFinal.nodeId} strPtr=0x${(parsedFinal as any).stringPtr?.toString(
         16
       )} str="${parsedFinal.string}"`
     );
-    console.log(
+console.log(
       `[XIMSystem][RegisterReply][dbg] wrote cmd(lineLen)=${lineLen} data=${parsedFinal.data}`
     );
 
@@ -102,9 +106,9 @@ export class XIMSystemCommandsHandler {
     });
 
     this.execLibrary.replyMsg(msg.msgAddr);
-    console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
+console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
 
-    console.log(`[XIMSystem] Registration acknowledged`);
+console.log(`[XIMSystem] Registration acknowledged`);
     // express.e only sets msg.command for JH_REGISTER; avoid post-register memory writes.
   }
 
@@ -114,7 +118,7 @@ export class XIMSystemCommandsHandler {
    * that the library's GetUserName/CopyLocationString functions will read from.
    */
   private populateBBSInfoPostRegister(msg: XIMMessage): void {
-    console.log('[BBSInfo] Post-register population starting...');
+console.log('[BBSInfo] Post-register population starting...');
 
     // Try to find the DIFace address using known structure relationships
     // The DIFace structure layout:
@@ -132,7 +136,7 @@ export class XIMSystemCommandsHandler {
     // The message address points to the jhMessage within the DIFace
     if ((!difaceAddr || difaceAddr < 0x100 || difaceAddr > 0xFFFFFF) && msg.msgAddr > 0x100) {
       const calculatedDIFace = msg.msgAddr - DIFACE_MSG_OFFSET;
-      console.log(`[BBSInfo] Calculating DIFace from message address: 0x${msg.msgAddr.toString(16)} - 0x46 = 0x${calculatedDIFace.toString(16)}`);
+console.log(`[BBSInfo] Calculating DIFace from message address: 0x${msg.msgAddr.toString(16)} - 0x46 = 0x${calculatedDIFace.toString(16)}`);
 
       // Verify the calculated address looks valid
       if (calculatedDIFace > 0x100 && calculatedDIFace < 0xFFFFFF) {
@@ -142,36 +146,36 @@ export class XIMSystemCommandsHandler {
           const storedReplyPort = this.emulator.readMemory32(calculatedDIFace + 0x04);
           const storedAEPort = this.emulator.readMemory32(calculatedDIFace + 0x00);
 
-          console.log(`[BBSInfo] Verifying calculated DIFace at 0x${calculatedDIFace.toString(16)}:`);
-          console.log(`[BBSInfo]   dif_AEPort (0x00): 0x${storedAEPort.toString(16)}`);
-          console.log(`[BBSInfo]   dif_MsgPort (0x04): 0x${storedReplyPort.toString(16)}`);
-          console.log(`[BBSInfo]   dif_Message (0x08): 0x${storedMsgPtr.toString(16)}`);
+console.log(`[BBSInfo] Verifying calculated DIFace at 0x${calculatedDIFace.toString(16)}:`);
+console.log(`[BBSInfo]   dif_AEPort (0x00): 0x${storedAEPort.toString(16)}`);
+console.log(`[BBSInfo]   dif_MsgPort (0x04): 0x${storedReplyPort.toString(16)}`);
+console.log(`[BBSInfo]   dif_Message (0x08): 0x${storedMsgPtr.toString(16)}`);
 
           // The message pointer at offset 0x08 should equal the message address
           // OR be very close (within the DIFace structure)
           if (storedMsgPtr === msg.msgAddr ||
               (storedMsgPtr > calculatedDIFace && storedMsgPtr < calculatedDIFace + 0x300)) {
-            console.log(`[BBSInfo] DIFace verified! Message pointer matches.`);
+console.log(`[BBSInfo] DIFace verified! Message pointer matches.`);
             difaceAddr = calculatedDIFace;
           } else if (storedReplyPort === msg.replyPort && storedAEPort >= 0xa0000 && storedAEPort < 0xa2000) {
-            console.log(`[BBSInfo] DIFace verified via reply port and AEPort match.`);
+console.log(`[BBSInfo] DIFace verified via reply port and AEPort match.`);
             difaceAddr = calculatedDIFace;
           } else {
-            console.log(`[BBSInfo] Calculated DIFace verification failed, trying search...`);
+console.log(`[BBSInfo] Calculated DIFace verification failed, trying search...`);
           }
         } catch (e) {
-          console.log(`[BBSInfo] Could not read from calculated DIFace address`);
+console.log(`[BBSInfo] Could not read from calculated DIFace address`);
         }
       }
     }
 
     // Fallback: Search memory for DIFace using reply port
     if (!difaceAddr || difaceAddr < 0x100 || difaceAddr > 0xFFFFFF) {
-      console.log('[BBSInfo] Searching for DIFace via reply port...');
+console.log('[BBSInfo] Searching for DIFace via reply port...');
 
       const replyPort = msg.replyPort;
       if (replyPort && replyPort > 0x100) {
-        console.log(`[BBSInfo] Searching for DIFace with replyPort=0x${replyPort.toString(16)}`);
+console.log(`[BBSInfo] Searching for DIFace with replyPort=0x${replyPort.toString(16)}`);
 
         // Search memory for structures where offset 0x04 = replyPort
         const searchRanges = [
@@ -190,10 +194,10 @@ export class XIMSystemCommandsHandler {
 
                 if (aePort >= 0xa0000 && aePort < 0xa2000 &&
                     msgPtr > addr && msgPtr < addr + 0x300) {
-                  console.log(`[BBSInfo] Found DIFace at 0x${addr.toString(16)}`);
-                  console.log(`[BBSInfo]   dif_AEPort: 0x${aePort.toString(16)}`);
-                  console.log(`[BBSInfo]   dif_MsgPort: 0x${storedPort.toString(16)}`);
-                  console.log(`[BBSInfo]   dif_Message: 0x${msgPtr.toString(16)}`);
+console.log(`[BBSInfo] Found DIFace at 0x${addr.toString(16)}`);
+console.log(`[BBSInfo]   dif_AEPort: 0x${aePort.toString(16)}`);
+console.log(`[BBSInfo]   dif_MsgPort: 0x${storedPort.toString(16)}`);
+console.log(`[BBSInfo]   dif_Message: 0x${msgPtr.toString(16)}`);
                   difaceAddr = addr;
                   break;
                 }
@@ -207,12 +211,12 @@ export class XIMSystemCommandsHandler {
       }
 
       if (!difaceAddr || difaceAddr < 0x100) {
-        console.warn('[BBSInfo] Could not find valid DIFace address, skipping BBSInfo population');
+console.warn('[BBSInfo] Could not find valid DIFace address, skipping BBSInfo population');
         return;
       }
     }
 
-    console.log(`[BBSInfo] DIFace address: 0x${difaceAddr.toString(16)}`);
+console.log(`[BBSInfo] DIFace address: 0x${difaceAddr.toString(16)}`);
 
     // Read the pointers that the library set up
     // DoorInfo+0x20 points to user name string location
@@ -220,8 +224,8 @@ export class XIMSystemCommandsHandler {
     const userPtr = this.emulator.readMemory32(difaceAddr + 0x20);
     const locPtr = this.emulator.readMemory32(difaceAddr + 0x1c);
 
-    console.log(`[BBSInfo] User name pointer: 0x${userPtr.toString(16)}`);
-    console.log(`[BBSInfo] Location pointer: 0x${locPtr.toString(16)}`);
+console.log(`[BBSInfo] User name pointer: 0x${userPtr.toString(16)}`);
+console.log(`[BBSInfo] Location pointer: 0x${locPtr.toString(16)}`);
 
     // Get actual user data from session
     const username = this.bbsSession?.user?.username || 'Guest';
@@ -231,12 +235,12 @@ export class XIMSystemCommandsHandler {
     // Write user data to the addresses the library's pointers point to
     if (userPtr > 0x100 && userPtr < 0xFFFFFF) {
       this.writeCString(userPtr, username, 198);
-      console.log(`[BBSInfo] Wrote username "${username}" to 0x${userPtr.toString(16)}`);
+console.log(`[BBSInfo] Wrote username "${username}" to 0x${userPtr.toString(16)}`);
     }
 
     if (locPtr > 0x100 && locPtr < 0xFFFFFF) {
       this.writeCString(locPtr, location, 60);
-      console.log(`[BBSInfo] Wrote location "${location}" to 0x${locPtr.toString(16)}`);
+console.log(`[BBSInfo] Wrote location "${location}" to 0x${locPtr.toString(16)}`);
     }
 
     // DISABLED: These writes were corrupting the message structure!
@@ -254,8 +258,8 @@ export class XIMSystemCommandsHandler {
     //   "AmiExpress-Web" wrote "eb\0\0" at message+14 (reply port offset)
     //   Corrupted reply port from 0xa0300 to 0x65620000
 
-    console.log('[BBSInfo] Skipping BBSInfo field writes (native library handles via XIM commands)');
-    console.log('[BBSInfo] Post-register population complete');
+console.log('[BBSInfo] Skipping BBSInfo field writes (native library handles via XIM commands)');
+console.log('[BBSInfo] Post-register population complete');
   }
 
   /**
@@ -308,13 +312,13 @@ export class XIMSystemCommandsHandler {
    * Handle door shutdown (JH_SHUTDOWN)
    */
   handleShutdown(msg: XIMMessage): void {
-    console.log('[XIMSystem] Door requesting shutdown');
+console.log('[XIMSystem] Door requesting shutdown');
 
     this.state.shuttingDown = true;
     this.state.registered = false;
     this.reply(msg, msg.data ?? 0);
 
-    console.log('[XIMSystem] Door completed execution');
+console.log('[XIMSystem] Door completed execution');
   }
 
   /**
@@ -328,7 +332,7 @@ export class XIMSystemCommandsHandler {
     // Toggle rawArrow state
     this.state.rawArrow = !this.state.rawArrow;
 
-    console.log(`[XIMSystem] RAWARROW: Toggle raw arrow mode -> ${this.state.rawArrow ? 'ON (raw)' : 'OFF (convert)'}`);
+console.log(`[XIMSystem] RAWARROW: Toggle raw arrow mode -> ${this.state.rawArrow ? 'ON (raw)' : 'OFF (convert)'}`);
 
     // Ack
     this.reply(msg, msg.data ?? 0);
@@ -341,13 +345,13 @@ export class XIMSystemCommandsHandler {
   handleReturnCommand(msg: XIMMessage): void {
     const command = this.getMessageString(msg);
 
-    console.log(`[XIMSystem] RETURNCOMMAND: "${command}" -> state.returnCommand set`);
+console.log(`[XIMSystem] RETURNCOMMAND: "${command}" -> state.returnCommand set`);
 
     this.bbsSession.returnCommand = command;
     this.state.returnCommand = command;
 
     // Verify it was set
-    console.log(`[XIMSystem] RETURNCOMMAND verify: state.returnCommand="${this.state.returnCommand}"`);
+console.log(`[XIMSystem] RETURNCOMMAND verify: state.returnCommand="${this.state.returnCommand}"`);
 
     this.reply(msg, msg.data ?? 0);
   }
@@ -357,7 +361,7 @@ export class XIMSystemCommandsHandler {
    * From E sources (express.e:3386-3387)
    */
   handleChain(msg: XIMMessage): void {
-    console.log('[XIMSystem] CHAIN: Door requesting chain to another door');
+console.log('[XIMSystem] CHAIN: Door requesting chain to another door');
 
     this.state.chainCommand = this.getMessageString(msg);
     this.reply(msg, msg.data ?? 0);
@@ -369,26 +373,26 @@ export class XIMSystemCommandsHandler {
    * From assembly (aedoor.i): ENV_DROPPED = -1 when carrier lost
    */
   handleEnvStat(msg: XIMMessage): void {
-    console.log('[XIMSystem] ENVSTAT - Environment status');
+console.log('[XIMSystem] ENVSTAT - Environment status');
 
     const isRead = msg.data !== 0;
     if (isRead) {
       // Per assembly sources: return -1 (ENV_DROPPED) when carrier is lost
       if (this.state.carrierDropped) {
         this.messageParser.writeMessageString(msg.msgAddr, ENVStatus.ENV_DROPPED.toString());
-        console.log(`  [READ] Status: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
+console.log(`  [READ] Status: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
       } else {
         // Return current environment status from session (set by command-execution.handler.ts)
         // For file scan commands (FR, F, N, etc.), this will be 8 (ENV_FILES)
         const status = (this.bbsSession as any).currentStat || ENVStatus.ENV_IDLE;
         this.messageParser.writeMessageString(msg.msgAddr, status.toString());
-        console.log(`  [READ] Status: ${status}`);
+console.log(`  [READ] Status: ${status}`);
       }
     } else {
       const value = this.getMessageString(msg);
       if (value.length > 0) {
         (this.bbsSession as any).currentStat = parseInt(value) || ENVStatus.ENV_IDLE;
-        console.log(`  [WRITE] Set status: ${value}`);
+console.log(`  [WRITE] Set status: ${value}`);
       }
     }
 
@@ -403,8 +407,8 @@ export class XIMSystemCommandsHandler {
   handleSvNewMsg(msg: XIMMessage): void {
     const message = this.getMessageString(msg);
 
-    console.log('[XIMSystem] SV_NEWMSG - Set server message');
-    console.log(`  Message: "${message}"`);
+console.log('[XIMSystem] SV_NEWMSG - Set server message');
+console.log(`  Message: "${message}"`);
 
     // Ack with Data=1 per express.e behavior
     this.reply(msg, 1);
@@ -417,8 +421,8 @@ export class XIMSystemCommandsHandler {
   handlePrvCommand(msg: XIMMessage): void {
     const command = this.getMessageString(msg);
 
-    console.log('[XIMSystem] PRV_COMMAND - Execute BBS command');
-    console.log(`  Command: "${command}"`);
+console.log('[XIMSystem] PRV_COMMAND - Execute BBS command');
+console.log(`  Command: "${command}"`);
 
     this.state.prvCommand = command;
     // Execute immediately like express.e processCommand
@@ -426,7 +430,7 @@ export class XIMSystemCommandsHandler {
       const { handleCommand } = require('../../handlers/command.handler');
       handleCommand(this.socket, this.bbsSession as any, command);
     } catch (err) {
-      console.warn('[XIMSystem] PRV_COMMAND execution error:', err);
+console.warn('[XIMSystem] PRV_COMMAND execution error:', err);
     }
     this.reply(msg, 1);
   }
@@ -438,8 +442,8 @@ export class XIMSystemCommandsHandler {
   handlePrvGroup(msg: XIMMessage): void {
     const groupData = this.getMessageString(msg);
 
-    console.log('[XIMSystem] PRV_GROUP - Modify group settings');
-    console.log(`  Group data: "${groupData}"`);
+console.log('[XIMSystem] PRV_GROUP - Modify group settings');
+console.log(`  Group data: "${groupData}"`);
 
     // Update conference names/locations when targeting current conf
     const confNum = parseInt(groupData, 10);
@@ -454,7 +458,7 @@ export class XIMSystemCommandsHandler {
    * From E sources (express.e:3463-3464)
    */
   handleSignalBit(msg: XIMMessage): void {
-    console.log('[XIMSystem] JH_SIGBIT - Query signal bits');
+console.log('[XIMSystem] JH_SIGBIT - Query signal bits');
 
     // Return a distinct signal mask; use msg.data when provided, otherwise default bit 1
     const bit = typeof msg.data === 'number' && msg.data > 0 ? msg.data : 1;
@@ -469,8 +473,8 @@ export class XIMSystemCommandsHandler {
   handleMCI(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
 
-    console.log('[XIMSystem] JH_MCI - Process MCI codes');
-    console.log(`  Text: "${text}"`);
+console.log('[XIMSystem] JH_MCI - Process MCI codes');
+console.log(`  Text: "${text}"`);
 
     // Use the existing MCI processor to render codes the same way screens do
     try {
@@ -489,7 +493,7 @@ export class XIMSystemCommandsHandler {
         this.socket.emit('ansi-output', '\r\n');
       }
     } catch (err) {
-      console.warn('[XIMSystem] JH_MCI fallback:', err);
+console.warn('[XIMSystem] JH_MCI fallback:', err);
       this.socket.emit('ansi-output', text + (msg.data !== 0 ? '\r\n' : ''));
     }
 
@@ -503,8 +507,8 @@ export class XIMSystemCommandsHandler {
   handleSecurityScreen(msg: XIMMessage): void {
     const screenName = this.getMessageString(msg);
 
-    console.log('[XIMSystem] JH_SG - Display security screen');
-    console.log(`  Screen: "${screenName}"`);
+console.log('[XIMSystem] JH_SG - Display security screen');
+console.log(`  Screen: "${screenName}"`);
 
     const resolved = this.resolvePath(screenName);
     if (amigafs.existsSync(resolved)) {
@@ -513,10 +517,10 @@ export class XIMSystemCommandsHandler {
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
-        console.warn(`[XIMSystem] JH_SG failed to read ${resolved}:`, err);
+console.warn(`[XIMSystem] JH_SG failed to read ${resolved}:`, err);
       }
     } else {
-      console.warn(`[XIMSystem] JH_SG: Screen not found at ${resolved}`);
+console.warn(`[XIMSystem] JH_SG: Screen not found at ${resolved}`);
     }
 
     this.reply(msg, 1);
@@ -529,8 +533,8 @@ export class XIMSystemCommandsHandler {
   handleShowFile(msg: XIMMessage): void {
     const fileName = this.getMessageString(msg);
 
-    console.log('[XIMSystem] JH_SF - Show file');
-    console.log(`  File: "${fileName}"`);
+console.log('[XIMSystem] JH_SF - Show file');
+console.log(`  File: "${fileName}"`);
 
     const resolved = this.resolvePath(fileName);
     if (amigafs.existsSync(resolved)) {
@@ -539,10 +543,10 @@ export class XIMSystemCommandsHandler {
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
-        console.warn(`[XIMSystem] JH_SF failed to read ${resolved}:`, err);
+console.warn(`[XIMSystem] JH_SF failed to read ${resolved}:`, err);
       }
     } else {
-      console.warn(`[XIMSystem] JH_SF: File not found at ${resolved}`);
+console.warn(`[XIMSystem] JH_SF: File not found at ${resolved}`);
     }
 
     this.reply(msg, 1);
@@ -555,11 +559,11 @@ export class XIMSystemCommandsHandler {
   handleEditFile(msg: XIMMessage): void {
     const fileName = this.getMessageString(msg);
 
-    console.log('[XIMSystem] JH_EF - Edit file');
-    console.log(`  File: "${fileName}"`);
+console.log('[XIMSystem] JH_EF - Edit file');
+console.log(`  File: "${fileName}"`);
 
     this.messageParser.writeData(msg.msgAddr, 1);
-    console.log('  [SUCCESS] File edit acknowledged');
+console.log('  [SUCCESS] File edit acknowledged');
 
     this.reply(msg, 1);
   }
@@ -571,8 +575,8 @@ export class XIMSystemCommandsHandler {
   handleFlagFile(msg: XIMMessage): void {
     const fileName = this.getMessageString(msg);
 
-    console.log('[XIMSystem] JH_FLAGFILE - Flag file for download');
-    console.log(`  File: "${fileName}"`);
+console.log('[XIMSystem] JH_FLAGFILE - Flag file for download');
+console.log(`  File: "${fileName}"`);
 
     // Persist flagged file on the session for host pickup
     // Store as object with filename and confNum for download handler compatibility
@@ -588,7 +592,7 @@ export class XIMSystemCommandsHandler {
       confNum: confNum
     });
 
-    console.log(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: ${(this.bbsSession as any).flaggedFiles.length}`);
+console.log(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: ${(this.bbsSession as any).flaggedFiles.length}`);
 
     this.reply(msg, 1);
   }
@@ -652,7 +656,7 @@ export class XIMSystemCommandsHandler {
       .filter((t) => t.resolved && this.pathExists(t.resolved));
     const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((r) => r.resolved)) : null;
 
-    console.log(
+console.log(
       `[XIMSystem] ZMODEMSEND: targets=${targets.join(', ')} staged=${staged}`
     );
 
@@ -676,7 +680,7 @@ export class XIMSystemCommandsHandler {
     const dest = targetList[0] || '';
     const resolved = dest ? this.resolvePath(dest) : '';
 
-    console.log(`[XIMSystem] ZMODEMRECEIVE: ${dest} -> ${resolved}`);
+console.log(`[XIMSystem] ZMODEMRECEIVE: ${dest} -> ${resolved}`);
 
     if (!resolved) {
       this.reply(msg, 0);
@@ -700,7 +704,7 @@ export class XIMSystemCommandsHandler {
     const resolved = targets.filter((t) => this.pathExists(this.resolvePath(t)));
     const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((t) => this.resolvePath(t))) : null;
 
-    console.log(
+console.log(
       `[XIMSystem] BATCHZMODEMSEND: count=${targets.length} staged=${staged}`
     );
     if (staged && staged.length > 0) {
@@ -719,7 +723,7 @@ export class XIMSystemCommandsHandler {
       const targets = this.collectTransferList(msg, true);
       const dest = targets[0] || '';
       const resolved = dest ? this.resolvePath(dest) : '';
-      console.log(`[XIMSystem] NETUPLOAD: ${dest} -> ${resolved}`);
+console.log(`[XIMSystem] NETUPLOAD: ${dest} -> ${resolved}`);
       const ensured = dest ? this.ensureUploadTarget(dest, resolved) : null;
       if (ensured) {
         this.startZmodemTransfer('upload', [ensured]);
@@ -731,7 +735,7 @@ export class XIMSystemCommandsHandler {
     const targets = this.collectTransferList(msg, false);
     const resolved = targets.filter((t) => this.pathExists(this.resolvePath(t)));
     const staged = resolved.length > 0 ? this.stageDownloads(resolved.map((t) => this.resolvePath(t))) : null;
-    console.log(
+console.log(
       `[XIMSystem] NETDOWNLOAD: targets=${targets.join(',')} staged=${staged}`
     );
     if (staged && staged.length > 0) {
@@ -743,7 +747,7 @@ export class XIMSystemCommandsHandler {
   handleAcpCommand(msg: XIMMessage): void {
     const commandString = this.getMessageString(msg);
     const targetNode = typeof msg.lineNumber === 'number' ? msg.lineNumber : this.bbsSession?.nodeId || 0;
-    console.log(
+console.log(
       `[XIMSystem] ACP_COMMAND: data=${msg.data} string="${commandString}" targetNode=${targetNode}`
     );
     (this.bbsSession as any).acpCommand = {
@@ -1111,7 +1115,7 @@ export class XIMSystemCommandsHandler {
         };
       }
     } catch (err) {
-      console.warn('[XIMSystem] ConfConfig lookup failed:', err);
+console.warn('[XIMSystem] ConfConfig lookup failed:', err);
     }
 
     // 2) Fallback to Conf.DB handle if present
@@ -1122,7 +1126,7 @@ export class XIMSystemCommandsHandler {
         return { name: record.handle.trim(), path: confPath };
       }
     } catch (err) {
-      console.warn('[XIMSystem] Conf.DB lookup failed:', err);
+console.warn('[XIMSystem] Conf.DB lookup failed:', err);
     }
 
     // 3) Last resort: generic name
@@ -1155,7 +1159,7 @@ export class XIMSystemCommandsHandler {
         fs.closeSync(fd);
       }
     } catch (err) {
-      console.error(`[XIMSystem] Failed to read slot ${slot} from ${filePath}:`, err);
+console.error(`[XIMSystem] Failed to read slot ${slot} from ${filePath}:`, err);
       return null;
     }
   }
@@ -1180,7 +1184,7 @@ export class XIMSystemCommandsHandler {
         fs.closeSync(fd);
       }
     } catch (err) {
-      console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
+console.error(`[XIMSystem] Failed to write slot ${slot} to ${filePath}:`, err);
     }
   }
 
@@ -1247,7 +1251,7 @@ export class XIMSystemCommandsHandler {
         fs.closeSync(fd);
       }
     } catch (err) {
-      console.error('[XIMSystem] findFreeUserSlot failed:', err);
+console.error('[XIMSystem] findFreeUserSlot failed:', err);
       return 1;
     }
   }
@@ -1286,7 +1290,7 @@ export class XIMSystemCommandsHandler {
 
       return targetPath;
     } catch (err) {
-      console.error('[XIMSystem] Failed to prepare upload target:', err);
+console.error('[XIMSystem] Failed to prepare upload target:', err);
       return null;
     }
   }
@@ -1300,7 +1304,7 @@ export class XIMSystemCommandsHandler {
       const files = resolvedFiles.filter((p) => this.pathExists(p));
       return files;
     } catch (err) {
-      console.error('[XIMSystem] stageDownloads failed:', err);
+console.error('[XIMSystem] stageDownloads failed:', err);
       return null;
     }
   }
@@ -1375,7 +1379,7 @@ export class XIMSystemCommandsHandler {
    */
   handleInterpretMCI(msg: XIMMessage): void {
     const mciText = this.getMessageString(msg);
-    console.log(`[XIMSystem] INTERPRET_MCI: "${mciText.substring(0, 40)}..."`);
+console.log(`[XIMSystem] INTERPRET_MCI: "${mciText.substring(0, 40)}..."`);
 
     // Process MCI codes and return result
     // For now, return the string as-is (most doors just want variable substitution)
@@ -1383,7 +1387,7 @@ export class XIMSystemCommandsHandler {
 
     this.messageParser.writeMessageString(msg.msgAddr, processed);
 
-    console.log(`[XIMSystem]   Processed: "${processed.substring(0, 40)}..."`);
+console.log(`[XIMSystem]   Processed: "${processed.substring(0, 40)}..."`);
     this.reply(msg, processed.length);
   }
 
@@ -1419,7 +1423,7 @@ export class XIMSystemCommandsHandler {
    */
   handleCheckPlaypenExists(msg: XIMMessage): void {
     const filename = this.getMessageString(msg);
-    console.log(`[XIMSystem] CHECK_PLAYPEN_EXISTS: "${filename}"`);
+console.log(`[XIMSystem] CHECK_PLAYPEN_EXISTS: "${filename}"`);
 
     let exists = 0;
 
@@ -1427,15 +1431,15 @@ export class XIMSystemCommandsHandler {
     const resolved = this.resolvePath(filename);
     if (this.pathExists(resolved)) {
       exists = 1;
-      console.log(`[XIMSystem]   Found at: ${resolved}`);
+console.log(`[XIMSystem]   Found at: ${resolved}`);
     } else {
       // Check in playpens (express.e: checkInPlaypens)
       const playpenHit = this.checkInPlaypens(filename);
       if (playpenHit) {
         exists = 1;
-        console.log(`[XIMSystem]   Found in playpen: ${playpenHit}`);
+console.log(`[XIMSystem]   Found in playpen: ${playpenHit}`);
       } else {
-        console.log(`[XIMSystem]   Not found`);
+console.log(`[XIMSystem]   Not found`);
       }
     }
 
@@ -1448,7 +1452,7 @@ export class XIMSystemCommandsHandler {
    */
   handleSetFileAttach(msg: XIMMessage): void {
     const enabled = msg.data !== 0;
-    console.log(`[XIMSystem] SET_FILEATTACH: ${enabled}`);
+console.log(`[XIMSystem] SET_FILEATTACH: ${enabled}`);
 
     (this.state as any).fileAttach = enabled;
     (this.bbsSession as any).fileAttach = enabled;
@@ -1462,7 +1466,7 @@ export class XIMSystemCommandsHandler {
    */
   handleDisableFileAttach(msg: XIMMessage): void {
     const disabled = msg.data !== 0;
-    console.log(`[XIMSystem] DISABLE_FILE_ATTACH: ${disabled}`);
+console.log(`[XIMSystem] DISABLE_FILE_ATTACH: ${disabled}`);
 
     (this.state as any).disallowFileAttach = disabled;
     (this.bbsSession as any).disallowFileAttach = disabled;
@@ -1476,7 +1480,7 @@ export class XIMSystemCommandsHandler {
    */
   handleSetOverride(msg: XIMMessage): void {
     const mode = msg.data;
-    console.log(`[XIMSystem] SETOVERIDE: ${mode}`);
+console.log(`[XIMSystem] SETOVERIDE: ${mode}`);
 
     (this.state as any).overrideMode = mode;
     (this.bbsSession as any).overrideMode = mode;
@@ -1490,7 +1494,7 @@ export class XIMSystemCommandsHandler {
    */
   handleSetMCIOff(msg: XIMMessage): void {
     const off = msg.data !== 0;
-    console.log(`[XIMSystem] SETMCIOFF: ${off}`);
+console.log(`[XIMSystem] SETMCIOFF: ${off}`);
 
     (this.state as any).mciOff = off;
     (this.bbsSession as any).mciOff = off;
@@ -1505,7 +1509,7 @@ export class XIMSystemCommandsHandler {
    */
   handleSecureLineInput(msg: XIMMessage): void {
     const maxLen = msg.data > 0 ? msg.data : 80;
-    console.log(`[XIMSystem] SIG_LI: maxLen=${maxLen} (secure input, no echo)`);
+console.log(`[XIMSystem] SIG_LI: maxLen=${maxLen} (secure input, no echo)`);
 
     // For now, return empty string - actual implementation would need
     // frontend support for password input mode
@@ -1514,7 +1518,7 @@ export class XIMSystemCommandsHandler {
 
     // TODO: Implement actual secure line input via socket event
     // This would emit 'door:password-input' and wait for response
-    console.log(`[XIMSystem]   NOTE: SIG_LI not fully implemented - returning empty string`);
+console.log(`[XIMSystem]   NOTE: SIG_LI not fully implemented - returning empty string`);
 
     this.reply(msg, 0);
   }
@@ -1526,7 +1530,7 @@ export class XIMSystemCommandsHandler {
   handleGetMenuCommandChar(msg: XIMMessage): void {
     // Return the current menu command character (default is ':')
     const cmdChar = (this.bbsSession as any)?.menuCommandChar || ':';
-    console.log(`[XIMSystem] GET_MENU_COMMAND_CHAR: '${cmdChar}'`);
+console.log(`[XIMSystem] GET_MENU_COMMAND_CHAR: '${cmdChar}'`);
 
     this.messageParser.writeData(msg.msgAddr, cmdChar.charCodeAt(0));
     this.reply(msg, cmdChar.charCodeAt(0));
@@ -1539,7 +1543,7 @@ export class XIMSystemCommandsHandler {
   handleChooseName(msg: XIMMessage): void {
     const searchName = this.getMessageString(msg);
     const maxLen = msg.data > 0 ? msg.data : 31;
-    console.log(`[XIMSystem] CHOOSE_NAME: search="${searchName}" maxLen=${maxLen}`);
+console.log(`[XIMSystem] CHOOSE_NAME: search="${searchName}" maxLen=${maxLen}`);
 
     // For now, just return the search string as-is
     // Full implementation would search user database and show picker
@@ -1558,7 +1562,7 @@ export class XIMSystemCommandsHandler {
    * express.e:4078-4087: Check if realname is required for current msgbase
    */
   handleCheckRealname(msg: XIMMessage): void {
-    console.log(`[XIMSystem] CHECK_REALNAME`);
+console.log(`[XIMSystem] CHECK_REALNAME`);
 
     // Return 0=handle, 1=realname required, 2=username required
     // For now, return 0 (use handle/username)
@@ -1566,7 +1570,7 @@ export class XIMSystemCommandsHandler {
 
     // TODO: Check ConfConfig.info for REALNAME/USERNAME tooltypes
     // For now, default to handle
-    console.log(`[XIMSystem]   Returning 0 (use handle)`);
+console.log(`[XIMSystem]   Returning 0 (use handle)`);
 
     this.reply(msg, 0);
   }
@@ -1577,7 +1581,7 @@ export class XIMSystemCommandsHandler {
    */
   handleConCursor(msg: XIMMessage): void {
     const cursorOn = msg.data !== 0;
-    console.log(`[XIMSystem] CON_CURSOR: ${cursorOn ? 'ON' : 'OFF'}`);
+console.log(`[XIMSystem] CON_CURSOR: ${cursorOn ? 'ON' : 'OFF'}`);
 
     // Emit cursor control to frontend
     if (cursorOn) {

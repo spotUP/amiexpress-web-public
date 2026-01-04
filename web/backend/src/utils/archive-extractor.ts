@@ -92,25 +92,25 @@ export abstract class BaseArchiveExtractor implements IArchiveExtractor {
    */
   async extractFileDiz(filepath: string, outputPath: string): Promise<boolean> {
     try {
-      console.log(`[${this.formatName}] Extracting FILE_ID.DIZ from ${path.basename(filepath)}`);
+console.log(`[${this.formatName}] Extracting FILE_ID.DIZ from ${path.basename(filepath)}`);
 
       const entries = await this.getEntries(filepath);
 
-      console.log(`[${this.formatName}] Archive contains ${entries.length} files:`);
+console.log(`[${this.formatName}] Archive contains ${entries.length} files:`);
       entries.forEach((entry) => {
-        console.log(`[${this.formatName}]   - ${entry.name}`);
+console.log(`[${this.formatName}]   - ${entry.name}`);
       });
 
       const dizEntry = this.findFileDizEntry(entries);
 
       if (!dizEntry) {
-        console.log(
+console.log(
           `[${this.formatName}] FILE_ID.DIZ not found in archive (searched ${entries.length} files)`
         );
         return false;
       }
 
-      console.log(
+console.log(
         `[${this.formatName}] Found: ${dizEntry.name} (${dizEntry.size} bytes)`
       );
 
@@ -118,19 +118,19 @@ export abstract class BaseArchiveExtractor implements IArchiveExtractor {
       const data = await this.extractFile(filepath, dizEntry.name);
 
       if (!data) {
-        console.log(`[${this.formatName}] Failed to extract FILE_ID.DIZ`);
+console.log(`[${this.formatName}] Failed to extract FILE_ID.DIZ`);
         return false;
       }
 
       // Write to output file
       await fs.writeFile(outputPath, data);
-      console.log(
+console.log(
         `[${this.formatName}] ✓ Extracted FILE_ID.DIZ to ${outputPath} (${data.length} bytes)`
       );
 
       return true;
     } catch (error: any) {
-      console.error(`[${this.formatName}] Error: ${error.message}`);
+console.error(`[${this.formatName}] Error: ${error.message}`);
       SysopDebugUtil.debug(
         null,
         null,
@@ -151,14 +151,14 @@ export abstract class BaseArchiveExtractor implements IArchiveExtractor {
    * Log helper
    */
   protected log(message: string): void {
-    console.log(`[${this.formatName}] ${message}`);
+console.log(`[${this.formatName}] ${message}`);
   }
 
   /**
    * Error log helper
    */
   protected logError(message: string): void {
-    console.error(`[${this.formatName}] ${message}`);
+console.error(`[${this.formatName}] ${message}`);
   }
 }
 
@@ -184,6 +184,8 @@ export function detectArchiveFormat(filepath: string): string | null {
     '.gz': 'tar.gz',
     '.tgz': 'tar.gz',
     '.dms': 'dms',
+    '.arc': 'arc',
+    '.zoo': 'zoo',
   };
 
   return formatMap[ext] || null;
@@ -220,6 +222,12 @@ export async function getExtractorForFile(filepath: string): Promise<IArchiveExt
     case 'dms':
       const { DmsExtractor } = await import('./extractors/dms-extractor');
       return new DmsExtractor();
+    case 'arc':
+      const { ArcExtractor } = await import('./extractors/arc-extractor');
+      return new ArcExtractor();
+    case 'zoo':
+      const { ZooExtractor } = await import('./extractors/zoo-extractor');
+      return new ZooExtractor();
     default:
       return null;
   }
@@ -235,7 +243,7 @@ export async function extractFileDizFromArchive(
   const extractor = await getExtractorForFile(filepath);
 
   if (!extractor) {
-    console.error(`[Archive] Unsupported archive format: ${filepath}`);
+console.error(`[Archive] Unsupported archive format: ${filepath}`);
     return false;
   }
 
@@ -243,6 +251,6 @@ export async function extractFileDizFromArchive(
     return (extractor as any).extractFileDiz(filepath, outputPath);
   }
 
-  console.error(`[Archive] Extractor does not support FILE_ID.DIZ extraction`);
+console.error(`[Archive] Extractor does not support FILE_ID.DIZ extraction`);
   return false;
 }

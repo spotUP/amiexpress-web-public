@@ -62,9 +62,9 @@ export function populateDoorInfoStructs(
     const dateStr = `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear()}`;
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
-    console.log(`[door-info.util] ===== BBSInfo Population Debug =====`);
-    console.log(`[door-info.util] doorInfoAddr=0x${doorInfoAddr.toString(16)} bbsInfoAddr=0x${bbsInfoAddr.toString(16)}`);
-    console.log(`[door-info.util] Writing: user="${user}" loc="${loc}" bbsName="${bbsName}"`);
+console.log(`[door-info.util] ===== BBSInfo Population Debug =====`);
+console.log(`[door-info.util] doorInfoAddr=0x${doorInfoAddr.toString(16)} bbsInfoAddr=0x${bbsInfoAddr.toString(16)}`);
+console.log(`[door-info.util] Writing: user="${user}" loc="${loc}" bbsName="${bbsName}"`);
 
     // Write to BBSInfo structure at CORRECT offsets from library disassembly
     // Library copies CLI name to BBSInfo + 0x14 (line 246-250 in disasm)
@@ -82,7 +82,7 @@ export function populateDoorInfoStructs(
     emulator.writeMemory32(doorInfoAddr + 0x20, bbsInfoAddr + 0x14);  // Point to user name string
 
     // VERIFY what was written
-    console.log(`[door-info.util] ===== Verification (Reading Back) =====`);
+console.log(`[door-info.util] ===== Verification (Reading Back) =====`);
     const readBackUser = readCString(emulator, bbsInfoAddr + 0x14, 198);
     const readBackLoc = readCString(emulator, bbsInfoAddr + 0xdc, 60);
     const readBackBBS = readCString(emulator, bbsInfoAddr + 0x120, 40);
@@ -91,34 +91,34 @@ export function populateDoorInfoStructs(
     const ptr1c = emulator.readMemory32(doorInfoAddr + 0x1c);
     const ptr20 = emulator.readMemory32(doorInfoAddr + 0x20);
 
-    console.log(`[door-info.util] Read back from BBSInfo+0x14: "${readBackUser}" (length=${readBackUser.length})`);
-    console.log(`[door-info.util] Read back from BBSInfo+0xdc: "${readBackLoc}" (length=${readBackLoc.length})`);
-    console.log(`[door-info.util] Read back from BBSInfo+0x120: "${readBackBBS}"`);
-    console.log(`[door-info.util] Read back from BBSInfo+0x150: "${readBackDate}"`);
-    console.log(`[door-info.util] Read back from BBSInfo+0x170: "${readBackTime}"`);
-    console.log(`[door-info.util] DoorInfo+0x1c pointer: 0x${ptr1c.toString(16)} (should be 0x${(bbsInfoAddr + 0xdc).toString(16)})`);
-    console.log(`[door-info.util] DoorInfo+0x20 pointer: 0x${ptr20.toString(16)} (should be 0x${(bbsInfoAddr + 0x14).toString(16)})`);
+console.log(`[door-info.util] Read back from BBSInfo+0x14: "${readBackUser}" (length=${readBackUser.length})`);
+console.log(`[door-info.util] Read back from BBSInfo+0xdc: "${readBackLoc}" (length=${readBackLoc.length})`);
+console.log(`[door-info.util] Read back from BBSInfo+0x120: "${readBackBBS}"`);
+console.log(`[door-info.util] Read back from BBSInfo+0x150: "${readBackDate}"`);
+console.log(`[door-info.util] Read back from BBSInfo+0x170: "${readBackTime}"`);
+console.log(`[door-info.util] DoorInfo+0x1c pointer: 0x${ptr1c.toString(16)} (should be 0x${(bbsInfoAddr + 0xdc).toString(16)})`);
+console.log(`[door-info.util] DoorInfo+0x20 pointer: 0x${ptr20.toString(16)} (should be 0x${(bbsInfoAddr + 0x14).toString(16)})`);
 
     // Verify pointers point to correct addresses
     if (ptr1c === bbsInfoAddr + 0xdc && ptr20 === bbsInfoAddr + 0x14) {
-      console.log(`[door-info.util] ✓ Pointers are CORRECT`);
+console.log(`[door-info.util] ✓ Pointers are CORRECT`);
     } else {
-      console.log(`[door-info.util] ✗ ERROR: Pointers are WRONG!`);
+console.log(`[door-info.util] ✗ ERROR: Pointers are WRONG!`);
     }
 
     // Read what the pointers actually point to
     if (ptr20 !== 0) {
       const userViaPtr = readCString(emulator, ptr20, 198);
-      console.log(`[door-info.util] Via DoorInfo+0x20 pointer: "${userViaPtr}"`);
+console.log(`[door-info.util] Via DoorInfo+0x20 pointer: "${userViaPtr}"`);
     }
     if (ptr1c !== 0) {
       const locViaPtr = readCString(emulator, ptr1c, 60);
-      console.log(`[door-info.util] Via DoorInfo+0x1c pointer: "${locViaPtr}"`);
+console.log(`[door-info.util] Via DoorInfo+0x1c pointer: "${locViaPtr}"`);
     }
 
-    console.log(`[door-info.util] ===== End Verification =====`);
+console.log(`[door-info.util] ===== End Verification =====`);
   } catch (error) {
-    console.error("[door-info.util] ⚠️ Failed to populate DoorInfo/BBSInfo:", error);
+console.error("[door-info.util] ⚠️ Failed to populate DoorInfo/BBSInfo:", error);
   }
 
   if (!nodeStatusAddr || nodeStatusAddr < 0x100) return;

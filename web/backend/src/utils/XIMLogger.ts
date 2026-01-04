@@ -74,12 +74,12 @@ export class XIMLogger {
     this.amigaLogFile = process.env.XIM_AMIGA_LOG || path.join(bbsRoot, 'logs', 'xim-amiga.log');
 
     if (this.jsonEnabled) {
-      console.log(`[XIMLogger] JSON logging enabled, writing to: ${this.logFile}`);
+console.log(`[XIMLogger] JSON logging enabled, writing to: ${this.logFile}`);
       this.initLogStream();
     }
 
     if (this.amigaEnabled) {
-      console.log(`[XIMLogger] Amiga CONSOLE_DEBUG format enabled, writing to: ${this.amigaLogFile}`);
+console.log(`[XIMLogger] Amiga CONSOLE_DEBUG format enabled, writing to: ${this.amigaLogFile}`);
       this.initAmigaLogStream();
     }
   }
@@ -113,7 +113,7 @@ export class XIMLogger {
         typeCode: 0,
       }, { message: 'XIM structured logging initialized' });
     } catch (err) {
-      console.error('[XIMLogger] Failed to initialize log stream:', err);
+console.error('[XIMLogger] Failed to initialize log stream:', err);
     }
   }
 
@@ -135,7 +135,7 @@ export class XIMLogger {
 
       this.amigaLogStream = fs.createWriteStream(this.amigaLogFile, { flags: 'a' });
     } catch (err) {
-      console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
+console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
     }
   }
 
@@ -260,7 +260,7 @@ export class XIMLogger {
       this.logStream.write(JSON.stringify(entry) + '\n');
     } else if (message.type !== 'LOG_START' && message.type !== 'LOG_END') {
       // Debug: log why XIM messages aren't being written
-      console.log(`[XIMLogger] NOT writing to JSON: jsonEnabled=${this.jsonEnabled} logStream=${!!this.logStream} type=${message.type}`);
+console.log(`[XIMLogger] NOT writing to JSON: jsonEnabled=${this.jsonEnabled} logStream=${!!this.logStream} type=${message.type}`);
     }
 
     // Write to console (human-readable)
@@ -301,7 +301,7 @@ export class XIMLogger {
     }
 
     output += reset;
-    console.log(output);
+console.log(output);
   }
 
   private getColor(level: string, direction: XIMDirection): string {
@@ -343,14 +343,14 @@ export class XIMLogger {
 
   logStats() {
     const uptime = Date.now() - this.startTime;
-    console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log('║                    XIM Protocol Statistics                    ║');
-    console.log('╚═══════════════════════════════════════════════════════════════╝');
-    console.log(`  Total Messages: ${this.messageCount}`);
-    console.log(`  Errors: ${this.errorCount}`);
-    console.log(`  Uptime: ${Math.floor(uptime / 1000)}s`);
-    console.log(`  Log File: ${this.logFile}`);
-    console.log('');
+console.log('\n╔═══════════════════════════════════════════════════════════════╗');
+console.log('║                    XIM Protocol Statistics                    ║');
+console.log('╚═══════════════════════════════════════════════════════════════╝');
+console.log(`  Total Messages: ${this.messageCount}`);
+console.log(`  Errors: ${this.errorCount}`);
+console.log(`  Uptime: ${Math.floor(uptime / 1000)}s`);
+console.log(`  Log File: ${this.logFile}`);
+console.log('');
   }
 
   close() {

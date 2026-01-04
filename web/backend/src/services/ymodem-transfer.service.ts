@@ -140,7 +140,7 @@ export class YmodemTransferManager extends EventEmitter {
     this.cancelled = false;
     this.state = 'waiting_start';
 
-    console.log(`[YMODEM] Starting batch send: ${files.length} file(s)`);
+console.log(`[YMODEM] Starting batch send: ${files.length} file(s)`);
 
     // Wait for receiver to send 'C' (CRC mode)
     this.startTimeout();
@@ -167,7 +167,7 @@ export class YmodemTransferManager extends EventEmitter {
       fs.mkdirSync(destinationPath, { recursive: true });
     }
 
-    console.log(`[YMODEM] Starting batch receive to: ${destinationPath}`);
+console.log(`[YMODEM] Starting batch receive to: ${destinationPath}`);
 
     // Send 'C' to request CRC mode and block 0
     this.send(Buffer.from([C]));
@@ -201,11 +201,11 @@ export class YmodemTransferManager extends EventEmitter {
       switch (this.state) {
         case 'waiting_start':
           if (byte === C) {
-            console.log('[YMODEM] Receiver requested CRC mode');
+console.log('[YMODEM] Receiver requested CRC mode');
             this.sendBlock0();
           } else if (byte === NAK) {
             // Checksum mode not supported in YMODEM
-            console.log('[YMODEM] NAK received, resending C request');
+console.log('[YMODEM] NAK received, resending C request');
             this.retryCount++;
             if (this.retryCount > this.maxRetries) {
               this.finish(false, 'Receiver does not support CRC mode');
@@ -362,7 +362,7 @@ export class YmodemTransferManager extends EventEmitter {
 
       // Validate sequence complement
       if ((seqNum ^ seqComp) !== 0xFF) {
-        console.log('[YMODEM] Sequence complement mismatch');
+console.log('[YMODEM] Sequence complement mismatch');
         this.send(Buffer.from([NAK]));
         continue;
       }
@@ -370,7 +370,7 @@ export class YmodemTransferManager extends EventEmitter {
       // Validate CRC
       const calculatedCRC = calculateCRC16(blockData);
       if (receivedCRC !== calculatedCRC) {
-        console.log('[YMODEM] CRC mismatch');
+console.log('[YMODEM] CRC mismatch');
         this.send(Buffer.from([NAK]));
         continue;
       }
@@ -419,7 +419,7 @@ export class YmodemTransferManager extends EventEmitter {
 
     if (filename === '') {
       // Empty filename = end of batch
-      console.log('[YMODEM] End of batch signaled');
+console.log('[YMODEM] End of batch signaled');
       this.send(Buffer.from([ACK]));
       this.finish(true);
       return;
@@ -437,7 +437,7 @@ export class YmodemTransferManager extends EventEmitter {
       }
     }
 
-    console.log(`[YMODEM] Receiving file: ${filename} (${fileSize} bytes)`);
+console.log(`[YMODEM] Receiving file: ${filename} (${fileSize} bytes)`);
 
     this.currentReceiveFilename = filename;
     this.expectedFileSize = fileSize;
@@ -480,7 +480,7 @@ export class YmodemTransferManager extends EventEmitter {
     }
 
     fs.writeFileSync(filePath, fullData);
-    console.log(`[YMODEM] File saved: ${filePath} (${fullData.length} bytes)`);
+console.log(`[YMODEM] File saved: ${filePath} (${fullData.length} bytes)`);
 
     this.completedFiles.push(filePath);
 
@@ -516,7 +516,7 @@ export class YmodemTransferManager extends EventEmitter {
       size: fileSize
     };
 
-    console.log(`[YMODEM] Sending file ${this.currentFileIndex + 1}/${this.files.length}: ${filename} (${fileSize} bytes)`);
+console.log(`[YMODEM] Sending file ${this.currentFileIndex + 1}/${this.files.length}: ${filename} (${fileSize} bytes)`);
 
     if (this.options.onFileStart) {
       this.options.onFileStart(filename, fileSize);
@@ -575,7 +575,7 @@ export class YmodemTransferManager extends EventEmitter {
     this.state = 'waiting_final_ack';
     this.startTimeout();
 
-    console.log('[YMODEM] Sent end-of-batch marker');
+console.log('[YMODEM] Sent end-of-batch marker');
   }
 
   /**
@@ -591,7 +591,7 @@ export class YmodemTransferManager extends EventEmitter {
 
     if (offset >= this.currentFile.size) {
       // All data sent, send EOT
-      console.log(`[YMODEM] All blocks sent for ${this.currentFile.name}, sending EOT`);
+console.log(`[YMODEM] All blocks sent for ${this.currentFile.name}, sending EOT`);
       this.send(Buffer.from([EOT]));
       this.state = 'waiting_eot_ack';
       this.startTimeout();
@@ -639,7 +639,7 @@ export class YmodemTransferManager extends EventEmitter {
       return;
     }
 
-    console.log(`[YMODEM] Retry ${this.retryCount}/${this.maxRetries}`);
+console.log(`[YMODEM] Retry ${this.retryCount}/${this.maxRetries}`);
 
     if (this.lastSentBlock) {
       this.send(this.lastSentBlock);
@@ -652,7 +652,7 @@ export class YmodemTransferManager extends EventEmitter {
    */
   private fileComplete(success: boolean): void {
     if (this.currentFile) {
-      console.log(`[YMODEM] File complete: ${this.currentFile.name}`);
+console.log(`[YMODEM] File complete: ${this.currentFile.name}`);
       this.completedFiles.push(this.currentFile.name);
 
       if (this.options.onFileComplete) {
@@ -673,7 +673,7 @@ export class YmodemTransferManager extends EventEmitter {
    * Handle cancel request
    */
   private handleCancel(): void {
-    console.log('[YMODEM] Transfer cancelled by remote');
+console.log('[YMODEM] Transfer cancelled by remote');
     this.send(Buffer.from([CAN, CAN]));
     this.finish(false, 'Cancelled by remote');
   }
@@ -728,7 +728,7 @@ export class YmodemTransferManager extends EventEmitter {
       return;
     }
 
-    console.log(`[YMODEM] Timeout, retry ${this.retryCount}/${this.maxRetries}`);
+console.log(`[YMODEM] Timeout, retry ${this.retryCount}/${this.maxRetries}`);
 
     if (this.direction === 'receive') {
       // Resend 'C' for CRC mode
@@ -748,12 +748,12 @@ export class YmodemTransferManager extends EventEmitter {
     this.active = false;
 
     if (error) {
-      console.log(`[YMODEM] Transfer failed: ${error}`);
+console.log(`[YMODEM] Transfer failed: ${error}`);
       if (this.options.onError) {
         this.options.onError(error);
       }
     } else {
-      console.log(`[YMODEM] Batch transfer complete: ${this.completedFiles.length} file(s)`);
+console.log(`[YMODEM] Batch transfer complete: ${this.completedFiles.length} file(s)`);
     }
 
     if (this.options.onComplete) {

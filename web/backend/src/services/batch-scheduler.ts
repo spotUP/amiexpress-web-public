@@ -43,7 +43,7 @@ function getExecuteOnTooltypes(): Map<string, string> {
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
 
   if (!fs.existsSync(configPath)) {
-    console.log('[BatchScheduler] bbsConfig.info not found, no EXECUTE_ON_* tooltypes');
+console.log('[BatchScheduler] bbsConfig.info not found, no EXECUTE_ON_* tooltypes');
     executeOnCache = tooltypes;
     executeOnCacheTime = now;
     return tooltypes;
@@ -62,9 +62,9 @@ function getExecuteOnTooltypes(): Map<string, string> {
       }
     }
 
-    console.log(`[BatchScheduler] Loaded ${tooltypes.size} EXECUTE_ON_* tooltypes from bbsConfig.info`);
+console.log(`[BatchScheduler] Loaded ${tooltypes.size} EXECUTE_ON_* tooltypes from bbsConfig.info`);
   } catch (error) {
-    console.error('[BatchScheduler] Failed to read bbsConfig.info:', error);
+console.error('[BatchScheduler] Failed to read bbsConfig.info:', error);
   }
 
   executeOnCache = tooltypes;
@@ -106,12 +106,12 @@ export async function runExecuteOn(
   const syncKey = `EXECUTE_ON_${event}`;
   const syncCmd = tooltypes.get(syncKey);
   if (syncCmd) {
-    console.log(`[BatchScheduler] Running ${syncKey}: ${syncCmd}`);
+console.log(`[BatchScheduler] Running ${syncKey}: ${syncCmd}`);
     const processed = processMciInCommand(syncCmd, nodeId, context);
     try {
       await executeLine(processed, nodeId);
     } catch (error) {
-      console.error(`[BatchScheduler] Error executing ${syncKey}:`, error);
+console.error(`[BatchScheduler] Error executing ${syncKey}:`, error);
     }
   }
 
@@ -119,11 +119,11 @@ export async function runExecuteOn(
   const asyncKey = `EXECUTE_ASYNC_ON_${event}`;
   const asyncCmd = tooltypes.get(asyncKey);
   if (asyncCmd) {
-    console.log(`[BatchScheduler] Running ${asyncKey}: ${asyncCmd}`);
+console.log(`[BatchScheduler] Running ${asyncKey}: ${asyncCmd}`);
     const processed = processMciInCommand(asyncCmd, nodeId, context);
     // Fire and forget - don't await
     executeLine(processed, nodeId).catch((error) => {
-      console.error(`[BatchScheduler] Error executing ${asyncKey}:`, error);
+console.error(`[BatchScheduler] Error executing ${asyncKey}:`, error);
     });
   }
 
@@ -301,10 +301,10 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
       });
 
       child.on('error', async (err: any) => {
-        console.warn(`[BatchScheduler] Failed to start ${progPath}: ${err.message}`);
+console.warn(`[BatchScheduler] Failed to start ${progPath}: ${err.message}`);
         // Fallback: if this looks like an Amiga binary, try running via the door runner
         if (!isTs && !isJs && (isDoorish || err.code === 'ENOEXEC')) {
-          console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback`);
+console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback`);
           await runAmigaDoorViaRunner(progPath, 0, args);
         }
         resolve();
@@ -312,7 +312,7 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
 
       child.on('close', (code: number) => {
         if (code !== 0) {
-          console.warn(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
+console.warn(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
         }
         if (redirectPath && output.length > 0) {
           try {
@@ -321,17 +321,17 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
             fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(resolved, output, 'utf-8');
           } catch (err) {
-            console.error('[BatchScheduler] Failed to write output:', err);
+console.error('[BatchScheduler] Failed to write output:', err);
           }
         }
         resolve();
       });
     } catch (err: any) {
-      console.warn(`[BatchScheduler] Error spawning ${progPath}: ${err.message || err}`);
+console.warn(`[BatchScheduler] Error spawning ${progPath}: ${err.message || err}`);
       if (!isTs && !isJs) {
-        console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback (spawn error)`);
+console.warn(`[BatchScheduler] Retrying ${progPath} via Amiga door runner fallback (spawn error)`);
         runAmigaDoorViaRunner(progPath, nodeId || 1, args).catch((e: any) => {
-          console.warn(`[BatchScheduler] Fallback runner failed for ${progPath}: ${e?.message || e}`);
+console.warn(`[BatchScheduler] Fallback runner failed for ${progPath}: ${e?.message || e}`);
         });
       }
       resolve();
@@ -378,7 +378,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     const doorPath = resolveAssign('doors:ntr-lastcallers/ntr-lastcallers');
     if (doorPath) {
       await runAmigaDoorViaRunner(doorPath, nodeNum, resolvedArgs, path.dirname(doorPath));
-      console.log(`[BatchScheduler] Ran NTR-LASTCALLERS for node ${nodeNum}`);
+console.log(`[BatchScheduler] Ran NTR-LASTCALLERS for node ${nodeNum}`);
     }
     return;
   }
@@ -400,11 +400,11 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
       // Parse optional flags
       const ignoreSysop = args.some(arg => arg.toLowerCase() === 'ignoresysop');
 
-      console.log(`[BatchScheduler] Generating MultiTop from design: ${designPath} (raw: ${rawDesignPath}), output: ${outputPath}, ignoreSysop: ${ignoreSysop}`);
+console.log(`[BatchScheduler] Generating MultiTop from design: ${designPath} (raw: ${rawDesignPath}), output: ${outputPath}, ignoreSysop: ${ignoreSysop}`);
       await generateMultiTop(designPath, outputPath, { ignoreSysop });
-      console.log('[BatchScheduler] MultiTop generated successfully');
+console.log('[BatchScheduler] MultiTop generated successfully');
     } else {
-      console.error('[BatchScheduler] MultiTop requires design file and output file arguments');
+console.error('[BatchScheduler] MultiTop requires design file and output file arguments');
     }
     return;
   }
@@ -449,11 +449,11 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     }
 
     if (options.bbsName && options.callersLog) {
-      console.log(`[BatchScheduler] Running GLCUpdater for ${options.bbsName}, log: ${options.callersLog}`);
+console.log(`[BatchScheduler] Running GLCUpdater for ${options.bbsName}, log: ${options.callersLog}`);
       await processCallersLog(options);
-      console.log('[BatchScheduler] GLCUpdater completed');
+console.log('[BatchScheduler] GLCUpdater completed');
     } else {
-      console.error('[BatchScheduler] GLCUpdater requires BBSNAME and CALLERSLOG parameters');
+console.error('[BatchScheduler] GLCUpdater requires BBSNAME and CALLERSLOG parameters');
     }
     return;
   }
@@ -483,11 +483,11 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
         }
       }
 
-      console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath} (raw: ${args[0]}), days: ${daysBack}, output: ${outputPath}`);
+console.log(`[BatchScheduler] Generating QuickNew from config: ${configPath} (raw: ${args[0]}), days: ${daysBack}, output: ${outputPath}`);
       await generateQuickNewFromConfig(configPath, daysBack, outputPath);
-      console.log('[BatchScheduler] QuickNew generated successfully');
+console.log('[BatchScheduler] QuickNew generated successfully');
     } else {
-      console.error('[BatchScheduler] QuickNew requires config file and days back arguments');
+console.error('[BatchScheduler] QuickNew requires config file and days back arguments');
     }
     return;
   }
@@ -496,7 +496,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   // Replaces 68K SAmiLog binary with TypeScript port (100% format compatible)
   // Command format: samilog -UC"N" -O"output/path"count
   if (program.includes('samilog/samilog') || program.includes('typescript:samilog')) {
-    console.log('[BatchScheduler] Running TypeScript SAmiLog');
+console.log('[BatchScheduler] Running TypeScript SAmiLog');
     const samilog = await import('../services/SamiLogService');
 
     // Parse all stacked commands in order
@@ -574,7 +574,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
 
         let fullPath;
         if (rawPath === '*' || rawPath.toLowerCase() === 'console:') {
-          console.log('[BatchScheduler] SAmiLog output to CONSOLE');
+console.log('[BatchScheduler] SAmiLog output to CONSOLE');
           // For now, we can't easily pipe back to actual console from batch
           continue;
         } else {
@@ -584,7 +584,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
         const content = samilog.generateBulletin(count, options);
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         fs.writeFileSync(fullPath, content, 'latin1');
-        console.log(`[BatchScheduler] SAmiLog bulletin written to ${rawPath}`);
+console.log(`[BatchScheduler] SAmiLog bulletin written to ${rawPath}`);
         continue;
       }
     }
@@ -599,7 +599,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     const nodeNum = nodeId || 1;
     if (doorPath) {
       await runAmigaDoorViaRunner(doorPath, nodeNum, args, path.dirname(doorPath));
-      console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
+console.log('[BatchScheduler] Ran SlickTop with args:', args.join(' '));
     }
     return;
   }
@@ -608,7 +608,7 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   const rawProg = resolveAssign(parts[0]);
   const resolvedProg = resolveExecutable(rawProg) || (require('../utils/amigafs').resolvePath(rawProg));
   if (!resolvedProg) {
-    console.warn('[BatchScheduler] Skipping missing program:', parts[0]);
+console.warn('[BatchScheduler] Skipping missing program:', parts[0]);
     return;
   }
 
@@ -627,7 +627,7 @@ export async function runBatchFile(batchPath: string, nodeId: number): Promise<v
     try {
       await executeLine(rawLine, nodeId);
     } catch (err) {
-      console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
+console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
     }
   }
 }
@@ -662,7 +662,7 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
 
-  console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${day} (${batchName})`);
+console.log(`[BatchScheduler] Running logoff batches for node ${nodeId}, day=${day} (${batchName})`);
 
   const candidates = [
     path.join(baseDir, batchName),
@@ -673,12 +673,12 @@ export async function runLogoffBatches(nodeId: number): Promise<void> {
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
-      console.log(`[BatchScheduler] Found batch file: ${candidate}`);
+console.log(`[BatchScheduler] Found batch file: ${candidate}`);
     }
     await runBatchFile(candidate, nodeId || 1);
   }
 
-  console.log(`[BatchScheduler] Logoff batches completed for node ${nodeId}`);
+console.log(`[BatchScheduler] Logoff batches completed for node ${nodeId}`);
 }
 function runAmigaDoorViaRunner(
   doorPath: string,
@@ -739,7 +739,7 @@ function runAmigaDoorViaRunner(
       lastLogin: new Date(),
     } as any);
   } catch (err: any) {
-    console.warn('[BatchScheduler] Failed to create drop files:', err?.message || err);
+console.warn('[BatchScheduler] Failed to create drop files:', err?.message || err);
   }
 
   return new Promise<void>((resolve) => {
@@ -769,7 +769,7 @@ function runAmigaDoorViaRunner(
     let killed = false;
     const timeoutHandle = setTimeout(() => {
       if (!child.killed && child.pid) {
-        console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} timed out after ${BATCH_DOOR_TIMEOUT / 1000}s, killing process tree (pid ${child.pid})`);
+console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} timed out after ${BATCH_DOOR_TIMEOUT / 1000}s, killing process tree (pid ${child.pid})`);
         killed = true;
         try {
           // AGGRESSIVE KILL: Use pkill to kill ALL processes matching the door name
@@ -781,13 +781,13 @@ function runAmigaDoorViaRunner(
           try {
             process.kill(-child.pid, 'SIGKILL');
           } catch (e1: any) {
-            console.warn(`[BatchScheduler] Process group kill failed: ${e1.message}`);
+console.warn(`[BatchScheduler] Process group kill failed: ${e1.message}`);
           }
 
           // Then kill by name (catches npm/npx children)
           try {
             execSync(`pkill -9 -f "${doorName}"`, { stdio: 'ignore' });
-            console.warn(`[BatchScheduler] Killed all processes matching: ${doorName}`);
+console.warn(`[BatchScheduler] Killed all processes matching: ${doorName}`);
           } catch (e2: any) {
             // pkill returns non-zero if no processes found, ignore
           }
@@ -795,7 +795,7 @@ function runAmigaDoorViaRunner(
           // Finally, direct kill of child
           child.kill('SIGKILL');
         } catch (e: any) {
-          console.error(`[BatchScheduler] Failed to kill door: ${e.message}`);
+console.error(`[BatchScheduler] Failed to kill door: ${e.message}`);
         }
       }
     }, BATCH_DOOR_TIMEOUT);
@@ -818,18 +818,18 @@ function runAmigaDoorViaRunner(
 
     child.on('error', (err: any) => {
       clearTimeout(timeoutHandle);
-      console.warn(`[BatchScheduler] Amiga door runner failed to start: ${err.message}`);
+console.warn(`[BatchScheduler] Amiga door runner failed to start: ${err.message}`);
       resolve();
     });
     child.on('close', (code: number) => {
       clearTimeout(timeoutHandle);
       const trimmed = output.trim();
       if (killed) {
-        console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} was killed due to timeout`);
+console.warn(`[BatchScheduler] Door ${path.basename(doorPath)} was killed due to timeout`);
       } else if (code !== 0) {
-        console.warn(`[BatchScheduler] Amiga door runner exited with code ${code}`);
+console.warn(`[BatchScheduler] Amiga door runner exited with code ${code}`);
         if (trimmed) {
-          console.warn(`[BatchScheduler] Runner output:\n${trimmed}`);
+console.warn(`[BatchScheduler] Runner output:\n${trimmed}`);
         }
       }
       if (trimmed) {
@@ -845,9 +845,9 @@ function runAmigaDoorViaRunner(
         try {
           fs.mkdirSync(path.dirname(resolved), { recursive: true });
           fs.writeFileSync(resolved, output, 'utf8');
-          console.log(`[BatchScheduler] Redirected output to ${resolved}`);
+console.log(`[BatchScheduler] Redirected output to ${resolved}`);
         } catch (err) {
-          console.error('[BatchScheduler] Failed to write redirect file:', err);
+console.error('[BatchScheduler] Failed to write redirect file:', err);
         }
       }
       resolve();

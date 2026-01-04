@@ -51,7 +51,7 @@ export class AmiExpressLibrary {
   constructor(emulator: MoiraEmulator, session?: any) {
     this.emulator = emulator;
     this.session = session || { user: { username: 'Guest', location: 'Unknown' } };
-    console.log('[AmiExpress Library] Initialized');
+console.log('[AmiExpress Library] Initialized');
   }
 
   /**
@@ -72,10 +72,10 @@ export class AmiExpressLibrary {
     if (Buffer.isBuffer(data)) {
       this.rawInputQueue.push(data);
       this.inputQueue.push(data.toString('latin1'));
-      console.log(`[AmiExpress Library] Raw input queued: <buffer ${data.length}>`);
+console.log(`[AmiExpress Library] Raw input queued: <buffer ${data.length}>`);
     } else {
       this.inputQueue.push(data);
-      console.log(`[AmiExpress Library] Input queued: "${data}"`);
+console.log(`[AmiExpress Library] Input queued: "${data}"`);
     }
   }
 
@@ -83,7 +83,7 @@ export class AmiExpressLibrary {
    * Handle library call
    */
   handleCall(offset: number): boolean {
-    console.log(`[AmiExpress Library] Checking offset: 0x${offset.toString(16)} (decimal: ${offset})`);
+console.log(`[AmiExpress Library] Checking offset: 0x${offset.toString(16)} (decimal: ${offset})`);
 
     switch (offset) {
       case this.FUNC_AEPUTS:
@@ -109,23 +109,23 @@ export class AmiExpressLibrary {
       // Door calls 4 different offsets in sequence - they're likely DIFFERENT functions
 
       case 0xFF0000:    // 16711680 - Maybe WriteChar
-        console.log(`[AmiExpress Library] Offset 0xFF0000 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset 0xFF0000 - treating as NOP (return success)`);
         return true;  // Just return success, don't output
 
       case 0xFF0001:    // 16711681 - Discovered during door testing
-        console.log(`[AmiExpress Library] Offset 0xFF0001 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset 0xFF0001 - treating as NOP (return success)`);
         return true;  // Just return success
 
       case 0xFF0002:    // 16711682 - Maybe another function
-        console.log(`[AmiExpress Library] Offset 0xFF0002 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset 0xFF0002 - treating as NOP (return success)`);
         return true;  // Just return success
 
       case 0xFF0003:    // 16711683 - Discovered during door testing
-        console.log(`[AmiExpress Library] Offset 0xFF0003 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset 0xFF0003 - treating as NOP (return success)`);
         return true;  // Just return success
 
       case 0xFF0005:    // 16711685 - Another discovered offset
-        console.log(`[AmiExpress Library] Offset 0xFF0005 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset 0xFF0005 - treating as NOP (return success)`);
         return true;  // Just return success
 
       // Additional offsets discovered during door testing - batch add
@@ -136,44 +136,44 @@ export class AmiExpressLibrary {
       case 16744036:    // 0xFF7E64
       case 16744142:    // 0xFF7ECE
       case 16744144:    // 0xFF7ED0
-        console.log(`[AmiExpress Library] Offset ${offset} (0x${offset.toString(16)}) - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset ${offset} (0x${offset.toString(16)}) - treating as NOP (return success)`);
         this.emulator.setRegister(CPURegister.D0, 0);  // Return 0 for success
         return true;
 
       case -28:
-        console.log(`[AmiExpress Library] Offset -28 - treating as NOP (return success)`);
+console.log(`[AmiExpress Library] Offset -28 - treating as NOP (return success)`);
         this.emulator.setRegister(CPURegister.D0, 0);
         return true;
 
       case -16655:      // 0xFFFFBEF1 - ReadChar (non-blocking)
-        console.log(`[AmiExpress Library] Offset -16655 - calling aeGetCh()`);
+console.log(`[AmiExpress Library] Offset -16655 - calling aeGetCh()`);
         return this.aeGetCh();
 
       case -16657:      // 0xFFFFBEEF - CheckInput (returns chars available)
         const charsAvailable = this.inputQueue.length > 0 ? 1 : 0;
-        console.log(`[AmiExpress Library] Offset -16657 - CheckInput returns ${charsAvailable}`);
+console.log(`[AmiExpress Library] Offset -16657 - CheckInput returns ${charsAvailable}`);
         this.emulator.setRegister(CPURegister.D0, charsAvailable);
         return true;
 
       // HIGH-LEVEL AEDoor.library functions (2025-10-30)
       case -30:         // CreateComm - Initialize door interface
-        console.log('[AEDoor.library] CreateComm() called');
+console.log('[AEDoor.library] CreateComm() called');
         return this.CreateComm();
 
       case -36:         // DeleteComm - Cleanup door interface
-        console.log('[AEDoor.library] DeleteComm() called');
+console.log('[AEDoor.library] DeleteComm() called');
         return this.DeleteComm();
 
       case -72:         // GetString - Get string buffer pointer
-        console.log('[AEDoor.library] GetString() called');
+console.log('[AEDoor.library] GetString() called');
         return this.GetString();
 
       case -84:         // WriteStr - Output text with optional linefeed
-        console.log('[AEDoor.library] WriteStr() called');
+console.log('[AEDoor.library] WriteStr() called');
         return this.WriteStr();
 
       case -108:        // GetDT - Get user/system data
-        console.log('[AEDoor.library] GetDT() called');
+console.log('[AEDoor.library] GetDT() called');
         return this.GetDT();
 
       default:
@@ -192,8 +192,8 @@ export class AmiExpressLibrary {
     const a2 = this.emulator.getRegister(CPURegister.A2);
     const stackPtr = this.emulator.getRegister(CPURegister.A7); // SP
 
-    console.log(`[AmiExpress] aePuts() called:`);
-    console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A2=0x${a2.toString(16)}, SP=0x${stackPtr.toString(16)}`);
+console.log(`[AmiExpress] aePuts() called:`);
+console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A2=0x${a2.toString(16)}, SP=0x${stackPtr.toString(16)}`);
 
     // Try A1 first (LEA instruction loads into A1 before call)
     let stringPtr = a1;
@@ -204,13 +204,13 @@ export class AmiExpressLibrary {
         // Try A2
         stringPtr = a2;
         if (stringPtr === 0 || stringPtr < 0x1000) {
-          console.warn('[AmiExpress] aePuts() called with null/invalid pointer in A0/A1/A2');
+console.warn('[AmiExpress] aePuts() called with null/invalid pointer in A0/A1/A2');
           return true;
         }
       }
     }
 
-    console.log(`[AmiExpress] Using string pointer: 0x${stringPtr.toString(16)}`);
+console.log(`[AmiExpress] Using string pointer: 0x${stringPtr.toString(16)}`);
 
     try {
       // DEBUG: Read first 16 bytes from memory to see what's there
@@ -219,41 +219,41 @@ export class AmiExpressLibrary {
         const byte = this.emulator.readMemory(stringPtr + i);
         debugBytes.push(byte);
       }
-      console.log(`[AmiExpress] Memory at 0x${stringPtr.toString(16)}: [${debugBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
-      console.log(`[AmiExpress] Memory as ASCII: "${debugBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+console.log(`[AmiExpress] Memory at 0x${stringPtr.toString(16)}: [${debugBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+console.log(`[AmiExpress] Memory as ASCII: "${debugBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
 
       // Check what's in the DATA segment (0x3900-0x3A78)
-      console.log('[AmiExpress] Checking DATA segment at 0x3900:');
+console.log('[AmiExpress] Checking DATA segment at 0x3900:');
       const dataBytes: number[] = [];
       for (let i = 0; i < 64; i++) {
         dataBytes.push(this.emulator.readMemory(0x3900 + i));
       }
-      console.log(`[AmiExpress] DATA at 0x3900 (hex): [${dataBytes.slice(0, 16).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
-      console.log(`[AmiExpress] DATA at 0x3900 (ASCII): "${dataBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+console.log(`[AmiExpress] DATA at 0x3900 (hex): [${dataBytes.slice(0, 16).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+console.log(`[AmiExpress] DATA at 0x3900 (ASCII): "${dataBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
 
       // Check if this looks like a pointer (first 4 bytes form an address)
       if (debugBytes.length >= 4) {
         const possiblePtr = (debugBytes[0] << 24) | (debugBytes[1] << 16) | (debugBytes[2] << 8) | debugBytes[3];
         if (possiblePtr > 0x1000 && possiblePtr < 0x100000) {
-          console.log(`[AmiExpress] First 4 bytes look like pointer: 0x${possiblePtr.toString(16)}`);
+console.log(`[AmiExpress] First 4 bytes look like pointer: 0x${possiblePtr.toString(16)}`);
           // Read 32 bytes from that address to see if there's a string there
           const derefBytes: number[] = [];
           for (let i = 0; i < 32; i++) {
             derefBytes.push(this.emulator.readMemory(possiblePtr + i));
           }
-          console.log(`[AmiExpress] Memory at dereferenced addr 0x${possiblePtr.toString(16)}: [${derefBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
-          console.log(`[AmiExpress] Dereferenced as ASCII: "${derefBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
+console.log(`[AmiExpress] Memory at dereferenced addr 0x${possiblePtr.toString(16)}: [${derefBytes.map(b => `0x${b.toString(16).padStart(2, '0')}`).join(', ')}]`);
+console.log(`[AmiExpress] Dereferenced as ASCII: "${derefBytes.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('')}"`);
         }
       }
 
       // CRITICAL: Check if stringPtr is actually within valid segment ranges
       const inCodeSegment = (stringPtr >= 0x1000 && stringPtr < 0x38E8);
       const inDataSegment = (stringPtr >= 0x3900 && stringPtr < 0x3A78);
-      console.log(`[AmiExpress] String pointer 0x${stringPtr.toString(16)} is in CODE: ${inCodeSegment}, DATA: ${inDataSegment}`);
+console.log(`[AmiExpress] String pointer 0x${stringPtr.toString(16)} is in CODE: ${inCodeSegment}, DATA: ${inDataSegment}`);
 
       if (!inCodeSegment && !inDataSegment) {
-        console.warn(`[AmiExpress] ⚠️ String pointer 0x${stringPtr.toString(16)} is OUTSIDE all loaded segments!`);
-        console.warn(`[AmiExpress]    CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78`);
+console.warn(`[AmiExpress] ⚠️ String pointer 0x${stringPtr.toString(16)} is OUTSIDE all loaded segments!`);
+console.warn(`[AmiExpress]    CODE: 0x1000-0x38E8, DATA: 0x3900-0x3A78`);
       }
 
       // Read string from memory as raw bytes
@@ -265,7 +265,7 @@ export class AmiExpressLibrary {
       }
       const rawBuf = Buffer.from(bytes);
       const text = rawBuf.toString('latin1');
-      console.log(`[AmiExpress] aePuts() output: "${text}"`);
+console.log(`[AmiExpress] aePuts() output: "${text}"`);
 
       // Send to terminal (raw preferred)
       if (this.outputRawCallback) {
@@ -274,7 +274,7 @@ export class AmiExpressLibrary {
         this.outputCallback(text);
       }
     } catch (error) {
-      console.error('[AmiExpress] aePuts() error:', error);
+console.error('[AmiExpress] aePuts() error:', error);
     }
 
     return true;
@@ -290,12 +290,12 @@ export class AmiExpressLibrary {
     const bufferPtr = this.emulator.getRegister(CPURegister.A0);
     const maxLength = this.emulator.getRegister(CPURegister.D0);
 
-    console.log(`[AmiExpress] aeGets() called, buffer at: 0x${bufferPtr.toString(16)}, maxlen: ${maxLength}`);
+console.log(`[AmiExpress] aeGets() called, buffer at: 0x${bufferPtr.toString(16)}, maxlen: ${maxLength}`);
 
     if (this.inputQueue.length === 0) {
       // No input available, return 0 (non-blocking)
       this.emulator.setRegister(CPURegister.D0, 0);
-      console.log('[AmiExpress] aeGets() no input available');
+console.log('[AmiExpress] aeGets() no input available');
       return true;
     }
 
@@ -312,9 +312,9 @@ export class AmiExpressLibrary {
 
       // Return length
       this.emulator.setRegister(CPURegister.D0, length);
-      console.log(`[AmiExpress] aeGets() returned: "${input}" (${length} bytes)`);
+console.log(`[AmiExpress] aeGets() returned: "${input}" (${length} bytes)`);
     } catch (error) {
-      console.error('[AmiExpress] aeGets() error:', error);
+console.error('[AmiExpress] aeGets() error:', error);
       this.emulator.setRegister(CPURegister.D0, -1);
     }
 
@@ -336,11 +336,11 @@ export class AmiExpressLibrary {
     const a6 = this.emulator.getRegister(CPURegister.A6);
     const pc = this.emulator.getRegister(CPURegister.PC);
 
-    console.log(`[AmiExpress] aePutCh() called:`);
-    console.log(`  Char: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
-    console.log(`  D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}`);
-    console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A6=0x${a6.toString(16)}`);
-    console.log(`  PC=0x${pc.toString(16)}`);
+console.log(`[AmiExpress] aePutCh() called:`);
+console.log(`  Char: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
+console.log(`  D0=0x${d0.toString(16)}, D1=0x${d1.toString(16)}`);
+console.log(`  A0=0x${a0.toString(16)}, A1=0x${a1.toString(16)}, A6=0x${a6.toString(16)}`);
+console.log(`  PC=0x${pc.toString(16)}`);
 
     if (this.outputCallback) {
       this.outputCallback(String.fromCharCode(charCode));
@@ -354,11 +354,11 @@ export class AmiExpressLibrary {
    * Returns: D0 = character code, -1 if no input
    */
   private aeGetCh(): boolean {
-    console.log('[AmiExpress] aeGetCh() called');
+console.log('[AmiExpress] aeGetCh() called');
 
     if (this.inputQueue.length === 0) {
       this.emulator.setRegister(CPURegister.D0, -1);
-      console.log('[AmiExpress] aeGetCh() no input available');
+console.log('[AmiExpress] aeGetCh() no input available');
       return true;
     }
 
@@ -371,7 +371,7 @@ export class AmiExpressLibrary {
     }
 
     this.emulator.setRegister(CPURegister.D0, charCode);
-    console.log(`[AmiExpress] aeGetCh() returned: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
+console.log(`[AmiExpress] aeGetCh() returned: 0x${charCode.toString(16)} ('${String.fromCharCode(charCode)}')`);
 
     return true;
   }
@@ -380,7 +380,7 @@ export class AmiExpressLibrary {
    * aeClearScreen() - Clear terminal screen
    */
   private aeClearScreen(): boolean {
-    console.log('[AmiExpress] aeClearScreen() called');
+console.log('[AmiExpress] aeClearScreen() called');
 
     if (this.outputCallback) {
       // Send ANSI clear screen sequence
@@ -402,7 +402,7 @@ export class AmiExpressLibrary {
    * Total: 68 bytes
    */
   private aeGetUser(): boolean {
-    console.log('[AmiExpress] aeGetUser() called');
+console.log('[AmiExpress] aeGetUser() called');
 
     // Allocate user structure in memory (use area after string buffer)
     const USER_STRUCT_ADDR = this.stringBufferPointer + this.STRING_BUFFER_SIZE + 256;
@@ -435,7 +435,7 @@ export class AmiExpressLibrary {
     // Write time limit (big-endian long)
     this.emulator.writeMemory32(USER_STRUCT_ADDR + 64, timeLimit);
 
-    console.log(
+console.log(
       `[AmiExpress] aeGetUser: username="${username}", location="${location}", ` +
       `secLevel=${secLevel}, timeLimit=${timeLimit}`
     );
@@ -472,7 +472,7 @@ export class AmiExpressLibrary {
 
     // If we found a null-terminated string, return it
     if (result.length > 0 && hasNullTerminator) {
-      console.log(`[AmiExpress] Read C-string: "${result}"`);
+console.log(`[AmiExpress] Read C-string: "${result}"`);
       return result;
     }
 
@@ -489,7 +489,7 @@ export class AmiExpressLibrary {
         }
       }
       if (bstrResult.length > 0) {
-        console.log(`[AmiExpress] Read BSTR: length=${bstrLength}, content="${bstrResult}"`);
+console.log(`[AmiExpress] Read BSTR: length=${bstrLength}, content="${bstrResult}"`);
         return bstrResult;
       }
     }
@@ -513,17 +513,17 @@ export class AmiExpressLibrary {
   private CreateComm(): boolean {
     const nodeStringPtr = this.emulator.getRegister(CPURegister.A0);
 
-    console.log('[AEDoor.library] CreateComm() initializing door interface');
-    console.log(`  Node string pointer: 0x${nodeStringPtr.toString(16)}`);
+console.log('[AEDoor.library] CreateComm() initializing door interface');
+console.log(`  Node string pointer: 0x${nodeStringPtr.toString(16)}`);
 
     // Read node number (usually passed as argv[1])
     let nodeStr = '';
     if (nodeStringPtr > 0 && nodeStringPtr < 0x100000) {
       try {
         nodeStr = this.readString(nodeStringPtr);
-        console.log(`  Node number: "${nodeStr}"`);
+console.log(`  Node number: "${nodeStr}"`);
       } catch (e) {
-        console.warn('  Could not read node string, using default');
+console.warn('  Could not read node string, using default');
       }
     }
 
@@ -531,14 +531,14 @@ export class AmiExpressLibrary {
     // In real implementation, would allocate via exec.library AllocMem
     // Must be outside door code range (0x1000-0x80000)
     this.difacePointer = 0x098000;  // After Task structure at 0x090000
-    console.log(`  Allocated interface at: 0x${this.difacePointer.toString(16)}`);
+console.log(`  Allocated interface at: 0x${this.difacePointer.toString(16)}`);
 
     // Initialize interface structure fields (simplified)
     // Real structure would have many fields, we'll add them as needed
 
     // Return interface pointer in D0
     this.emulator.setRegister(CPURegister.D0, this.difacePointer);
-    console.log(`[AEDoor.library] CreateComm() returned: 0x${this.difacePointer.toString(16)}`);
+console.log(`[AEDoor.library] CreateComm() returned: 0x${this.difacePointer.toString(16)}`);
 
     return true;
   }
@@ -553,14 +553,14 @@ export class AmiExpressLibrary {
   private DeleteComm(): boolean {
     const difacePtr = this.emulator.getRegister(CPURegister.D0);
 
-    console.log('[AEDoor.library] DeleteComm() cleaning up door interface');
-    console.log(`  Interface pointer: 0x${difacePtr.toString(16)}`);
+console.log('[AEDoor.library] DeleteComm() cleaning up door interface');
+console.log(`  Interface pointer: 0x${difacePtr.toString(16)}`);
 
     // Cleanup (simplified - in real implementation would free memory)
     this.difacePointer = 0;
     this.stringBufferPointer = 0;
 
-    console.log('[AEDoor.library] DeleteComm() complete');
+console.log('[AEDoor.library] DeleteComm() complete');
     return true;
   }
 
@@ -576,18 +576,18 @@ export class AmiExpressLibrary {
   private GetString(): boolean {
     const difacePtr = this.emulator.getRegister(CPURegister.D0);
 
-    console.log('[AEDoor.library] GetString() getting string buffer pointer');
-    console.log(`  Interface pointer: 0x${difacePtr.toString(16)}`);
+console.log('[AEDoor.library] GetString() getting string buffer pointer');
+console.log(`  Interface pointer: 0x${difacePtr.toString(16)}`);
 
     // Allocate string buffer if not already allocated
     if (this.stringBufferPointer === 0) {
       this.stringBufferPointer = 0x10200;  // Fixed address after interface
-      console.log(`  Allocated string buffer at: 0x${this.stringBufferPointer.toString(16)}`);
+console.log(`  Allocated string buffer at: 0x${this.stringBufferPointer.toString(16)}`);
     }
 
     // Return buffer pointer in D0
     this.emulator.setRegister(CPURegister.D0, this.stringBufferPointer);
-    console.log(`[AEDoor.library] GetString() returned: 0x${this.stringBufferPointer.toString(16)}`);
+console.log(`[AEDoor.library] GetString() returned: 0x${this.stringBufferPointer.toString(16)}`);
 
     return true;
   }
@@ -607,20 +607,20 @@ export class AmiExpressLibrary {
     const stringPtr = this.emulator.getRegister(CPURegister.A0);
     const mode = this.emulator.getRegister(CPURegister.D1);
 
-    console.log('[AEDoor.library] WriteStr() called');
-    console.log(`  Interface: 0x${difacePtr.toString(16)}`);
-    console.log(`  String ptr: 0x${stringPtr.toString(16)}`);
-    console.log(`  Mode: ${mode} (${mode === this.LF ? 'LF' : 'NOLF'})`);
+console.log('[AEDoor.library] WriteStr() called');
+console.log(`  Interface: 0x${difacePtr.toString(16)}`);
+console.log(`  String ptr: 0x${stringPtr.toString(16)}`);
+console.log(`  Mode: ${mode} (${mode === this.LF ? 'LF' : 'NOLF'})`);
 
     if (stringPtr === 0 || stringPtr < 0x1000) {
-      console.warn('[AEDoor.library] WriteStr() invalid string pointer');
+console.warn('[AEDoor.library] WriteStr() invalid string pointer');
       return true;
     }
 
     try {
       // Read string from memory
       const text = this.readString(stringPtr);
-      console.log(`[AEDoor.library] WriteStr() output: "${text}"`);
+console.log(`[AEDoor.library] WriteStr() output: "${text}"`);
 
       // Send to terminal via outputCallback
       if (this.outputCallback) {
@@ -632,7 +632,7 @@ export class AmiExpressLibrary {
         }
       }
     } catch (error) {
-      console.error('[AEDoor.library] WriteStr() error:', error);
+console.error('[AEDoor.library] WriteStr() error:', error);
     }
 
     return true;
@@ -655,46 +655,46 @@ export class AmiExpressLibrary {
     const dataType = this.emulator.getRegister(CPURegister.D1);
     const destPtr = this.emulator.getRegister(CPURegister.A0);
 
-    console.log('[AEDoor.library] GetDT() called');
-    console.log(`  Interface: 0x${difacePtr.toString(16)}`);
-    console.log(`  Data type: ${dataType}`);
-    console.log(`  Dest ptr: 0x${destPtr.toString(16)}`);
+console.log('[AEDoor.library] GetDT() called');
+console.log(`  Interface: 0x${difacePtr.toString(16)}`);
+console.log(`  Data type: ${dataType}`);
+console.log(`  Dest ptr: 0x${destPtr.toString(16)}`);
 
     // Determine destination address (use string buffer if destPtr is 0)
     const targetAddr = destPtr || this.stringBufferPointer;
-    console.log(`  Target address: 0x${targetAddr.toString(16)}`);
+console.log(`  Target address: 0x${targetAddr.toString(16)}`);
 
     // Get data value based on type
     let value = '';
     switch (dataType) {
       case 100:  // DT_NAME
         value = this.session?.user?.username || 'Guest';
-        console.log(`  DT_NAME: "${value}"`);
+console.log(`  DT_NAME: "${value}"`);
         break;
 
       case 102:  // DT_LOCATION
         value = this.session?.user?.location || 'Unknown';
-        console.log(`  DT_LOCATION: "${value}"`);
+console.log(`  DT_LOCATION: "${value}"`);
         break;
 
       case 103:  // DT_PHONENUMBER
         value = this.session?.user?.phoneNumber || 'N/A';
-        console.log(`  DT_PHONENUMBER: "${value}"`);
+console.log(`  DT_PHONENUMBER: "${value}"`);
         break;
 
       case 104:  // DT_SLOTNUMBER
         value = String(this.session?.user?.slotNumber || 1);
-        console.log(`  DT_SLOTNUMBER: "${value}"`);
+console.log(`  DT_SLOTNUMBER: "${value}"`);
         break;
 
       case 115:  // DT_TIMELIMIT
         value = String(this.session?.user?.timeLimit || 60);
-        console.log(`  DT_TIMELIMIT: "${value}"`);
+console.log(`  DT_TIMELIMIT: "${value}"`);
         break;
 
       default:
         value = '';
-        console.log(`  Unknown data type ${dataType}, returning empty string`);
+console.log(`  Unknown data type ${dataType}, returning empty string`);
         break;
     }
 
@@ -702,9 +702,9 @@ export class AmiExpressLibrary {
     if (targetAddr > 0 && targetAddr < 0x100000) {
       try {
         this.writeString(targetAddr, value);
-        console.log(`  Wrote "${value}" to 0x${targetAddr.toString(16)}`);
+console.log(`  Wrote "${value}" to 0x${targetAddr.toString(16)}`);
       } catch (error) {
-        console.error('[AEDoor.library] GetDT() write error:', error);
+console.error('[AEDoor.library] GetDT() write error:', error);
       }
     }
 

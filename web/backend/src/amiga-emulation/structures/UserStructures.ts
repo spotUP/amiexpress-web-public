@@ -82,7 +82,7 @@ export class UserStructure {
    * Write user structure to emulator memory
    */
   static writeToMemory(emulator: MoiraEmulator, addr: number, user: AmigaUserData): void {
-    console.log(`[UserStructure] Writing user structure at 0x${addr.toString(16)}`);
+console.log(`[UserStructure] Writing user structure at 0x${addr.toString(16)}`);
 
     // +0x00: name[31] - null-terminated string
     this.writeString(emulator, addr + 0x00, user.username || '', 31);
@@ -242,7 +242,7 @@ export class UserStructure {
     // +0xE5: newUser (CHAR)
     emulator.writeMemory(addr + 0xE5, user.newUser ? 1 : 0);
 
-    console.log(`[UserStructure] Wrote user "${user.username}" to 0x${addr.toString(16)}`);
+console.log(`[UserStructure] Wrote user "${user.username}" to 0x${addr.toString(16)}`);
   }
 
   /**
@@ -336,7 +336,7 @@ export class UserKeysStructure {
   static readonly SIZE = 54; // 0x36 bytes
 
   static writeToMemory(emulator: MoiraEmulator, addr: number, user: AmigaUserData): void {
-    console.log(`[UserKeysStructure] Writing userKeys at 0x${addr.toString(16)}`);
+console.log(`[UserKeysStructure] Writing userKeys at 0x${addr.toString(16)}`);
 
     // +0x00: userName[31]
     this.writeString(emulator, addr + 0x00, user.username || '', 31);
@@ -370,7 +370,7 @@ export class UserKeysStructure {
     // +0x34: timesOnToday (INT)
     emulator.writeMemory16(addr + 0x34, user.timesOnToday || 0);
 
-    console.log(`[UserKeysStructure] Wrote userKeys for "${user.username}"`);
+console.log(`[UserKeysStructure] Wrote userKeys for "${user.username}"`);
   }
 
   static readFromMemory(emulator: MoiraEmulator, addr: number): Partial<AmigaUserData> {
@@ -432,7 +432,7 @@ export class UserMiscStructure {
   static readonly SIZE = 248; // 0xF8 bytes
 
   static writeToMemory(emulator: MoiraEmulator, addr: number, user: AmigaUserData): void {
-    console.log(`[UserMiscStructure] Writing userMisc at 0x${addr.toString(16)}`);
+console.log(`[UserMiscStructure] Writing userMisc at 0x${addr.toString(16)}`);
 
     // +0x00: internetName[10] - legacy
     this.writeString(emulator, addr + 0x00, '', 10);
@@ -493,7 +493,7 @@ export class UserMiscStructure {
       emulator.writeMemory(addr + 0xA2 + i, 0);
     }
 
-    console.log(`[UserMiscStructure] Wrote userMisc for "${user.username}"`);
+console.log(`[UserMiscStructure] Wrote userMisc for "${user.username}"`);
   }
 
   static readFromMemory(emulator: MoiraEmulator, addr: number): Partial<AmigaUserData> {
@@ -547,10 +547,10 @@ export class SharedUserData {
     this.userKeysAddr = baseAddr + UserStructure.SIZE;
     this.userMiscAddr = baseAddr + UserStructure.SIZE + UserKeysStructure.SIZE;
 
-    console.log('[SharedUserData] Allocated shared memory:');
-    console.log(`  loggedOnUser:     0x${this.userAddr.toString(16)} (${UserStructure.SIZE} bytes)`);
-    console.log(`  loggedOnUserKeys: 0x${this.userKeysAddr.toString(16)} (${UserKeysStructure.SIZE} bytes)`);
-    console.log(`  loggedOnUserMisc: 0x${this.userMiscAddr.toString(16)} (${UserMiscStructure.SIZE} bytes)`);
+console.log('[SharedUserData] Allocated shared memory:');
+console.log(`  loggedOnUser:     0x${this.userAddr.toString(16)} (${UserStructure.SIZE} bytes)`);
+console.log(`  loggedOnUserKeys: 0x${this.userKeysAddr.toString(16)} (${UserKeysStructure.SIZE} bytes)`);
+console.log(`  loggedOnUserMisc: 0x${this.userMiscAddr.toString(16)} (${UserMiscStructure.SIZE} bytes)`);
   }
 
   /**
@@ -598,7 +598,7 @@ export class SharedUserData {
    * Clear all user data structures (on logoff)
    */
   clearUserData(): void {
-    console.log('[SharedUserData] Clearing user data structures');
+console.log('[SharedUserData] Clearing user data structures');
 
     // Zero out all three structures
     for (let i = 0; i < UserStructure.SIZE; i++) {

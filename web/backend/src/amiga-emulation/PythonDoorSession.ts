@@ -69,25 +69,25 @@ export class PythonDoorSession {
    * Set up Socket.io event handlers for user input
    */
   private setupSocketHandlers(): void {
-    console.log('[PythonDoorSession] Setting up socket handlers');
+console.log('[PythonDoorSession] Setting up socket handlers');
 
     // Handle user input
     this.socket.on('door:input', (data: string) => {
       if (this.isRunning && this.process && this.process.stdin) {
-        console.log(`[PythonDoorSession] Received input: "${data}"`);
+console.log(`[PythonDoorSession] Received input: "${data}"`);
 
         // Write to Python process stdin
         try {
           this.process.stdin.write(data);
         } catch (error) {
-          console.error('[PythonDoorSession] Error writing to stdin:', error);
+console.error('[PythonDoorSession] Error writing to stdin:', error);
         }
       }
     });
 
     // Handle disconnection
     this.socket.on('disconnect', () => {
-      console.log('[PythonDoorSession] Socket disconnected, terminating door');
+console.log('[PythonDoorSession] Socket disconnected, terminating door');
       this.terminate();
     });
   }
@@ -97,7 +97,7 @@ export class PythonDoorSession {
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.warn('[PythonDoorSession] Door already running');
+console.warn('[PythonDoorSession] Door already running');
       return;
     }
 
@@ -108,7 +108,7 @@ export class PythonDoorSession {
       throw new Error(`Python door not found: ${executablePath}`);
     }
 
-    console.log('[PythonDoorSession] Starting Python door:', executablePath);
+console.log('[PythonDoorSession] Starting Python door:', executablePath);
 
     // Create drop files if user provided
     if (this.config.user && this.config.nodeId) {
@@ -135,28 +135,28 @@ export class PythonDoorSession {
       // Handle stdout (door output → user)
       this.process.stdout?.on('data', (data: Buffer) => {
         const output = data.toString('utf8');
-        console.log('[PythonDoorSession] Door output:', output.length, 'bytes');
+console.log('[PythonDoorSession] Door output:', output.length, 'bytes');
         this.socket.emit('door:output', output);
       });
 
       // Handle stderr (errors)
       this.process.stderr?.on('data', (data: Buffer) => {
         const error = data.toString('utf8');
-        console.error('[PythonDoorSession] Door stderr:', error);
+console.error('[PythonDoorSession] Door stderr:', error);
         // Optionally emit to user
         this.socket.emit('door:output', `\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
       });
 
       // Handle process exit
       this.process.on('exit', (code, signal) => {
-        console.log('[PythonDoorSession] Door exited:', { code, signal });
+console.log('[PythonDoorSession] Door exited:', { code, signal });
         this.cleanup();
         this.socket.emit('door:exit', { code, signal });
       });
 
       // Handle process errors
       this.process.on('error', (error) => {
-        console.error('[PythonDoorSession] Process error:', error);
+console.error('[PythonDoorSession] Process error:', error);
         this.socket.emit('door:error', { message: error.message });
         this.cleanup();
       });
@@ -164,17 +164,17 @@ export class PythonDoorSession {
       // Set execution timeout
       if (this.config.timeout) {
         this.executionTimer = setTimeout(() => {
-          console.log('[PythonDoorSession] Door timeout, terminating');
+console.log('[PythonDoorSession] Door timeout, terminating');
           this.terminate();
         }, this.config.timeout * 1000);
       }
 
       // Emit ready event
       this.socket.emit('door:ready');
-      console.log('[PythonDoorSession] Door started successfully');
+console.log('[PythonDoorSession] Door started successfully');
 
     } catch (error) {
-      console.error('[PythonDoorSession] Failed to start door:', error);
+console.error('[PythonDoorSession] Failed to start door:', error);
       this.cleanup();
       throw error;
     }
@@ -223,7 +223,7 @@ export class PythonDoorSession {
       return;
     }
 
-    console.log('[PythonDoorSession] Terminating door');
+console.log('[PythonDoorSession] Terminating door');
 
     if (this.process) {
       try {
@@ -233,12 +233,12 @@ export class PythonDoorSession {
         // Force kill after 2 seconds
         setTimeout(() => {
           if (this.process && !this.process.killed) {
-            console.log('[PythonDoorSession] Force killing door process');
+console.log('[PythonDoorSession] Force killing door process');
             this.process.kill('SIGKILL');
           }
         }, 2000);
       } catch (error) {
-        console.error('[PythonDoorSession] Error terminating process:', error);
+console.error('[PythonDoorSession] Error terminating process:', error);
       }
     }
 
@@ -265,14 +265,14 @@ export class PythonDoorSession {
       try {
         doorDropFileManager.cleanupDropFiles(this.config.nodeId);
       } catch (error) {
-        console.error('[PythonDoorSession] Error cleaning up drop files:', error);
+console.error('[PythonDoorSession] Error cleaning up drop files:', error);
       }
     }
 
     // Null out process reference
     this.process = null;
 
-    console.log('[PythonDoorSession] Cleanup complete');
+console.log('[PythonDoorSession] Cleanup complete');
   }
 
   /**

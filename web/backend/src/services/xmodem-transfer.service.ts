@@ -130,7 +130,7 @@ export class XmodemTransferManager extends EventEmitter {
     this.cancelled = false;
     this.state = 'waiting_start';
 
-    console.log(`[XMODEM] Starting send: ${path.basename(filePath)} (${this.fileSize} bytes)`);
+console.log(`[XMODEM] Starting send: ${path.basename(filePath)} (${this.fileSize} bytes)`);
 
     // Wait for receiver to send NAK (checksum) or 'C' (CRC)
     this.startTimeout();
@@ -155,7 +155,7 @@ export class XmodemTransferManager extends EventEmitter {
     this.receiveBuffer = Buffer.alloc(0);
     this.state = 'waiting_start';
 
-    console.log(`[XMODEM] Starting receive to: ${filePath}`);
+console.log(`[XMODEM] Starting receive to: ${filePath}`);
 
     // Send initial handshake - 'C' for CRC mode or NAK for checksum mode
     if (this.useCRC) {
@@ -197,13 +197,13 @@ export class XmodemTransferManager extends EventEmitter {
           if (byte === C) {
             // CRC mode requested
             this.useCRC = true;
-            console.log('[XMODEM] Receiver requested CRC mode');
+console.log('[XMODEM] Receiver requested CRC mode');
             this.state = 'sending';
             this.sendNextBlock();
           } else if (byte === NAK) {
             // Checksum mode requested
             this.useCRC = false;
-            console.log('[XMODEM] Receiver requested checksum mode');
+console.log('[XMODEM] Receiver requested checksum mode');
             this.state = 'sending';
             this.sendNextBlock();
           } else if (byte === CAN) {
@@ -225,7 +225,7 @@ export class XmodemTransferManager extends EventEmitter {
               this.finish(false, 'Max retries exceeded');
               return;
             }
-            console.log(`[XMODEM] NAK received, retry ${this.retryCount}/${this.maxRetries}`);
+console.log(`[XMODEM] NAK received, retry ${this.retryCount}/${this.maxRetries}`);
             if (this.lastSentBlock) {
               this.send(this.lastSentBlock);
               this.startTimeout();
@@ -309,7 +309,7 @@ export class XmodemTransferManager extends EventEmitter {
 
       // Validate sequence number complement
       if ((seqNum ^ seqComp) !== 0xFF) {
-        console.log('[XMODEM] Sequence complement mismatch');
+console.log('[XMODEM] Sequence complement mismatch');
         this.sendNak();
         continue;
       }
@@ -327,7 +327,7 @@ export class XmodemTransferManager extends EventEmitter {
       }
 
       if (!valid) {
-        console.log('[XMODEM] Checksum/CRC mismatch');
+console.log('[XMODEM] Checksum/CRC mismatch');
         this.sendNak();
         continue;
       }
@@ -348,11 +348,11 @@ export class XmodemTransferManager extends EventEmitter {
       } else if (seqNum === ((this.blockNumber - 1) & 0xFF) ||
                  (this.blockNumber === 1 && seqNum === 255)) {
         // Duplicate of previous block (sender didn't get our ACK)
-        console.log('[XMODEM] Duplicate block received, re-ACKing');
+console.log('[XMODEM] Duplicate block received, re-ACKing');
         this.send(Buffer.from([ACK]));
       } else {
         // Out of sequence
-        console.log(`[XMODEM] Sequence error: expected ${this.blockNumber}, got ${seqNum}`);
+console.log(`[XMODEM] Sequence error: expected ${this.blockNumber}, got ${seqNum}`);
         this.sendNak();
       }
     }
@@ -372,7 +372,7 @@ export class XmodemTransferManager extends EventEmitter {
 
     if (offset >= this.fileSize) {
       // All data sent, send EOT
-      console.log('[XMODEM] All blocks sent, sending EOT');
+console.log('[XMODEM] All blocks sent, sending EOT');
       this.state = 'complete';
       this.send(Buffer.from([EOT]));
       this.startTimeout();
@@ -417,7 +417,7 @@ export class XmodemTransferManager extends EventEmitter {
       this.options.onProgress(this.bytesTransferred, this.fileSize);
     }
 
-    console.log(`[XMODEM] Sending block ${this.blockNumber} (${dataSize} bytes)`);
+console.log(`[XMODEM] Sending block ${this.blockNumber} (${dataSize} bytes)`);
     this.send(packet);
     this.startTimeout();
   }
@@ -439,7 +439,7 @@ export class XmodemTransferManager extends EventEmitter {
    * Handle cancel request
    */
   private handleCancel(): void {
-    console.log('[XMODEM] Transfer cancelled by remote');
+console.log('[XMODEM] Transfer cancelled by remote');
     // Send CAN twice to confirm
     this.send(Buffer.from([CAN, CAN]));
     this.finish(false, 'Cancelled by remote');
@@ -460,7 +460,7 @@ export class XmodemTransferManager extends EventEmitter {
    */
   private saveReceivedFile(): void {
     if (this.receivedBlocks.length === 0) {
-      console.log('[XMODEM] No data received');
+console.log('[XMODEM] No data received');
       return;
     }
 
@@ -482,7 +482,7 @@ export class XmodemTransferManager extends EventEmitter {
     }
 
     fs.writeFileSync(this.filePath, trimmedData);
-    console.log(`[XMODEM] File saved: ${this.filePath} (${trimmedData.length} bytes)`);
+console.log(`[XMODEM] File saved: ${this.filePath} (${trimmedData.length} bytes)`);
   }
 
   /**
@@ -525,7 +525,7 @@ export class XmodemTransferManager extends EventEmitter {
       return;
     }
 
-    console.log(`[XMODEM] Timeout, retry ${this.retryCount}/${this.maxRetries}`);
+console.log(`[XMODEM] Timeout, retry ${this.retryCount}/${this.maxRetries}`);
 
     if (this.direction === 'receive') {
       // Resend handshake
@@ -557,12 +557,12 @@ export class XmodemTransferManager extends EventEmitter {
     this.state = success ? 'complete' : 'error';
 
     if (error) {
-      console.log(`[XMODEM] Transfer failed: ${error}`);
+console.log(`[XMODEM] Transfer failed: ${error}`);
       if (this.options.onError) {
         this.options.onError(error);
       }
     } else {
-      console.log(`[XMODEM] Transfer complete: ${this.bytesTransferred} bytes`);
+console.log(`[XMODEM] Transfer complete: ${this.bytesTransferred} bytes`);
     }
 
     if (this.options.onComplete) {

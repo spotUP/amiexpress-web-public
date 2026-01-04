@@ -67,7 +67,7 @@ export class MessageFileManager {
     const dir = this.getMessagesDir(confNumber);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
-      console.log(`[MessageFileManager] Created directory: ${dir}`);
+console.log(`[MessageFileManager] Created directory: ${dir}`);
     }
   }
 
@@ -130,9 +130,9 @@ export class MessageFileManager {
       const content = lines.join('\n');
       fs.writeFileSync(filePath, content, 'utf8');
 
-      console.log(`[MessageFileManager] Wrote message ${msgNumber} to ${filePath}`);
+console.log(`[MessageFileManager] Wrote message ${msgNumber} to ${filePath}`);
     } catch (error) {
-      console.error(`[MessageFileManager] Error writing message ${msgNumber}:`, error);
+console.error(`[MessageFileManager] Error writing message ${msgNumber}:`, error);
       throw error;
     }
   }
@@ -154,12 +154,12 @@ export class MessageFileManager {
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        console.log(`[MessageFileManager] Deleted message ${msgNumber} from ${filePath}`);
+console.log(`[MessageFileManager] Deleted message ${msgNumber} from ${filePath}`);
       } else {
-        console.warn(`[MessageFileManager] Message file not found: ${filePath}`);
+console.warn(`[MessageFileManager] Message file not found: ${filePath}`);
       }
     } catch (error) {
-      console.error(`[MessageFileManager] Error deleting message ${msgNumber}:`, error);
+console.error(`[MessageFileManager] Error deleting message ${msgNumber}:`, error);
       throw error;
     }
   }
@@ -179,7 +179,7 @@ export class MessageFileManager {
       const filePath = this.getMessagePath(confNumber, msgNumber);
 
       if (!fs.existsSync(filePath)) {
-        console.warn(`[MessageFileManager] Message file not found: ${filePath}`);
+console.warn(`[MessageFileManager] Message file not found: ${filePath}`);
         return null;
       }
 
@@ -187,7 +187,7 @@ export class MessageFileManager {
       const lines = content.split('\n');
 
       if (lines.length < 5) {
-        console.error(`[MessageFileManager] Invalid message format in ${filePath}`);
+console.error(`[MessageFileManager] Invalid message format in ${filePath}`);
         return null;
       }
 
@@ -200,7 +200,7 @@ export class MessageFileManager {
         body: lines.slice(5).join('\n')
       };
     } catch (error) {
-      console.error(`[MessageFileManager] Error reading message ${msgNumber}:`, error);
+console.error(`[MessageFileManager] Error reading message ${msgNumber}:`, error);
       return null;
     }
   }
@@ -261,14 +261,14 @@ export class MessageFileManager {
    * Initialize message directories for existing conferences
    */
   initializeMessageDirs(): void {
-    console.log('[MessageFileManager] Initializing message directories...');
+console.log('[MessageFileManager] Initializing message directories...');
 
     // Create directories for Conf1 through Conf10 if they don't exist
     for (let i = 1; i <= 10; i++) {
       this.ensureMessagesDir(i);
     }
 
-    console.log('[MessageFileManager] Message directories initialized');
+console.log('[MessageFileManager] Message directories initialized');
   }
 }
 

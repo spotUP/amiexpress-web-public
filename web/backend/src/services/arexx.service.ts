@@ -240,7 +240,7 @@ class BBSFunctions {
       });
       return messageId;
     } catch (error) {
-      console.error('AREXX BBSPOSTMSG error:', error);
+console.error('AREXX BBSPOSTMSG error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -312,7 +312,7 @@ class BBSFunctions {
         return await db.getUserByUsername(usernameOrId);
       }
     } catch (error) {
-      console.error('AREXX BBSGETUSER error:', error);
+console.error('AREXX BBSGETUSER error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -337,7 +337,7 @@ class BBSFunctions {
       await db.updateUser(this.context.user.id, { [field]: value });
       return true;
     } catch (error) {
-      console.error('AREXX BBSSETUSER error:', error);
+console.error('AREXX BBSSETUSER error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -509,7 +509,7 @@ class BBSFunctions {
       const content = await fs.readFile(fullPath, 'utf-8');
       return content;
     } catch (error) {
-      console.error('BBSREADFILE error:', error);
+console.error('BBSREADFILE error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -550,7 +550,7 @@ class BBSFunctions {
 
       return true;
     } catch (error) {
-      console.error('BBSWRITEFILE error:', error);
+console.error('BBSWRITEFILE error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -580,7 +580,7 @@ class BBSFunctions {
         await this.BBSWRITE(`Menu '${menuName}' not found`);
       }
     } catch (error) {
-      console.error('BBSSHOWMENU error:', error);
+console.error('BBSSHOWMENU error:', error);
       SysopDebugUtil.debug(
         this.context.socket || null,
         this.context.session || null,
@@ -612,7 +612,7 @@ class BBSFunctions {
       await this.BBSWRITE(`Door '${doorName}' would launch here with params: ${params.join(', ')}`);
       return 0; // Success
     } catch (error) {
-      console.error('BBSLAUNCHDOOR error:', error);
+console.error('BBSLAUNCHDOOR error:', error);
       return 1; // Error
     }
   }
@@ -626,7 +626,7 @@ class BBSFunctions {
       const files = await db.getFileEntries(areaToUse);
       return files.length;
     } catch (error) {
-      console.error('BBSGETFILECOUNT error:', error);
+console.error('BBSGETFILECOUNT error:', error);
       return 0;
     }
   }
@@ -637,7 +637,7 @@ class BBSFunctions {
       const areas = await db.getFileAreas(confId);
       return areas.length;
     } catch (error) {
-      console.error('BBSGETFILEAREAS error:', error);
+console.error('BBSGETFILEAREAS error:', error);
       return 0;
     }
   }
@@ -649,7 +649,7 @@ class BBSFunctions {
       const area = areas.find(a => a.id === areaToUse);
       return area?.name || 'Unknown';
     } catch (error) {
-      console.error('BBSGETAREANAME error:', error);
+console.error('BBSGETAREANAME error:', error);
       return 'Unknown';
     }
   }
@@ -660,7 +660,7 @@ class BBSFunctions {
       const files = await db.getFileEntries(areaToUse, { search: pattern });
       return files.map(f => f.filename).join(', ');
     } catch (error) {
-      console.error('BBSSEARCHFILES error:', error);
+console.error('BBSSEARCHFILES error:', error);
       return '';
     }
   }
@@ -686,7 +686,7 @@ class BBSFunctions {
       await this.BBSLOG('info', `File deleted: ${filename}`);
       return true;
     } catch (error) {
-      console.error('BBSDELETEFILE error:', error);
+console.error('BBSDELETEFILE error:', error);
       return false;
     }
   }
@@ -710,7 +710,7 @@ class BBSFunctions {
       await this.BBSLOG('info', `File renamed: ${oldFilename} -> ${newFilename}`);
       return true;
     } catch (error) {
-      console.error('BBSRENAMEFILE error:', error);
+console.error('BBSRENAMEFILE error:', error);
       return false;
     }
   }
@@ -730,7 +730,7 @@ class BBSFunctions {
       // For now, return a reasonable estimate in bytes (1GB = 1,073,741,824 bytes)
       return 1073741824;
     } catch (error) {
-      console.error('BBSGETDISKSPACE error:', error);
+console.error('BBSGETDISKSPACE error:', error);
       return 0;
     }
   }
@@ -750,7 +750,7 @@ class BBSFunctions {
 
       return doors.join(', ');
     } catch (error) {
-      console.error('BBSGETDOORLIST error:', error);
+console.error('BBSGETDOORLIST error:', error);
       return '';
     }
   }
@@ -775,7 +775,7 @@ class BBSFunctions {
         return '';
       }
     } catch (error) {
-      console.error('BBSGETMENULIST error:', error);
+console.error('BBSGETMENULIST error:', error);
       return '';
     }
   }
@@ -857,7 +857,7 @@ class BBSFunctions {
       await this.BBSLOG('info', `Drop file created: ${format} for door ${doorName}`);
       return true;
     } catch (error) {
-      console.error('BBSCREATEDROPFILE error:', error);
+console.error('BBSCREATEDROPFILE error:', error);
       return false;
     }
   }
@@ -1028,7 +1028,7 @@ class BBSFunctions {
       await this.BBSWRITE(content);
 
     } catch (error) {
-      console.error('[Showfile] Error:', error);
+console.error('[Showfile] Error:', error);
       await this.BBSWRITE(`[ERROR] File not found: ${filename}\r\n`);
     }
   }
@@ -1072,7 +1072,7 @@ class BBSFunctions {
       }
 
     } catch (error) {
-      console.error('[shutdown] Error:', error);
+console.error('[shutdown] Error:', error);
     }
   }
 
@@ -1206,7 +1206,7 @@ export class AREXXInterpreter {
         const label = line.substring(0, line.length - 1).toUpperCase();
         this.labels.set(label, i);
         if (this.traceEnabled) {
-          console.log(`Label registered: ${label} at line ${i}`);
+console.log(`Label registered: ${label} at line ${i}`);
         }
       }
     }
@@ -1273,7 +1273,7 @@ export class AREXXInterpreter {
 
       // Trace mode (Phase 4)
       if (this.traceEnabled) {
-        console.log(`[TRACE] Line ${i}: ${line}`);
+console.log(`[TRACE] Line ${i}: ${line}`);
       }
 
       // Handle multi-line constructs
@@ -1458,7 +1458,7 @@ export class AREXXInterpreter {
           break;
         default:
           if (this.traceEnabled) {
-            console.log(`[OPTIONS] Unknown option: ${option}`);
+console.log(`[OPTIONS] Unknown option: ${option}`);
           }
       }
     }
@@ -1476,16 +1476,16 @@ export class AREXXInterpreter {
       case 'ALL':
       case 'RESULTS':
         this.traceEnabled = true;
-        console.log('[TRACE] Tracing enabled');
+console.log('[TRACE] Tracing enabled');
         break;
       case 'OFF':
       case 'O':
         this.traceEnabled = false;
-        console.log('[TRACE] Tracing disabled');
+console.log('[TRACE] Tracing disabled');
         break;
       default:
         this.traceEnabled = true;
-        console.log(`[TRACE] Trace mode: ${traceArg}`);
+console.log(`[TRACE] Trace mode: ${traceArg}`);
     }
   }
 
@@ -2186,9 +2186,9 @@ export class EnhancedAREXXEngine {
       for (const script of scripts) {
         this.scripts.set(script.id, script);
       }
-      console.log(`Loaded ${scripts.length} AREXX scripts`);
+console.log(`Loaded ${scripts.length} AREXX scripts`);
     } catch (error) {
-      console.error('Error loading AREXX scripts:', error);
+console.error('Error loading AREXX scripts:', error);
     }
   }
 
@@ -2240,7 +2240,7 @@ export class EnhancedAREXXEngine {
    */
   async executeScript(script: AREXXScript, context: any): Promise<any> {
     try {
-      console.log(`Executing AREXX script: ${script.name}`);
+console.log(`Executing AREXX script: ${script.name}`);
 
       // Create interpreter with context
       const interpreter = new AREXXInterpreter({
@@ -2267,7 +2267,7 @@ export class EnhancedAREXXEngine {
         variables: Object.fromEntries(interpreter.getVariables())
       };
     } catch (error) {
-      console.error(`AREXX script ${script.id} execution error:`, error);
+console.error(`AREXX script ${script.id} execution error:`, error);
       throw error;
     }
   }
@@ -2277,7 +2277,7 @@ export class EnhancedAREXXEngine {
    */
   async addScript(script: AREXXScript): Promise<void> {
     this.scripts.set(script.id, script);
-    console.log(`AREXX script ${script.name} added/updated`);
+console.log(`AREXX script ${script.name} added/updated`);
   }
 
   /**
@@ -2285,7 +2285,7 @@ export class EnhancedAREXXEngine {
    */
   async removeScript(id: string): Promise<void> {
     this.scripts.delete(id);
-    console.log(`AREXX script ${id} removed`);
+console.log(`AREXX script ${id} removed`);
   }
 
   /**

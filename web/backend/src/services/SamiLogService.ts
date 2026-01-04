@@ -120,7 +120,7 @@ export async function updateStoreFromCallersLog(nodeId: number, options: UpdateO
     // Read CallersLog
     const callersLogPath = path.join(DATA_DIR, `Node${nodeId}`, 'CallersLog');
     if (!fs.existsSync(callersLogPath)) {
-      console.warn(`[SamiLog] CallersLog not found for Node ${nodeId}`);
+console.warn(`[SamiLog] CallersLog not found for Node ${nodeId}`);
       return;
     }
 
@@ -134,7 +134,7 @@ export async function updateStoreFromCallersLog(nodeId: number, options: UpdateO
 
     // Ignore Sysop check
     if (options.ignoreSysop && entry.userId === 1) {
-      console.log('[SamiLog] Ignoring Sysop call');
+console.log('[SamiLog] Ignoring Sysop call');
       return;
     }
 
@@ -278,7 +278,7 @@ export async function updateStoreFromCallersLog(nodeId: number, options: UpdateO
     }
 
   } catch (err) {
-    console.error('[SamiLog] Update failed:', err);
+console.error('[SamiLog] Update failed:', err);
   }
 }
 
@@ -333,9 +333,9 @@ export async function clearStore(): Promise<void> {
     }
     
     fs.writeFileSync(storePath, buffer);
-    console.log('[SamiLog] Storage file cleared/created');
+console.log('[SamiLog] Storage file cleared/created');
   } catch (err) {
-    console.error('[SamiLog] Failed to clear store:', err);
+console.error('[SamiLog] Failed to clear store:', err);
   }
 }
 
@@ -368,10 +368,10 @@ export async function stripMiniLog(days: number): Promise<void> {
     if (cutoffIndex !== -1) {
       const stripped = lines.slice(cutoffIndex).join('\n');
       fs.writeFileSync(miniLogPath, stripped, 'latin1');
-      console.log(`[SamiLog] Stripped Mini_Callerslog to ${days} days`);
+console.log(`[SamiLog] Stripped Mini_Callerslog to ${days} days`);
     }
   } catch (err) {
-    console.error('[SamiLog] Failed to strip log:', err);
+console.error('[SamiLog] Failed to strip log:', err);
   }
 }
 
@@ -388,7 +388,7 @@ export async function createDocs(filePath: string): Promise<void> {
       fs.writeFileSync(filePath, 'SAmiLog Guide not found.', 'latin1');
     }
   } catch (err) {
-    console.error('[SamiLog] Failed to create docs:', err);
+console.error('[SamiLog] Failed to create docs:', err);
   }
 }
 
@@ -425,7 +425,7 @@ function loadBaselineStore(): BaselineResult | null {
     }
   }
 
-  console.warn('[SamiLog] Baseline store not found in any known location.');
+console.warn('[SamiLog] Baseline store not found in any known location.');
   return null;
 }
 
@@ -439,14 +439,14 @@ function ensureStoreExists(): void {
   const baseline = loadBaselineStore();
   if (baseline) {
     fs.writeFileSync(storePath, baseline.buffer);
-    console.log(`[SamiLog] Seeded storage file from ${baseline.path}`);
+console.log(`[SamiLog] Seeded storage file from ${baseline.path}`);
     return;
   }
 
   const placeholder = Buffer.alloc(STORE_SIZE_BYTES, 0);
   placeholder.write(STORE_VERSION, 0, 'latin1');
   fs.writeFileSync(storePath, placeholder);
-  console.warn('[SamiLog] Created blank placeholder store (baseline missing)');
+console.warn('[SamiLog] Created blank placeholder store (baseline missing)');
 }
 
 function sanitizeString(value: string): string {
@@ -594,27 +594,27 @@ export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise
     if (!fs.existsSync(storePath)) {
       const baseline = loadBaselineStore();
       if (!baseline) {
-        console.warn('[SamiLog] Storage file not found and no baseline available:', storePath);
+console.warn('[SamiLog] Storage file not found and no baseline available:', storePath);
         return;
       }
       buffer = Buffer.from(baseline.buffer);
       fs.writeFileSync(storePath, buffer);
-      console.log(`[SamiLog] Seeded storage file from ${baseline.path}`);
+console.log(`[SamiLog] Seeded storage file from ${baseline.path}`);
     } else {
       buffer = fs.readFileSync(storePath);
       if (countNonDefaultEntries(buffer) === 0) {
         const baseline = loadBaselineStore();
         if (baseline) {
           buffer = Buffer.from(baseline.buffer);
-          console.log('[SamiLog] Store empty, reloaded baseline contents');
+console.log('[SamiLog] Store empty, reloaded baseline contents');
         }
       }
     }
 
-    console.log(`[SamiLog] Refreshing store with ${activeSessions.length} session(s)`);
+console.log(`[SamiLog] Refreshing store with ${activeSessions.length} session(s)`);
 
     if (buffer.length < USERS_OFFSET + TOTAL_USER_BYTES) {
-      console.warn('[SamiLog] Storage file is smaller than expected, skipping update');
+console.warn('[SamiLog] Storage file is smaller than expected, skipping update');
       return;
     }
 
@@ -628,7 +628,7 @@ export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise
       const entryOffset = USERS_OFFSET + index * USER_ENTRY_BYTES;
       writeEntry(buffer, entryOffset, entry);
       if (index === 0) {
-        console.log(`[SamiLog] Entry #1 -> name="${entry.name}" node=${entry.node} usage=${entry.usage}`);
+console.log(`[SamiLog] Entry #1 -> name="${entry.name}" node=${entry.node} usage=${entry.usage}`);
       }
     });
 
@@ -637,9 +637,9 @@ export async function refreshSamiLogStore(activeSessions: BBSSession[]): Promise
     buffer.writeUInt32BE(getDaysSinceAmigaEpoch(), CALLS_DATE_OFFSET);
 
     fs.writeFileSync(storePath, buffer);
-    console.log('[SamiLog] Storage file updated');
+console.log('[SamiLog] Storage file updated');
   } catch (error) {
-    console.error('[SamiLog] Failed to prepare SAmiLog.Store:', error);
+console.error('[SamiLog] Failed to prepare SAmiLog.Store:', error);
   }
 }
 
@@ -878,7 +878,7 @@ export function generateBulletin(limit: number = 20, options: OutputOptions = {}
           tailer = fs.readFileSync(tailerTxt, 'latin1');
         }
       } catch (e) {
-        console.warn('[SamiLog] Failed to read templates:', e);
+console.warn('[SamiLog] Failed to read templates:', e);
       }
     }
 
@@ -991,7 +991,7 @@ export function generateBulletin(limit: number = 20, options: OutputOptions = {}
 
     return output;
   } catch (err) {
-    console.error('[SamiLog] Error generating bulletin:', err);
+console.error('[SamiLog] Error generating bulletin:', err);
     return 'Error reading caller data.\n';
   }
 }

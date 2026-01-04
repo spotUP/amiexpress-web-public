@@ -113,7 +113,7 @@ export class ImportTransactionService extends EventEmitter {
    * Extracts archive and performs initial validation
    */
   async createSession(archivePath: string): Promise<ImportSession> {
-    console.log('[ImportTransaction] Creating session for:', archivePath);
+console.log('[ImportTransaction] Creating session for:', archivePath);
 
     const sessionId = crypto.randomUUID();
 
@@ -150,7 +150,7 @@ export class ImportTransactionService extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);
 
-    console.log('[ImportTransaction] Validating session:', sessionId);
+console.log('[ImportTransaction] Validating session:', sessionId);
     session.status = 'validating';
     this.emitProgress(sessionId, 10, 'Extracting archive...');
 
@@ -211,8 +211,8 @@ export class ImportTransactionService extends EventEmitter {
     if (!session) throw new Error(`Session ${sessionId} not found`);
     if (!session.importData) throw new Error('Session not validated');
 
-    console.log('[ImportTransaction] Executing import:', sessionId);
-    console.log('[ImportTransaction] Options:', options);
+console.log('[ImportTransaction] Executing import:', sessionId);
+console.log('[ImportTransaction] Options:', options);
 
     session.status = 'importing';
     this.emitProgress(sessionId, 0, 'Starting import...');
@@ -287,7 +287,7 @@ export class ImportTransactionService extends EventEmitter {
             result.warnings.push(
               `Stripped ${stripResult.strippedCount} sensitive fields from .info files. Backup: ${stripResult.backupPath}`
             );
-            console.log(`[ImportTransaction] Stripped ${stripResult.strippedCount} secrets from .info files`);
+console.log(`[ImportTransaction] Stripped ${stripResult.strippedCount} secrets from .info files`);
           } else {
             result.warnings.push(`Failed to strip secrets from .info files: ${stripResult.error}`);
           }
@@ -309,9 +309,9 @@ export class ImportTransactionService extends EventEmitter {
       session.progress = 100;
       this.emitProgress(sessionId, 100, 'Import complete!');
 
-      console.log('[ImportTransaction] Import successful:', result);
+console.log('[ImportTransaction] Import successful:', result);
     } catch (error: any) {
-      console.error('[ImportTransaction] Import failed:', error);
+console.error('[ImportTransaction] Import failed:', error);
       result.success = false;
       result.errors.push(error.message);
       session.status = 'failed';
@@ -324,7 +324,7 @@ export class ImportTransactionService extends EventEmitter {
           this.emitProgress(sessionId, 0, 'Rollback complete');
           result.warnings.push('Import failed - database rolled back to backup');
         } catch (rollbackError: any) {
-          console.error('[ImportTransaction] Rollback failed:', rollbackError);
+console.error('[ImportTransaction] Rollback failed:', rollbackError);
           result.errors.push(`Rollback failed: ${rollbackError.message}`);
         }
       }
@@ -358,7 +358,7 @@ export class ImportTransactionService extends EventEmitter {
       try {
         await fs.rm(session.importData.extractedPath, { recursive: true, force: true });
       } catch (error: any) {
-        console.warn('[ImportTransaction] Failed to cleanup temp dir:', error.message);
+console.warn('[ImportTransaction] Failed to cleanup temp dir:', error.message);
       }
     }
     this.sessions.delete(sessionId);
@@ -383,7 +383,7 @@ export class ImportTransactionService extends EventEmitter {
    * Extract archive using existing archive-extractor.ts utilities
    */
   private async extractArchive(archivePath: string): Promise<string> {
-    console.log('[ImportTransaction] Extracting archive:', archivePath);
+console.log('[ImportTransaction] Extracting archive:', archivePath);
 
     // Use existing archive-extractor.ts
     const { getExtractorForFile } = require('../utils/archive-extractor');
@@ -396,10 +396,10 @@ export class ImportTransactionService extends EventEmitter {
     const tmpDir = path.join('/tmp', `amiga-import-${Date.now()}`);
     await fs.mkdir(tmpDir, { recursive: true });
 
-    console.log('[ImportTransaction] Extracting to:', tmpDir);
+console.log('[ImportTransaction] Extracting to:', tmpDir);
 
     const entries = await extractor.getEntries(archivePath);
-    console.log(`[ImportTransaction] Found ${entries.length} files in archive`);
+console.log(`[ImportTransaction] Found ${entries.length} files in archive`);
 
     for (const entry of entries) {
       // Skip directories (entries with size 0 and names ending with /)
@@ -415,7 +415,7 @@ export class ImportTransactionService extends EventEmitter {
       }
     }
 
-    console.log('[ImportTransaction] Extraction complete');
+console.log('[ImportTransaction] Extraction complete');
     return tmpDir;
   }
 
@@ -431,27 +431,30 @@ export class ImportTransactionService extends EventEmitter {
 
   /**
    * Create database backup
-   * TODO: Implement actual database backup once getDatabasePath() is added to Database class
+   * Uses Database.backupDatabase() for SQLite backup API
    */
   private async createDatabaseBackup(): Promise<string> {
     const backupDir = path.join(process.cwd(), 'data', 'backups');
     await fs.mkdir(backupDir, { recursive: true });
 
     const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
-    const backupPath = path.join(backupDir, `backup-${timestamp}.json`);
+    const backupPath = path.join(backupDir, `backup-${timestamp}.db`);
 
-    console.log(`[ImportTransaction] Database backup not yet implemented - backup path: ${backupPath}`);
-    // TODO: Export current database state to JSON or create DB file copy
+console.log(`[ImportTransaction] Creating database backup: ${backupPath}`);
+    await this.db.backupDatabase(backupPath);
+console.log(`[ImportTransaction] Backup created successfully`);
+
     return backupPath;
   }
 
   /**
    * Restore database from backup
-   * TODO: Implement actual database restore
+   * Uses Database.restoreDatabase() to restore from SQLite backup
    */
   private async restoreDatabaseBackup(backupPath: string): Promise<void> {
-    console.log(`[ImportTransaction] Database restore not yet implemented - would restore from: ${backupPath}`);
-    // TODO: Restore from JSON export or DB file copy
+console.log(`[ImportTransaction] Restoring database from: ${backupPath}`);
+    await this.db.restoreDatabase(backupPath);
+console.log(`[ImportTransaction] Database restored successfully`);
   }
 
   /**
@@ -462,7 +465,7 @@ export class ImportTransactionService extends EventEmitter {
     strategy: ConflictResolutionStrategy,
     forcePasswordReset: boolean
   ): Promise<{ imported: number; warnings: string[] }> {
-    console.log(`[ImportTransaction] Importing ${users.length} users (strategy: ${strategy})`);
+console.log(`[ImportTransaction] Importing ${users.length} users (strategy: ${strategy})`);
 
     let imported = 0;
     const warnings: string[] = [];
@@ -528,11 +531,11 @@ export class ImportTransactionService extends EventEmitter {
         }
       } catch (error: any) {
         warnings.push(`Failed to import user ${amigaUser.username}: ${error.message}`);
-        console.error('[ImportTransaction] User import error:', error);
+console.error('[ImportTransaction] User import error:', error);
       }
     }
 
-    console.log(`[ImportTransaction] Users imported: ${imported}`);
+console.log(`[ImportTransaction] Users imported: ${imported}`);
     return { imported, warnings };
   }
 
@@ -543,7 +546,7 @@ export class ImportTransactionService extends EventEmitter {
     conferences: AmigaConference[],
     strategy: ConflictResolutionStrategy
   ): Promise<{ imported: number; warnings: string[] }> {
-    console.log(`[ImportTransaction] Importing ${conferences.length} conferences (strategy: ${strategy})`);
+console.log(`[ImportTransaction] Importing ${conferences.length} conferences (strategy: ${strategy})`);
 
     let imported = 0;
     const warnings: string[] = [];
@@ -578,8 +581,41 @@ export class ImportTransactionService extends EventEmitter {
             case 'merge':
               const mergeResult = this.mapper.mergeConferences(conflict, amigaConf);
               await this.db.updateConference(conflict.id, mergeResult.updateExisting);
-              // Import additional file areas/message bases
-              // TODO: Import mergeResult.importFileAreas and importMessageBases
+
+              // Import additional file areas from imported conference
+              for (const area of mergeResult.importFileAreas) {
+                try {
+                  // Fill in required fields with defaults
+                  const fileArea = {
+                    name: area.name,
+                    description: `Imported from ${amigaConf.database.conferenceName}`,
+                    path: area.path,
+                    conferenceId: conflict.id, // Use existing conference ID
+                    maxFiles: 1000, // Default max files
+                    uploadAccess: area.accessLevel || 10,
+                    downloadAccess: area.accessLevel || 10
+                  };
+                  await this.db.createFileArea(fileArea);
+console.log(`[ImportTransaction] Imported file area: ${area.name} to conference ${conflict.name}`);
+                } catch (error: any) {
+                  warnings.push(`Failed to import file area ${area.name}: ${error.message}`);
+                }
+              }
+
+              // Import additional message bases from imported conference
+              for (const base of mergeResult.importMessageBases) {
+                try {
+                  const messageBase = {
+                    name: base.name,
+                    conferenceId: conflict.id // Use existing conference ID
+                  };
+                  await this.db.createMessageBase(messageBase);
+console.log(`[ImportTransaction] Imported message base: ${base.name} to conference ${conflict.name}`);
+                } catch (error: any) {
+                  warnings.push(`Failed to import message base ${base.name}: ${error.message}`);
+                }
+              }
+
               warnings.push(`Merged conference: ${conflict.name}`);
               imported++;
               break;
@@ -591,11 +627,11 @@ export class ImportTransactionService extends EventEmitter {
         }
       } catch (error: any) {
         warnings.push(`Failed to import conference ${amigaConf.number}: ${error.message}`);
-        console.error('[ImportTransaction] Conference import error:', error);
+console.error('[ImportTransaction] Conference import error:', error);
       }
     }
 
-    console.log(`[ImportTransaction] Conferences imported: ${imported}`);
+console.log(`[ImportTransaction] Conferences imported: ${imported}`);
     return { imported, warnings };
   }
 
@@ -606,7 +642,7 @@ export class ImportTransactionService extends EventEmitter {
     commands: AmigaCommand[],
     strategy: ConflictResolutionStrategy
   ): Promise<{ imported: number; warnings: string[] }> {
-    console.log(`[ImportTransaction] Importing ${commands.length} commands (strategy: ${strategy})`);
+console.log(`[ImportTransaction] Importing ${commands.length} commands (strategy: ${strategy})`);
 
     let imported = 0;
     const warnings: string[] = [];
@@ -614,7 +650,7 @@ export class ImportTransactionService extends EventEmitter {
     // Commands import depends on how the BBS stores command definitions
     // For now, log them and mark as not fully implemented
     for (const cmd of commands) {
-      console.log(`[ImportTransaction] Command: ${cmd.name} (${cmd.type})`);
+console.log(`[ImportTransaction] Command: ${cmd.name} (${cmd.type})`);
       imported++;
     }
 
@@ -628,11 +664,11 @@ export class ImportTransactionService extends EventEmitter {
    * Stores config in database with sensitive fields encrypted
    */
   private async importConfig(config: AmigaBBSConfig): Promise<void> {
-    console.log('[ImportTransaction] Importing configuration');
+console.log('[ImportTransaction] Importing configuration');
 
     // Map Amiga config to modern format
     const mapped = this.mapper.mapAmigaConfigToModern(config);
-    console.log('[ImportTransaction] Config keys:', Object.keys(mapped));
+console.log('[ImportTransaction] Config keys:', Object.keys(mapped));
 
     // Build updates object for system_config table
     // Note: updateSystemConfig handles encryption of sensitive fields automatically
@@ -645,7 +681,7 @@ export class ImportTransactionService extends EventEmitter {
       updates.smtp_username = mapped.smtp.username || '';
       updates.smtp_password = mapped.smtp.password || '';
       updates.smtp_ssl = mapped.smtp.ssl || false;
-      console.log('[ImportTransaction] Importing SMTP config (password will be encrypted)');
+console.log('[ImportTransaction] Importing SMTP config (password will be encrypted)');
     }
 
     // Email addresses
@@ -661,7 +697,7 @@ export class ImportTransactionService extends EventEmitter {
       updates.ftp_host = mapped.ftp.host;
       updates.ftp_port = mapped.ftp.port;
       updates.ftp_data_ports = mapped.ftp.dataPorts || '';
-      console.log('[ImportTransaction] Importing FTP config');
+console.log('[ImportTransaction] Importing FTP config');
     }
 
     // Password security
@@ -679,14 +715,14 @@ export class ImportTransactionService extends EventEmitter {
     // Registration key (sensitive)
     if (config.regKey) {
       updates.reg_key = config.regKey;
-      console.log('[ImportTransaction] Importing registration key (will be encrypted)');
+console.log('[ImportTransaction] Importing registration key (will be encrypted)');
     }
 
     // Only update if we have something to update
     if (Object.keys(updates).length > 0) {
       const configRepo = this.db.getConfigRepository();
       configRepo.updateSystemConfig(updates);
-      console.log(`[ImportTransaction] Stored ${Object.keys(updates).length} config values in database`);
+console.log(`[ImportTransaction] Stored ${Object.keys(updates).length} config values in database`);
     }
   }
 
@@ -694,16 +730,77 @@ export class ImportTransactionService extends EventEmitter {
    * Import bulletins
    */
   private async importBulletins(bulletins: any[]): Promise<void> {
-    console.log(`[ImportTransaction] Importing ${bulletins.length} bulletins`);
-    // TODO: Copy bulletin files to BBS bulletins directory
+console.log(`[ImportTransaction] Importing ${bulletins.length} bulletins`);
+
+    if (bulletins.length === 0) {
+console.log('[ImportTransaction] No bulletins to import');
+      return;
+    }
+
+    // Get BBS root directory from config
+    const config = require('../config').config;
+    const bbsRoot = config.get('bbsRoot') || process.cwd();
+    const bulletinsDir = path.join(bbsRoot, 'Bulletins');
+
+    // Ensure bulletins directory exists
+    if (!await fs.stat(bulletinsDir).catch(() => null)) {
+      await fs.mkdir(bulletinsDir, { recursive: true });
+console.log(`[ImportTransaction] Created bulletins directory: ${bulletinsDir}`);
+    }
+
+    // Copy each bulletin file
+    for (const bulletin of bulletins) {
+      try {
+        const filename = bulletin.name || `bull${bulletins.indexOf(bulletin) + 1}.txt`;
+        const filePath = path.join(bulletinsDir, filename);
+
+        await fs.writeFile(filePath, bulletin.content, 'utf8');
+console.log(`[ImportTransaction] Copied bulletin: ${filename}`);
+      } catch (error: any) {
+console.error(`[ImportTransaction] Error copying bulletin ${bulletin.name}:`, error.message);
+      }
+    }
+
+console.log(`[ImportTransaction] Imported ${bulletins.length} bulletins to ${bulletinsDir}`);
   }
 
   /**
    * Import screens
    */
   private async importScreens(screens: any[]): Promise<void> {
-    console.log(`[ImportTransaction] Importing ${screens.length} screens`);
-    // TODO: Copy screen files to BBS screens directory
+console.log(`[ImportTransaction] Importing ${screens.length} screens`);
+
+    if (screens.length === 0) {
+console.log('[ImportTransaction] No screens to import');
+      return;
+    }
+
+    // Get BBS root directory from config
+    const config = require('../config').config;
+    const bbsRoot = config.get('bbsRoot') || process.cwd();
+    const screensDir = path.join(bbsRoot, 'Screens');
+
+    // Ensure screens directory exists
+    if (!await fs.stat(screensDir).catch(() => null)) {
+      await fs.mkdir(screensDir, { recursive: true });
+console.log(`[ImportTransaction] Created screens directory: ${screensDir}`);
+    }
+
+    // Copy each screen file
+    for (const screen of screens) {
+      try {
+        const filename = screen.name;
+        const filePath = path.join(screensDir, filename);
+
+        // Preserve ANSI/ASCII content
+        await fs.writeFile(filePath, screen.content, 'utf8');
+console.log(`[ImportTransaction] Copied screen: ${filename} (${screen.type})`);
+      } catch (error: any) {
+console.error(`[ImportTransaction] Error copying screen ${screen.name}:`, error.message);
+      }
+    }
+
+console.log(`[ImportTransaction] Imported ${screens.length} screens to ${screensDir}`);
   }
 
   /**
@@ -723,6 +820,6 @@ export class ImportTransactionService extends EventEmitter {
     };
 
     this.emit('progress', event);
-    console.log(`[ImportTransaction] ${sessionId}: ${progress}% - ${message}`);
+console.log(`[ImportTransaction] ${sessionId}: ${progress}% - ${message}`);
   }
 }

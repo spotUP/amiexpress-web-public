@@ -27,22 +27,37 @@ export interface InfoFile {
 }
 
 /**
- * Extract tooltypes from file using 'strings' command.
- * This is robust for both text and binary Amiga icons.
+ * Extract tooltypes from file without external dependencies.
+ * Native binary parser that scans for printable ASCII sequences.
  */
 function extractTooltypes(filePath: string): Tooltype[] {
   const tooltypes: Tooltype[] = [];
   try {
-    // -a: scan whole file, -t x: show offset in hex
-    const output = execSync(`strings -a -t x "${filePath}"`, { encoding: 'utf8' });
-    const lines = output.split('\n');
+    if (!fs.existsSync(filePath)) return [];
+    
+    const buffer = fs.readFileSync(filePath);
+    if (buffer.length < 40) return [];
 
-    for (const line of lines) {
-      const match = line.trim().match(/^\s*([0-9a-f]+)\s+(.+)$/i);
-      if (!match) continue;
+    // Extract all printable ASCII sequences (2+ chars)
+    const extractedStrings: string[] = [];
+    let currentString = '';
 
-      const content = match[2].trim();
-      let cleaned = content;
+    for (let i = 0; i < buffer.length; i++) {
+      const charCode = buffer[i];
+      if (charCode >= 32 && charCode <= 126) {
+        currentString += String.fromCharCode(charCode);
+      } else {
+        if (currentString.length >= 2) extractedStrings.push(currentString);
+        currentString = '';
+      }
+    }
+    if (currentString.length >= 2) extractedStrings.push(currentString);
+
+    for (const content of extractedStrings) {
+      const trimmed = content.trim();
+      if (!trimmed) continue;
+
+      let cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#']+/g, '');
       let commented = false;
       let prefix = '';
 
@@ -65,7 +80,7 @@ function extractTooltypes(filePath: string): Tooltype[] {
       if (eqIdx !== -1) {
         const key = cleaned.substring(0, eqIdx).toUpperCase().trim();
         const value = cleaned.substring(eqIdx + 1).trim();
-        if (key) {
+        if (key && /^[A-Z0-9_.]+$/.test(key)) {
           tooltypes.push({
             key,
             value,
@@ -77,7 +92,7 @@ function extractTooltypes(filePath: string): Tooltype[] {
       } else {
         // Flag mode: just the key
         const key = cleaned.toUpperCase().trim();
-        if (key && /^[A-Z0-9_]{2,64}$/.test(key)) {
+        if (key && /^[A-Z0-9_.]+$/.test(key)) {
           tooltypes.push({
             key,
             value: '',
@@ -89,7 +104,7 @@ function extractTooltypes(filePath: string): Tooltype[] {
       }
     }
   } catch (error) {
-    console.error(`[InfoFileUtil] Error extracting strings:`, error);
+    // console.error eliminated to prevent terminal pollution
   }
   return tooltypes;
 }

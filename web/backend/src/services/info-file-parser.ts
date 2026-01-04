@@ -41,7 +41,7 @@ export class InfoFileParser {
       // Optionally extract icon data (if needed for display)
       // result.icon = this.extractIcon(buffer);
     } catch (error: any) {
-      console.error('[InfoFileParser] Parse error:', error.message);
+console.error('[InfoFileParser] Parse error:', error.message);
     }
 
     return result;
@@ -81,7 +81,7 @@ export class InfoFileParser {
           if (!keyOnly) continue;
 
           const normalizedKey = keyOnly.toUpperCase();
-          if (!/^[A-Z0-9_]+$/.test(normalizedKey)) continue;
+          if (!/^[A-Z0-9_.]+$/.test(normalizedKey)) continue;
           if (toolTypes.has(normalizedKey)) continue;
 
           toolTypes.set(normalizedKey, '');
@@ -104,7 +104,7 @@ export class InfoFileParser {
         toolTypes.set(normalizedKey, value);
       }
     } catch (error: any) {
-      console.error('[InfoFileParser] Tool type extraction error:', error.message);
+console.error('[InfoFileParser] Tool type extraction error:', error.message);
     }
 
     return toolTypes;
@@ -122,7 +122,7 @@ export class InfoFileParser {
 
       return undefined;
     } catch (error: any) {
-      console.error('[InfoFileParser] Icon extraction error:', error.message);
+console.error('[InfoFileParser] Icon extraction error:', error.message);
       return undefined;
     }
   }
@@ -163,11 +163,11 @@ export class InfoFileParser {
     const data = this.parse(buffer);
 
     // Log found configuration for debugging
-    console.log('[InfoFileParser] Found BBS config keys:');
+console.log('[InfoFileParser] Found BBS config keys:');
     for (const [key, value] of data.toolTypes) {
       // Mask sensitive values in logs
       const maskedValue = this.maskSensitive(key, value);
-      console.log(`  ${key}=${maskedValue}`);
+console.log(`  ${key}=${maskedValue}`);
     }
 
     return data.toolTypes;
@@ -199,9 +199,9 @@ export class InfoFileParser {
   parseCommandInfo(buffer: Buffer, commandName: string): Map<string, string> {
     const data = this.parse(buffer);
 
-    console.log(`[InfoFileParser] Command "${commandName}" settings:`);
+console.log(`[InfoFileParser] Command "${commandName}" settings:`);
     for (const [key, value] of data.toolTypes) {
-      console.log(`  ${key}=${value}`);
+console.log(`  ${key}=${value}`);
     }
 
     return data.toolTypes;
@@ -214,9 +214,9 @@ export class InfoFileParser {
   parseAccessInfo(buffer: Buffer, level: number): Map<string, string> {
     const data = this.parse(buffer);
 
-    console.log(`[InfoFileParser] Access level ${level} settings:`);
+console.log(`[InfoFileParser] Access level ${level} settings:`);
     for (const [key, value] of data.toolTypes) {
-      console.log(`  ${key}=${value}`);
+console.log(`  ${key}=${value}`);
     }
 
     return data.toolTypes;
@@ -229,9 +229,9 @@ export class InfoFileParser {
   parseFileAreaInfo(buffer: Buffer, areaName: string): Map<string, string> {
     const data = this.parse(buffer);
 
-    console.log(`[InfoFileParser] File area "${areaName}" settings:`);
+console.log(`[InfoFileParser] File area "${areaName}" settings:`);
     for (const [key, value] of data.toolTypes) {
-      console.log(`  ${key}=${value}`);
+console.log(`  ${key}=${value}`);
     }
 
     return data.toolTypes;

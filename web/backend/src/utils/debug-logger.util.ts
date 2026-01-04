@@ -122,7 +122,7 @@ export class DebugLogger {
     sessionLogManager.captureOutput(options.sessionId, formattedMessage);
 
     // Also log to console for server logs
-    console.log(`[DEBUG:${options.category}:${options.level}] ${options.message}`, options.data || '');
+console.log(`[DEBUG:${options.category}:${options.level}] ${options.message}`, options.data || '');
   }
 
   /**

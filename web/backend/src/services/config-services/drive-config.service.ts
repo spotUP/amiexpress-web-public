@@ -25,7 +25,7 @@ export class DriveConfigService {
     const drivesInfoPath = path.join(bbsRoot, 'Drives.info');
 
     if (!fs.existsSync(drivesInfoPath)) {
-      console.warn('[DriveConfigService] Drives.info not found, falling back to database');
+console.warn('[DriveConfigService] Drives.info not found, falling back to database');
       return this.configRepo.getAllDrives();
     }
 
@@ -62,10 +62,10 @@ export class DriveConfigService {
         if (driveNum > 50) break; // Safety limit
       }
 
-      console.log(`[DriveConfigService] Loaded ${drives.length} drives from disk files`);
+console.log(`[DriveConfigService] Loaded ${drives.length} drives from disk files`);
       return drives;
     } catch (error) {
-      console.error('[DriveConfigService] Error reading Drives.info:', error);
+console.error('[DriveConfigService] Error reading Drives.info:', error);
       return this.configRepo.getAllDrives();
     }
   }
@@ -232,9 +232,9 @@ export class DriveConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(drivesInfoPath, infoData);
 
-      console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${drives.length} drives`);
+console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${drives.length} drives`);
     } catch (error) {
-      console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
+console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
   }
 }

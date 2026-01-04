@@ -70,7 +70,7 @@ function getEncryptionKey(): Buffer {
 
   // Development fallback: machine-specific key (NOT secure for production)
   if (!keySource) {
-    console.warn('[SecretsEncryption] WARNING: No SECRETS_KEY or JWT_SECRET set. Using machine-derived key (dev only).');
+console.warn('[SecretsEncryption] WARNING: No SECRETS_KEY or JWT_SECRET set. Using machine-derived key (dev only).');
     keySource = `amiexpress-dev-${os.hostname()}-${os.userInfo().username}`;
   }
 
@@ -125,7 +125,7 @@ export function decryptSecret(encryptedValue: string): string {
   try {
     const parts = encryptedValue.slice(ENCRYPTED_PREFIX.length).split(':');
     if (parts.length !== 3) {
-      console.error('[SecretsEncryption] Invalid encrypted format');
+console.error('[SecretsEncryption] Invalid encrypted format');
       return '';
     }
 
@@ -144,7 +144,7 @@ export function decryptSecret(encryptedValue: string): string {
 
     return decrypted.toString('utf8');
   } catch (error: any) {
-    console.error('[SecretsEncryption] Decryption failed:', error.message);
+console.error('[SecretsEncryption] Decryption failed:', error.message);
     // Return empty string on failure (prevents exposing partial data)
     return '';
   }

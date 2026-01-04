@@ -47,7 +47,7 @@ export class AuthenticationUseCase {
         user
       };
     } catch (error) {
-      console.error('[AuthenticationUseCase] Authentication error:', error);
+console.error('[AuthenticationUseCase] Authentication error:', error);
       return {
         success: false,
         error: 'Authentication failed'

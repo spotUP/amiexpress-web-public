@@ -91,7 +91,7 @@ export class UserRepository extends BaseRepository<User> {
       try {
         // Write to node files (active session)
         userFileManager.writeUserFiles(newUser, slotNumber);
-        console.log(`[Database] Synced new user ${newUser.username} to node files (slot ${slotNumber})`);
+console.log(`[Database] Synced new user ${newUser.username} to node files (slot ${slotNumber})`);
 
         // Write to main user database (user.data, user.keys, user.misc)
         const userStruct = userDatabaseManager.userToStruct(newUser);
@@ -100,9 +100,9 @@ export class UserRepository extends BaseRepository<User> {
         const miscStruct = userDatabaseManager.userToMisc(newUser);
 
         userDatabaseManager.appendUser(userStruct, keysStruct, miscStruct);
-        console.log(`[Database] Synced new user ${newUser.username} to user.data/keys/misc`);
+console.log(`[Database] Synced new user ${newUser.username} to user.data/keys/misc`);
       } catch (error) {
-        console.error(`[Database] Failed to sync user to disk:`, error);
+console.error(`[Database] Failed to sync user to disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
@@ -223,9 +223,9 @@ export class UserRepository extends BaseRepository<User> {
     if (updatedUser && updatedUser.slotNumber) {
       try {
         userFileManager.updateUserDataFile(updatedUser, updatedUser.slotNumber);
-        console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${updatedUser.slotNumber})`);
+console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${updatedUser.slotNumber})`);
       } catch (error) {
-        console.error(`[Database] Failed to sync user update to disk:`, error);
+console.error(`[Database] Failed to sync user update to disk:`, error);
         SysopDebugUtil.debug(
           null,
           null,
@@ -285,15 +285,15 @@ export class UserRepository extends BaseRepository<User> {
       throw new Error(`Failed to delete user ${id}`);
     }
 
-    console.log(`[Database] Deleted user ${user.username} (ID: ${id})`);
+console.log(`[Database] Deleted user ${user.username} (ID: ${id})`);
 
     // DISK-BASED: Clear user slot in user.data/keys/misc files
     if (slotNumber > 0) {
       try {
         userFileManager.deleteUserSlot(slotNumber);
-        console.log(`[Database] Cleared disk slot ${slotNumber} for deleted user ${user.username}`);
+console.log(`[Database] Cleared disk slot ${slotNumber} for deleted user ${user.username}`);
       } catch (error) {
-        console.error(`[Database] Failed to clear disk slot for user ${user.username}:`, error);
+console.error(`[Database] Failed to clear disk slot for user ${user.username}:`, error);
         // Don't throw - database deletion already succeeded
       }
     }

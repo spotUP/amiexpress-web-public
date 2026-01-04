@@ -21,7 +21,7 @@ export async function runSamiLogUpdate(session: BBSSession): Promise<void> {
     const dataDir = config.get('dataDir');
     const samilogPath = path.join(dataDir, 'Utils', 'samilog', 'SAmiLog');
     if (!fs.existsSync(samilogPath)) {
-      console.warn('[SAmiLogRunner] SAmiLog binary not found at', samilogPath);
+console.warn('[SAmiLogRunner] SAmiLog binary not found at', samilogPath);
       return;
     }
 
@@ -44,10 +44,10 @@ export async function runSamiLogUpdate(session: BBSSession): Promise<void> {
       }
     } as any);
 
-    console.log(`[SAmiLogRunner] Running SAmiLog update for node ${nodeId}`);
+console.log(`[SAmiLogRunner] Running SAmiLog update for node ${nodeId}`);
     await amigaSession.start();
-    console.log('[SAmiLogRunner] SAmiLog update completed');
+console.log('[SAmiLogRunner] SAmiLog update completed');
   } catch (error) {
-    console.error('[SAmiLogRunner] Failed to run SAmiLog update:', error);
+console.error('[SAmiLogRunner] Failed to run SAmiLog update:', error);
   }
 }

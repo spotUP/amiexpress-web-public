@@ -77,7 +77,7 @@ export class FileAreaManager {
     const dir = this.getFilesDir(confNumber);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
-      console.log(`[FileAreaManager] Created directory: ${dir}`);
+console.log(`[FileAreaManager] Created directory: ${dir}`);
     }
   }
 
@@ -161,7 +161,7 @@ export class FileAreaManager {
 
       return entries;
     } catch (error) {
-      console.error(`[FileAreaManager] Error reading .dir file ${filePath}:`, error);
+console.error(`[FileAreaManager] Error reading .dir file ${filePath}:`, error);
       return [];
     }
   }
@@ -178,9 +178,9 @@ export class FileAreaManager {
       const content = lines.join('\n') + '\n';
 
       fs.writeFileSync(filePath, content, 'utf8');
-      console.log(`[FileAreaManager] Wrote ${entries.length} entries to ${filePath}`);
+console.log(`[FileAreaManager] Wrote ${entries.length} entries to ${filePath}`);
     } catch (error) {
-      console.error(`[FileAreaManager] Error writing .dir file ${filePath}:`, error);
+console.error(`[FileAreaManager] Error writing .dir file ${filePath}:`, error);
       throw error;
     }
   }
@@ -202,9 +202,9 @@ export class FileAreaManager {
       // Write back
       this.writeDirFile(confNumber, areaName, entries);
 
-      console.log(`[FileAreaManager] Added file "${entry.filename}" to ${areaName}.dir`);
+console.log(`[FileAreaManager] Added file "${entry.filename}" to ${areaName}.dir`);
     } catch (error) {
-      console.error(`[FileAreaManager] Error adding file entry:`, error);
+console.error(`[FileAreaManager] Error adding file entry:`, error);
       throw error;
     }
   }
@@ -226,15 +226,15 @@ export class FileAreaManager {
       if (index >= 0) {
         entries[index] = entry;
         this.writeDirFile(confNumber, areaName, entries);
-        console.log(`[FileAreaManager] Updated file "${entry.filename}" in ${areaName}.dir`);
+console.log(`[FileAreaManager] Updated file "${entry.filename}" in ${areaName}.dir`);
       } else {
-        console.warn(`[FileAreaManager] File "${entry.filename}" not found in ${areaName}.dir`);
+console.warn(`[FileAreaManager] File "${entry.filename}" not found in ${areaName}.dir`);
         // Add it anyway
         entries.push(entry);
         this.writeDirFile(confNumber, areaName, entries);
       }
     } catch (error) {
-      console.error(`[FileAreaManager] Error updating file entry:`, error);
+console.error(`[FileAreaManager] Error updating file entry:`, error);
       throw error;
     }
   }
@@ -255,12 +255,12 @@ export class FileAreaManager {
 
       if (filtered.length < entries.length) {
         this.writeDirFile(confNumber, areaName, filtered);
-        console.log(`[FileAreaManager] Deleted file "${filename}" from ${areaName}.dir`);
+console.log(`[FileAreaManager] Deleted file "${filename}" from ${areaName}.dir`);
       } else {
-        console.warn(`[FileAreaManager] File "${filename}" not found in ${areaName}.dir`);
+console.warn(`[FileAreaManager] File "${filename}" not found in ${areaName}.dir`);
       }
     } catch (error) {
-      console.error(`[FileAreaManager] Error deleting file entry:`, error);
+console.error(`[FileAreaManager] Error deleting file entry:`, error);
       throw error;
     }
   }
@@ -280,10 +280,10 @@ export class FileAreaManager {
       // Create empty .dir file
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, '', 'utf8');
-        console.log(`[FileAreaManager] Created .dir file: ${filePath}`);
+console.log(`[FileAreaManager] Created .dir file: ${filePath}`);
       }
     } catch (error) {
-      console.error(`[FileAreaManager] Error creating .dir file:`, error);
+console.error(`[FileAreaManager] Error creating .dir file:`, error);
       throw error;
     }
   }
@@ -307,14 +307,14 @@ export class FileAreaManager {
    * Initialize file area directories for existing conferences
    */
   initializeFileAreaDirs(): void {
-    console.log('[FileAreaManager] Initializing file area directories...');
+console.log('[FileAreaManager] Initializing file area directories...');
 
     // Create directories for Conf1 through Conf10 if they don't exist
     for (let i = 1; i <= 10; i++) {
       this.ensureFilesDir(i);
     }
 
-    console.log('[FileAreaManager] File area directories initialized');
+console.log('[FileAreaManager] File area directories initialized');
   }
 
   /**
@@ -328,9 +328,9 @@ export class FileAreaManager {
       this.ensureFilesDir(confNumber);
       this.writeDirFile(confNumber, areaName, entries);
 
-      console.log(`[FileAreaManager] Rebuilt ${areaName}.dir with ${entries.length} entries`);
+console.log(`[FileAreaManager] Rebuilt ${areaName}.dir with ${entries.length} entries`);
     } catch (error) {
-      console.error(`[FileAreaManager] Error rebuilding .dir file:`, error);
+console.error(`[FileAreaManager] Error rebuilding .dir file:`, error);
       throw error;
     }
   }

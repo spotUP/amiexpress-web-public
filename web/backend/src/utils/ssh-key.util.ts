@@ -118,7 +118,7 @@ export class SSHKeyUtil {
         createdAt: stats.mtime
       };
     } catch (error) {
-      console.error('[SSH Key] Error getting key info:', error);
+console.error('[SSH Key] Error getting key info:', error);
       return {
         exists: true,
         path: privateKeyPath,
@@ -141,7 +141,7 @@ export class SSHKeyUtil {
       }
       return stdout.trim();
     } catch (error) {
-      console.error('[SSH Key] Error getting fingerprint:', error);
+console.error('[SSH Key] Error getting fingerprint:', error);
       return 'Unknown';
     }
   }
@@ -187,8 +187,8 @@ export class SSHKeyUtil {
       // Get the fingerprint
       const fingerprint = await this.getKeyFingerprint(privateKeyPath);
 
-      console.log(`[SSH Key] Generated new SSH host key at ${privateKeyPath}`);
-      console.log(`[SSH Key] Fingerprint: ${fingerprint}`);
+console.log(`[SSH Key] Generated new SSH host key at ${privateKeyPath}`);
+console.log(`[SSH Key] Fingerprint: ${fingerprint}`);
 
       return {
         success: true,
@@ -197,7 +197,7 @@ export class SSHKeyUtil {
         fingerprint
       };
     } catch (error: any) {
-      console.error('[SSH Key] Error generating SSH key:', error);
+console.error('[SSH Key] Error generating SSH key:', error);
       return {
         success: false,
         privateKeyPath,
@@ -226,18 +226,18 @@ export class SSHKeyUtil {
       // Delete private key
       if (existsSync(privateKeyPath)) {
         unlinkSync(privateKeyPath);
-        console.log(`[SSH Key] Deleted private key: ${privateKeyPath}`);
+console.log(`[SSH Key] Deleted private key: ${privateKeyPath}`);
       }
 
       // Delete public key
       if (existsSync(publicKeyPath)) {
         unlinkSync(publicKeyPath);
-        console.log(`[SSH Key] Deleted public key: ${publicKeyPath}`);
+console.log(`[SSH Key] Deleted public key: ${publicKeyPath}`);
       }
 
       return { success: true };
     } catch (error: any) {
-      console.error('[SSH Key] Error deleting SSH key:', error);
+console.error('[SSH Key] Error deleting SSH key:', error);
       return {
         success: false,
         error: error.message || 'Failed to delete SSH key'
@@ -252,16 +252,16 @@ export class SSHKeyUtil {
     const privateKeyPath = this.getPrivateKeyPath();
 
     if (!existsSync(privateKeyPath)) {
-      console.warn(`[SSH Key] No SSH host key found at ${privateKeyPath}`);
+console.warn(`[SSH Key] No SSH host key found at ${privateKeyPath}`);
       return null;
     }
 
     try {
       const keyBuffer = readFileSync(privateKeyPath);
-      console.log(`[SSH Key] Loaded SSH host key from ${privateKeyPath}`);
+console.log(`[SSH Key] Loaded SSH host key from ${privateKeyPath}`);
       return keyBuffer;
     } catch (error) {
-      console.error(`[SSH Key] Failed to load SSH host key:`, error);
+console.error(`[SSH Key] Failed to load SSH host key:`, error);
       return null;
     }
   }

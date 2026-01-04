@@ -70,13 +70,13 @@ export async function writeToFilesBBS(
       false // isLCFile = false for regular uploads
     );
 
-    console.log(
+console.log(
       `[FILES.BBS] Wrote entry to ${path.basename(
         path.dirname(filesBBSPath)
       )}/FILES.BBS: ${filename}`
     );
   } catch (error: any) {
-    console.error(
+console.error(
       `[FILES.BBS] Error writing FILES.BBS entry: ${error.message}`
     );
     // Don't throw - FILES.BBS is supplementary, DIR file is primary

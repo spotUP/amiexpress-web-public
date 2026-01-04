@@ -133,7 +133,7 @@ export class XIMHostService {
 
   private dump(prefix: string, handle: XIMHandle) {
     const parsed = this.parser.parseMessage(handle.msgAddr);
-    console.log(
+console.log(
       `[XIMHostService] ${prefix} msg=0x${parsed.msgAddr.toString(16)} cmd=${parsed.command} data=${parsed.data} node=${parsed.nodeId} line=${parsed.lineNumber} sig=${parsed.signal} task=0x${parsed.task?.toString(16)} str="${parsed.string}"`
     );
   }

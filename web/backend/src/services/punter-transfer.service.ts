@@ -192,7 +192,7 @@ export class PunterTransferManager extends EventEmitter {
     const ext = path.extname(filePath).toLowerCase();
     this.fileType = (ext === '.prg' || ext === '.p00') ? FILE_TYPE_PRG : FILE_TYPE_SEQ;
 
-    console.log(`[PUNTER] Starting send: ${path.basename(filePath)} (${this.fileSize} bytes, type=${this.fileType === FILE_TYPE_PRG ? 'PRG' : 'SEQ'})`);
+console.log(`[PUNTER] Starting send: ${path.basename(filePath)} (${this.fileSize} bytes, type=${this.fileType === FILE_TYPE_PRG ? 'PRG' : 'SEQ'})`);
 
     // Phase A: Send first GOO
     this.send(GOO);
@@ -220,7 +220,7 @@ export class PunterTransferManager extends EventEmitter {
     this.phase = 'A';
     this.state = 'wait_goo1';
 
-    console.log(`[PUNTER] Starting receive to: ${filePath}`);
+console.log(`[PUNTER] Starting receive to: ${filePath}`);
 
     // Receiver waits for sender's GOO
     this.startTimeout();
@@ -358,7 +358,7 @@ export class PunterTransferManager extends EventEmitter {
 
     // Verify checksums
     if (!verifyBlockChecksums(block)) {
-      console.log('[PUNTER] Block checksum error');
+console.log('[PUNTER] Block checksum error');
       this.send(BAD);
       this.retryCount++;
       if (this.retryCount > this.maxRetries) {
@@ -371,7 +371,7 @@ export class PunterTransferManager extends EventEmitter {
     if (this.phase === 'A') {
       // File type block
       this.receivedFileType = block[7];
-      console.log(`[PUNTER] Received file type: ${this.receivedFileType === FILE_TYPE_PRG ? 'PRG' : 'SEQ'}`);
+console.log(`[PUNTER] Received file type: ${this.receivedFileType === FILE_TYPE_PRG ? 'PRG' : 'SEQ'}`);
       this.send(GOO);
       this.state = 'wait_ack_phase_a';
     } else {
@@ -389,7 +389,7 @@ export class PunterTransferManager extends EventEmitter {
         }
       }
 
-      console.log(`[PUNTER] Received block ${blockIdx}${isLastBlock ? ' (last)' : ''}`);
+console.log(`[PUNTER] Received block ${blockIdx}${isLastBlock ? ' (last)' : ''}`);
 
       if (isLastBlock) {
         this.send(GOO);
@@ -407,7 +407,7 @@ export class PunterTransferManager extends EventEmitter {
    * Handle GOO handshake
    */
   private handleGOO(): void {
-    console.log(`[PUNTER] Received GOO in state ${this.state}`);
+console.log(`[PUNTER] Received GOO in state ${this.state}`);
 
     switch (this.state) {
       case 'wait_goo1':
@@ -443,7 +443,7 @@ export class PunterTransferManager extends EventEmitter {
    * Handle BAD handshake (checksum error, resend)
    */
   private handleBAD(): void {
-    console.log(`[PUNTER] Received BAD - checksum error`);
+console.log(`[PUNTER] Received BAD - checksum error`);
     this.retryCount++;
 
     if (this.retryCount > this.maxRetries) {
@@ -460,7 +460,7 @@ export class PunterTransferManager extends EventEmitter {
    * Handle ACK handshake
    */
   private handleACK(): void {
-    console.log(`[PUNTER] Received ACK in state ${this.state}`);
+console.log(`[PUNTER] Received ACK in state ${this.state}`);
 
     switch (this.state) {
       case 'wait_ack1':
@@ -486,7 +486,7 @@ export class PunterTransferManager extends EventEmitter {
    * Handle S/B handshake
    */
   private handleSB(): void {
-    console.log(`[PUNTER] Received S/B in state ${this.state}`);
+console.log(`[PUNTER] Received S/B in state ${this.state}`);
 
     switch (this.state) {
       case 'wait_sb':
@@ -503,7 +503,7 @@ export class PunterTransferManager extends EventEmitter {
    * Handle SYN handshake
    */
   private handleSYN(): void {
-    console.log(`[PUNTER] Received SYN in state ${this.state}`);
+console.log(`[PUNTER] Received SYN in state ${this.state}`);
 
     // SYN typically signals end of transfer handshake
     if (this.state === 'wait_syn') {
@@ -553,7 +553,7 @@ export class PunterTransferManager extends EventEmitter {
 
     if (offset >= this.fileSize) {
       // All data sent, send final block with index 0xFFFF
-      console.log('[PUNTER] All blocks sent, sending final block');
+console.log('[PUNTER] All blocks sent, sending final block');
       this.sendFinalBlock();
       return;
     }
@@ -592,7 +592,7 @@ export class PunterTransferManager extends EventEmitter {
       this.options.onProgress(this.bytesTransferred, this.fileSize);
     }
 
-    console.log(`[PUNTER] Sending block ${this.blockIndex - 1} (${payloadSize} bytes)`);
+console.log(`[PUNTER] Sending block ${this.blockIndex - 1} (${payloadSize} bytes)`);
     this.send(block);
     this.state = 'wait_block_ack';
   }
@@ -614,7 +614,7 @@ export class PunterTransferManager extends EventEmitter {
     setBlockChecksums(block);
 
     this.lastSentBlock = block;
-    console.log('[PUNTER] Sending final block');
+console.log('[PUNTER] Sending final block');
     this.send(block);
     this.state = 'wait_final_goo';
   }
@@ -633,7 +633,7 @@ export class PunterTransferManager extends EventEmitter {
    */
   private saveReceivedFile(): void {
     if (this.receivedData.length === 0) {
-      console.log('[PUNTER] No data received');
+console.log('[PUNTER] No data received');
       return;
     }
 
@@ -647,7 +647,7 @@ export class PunterTransferManager extends EventEmitter {
     }
 
     fs.writeFileSync(this.filePath, fullData);
-    console.log(`[PUNTER] File saved: ${this.filePath} (${fullData.length} bytes)`);
+console.log(`[PUNTER] File saved: ${this.filePath} (${fullData.length} bytes)`);
   }
 
   /**
@@ -690,7 +690,7 @@ export class PunterTransferManager extends EventEmitter {
       return;
     }
 
-    console.log(`[PUNTER] Timeout in state ${this.state}, retry ${this.retryCount}/${this.maxRetries}`);
+console.log(`[PUNTER] Timeout in state ${this.state}, retry ${this.retryCount}/${this.maxRetries}`);
 
     // Resend appropriate response based on state
     if (this.lastSentBlock && this.state.includes('wait_block')) {
@@ -711,12 +711,12 @@ export class PunterTransferManager extends EventEmitter {
     this.active = false;
 
     if (error) {
-      console.log(`[PUNTER] Transfer failed: ${error}`);
+console.log(`[PUNTER] Transfer failed: ${error}`);
       if (this.options.onError) {
         this.options.onError(error);
       }
     } else {
-      console.log(`[PUNTER] Transfer complete: ${this.bytesTransferred} bytes`);
+console.log(`[PUNTER] Transfer complete: ${this.bytesTransferred} bytes`);
     }
 
     if (this.options.onComplete) {

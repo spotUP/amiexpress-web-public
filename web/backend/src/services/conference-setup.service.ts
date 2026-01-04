@@ -185,7 +185,7 @@ export class ConferenceSetupService {
   async setupConference(options: ConferenceSetupOptions): Promise<void> {
     const { conferenceId, conferenceName, location, ndirs = 1 } = options;
 
-    console.log(`[ConferenceSetup] Setting up Conf${conferenceId}: ${conferenceName}`);
+console.log(`[ConferenceSetup] Setting up Conf${conferenceId}: ${conferenceName}`);
 
     // 1. Create Conf{N}.info file
     await this.createConferenceInfoFile(options);
@@ -194,7 +194,7 @@ export class ConferenceSetupService {
     const confDirPath = path.join(this.bbsRoot, location);
     if (!fs.existsSync(confDirPath)) {
       fs.mkdirSync(confDirPath, { recursive: true });
-      console.log(`[ConferenceSetup] Created ${location}/`);
+console.log(`[ConferenceSetup] Created ${location}/`);
     }
 
     // 3. Create standard directories (express.e structure)
@@ -212,7 +212,7 @@ export class ConferenceSetupService {
       const dirPath = path.join(confDirPath, dir);
       if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
-        console.log(`[ConferenceSetup] Created ${location}/${dir}/`);
+console.log(`[ConferenceSetup] Created ${location}/${dir}/`);
       }
     }
 
@@ -223,7 +223,7 @@ export class ConferenceSetupService {
         // Create empty DIR file with header
         const header = `\n[File Area ${i} - ${conferenceName}]\n\n`;
         fs.writeFileSync(dirFilePath, header, 'utf8');
-        console.log(`[ConferenceSetup] Created ${location}/DIR${i}`);
+console.log(`[ConferenceSetup] Created ${location}/DIR${i}`);
       }
     }
 
@@ -231,7 +231,7 @@ export class ConferenceSetupService {
     const numULsPath = path.join(confDirPath, 'NumULs');
     if (!fs.existsSync(numULsPath)) {
       fs.writeFileSync(numULsPath, '0\n', 'utf8');
-      console.log(`[ConferenceSetup] Created ${location}/NumULs`);
+console.log(`[ConferenceSetup] Created ${location}/NumULs`);
     }
 
     // 6. Create SysopStats/NumULs_{conferenceId} file
@@ -239,10 +239,10 @@ export class ConferenceSetupService {
     if (!fs.existsSync(sysopStatsNumULsPath)) {
       fs.mkdirSync(path.dirname(sysopStatsNumULsPath), { recursive: true });
       fs.writeFileSync(sysopStatsNumULsPath, '0\n', 'utf8');
-      console.log(`[ConferenceSetup] Created SysopStats/NumULs_${conferenceId}`);
+console.log(`[ConferenceSetup] Created SysopStats/NumULs_${conferenceId}`);
     }
 
-    console.log(`[ConferenceSetup] Conference ${conferenceId} setup complete`);
+console.log(`[ConferenceSetup] Conference ${conferenceId} setup complete`);
   }
 
   /**
@@ -266,7 +266,7 @@ export class ConferenceSetupService {
     const confInfoPath = path.join(this.bbsRoot, `Conf${conferenceId}.info`);
 
     if (fs.existsSync(confInfoPath)) {
-      console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping`);
+console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping`);
       return;
     }
 
@@ -304,7 +304,7 @@ export class ConferenceSetupService {
     const infoData = parser.write(toolTypeMap);
 
     fs.writeFileSync(confInfoPath, infoData);
-    console.log(`[ConferenceSetup] Created Conf${conferenceId}.info with ${tooltypes.length} tooltypes`);
+console.log(`[ConferenceSetup] Created Conf${conferenceId}.info with ${tooltypes.length} tooltypes`);
   }
 
   /**
@@ -315,13 +315,13 @@ export class ConferenceSetupService {
       throw new Error(`Cannot auto-fix Conf${conferenceId}: ${healthCheck.issues.join(', ')}`);
     }
 
-    console.log(`[ConferenceSetup] Auto-fixing Conf${conferenceId}`);
+console.log(`[ConferenceSetup] Auto-fixing Conf${conferenceId}`);
 
     // Create missing directories
     for (const dirPath of healthCheck.missingDirectories) {
       if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
-        console.log(`[ConferenceSetup] Created missing directory: ${dirPath}`);
+console.log(`[ConferenceSetup] Created missing directory: ${dirPath}`);
       }
     }
 
@@ -333,18 +333,18 @@ export class ConferenceSetupService {
         // Create empty DIR file with header
         const header = `\n[File Area - ${healthCheck.conferenceName}]\n\n`;
         fs.writeFileSync(filePath, header, 'utf8');
-        console.log(`[ConferenceSetup] Created missing DIR file: ${filePath}`);
+console.log(`[ConferenceSetup] Created missing DIR file: ${filePath}`);
       } else if (fileName === 'NumULs' || fileName.startsWith('NumULs_')) {
         // Create NumULs counter file
         fs.writeFileSync(filePath, '0\n', 'utf8');
-        console.log(`[ConferenceSetup] Created missing NumULs file: ${filePath}`);
+console.log(`[ConferenceSetup] Created missing NumULs file: ${filePath}`);
       } else if (fileName.match(/^Conf\d+\.info$/)) {
         // Cannot auto-create .info files without more context - skip
-        console.warn(`[ConferenceSetup] Cannot auto-create ${fileName} - needs manual creation`);
+console.warn(`[ConferenceSetup] Cannot auto-create ${fileName} - needs manual creation`);
       }
     }
 
-    console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
+console.log(`[ConferenceSetup] Auto-fix complete for Conf${conferenceId}`);
   }
 
   /**
@@ -390,7 +390,7 @@ export class ConferenceSetupService {
     const infoData = parser.write(toolTypes);
 
     fs.writeFileSync(confConfigPath, infoData);
-    console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(currentNconfs, conferenceId)}, NAME.${conferenceId}=${conferenceName}`);
+console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(currentNconfs, conferenceId)}, NAME.${conferenceId}=${conferenceName}`);
   }
 
   /**
@@ -478,6 +478,6 @@ export class ConferenceSetupService {
     // Write updated Conf{N}.info
     const infoData = parser.write(toolTypes);
     fs.writeFileSync(confInfoPath, infoData);
-    console.log(`[ConferenceSetup] Updated Conf${conferenceId}.info`);
+console.log(`[ConferenceSetup] Updated Conf${conferenceId}.info`);
   }
 }

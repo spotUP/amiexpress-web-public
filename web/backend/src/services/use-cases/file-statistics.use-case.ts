@@ -48,7 +48,7 @@ export class FileStatisticsUseCase {
 
       return stats;
     } catch (error) {
-      console.error('[FileStatisticsUseCase] Error getting all conference stats:', error);
+console.error('[FileStatisticsUseCase] Error getting all conference stats:', error);
       return [];
     }
   }
@@ -78,7 +78,7 @@ export class FileStatisticsUseCase {
         totalFiles: fileCount || 0
       };
     } catch (error) {
-      console.error(`[FileStatisticsUseCase] Error getting conference ${conferenceId} stats:`, error);
+console.error(`[FileStatisticsUseCase] Error getting conference ${conferenceId} stats:`, error);
       return {
         conferenceId,
         conferenceName: `Conference ${conferenceId}`,
@@ -111,7 +111,7 @@ export class FileStatisticsUseCase {
         downloadKBytes: user.downloadKBytes || 0
       };
     } catch (error) {
-      console.error(`[FileStatisticsUseCase] Error getting user ${userId} stats:`, error);
+console.error(`[FileStatisticsUseCase] Error getting user ${userId} stats:`, error);
       return this.getEmptyUserStats();
     }
   }

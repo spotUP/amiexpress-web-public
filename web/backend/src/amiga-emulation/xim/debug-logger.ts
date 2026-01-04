@@ -28,9 +28,9 @@ class XIMDebugLogger {
       // Clear log file at start
       try {
         amigafs.writeFileSync(this.logPath, `\n\n=== XIM DEBUG SESSION START: ${this.sessionStart.toISOString()} ===\n\n`, 'utf8');
-        console.log(`[XIM Debug] Logging enabled: ${this.logPath}`);
+console.log(`[XIM Debug] Logging enabled: ${this.logPath}`);
       } catch (e) {
-        console.error(`[XIM Debug] Failed to initialize log file: ${e}`);
+console.error(`[XIM Debug] Failed to initialize log file: ${e}`);
         this.enabled = false;
       }
     }
@@ -57,7 +57,7 @@ class XIMDebugLogger {
     }
 
     // Also log to console for immediate visibility
-    console.log(`[XIM-DBG] [${category}] ${message}`, data || '');
+console.log(`[XIM-DBG] [${category}] ${message}`, data || '');
   }
 
   logMessage(msgId: number, msgName: string, direction: 'SEND' | 'RECV', data?: any): void {

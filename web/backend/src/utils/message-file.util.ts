@@ -110,7 +110,7 @@ export async function writeMailStats(
   buffer.writeInt32LE(stats.highMsgNum, 8);
 
   await fs.writeFile(mailStatsPath, buffer);
-  console.log(`[MailStats] Conf${confNum}: low=${stats.lowestNotDel} high=${stats.highMsgNum}`);
+console.log(`[MailStats] Conf${confNum}: low=${stats.lowestNotDel} high=${stats.highMsgNum}`);
 }
 
 /**
@@ -193,7 +193,7 @@ export async function writeMessageFile(
     await fs.writeFile(tempPath, content, 'utf-8');
     await fs.rename(tempPath, msgFilePath);
 
-    console.log(`[Message] Wrote Conf${confNum} message ${msgNum}: ${message.subject}`);
+console.log(`[Message] Wrote Conf${confNum} message ${msgNum}: ${message.subject}`);
     return msgNum;
   } catch (error: any) {
     // Clean up temp file on error
@@ -221,7 +221,7 @@ export async function readMessageFile(
     const lines = content.split('\n');
 
     if (lines.length < 6) {
-      console.error(`[Message] Invalid format in ${msgFilePath}`);
+console.error(`[Message] Invalid format in ${msgFilePath}`);
       return null;
     }
 
@@ -270,7 +270,7 @@ export async function deleteMessageFile(
 
   try {
     await fs.rename(msgFilePath, deletedPath);
-    console.log(`[Message] Deleted Conf${confNum} message ${msgNum}`);
+console.log(`[Message] Deleted Conf${confNum} message ${msgNum}`);
   } catch (error: any) {
     if (error.code !== 'ENOENT') {
       throw error;

@@ -26,7 +26,7 @@ export const AEDOOR_VECTORS: LibraryVector[] = [
     offset: -30, // LVO -30 (0xFFE2)
     name: "CreateComm",
     handler: (emu, lib: AEDoorLibrary) => {
-      console.log("[AEDoorLibrary][Trap] CreateComm intercepted");
+console.log("[AEDoorLibrary][Trap] CreateComm intercepted");
       return lib.createComm();
     },
   },
@@ -147,7 +147,7 @@ export const AEDOOR_VECTORS: LibraryVector[] = [
     offset: -132, // LVO -132 (0xFF7C)
     name: "PreCreateComm",
     handler: (emu, lib: AEDoorLibrary) => {
-      console.log("[AEDoorLibrary][Trap] PreCreateComm intercepted");
+console.log("[AEDoorLibrary][Trap] PreCreateComm intercepted");
       return lib.preCreateComm();
     },
   },
@@ -162,7 +162,7 @@ export const AEDOOR_VECTORS: LibraryVector[] = [
     offset: -24, // Some doors call this slot; provide a safe stub
     name: "Stub_-24",
     handler: () => {
-      console.log("[AEDoorLibrary][Trap] Stub -24 invoked");
+console.log("[AEDoorLibrary][Trap] Stub -24 invoked");
       return 0;
     },
   },

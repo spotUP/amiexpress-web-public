@@ -106,7 +106,7 @@ export class LibraryLoader {
       this.librarySearchPaths.splice(existingIndex, 1);
     }
     this.librarySearchPaths.unshift(searchPath);
-    console.log(`[LibraryLoader] Added search path: ${searchPath}`);
+console.log(`[LibraryLoader] Added search path: ${searchPath}`);
   }
 
   /**
@@ -117,12 +117,12 @@ export class LibraryLoader {
       const libraryPath = path.join(searchPath, libraryName);
 
       if (amigafs.existsSync(libraryPath)) {
-        console.log(`[LibraryLoader] Found library: ${libraryPath}`);
+console.log(`[LibraryLoader] Found library: ${libraryPath}`);
         return libraryPath;
       }
     }
 
-    console.log(`[LibraryLoader] Library file not found: ${libraryName}`);
+console.log(`[LibraryLoader] Library file not found: ${libraryName}`);
     return null;
   }
 
@@ -146,24 +146,24 @@ export class LibraryLoader {
    */
   loadLibrary(libraryName: string, minVersion: number = 0): LoadedLibrary | null {
     try {
-      console.log(`[LibraryLoader] Loading ${libraryName} (version >= ${minVersion})`);
+console.log(`[LibraryLoader] Loading ${libraryName} (version >= ${minVersion})`);
 
       // Check if already loaded
       if (this.loadedLibraries.has(libraryName)) {
-        console.log(`[LibraryLoader] Library already loaded: ${libraryName}`);
+console.log(`[LibraryLoader] Library already loaded: ${libraryName}`);
         return this.loadedLibraries.get(libraryName)!;
       }
 
       // CRITICAL: Check if library is ROM-resident (like a real Amiga!)
       if (this.ROM_LIBRARIES.has(libraryName)) {
         if (this.kickstartRom) {
-          console.log(`[LibraryLoader] ✅ ${libraryName} is ROM-resident (using Kickstart ROM)`);
-          console.log(`[LibraryLoader]   ROM libraries are native code in ROM, not loaded from disk`);
+console.log(`[LibraryLoader] ✅ ${libraryName} is ROM-resident (using Kickstart ROM)`);
+console.log(`[LibraryLoader]   ROM libraries are native code in ROM, not loaded from disk`);
           // Return null to indicate library should use ROM/trap hybrid approach
           // The actual library implementation is already in the ROM or uses our traps
           return null;
         } else {
-          console.log(`[LibraryLoader] ⚠️  ${libraryName} should be in ROM, but no ROM loaded - will try disk`);
+console.log(`[LibraryLoader] ⚠️  ${libraryName} should be in ROM, but no ROM loaded - will try disk`);
         }
       }
 
@@ -175,15 +175,15 @@ export class LibraryLoader {
 
       // Read library file
       const libraryData = amigafs.readFileSync(libraryPath) as Buffer;
-      console.log(`[LibraryLoader] Read ${libraryData.length} bytes from ${libraryPath}`);
+console.log(`[LibraryLoader] Read ${libraryData.length} bytes from ${libraryPath}`);
 
       // Parse as Hunk file
       const hunkFile = this.hunkLoader.parse(Buffer.from(libraryData));
-      console.log(`[LibraryLoader] Parsed ${hunkFile.segments.length} segments`);
+console.log(`[LibraryLoader] Parsed ${hunkFile.segments.length} segments`);
 
       // Allocate base address for this library
       const baseAddress = this.allocateLibraryBase();
-      console.log(`[LibraryLoader] Allocated base address: 0x${baseAddress.toString(16)}`);
+console.log(`[LibraryLoader] Allocated base address: 0x${baseAddress.toString(16)}`);
 
       // Load segments into memory
       // Note: We need to load at the base address, not at segment addresses
@@ -193,7 +193,7 @@ export class LibraryLoader {
       let currentAddress = baseAddress;
 
       for (const segment of hunkFile.segments) {
-        console.log(`[LibraryLoader] Loading ${segment.type} segment (${segment.size} bytes) at 0x${currentAddress.toString(16)}`);
+console.log(`[LibraryLoader] Loading ${segment.type} segment (${segment.size} bytes) at 0x${currentAddress.toString(16)}`);
 
         // Copy segment data to memory
         for (let i = 0; i < segment.data.length; i++) {
@@ -220,7 +220,7 @@ export class LibraryLoader {
       const EXECBASE_OFFSET = 0x22;  // 34 decimal
       const execBase = 0x80000;  // ExecBase address in our memory map
       this.emulator.writeMemory32(baseAddress + EXECBASE_OFFSET, execBase);
-      console.log(`[LibraryLoader] Stored ExecBase (0x${execBase.toString(16)}) at library+0x${EXECBASE_OFFSET.toString(16)}`);
+console.log(`[LibraryLoader] Stored ExecBase (0x${execBase.toString(16)}) at library+0x${EXECBASE_OFFSET.toString(16)}`);
 
       // Parse jump table from first code segment
       const jumpTable = this.parseJumpTable(baseAddress, codeSegments[0]);
@@ -236,9 +236,9 @@ export class LibraryLoader {
         const dateStr = versionInfo.date
           ? `(${versionInfo.date.day}.${versionInfo.date.month}.${versionInfo.date.year})`
           : '';
-        console.log(`[LibraryLoader] Parsed $VER: ${versionInfo.programName} ${version}.${revision} ${dateStr}`);
+console.log(`[LibraryLoader] Parsed $VER: ${versionInfo.programName} ${version}.${revision} ${dateStr}`);
         if (versionInfo.comment) {
-          console.log(`[LibraryLoader]   Comment: ${versionInfo.comment}`);
+console.log(`[LibraryLoader]   Comment: ${versionInfo.comment}`);
         }
       }
 
@@ -254,13 +254,13 @@ export class LibraryLoader {
       };
 
       this.loadedLibraries.set(libraryName, library);
-      console.log(`✅ [LibraryLoader] Successfully loaded ${libraryName} at 0x${baseAddress.toString(16)}`);
-      console.log(`   Jump table entries: ${jumpTable.size}`);
+console.log(`✅ [LibraryLoader] Successfully loaded ${libraryName} at 0x${baseAddress.toString(16)}`);
+console.log(`   Jump table entries: ${jumpTable.size}`);
 
       return library;
 
     } catch (error) {
-      console.error(`❌ [LibraryLoader] Failed to load ${libraryName}:`, error);
+console.error(`❌ [LibraryLoader] Failed to load ${libraryName}:`, error);
       return null;
     }
   }
@@ -283,7 +283,7 @@ export class LibraryLoader {
       return;
     }
 
-    console.log(`[LibraryLoader] Applying ${hunkFile.relocations.size} relocation groups`);
+console.log(`[LibraryLoader] Applying ${hunkFile.relocations.size} relocation groups`);
 
     for (const [segmentIndex, relocs] of hunkFile.relocations.entries()) {
       const segment = hunkFile.segments[segmentIndex];
@@ -359,7 +359,7 @@ export class LibraryLoader {
         const targetAddress = (addr0 << 24) | (addr1 << 16) | (addr2 << 8) | addr3;
 
         jumpTable.set(offset, targetAddress);
-        console.log(`[LibraryLoader] Jump table entry: offset ${offset} -> 0x${targetAddress.toString(16)}`);
+console.log(`[LibraryLoader] Jump table entry: offset ${offset} -> 0x${targetAddress.toString(16)}`);
       }
     }
 
@@ -586,7 +586,7 @@ export class LibraryLoader {
     // TODO: Check reference count
     // For now, just remove from map (memory remains)
     this.loadedLibraries.delete(libraryName);
-    console.log(`[LibraryLoader] Unloaded library: ${libraryName}`);
+console.log(`[LibraryLoader] Unloaded library: ${libraryName}`);
     return true;
   }
 

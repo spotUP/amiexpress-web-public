@@ -44,12 +44,12 @@ export class XIMDataQueryHandler {
    *   - IF msg.data == 0: WRITE mode - copy msg.string TO user data
    */
   handleDataQuery(msg: XIMMessage): void {
-    console.log(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
-    console.log(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
+console.log(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
+console.log(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
 
     // CRITICAL FIX: string[200] is embedded in jhMessage at offset 20, NOT a pointer
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-    console.log(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
+console.log(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
 
     const isRead = msg.data !== 0;
     const user = this.bbsSession?.user;
@@ -77,25 +77,25 @@ export class XIMDataQueryHandler {
                 fileCount = fs.readFileSync(numULsPath, 'utf8').trim();
               }
             } catch (err) {
-              console.error(`  [READ] DT_NAME: Failed to read NumULs from ${numULsPath}:`, err);
+console.error(`  [READ] DT_NAME: Failed to read NumULs from ${numULsPath}:`, err);
             }
 
             this.messageParser.writeString(stringAddr, fileCount, 31);
             const verify = this.messageParser.readString(stringAddr, 31);
-            console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
-            console.log(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
+console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
+console.log(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
           } else {
             // Normal context: return username
             const username = user?.username || 'Guest';
             this.messageParser.writeString(stringAddr, username, 31);
             const verify = this.messageParser.readString(stringAddr, 31);
-            console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
-            console.log(`  [READ] DT_NAME: "${username}"`);
+console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
+console.log(`  [READ] DT_NAME: "${username}"`);
           }
         } else {
           const newName = this.messageParser.readString(stringAddr, 31);
           if (user) user.username = newName;
-          console.log(`  [WRITE] DT_NAME: "${newName}"`);
+console.log(`  [WRITE] DT_NAME: "${newName}"`);
         }
         break;
 
@@ -103,7 +103,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           // express.e: doors cannot read passwords; return empty
           this.messageParser.writeString(stringAddr, '', 40);
-          console.log(`  [READ] DT_PASSWORD: (blocked)`);
+console.log(`  [READ] DT_PASSWORD: (blocked)`);
         } else {
           const newPwd = this.messageParser.readString(stringAddr, 40);
           if (user) {
@@ -115,7 +115,7 @@ export class XIMDataQueryHandler {
               (user as any).pwdLastUpdated = Date.now();
               (user as any).pwdType = 1; // bcrypt
             } catch (err) {
-              console.error('[XIMDataQuery] Failed to hash password:', err);
+console.error('[XIMDataQuery] Failed to hash password:', err);
               SysopDebugUtil.debug(
                 null,
                 this.bbsSession,
@@ -129,7 +129,7 @@ export class XIMDataQueryHandler {
               );
             }
           }
-          console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
+console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
         }
         break;
 
@@ -137,11 +137,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const location = user?.location || 'Unknown';
           this.messageParser.writeString(stringAddr, location, 30);
-          console.log(`  [READ] DT_LOCATION: "${location}"`);
+console.log(`  [READ] DT_LOCATION: "${location}"`);
         } else {
           const newLocation = this.messageParser.readString(stringAddr, 30);
           if (user) user.location = newLocation;
-          console.log(`  [WRITE] DT_LOCATION: "${newLocation}"`);
+console.log(`  [WRITE] DT_LOCATION: "${newLocation}"`);
         }
         break;
 
@@ -149,11 +149,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const phone = user?.phone || '';
           this.messageParser.writeString(stringAddr, phone, 13);
-          console.log(`  [READ] DT_PHONENUMBER: "${phone}"`);
+console.log(`  [READ] DT_PHONENUMBER: "${phone}"`);
         } else {
           const newPhone = this.messageParser.readString(stringAddr, 13);
           if (user) user.phone = newPhone;
-          console.log(`  [WRITE] DT_PHONENUMBER: "${newPhone}"`);
+console.log(`  [WRITE] DT_PHONENUMBER: "${newPhone}"`);
         }
         break;
 
@@ -161,11 +161,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const realname = user?.realname || '';
           this.messageParser.writeString(stringAddr, realname, 26);
-          console.log(`  [READ] DT_REALNAME: "${realname}"`);
+console.log(`  [READ] DT_REALNAME: "${realname}"`);
         } else {
           const newRealname = this.messageParser.readString(stringAddr, 26);
           if (user) user.realname = newRealname;
-          console.log(`  [WRITE] DT_REALNAME: "${newRealname}"`);
+console.log(`  [WRITE] DT_REALNAME: "${newRealname}"`);
         }
         break;
 
@@ -182,7 +182,7 @@ export class XIMDataQueryHandler {
                 ? userSlot
                 : 0;
           this.messageParser.writeString(stringAddr, slotNum.toString(), 200);
-          console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
+console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
         } else {
           // Extended: allow write for compatibility with later AmiExpress versions
           const newSlot = parseInt(this.messageParser.readString(stringAddr, 200));
@@ -190,7 +190,7 @@ export class XIMDataQueryHandler {
             if (user) (user as any).slotNumber = newSlot;
             (this.bbsSession as any).userSlotNumber = newSlot;
           }
-          console.log(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
+console.log(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
         }
         break;
 
@@ -198,11 +198,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const secLevel = user?.secLevel || 10;
           this.messageParser.writeString(stringAddr, secLevel.toString(), 200);
-          console.log(`  [READ] DT_SECSTATUS: ${secLevel}`);
+console.log(`  [READ] DT_SECSTATUS: ${secLevel}`);
         } else {
           const newLevel = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) user.secLevel = newLevel;
-          console.log(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
+console.log(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
         }
         break;
 
@@ -213,16 +213,16 @@ export class XIMDataQueryHandler {
         if (isRead) {
           if (this.state.carrierDropped) {
             this.messageParser.writeString(stringAddr, ENVStatus.ENV_DROPPED.toString(), 200);
-            console.log(`  [READ] ENVSTAT: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
+console.log(`  [READ] ENVSTAT: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
           } else {
             const envStat = (this.bbsSession as any).currentStat || ENVStatus.ENV_IDLE;
             this.messageParser.writeString(stringAddr, envStat.toString(), 200);
-            console.log(`  [READ] ENVSTAT: ${envStat}`);
+console.log(`  [READ] ENVSTAT: ${envStat}`);
           }
         } else {
           const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || ENVStatus.ENV_IDLE;
           (this.bbsSession as any).currentStat = newStat;
-          console.log(`  [WRITE] ENVSTAT: ${newStat}`);
+console.log(`  [WRITE] ENVSTAT: ${newStat}`);
         }
         break;
 
@@ -230,11 +230,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const secBoard = user?.secBoard || 0;
           this.messageParser.writeString(stringAddr, secBoard.toString(), 200);
-          console.log(`  [READ] DT_SECBOARD: ${secBoard}`);
+console.log(`  [READ] DT_SECBOARD: ${secBoard}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secBoard = newSec;
-          console.log(`  [WRITE] DT_SECBOARD: ${newSec}`);
+console.log(`  [WRITE] DT_SECBOARD: ${newSec}`);
         }
         break;
 
@@ -242,11 +242,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const secLibrary = user?.secLibrary || 0;
           this.messageParser.writeString(stringAddr, secLibrary.toString(), 200);
-          console.log(`  [READ] DT_SECLIBRARY: ${secLibrary}`);
+console.log(`  [READ] DT_SECLIBRARY: ${secLibrary}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secLibrary = newSec;
-          console.log(`  [WRITE] DT_SECLIBRARY: ${newSec}`);
+console.log(`  [WRITE] DT_SECLIBRARY: ${newSec}`);
         }
         break;
 
@@ -254,11 +254,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const secBulletin = user?.secBulletin || 0;
           this.messageParser.writeString(stringAddr, secBulletin.toString(), 200);
-          console.log(`  [READ] DT_SECBULLETIN: ${secBulletin}`);
+console.log(`  [READ] DT_SECBULLETIN: ${secBulletin}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secBulletin = newSec;
-          console.log(`  [WRITE] DT_SECBULLETIN: ${newSec}`);
+console.log(`  [WRITE] DT_SECBULLETIN: ${newSec}`);
         }
         break;
 
@@ -266,11 +266,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const timeLimit = user?.timeLimit || 60;
           this.messageParser.writeString(stringAddr, timeLimit.toString(), 200);
-          console.log(`  [READ] DT_TIMELIMIT: ${timeLimit}`);
+console.log(`  [READ] DT_TIMELIMIT: ${timeLimit}`);
         } else {
           const newLimit = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) user.timeLimit = newLimit;
-          console.log(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
+console.log(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
         }
         break;
 
@@ -285,8 +285,8 @@ export class XIMDataQueryHandler {
                           24;
           this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
           const verify = this.messageParser.readString(stringAddr, 200);
-          console.log(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
-          console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
+console.log(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
+console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
         } else {
           const newLen = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) {
@@ -294,7 +294,7 @@ export class XIMDataQueryHandler {
             (user as any).pageLength = newLen;
           }
           this.state.pauseLines = Number.isFinite(newLen) ? newLen : this.state.pauseLines;
-          console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
+console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
         }
         break;
 
@@ -302,11 +302,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const expert = user?.expert === 'X' ? 'X' : 'N';
           this.messageParser.writeString(stringAddr, expert, 200);
-          console.log(`  [READ] DT_EXPERT: ${expert}`);
+console.log(`  [READ] DT_EXPERT: ${expert}`);
         } else {
           const expertStr = this.messageParser.readString(stringAddr, 1);
           if (user) user.expert = (expertStr === 'X' || expertStr === 'x') ? 'X' : 'N';
-          console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
+console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
         }
         break;
 
@@ -318,14 +318,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const msgs = diskStats?.messagesPosted ?? user?.messagesPosted ?? 0;
             this.messageParser.writeString(stringAddr, msgs.toString(), 200);
-            console.log(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newMsgs = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newMsgs)) {
               if (user) user.messagesPosted = newMsgs;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'messagesPosted', newMsgs);
             }
-            console.log(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
+console.log(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
           }
         }
         break;
@@ -337,14 +337,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
             this.messageParser.writeString(stringAddr, uploads.toString(), 200);
-            console.log(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newUploads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newUploads)) {
               if (user) user.uploads = newUploads;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'uploads', newUploads);
             }
-            console.log(`  [WRITE] DT_UPLOADS: ${newUploads}`);
+console.log(`  [WRITE] DT_UPLOADS: ${newUploads}`);
           }
         }
         break;
@@ -356,14 +356,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
             this.messageParser.writeString(stringAddr, downloads.toString(), 200);
-            console.log(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newDownloads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDownloads)) {
               if (user) user.downloads = newDownloads;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'downloads', newDownloads);
             }
-            console.log(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
+console.log(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
           }
         }
         break;
@@ -375,14 +375,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const calls = diskStats?.timesCalled ?? user?.timesCalled ?? 0;
             this.messageParser.writeString(stringAddr, calls.toString(), 200);
-            console.log(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newCalls = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCalls)) {
               if (user) user.timesCalled = newCalls;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timesCalled', newCalls);
             }
-            console.log(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
+console.log(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           }
         }
         break;
@@ -394,13 +394,13 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const lastOn = diskStats?.timeLastOn ?? (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-            console.log(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newLastOn = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLastOn)) {
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', newLastOn);
             }
-            console.log(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
+console.log(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
           }
         }
         break;
@@ -412,14 +412,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const timeUsed = diskStats?.timeUsed ?? user?.timeUsed ?? 0;
             this.messageParser.writeString(stringAddr, timeUsed.toString(), 200);
-            console.log(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newTimeUsed = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeUsed)) {
               if (user) user.timeUsed = newTimeUsed;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeUsed', newTimeUsed);
             }
-            console.log(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
+console.log(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
           }
         }
         break;
@@ -431,14 +431,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const timeTotal = diskStats?.timeTotal ?? user?.timeTotal ?? 0;
             this.messageParser.writeString(stringAddr, timeTotal.toString(), 200);
-            console.log(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newTimeTotal = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeTotal)) {
               if (user) user.timeTotal = newTimeTotal;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeTotal', newTimeTotal);
             }
-            console.log(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
+console.log(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
           }
         }
         break;
@@ -450,14 +450,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
             this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
-            console.log(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesUpload = newBytes;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesUpload', newBytes);
             }
-            console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
+console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
           }
         }
         break;
@@ -469,14 +469,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
             this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
-            console.log(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesDownload = newBytes;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesDownload', newBytes);
             }
-            console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
+console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
           }
         }
         break;
@@ -488,14 +488,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const limit = diskStats?.dailyBytesLimit ?? user?.dailyBytesLimit ?? 0;
             this.messageParser.writeString(stringAddr, limit.toString(), 200);
-            console.log(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newLimit = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLimit)) {
               if (user) user.dailyBytesLimit = newLimit;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesLimit', newLimit);
             }
-            console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
+console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
           }
         }
         break;
@@ -507,14 +507,14 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const dailyDld = diskStats?.dailyBytesDld ?? user?.dailyBytesDld ?? 0;
             this.messageParser.writeString(stringAddr, dailyDld.toString(), 200);
-            console.log(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'session'})`);
+console.log(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newDld = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDld)) {
               if (user) user.dailyBytesDld = newDld;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesDld', newDld);
             }
-            console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
+console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
           }
         }
         break;
@@ -523,7 +523,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const hostname = this.bbsSession?.hostname || 'localhost';
           this.messageParser.writeString(stringAddr, hostname, 200);
-          console.log(`  [READ] DT_HOSTNAME: "${hostname}"`);
+console.log(`  [READ] DT_HOSTNAME: "${hostname}"`);
         }
         break;
 
@@ -531,7 +531,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const hostip = this.bbsSession?.hostip || '127.0.0.1';
           this.messageParser.writeString(stringAddr, hostip, 200);
-          console.log(`  [READ] DT_HOSTIP: "${hostip}"`);
+console.log(`  [READ] DT_HOSTIP: "${hostip}"`);
         }
         break;
 
@@ -550,10 +550,10 @@ export class XIMDataQueryHandler {
             const seconds = lastOn.getSeconds().toString().padStart(2, '0');
             const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
             this.messageParser.writeString(stringAddr, amigaDate, 200);
-            console.log(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
+console.log(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
           } else {
             this.messageParser.writeString(stringAddr, '01-Jan-70 00:00:00', 200);
-            console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
+console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
           }
         }
         break;
@@ -572,7 +572,7 @@ export class XIMDataQueryHandler {
           const seconds = now.getSeconds().toString().padStart(2, '0');
           const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
           this.messageParser.writeString(stringAddr, amigaDate, 200);
-          console.log(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
+console.log(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
         }
         break;
 
@@ -580,7 +580,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const currTime = Math.floor(Date.now() / 1000);
           this.messageParser.writeString(stringAddr, currTime.toString(), 200);
-          console.log(`  [READ] DT_CURR_TIME: ${currTime}`);
+console.log(`  [READ] DT_CURR_TIME: ${currTime}`);
         }
         break;
 
@@ -588,11 +588,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const timeout = (this.state as any).doorTimeout || (this.state as any).timeoutSeconds || 300;
           this.messageParser.writeString(stringAddr, timeout.toString(), 200);
-          console.log(`  [READ] DT_TIMEOUT: ${timeout}`);
+console.log(`  [READ] DT_TIMEOUT: ${timeout}`);
         } else {
           const newTimeout = parseInt(this.messageParser.readString(stringAddr, 200));
           (this.state as any).doorTimeout = newTimeout;
-          console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
+console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
         }
         break;
 
@@ -609,13 +609,13 @@ export class XIMDataQueryHandler {
             confAccess = confAccess.slice(0, 10);
           }
           this.messageParser.writeString(stringAddr, confAccess, 10);
-          console.log(`  [READ] DT_CONFACCESS: "${confAccess}" (from disk)`);
+console.log(`  [READ] DT_CONFACCESS: "${confAccess}" (from disk)`);
         } else {
           // Write operation - update state (will need to sync to disk separately)
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
           (this.bbsSession as any).confAccess = newAccess;
-          console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
+console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
         }
         break;
 
@@ -623,12 +623,12 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const language = this.state.language || 'txt';
           this.messageParser.writeString(stringAddr, language, 200);
-          console.log(`  [READ] DT_LANGUAGE: "${language}"`);
+console.log(`  [READ] DT_LANGUAGE: "${language}"`);
         } else {
           const newLang = this.messageParser.readString(stringAddr, 200);
           this.state.language = newLang || 'txt';
           if (user) (user as any).language = newLang;
-          console.log(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
+console.log(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
         }
         break;
 
@@ -637,18 +637,18 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const isAnsi = user?.ansi || true;
           this.messageParser.writeString(stringAddr, isAnsi ? '1' : '0', 200);
-          console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${isAnsi}`);
+console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${isAnsi}`);
         }
         break;
 
       case XIMCommand.DT_MSGCODE:
         replyData = 0;
-        console.log('  DT_MSGCODE: 0');
+console.log('  DT_MSGCODE: 0');
         break;
 
       case XIMCommand.DT_FILECODE:
         replyData = 0;
-        console.log('  DT_FILECODE: 0');
+console.log('  DT_FILECODE: 0');
         break;
 
       case XIMCommand.DT_QUICKFLAG:
@@ -658,11 +658,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const val = (this.state as any)[msg.command] ?? 0;
           this.messageParser.writeString(stringAddr, String(val), 200);
-          console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${val}`);
+console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${val}`);
         } else {
           const newVal = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
           (this.state as any)[msg.command] = newVal;
-          console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}`);
+console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}`);
         }
         break;
 
@@ -670,7 +670,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const dumpData = JSON.stringify(user || {}, null, 2);
           this.messageParser.writeString(stringAddr, dumpData, 200);
-          console.log(`  [READ] DT_DUMP: User data dumped`);
+console.log(`  [READ] DT_DUMP: User data dumped`);
         }
         break;
 
@@ -689,7 +689,7 @@ export class XIMDataQueryHandler {
           // Pad to 10 bytes total
           nodesStatus += '_';
           this.messageParser.writeString(stringAddr, nodesStatus, 10);
-          console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
+console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
         }
         break;
 
@@ -705,7 +705,7 @@ export class XIMDataQueryHandler {
             updated = currentFlags | bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
-            console.log(
+console.log(
               `  [WRITE] DT_ADDBIT: mask=0x${bitMask.toString(
                 16
               )}, flags=0x${updated.toString(16)}`
@@ -714,14 +714,14 @@ export class XIMDataQueryHandler {
             updated = currentFlags & ~bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
-            console.log(
+console.log(
               `  [WRITE] DT_REMBIT: mask=0x${bitMask.toString(
                 16
               )}, flags=0x${updated.toString(16)}`
             );
           } else {
             replyData = (currentFlags & bitMask) !== 0 ? 1 : 0;
-            console.log(
+console.log(
               `  [READ] DT_QUERYBIT: mask=0x${bitMask.toString(
                 16
               )}, result=${replyData}`
@@ -734,18 +734,18 @@ export class XIMDataQueryHandler {
         // Module type indicator - return 0 for standard
         if (isRead) {
           this.messageParser.writeString(stringAddr, '0', 200);
-          console.log(`  [READ] MOD_TYPE: 0`);
+console.log(`  [READ] MOD_TYPE: 0`);
         } else {
           const modType = this.messageParser.readString(stringAddr, 200);
           (this.state as any).modType = parseInt(modType) || 0;
-          console.log(`  [WRITE] MOD_TYPE: ${modType}`);
+console.log(`  [WRITE] MOD_TYPE: ${modType}`);
         }
         break;
 
       case XIMCommand.EDITOR_STRUCT:
         // Editor structure pointer - return 0 (no editor struct)
         replyData = 0;
-        console.log(`  EDITOR_STRUCT: 0 (no editor struct)`);
+console.log(`  EDITOR_STRUCT: 0 (no editor struct)`);
         break;
 
       case XIMCommand.BYPASS_CSI_CHECK:
@@ -753,11 +753,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const bypass = (this.state as any).bypassCSICheck || 0;
           this.messageParser.writeString(stringAddr, bypass.toString(), 200);
-          console.log(`  [READ] BYPASS_CSI_CHECK: ${bypass}`);
+console.log(`  [READ] BYPASS_CSI_CHECK: ${bypass}`);
         } else {
           const newBypass = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
           (this.state as any).bypassCSICheck = newBypass;
-          console.log(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
+console.log(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
         }
         break;
 
@@ -766,11 +766,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const sentBy = (this.state as any).sentBy || '';
           this.messageParser.writeString(stringAddr, sentBy, 200);
-          console.log(`  [READ] SENTBY: "${sentBy}"`);
+console.log(`  [READ] SENTBY: "${sentBy}"`);
         } else {
           const newSentBy = this.messageParser.readString(stringAddr, 200);
           (this.state as any).sentBy = newSentBy;
-          console.log(`  [WRITE] SENTBY: "${newSentBy}"`);
+console.log(`  [WRITE] SENTBY: "${newSentBy}"`);
         }
         break;
 
@@ -782,11 +782,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const internetName = (user as any)?.internetName || user?.email || '';
           this.messageParser.writeString(stringAddr, internetName, 10);
-          console.log(`  [READ] DT_INTERNETNAME: "${internetName}"`);
+console.log(`  [READ] DT_INTERNETNAME: "${internetName}"`);
         } else {
           const newName = this.messageParser.readString(stringAddr, 10);
           if (user) (user as any).internetName = newName;
-          console.log(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
+console.log(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
         }
         break;
 
@@ -795,11 +795,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const translator = (this.state as any).userLanguage || '';
           this.messageParser.writeString(stringAddr, translator, 200);
-          console.log(`  [READ] DT_TRANSLATOR: "${translator}"`);
+console.log(`  [READ] DT_TRANSLATOR: "${translator}"`);
         } else {
           const newTranslator = this.messageParser.readString(stringAddr, 200);
           (this.state as any).userLanguage = newTranslator;
-          console.log(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
+console.log(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
         }
         break;
 
@@ -808,11 +808,11 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const hostLang = (this.state as any).hostLanguage || 'English';
           this.messageParser.writeString(stringAddr, hostLang, 200);
-          console.log(`  [READ] DT_HOST_LANGUAGE: "${hostLang}"`);
+console.log(`  [READ] DT_HOST_LANGUAGE: "${hostLang}"`);
         } else {
           const newLang = this.messageParser.readString(stringAddr, 200);
           (this.state as any).hostLanguage = newLang;
-          console.log(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
+console.log(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
         }
         break;
 
@@ -821,7 +821,7 @@ export class XIMDataQueryHandler {
         if (isRead) {
           const geo = (this.bbsSession as any)?.bbsLocation || 'The Internet';
           this.messageParser.writeString(stringAddr, geo, 200);
-          console.log(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
+console.log(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
         }
         break;
 
@@ -831,7 +831,7 @@ export class XIMDataQueryHandler {
           const bytesUp = user?.bytesUpload || 0;
           const sizeText = this.formatSizeText(bytesUp);
           this.messageParser.writeString(stringAddr, sizeText, 200);
-          console.log(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
+console.log(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
         }
         break;
 
@@ -841,7 +841,7 @@ export class XIMDataQueryHandler {
           const bytesDown = user?.bytesDownload || 0;
           const sizeText = this.formatSizeText(bytesDown);
           this.messageParser.writeString(stringAddr, sizeText, 200);
-          console.log(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
+console.log(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
         }
         break;
 
@@ -856,13 +856,13 @@ export class XIMDataQueryHandler {
             confAccess2 += hasAccess ? 'X' : '_';
           }
           this.messageParser.writeString(stringAddr, confAccess2, 200);
-          console.log(`  [READ] DT_CONFACCESS2: "${confAccess2}"`);
+console.log(`  [READ] DT_CONFACCESS2: "${confAccess2}"`);
         } else {
           const newAccess = this.messageParser.readString(stringAddr, 25);
           // Update the first 10 chars to main confAccess, store full in confAccess2
           this.state.confAccess = newAccess.slice(0, 10);
           (this.state as any).confAccess2 = newAccess;
-          console.log(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
+console.log(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
         }
         break;
 
@@ -873,11 +873,11 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
             this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
-            console.log(`  [READ] DT_CBYTESUPLOAD: ${bytesUp}`);
+console.log(`  [READ] DT_CBYTESUPLOAD: ${bytesUp}`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes) && user) user.bytesUpload = newBytes;
-            console.log(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
+console.log(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
           }
         }
         break;
@@ -889,11 +889,11 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
             this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
-            console.log(`  [READ] DT_CBYTESDOWNLOAD: ${bytesDown}`);
+console.log(`  [READ] DT_CBYTESDOWNLOAD: ${bytesDown}`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes) && user) user.bytesDownload = newBytes;
-            console.log(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
+console.log(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
           }
         }
         break;
@@ -905,11 +905,11 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
             this.messageParser.writeString(stringAddr, uploads.toString(), 200);
-            console.log(`  [READ] DT_CFILESUPLOAD: ${uploads}`);
+console.log(`  [READ] DT_CFILESUPLOAD: ${uploads}`);
           } else {
             const newUploads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newUploads) && user) user.uploads = newUploads;
-            console.log(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
+console.log(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
           }
         }
         break;
@@ -921,11 +921,11 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
             this.messageParser.writeString(stringAddr, downloads.toString(), 200);
-            console.log(`  [READ] DT_CFILESDOWNLOAD: ${downloads}`);
+console.log(`  [READ] DT_CFILESDOWNLOAD: ${downloads}`);
           } else {
             const newDownloads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDownloads) && user) user.downloads = newDownloads;
-            console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
+console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
           }
         }
         break;
@@ -936,17 +936,17 @@ export class XIMDataQueryHandler {
           if (isRead) {
             const timesOnToday = (user as any)?.timesOnToday ?? 1;
             this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
-            console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday}`);
+console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday}`);
           } else {
             const newCount = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCount) && user) (user as any).timesOnToday = newCount;
-            console.log(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
+console.log(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
           }
         }
         break;
 
       default:
-        console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
+console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }
 
     this.reply(msg, replyData);

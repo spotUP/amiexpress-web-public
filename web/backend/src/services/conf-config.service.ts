@@ -48,7 +48,7 @@ export function loadConfConfig(bbsRoot: string): ConfConfigData | null {
 
     return { confCount, entries };
   } catch (error) {
-    console.error('[ConfConfig] Failed to read ConfConfig.info:', error);
+console.error('[ConfConfig] Failed to read ConfConfig.info:', error);
     return null;
   }
 }

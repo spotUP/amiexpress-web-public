@@ -115,7 +115,7 @@ export class NodeFileManager {
   writeNodeUserFile(nodeId: number, user: User): void {
     const filePath = path.join(this.bbsRoot, `node${nodeId}.user`);
 
-    console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
+console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     // Create binary buffer matching E struct layout
     const buffer = this.userToBuffer(user, nodeId);
@@ -125,7 +125,7 @@ export class NodeFileManager {
     fs.writeFileSync(tmpPath, buffer);
     fs.renameSync(tmpPath, filePath);
 
-    console.log(`[NodeFileManager] Wrote node${nodeId}.user (${buffer.length} bytes)`);
+console.log(`[NodeFileManager] Wrote node${nodeId}.user (${buffer.length} bytes)`);
   }
 
   /**
@@ -134,7 +134,7 @@ export class NodeFileManager {
   writeNodeUserKeysFile(nodeId: number, user: User): void {
     const filePath = path.join(this.bbsRoot, `node${nodeId}.userkeys`);
 
-    console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
+console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     const buffer = this.userKeysToBuffer(user);
 
@@ -142,7 +142,7 @@ export class NodeFileManager {
     fs.writeFileSync(tmpPath, buffer);
     fs.renameSync(tmpPath, filePath);
 
-    console.log(`[NodeFileManager] Wrote node${nodeId}.userkeys (${buffer.length} bytes)`);
+console.log(`[NodeFileManager] Wrote node${nodeId}.userkeys (${buffer.length} bytes)`);
   }
 
   /**
@@ -161,7 +161,7 @@ export class NodeFileManager {
       const buffer = fs.readFileSync(filePath);
       return this.bufferToUser(buffer);
     } catch (error) {
-      console.error(`[NodeFileManager] Error reading ${filePath}:`, error);
+console.error(`[NodeFileManager] Error reading ${filePath}:`, error);
       return null;
     }
   }
@@ -180,7 +180,7 @@ export class NodeFileManager {
       const buffer = fs.readFileSync(filePath);
       return this.bufferToUserKeys(buffer);
     } catch (error) {
-      console.error(`[NodeFileManager] Error reading ${filePath}:`, error);
+console.error(`[NodeFileManager] Error reading ${filePath}:`, error);
       return null;
     }
   }
@@ -194,12 +194,12 @@ export class NodeFileManager {
 
     if (fs.existsSync(userFile)) {
       fs.unlinkSync(userFile);
-      console.log(`[NodeFileManager] Deleted node${nodeId}.user`);
+console.log(`[NodeFileManager] Deleted node${nodeId}.user`);
     }
 
     if (fs.existsSync(keysFile)) {
       fs.unlinkSync(keysFile);
-      console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
+console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
     }
   }
 

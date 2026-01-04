@@ -163,7 +163,7 @@ export class NodeManager {
       const oldCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       // Skip cleanup for now to avoid private access issues
     } catch (error) {
-      console.error('Error cleaning up database sessions:', error);
+console.error('Error cleaning up database sessions:', error);
     }
   }
 
@@ -199,7 +199,7 @@ export class NodeManager {
   async broadcastToNode(nodeId: number, message: any): Promise<void> {
     const nodeSessions = await db.getNodeSessions(nodeId);
     // In a real implementation, this would use Socket.IO to broadcast to actual socket connections
-    console.log(`Broadcasting to ${nodeSessions.length} sessions on node ${nodeId}:`, message);
+console.log(`Broadcasting to ${nodeSessions.length} sessions on node ${nodeId}:`, message);
   }
 
   // Transfer session between nodes (for load balancing)
@@ -225,10 +225,10 @@ export class NodeManager {
       targetNode.status = 'busy';
       targetNode.currentUser = session.userId;
 
-      console.log(`Transferred session ${sessionId} to node ${targetNodeId}`);
+console.log(`Transferred session ${sessionId} to node ${targetNodeId}`);
       return true;
     } catch (error) {
-      console.error('Error transferring session:', error);
+console.error('Error transferring session:', error);
       return false;
     }
   }
@@ -272,10 +272,10 @@ export class AREXXEngine {
       for (const script of scripts) {
         this.scripts.set(script.id, script);
       }
-      console.log(`Loaded ${scripts.length} AREXX scripts`);
+console.log(`Loaded ${scripts.length} AREXX scripts`);
     } catch (error) {
       // Table might not exist yet during initial startup
-      console.log('AREXX scripts table not ready yet, will retry later');
+console.log('AREXX scripts table not ready yet, will retry later');
     }
   }
 
@@ -351,7 +351,7 @@ export class AREXXEngine {
 
       return result;
     } catch (error) {
-      console.error(`AREXX script ${script.id} execution error:`, error);
+console.error(`AREXX script ${script.id} execution error:`, error);
       throw error;
     }
   }
@@ -359,7 +359,7 @@ export class AREXXEngine {
   // Simulate script execution (placeholder for real AREXX interpreter)
   private async simulateScriptExecution(script: any, context: any): Promise<any> {
     // This is a simulation - real implementation would parse and execute AREXX code
-    console.log(`Executing AREXX script: ${script.name}`);
+console.log(`Executing AREXX script: ${script.name}`);
 
     // Simulate different script behaviors based on filename
     switch (script.filename) {
@@ -458,14 +458,14 @@ export class AREXXEngine {
   async addScript(script: any): Promise<void> {
     this.scripts.set(script.id, script);
     // In real implementation, save to database
-    console.log(`AREXX script ${script.name} added/updated`);
+console.log(`AREXX script ${script.name} added/updated`);
   }
 
   // Remove script
   async removeScript(id: string): Promise<void> {
     this.scripts.delete(id);
     // In real implementation, remove from database
-    console.log(`AREXX script ${id} removed`);
+console.log(`AREXX script ${id} removed`);
   }
 
   // Reload scripts
@@ -579,7 +579,7 @@ export class ProtocolManager {
   // ZModem transfer implementation
   private async startZModemTransfer(sessionId: string, data: any): Promise<void> {
     try {
-      console.log('Starting ZModem transfer for session:', sessionId);
+console.log('Starting ZModem transfer for session:', sessionId);
 
       // Update protocol status to enabled
       const zmodemProtocol = this.protocols.get('zmodem');
@@ -589,7 +589,7 @@ export class ProtocolManager {
 
       // Check if ZModem binary exists (in production, check file system)
       const zmodemPath = zmodemProtocol.config.path;
-      console.log('ZModem binary path:', zmodemPath);
+console.log('ZModem binary path:', zmodemPath);
 
       // For web implementation, we'll simulate ZModem behavior
       // In a real implementation, this would spawn the ZModem process
@@ -600,15 +600,15 @@ export class ProtocolManager {
         try {
           // Simulate successful transfer completion
           await this.completeTransfer(sessionId, 'zmodem_checksum_placeholder');
-          console.log('ZModem transfer completed for session:', sessionId);
+console.log('ZModem transfer completed for session:', sessionId);
         } catch (error) {
-          console.error('ZModem transfer completion error:', error);
+console.error('ZModem transfer completion error:', error);
           await this.failTransfer(sessionId, 'Transfer completion failed');
         }
       }, 2000); // Simulate 2-second transfer
 
     } catch (error) {
-      console.error('ZModem transfer initialization error:', error);
+console.error('ZModem transfer initialization error:', error);
       await db.updateTransferSession(sessionId, {
         status: 'error',
         error: `ZModem initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -619,7 +619,7 @@ export class ProtocolManager {
   // FTP transfer implementation
   private async startFTPTransfer(sessionId: string, data: any): Promise<void> {
     try {
-      console.log('Starting FTP transfer for session:', sessionId);
+console.log('Starting FTP transfer for session:', sessionId);
 
       // Update protocol status to enabled
       const ftpProtocol = this.protocols.get('ftp');
@@ -629,7 +629,7 @@ export class ProtocolManager {
 
       // Check FTP server configuration
       const ftpConfig = ftpProtocol.config;
-      console.log('FTP server config:', ftpConfig);
+console.log('FTP server config:', ftpConfig);
 
       // For web implementation, we'll simulate FTP behavior
       // In a real implementation, this would connect to FTP server
@@ -640,15 +640,15 @@ export class ProtocolManager {
         try {
           // Simulate successful transfer completion
           await this.completeTransfer(sessionId, 'ftp_checksum_placeholder');
-          console.log('FTP transfer completed for session:', sessionId);
+console.log('FTP transfer completed for session:', sessionId);
         } catch (error) {
-          console.error('FTP transfer completion error:', error);
+console.error('FTP transfer completion error:', error);
           await this.failTransfer(sessionId, 'Transfer completion failed');
         }
       }, 3000); // Simulate 3-second transfer
 
     } catch (error) {
-      console.error('FTP transfer initialization error:', error);
+console.error('FTP transfer initialization error:', error);
       await db.updateTransferSession(sessionId, {
         status: 'error',
         error: `FTP initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`

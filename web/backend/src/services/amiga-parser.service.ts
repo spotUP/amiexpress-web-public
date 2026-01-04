@@ -23,6 +23,7 @@ import type {
   AmigaBBSConfig,
   AmigaNodeData,
   AmigaCallersLogEntry,
+  AmigaDoorLogEntry,
   AmigaBulletin,
   AmigaScreen,
 } from '../types/amiga-import';
@@ -48,7 +49,7 @@ export class AmigaParserService {
    * @returns Path to actual BBS root directory
    */
   private async findBBSRoot(extractedPath: string): Promise<string> {
-    console.log('[AmigaParser] Finding BBS root in:', extractedPath);
+console.log('[AmigaParser] Finding BBS root in:', extractedPath);
 
     // Check if BBS files are at root
     const userDataAtRoot = await this.fileExists(path.join(extractedPath, 'User.data'));
@@ -56,12 +57,12 @@ export class AmigaParserService {
     const bbsConfigAtRoot = await this.fileExists(path.join(extractedPath, 'bbsConfig.info'));
 
     if (userDataAtRoot || confAtRoot || bbsConfigAtRoot) {
-      console.log('[AmigaParser] BBS files found at root');
+console.log('[AmigaParser] BBS files found at root');
       return extractedPath;
     }
 
     // Check immediate subdirectories
-    console.log('[AmigaParser] BBS files not at root, checking subdirectories...');
+console.log('[AmigaParser] BBS files not at root, checking subdirectories...');
     try {
       const entries = await fs.readdir(extractedPath, { withFileTypes: true });
 
@@ -73,17 +74,17 @@ export class AmigaParserService {
           const bbsConfigInSub = await this.fileExists(path.join(subPath, 'bbsConfig.info'));
 
           if (userDataInSub || confInSub || bbsConfigInSub) {
-            console.log(`[AmigaParser] BBS files found in subdirectory: ${entry.name}`);
+console.log(`[AmigaParser] BBS files found in subdirectory: ${entry.name}`);
             return subPath;
           }
         }
       }
     } catch (error: any) {
-      console.error('[AmigaParser] Error searching subdirectories:', error.message);
+console.error('[AmigaParser] Error searching subdirectories:', error.message);
     }
 
     // Fallback to original path
-    console.log('[AmigaParser] BBS root not found, using extraction path as-is');
+console.log('[AmigaParser] BBS root not found, using extraction path as-is');
     return extractedPath;
   }
 
@@ -98,11 +99,11 @@ export class AmigaParserService {
     archiveFormat: 'lha' | 'lzx' | 'zip',
     archivePath: string
   ): Promise<AmigaBBSArchive> {
-    console.log('[AmigaParser] Parsing BBS archive:', extractedPath);
+console.log('[AmigaParser] Parsing BBS archive:', extractedPath);
 
     // Find actual BBS root (handles nested directories)
     const bbsRoot = await this.findBBSRoot(extractedPath);
-    console.log('[AmigaParser] Using BBS root:', bbsRoot);
+console.log('[AmigaParser] Using BBS root:', bbsRoot);
 
     const archive: AmigaBBSArchive = {
       users: [],
@@ -120,57 +121,57 @@ export class AmigaParserService {
     // Parse users
     try {
       archive.users = await this.parseUserFiles(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.users.length} users`);
+console.log(`[AmigaParser] Parsed ${archive.users.length} users`);
     } catch (error: any) {
-      console.error('[AmigaParser] User parsing error:', error.message);
+console.error('[AmigaParser] User parsing error:', error.message);
     }
 
     // Parse conferences
     try {
       archive.conferences = await this.parseConferences(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.conferences.length} conferences`);
+console.log(`[AmigaParser] Parsed ${archive.conferences.length} conferences`);
     } catch (error: any) {
-      console.error('[AmigaParser] Conference parsing error:', error.message);
+console.error('[AmigaParser] Conference parsing error:', error.message);
     }
 
     // Parse nodes
     try {
       archive.nodes = await this.parseNodes(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.nodes.length} nodes`);
+console.log(`[AmigaParser] Parsed ${archive.nodes.length} nodes`);
     } catch (error: any) {
-      console.error('[AmigaParser] Node parsing error:', error.message);
+console.error('[AmigaParser] Node parsing error:', error.message);
     }
 
     // Parse commands
     try {
       archive.commands = await this.parseCommands(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.commands.length} commands`);
+console.log(`[AmigaParser] Parsed ${archive.commands.length} commands`);
     } catch (error: any) {
-      console.error('[AmigaParser] Command parsing error:', error.message);
+console.error('[AmigaParser] Command parsing error:', error.message);
     }
 
     // Parse access levels
     try {
       archive.access = await this.parseAccessLevels(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.access.length} access levels`);
+console.log(`[AmigaParser] Parsed ${archive.access.length} access levels`);
     } catch (error: any) {
-      console.error('[AmigaParser] Access level parsing error:', error.message);
+console.error('[AmigaParser] Access level parsing error:', error.message);
     }
 
     // Parse bulletins (optional)
     try {
       archive.bulletins = await this.parseBulletins(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.bulletins?.length || 0} bulletins`);
+console.log(`[AmigaParser] Parsed ${archive.bulletins?.length || 0} bulletins`);
     } catch (error: any) {
-      console.error('[AmigaParser] Bulletin parsing error:', error.message);
+console.error('[AmigaParser] Bulletin parsing error:', error.message);
     }
 
     // Parse screens (optional)
     try {
       archive.screens = await this.parseScreens(bbsRoot);
-      console.log(`[AmigaParser] Parsed ${archive.screens?.length || 0} screens`);
+console.log(`[AmigaParser] Parsed ${archive.screens?.length || 0} screens`);
     } catch (error: any) {
-      console.error('[AmigaParser] Screen parsing error:', error.message);
+console.error('[AmigaParser] Screen parsing error:', error.message);
     }
 
     return archive;
@@ -191,14 +192,14 @@ export class AmigaParserService {
     const miscExists = await this.fileExists(userMiscPath);
 
     if (!dataExists) {
-      console.warn('[AmigaParser] User.data not found');
+console.warn('[AmigaParser] User.data not found');
       return [];
     }
 
-    console.log('[AmigaParser] Reading user files:');
-    console.log(`  User.data: ${dataExists ? 'found' : 'missing'}`);
-    console.log(`  User.keys: ${keysExists ? 'found' : 'missing'}`);
-    console.log(`  user.misc: ${miscExists ? 'found' : 'missing'}`);
+console.log('[AmigaParser] Reading user files:');
+console.log(`  User.data: ${dataExists ? 'found' : 'missing'}`);
+console.log(`  User.keys: ${keysExists ? 'found' : 'missing'}`);
+console.log(`  user.misc: ${miscExists ? 'found' : 'missing'}`);
 
     // Parse binary user data files
     const users = await this.parseUserDataBinary(userDataPath, userKeysPath, userMiscPath);
@@ -258,7 +259,7 @@ export class AmigaParserService {
     const configPath = path.join(bbsPath, 'bbsConfig.info');
 
     if (!(await this.fileExists(configPath))) {
-      console.warn('[AmigaParser] bbsConfig.info not found, using defaults');
+console.warn('[AmigaParser] bbsConfig.info not found, using defaults');
       return {
         passwordSecurity: 'LEGACY',
         toolTypes: new Map(),
@@ -333,7 +334,7 @@ export class AmigaParserService {
         const conference = await this.parseConference(confPath, confNumber, metadata);
         conferences.push(conference);
       } catch (error: any) {
-        console.error(`[AmigaParser] Error parsing ${confDir.name}:`, error.message);
+console.error(`[AmigaParser] Error parsing ${confDir.name}:`, error.message);
       }
     }
 
@@ -348,14 +349,14 @@ export class AmigaParserService {
     confNumber: number,
     metadata?: ConferenceConfigEntry
   ): Promise<AmigaConference> {
-    console.log(`[AmigaParser] Parsing conference ${confNumber}...`);
+console.log(`[AmigaParser] Parsing conference ${confNumber}...`);
 
     const conference: AmigaConference = {
       number: confNumber,
       database: await this.parseConferenceDB(confPath, confNumber, metadata),
       menu: await this.readTextFile(path.join(confPath, 'Menu.txt')),
       fileAreas: await this.parseFileAreas(confPath),
-      messageBases: [], // TODO: Implement message base parsing
+      messageBases: await this.parseMessageBases(confPath, confNumber),
     };
 
     return conference;
@@ -373,7 +374,7 @@ export class AmigaParserService {
     const dbPath = path.join(confPath, 'Conf.DB');
 
     if (!(await this.fileExists(dbPath))) {
-      console.warn(`[AmigaParser] Conf.DB not found in conference ${confNumber}`);
+console.warn(`[AmigaParser] Conf.DB not found in conference ${confNumber}`);
       return {
         conferenceNumber: confNumber,
         conferenceName: metadata?.name || `Conference ${confNumber}`,
@@ -384,7 +385,7 @@ export class AmigaParserService {
     }
 
     const buffer = await fs.readFile(dbPath);
-    console.log(`[AmigaParser] Conf.DB size: ${buffer.length} bytes`);
+console.log(`[AmigaParser] Conf.DB size: ${buffer.length} bytes`);
 
     // TODO: Parse binary structure
     // For now, return placeholder with conference number
@@ -428,7 +429,7 @@ export class AmigaParserService {
         result.set(confIndex, entry);
       }
     } catch (error: any) {
-      console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
+console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
     }
 
     return result;
@@ -464,6 +465,84 @@ export class AmigaParserService {
   }
 
   /**
+   * Parse message bases for a conference
+   * AmiExpress stores messages in MsgBase directory with binary HeaderFile
+   * Format: HeaderFile contains message headers/bodies in proprietary binary format
+   */
+  async parseMessageBases(confPath: string, confNumber: number): Promise<AmigaMessageBase[]> {
+    const messageBases: AmigaMessageBase[] = [];
+
+    // Check for MsgBase directory (primary location)
+    const msgBasePath = path.join(confPath, 'MsgBase');
+    const messagesPath = path.join(confPath, 'Messages');
+
+    if (await this.fileExists(msgBasePath)) {
+      try {
+        // Read MsgBase directory contents
+        const entries = await fs.readdir(msgBasePath);
+
+        // Check for HeaderFile (contains message data in binary format)
+        const hasHeaderFile = entries.includes('HeaderFile');
+        const hasMailStats = entries.includes('MailStats');
+
+        if (hasHeaderFile) {
+console.log(`[AmigaParser] Found MsgBase/HeaderFile in Conf${confNumber}`);
+
+          // Read HeaderFile to get basic info
+          const headerPath = path.join(msgBasePath, 'HeaderFile');
+          const headerBuffer = await fs.readFile(headerPath);
+
+          // Amiga message format is complex binary structure
+          // Full parsing requires reverse engineering - for now, detect and warn
+console.warn(`[AmigaParser] MsgBase/HeaderFile parsing not fully implemented`);
+console.warn(`[AmigaParser] HeaderFile size: ${headerBuffer.length} bytes`);
+console.warn(`[AmigaParser] Messages from Amiga BBS will need manual import`);
+
+          // Create placeholder message base entry
+          messageBases.push({
+            name: `Conference ${confNumber} Messages`,
+            path: msgBasePath,
+            messages: [], // Binary parsing not implemented - requires reverse engineering
+          });
+        }
+
+        if (hasMailStats) {
+          // MailStats contains message statistics (small binary file)
+          const statsPath = path.join(msgBasePath, 'MailStats');
+          const statsBuffer = await fs.readFile(statsPath);
+console.log(`[AmigaParser] MailStats size: ${statsBuffer.length} bytes`);
+        }
+      } catch (error: any) {
+console.error(`[AmigaParser] Error parsing MsgBase for Conf${confNumber}:`, error.message);
+      }
+    } else if (await this.fileExists(messagesPath)) {
+      // Alternative: Messages directory (older format or different configuration)
+console.log(`[AmigaParser] Found Messages directory in Conf${confNumber}`);
+
+      try {
+        const entries = await fs.readdir(messagesPath);
+        const messageFiles = entries.filter(f => !f.startsWith('.'));
+
+        if (messageFiles.length > 0) {
+console.log(`[AmigaParser] Found ${messageFiles.length} files in Messages directory`);
+
+          messageBases.push({
+            name: `Conference ${confNumber} Messages`,
+            path: messagesPath,
+            messages: [], // Individual message file parsing not implemented
+          });
+        }
+      } catch (error: any) {
+console.error(`[AmigaParser] Error parsing Messages for Conf${confNumber}:`, error.message);
+      }
+    } else {
+console.log(`[AmigaParser] No message base found for Conf${confNumber}`);
+    }
+
+    return messageBases;
+  }
+
+  /**
    * Parse nodes (Node0-Node5 directories)
    */
   async parseNodes(bbsPath: string): Promise<AmigaNodeData[]> {
@@ -479,7 +558,7 @@ export class AmigaParserService {
         const node = await this.parseNode(nodePath, nodeNumber);
         nodes.push(node);
       } catch (error: any) {
-        console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
+console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
       }
     }
 
@@ -488,15 +567,234 @@ export class AmigaParserService {
 
   /**
    * Parse a single node directory
+   * Port from express.e:9493-9518 (callersLog), 9396-9406 (doorLog), 8968-8992 (errorLog)
    */
   async parseNode(nodePath: string, nodeNumber: number): Promise<AmigaNodeData> {
+    const callersLog = await this.parseCallersLog(nodePath);
+    const doorLog = await this.parseDoorLog(nodePath);
+    const errorLog = await this.parseErrorLog(nodePath);
+
     return {
       nodeNumber,
-      // TODO: Parse CallersLog, DoorLog, ErrorLog
-      callersLog: [],
-      doorLog: [],
-      errorLog: [],
+      callersLog,
+      doorLog,
+      errorLog,
     };
+  }
+
+  /**
+   * Parse CallersLog file
+   * Format from express.e:16023-16056 (displayUserToCallersLog)
+   * Example: "01-Jan-2026 (12:34:56) NEW [123] JohnDoe (CONNECT 28800) New York"
+   * Logoff:  "01-Jan-2026 (12:34:56) JohnDoe Off Normally"
+   */
+  private async parseCallersLog(nodePath: string): Promise<AmigaCallersLogEntry[]> {
+    const logPath = path.join(nodePath, 'CallersLog');
+    const entries: AmigaCallersLogEntry[] = [];
+
+    if (!(await this.fileExists(logPath))) {
+      return entries;
+    }
+
+    try {
+      const content = await fs.readFile(logPath, 'utf-8');
+      const lines = content.split('\n').filter(line => line.trim().length > 0);
+
+      let currentEntry: Partial<AmigaCallersLogEntry> | null = null;
+
+      for (const line of lines) {
+        // Skip divider lines and tab-indented detail lines
+        if (line.startsWith('---') || line.startsWith('\t')) {
+          continue;
+        }
+
+        // Parse login line: "Date (Time) [Slot] Username (ConnectString) Location"
+        // or logoff line: "Date (Time) Username Off [reason]"
+        const loginMatch = line.match(/^(\d{2}-\w{3}-\d{4})\s+\((\d{2}:\d{2}:\d{2})\)\s+(?:NEW\s+)?\[(\d+)\]\s+(\S+)\s+\(([^)]+)\)\s+(.*)$/);
+        const logoffMatch = line.match(/^(\d{2}-\w{3}-\d{4})\s+\((\d{2}:\d{2}:\d{2})\)\s+(\S+)\s+Off\s+(.*)$/);
+
+        if (loginMatch) {
+          // Save previous entry if exists
+          if (currentEntry && currentEntry.username) {
+            entries.push(this.finalizeCallersLogEntry(currentEntry));
+          }
+
+          // Start new entry
+          const [, date, time, slot, username, connectStr, location] = loginMatch;
+          const loginTime = this.parseAmigaDateTime(date, time);
+
+          currentEntry = {
+            username,
+            loginTime,
+            node: parseInt(slot, 10),
+            location: location.trim() || undefined,
+            baud: this.extractBaudRate(connectStr),
+            uploaded: 0,
+            downloaded: 0,
+            messagesRead: 0,
+            messagesPosted: 0,
+            duration: 0,
+          };
+        } else if (logoffMatch && currentEntry) {
+          // Complete current entry with logoff time
+          const [, date, time] = logoffMatch;
+          const logoffTime = this.parseAmigaDateTime(date, time);
+          currentEntry.logoffTime = logoffTime;
+
+          if (currentEntry.loginTime) {
+            currentEntry.duration = Math.floor((logoffTime.getTime() - currentEntry.loginTime.getTime()) / 60000);
+          }
+
+          entries.push(this.finalizeCallersLogEntry(currentEntry));
+          currentEntry = null;
+        }
+      }
+
+      // Save last entry if exists
+      if (currentEntry && currentEntry.username) {
+        entries.push(this.finalizeCallersLogEntry(currentEntry));
+      }
+
+      return entries;
+    } catch (error: any) {
+console.error(`[AmigaParser] Error parsing CallersLog:`, error.message);
+      return entries;
+    }
+  }
+
+  /**
+   * Parse DoorLog file
+   * Format from express.e:9396-9406
+   * Text log of door activity
+   */
+  private async parseDoorLog(nodePath: string): Promise<AmigaDoorLogEntry[]> {
+    const logPath = path.join(nodePath, 'DoorLog');
+    const entries: AmigaDoorLogEntry[] = [];
+
+    if (!(await this.fileExists(logPath))) {
+      return entries;
+    }
+
+    try {
+      const content = await fs.readFile(logPath, 'utf-8');
+      const lines = content.split('\n').filter(line => line.trim().length > 0);
+
+      for (const line of lines) {
+        // Skip divider lines
+        if (line.startsWith('---')) {
+          continue;
+        }
+
+        // Parse door log entry: "Date (Time) Username DoorName Duration"
+        const match = line.match(/^(\d{2}-\w{3}-\d{4})\s+\((\d{2}:\d{2}:\d{2})\)\s+(\S+)\s+(.+?)\s+(\d+)\s+min/);
+        if (match) {
+          const [, date, time, username, doorName, durationStr] = match;
+          const startTime = this.parseAmigaDateTime(date, time);
+
+          entries.push({
+            username,
+            doorName: doorName.trim(),
+            startTime,
+            duration: parseInt(durationStr, 10),
+            node: parseInt(nodePath.match(/Node(\d+)/)?.[1] || '0', 10),
+          });
+        }
+      }
+
+      return entries;
+    } catch (error: any) {
+console.error(`[AmigaParser] Error parsing DoorLog:`, error.message);
+      return entries;
+    }
+  }
+
+  /**
+   * Parse ErrorLog file
+   * Format from express.e:8968-8992
+   * Simple text log: "Date Time ErrorMessage"
+   */
+  private async parseErrorLog(nodePath: string): Promise<string[]> {
+    const logPath = path.join(nodePath, 'ErrorLog');
+    const errors: string[] = [];
+
+    if (!(await this.fileExists(logPath))) {
+      return errors;
+    }
+
+    try {
+      const content = await fs.readFile(logPath, 'utf-8');
+      const lines = content.split('\n').filter(line => line.trim().length > 0);
+
+      for (const line of lines) {
+        // Each line is a complete error entry
+        if (line.trim().length > 0) {
+          errors.push(line.trim());
+        }
+      }
+
+      return errors;
+    } catch (error: any) {
+console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
+      return errors;
+    }
+  }
+
+  /**
+   * Helper: Finalize a partial callers log entry
+   */
+  private finalizeCallersLogEntry(entry: Partial<AmigaCallersLogEntry>): AmigaCallersLogEntry {
+    return {
+      username: entry.username || 'Unknown',
+      loginTime: entry.loginTime || new Date(),
+      logoffTime: entry.logoffTime,
+      duration: entry.duration || 0,
+      uploaded: entry.uploaded || 0,
+      downloaded: entry.downloaded || 0,
+      messagesRead: entry.messagesRead || 0,
+      messagesPosted: entry.messagesPosted || 0,
+      node: entry.node || 0,
+      baud: entry.baud,
+      location: entry.location,
+    };
+  }
+
+  /**
+   * Helper: Parse Amiga date/time format
+   * Format: "01-Jan-2026" and "12:34:56"
+   */
+  private parseAmigaDateTime(dateStr: string, timeStr: string): Date {
+    try {
+      // Parse "01-Jan-2026" format
+      const months: Record<string, number> = {
+        Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+        Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+      };
+
+      const [day, monthStr, year] = dateStr.split('-');
+      const [hour, minute, second] = timeStr.split(':');
+
+      const month = months[monthStr] ?? 0;
+
+      return new Date(
+        parseInt(year, 10),
+        month,
+        parseInt(day, 10),
+        parseInt(hour, 10),
+        parseInt(minute, 10),
+        parseInt(second, 10)
+      );
+    } catch (error) {
+      return new Date();
+    }
+  }
+
+  /**
+   * Helper: Extract baud rate from connect string
+   * Example: "CONNECT 28800" -> 28800
+   */
+  private extractBaudRate(connectStr: string): number | undefined {
+    const match = connectStr.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : undefined;
   }
 
   /**
@@ -668,10 +966,10 @@ export class AmigaParserService {
     keysPath: string,
     miscPath: string
   ): Promise<any[]> {
-    console.log('[AmigaParser] Parsing binary user data files');
-    console.log(`[AmigaParser]   Data file: ${dataPath}`);
-    console.log(`[AmigaParser]   Keys file: ${keysPath}`);
-    console.log(`[AmigaParser]   Misc file: ${miscPath}`);
+console.log('[AmigaParser] Parsing binary user data files');
+console.log(`[AmigaParser]   Data file: ${dataPath}`);
+console.log(`[AmigaParser]   Keys file: ${keysPath}`);
+console.log(`[AmigaParser]   Misc file: ${miscPath}`);
 
     const users: any[] = [];
 
@@ -691,7 +989,7 @@ export class AmigaParserService {
       const numUsersKeys = Math.floor(keysBuffer.length / USERKEYS_STRUCT_SIZE);
       const numUsersMisc = Math.floor(miscBuffer.length / USERMISC_STRUCT_SIZE);
 
-      console.log(`[AmigaParser] User counts: data=${numUsersData}, keys=${numUsersKeys}, misc=${numUsersMisc}`);
+console.log(`[AmigaParser] User counts: data=${numUsersData}, keys=${numUsersKeys}, misc=${numUsersMisc}`);
 
       // Use minimum count (in case files are mismatched)
       const numUsers = Math.min(numUsersData, numUsersKeys, numUsersMisc);
@@ -721,10 +1019,10 @@ export class AmigaParserService {
         users.push(user);
       }
 
-      console.log(`[AmigaParser] Parsed ${users.length} users from binary files`);
+console.log(`[AmigaParser] Parsed ${users.length} users from binary files`);
       return users;
     } catch (error: any) {
-      console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
+console.error(`[AmigaParser] Error parsing user binary files:`, error.message);
       return [];
     }
   }
@@ -978,7 +1276,7 @@ export class AmigaParserService {
         const buffer = await fs.readFile(filePath);
         return buffer.toString('latin1');
       } catch (error: any) {
-        console.error(`[AmigaParser] Error reading ${filePath}:`, error.message);
+console.error(`[AmigaParser] Error reading ${filePath}:`, error.message);
         return '';
       }
     }

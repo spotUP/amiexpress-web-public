@@ -37,7 +37,7 @@ class SessionLogManager {
       output: [],
       maxLines: this.MAX_LINES_PER_SESSION
     });
-    console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${username || 'guest'})`);
+console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${username || 'guest'})`);
   }
 
   /**
@@ -103,7 +103,7 @@ class SessionLogManager {
       log.userId = userId;
       log.username = username;
       log.nodeId = nodeId;
-      console.log(`[SessionLogManager] Updated session metadata: ${sessionId} -> ${username}`);
+console.log(`[SessionLogManager] Updated session metadata: ${sessionId} -> ${username}`);
     }
   }
 
@@ -113,12 +113,12 @@ class SessionLogManager {
   endSession(sessionId: string): void {
     const log = this.logs.get(sessionId);
     if (log) {
-      console.log(`[SessionLogManager] Session ended: ${sessionId} (${log.username || 'guest'})`);
+console.log(`[SessionLogManager] Session ended: ${sessionId} (${log.username || 'guest'})`);
 
       // Keep log for retention period, then delete
       setTimeout(() => {
         this.logs.delete(sessionId);
-        console.log(`[SessionLogManager] Deleted old session log: ${sessionId}`);
+console.log(`[SessionLogManager] Deleted old session log: ${sessionId}`);
       }, this.LOG_RETENTION_MS);
     }
   }
@@ -200,7 +200,7 @@ class SessionLogManager {
    */
   clearAllLogs(): void {
     this.logs.clear();
-    console.log('[SessionLogManager] Cleared all session logs');
+console.log('[SessionLogManager] Cleared all session logs');
   }
 
   /**
@@ -254,7 +254,7 @@ class SessionLogManager {
     const content = log.output.join('');
     fs.writeFileSync(filePath, content, 'utf8');
 
-    console.log(`[SessionLogManager] Saved session log to: ${filePath}`);
+console.log(`[SessionLogManager] Saved session log to: ${filePath}`);
     return filePath;
   }
 }

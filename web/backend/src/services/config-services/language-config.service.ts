@@ -47,7 +47,7 @@ export class LanguageConfigService {
     const languagesDir = path.join(bbsRoot, 'Languages');
 
     if (!fs.existsSync(languagesDir)) {
-      console.warn('[LanguageConfigService] Languages/ directory not found');
+console.warn('[LanguageConfigService] Languages/ directory not found');
       return this.configRepo.getLanguages();
     }
 
@@ -83,10 +83,10 @@ export class LanguageConfigService {
         });
       }
 
-      console.log(`[LanguageConfigService] Loaded ${languages.length} languages`);
+console.log(`[LanguageConfigService] Loaded ${languages.length} languages`);
       return languages;
     } catch (error) {
-      console.error('[LanguageConfigService] Error reading Languages/ directory:', error);
+console.error('[LanguageConfigService] Error reading Languages/ directory:', error);
       return this.configRepo.getLanguages();
     }
   }
@@ -201,9 +201,9 @@ export class LanguageConfigService {
       const infoData = parser.write(toolTypes);
       fs.writeFileSync(infoPath, infoData);
 
-      console.log(`[LanguageConfigService] Wrote ${infoPath}`);
+console.log(`[LanguageConfigService] Wrote ${infoPath}`);
     } catch (error) {
-      console.error(`[LanguageConfigService] Failed to write ${infoPath}:`, error);
+console.error(`[LanguageConfigService] Failed to write ${infoPath}:`, error);
     }
   }
 
@@ -214,9 +214,9 @@ export class LanguageConfigService {
     if (fs.existsSync(infoPath)) {
       try {
         fs.unlinkSync(infoPath);
-        console.log(`[LanguageConfigService] Deleted ${infoPath}`);
+console.log(`[LanguageConfigService] Deleted ${infoPath}`);
       } catch (error) {
-        console.error(`[LanguageConfigService] Failed to delete ${infoPath}:`, error);
+console.error(`[LanguageConfigService] Failed to delete ${infoPath}:`, error);
       }
     }
   }

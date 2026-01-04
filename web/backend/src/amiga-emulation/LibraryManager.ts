@@ -185,7 +185,7 @@ export class LibraryManager {
       // romtool must be present to split modules
       const which = spawnSync("which", ["romtool"], { encoding: "utf-8" });
       if (which.status !== 0 || !which.stdout.trim()) {
-        console.warn("[LibraryManager] romtool not found; cannot extract ROM libraries");
+console.warn("[LibraryManager] romtool not found; cannot extract ROM libraries");
         return;
       }
 
@@ -201,7 +201,7 @@ export class LibraryManager {
           encoding: "utf-8",
         });
         if (split.status !== 0) {
-          console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
+console.warn("[LibraryManager] romtool split failed:", split.stderr || split.stdout);
           return;
         }
         fs.writeFileSync(stampPath, stamp);
@@ -213,7 +213,7 @@ export class LibraryManager {
           fs.mkdirSync(path.dirname(target), { recursive: true });
           if (amigafs.existsSync(target)) continue;
           fs.copyFileSync(src, target);
-          console.log(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${target}`);
+console.log(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${target}`);
         }
       };
 
@@ -286,14 +286,14 @@ export class LibraryManager {
         copyTo(src, romTargets.map((dir) => path.join(dir, entry)));
       });
     } catch (err) {
-      console.warn("[LibraryManager] Failed to extract ROM libraries", err);
+console.warn("[LibraryManager] Failed to extract ROM libraries", err);
     }
   }
 
   private async initializeExec(): Promise<void> {
     const projectRoot = this.resolveBbsRoot();
-    console.log(`[LibraryManager] BBS root resolved to ${projectRoot}`);
-    console.log("[LibraryManager] Loading ROM...");
+console.log(`[LibraryManager] BBS root resolved to ${projectRoot}`);
+console.log("[LibraryManager] Loading ROM...");
 
     const romSource = this.resolveRomSource();
     let romPath: string | null = null;
@@ -303,14 +303,14 @@ export class LibraryManager {
       romPath = romSource.path;
       const romData = fs.readFileSync(romPath);
       this.emulator.loadROM(new Uint8Array(romData));
-      console.log("[LibraryManager] Kickstart ROM loaded - provides ROM routines");
+console.log("[LibraryManager] Kickstart ROM loaded - provides ROM routines");
     } else {
-      console.warn("[LibraryManager] Kickstart ROM not found; using AROS ROM fallback.");
+console.warn("[LibraryManager] Kickstart ROM not found; using AROS ROM fallback.");
       const arosRom = fs.readFileSync(romSource.romPath);
       const arosExt = fs.readFileSync(romSource.extPath);
       const combined = Buffer.concat([arosRom, arosExt]);
       this.emulator.loadROM(new Uint8Array(combined));
-      console.log("[LibraryManager] AROS ROM loaded - provides ROM routines");
+console.log("[LibraryManager] AROS ROM loaded - provides ROM routines");
 
       // Best-effort: allow romtool to try extracting libraries from AROS ROM.
       const combinedPath = path.join(projectRoot, "tmp", "aros-combined.rom");
@@ -321,11 +321,11 @@ export class LibraryManager {
         }
         romPath = combinedPath;
       } catch (err) {
-        console.warn("[LibraryManager] Failed to persist combined AROS ROM for extraction", err);
+console.warn("[LibraryManager] Failed to persist combined AROS ROM for extraction", err);
       }
     }
 
-    console.log("[LibraryManager] Creating ExecBase structure...");
+console.log("[LibraryManager] Creating ExecBase structure...");
 
     this.execLibrary = new ExecLibrary(this.emulator);
     this.execLibrary.initialize();
@@ -337,7 +337,7 @@ export class LibraryManager {
     libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
     libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);
-    console.log(
+console.log(
       `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
     );
 
@@ -349,7 +349,7 @@ export class LibraryManager {
     }
 
     if (!this.execLibrary.loadRealAEDoorLibrary()) {
-      console.warn("[LibraryManager] Real AEDoor.library failed to load");
+console.warn("[LibraryManager] Real AEDoor.library failed to load");
     }
 
     // Pre-register any libraries present on disk so getLibraryBase() can
@@ -361,13 +361,13 @@ export class LibraryManager {
     const doorType = (this.config.doorType || "SIM").toUpperCase();
     const nodeId = this.config.bbsSession?.nodeId || 0;
 
-    console.log(`[LibraryManager] Door type: ${doorType}`);
+console.log(`[LibraryManager] Door type: ${doorType}`);
 
     // CRITICAL: isSIMType must be calculated using the final normalized doorType
     const isSIMType = doorType === "SIM" || doorType === "SUP" || doorType === "TIM" || doorType === "IIM";
     const basePortName = isSIMType ? "DoorControl" : "AEServer";
 
-    console.log(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
+console.log(`[LibraryManager] Creating ${basePortName} for BBS data access...`);
 
     // Amiga doors call FindPort with 1-based node numbers.
     // Our session nodeId may be 0-based; normalize to 1-based for public port naming.
@@ -376,13 +376,13 @@ export class LibraryManager {
     const portName = basePortName === "AEServer" ? `${basePortName}.${amigaNodeId}` : `${basePortName}${amigaNodeId}`;
     const mainPortAddr = this.execLibrary.createPublicPort(portName);
     this.execLibrary.setDoorPortAddress(mainPortAddr);
-    console.log(
+console.log(
       `[LibraryManager] Created ${portName} at 0x${mainPortAddr.toString(16)}`
     );
 
     const simplePortName = basePortName === "AEServer" ? `${basePortName}.0` : basePortName;
     const simplePortAddr = this.execLibrary.createPublicPort(simplePortName);
-    console.log(
+console.log(
       `[LibraryManager] Created ${simplePortName} (simple) at 0x${simplePortAddr.toString(
         16
       )}`
@@ -391,7 +391,7 @@ export class LibraryManager {
     if (nodeId !== amigaNodeId) {
       const zeroBasedName = basePortName === "AEServer" ? `${basePortName}.${nodeId}` : `${basePortName}${nodeId}`;
       const zeroBasedAddr = this.execLibrary.createPublicPort(zeroBasedName);
-      console.log(
+console.log(
         `[LibraryManager] Created ${zeroBasedName} at 0x${zeroBasedAddr.toString(
           16
         )}`
@@ -406,12 +406,12 @@ export class LibraryManager {
     // RTW calls FindPort("AEDoorPort1") and exits with code 30 if found (assumes another instance running)
     // Doors create their own communication ports during initialization
     const altBasePortName = isSIMType ? "AEServer" : "AEDoorPort";
-    console.log(`[LibraryManager] Skipping alternate port pre-creation (${altBasePortName}) - doors create their own`);
+console.log(`[LibraryManager] Skipping alternate port pre-creation (${altBasePortName}) - doors create their own`);
 
     // REMOVED: this.execLibrary.createPublicPort(`${altBasePortName}${amigaNodeId}`);
     // REMOVED: this.execLibrary.createPublicPort(altBasePortName);
     // REMOVED: if (nodeId !== amigaNodeId) { this.execLibrary.createPublicPort(`${altBasePortName}${nodeId}`); }
-    console.log(`[LibraryManager] XIM doors will create their own ports when they initialize`);
+console.log(`[LibraryManager] XIM doors will create their own ports when they initialize`);
 
     // Create AEServer ports for multinode doors (used for node status detection)
     // Doors call FindPort("AEServer.%d") to detect active nodes on the BBS
@@ -419,7 +419,7 @@ export class LibraryManager {
     // Use lightweight ports to avoid exhausting signal bits (only 32 available)
     // CRITICAL: Skip the current node's port - it's already been created as the main port above
     const maxAEServerNodes = 255;
-    console.log(`[LibraryManager] Creating lightweight AEServer ports for multinode support (0-254, skipping node ${nodeId})...`);
+console.log(`[LibraryManager] Creating lightweight AEServer ports for multinode support (0-254, skipping node ${nodeId})...`);
     for (let i = 0; i < maxAEServerNodes; i++) {
       // Skip current node - already created as main port
       if (i === nodeId || i === amigaNodeId) {
@@ -427,17 +427,17 @@ export class LibraryManager {
       }
       this.execLibrary.createLightweightPort(`AEServer.${i}`);
     }
-    console.log(`[LibraryManager] AEServer.0-254 lightweight ports created (except node ${nodeId} - already exists as main port)`);
+console.log(`[LibraryManager] AEServer.0-254 lightweight ports created (except node ${nodeId} - already exists as main port)`);
 
     // Create AREXX-format ports (AEDoorRP.XXX) for doors like RTW that use this naming convention
     // RTW and other doors look for "AEDoorRP.000", "AEDoorRP.001" etc. (3-digit zero-padded node IDs)
     // These are AREXX Rexx Port format names used for message passing
-    console.log(`[LibraryManager] Creating AREXX-format AEDoorRP ports for XIM door compatibility...`);
+console.log(`[LibraryManager] Creating AREXX-format AEDoorRP ports for XIM door compatibility...`);
     for (let i = 0; i < 10; i++) {
       const rexxPortName = `AEDoorRP.${i.toString().padStart(3, '0')}`;
       this.execLibrary.createLightweightPort(rexxPortName);
     }
-    console.log(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
+console.log(`[LibraryManager] AEDoorRP.000-009 AREXX ports created`);
 
     this.doorPortAddress = mainPortAddr;
     this.aePortAddress = mainPortAddr;
@@ -465,7 +465,7 @@ export class LibraryManager {
     this.useXimProtocol = useXimProtocol;
 
     // Create icon.library BEFORE XIMProtocol so it can pre-load command .info files
-    console.log("[LibraryManager] Creating icon.library...");
+console.log("[LibraryManager] Creating icon.library...");
     const bbsRoot = projectRoot;
     this.ensureAnswerFiles(bbsRoot);
     this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
@@ -479,7 +479,7 @@ export class LibraryManager {
     }
 
     if (useXimProtocol) {
-      console.log("[LibraryManager] Creating XIM Protocol handler...");
+console.log("[LibraryManager] Creating XIM Protocol handler...");
       this.ximProtocol = new XIMProtocol(
         this.emulator,
         this.execLibrary,
@@ -489,12 +489,12 @@ export class LibraryManager {
         this.iconLibrary  // Pass iconLibrary for command .info file loading
       );
     } else {
-      console.log(
+console.log(
         `[LibraryManager] Skipping XIM protocol for ${doorType} door`
       );
     }
 
-    console.log("[LibraryManager] Creating DOS.library...");
+console.log("[LibraryManager] Creating DOS.library...");
 
     this.dosLibrary = new DosLibrary(this.emulator, projectRoot);
     this.dosLibrary.setBasePaths(projectRoot);
@@ -508,7 +508,7 @@ export class LibraryManager {
     const doorConfId = this.config.bbsSession?.currentConference || 1;
     this.dosLibrary.initializeEnvironmentVariables(doorNodeId, doorConfId, doorUsername, doorSecLevel);
 
-    console.log(
+console.log(
       `[LibraryManager] Enabling FileManager with base directory: ${projectRoot}`
     );
     this.dosLibrary.enableNewFileSystem(projectRoot, this.pathManager || undefined);
@@ -539,7 +539,7 @@ export class LibraryManager {
       }
       this.socket.emit("ansi-output", normalizeAnsiNewlines(text));
     });
-    console.log("[LibraryManager] DOS.library output callback configured");
+console.log("[LibraryManager] DOS.library output callback configured");
 
     // Expose raw input hook to the session so socket-handlers can feed transfer-raw data
     const bbsSession: any = this.config.bbsSession || {};
@@ -547,7 +547,7 @@ export class LibraryManager {
       this.dosLibrary?.queueInput(data);
     };
 
-    console.log("[LibraryManager] Creating AEDoor.library...");
+console.log("[LibraryManager] Creating AEDoor.library...");
 
     this.aedoorLibrary = new AEDoorLibrary(
       this.socket,
@@ -556,11 +556,11 @@ export class LibraryManager {
       this.config.bbsSession || {}
     );
 
-    console.log("[LibraryManager] Creating utility.library...");
+console.log("[LibraryManager] Creating utility.library...");
 
     this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket);
 
-    console.log("[LibraryManager] Creating math libraries...");
+console.log("[LibraryManager] Creating math libraries...");
 
     this.mathFFPLibrary = new MathFFPLibrary(this.emulator);
     this.mathTransLibrary = new MathTransLibrary(this.emulator);
@@ -569,10 +569,10 @@ export class LibraryManager {
     this.mathIEEESingBasLibrary = new MathIEEESingBasLibrary(this.emulator);
     this.mathIEEESingTransLibrary = new MathIEEESingTransLibrary(this.emulator);
 
-    console.log("[LibraryManager] Creating intuition.library...");
+console.log("[LibraryManager] Creating intuition.library...");
     this.intuitionLibrary = new IntuitionLibrary(this.emulator);
 
-    console.log("[LibraryManager] Installing library call traps...");
+console.log("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
 
@@ -600,65 +600,65 @@ export class LibraryManager {
 
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
-    console.log("[LibraryManager] Pre-opening utility.library and installing vectors...");
+console.log("[LibraryManager] Pre-opening utility.library and installing vectors...");
     this.execLibrary.openLibraryHybrid("utility.library", 37, false);
     this.libraryTraps.installUtilityVectors();
 
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === "dos.library") {
-        console.log(
+console.log(
           "[LibraryManager] dos.library opened, installing vectors..."
         );
         this.libraryTraps!.installDOSVectors();
       }
       if (name.toLowerCase() === "aedoor.library") {
-        console.log(
+console.log(
           "[LibraryManager] AEDoor.library opened, installing vectors..."
         );
         this.libraryTraps!.installAEDoorVectors();
       }
       if (name.toLowerCase() === "icon.library") {
-        console.log(
+console.log(
           "[LibraryManager] icon.library opened, installing vectors..."
         );
         this.libraryTraps!.installIconVectors();
       }
       if (name.toLowerCase() === "utility.library") {
-        console.log(
+console.log(
           "[LibraryManager] utility.library opened, installing vectors..."
         );
         this.libraryTraps!.installUtilityVectors();
       }
       if (name.toLowerCase() === "mathffp.library") {
-        console.log("[LibraryManager] mathffp.library opened, installing vectors...");
+console.log("[LibraryManager] mathffp.library opened, installing vectors...");
         this.libraryTraps!.installMathFFPVectors();
       }
       if (name.toLowerCase() === "mathtrans.library") {
-        console.log("[LibraryManager] mathtrans.library opened, installing vectors...");
+console.log("[LibraryManager] mathtrans.library opened, installing vectors...");
         this.libraryTraps!.installMathTransVectors();
       }
       if (name.toLowerCase() === "mathieeedoubbas.library") {
-        console.log("[LibraryManager] mathieeedoubbas.library opened, installing vectors...");
+console.log("[LibraryManager] mathieeedoubbas.library opened, installing vectors...");
         this.libraryTraps!.installMathIEEEDoubBasVectors();
       }
       if (name.toLowerCase() === "mathieeedoubtrans.library") {
-        console.log("[LibraryManager] mathieeedoubtrans.library opened, installing vectors...");
+console.log("[LibraryManager] mathieeedoubtrans.library opened, installing vectors...");
         this.libraryTraps!.installMathIEEEDoubTransVectors();
       }
       if (name.toLowerCase() === "mathieeesingbas.library") {
-        console.log("[LibraryManager] mathieeesingbas.library opened, installing vectors...");
+console.log("[LibraryManager] mathieeesingbas.library opened, installing vectors...");
         this.libraryTraps!.installMathIEEESingBasVectors();
       }
       if (name.toLowerCase() === "mathieeesingtrans.library") {
-        console.log("[LibraryManager] mathieeesingtrans.library opened, installing vectors...");
+console.log("[LibraryManager] mathieeesingtrans.library opened, installing vectors...");
         this.libraryTraps!.installMathIEEESingTransVectors();
       }
       if (name.toLowerCase() === "intuition.library") {
-        console.log("[LibraryManager] intuition.library opened, installing vectors...");
+console.log("[LibraryManager] intuition.library opened, installing vectors...");
         this.libraryTraps!.installIntuitionVectors();
       }
       if (name.toLowerCase() === "graphics.library") {
-        console.log(
+console.log(
           `[LibraryManager] ${name} opened, installing stub vectors from LVOs.i...`
         );
         this.libraryTraps!.installStubVectorsForLibrary(name, addr);
@@ -670,7 +670,7 @@ export class LibraryManager {
     this.execLibrary.setDoorMessageCallback(
       (portAddr: number, msgAddr: number) => {
         // Will be handled by DoorMessageHandler in Phase 5
-        console.log(
+console.log(
           "[LibraryManager] Door message callback - to be handled by message handler"
         );
       }
@@ -680,26 +680,26 @@ export class LibraryManager {
     const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, true);
     if (dosHybrid.success) {
       this.libraryTraps!.installDOSVectors();
-      console.log(
+console.log(
         `[LibraryManager] dos.library pre-opened (${dosHybrid.isNative ? "native" : "stub"}) at 0x${dosHybrid.address.toString(
           16
         )}`
       );
     } else {
-      console.warn("[LibraryManager] Failed to pre-open dos.library");
+console.warn("[LibraryManager] Failed to pre-open dos.library");
     }
 
     // Pre-open AEDoor.library so vectors are installed even before doors call OpenLibrary.
     const aedHybrid = this.execLibrary.openLibraryHybrid("AEDoor.library", 2, false);
     if (aedHybrid.success) {
       this.libraryTraps!.installAEDoorVectors();
-      console.log(
+console.log(
         `[LibraryManager] AEDoor.library pre-opened (${aedHybrid.isNative ? "native" : "stub"}) at 0x${aedHybrid.address.toString(
           16
         )}`
       );
     } else {
-      console.warn("[LibraryManager] Failed to pre-open AEDoor.library");
+console.warn("[LibraryManager] Failed to pre-open AEDoor.library");
     }
 
     // CRITICAL: Create AEDoorPort BEFORE door starts (XIM protocol requirement)
@@ -712,7 +712,7 @@ export class LibraryManager {
     // 2. Sets BBS task as owner (not door task) to prevent self-signaling
     const aedoorPortName = `AEDoorPort${amigaNodeId}`;
     const aedoorPortAddr = this.execLibrary.createAEDoorPort(aedoorPortName);
-    console.log(
+console.log(
       `[LibraryManager] Created ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
     );
 
@@ -725,7 +725,7 @@ export class LibraryManager {
     // XIM/AIM doors check 0x790 and misinterpret our trap address as a frame pointer,
     // leading to register corruption (A5) and crashes.
     if (currentIsSIM) {
-      console.log("[LibraryManager] Setting up BBS API dispatcher for SIM door...");
+console.log("[LibraryManager] Setting up BBS API dispatcher for SIM door...");
 
       // Initialize low-memory region (parameter blocks at 0x794, 0x79c)
       BbsApiLibrary.setupLowMemory(this.emulator);
@@ -740,7 +740,7 @@ export class LibraryManager {
       // Allocate memory for trap instruction (ILLEGAL = 0x4AFC)
       const trapAddr = this.execLibrary.allocMem(4, 0); // 4 bytes, any memory
       if (trapAddr === 0) {
-        console.error("[LibraryManager] Failed to allocate memory for BBS API trap!");
+console.error("[LibraryManager] Failed to allocate memory for BBS API trap!");
       } else {
         // Write ILLEGAL instruction at trap address
         this.emulator.writeMemory16(trapAddr, 0x4AFC);
@@ -760,28 +760,28 @@ export class LibraryManager {
         // Write trap address to 0x790 so WHO can find it
         this.emulator.writeMemory32(0x790, trapAddr);
 
-        console.log(
+console.log(
           `[LibraryManager] BBS API dispatcher installed at 0x${trapAddr.toString(16)}`
         );
-        console.log(
+console.log(
           `[LibraryManager] Function pointer written to 0x790 → 0x${trapAddr.toString(16)}`
         );
 
         // Verify the value was written correctly
         const verifyValue = this.emulator.readMemory32(0x790);
-        console.log(
+console.log(
           `[LibraryManager] Verification: 0x790 contains 0x${verifyValue.toString(16)}`
         );
 
         // Also verify the ILLEGAL instruction is at the trap address
         const trapInstruction = this.emulator.readMemory16(trapAddr);
-        console.log(
+console.log(
           `[LibraryManager] Verification: ILLEGAL instruction at 0x${trapAddr.toString(16)} = 0x${trapInstruction.toString(16)}`
         );
       }
     }
 
-    console.log("[LibraryManager] Library system ready");
+console.log("[LibraryManager] Library system ready");
   }
 
   private ensureAnswerFiles(bbsRoot: string): void {
@@ -805,7 +805,7 @@ export class LibraryManager {
       // Do NOT create it as a directory - doors like GetAnswer expect it to be a file
       // The file is created by new-user.handler.ts when users complete questionnaires
     } catch (error) {
-      console.warn("[LibraryManager] Failed to ensure node directories", error);
+console.warn("[LibraryManager] Failed to ensure node directories", error);
     }
   }
 
@@ -833,7 +833,7 @@ export class LibraryManager {
         this.execLibrary.registerLibraryPlaceholder(name);
       }
     } catch (err) {
-      console.warn(
+console.warn(
         `[LibraryManager] Failed to pre-register libraries from ${dir}:`,
         err
       );

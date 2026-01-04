@@ -77,8 +77,8 @@ export interface CommandDefinition {
 /**
  * Parse Amiga .info file tooltypes
  *
- * Uses `strings` command to extract tooltypes from binary .info file
- * Format: KEY=VALUE pairs (one per line)
+ * Native binary parser - no longer relies on external 'strings' command.
+ * Scans for the tooltypes section in the binary .info file and extracts strings.
  *
  * @param session - Optional BBS session for sysop debug messages
  * @param socket - Optional socket for sysop debug messages
@@ -88,67 +88,65 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
 
   try {
     // Check if file exists
-    if (!amigafs.existsSync(filePath)) {
-      SysopDebugUtil.debugFileError(socket, session, 'read', filePath, new Error('File does not exist'), DebugSeverity.WARNING);
-      console.error(`[parseInfoFile] File does not exist: ${filePath}`);
+    if (!fs.existsSync(filePath)) {
       return tooltypes;
     }
 
-    console.log(`[parseInfoFile] Parsing: ${filePath}`);
+    const buffer = fs.readFileSync(filePath);
+    if (buffer.length < 40) return tooltypes; // Too small to be a valid .info file
 
-    // Use strings command to extract tooltypes from binary .info file
-    // This maintains Amiga compatibility
-    try {
-      const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
-      const lines = output.split('\n');
-      console.log(`[parseInfoFile] Found ${lines.length} lines from strings command`);
+    // Amiga .info files are binary. The tooltypes section starts after the 
+    // DiskObject structure. We look for printable strings that look like KEY=VALUE
+    // but a more robust way is to just extract all printable ASCII sequences.
+    const extractedStrings: string[] = [];
+    let currentString = '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-
-        if (!trimmed) {
-          continue;
+    for (let i = 0; i < buffer.length; i++) {
+      const charCode = buffer[i];
+      // Printable ASCII range (including space)
+      if (charCode >= 32 && charCode <= 126) {
+        currentString += String.fromCharCode(charCode);
+      } else {
+        if (currentString.length >= 2) {
+          extractedStrings.push(currentString);
         }
+        currentString = '';
+      }
+    }
+    if (currentString.length >= 2) extractedStrings.push(currentString);
 
-        // Commented-out tooltypes are wrapped in parentheses or prefixed with '!'
-        if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
-          continue;
-        }
+    for (const line of extractedStrings) {
+      const trimmed = line.trim();
 
-        // Parse KEY=VALUE format or just KEY (flag)
-        // Remove leading '+', '#', '%', or '\'' if present
-        let cleanLine = trimmed;
-        if (cleanLine.startsWith('+') || cleanLine.startsWith('#') || cleanLine.startsWith('%') || cleanLine.startsWith("'")) {
-          cleanLine = cleanLine.substring(1);
-        }
-
-        const eqIdx = cleanLine.indexOf('=');
-        if (eqIdx !== -1) {
-          const key = cleanLine.substring(0, eqIdx).toUpperCase().trim();
-          const value = cleanLine.substring(eqIdx + 1).trim();
-          if (key) {
-            console.log(`[parseInfoFile]   Tooltype: ${key}=${value}`);
-            tooltypes.set(key, value);
-          }
-        } else {
-          // Flag mode: just the key
-          const key = cleanLine.toUpperCase().trim();
-          if (key && /^[A-Z0-9_]{2,64}$/.test(key)) {
-            console.log(`[parseInfoFile]   Tooltype (Flag): ${key}`);
-            tooltypes.set(key, 'YES'); // Standard Amiga practice for flags
-          }
-        }
+      // Commented-out tooltypes
+      if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
+        continue;
       }
 
-      console.log(`[parseInfoFile] Extracted ${tooltypes.size} tooltypes`);
-    } catch (cmdError) {
-      SysopDebugUtil.debug(socket, session, 'Command Parser', `strings command failed for ${filePath}`, { error: (cmdError as Error).message }, DebugSeverity.CRITICAL);
-      console.error(`[parseInfoFile] strings command failed:`, cmdError);
-      throw cmdError;
+      // Remove leading junk commonly found in binary buffers before strings
+      let cleanLine = trimmed.replace(/^[^a-zA-Z0-9+(%#']+/g, '');
+      if (cleanLine.startsWith('+') || cleanLine.startsWith('#') || cleanLine.startsWith('%') || cleanLine.startsWith("'")) {
+        cleanLine = cleanLine.substring(1);
+      }
+
+      const eqIdx = cleanLine.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = cleanLine.substring(0, eqIdx).toUpperCase().trim();
+        const value = cleanLine.substring(eqIdx + 1).trim();
+        // Validation: Amiga tooltype keys are usually alphanumeric + underscore, 2-32 chars
+        if (key && /^[A-Z0-9_]{2,32}$/.test(key)) {
+          tooltypes.set(key, value);
+        }
+      } else {
+        // Flag mode: just the key
+        const key = cleanLine.toUpperCase().trim();
+        if (key && /^[A-Z0-9_]{2,32}$/.test(key)) {
+          tooltypes.set(key, 'YES');
+        }
+      }
     }
   } catch (error) {
-    SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.CRITICAL);
-    console.error(`[parseInfoFile] Error parsing .info file ${filePath}:`, error);
+    SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.WARNING);
   }
 
   return tooltypes;
@@ -236,19 +234,15 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
     }
   } catch (error) {
     SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.CRITICAL);
-    console.error(`Error parsing .CMD file ${filePath}:`, error);
+console.error(`Error parsing .CMD file ${filePath}:`, error);
   }
 
   return null;
 }
 
 function getConferenceDirNames(confNumber: number): string[] {
-  const names = [`Conf${confNumber}`];
-  const padded = `Conf${String(confNumber).padStart(2, '0')}`;
-  if (!names.includes(padded)) {
-    names.push(padded);
-  }
-  return names;
+  // reference-board data uses unpadded ConfX; avoid padded variants to prevent Conf01 creation
+  return [`Conf${confNumber}`];
 }
 
 /**
@@ -328,7 +322,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     const factor = parseInt(overclock, 10);
     if (!isNaN(factor)) {
       cmd.overclockFactor = factor;
-      console.log(`[loadCommandFromInfo] OVERCLOCK=${factor} for ${cmd.name || cmd.location}`);
+console.log(`[loadCommandFromInfo] OVERCLOCK=${factor} for ${cmd.name || cmd.location}`);
     }
   }
 
@@ -341,7 +335,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     const lines = parseInt(pagination, 10);
     if (!isNaN(lines)) {
       cmd.pagination = lines;
-      console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.location}`);
+console.log(`[loadCommandFromInfo] PAGINATION=${lines} for ${cmd.name || cmd.location}`);
     }
   }
 
@@ -413,12 +407,7 @@ export function scanCommandDirectory(
   if (commandType === CommandType.BBSCMD) {
     if (conferenceId) {
       for (const confName of getConferenceDirNames(conferenceId)) {
-        const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'BBSCmd');
-        const rootPath = path.join(baseDir, confName, 'Commands', 'BBSCmd');
-        searchPaths.push(rootPath);
-        if (amigafs.existsSync(legacyPath)) {
-          searchPaths.push(legacyPath);
-        }
+        searchPaths.push(path.join(baseDir, confName, 'Commands', 'BBSCmd'));
       }
     }
     if (nodeId) {
@@ -428,12 +417,7 @@ export function scanCommandDirectory(
   } else if (commandType === CommandType.SYSCMD) {
     if (conferenceId) {
       for (const confName of getConferenceDirNames(conferenceId)) {
-        const legacyPath = path.join(baseDir, 'BBS', confName, 'Commands', 'SysCmd');
-        const rootPath = path.join(baseDir, confName, 'Commands', 'SysCmd');
-        searchPaths.push(rootPath);
-        if (amigafs.existsSync(legacyPath)) {
-          searchPaths.push(legacyPath);
-        }
+        searchPaths.push(path.join(baseDir, confName, 'Commands', 'SysCmd'));
       }
     }
     if (nodeId) {
@@ -451,28 +435,17 @@ export function scanCommandDirectory(
     }
 
     const files = amigafs.readdirSync(dirPath);
-    console.log(`    Found ${files.length} file(s): ${files.join(', ')}`);
     for (const file of files) {
       if (file.endsWith('.info') || file.endsWith('.Info')) {
         const fullPath = path.join(dirPath, file);
-        console.log(`    Parsing .info file: ${fullPath}`);
         const cmd = loadCommandFromInfo(fullPath);
 
         if (cmd) {
-          console.log(`      Loaded command: ${cmd.name} → ${cmd.location}`);
-
           const existing = commands.get(cmd.name);
 
           if (!existing || cmd.type) {
-            if (existing) {
-              console.log(`      Overriding existing command '${cmd.name}' with new door definition.`);
-            }
             commands.set(cmd.name, cmd);
-          } else {
-            console.log(`      Command ${cmd.name} already loaded (skipping due to priority)`);
           }
-        } else {
-          console.log(`      Failed to parse .info file or missing BBSCMD/SYSCMD tooltype`);
         }
       }
     }
