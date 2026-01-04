@@ -25,7 +25,7 @@ import type { BBSSession } from '../../index';
 let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
 let _messages: any[] = [];
 let _confScreenDir: string;
-let _findSecurityScreen: (basePath: string, secLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean) => string | null;
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
 let _searchFileDescriptions: (searchPattern: string, conferenceId: number) => Promise<any[]>;
 
@@ -128,7 +128,7 @@ export function handleViewFileCommand(socket: any, session: BBSSession, params: 
     return;
   }
 
-  console.log('[ENV] Viewing');
+console.log('[ENV] Viewing');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('View Text File'));
@@ -222,7 +222,7 @@ export async function handleZippySearchCommand(socket: any, session: BBSSession,
     return;
   }
 
-  console.log('[ENV] Files');
+console.log('[ENV] Files');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Zippy Text Search'));
@@ -278,7 +278,7 @@ export async function handleZippySearchCommand(socket: any, session: BBSSession,
         });
       }
     } catch (error) {
-      console.error('[Z Command] Database error:', error);
+console.error('[Z Command] Database error:', error);
       socket.emit('ansi-output', AnsiUtil.errorLine('An error occurred during search'));
       socket.emit('ansi-output', '\r\n');
     }
@@ -363,7 +363,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     return;
   }
 
-  console.log('[ENV] Zoom');
+console.log('[ENV] Zoom');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Zoo Mail (QWK Download)'));
@@ -394,10 +394,20 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     const { QWKManager } = await import('../../services/qwk.service');
     const qwkManager = new QWKManager();
 
-    // Generate QWK packet for all conferences user has access to
-    // express.e:26227-26238 - uses user's zoomType to determine format
-    const userConferences = [session.currentConf]; // For now, just current conference
-    // TODO: Get list of all conferences user has flagged for ZOOM (CF command)
+    // Generate QWK packet for all conferences user has flagged for ZOOM
+    // express.e:26227-26238, 26552 - uses user's zoomType and checks ZOOM_SCAN_MASK
+    const userConferences = await getZoomFlaggedConferences(session.user.id);
+
+    if (userConferences.length === 0) {
+      socket.emit('ansi-output', AnsiUtil.colorize('No conferences flagged for ZOOM.', 'yellow'));
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', 'Use CF command to flag conferences for QWK download.\r\n');
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
 
     socket.emit('ansi-output', AnsiUtil.colorize('Generating QWK packet...', 'cyan'));
     socket.emit('ansi-output', '\r\n');
@@ -423,7 +433,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
   } catch (error) {
-    console.error('[ZOOM] QWK generation error:', error);
+console.error('[ZOOM] QWK generation error:', error);
     socket.emit('ansi-output', AnsiUtil.errorLine('Error generating QWK packet'));
     socket.emit('ansi-output', (error as Error).message + '\r\n');
     socket.emit('ansi-output', '\r\n');
@@ -468,7 +478,7 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
   // Try to find help file - keeps removing last character until found
   while (searchTerm.length > 0) {
     const helpBasePath = path.join('help', searchTerm);
-    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
+    foundFile = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
     if (foundFile) {
       break;
@@ -497,4 +507,43 @@ export function handleHelpFilesCommand(socket: any, session: BBSSession, params:
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+}
+
+// === UTILITY FUNCTIONS ===
+
+/**
+ * Get list of conferences flagged with ZOOM_SCAN_MASK for a user
+ * express.e:26552 - checks cb.handle[0] AND ZOOM_SCAN_MASK
+ */
+async function getZoomFlaggedConferences(userId: string): Promise<number[]> {
+  const { db } = require('../database');
+  const ZOOM_SCAN_MASK = 2; // Bit 1 - from express.e axconsts.e:47
+
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT conference_id
+       FROM conf_base
+       WHERE user_id = $1 AND (scan_flags & $2) != 0
+       ORDER BY conference_id`,
+      [userId, ZOOM_SCAN_MASK]
+    );
+
+    return result.rows.map((row: any) => row.conference_id);
+  } catch (error) {
+console.error('[ZOOM] Error getting flagged conferences:', error);
+    // Fallback: return all conferences user has access to
+    try {
+      const confResult = await db.query(
+        `SELECT DISTINCT conference_id
+         FROM conf_base
+         WHERE user_id = $1
+         ORDER BY conference_id`,
+        [userId]
+      );
+      return confResult.rows.map((row: any) => row.conference_id);
+    } catch (fallbackError) {
+console.error('[ZOOM] Fallback query failed:', fallbackError);
+      return [];
+    }
+  }
 }

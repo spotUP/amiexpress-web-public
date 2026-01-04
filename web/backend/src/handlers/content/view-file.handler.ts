@@ -42,7 +42,7 @@ export class ViewFileHandler {
     }
 
     // setEnvStat(ENV_VIEWING) - express.e:25678
-    console.log('[ENV] Viewing');
+console.log('[ENV] Viewing');
 
     // RIP mode handling (express.e:25679-25681)
     // [1! = Enter RIP graphics/pixel mode
@@ -164,7 +164,7 @@ export class ViewFileHandler {
     if (this.isRestrictedFile(fileInfo.fullPath)) {
       socket.emit('ansi-output', '\r\n\x1b[31mAttempt to read RESTRICTED file denied\x1b[0m\r\n');
       socket.emit('ansi-output', 'Updating Callerslog\r\n');
-      console.log(`[SECURITY] User ${session.user?.username} attempted to read restricted file: ${filename}`);
+console.log(`[SECURITY] User ${session.user?.username} attempted to read restricted file: ${filename}`);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -214,7 +214,7 @@ export class ViewFileHandler {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
 
     } catch (error) {
-      console.error('[VIEW FILE] Error reading file:', error);
+console.error('[VIEW FILE] Error reading file:', error);
       socket.emit('ansi-output', '\r\n\x1b[31mError reading file.\x1b[0m\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
     }
@@ -345,7 +345,7 @@ export class ViewFileHandler {
 
       return false;
     } catch (error) {
-      console.error('[VIEW FILE] Error checking binary:', error);
+console.error('[VIEW FILE] Error checking binary:', error);
       return true; // Assume binary if error
     }
   }

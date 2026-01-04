@@ -81,7 +81,7 @@ export class NodeStatusManager {
    * @param baseAddress - Base address for semaphore structure (default: 0xB0000)
    */
   initializeInEmulator(emulator: MoiraEmulator, execLibrary: ExecLibrary, baseAddress: number = 0xB0000): void {
-    console.log('[NodeStatusManager] Initializing multiPort semaphore structure...');
+console.log('[NodeStatusManager] Initializing multiPort semaphore structure...');
 
     this.multiPortAddress = baseAddress;
 
@@ -124,14 +124,14 @@ export class NodeStatusManager {
     }
 
     // Register all AEServer semaphores with ExecLibrary
-    console.log('[NodeStatusManager] Registering AEServer semaphores...');
+console.log('[NodeStatusManager] Registering AEServer semaphores...');
     for (let i = 0; i < this.MAX_NODES; i++) {
       const semaphoreAddr = this.singlePortAddresses.get(i)!;
       execLibrary.addSemaphore(semaphoreAddr);
     }
 
-    console.log(`[NodeStatusManager] MultiPort at 0x${this.multiPortAddress.toString(16)}`);
-    console.log(`[NodeStatusManager] Node status structures initialized and registered`);
+console.log(`[NodeStatusManager] MultiPort at 0x${this.multiPortAddress.toString(16)}`);
+console.log(`[NodeStatusManager] Node status structures initialized and registered`);
   }
 
   /**
@@ -219,7 +219,7 @@ export class NodeStatusManager {
     }
     emulator.writeMemory(address + 350 + node.baud.length, 0);
 
-    console.log(`[NodeStatusManager] Node ${nodeId} singlePort at 0x${address.toString(16)}: ${node.handle || '(inactive)'}`);
+console.log(`[NodeStatusManager] Node ${nodeId} singlePort at 0x${address.toString(16)}: ${node.handle || '(inactive)'}`);
   }
 
   /**
@@ -228,7 +228,7 @@ export class NodeStatusManager {
   updateNode(emulator: MoiraEmulator, nodeId: number, updates: Partial<NodeInfo>): void {
     const node = this.nodes.get(nodeId);
     if (!node) {
-      console.warn(`[NodeStatusManager] Node ${nodeId} not found`);
+console.warn(`[NodeStatusManager] Node ${nodeId} not found`);
       return;
     }
 
@@ -249,7 +249,7 @@ export class NodeStatusManager {
       location: node.location
     }).catch((err) => console.error('[NodeStatusManager] EXECUTE_ON_STATUS_CHANGE failed:', err));
 
-    console.log(`[NodeStatusManager] Updated node ${nodeId}: ${node.handle} - ${NodeStatus[node.status]}`);
+console.log(`[NodeStatusManager] Updated node ${nodeId}: ${node.handle} - ${NodeStatus[node.status]}`);
   }
 
   /**

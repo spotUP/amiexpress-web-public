@@ -37,7 +37,7 @@ export class AlterFlagsHandler {
     }
 
     // setEnvStat(ENV_FILES) - express.e:24603
-    console.log('[ENV] Files');
+console.log('[ENV] Files');
 
     // Initialize flag manager if not exists
     if (!session.flagManager) {
@@ -332,7 +332,7 @@ export class AlterFlagsHandler {
       }
 
     } catch (error) {
-      console.error('[FLAG FROM] Error reading DIR file:', error);
+console.error('[FLAG FROM] Error reading DIR file:', error);
       socket.emit('ansi-output', '\x1b[31mError reading file list.\x1b[0m\r\n');
     }
   }

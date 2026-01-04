@@ -122,7 +122,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       const { db } = require('../../database');
       await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
     } catch (err) {
-      console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
+console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
     }
   }
 
@@ -135,7 +135,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       session.lastMsgReadConf = validated.lastMsgReadConf || 0;
       session.lastNewReadConf = validated.lastNewReadConf || 0;
     } catch (err) {
-      console.error('[joinConference] Failed to load/validate message pointers:', err);
+console.error('[joinConference] Failed to load/validate message pointers:', err);
       session.lastMsgReadConf = 0;
       session.lastNewReadConf = 0;
     }
@@ -147,7 +147,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       const { nodeFileManager } = require('../../services/NodeFileManager');
       nodeFileManager.writeNodeUserFile(session.nodeId, session.user);
     } catch (err) {
-      console.warn('[joinConference] Failed to sync node user file:', err);
+console.warn('[joinConference] Failed to sync node user file:', err);
     }
   }
 

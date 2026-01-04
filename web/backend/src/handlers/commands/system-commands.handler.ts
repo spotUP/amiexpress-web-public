@@ -1,12 +1,12 @@
 /**
- * System Commands Handler - System operations and messaging stubs
+ * System Commands Handler - System operations and messaging
  *
  * Implements system commands from express.e:
  * - G: Goodbye/Logoff (internalCommandG - express.e:25047-25075)
  * - Q: Quiet Mode toggle (internalCommandQ - express.e:25504-25516)
  * - H: Help system (internalCommandH - express.e:25075-25087)
- * - R: Read messages (internalCommandR - express.e:25518-25532) [STUB]
- * - E: Enter message (internalCommandE - express.e:24860-24868) [STUB]
+ * - R: Read messages (internalCommandR - express.e:25518-25532) - See messaging.handler.ts
+ * - E: Enter message (internalCommandE - express.e:24860-24868) - See messaging.handler.ts
  */
 
 import { checkSecurity } from '../../utils/acs.util';
@@ -94,15 +94,15 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
     try {
       const { saveHistory } = require('../../utils/command-history.util');
       await saveHistory(session, session.user.id);
-      console.log(`[LOGOFF] Saved command history for user ${session.user.username}`);
+console.log(`[LOGOFF] Saved command history for user ${session.user.username}`);
     } catch (err) {
-      console.error('[LOGOFF] Failed to save command history:', err);
+console.error('[LOGOFF] Failed to save command history:', err);
     }
   }
 
   // express.e:25066 - reqState:=REQ_STATE_LOGOFF
   // express.e:25069 - setEnvStat(ENV_LOGOFF)
-  console.log('[ENV] Logoff');
+console.log('[ENV] Logoff');
 
   // Set session state to logoff
   session.state = BBSState.AWAIT;
@@ -110,7 +110,7 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
 
   // express.e:8187 - displayScreen(SCREEN_LOGOFF)
   // Display Logoff.txt screen file which contains ~XIDOORS:who/No
-  console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
+console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
   // Reset shortcuts on exit (express.e:8124)
   session.cmdShortcuts = false;
   if (session.shortcuts) session.shortcuts.clear();
@@ -131,7 +131,7 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
   try {
     session.flagManager?.save();
   } catch (err) {
-    console.error('[LOGOFF] Failed to save flagged files:', err);
+console.error('[LOGOFF] Failed to save flagged files:', err);
   }
 
   // express.e logoff message - show modem disconnect message
@@ -237,7 +237,7 @@ export function handleEnterMessageCommand(socket: any, session: BBSSession, para
   }
 
   // express.e:24862 - setEnvStat(ENV_MAIL)
-  console.log('[ENV] Mail - Enter');
+console.log('[ENV] Mail - Enter');
 
   // express.e:24863 - parseParams(params)
   const parsedParams = ParamsUtil.parse(params);
@@ -249,7 +249,8 @@ export function handleEnterMessageCommand(socket: any, session: BBSSession, para
       subject: '',
       isPrivate: false,
       body: [],
-      currentLine: 0
+      currentLine: 0,
+      parentId: null  // Set by Reply command (not yet implemented)
     }
   };
 

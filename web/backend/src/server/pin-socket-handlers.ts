@@ -34,7 +34,7 @@ export function setupPinHandlers(socket: Socket, session: any) {
       socket.to(roomId).emit('chat:pin:updated', { roomId, pinnedMessages });
       socket.emit('chat:pin:updated', { roomId, pinnedMessages });
     } catch (error) {
-      console.error('[Pin] Add error:', error);
+console.error('[Pin] Add error:', error);
       socket.emit('chat:error', { error: 'Failed to pin message' });
     }
   });
@@ -53,7 +53,7 @@ export function setupPinHandlers(socket: Socket, session: any) {
       socket.to(roomId).emit('chat:pin:updated', { roomId, pinnedMessages });
       socket.emit('chat:pin:updated', { roomId, pinnedMessages });
     } catch (error) {
-      console.error('[Pin] Remove error:', error);
+console.error('[Pin] Remove error:', error);
       socket.emit('chat:error', { error: 'Failed to unpin message' });
     }
   });
@@ -65,7 +65,7 @@ export function setupPinHandlers(socket: Socket, session: any) {
       const pinnedMessages = await pinRepo.getPinnedMessages(roomId);
       socket.emit('chat:pin:list', { roomId, pinnedMessages });
     } catch (error) {
-      console.error('[Pin] List error:', error);
+console.error('[Pin] List error:', error);
       socket.emit('chat:error', { error: 'Failed to load pinned messages' });
     }
   });

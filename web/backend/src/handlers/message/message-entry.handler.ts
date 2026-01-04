@@ -13,6 +13,8 @@ import { writeMessageFile, formatMessageDate } from '../../utils/message-file.ut
 import { config } from '../../config';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnSysopComment } from '../../services/mail-notification.service';
+import * as amigafs from '../../utils/amigafs';
+import * as path from 'path';
 
 
 // Dependencies (injected from index.ts)
@@ -240,15 +242,62 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
 
     // /Q - Quote Previous Message (express.e:10865-10946)
     if (cmd === 'Q' || cmd === 'QUOTE') {
-      // Check if this is a reply (has parentId or replyTo)
       const messageData = session.tempData.messageEntry;
 
-      // TODO: Load parent message if replying
-      // For now, just inform user this requires message threading
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Quote requires message threading (not yet implemented)'));
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      // Check if this is a reply (express.e:10878 - replyFlag=1)
+      if (!messageData.parentId) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.errorLine('Quote only works when replying to a message'));
+        socket.emit('ansi-output', AnsiUtil.warningLine('Use "R" command to reply to a message first'));
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        return;
+      }
+
+      // Load the parent message (express.e:10888)
+      _db.getMessage(messageData.parentId)
+        .then((parentMessage: any) => {
+          if (!parentMessage) {
+            socket.emit('ansi-output', '\r\n');
+            socket.emit('ansi-output', AnsiUtil.errorLine('Cannot load parent message'));
+            socket.emit('ansi-output', '\r\n');
+            socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+            return;
+          }
+
+          // Split message body into lines
+          const parentLines = parentMessage.body.split('\n');
+
+          // Display parent message with line numbers (express.e:10892-10900)
+          socket.emit('ansi-output', '\r\n');
+          socket.emit('ansi-output', AnsiUtil.colorize('Quote in Reply', 'cyan'));
+          socket.emit('ansi-output', '\r\n\r\n');
+
+          parentLines.forEach((line: string, index: number) => {
+            const lineNum = (index + 1).toString().padStart(index >= 99 ? 3 : 2, ' ');
+            socket.emit('ansi-output', `${lineNum}> ${line}\r\n`);
+          });
+
+          // Prompt for line range (express.e:10902)
+          socket.emit('ansi-output', '\r\n');
+          socket.emit('ansi-output', AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
+
+          // Store parent message info for quote processing
+          session.tempData.quoteData = {
+            parentMessage: parentMessage,
+            parentLines: parentLines,
+            totalLines: parentLines.length
+          };
+
+          session.subState = LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE;
+        })
+        .catch((error: Error) => {
+console.error('[MSG] Error loading parent message for quote:', error);
+          socket.emit('ansi-output', '\r\n');
+          socket.emit('ansi-output', AnsiUtil.errorLine('Error loading parent message'));
+          socket.emit('ansi-output', '\r\n');
+          socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+        });
       return;
     }
 
@@ -287,11 +336,11 @@ export async function handleMessageBodyInput(socket: any, session: BBSSession, i
     }
 
     // /U - Upload Text File
+    // Web extension: Import text file from disk into message body
     if (cmd === 'U' || cmd === 'UPLOAD') {
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Text file upload requires file upload infrastructure (not yet implemented)'));
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+      socket.emit('ansi-output', `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+      session.subState = LoggedOnSubState.POST_MESSAGE_UPLOAD_FILE;
       return;
     }
 
@@ -384,9 +433,9 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
       try {
         const { userFileManager } = require('../../services/UserFileManager');
         userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
-        console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
+console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
       } catch (diskErr) {
-        console.error('[Message] Error writing user disk files:', diskErr);
+console.error('[Message] Error writing user disk files:', diskErr);
         // Continue anyway - database has the stats, can sync later
       }
     }
@@ -400,14 +449,14 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     );
 
     // Trigger webhook for new message
-    console.log('[Message] About to trigger NEW_MESSAGE webhook');
+console.log('[Message] About to trigger NEW_MESSAGE webhook');
     try {
       const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
 
       const conference = await _db.getConferenceById(session.currentConf);
       const messageBase = await _db.getMessageBaseById(session.currentMsgBase);
 
-      console.log(`[Message] Calling webhook for message: subject="${entry.subject}", toUser="${entry.toUser}", isPrivate=${entry.isPrivate}`);
+console.log(`[Message] Calling webhook for message: subject="${entry.subject}", toUser="${entry.toUser}", isPrivate=${entry.isPrivate}`);
       await webhookService.sendWebhook(WebhookTrigger.NEW_MESSAGE, {
         username: session.user!.username,
         subject: entry.subject,
@@ -416,7 +465,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
         toUser: entry.toUser,
         isPrivate: entry.isPrivate
       });
-      console.log('[Message] Webhook call completed');
+console.log('[Message] Webhook call completed');
 
       // If message is to sysop, also trigger COMMENT_POSTED webhook
       // express.e:6704 - runExecuteOn('SYSOP_COMMENT') called from doCommentNotify()
@@ -441,7 +490,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
         );
       }
     } catch (error) {
-      console.error('[Webhook] Error sending new message webhook:', error);
+console.error('[Webhook] Error sending new message webhook:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -462,7 +511,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
 
   } catch (error) {
-    console.error('[saveMessage] Error:', error);
+console.error('[saveMessage] Error:', error);
     SysopDebugUtil.debug(
       socket,
       session,
@@ -643,8 +692,7 @@ export async function handleMessageAttachFileInput(socket: any, session: BBSSess
   // Check for directory command (express.e:10518-10521)
   if (attachedFile.startsWith('5 ')) {
     const dirPath = attachedFile.substring(2).trim() || '.';
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('Directory listing not yet implemented.'));
+    await displayDirectoryListing(socket, session, dirPath);
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.colorize('Enter path/filename to attach ', 'cyan'));
     socket.emit('ansi-output', `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
@@ -813,6 +861,102 @@ export function handleMessageInsertTextInput(socket: any, session: BBSSession, i
 }
 
 /**
+ * Handle /Q (Quote) - Line Range Input
+ * express.e:10902-10944
+ */
+export function handleQuoteRangeInput(socket: any, session: BBSSession, input: string): void {
+  const range = input.trim().toUpperCase();
+  const quoteData = session.tempData.quoteData;
+  const messageData = session.tempData.messageEntry;
+
+  if (!quoteData) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('Quote data not found'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Handle abort (express.e:10909-10913)
+  if (range === 'A' || range === 'ABORT') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.warningLine('Quote aborted'));
+    socket.emit('ansi-output', '\r\n');
+    delete session.tempData.quoteData;
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  let startLine = 1;
+  let endLine = quoteData.totalLines;
+
+  // Handle * for all lines (express.e:10916-10918)
+  if (range === '*') {
+    startLine = 1;
+    endLine = quoteData.totalLines;
+  } else {
+    // Parse "start,end" format (express.e:10920-10927)
+    const parts = range.split(',');
+    if (parts.length === 2) {
+      startLine = parseInt(parts[0], 10);
+      endLine = parseInt(parts[1], 10);
+    } else {
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.errorLine('Invalid range format. Use: start,end or * for all'));
+      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
+      return;
+    }
+  }
+
+  // Validate range (express.e:10927)
+  if (isNaN(startLine) || isNaN(endLine) ||
+      startLine < 1 || startLine > quoteData.totalLines ||
+      endLine < 1 || endLine > quoteData.totalLines ||
+      startLine > endLine) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Invalid range. Must be 1-${quoteData.totalLines}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize(' Enter Startline,Endline or (*=ALL, A=Abort): ', 'yellow'));
+    return;
+  }
+
+  // Insert quoted lines (express.e:10931-10944)
+  const quotedLines: string[] = [];
+
+  // Add separator line with author and date (express.e:10936-10939)
+  const parentMsg = quoteData.parentMessage;
+  const msgDate = new Date(parentMsg.createdAt || parentMsg.created_at).toLocaleString();
+  const separator = ` -----[ ${parentMsg.fromUser} ]--[ ${msgDate} ]----------------------------------------------------------------------`.substring(0, 70);
+  quotedLines.push(separator);
+  quotedLines.push(' ');
+
+  // Copy selected lines (express.e:10931-10935)
+  for (let i = startLine - 1; i < endLine; i++) {
+    quotedLines.push(quoteData.parentLines[i]);
+  }
+
+  quotedLines.push('');
+
+  // Insert at current position in message body
+  const currentIndex = messageData.currentLine - 1;
+  messageData.body.splice(currentIndex, 0, ...quotedLines);
+  messageData.currentLine += quotedLines.length;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', AnsiUtil.colorize(`Quoted ${endLine - startLine + 1} lines`, 'green'));
+  socket.emit('ansi-output', '\r\n');
+
+  // Clean up
+  delete session.tempData.quoteData;
+
+  socket.emit('ansi-output', `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
+  session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+}
+
+/**
  * Helper: Prompt for message body - express.e:10898-10909
  */
 function promptForMessageBody(socket: any, session: BBSSession): void {
@@ -831,4 +975,358 @@ function promptForMessageBody(socket: any, session: BBSSession): void {
 
   socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
   session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+}
+
+/**
+ * Forward message handlers (express.e forwardMSG:9807-9871)
+ */
+
+/**
+ * Handle recipient input for message forwarding (express.e:9817-9821)
+ */
+export async function handleForwardMessageToInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // Default to 'ALL' if empty (express.e:9817)
+  const recipient = input || 'ALL';
+
+  // Validate recipient name
+  const user = await _db.getUserByUsername(recipient.toUpperCase());
+  if (!user && recipient.toUpperCase() !== 'ALL') {
+    socket.emit('ansi-output', '\r\nUser not found.\r\n');
+    socket.emit('ansi-output', '     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m\'[33mALL[32m\'[32m?[0m ');
+    return; // Stay in same state
+  }
+
+  // Store recipient
+  session.tempData.forwardData.toUser = recipient.toUpperCase();
+  socket.emit('ansi-output', '\r\n');
+
+  // Prompt for subject (express.e:9825-9830)
+  socket.emit('ansi-output', `[36mSubject[33m: [32m([33mBlank[32m)[0m=[33mabort[32m?[0m `);
+  session.subState = LoggedOnSubState.FORWARD_MESSAGE_SUBJECT;
+}
+
+/**
+ * Handle subject input for message forwarding (express.e:9826-9835)
+ */
+export async function handleForwardMessageSubjectInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // If subject is blank, abort (express.e:9832-9835)
+  if (!input) {
+    socket.emit('ansi-output', '\r\n');
+    // Return to message reader
+    const messages = session.tempData.msgReaderMessages || [];
+    const currentIndex = session.tempData.forwardOriginalIndex || 0;
+    session.subState = LoggedOnSubState.MSG_READER_NAV;
+
+    // Re-display the message
+    const { displaySingleMessage } = require('./messaging.handler');
+    await displaySingleMessage(socket, session, currentIndex);
+    return;
+  }
+
+  // Store subject
+  session.tempData.forwardData.subject = input;
+
+  // Prompt for privacy (express.e:9837-9851)
+  socket.emit('ansi-output', '         [36mPrivate ');
+  session.subState = LoggedOnSubState.FORWARD_MESSAGE_PRIVATE;
+}
+
+/**
+ * Handle privacy choice for message forwarding (express.e:9837-9851)
+ */
+export async function handleForwardMessagePrivateInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  let isPrivate = false;
+
+  // Handle Y/N input (express.e yesNo function)
+  if (input === 'Y') {
+    isPrivate = true;
+    socket.emit('ansi-output', 'Yes\r\n');
+  } else if (input === 'N') {
+    isPrivate = false;
+    socket.emit('ansi-output', 'No\r\n');
+  } else {
+    return; // Wait for valid input
+  }
+
+  // Store privacy setting
+  session.tempData.forwardData.isPrivate = isPrivate;
+
+  // Check if user can delete original message (express.e:9853-9860)
+  if (session.tempData.forwardData.canDeleteOriginal) {
+    socket.emit('ansi-output', 'Delete original message ');
+    session.subState = LoggedOnSubState.FORWARD_MESSAGE_DELETE_ORIGINAL;
+  } else {
+    // Skip to saving message
+    await saveForwardedMessage(socket, session, false);
+  }
+}
+
+/**
+ * Handle delete original confirmation for message forwarding (express.e:9853-9860)
+ */
+export async function handleForwardMessageDeleteOriginalInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  let deleteOriginal = false;
+
+  // Handle Y/N input
+  if (input === 'Y') {
+    deleteOriginal = true;
+    socket.emit('ansi-output', 'Yes\r\n');
+  } else if (input === 'N') {
+    deleteOriginal = false;
+    socket.emit('ansi-output', 'No\r\n');
+  } else {
+    return; // Wait for valid input
+  }
+
+  // Save forwarded message and optionally delete original
+  await saveForwardedMessage(socket, session, deleteOriginal);
+}
+
+/**
+ * Save the forwarded message (express.e:9862-9871)
+ */
+async function saveForwardedMessage(socket: any, session: BBSSession, deleteOriginal: boolean): Promise<void> {
+  socket.emit('ansi-output', '\r\nSaving...');
+
+  try {
+    const originalMsg = session.tempData.forwardOriginalMessage;
+    const forwardData = session.tempData.forwardData;
+
+    // Create new message with original body but new headers
+    const newMessage = {
+      subject: forwardData.subject,
+      body: originalMsg.body, // Copy original message body
+      author: session.user.username,
+      timestamp: new Date(),
+      conferenceId: originalMsg.conferenceId,
+      messageBaseId: originalMsg.messageBaseId,
+      isPrivate: forwardData.isPrivate,
+      toUser: forwardData.toUser,
+      parentId: null,
+      attachments: [],
+      edited: false,
+      editedBy: null,
+      editedAt: null
+    };
+
+    // Save the forwarded message
+    await _db.createMessage(newMessage);
+
+    // Delete original if requested
+    if (deleteOriginal) {
+      await _db.deleteMessage(originalMsg.id);
+
+      // Remove from reader's message list
+      const messages = session.tempData.msgReaderMessages || [];
+      const originalIndex = session.tempData.forwardOriginalIndex || 0;
+      messages.splice(originalIndex, 1);
+      session.tempData.msgReaderMessages = messages;
+    }
+
+    socket.emit('ansi-output', ' done.\r\n');
+
+    // Return to message reader
+    const messages = session.tempData.msgReaderMessages || [];
+    const currentIndex = session.tempData.forwardOriginalIndex || 0;
+
+    // If we deleted the original and there are no more messages, exit
+    if (deleteOriginal && messages.length === 0) {
+      socket.emit('ansi-output', 'No more messages.\r\n');
+      const { saveMessagePointerAndExit } = require('./messaging.handler');
+      await saveMessagePointerAndExit(socket, session);
+      return;
+    }
+
+    // Display next message (or previous if we deleted the last one)
+    const nextIndex = deleteOriginal && currentIndex < messages.length ? currentIndex : currentIndex;
+    session.subState = LoggedOnSubState.MSG_READER_NAV;
+
+    const { displaySingleMessage } = require('./messaging.handler');
+    await displaySingleMessage(socket, session, deleteOriginal ? Math.min(nextIndex, messages.length - 1) : nextIndex);
+
+  } catch (error: any) {
+console.error('[ForwardMessage] Error saving forwarded message:', error);
+    socket.emit('ansi-output', '\r\nError forwarding message.\r\n');
+
+    // Return to message reader
+    session.subState = LoggedOnSubState.MSG_READER_NAV;
+    const { displaySingleMessage } = require('./messaging.handler');
+    const currentIndex = session.tempData.forwardOriginalIndex || 0;
+    await displaySingleMessage(socket, session, currentIndex);
+  }
+}
+
+/**
+ * Handle text file upload input
+ * Web extension: Import text file contents into message body
+ */
+export async function handleUploadFileInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const filePath = input.trim();
+
+  // Check for directory listing command
+  if (filePath.startsWith('5 ')) {
+    const dirPath = filePath.substring(2).trim() || '.';
+    await displayDirectoryListing(socket, session, dirPath);
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+    return;
+  }
+
+  // Empty input = cancel
+  if (filePath === '') {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize('Upload cancelled.', 'yellow'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+    return;
+  }
+
+  // Resolve file path
+  const bbsRoot = config.get('dataDir');
+  const fullPath = path.isAbsolute(filePath) ? filePath : path.join(bbsRoot, filePath);
+
+  // Check if file exists
+  if (!amigafs.existsSync(fullPath)) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`File not found: ${filePath}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+    return;
+  }
+
+  // Check if it's a file (not directory)
+  const stats = amigafs.statSync(fullPath);
+  if (!stats.isFile()) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Path is not a file: ${filePath}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize('Enter path/filename to import ', 'cyan')}${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('5 <DIR>', 'yellow')}${AnsiUtil.colorize(')', 'green')}=${AnsiUtil.colorize('DIR', 'yellow')}${AnsiUtil.colorize(')', 'green')}${AnsiUtil.colorize(':', 'cyan')} `);
+    return;
+  }
+
+  // Read file contents
+  try {
+    const fileContents = amigafs.readFileSync(fullPath, 'utf-8');
+    const contentStr = typeof fileContents === 'string' ? fileContents : fileContents.toString('utf-8');
+    const lines = contentStr.split(/\r?\n/);
+
+    // Import lines into message body
+    const messageData = session.tempData.messageEntry;
+    let importedLines = 0;
+
+    for (const line of lines) {
+      // Limit to 200 lines total
+      if (messageData.body.length >= 200) {
+        socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', AnsiUtil.warningLine(`Maximum message length reached (200 lines). Imported ${importedLines} lines.`));
+        break;
+      }
+
+      messageData.body.push(line);
+      importedLines++;
+    }
+
+    messageData.currentLine = messageData.body.length + 1;
+
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.colorize(`Imported ${importedLines} line(s) from ${path.basename(filePath)}`, 'green'));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(messageData.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  } catch (error) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Error reading file: ${(error as Error).message}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', `${AnsiUtil.colorize(String(session.tempData.messageEntry.currentLine).padStart(3), 'yellow')}> `);
+    session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
+  }
+}
+
+/**
+ * Display directory listing for file attachment selection
+ * 1:1 port from express.e:8343-8387 myDirRecurse()
+ *
+ * @param socket - Socket connection
+ * @param session - User session
+ * @param dirPath - Directory path to list
+ */
+async function displayDirectoryListing(socket: any, session: BBSSession, dirPath: string): Promise<void> {
+  socket.emit('ansi-output', '\r\n');
+
+  // Resolve path relative to BBS root
+  const bbsRoot = config.get('dataDir');
+  const fullPath = path.isAbsolute(dirPath) ? dirPath : path.join(bbsRoot, dirPath);
+
+  // Check if path exists (express.e:8353-8364)
+  if (!amigafs.existsSync(fullPath)) {
+    socket.emit('ansi-output', AnsiUtil.errorLine(`${dirPath} does not exist`));
+    socket.emit('ansi-output', '\r\n');
+    return;
+  }
+
+  // Check if it's a directory (express.e:8367)
+  const stats = amigafs.statSync(fullPath);
+  if (!stats.isDirectory()) {
+    // If it's a file, just display the file info (express.e:8382)
+    displayFileInfo(socket, path.basename(fullPath), stats);
+    return;
+  }
+
+  // Display directory header (express.e:8368-8369)
+  socket.emit('ansi-output', `${AnsiUtil.colorize('Directory of ', 'cyan')}${AnsiUtil.colorize(dirPath, 'white')}\r\n`);
+  socket.emit('ansi-output', '\r\n');
+
+  // Read directory contents (express.e:8371-8380)
+  try {
+    const entries = amigafs.readdirSync(fullPath);
+
+    for (const entry of entries) {
+      const entryPath = path.join(fullPath, entry);
+      try {
+        const entryStats = amigafs.statSync(entryPath);
+        displayFileInfo(socket, entry, entryStats);
+      } catch (error) {
+        // Skip files that can't be stat'd
+console.warn(`[Directory Listing] Cannot stat ${entry}:`, error);
+      }
+    }
+  } catch (error) {
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Error reading directory: ${(error as Error).message}`));
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  socket.emit('ansi-output', '\r\n');
+}
+
+/**
+ * Display information for a single file
+ * Port from express.e:8325-8341 myDirDisplay()
+ *
+ * @param socket - Socket connection
+ * @param filename - File name
+ * @param stats - File stats
+ */
+function displayFileInfo(socket: any, filename: string, stats: any): void {
+  // Format file size or "Dir" indicator (express.e:8333-8337)
+  const sizeStr = stats.isDirectory()
+    ? AnsiUtil.colorize('     Dir', 'blue')
+    : AnsiUtil.colorize(String(stats.size).padStart(8), 'white');
+
+  // Format modification date/time (express.e:8327-8332, 8339-8340)
+  const mtime = stats.mtime || new Date();
+  const dateStr = `${String(mtime.getMonth() + 1).padStart(2, '0')}/${String(mtime.getDate()).padStart(2, '0')}/${String(mtime.getFullYear()).substring(2)}`;
+  const timeStr = `${String(mtime.getHours()).padStart(2, '0')}:${String(mtime.getMinutes()).padStart(2, '0')}:${String(mtime.getSeconds()).padStart(2, '0')}`;
+
+  // Display file info line (express.e:8339-8340)
+  // Format: filename (25 chars) size (8 chars) date time
+  socket.emit('ansi-output', ' ');
+  socket.emit('ansi-output', AnsiUtil.colorize(filename.padEnd(25).substring(0, 25), stats.isDirectory() ? 'yellow' : 'green'));
+  socket.emit('ansi-output', ' ');
+  socket.emit('ansi-output', sizeStr);
+  socket.emit('ansi-output', ' ');
+  socket.emit('ansi-output', AnsiUtil.colorize(dateStr, 'cyan'));
+  socket.emit('ansi-output', ' ');
+  socket.emit('ansi-output', AnsiUtil.colorize(timeStr, 'cyan'));
+  socket.emit('ansi-output', '\r\n');
 }

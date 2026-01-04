@@ -123,7 +123,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const voiceRoomId = `voice:${roomId}`;
     socket.join(voiceRoomId);
 
-    console.log(`[Voice Channel] User ${username} joined voice channel in room ${roomId}`);
+console.log(`[Voice Channel] User ${username} joined voice channel in room ${roomId}`);
 
     // Get all participants
     const participants = getVoiceParticipants(roomId);
@@ -177,7 +177,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
         userId,
       });
 
-      console.log(`[Voice Channel] User ${session.user?.username} left voice channel in room ${roomId}`);
+console.log(`[Voice Channel] User ${session.user?.username} left voice channel in room ${roomId}`);
     }
   });
 
@@ -210,7 +210,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
     const voiceRoomId = `voice:${channelId}`;
     socket.join(voiceRoomId);
 
-    console.log(`[Voice Channel] User ${username} joined voice channel: ${channelId}`);
+console.log(`[Voice Channel] User ${username} joined voice channel: ${channelId}`);
 
     // Get all participants
     const participants = getVoiceParticipants(channelId);
@@ -267,7 +267,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
         channelId,
       });
 
-      console.log(`[Voice Channel] User ${session.user?.username} left voice channel: ${channelId}`);
+console.log(`[Voice Channel] User ${session.user?.username} left voice channel: ${channelId}`);
     }
   });
 
@@ -322,7 +322,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
       hasVideo: data.hasVideo,
     });
 
-    console.log(`[Voice Channel] User ${session.user?.username} ${data.hasVideo ? 'enabled' : 'disabled'} video`);
+console.log(`[Voice Channel] User ${session.user?.username} ${data.hasVideo ? 'enabled' : 'disabled'} video`);
   });
 
   /**
@@ -350,7 +350,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
       hasScreenShare: data.hasScreenShare,
     });
 
-    console.log(`[Voice Channel] User ${session.user?.username} ${data.hasScreenShare ? 'started' : 'stopped'} screen share`);
+console.log(`[Voice Channel] User ${session.user?.username} ${data.hasScreenShare ? 'started' : 'stopped'} screen share`);
   });
 
   /**
@@ -400,7 +400,7 @@ export function registerVoiceChannelHandlers(socket: Socket, io: any, sessions: 
         userId,
       });
 
-      console.log(`[Voice Channel] User ${session.user?.username} disconnected from voice channel`);
+console.log(`[Voice Channel] User ${session.user?.username} disconnected from voice channel`);
     }
   });
 }

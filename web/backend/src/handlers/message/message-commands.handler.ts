@@ -86,7 +86,7 @@ export function handleJoinMessageBaseCommand(socket: any, session: BBSSession, p
     return;
   }
 
-  console.log('[ENV] Join');
+console.log('[ENV] Join');
 
   const parsedParams = ParamsUtil.parse(params);
   let newMsgBase = -1;
@@ -255,7 +255,7 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
     return;
   }
 
-  console.log('[ENV] Sysop');
+console.log('[ENV] Sysop');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Node Management'));
@@ -305,7 +305,7 @@ export async function handleConferenceMaintenanceCommand(socket: any, session: B
     return;
   }
 
-  console.log('[ENV] Sysop');
+console.log('[ENV] Sysop');
 
   // Initialize conference maintenance state
   session.tempData = session.tempData || {};
@@ -399,6 +399,13 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
  * Handle CM menu input
  */
 export async function handleCMInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // Check if awaiting Y/N confirmation for cases 6, 7, 8
+  if (session.tempData?.awaitingCMConfirm) {
+    delete session.tempData.awaitingCMConfirm;
+    await handleCMConfirmInput(socket, session, input);
+    return;
+  }
+
   const choice = input.trim().toUpperCase();
   const conf = session.tempData.cmConf;
   const msgBase = session.tempData.cmMsgBase;
@@ -429,21 +436,101 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
     case '5': // Dump user stats - express.e:22803-22805
       socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
-      // TODO: Implement dumpUserStats function
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mFeature not yet implemented\r\n`);
+      try {
+        const confId = session.tempData?.cmConf || session.currentConf || 1;
+        const db = getDatabase();
+
+        // Get conference user statistics - express.e:22521-22582
+        // Output format: Name, Location, Access, Ratio, Type, Uploads, Downloads, Bytes Up/Down, Messages Posted
+        const stats = await db.query(`
+          SELECT
+            u.username,
+            u.location,
+            cb.conference_id,
+            cb.ratio,
+            cb.ratio_type,
+            cb.files_uploaded,
+            cb.files_downloaded,
+            cb.bytes_uploaded,
+            cb.bytes_downloaded,
+            cb.messages_posted
+          FROM conf_base cb
+          JOIN users u ON cb.user_id = u.id
+          WHERE cb.conference_id = $1
+          ORDER BY u.username
+        `, [confId]);
+
+        // Create output file: Conf{N}.Stats - express.e:22527-22530
+        const { config } = require('../../config');
+        const path = require('path');
+        const fs = require('fs');
+        const bbsRoot = config.get('bbsRoot') || process.cwd();
+        const statsFile = path.join(bbsRoot, `Conf${confId}.Stats`);
+
+        let output = '';
+        output += `Conference ${confId} User Statistics\n`;
+        output += `Generated: ${new Date().toISOString()}\n`;
+        output += `${'='.repeat(80)}\n\n`;
+
+        // Write each user's statistics - express.e:22540-22580
+        for (const row of stats.rows) {
+          output += `User: ${row.username}\n`;
+          output += `  Location: ${row.location || 'Unknown'}\n`;
+          output += `  Conference Access: ${confId}\n`;
+          output += `  Ratio: ${row.ratio || 0}\n`;
+          output += `  Ratio Type: ${row.ratio_type || 0}\n`;
+          output += `  Files Uploaded: ${row.files_uploaded || 0}\n`;
+          output += `  Files Downloaded: ${row.files_downloaded || 0}\n`;
+          output += `  Bytes Uploaded: ${row.bytes_uploaded || 0}\n`;
+          output += `  Bytes Downloaded: ${row.bytes_downloaded || 0}\n`;
+          output += `  Messages Posted: ${row.messages_posted || 0}\n`;
+          output += `${'-'.repeat(80)}\n`;
+        }
+
+        fs.writeFileSync(statsFile, output, 'utf8');
+
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mUser statistics dumped to ${path.basename(statsFile)}\x1b[0m\r\n`);
+      } catch (error) {
+console.error('[CM] Error dumping user stats:', error);
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError dumping user stats\x1b[0m\r\n`);
+      }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
-    case '6': // Set Default New Mail Scan - express.e:22806-22814
-    case '7': // Set Default New File Scan - express.e:22815-22823
-    case '8': // Set Default Zoom Flag - express.e:22824-22832
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mFeature not yet implemented\r\n`);
-      await displayConferenceMaintenanceMenu(socket, session);
+    case '6': // Set Default New Mail Scan - express.e:22798-22806
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      session.tempData.cmAction = 'setMailScan';
+      session.tempData.awaitingCMConfirm = true;
+      return;
+
+    case '7': // Set Default New File Scan - express.e:22807-22815
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      session.tempData.cmAction = 'setFileScan';
+      session.tempData.awaitingCMConfirm = true;
+      return;
+
+    case '8': // Set Default Zoom Flag - express.e:22816-22824
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      session.tempData.cmAction = 'setZoomFlag';
+      session.tempData.awaitingCMConfirm = true;
       return;
 
     case '9': // Reset Messages Posted - express.e:22833-22835
       socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
-      // TODO: Implement reset messages posted
+      try {
+        const confId = session.tempData?.cmConf || session.currentConf || 1;
+        const db = getDatabase();
+        // Reset messages posted counter for all users in this conference
+        // express.e:22833-22835 calls updateAllUsers(conf, msgBase, UPDATE_MESSAGES_POSTED, 0)
+        await db.query(
+          `UPDATE conf_base SET messages_posted = 0 WHERE conference_id = $1`,
+          [confId]
+        );
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mMessages posted counters reset for conference ${confId}\x1b[0m\r\n`);
+      } catch (error) {
+console.error('[CM] Error resetting messages posted:', error);
+        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError resetting messages posted\x1b[0m\r\n`);
+      }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
@@ -462,9 +549,9 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
           WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
         `, [confId]);
         socket.emit('ansi-output', `\x1b[18;2H \x1b[32mVoting booth reset for conference ${confId}.\x1b[0m\r\n`);
-        console.log(`[CM] Voting booth reset for conference ${confId}`);
+console.log(`[CM] Voting booth reset for conference ${confId}`);
       } catch (error) {
-        console.error('[CM] Error resetting voting booth:', error);
+console.error('[CM] Error resetting voting booth:', error);
         socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError resetting voting booth.\x1b[0m\r\n`);
       }
       await displayConferenceMaintenanceMenu(socket, session);
@@ -540,13 +627,112 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
   const msgBase = session.tempData.cmMsgBase;
 
   if (!isNaN(value) && value >= 0) {
+    const db = getDatabase();
+
     if (field === 'HIGH_MSG') {
       await _updateMessageNumberRange(conf, msgBase, undefined, value);
     } else if (field === 'LOW_MSG') {
       await _updateMessageNumberRange(conf, msgBase, value, undefined);
+    } else if (field === 'RATIO') {
+      // express.e:22781-22788 - Update ratio for all users in conference
+      await db.query(
+        `UPDATE conf_base SET ratio = $1 WHERE conference_id = $2`,
+        [value, conf]
+      );
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mRatio updated to ${value} for all users\x1b[0m\r\n`);
+    } else if (field === 'RATIO_TYPE') {
+      // express.e:22789-22796 - Update ratio type for all users in conference
+      await db.query(
+        `UPDATE conf_base SET ratio_type = $1 WHERE conference_id = $2`,
+        [value, conf]
+      );
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mRatio type updated to ${value} for all users\x1b[0m\r\n`);
+    } else if (field === 'CAPACITY') {
+      // express.e:22851-22859 - Set conference capacity (max users)
+      // This would resize the conference database file in Amiga version
+      // In our SQL version, we can track this as metadata
+      await db.query(
+        `UPDATE conferences SET max_users = $1 WHERE id = $2`,
+        [value, conf]
+      );
+      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mConference capacity set to ${value} users\x1b[0m\r\n`);
     }
   }
 
+  session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
+  await displayConferenceMaintenanceMenu(socket, session);
+}
+
+/**
+ * Handle conference maintenance Y/N confirmations
+ * For cases 6, 7, 8 (set default scan flags)
+ */
+export async function handleCMConfirmInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  const answer = input.trim().toUpperCase();
+  const isYes = (answer === 'Y' || answer === 'YES');
+  const action = session.tempData.cmAction;
+  const confId = session.tempData.cmConf || session.currentConf || 1;
+
+  socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+
+  try {
+    const db = getDatabase();
+
+    // express.e:22459-22519 - updateAllUsers with bit flag operations
+    switch (action) {
+      case 'setMailScan': // Case 6 - express.e:22798-22806
+        // UPDATE_NEW_MAIL_SCAN sets/clears MAIL_SCAN_MASK (bit 7, value 128)
+        if (isYes) {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags | 128 WHERE conference_id = $1`,
+            [confId]
+          );
+        } else {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags & ~128 WHERE conference_id = $1`,
+            [confId]
+          );
+        }
+        break;
+
+      case 'setFileScan': // Case 7 - express.e:22807-22815
+        // UPDATE_NEW_FILE_SCAN sets/clears FILE_SCAN_MASK (bit 6, value 64)
+        if (isYes) {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags | 64 WHERE conference_id = $1`,
+            [confId]
+          );
+        } else {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags & ~64 WHERE conference_id = $1`,
+            [confId]
+          );
+        }
+        break;
+
+      case 'setZoomFlag': // Case 8 - express.e:22816-22824
+        // UPDATE_DEFAULT_ZOOM_FLAG sets/clears ZOOM_SCAN_MASK (bit 1, value 2)
+        if (isYes) {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags | 2 WHERE conference_id = $1`,
+            [confId]
+          );
+        } else {
+          await db.query(
+            `UPDATE conf_base SET scan_flags = scan_flags & ~2 WHERE conference_id = $1`,
+            [confId]
+          );
+        }
+        break;
+    }
+
+    socket.emit('ansi-output', `\x1b[18;2H \x1b[32mDefault flags updated for all users in conference ${confId}\x1b[0m\r\n`);
+  } catch (error) {
+console.error('[CM] Error updating default flags:', error);
+    socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError updating flags\x1b[0m\r\n`);
+  }
+
+  delete session.tempData.cmAction;
   session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
   await displayConferenceMaintenanceMenu(socket, session);
 }

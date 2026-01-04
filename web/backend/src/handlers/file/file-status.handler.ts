@@ -23,6 +23,7 @@ import { finalizeCommand } from '../../utils/command-response.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { DI_TOKENS } from '../../container';
 import { FileStatisticsUseCase } from '../../services/use-cases/file-statistics.use-case';
+import { formatBCD as formatBCDUtil } from '../../utils/bcd-math.util';
 
 /**
  * FS Command - File Status
@@ -35,7 +36,7 @@ export class FileStatusHandler {
     @inject(DI_TOKENS.Database) private database: any,
     private fileStatsUseCase: FileStatisticsUseCase
   ) {
-    console.log('[FileStatusHandler] Initialized with DI');
+console.log('[FileStatusHandler] Initialized with DI');
   }
 
   /**
@@ -202,12 +203,12 @@ export class FileStatusHandler {
   }
 
   /**
-   * Format BCD value for display (future enhancement)
-   * Express.e uses formatBCD() for precise byte tracking
+   * Format BCD value for display with thousands separators
+   * Express.e:bcd.e:23 - formatBCD() for precise byte tracking
    */
   private formatBCD(bcdValue: bigint): string {
-    // For now, just convert to string
-    // TODO: Implement proper BCD formatting if needed
-    return String(bcdValue);
+    // Use proper BCD formatting from bcd-math.util (express.e:bcd.e:23)
+    // Formats with thousands separators (e.g., "1,234,567")
+    return formatBCDUtil(bcdValue);
   }
 }

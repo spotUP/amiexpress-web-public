@@ -61,97 +61,97 @@ function getUsernameColor(username: string): number {
 export async function handleChatRequest(socket: Socket, session: BBSSession, data: { targetUsername: string }) {
   try {
     const { targetUsername } = data;
-    console.log('🔥 [CHAT] handleChatRequest called, targetUsername:', targetUsername);
+console.log('🔥 [CHAT] handleChatRequest called, targetUsername:', targetUsername);
 
     // Validation 1: Check if user is logged in
     if (!session.user) {
-      console.log('❌ [CHAT] Validation failed: User not logged in');
+console.log('❌ [CHAT] Validation failed: User not logged in');
       socket.emit('chat:error', 'You must be logged in to use chat');
       return;
     }
-    console.log('✅ [CHAT] Validation 1 passed: User logged in');
+console.log('✅ [CHAT] Validation 1 passed: User logged in');
 
     // Validation 2: Check if initiator is available for chat
-    console.log('🔍 [CHAT] Checking availableForChat:', session.user.availableForChat);
+console.log('🔍 [CHAT] Checking availableForChat:', session.user.availableForChat);
     if (!session.user.availableForChat) {
-      console.log('❌ [CHAT] Validation failed: User not available for chat');
+console.log('❌ [CHAT] Validation failed: User not available for chat');
       socket.emit('chat:error', 'You must toggle your chat availability first (CHAT TOGGLE)');
       return;
     }
-    console.log('✅ [CHAT] Validation 2 passed: User available for chat');
+console.log('✅ [CHAT] Validation 2 passed: User available for chat');
 
     // Validation 3: Check if initiator is already in chat
     if (session.subState === LoggedOnSubState.CHAT) {
-      console.log('❌ [CHAT] Validation failed: User already in chat');
+console.log('❌ [CHAT] Validation failed: User already in chat');
       socket.emit('chat:error', 'You are already in a chat session');
       return;
     }
-    console.log('✅ [CHAT] Validation 3 passed: User not in chat');
+console.log('✅ [CHAT] Validation 3 passed: User not in chat');
 
     // Validation 4: Find target user in database
-    console.log('🔍 [CHAT] Looking up target user:', targetUsername);
+console.log('🔍 [CHAT] Looking up target user:', targetUsername);
     const targetUser = await db.getUserByUsernameForOLM(targetUsername);
     if (!targetUser) {
-      console.log('❌ [CHAT] Validation failed: Target user not found');
+console.log('❌ [CHAT] Validation failed: Target user not found');
       socket.emit('chat:error', `User "${targetUsername}" not found`);
       return;
     }
-    console.log('✅ [CHAT] Validation 4 passed: Target user found:', targetUser.username);
+console.log('✅ [CHAT] Validation 4 passed: Target user found:', targetUser.username);
 
     // Validation 5: Cannot chat with self
     if (targetUser.id === session.user.id) {
-      console.log('❌ [CHAT] Validation failed: Self-chat attempt');
+console.log('❌ [CHAT] Validation failed: Self-chat attempt');
       socket.emit('chat:error', 'You cannot chat with yourself');
       return;
     }
-    console.log('✅ [CHAT] Validation 5 passed: Not chatting with self');
+console.log('✅ [CHAT] Validation 5 passed: Not chatting with self');
 
     // Validation 6: Check if target is online
-    console.log('🔍 [CHAT] Looking for target session, total sessions:', sessions.size);
+console.log('🔍 [CHAT] Looking for target session, total sessions:', sessions.size);
     let targetSession: BBSSession | null = null;
     let targetSocketId: string | null = null;
     for (const [socketId, sess] of Array.from(sessions.entries())) {
-      console.log(`  Checking session: user=${sess.user?.username}, id=${sess.user?.id}, socketId=${socketId}, sess.socketId=${sess.socketId}`);
+console.log(`  Checking session: user=${sess.user?.username}, id=${sess.user?.id}, socketId=${socketId}, sess.socketId=${sess.socketId}`);
       if (sess.user?.id === targetUser.id) {
         targetSession = sess;
         targetSocketId = socketId; // Use the Map key (actual socket ID)
-        console.log('  ✅ FOUND target session!');
-        console.log('  Target socketId from map:', socketId);
-        console.log('  Target session.socketId:', sess.socketId);
+console.log('  ✅ FOUND target session!');
+console.log('  Target socketId from map:', socketId);
+console.log('  Target session.socketId:', sess.socketId);
         break;
       }
     }
 
     if (!targetSession) {
-      console.log('❌ [CHAT] Validation failed: Target not online');
+console.log('❌ [CHAT] Validation failed: Target not online');
       socket.emit('chat:error', `${targetUsername} is not currently online`);
       return;
     }
-    console.log('✅ [CHAT] Validation 6 passed: Target is online');
+console.log('✅ [CHAT] Validation 6 passed: Target is online');
 
     // Validation 7: Check if target is available for chat
-    console.log('🔍 [CHAT] Target availableForChat:', targetUser.availableForChat);
+console.log('🔍 [CHAT] Target availableForChat:', targetUser.availableForChat);
     if (!targetUser.availableForChat) {
-      console.log('❌ [CHAT] Validation failed: Target not available');
+console.log('❌ [CHAT] Validation failed: Target not available');
       socket.emit('chat:error', `${targetUsername} is not available for chat`);
       return;
     }
-    console.log('✅ [CHAT] Validation 7 passed: Target available for chat');
+console.log('✅ [CHAT] Validation 7 passed: Target available for chat');
 
     // Validation 8: Check if target is already in chat
-    console.log('🔍 [CHAT] Target subState:', targetSession.subState);
+console.log('🔍 [CHAT] Target subState:', targetSession.subState);
     if (targetSession.subState === LoggedOnSubState.CHAT) {
-      console.log('❌ [CHAT] Validation failed: Target in another chat');
+console.log('❌ [CHAT] Validation failed: Target in another chat');
       socket.emit('chat:error', `${targetUsername} is currently in another chat`);
       return;
     }
-    console.log('✅ [CHAT] Validation 8 passed: Target not in chat');
+console.log('✅ [CHAT] Validation 8 passed: Target not in chat');
 
     // Create chat session in database
-    console.log('📝 [CHAT] Creating chat session in database...');
-    console.log('  initiatorSocket:', socket.id);
-    console.log('  recipientSocket (from map):', targetSocketId);
-    console.log('  recipientSocket (from session):', targetSession.socketId);
+console.log('📝 [CHAT] Creating chat session in database...');
+console.log('  initiatorSocket:', socket.id);
+console.log('  recipientSocket (from map):', targetSocketId);
+console.log('  recipientSocket (from session):', targetSession.socketId);
 
     const sessionId = await db.createChatSession(
       session.user.id,           // initiatorId
@@ -161,10 +161,10 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
       targetUser.username,       // recipientUsername
       targetSocketId!            // recipientSocket - Use Map key, not session.socketId
     );
-    console.log('✅ [CHAT] Chat session created:', sessionId);
+console.log('✅ [CHAT] Chat session created:', sessionId);
 
     // Send confirmation to initiator in terminal
-    console.log('📤 [CHAT] Sending confirmation to initiator...');
+console.log('📤 [CHAT] Sending confirmation to initiator...');
     socket.emit('ansi-output',
       '\r\n\x1b[32m✓ Chat request sent to ' + targetUsername + '\x1b[0m\r\n' +
       '\x1b[33mWaiting for response (30 seconds)...\x1b[0m\r\n'
@@ -175,10 +175,10 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
       sessionId,
       to: targetUsername
     });
-    console.log('✅ [CHAT] Confirmation displayed in initiator terminal');
+console.log('✅ [CHAT] Confirmation displayed in initiator terminal');
 
     // Send invite to target user via terminal output
-    console.log('📤 [CHAT] Sending invite to target:', targetSocketId);
+console.log('📤 [CHAT] Sending invite to target:', targetSocketId);
 
     // Display invitation in recipient's terminal with Y/n prompt
     io.to(targetSocketId!).emit('ansi-output',
@@ -203,7 +203,7 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
       from: session.user.username,
       fromId: session.user.id
     });
-    console.log('✅ [CHAT] Invite displayed in target terminal');
+console.log('✅ [CHAT] Invite displayed in target terminal');
 
     // Set 30-second timeout
     setTimeout(async () => {
@@ -232,7 +232,7 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
     }, 30000);
 
   } catch (error) {
-    console.error('[INTERNODE CHAT] Error handling chat request:', error);
+console.error('[INTERNODE CHAT] Error handling chat request:', error);
     socket.emit('chat:error', 'Failed to send chat request');
   }
 }
@@ -243,42 +243,42 @@ export async function handleChatRequest(socket: Socket, session: BBSSession, dat
  */
 export async function handleChatAccept(socket: Socket, session: BBSSession, data: { sessionId: string }) {
   try {
-    console.log('🚀 [handleChatAccept] ENTRY POINT - Function called');
-    console.log('   socket.id:', socket.id);
-    console.log('   session.user?.id:', session.user?.id);
-    console.log('   data:', data);
+console.log('🚀 [handleChatAccept] ENTRY POINT - Function called');
+console.log('   socket.id:', socket.id);
+console.log('   session.user?.id:', session.user?.id);
+console.log('   data:', data);
 
     const { sessionId } = data;
-    console.log('   sessionId extracted:', sessionId);
+console.log('   sessionId extracted:', sessionId);
 
     // Get chat session from database
-    console.log('   Calling db.getChatSession...');
+console.log('   Calling db.getChatSession...');
     const chatSession = await db.getChatSession(sessionId);
-    console.log('   chatSession result:', chatSession);
+console.log('   chatSession result:', chatSession);
 
     if (!chatSession) {
-      console.log('❌ [handleChatAccept] Chat session not found in DB');
+console.log('❌ [handleChatAccept] Chat session not found in DB');
       socket.emit('chat:error', 'Chat session not found');
       return;
     }
 
     // Validate recipient
-    console.log('   Validating recipient...', chatSession.recipientId, 'vs', session.user?.id);
+console.log('   Validating recipient...', chatSession.recipientId, 'vs', session.user?.id);
     if (chatSession.recipientId !== session.user?.id) {
-      console.log('❌ [handleChatAccept] User is not the recipient');
+console.log('❌ [handleChatAccept] User is not the recipient');
       socket.emit('chat:error', 'You are not the recipient of this chat');
       return;
     }
 
     // Validate status
-    console.log('   Validating status:', chatSession.status);
+console.log('   Validating status:', chatSession.status);
     if (chatSession.status !== 'requesting') {
-      console.log('❌ [handleChatAccept] Chat status is not requesting:', chatSession.status);
+console.log('❌ [handleChatAccept] Chat status is not requesting:', chatSession.status);
       socket.emit('chat:error', 'Chat request is no longer valid');
       return;
     }
 
-    console.log('✅ [handleChatAccept] All validations passed, continuing...');
+console.log('✅ [handleChatAccept] All validations passed, continuing...');
 
     // Update session status to active
     await db.updateChatSessionStatus(sessionId, 'active');
@@ -307,7 +307,7 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
       if (sess.user?.id === chatSession.recipientId) {
         recipientSession = sess;
         recipientSocketId = socketId; // CRITICAL: Use Map key as socket ID
-        console.log('✅ [CHAT ACCEPT] Found recipient session in Map');
+console.log('✅ [CHAT ACCEPT] Found recipient session in Map');
         break;
       }
     }
@@ -320,25 +320,25 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
 
     // Create Socket.io room for this chat
     const roomName = `chat:${sessionId}`;
-    console.log('🏠 [CHAT ACCEPT] Creating Socket.io room:', roomName);
-    console.log('🏠 [CHAT ACCEPT] Recipient socket:', recipientSocketId);
-    console.log('🏠 [CHAT ACCEPT] Initiator socket:', initiatorSocketId);
+console.log('🏠 [CHAT ACCEPT] Creating Socket.io room:', roomName);
+console.log('🏠 [CHAT ACCEPT] Recipient socket:', recipientSocketId);
+console.log('🏠 [CHAT ACCEPT] Initiator socket:', initiatorSocketId);
 
     socket.join(roomName);
-    console.log('✅ [CHAT ACCEPT] Recipient joined room');
+console.log('✅ [CHAT ACCEPT] Recipient joined room');
 
     const initiatorSocket = io.sockets.sockets.get(initiatorSocketId!);
     if (initiatorSocket) {
       initiatorSocket.join(roomName);
-      console.log('✅ [CHAT ACCEPT] Initiator joined room');
+console.log('✅ [CHAT ACCEPT] Initiator joined room');
     } else {
-      console.log('❌ [CHAT ACCEPT] Could not find initiator socket!');
+console.log('❌ [CHAT ACCEPT] Could not find initiator socket!');
     }
 
     // Verify room membership
     const roomMembers = Array.from(io.sockets.adapter.rooms.get(roomName) || []);
-    console.log('🏠 [CHAT ACCEPT] Room members:', roomMembers);
-    console.log('🏠 [CHAT ACCEPT] Expected 2 members, got:', roomMembers.length);
+console.log('🏠 [CHAT ACCEPT] Room members:', roomMembers);
+console.log('🏠 [CHAT ACCEPT] Expected 2 members, got:', roomMembers.length);
 
     // Save previous states for both users (using the actual sessions from the Map)
     initiatorSession.previousState = initiatorSession.state;
@@ -356,12 +356,12 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
     // Set both users to CHAT substate (CRITICAL: modifying the actual session objects from the Map)
     initiatorSession.subState = LoggedOnSubState.CHAT;
     recipientSession.subState = LoggedOnSubState.CHAT;
-    console.log('✅ [CHAT ACCEPT] Both users set to CHAT substate');
-    console.log('   Initiator subState:', initiatorSession.subState);
-    console.log('   Recipient subState:', recipientSession.subState);
+console.log('✅ [CHAT ACCEPT] Both users set to CHAT substate');
+console.log('   Initiator subState:', initiatorSession.subState);
+console.log('   Recipient subState:', recipientSession.subState);
 
     // Notify both users that chat has started
-    console.log('📤 [CHAT ACCEPT] Emitting chat:started to room:', roomName);
+console.log('📤 [CHAT ACCEPT] Emitting chat:started to room:', roomName);
     io.to(roomName).emit('chat:started', {
       sessionId,
       withUsername: recipientSession.user?.username,
@@ -412,7 +412,7 @@ export async function handleChatAccept(socket: Socket, session: BBSSession, data
     socket.emit('ansi-output', setupScreenRecipient);
 
   } catch (error) {
-    console.error('[INTERNODE CHAT] Error accepting chat:', error);
+console.error('[INTERNODE CHAT] Error accepting chat:', error);
     socket.emit('chat:error', 'Failed to accept chat');
   }
 }
@@ -457,7 +457,7 @@ export async function handleChatDecline(socket: Socket, session: BBSSession, dat
     );
 
   } catch (error) {
-    console.error('[INTERNODE CHAT] Error declining chat:', error);
+console.error('[INTERNODE CHAT] Error declining chat:', error);
     socket.emit('chat:error', 'Failed to decline chat');
   }
 }
@@ -577,7 +577,7 @@ export async function handleChatKeystroke(socket: Socket, session: BBSSession, d
     }
 
   } catch (error) {
-    console.error('❌ [CHAT KEYSTROKE] Error:', error);
+console.error('❌ [CHAT KEYSTROKE] Error:', error);
   }
 }
 
@@ -588,62 +588,62 @@ export async function handleChatKeystroke(socket: Socket, session: BBSSession, d
 export async function handleChatMessage(socket: Socket, session: BBSSession, data: { message: string }) {
   try {
     const { message } = data;
-    console.log('\n💬 [CHAT MESSAGE] Received message:', { message, from: session.user?.username, subState: session.subState });
+console.log('\n💬 [CHAT MESSAGE] Received message:', { message, from: session.user?.username, subState: session.subState });
 
     // Validation 1: Check if in chat mode
     if (session.subState !== LoggedOnSubState.CHAT) {
-      console.log('❌ [CHAT MESSAGE] Validation failed: Not in chat mode. Current subState:', session.subState);
+console.log('❌ [CHAT MESSAGE] Validation failed: Not in chat mode. Current subState:', session.subState);
       socket.emit('chat:error', 'You are not in a chat session');
       return;
     }
-    console.log('✅ [CHAT MESSAGE] Validation 1 passed: User in CHAT mode');
+console.log('✅ [CHAT MESSAGE] Validation 1 passed: User in CHAT mode');
 
     // Validation 2: Check if chat session exists
     if (!session.chatSessionId) {
-      console.log('❌ [CHAT MESSAGE] Validation failed: No chatSessionId');
+console.log('❌ [CHAT MESSAGE] Validation failed: No chatSessionId');
       socket.emit('chat:error', 'No active chat session');
       return;
     }
-    console.log('✅ [CHAT MESSAGE] Validation 2 passed: chatSessionId exists:', session.chatSessionId);
+console.log('✅ [CHAT MESSAGE] Validation 2 passed: chatSessionId exists:', session.chatSessionId);
 
     // Validation 3: Get chat session from database
     const chatSession = await db.getChatSession(session.chatSessionId);
-    console.log('🔍 [CHAT MESSAGE] Database chat session:', chatSession);
+console.log('🔍 [CHAT MESSAGE] Database chat session:', chatSession);
     if (!chatSession || chatSession.status !== 'active') {
-      console.log('❌ [CHAT MESSAGE] Validation failed: Chat session not active');
+console.log('❌ [CHAT MESSAGE] Validation failed: Chat session not active');
       socket.emit('chat:error', 'Chat session is not active');
       return;
     }
-    console.log('✅ [CHAT MESSAGE] Validation 3 passed: Chat session is active');
+console.log('✅ [CHAT MESSAGE] Validation 3 passed: Chat session is active');
 
     // Validation 4: Message length
     if (message.length > 500) {
-      console.log('❌ [CHAT MESSAGE] Validation failed: Message too long');
+console.log('❌ [CHAT MESSAGE] Validation failed: Message too long');
       socket.emit('chat:error', 'Message too long (max 500 characters)');
       return;
     }
 
     if (message.trim().length === 0) {
-      console.log('⚠️  [CHAT MESSAGE] Empty message, ignoring');
+console.log('⚠️  [CHAT MESSAGE] Empty message, ignoring');
       return; // Ignore empty messages
     }
-    console.log('✅ [CHAT MESSAGE] Validation 4 passed: Message length OK');
+console.log('✅ [CHAT MESSAGE] Validation 4 passed: Message length OK');
 
     // Sanitize message (remove ANSI escape codes) and ensure UTF-8 encoding
     const sanitized = message.replace(/\x1b/g, '');
     // Ensure proper UTF-8 encoding for international characters (åäö, etc.)
     const utf8Message = Buffer.from(sanitized, 'utf8').toString('utf8');
-    console.log('🧹 [CHAT MESSAGE] Sanitized message:', utf8Message);
+console.log('🧹 [CHAT MESSAGE] Sanitized message:', utf8Message);
 
     // Save message to database
-    console.log('💾 [CHAT MESSAGE] Saving to database...');
+console.log('💾 [CHAT MESSAGE] Saving to database...');
     await db.saveChatMessage(
       session.chatSessionId!,
       session.user!.id,
       session.user!.username,
       utf8Message
     );
-    console.log('✅ [CHAT MESSAGE] Message saved to database');
+console.log('✅ [CHAT MESSAGE] Message saved to database');
 
     // Clear typing buffers and timers for both users (message is being finalized)
     // Find both users' sessions and clear their partnerTypingBuffer and blink timers
@@ -665,8 +665,8 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       hour12: false
     });
 
-    console.log('📤 [CHAT MESSAGE] Broadcasting to room:', roomName);
-    console.log('📤 [CHAT MESSAGE] Room members:', Array.from(io.sockets.adapter.rooms.get(roomName) || []));
+console.log('📤 [CHAT MESSAGE] Broadcasting to room:', roomName);
+console.log('📤 [CHAT MESSAGE] Room members:', Array.from(io.sockets.adapter.rooms.get(roomName) || []));
 
     io.to(roomName).emit('chat:message-received', {
       sessionId: session.chatSessionId,
@@ -675,7 +675,7 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       message: utf8Message,
       timestamp
     });
-    console.log('✅ [CHAT MESSAGE] Emitted chat:message-received event');
+console.log('✅ [CHAT MESSAGE] Emitted chat:message-received event');
 
     // Assign color based on username (hash username to get consistent color)
     const usernameColors = [31, 32, 33, 34, 35, 36]; // Red, Green, Yellow, Blue, Magenta, Cyan
@@ -697,10 +697,10 @@ export async function handleChatMessage(socket: Socket, session: BBSSession, dat
       '\x1b[K'; // Clear input line
 
     io.to(roomName).emit('ansi-output', insertMessage);
-    console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
+console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
 
   } catch (error) {
-    console.error('❌ [CHAT MESSAGE] Error sending message:', error);
+console.error('❌ [CHAT MESSAGE] Error sending message:', error);
     socket.emit('chat:error', 'Failed to send message');
   }
 }
@@ -745,21 +745,21 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
       ? chatSession.recipientId
       : chatSession.initiatorId;
 
-    console.log(`🔍 [CHAT END] Looking for partner with ID: ${partnerId}`);
+console.log(`🔍 [CHAT END] Looking for partner with ID: ${partnerId}`);
 
     let partnerSession: BBSSession | null = null;
     let partnerSocketId: string | null = null;
     for (const [socketId, sess] of Array.from(sessions.entries())) {
-      console.log(`  Checking session: socketId=${socketId}, userId=${sess.user?.id}`);
+console.log(`  Checking session: socketId=${socketId}, userId=${sess.user?.id}`);
       if (sess.user?.id === partnerId) {
         partnerSession = sess;
         partnerSocketId = socketId;
-        console.log(`  ✅ FOUND PARTNER! socketId=${socketId}`);
+console.log(`  ✅ FOUND PARTNER! socketId=${socketId}`);
         break;
       }
     }
 
-    console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketId: ${partnerSocketId}`);
+console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketId: ${partnerSocketId}`);
 
     const roomName = `chat:${sessionId}`;
 
@@ -792,24 +792,24 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
     io.to(roomName).emit('ansi-output', endMessage);
 
     // Clean up both users and set them to menu display state
-    console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.username}`);
+console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.username}`);
     await cleanupChatSession(socket, session);
     session.menuPause = true; // Force menu redisplay
 
-    console.log(`🧹 [CHAT END] Attempting partner cleanup: partnerSession=${!!partnerSession}, partnerSocketId=${partnerSocketId}`);
+console.log(`🧹 [CHAT END] Attempting partner cleanup: partnerSession=${!!partnerSession}, partnerSocketId=${partnerSocketId}`);
     if (partnerSession && partnerSocketId) {
       const partnerSocket = io.sockets.sockets.get(partnerSocketId);
-      console.log(`🧹 [CHAT END] Partner socket found: ${!!partnerSocket}`);
+console.log(`🧹 [CHAT END] Partner socket found: ${!!partnerSocket}`);
       if (partnerSocket) {
-        console.log(`🧹 [CHAT END] Cleaning up partner user: ${partnerSession.user?.username}`);
+console.log(`🧹 [CHAT END] Cleaning up partner user: ${partnerSession.user?.username}`);
         await cleanupChatSession(partnerSocket, partnerSession);
         partnerSession.menuPause = true; // Force menu redisplay
-        console.log(`🧹 [CHAT END] Partner cleanup complete`);
+console.log(`🧹 [CHAT END] Partner cleanup complete`);
       } else {
-        console.log(`❌ [CHAT END] Partner socket NOT FOUND for socketId: ${partnerSocketId}`);
+console.log(`❌ [CHAT END] Partner socket NOT FOUND for socketId: ${partnerSocketId}`);
       }
     } else {
-      console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
+console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
     }
 
     // Leave Socket.io room
@@ -819,7 +819,7 @@ export async function handleChatEnd(socket: Socket, session: BBSSession) {
     }
 
   } catch (error) {
-    console.error('[INTERNODE CHAT] Error ending chat:', error);
+console.error('[INTERNODE CHAT] Error ending chat:', error);
     socket.emit('chat:error', 'Failed to end chat');
   }
 }
@@ -886,7 +886,7 @@ export async function handleChatDisconnect(socket: Socket, session: BBSSession) 
     socket.leave(roomName);
 
   } catch (error) {
-    console.error('[INTERNODE CHAT] Error handling chat disconnect:', error);
+console.error('[INTERNODE CHAT] Error handling chat disconnect:', error);
   }
 }
 
@@ -894,15 +894,15 @@ export async function handleChatDisconnect(socket: Socket, session: BBSSession) 
  * Cleanup chat session - Restore user to previous state
  */
 async function cleanupChatSession(socket: Socket, session: BBSSession) {
-  console.log(`🧹 [CLEANUP CHAT] Starting cleanup for user: ${session.user?.username}`);
-  console.log(`  Current subState: ${session.subState}`);
-  console.log(`  Previous subState: ${session.previousSubState}`);
+console.log(`🧹 [CLEANUP CHAT] Starting cleanup for user: ${session.user?.username}`);
+console.log(`  Current subState: ${session.subState}`);
+console.log(`  Previous subState: ${session.previousSubState}`);
 
   // Always restore to DISPLAY_MENU after chat ends
   // Don't use previousSubState as it might be a chat-related state like livechat_invitation_response
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 
-  console.log(`  New subState: ${session.subState}`);
+console.log(`  New subState: ${session.subState}`);
 
   // Clear chat fields
   delete session.chatSessionId;

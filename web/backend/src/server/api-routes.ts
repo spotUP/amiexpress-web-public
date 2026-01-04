@@ -47,7 +47,7 @@ apiRouter.get('/users/:id', authenticateToken(db), async (req: AuthRequest, res:
       downloads: user.downloads
     });
   } catch (error) {
-    console.error('Get user error:', error);
+console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

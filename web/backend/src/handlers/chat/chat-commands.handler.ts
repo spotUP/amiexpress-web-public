@@ -41,10 +41,10 @@ export function setChatCommandsDependencies(deps: {
  * Handles all LIVECHAT subcommands
  */
 export async function handleLiveChatCommand(socket: Socket, session: BBSSession, params: string = '') {
-  console.log('💬 [LIVECHAT] handleLiveChatCommand called with params:', params);
+console.log('💬 [LIVECHAT] handleLiveChatCommand called with params:', params);
   const parts = params.trim().split(/\s+/);
   const subcommand = parts[0]?.toUpperCase() || '';
-  console.log('💬 [LIVECHAT] subcommand:', subcommand);
+console.log('💬 [LIVECHAT] subcommand:', subcommand);
 
   // LIVECHAT (no params) or LIVECHAT HELP - Show menu
   if (!subcommand || subcommand === 'HELP') {
@@ -279,7 +279,7 @@ async function toggleChatAvailability(socket: Socket, session: BBSSession) {
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
   } catch (error) {
-    console.error('[CHAT] Error toggling availability:', error);
+console.error('[CHAT] Error toggling availability:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError toggling chat availability.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -328,7 +328,7 @@ async function requestChat(socket: Socket, session: BBSSession, targetUsername: 
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
   } catch (error) {
-    console.error('[CHAT] Error requesting chat:', error);
+console.error('[CHAT] Error requesting chat:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError requesting chat.\x1b[0m\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -339,16 +339,16 @@ async function requestChat(socket: Socket, session: BBSSession, targetUsername: 
  */
 async function acceptChatInvitation(socket: Socket, session: BBSSession) {
   try {
-    console.log('🎯 [CHAT ACCEPT] Starting...');
-    console.log('  User ID:', session.user?.id);
-    console.log('  Username:', session.user?.username);
+console.log('🎯 [CHAT ACCEPT] Starting...');
+console.log('  User ID:', session.user?.id);
+console.log('  Username:', session.user?.username);
 
     // Find pending invitation for this user
     const pendingInvite = await db.getPendingChatInvitationForUser(session.user.id);
-    console.log('  Pending invite found:', pendingInvite);
+console.log('  Pending invite found:', pendingInvite);
 
     if (!pendingInvite) {
-      console.log('❌ [CHAT ACCEPT] No pending invitation found');
+console.log('❌ [CHAT ACCEPT] No pending invitation found');
       socket.emit('ansi-output',
         '\r\n\x1b[31m✗ No pending chat invitations\x1b[0m\r\n' +
         'You do not have any pending chat requests.\r\n'
@@ -356,19 +356,19 @@ async function acceptChatInvitation(socket: Socket, session: BBSSession) {
       return;
     }
 
-    console.log('✅ [CHAT ACCEPT] Found invitation, sessionId:', pendingInvite.sessionId);
-    console.log('  subState BEFORE handleChatAcceptFn:', session.subState);
-    console.log('  Calling handleChatAcceptFn...');
+console.log('✅ [CHAT ACCEPT] Found invitation, sessionId:', pendingInvite.sessionId);
+console.log('  subState BEFORE handleChatAcceptFn:', session.subState);
+console.log('  Calling handleChatAcceptFn...');
 
     // Call the Socket.io accept handler
     await handleChatAcceptFn(socket, session, { sessionId: pendingInvite.sessionId });
 
-    console.log('✅ [CHAT ACCEPT] handleChatAcceptFn completed');
-    console.log('  subState AFTER handleChatAcceptFn:', session.subState);
-    console.log('  Expected:', LoggedOnSubState.CHAT);
+console.log('✅ [CHAT ACCEPT] handleChatAcceptFn completed');
+console.log('  subState AFTER handleChatAcceptFn:', session.subState);
+console.log('  Expected:', LoggedOnSubState.CHAT);
 
   } catch (error) {
-    console.error('❌ [CHAT ACCEPT] Error accepting chat:', error);
+console.error('❌ [CHAT ACCEPT] Error accepting chat:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError accepting chat invitation.\x1b[0m\r\n');
   }
 }
@@ -393,7 +393,7 @@ async function declineChatInvitation(socket: Socket, session: BBSSession) {
     await handleChatDeclineFn(socket, session, { sessionId: pendingInvite.sessionId });
 
   } catch (error) {
-    console.error('[CHAT] Error declining chat:', error);
+console.error('[CHAT] Error declining chat:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError declining chat invitation.\x1b[0m\r\n');
   }
 }
@@ -525,11 +525,11 @@ export async function handleLiveChatInvitationResponse(socket: Socket, session: 
 
   if (isAccept) {
     // Accept the invitation
-    console.log('💬 [LIVECHAT] User accepted via Y/n prompt');
+console.log('💬 [LIVECHAT] User accepted via Y/n prompt');
     await handleChatAcceptFn(socket, session, { sessionId });
   } else {
     // Decline the invitation
-    console.log('💬 [LIVECHAT] User declined via Y/n prompt');
+console.log('💬 [LIVECHAT] User declined via Y/n prompt');
     await handleChatDeclineFn(socket, session, { sessionId });
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }

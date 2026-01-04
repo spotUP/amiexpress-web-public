@@ -33,7 +33,7 @@ export async function handlePreLoginInput(socket: any, session: BBSSession, data
     // Check if this is a real C64 terminal (detected via telnet TTYPE)
     // If so, skip the graphics prompt and go straight to PETSCII mode
     if (session.terminalType === 'c64') {
-      console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
+console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
       session.petsciiMode = true;
       session.ansiEnabled = false; // C64 uses raw PETSCII, not ANSI
       session.screenWidth = 40;
@@ -53,7 +53,7 @@ export async function handlePreLoginInput(socket: any, session: BBSSession, data
 
     // For non-C64 terminals, show the graphics prompt
     // express.e:29528 - ANSI prompt
-    console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
+console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: '' }; // Initialize input buffer
     socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
@@ -68,7 +68,7 @@ export async function handlePreLoginInput(socket: any, session: BBSSession, data
   // Handle BBSTITLE screen keypress
   if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
     // User pressed key after BBSTITLE, now ready for login
-    console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
+console.log('[PRE-LOGIN] BBSTITLE viewed, transitioning to login');
     session.state = BBSState.LOGON;
     session.subState = undefined;
     const outputEvent = getOutputEvent(session);
@@ -90,7 +90,7 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
   if (data === '\r') {
     // Enter pressed - process the buffered input
     const answer = (session.tempData?.inputBuffer || '').toUpperCase();
-    console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
+console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
 
     // express.e:29538-29546 - Check for specific letters in the string
     // Default (empty/just Enter) = ANSI enabled
@@ -106,7 +106,7 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
       session.ansiEnabled = true; // PETSCII still needs ANSI color codes
       session.screenWidth = 40;  // C64 terminal width
       session.screenHeight = 25; // C64 terminal height
-      console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
+console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
       socket.emit('terminal-resize', { cols: 40, rows: 25 });
     } else if (hasR) {
       // express.e:29086 - RIP mode (640x350 EGA graphics, uses .rip files)
@@ -115,7 +115,7 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
       session.ansiEnabled = true; // RIP includes ANSI support
       session.screenWidth = 80;  // RIP uses 80 column text mode
       session.screenHeight = 43; // RIP uses 43 line text mode (EGA)
-      console.log('[RIP] RIP graphics mode enabled - 640x350 EGA');
+console.log('[RIP] RIP graphics mode enabled - 640x350 EGA');
       socket.emit('rip-mode', { enabled: true, width: 640, height: 350 });
     } else {
       // express.e:29538-29539 - If 'N' in string, disable ANSI
@@ -136,7 +136,7 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
     if (session.petsciiMode) graphicsMode = 'PETSCII (40x25)';
     else if (session.ripMode) graphicsMode = 'RIP (640x350)';
     else if (session.ansiEnabled) graphicsMode = 'ANSI';
-    console.log('[GRAPHICS] Mode set:', graphicsMode);
+console.log('[GRAPHICS] Mode set:', graphicsMode);
 
     // express.e:29551 - Display BBSTITLE screen and immediately show login prompt
     session.tempData.inputBuffer = ''; // Clear buffer
@@ -147,7 +147,7 @@ async function handleAnsiPromptInput(socket: any, session: BBSSession, data: str
           socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
         }
       }).catch((error: any) => {
-        console.error('[handlePreLogin] Pending screen command rejected:', error);
+console.error('[handlePreLogin] Pending screen command rejected:', error);
         socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
       });
     }

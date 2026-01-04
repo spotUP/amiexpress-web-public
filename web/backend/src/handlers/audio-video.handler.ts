@@ -26,7 +26,10 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
     }
 
     const streamId = `audio-${socket.id}`;
-    console.log(`[Audio] User ${session.user?.username} starting audio stream: ${streamId} in room ${roomId}`);
+console.log(`[Audio] User ${session.user?.username} starting audio stream: ${streamId} in room ${roomId}`);
+
+    // Notify the client (frontend) to start audio capture
+    socket.emit('audio:start-streaming', { options, streamId });
 
     // Notify others in the room
     const voiceRoomId = `voice:${roomId}`;
@@ -55,7 +58,7 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
       });
     }
 
-    console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
+console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
     callback?.();
   });
 
@@ -89,7 +92,10 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
     }
 
     const streamId = `video-${socket.id}`;
-    console.log(`[Video] User ${session.user?.username} starting video stream: ${streamId} in room ${roomId}`);
+console.log(`[Video] User ${session.user?.username} starting video stream: ${streamId} in room ${roomId}`);
+
+    // Notify the client (frontend) to actually start capturing from the camera
+    socket.emit('video:start-stream', { source: data.source, options: data.options, streamId });
 
     // Notify others in the room
     const voiceRoomId = `voice:${roomId}`;
@@ -119,7 +125,7 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
       });
     }
 
-    console.log(`[Video] User ${session.user?.username} stopped video stream: ${data.streamId}`);
+console.log(`[Video] User ${session.user?.username} stopped video stream: ${data.streamId}`);
     callback?.({ success: true });
   });
 
@@ -176,8 +182,8 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
     }
 
     const voiceRoomId = `voice:${roomId}`;
-    // Broadcast the ASCII frame to everyone else in the voice room
-    socket.to(voiceRoomId).emit('video:frame', {
+    // Broadcast the ASCII frame to everyone in the voice room (including sender for local preview)
+    io.to(voiceRoomId).emit('video:frame', {
       userId: session.user?.id,
       streamId: `video-${socket.id}`,
       frame: asciiFrame
@@ -193,11 +199,29 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
     if (!roomId) return;
 
     const voiceRoomId = `voice:${roomId}`;
-    // Broadcast to everyone else in the voice room
-    socket.to(voiceRoomId).emit('video:frame', {
+    // Broadcast to everyone in the voice room (including sender)
+    io.to(voiceRoomId).emit('video:frame', {
       userId: session.user?.id,
       streamId: data.streamId,
       frame: data.frame
+    });
+  });
+
+  // Relay speaking status to all participants (including sender for local UI sync)
+  socket.on('voice:speaking', (data: { isSpeaking: boolean, audioLevel: number }) => {
+    const session = sessions.get(socket.id);
+    if (!session) return;
+
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
+    if (!roomId) return;
+
+    const voiceRoomId = `voice:${roomId}`;
+    // Use the event name LiveChat is listening for
+    io.to(voiceRoomId).emit('audio-speaking-status', {
+      userId: session.user?.id,
+      username: session.user?.username,
+      isSpeaking: data.isSpeaking,
+      audioLevel: data.audioLevel
     });
   });
 }

@@ -29,7 +29,7 @@ export class ModernHandler {
     @inject(DI_TOKENS.Database) private db: any,
     @inject(DI_TOKENS.Config) private config: any
   ) {
-    console.log('[ModernHandler] Initialized with DI');
+console.log('[ModernHandler] Initialized with DI');
   }
 
   /**
@@ -62,7 +62,7 @@ export class ModernHandler {
       });
     } catch (error) {
       // Error handling (handler responsibility)
-      console.error('[ModernHandler] Command error:', error);
+console.error('[ModernHandler] Command error:', error);
       socket.emit('error', {
         message: 'Command failed',
         details: (error as Error).message
@@ -83,7 +83,7 @@ export class ModernHandler {
         data: result
       });
     } catch (error) {
-      console.error('[ModernHandler] Query error:', error);
+console.error('[ModernHandler] Query error:', error);
       socket.emit('error', { message: 'Query failed' });
     }
   }

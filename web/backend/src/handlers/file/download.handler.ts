@@ -49,7 +49,7 @@ export class DownloadHandler {
     }
 
     // setEnvStat(ENV_DOWNLOADING) - express.e:24855
-    console.log('[ENV] Downloading');
+console.log('[ENV] Downloading');
 
     // Call beginDLF - express.e:24856
     await this.beginDLF(socket, session, params);
@@ -69,7 +69,7 @@ export class DownloadHandler {
 
     // express.e:19793 - modemOffHook if RESULT_GOODBYE
     if (stat === 'GOODBYE') {
-      console.log('[DOWNLOAD] User chose goodbye after download');
+console.log('[DOWNLOAD] User chose goodbye after download');
       // Handle disconnect here if needed
     }
   }
@@ -142,7 +142,7 @@ export class DownloadHandler {
     if (filenameInput) {
       // express.e:20037-20055 - Parse multiple filenames (space-separated)
       const filenames = filenameInput.split(/\s+/).filter(f => f.length > 0);
-      console.log(`[DOWNLOAD] Processing ${filenames.length} filename(s):`, filenames);
+console.log(`[DOWNLOAD] Processing ${filenames.length} filename(s):`, filenames);
 
       for (const filename of filenames) {
         // Validate filename - express.e:20136-20155
@@ -356,7 +356,7 @@ export class DownloadHandler {
           timestamp: Date.now()
         });
       } catch (error) {
-        console.error('[BBSEvent] Error emitting download event:', error);
+console.error('[BBSEvent] Error emitting download event:', error);
       }
 
       await updateDownloadStats(session.user, fileInfo.size, isFree);
@@ -429,7 +429,7 @@ export class DownloadHandler {
             timestamp: Date.now()
           });
         } catch (error) {
-          console.error('[BBSEvent] Error emitting download event:', error);
+console.error('[BBSEvent] Error emitting download event:', error);
         }
 
         await updateDownloadStats(session.user, fileInfo.size, isFree);
@@ -654,15 +654,15 @@ export class DownloadHandler {
         if (user.slotNumber) {
           try {
             userFileManager.updateUserDataFile(user, user.slotNumber);
-            console.log(`[DOWNLOAD] Updated user ${user.username} disk files with download stats`);
+console.log(`[DOWNLOAD] Updated user ${user.username} disk files with download stats`);
           } catch (diskErr) {
-            console.error('[DOWNLOAD] Error writing user disk files:', diskErr);
+console.error('[DOWNLOAD] Error writing user disk files:', diskErr);
             // Continue anyway - database has the stats, sync can happen later
           }
         }
       }
     } catch (err) {
-      console.error('[DOWNLOAD] Failed to persist download stats', err);
+console.error('[DOWNLOAD] Failed to persist download stats', err);
     }
   }
 
@@ -697,7 +697,7 @@ export class DownloadHandler {
         bytesDownload: target.bytesDownload
       });
     } catch (err) {
-      console.error('[DOWNLOAD] Failed to persist conference download stats', err);
+console.error('[DOWNLOAD] Failed to persist conference download stats', err);
     }
   }
 
@@ -712,7 +712,7 @@ export class DownloadHandler {
       session.conferences = confs;
       return confs;
     } catch (err) {
-      console.error('[DOWNLOAD] Failed to load conferences for accounting', err);
+console.error('[DOWNLOAD] Failed to load conferences for accounting', err);
       return undefined;
     }
   }

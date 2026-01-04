@@ -140,7 +140,7 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
   }).catch((error: any) => {
-    console.error('Error fetching users:', error);
+console.error('Error fetching users:', error);
     socket.emit('ansi-output', '\x1b[31mError loading user list.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -150,8 +150,108 @@ export function displayUserList(socket: any, session: BBSSession, page: number =
 }
 
 // ===== User Account Editing =====
+// 1:1 port from express.e:21211-21650 editInfo()
 
-// handleEditUserAccount() - Edit user account details
+/**
+ * Display account information - Page 0 (Main Info)
+ * Port from express.e:21222 displayAccount()
+ */
+export function displayAccountPage0(socket: any, user: any, slot: number) {
+  // Clear screen and display header
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // CLS
+  socket.emit('ansi-output', '\x1b[36m-= Account Editor: Page 1 of 2 =-\x1b[0m\r\n');
+  socket.emit('ansi-output', `\x1b[33mSlot #${slot}\x1b[0m\r\n\r\n`);
+
+  // Line 2: A) Name, B) Real Name
+  socket.emit('ansi-output', `\x1b[33mA>\x1b[32m Name......:\x1b[36m${(user.username || '').padEnd(31)}\x1b[33mB>\x1b[32m Real Name.:\x1b[36m${(user.realname || '').padEnd(26)}\x1b[0m\r\n`);
+
+  // Line 3: C) Location, D) Password
+  socket.emit('ansi-output', `\x1b[33mC>\x1b[32m Location..:\x1b[36m${(user.location || '').padEnd(30)}\x1b[33mD>\x1b[32m Password..:\x1b[36m*********\x1b[0m\r\n`);
+
+  // Line 4: E) Phone, F) Conf Access
+  socket.emit('ansi-output', `\x1b[33mE>\x1b[32m Phone Number.:\x1b[36m${(user.phone || '').padEnd(13)}\x1b[33mF>\x1b[32m Conf Access:\x1b[36m${(user.conferenceAccess || '').padEnd(10)}\x1b[0m\r\n`);
+
+  // Line 5: G) Ratio, H) Sec Level
+  socket.emit('ansi-output', `\x1b[33mG>\x1b[32m Ratio.........:\x1b[36m${String(user.ratio || 0).padStart(5)}\x1b[33mH>\x1b[32m Sec_Level.:\x1b[36m${String(user.secLevel || 0).padStart(5)}\x1b[0m\r\n`);
+
+  // Line 6: I) Ratio Type, J) ReJoin, #) Calls
+  const ratioType = user.ratioType === 0 ? 'Byte' : user.ratioType === 1 ? 'B/F' : 'File';
+  const confRejoin = user.confRJoin || 0;
+  const msgBaseRejoin = user.msgBaseRJoin || 0;
+  socket.emit('ansi-output', `\x1b[33mI>\x1b[32m Ratio Type...:\x1b[36m${String(user.ratioType || 0).padStart(5)} \x1b[32m<-\x1b[33m${ratioType}\x1b[32m)\x1b[0m `);
+  socket.emit('ansi-output', `\x1b[33mJ>\x1b[32m ReJoin:\x1b[36m${String(confRejoin).padStart(3)}:${String(msgBaseRejoin).padStart(2)}`);
+  socket.emit('ansi-output', `  \x1b[33m#>\x1b[32m Calls:\x1b[36m${String(user.calls || 0).padStart(5)}\x1b[0m\r\n`);
+
+  // Line 7: K) Uploads, L) Messages Posted, %) Calls Today
+  socket.emit('ansi-output', `\x1b[33mK>\x1b[32m Uploads.......:\x1b[36m${String(user.uploads || 0).padStart(5)}\x1b[33mL>\x1b[32m Msgs Posted:\x1b[36m${String(user.messagesPosted || 0).padStart(5)}`);
+  socket.emit('ansi-output', `  \x1b[33m%>\x1b[32m Calls Today:\x1b[36m${String(user.callsToday || 0).padStart(3)}\x1b[0m\r\n`);
+
+  // Line 8: M) Downloads, N) New User
+  const newUser = user.newUser ? 'Yes' : 'No';
+  socket.emit('ansi-output', `\x1b[33mM>\x1b[32m Downloads.....:\x1b[36m${String(user.downloads || 0).padStart(5)}\x1b[33mN>\x1b[32m New User..:\x1b[36m${newUser.padEnd(3)}\x1b[0m\r\n`);
+
+  // Line 9: O) Bytes Uploaded
+  socket.emit('ansi-output', `\x1b[33mO>\x1b[32m Bytes Uploaded:\x1b[36m${String(user.bytesUpload || 0).padStart(12)}\x1b[0m\r\n`);
+
+  // Line 10: P) Bytes Downloaded
+  socket.emit('ansi-output', `\x1b[33mP>\x1b[32m Bytes Downloaded:\x1b[36m${String(user.bytesDownload || 0).padStart(10)}\x1b[0m\r\n`);
+
+  // Line 11: Q) Daily Bytes Limit
+  socket.emit('ansi-output', `\x1b[33mQ>\x1b[32m Daily Bytes Limit:\x1b[36m${String(user.dailyBytesLimit || 0).padStart(9)}\x1b[0m\r\n`);
+
+  // Line 12: R) Time Total, S) Upload CPS, T) Download CPS
+  const timeTotal = Math.floor((user.timeTotal || 0) / 60);
+  socket.emit('ansi-output', `\x1b[33mR>\x1b[32m Time Total:\x1b[36m${String(timeTotal).padStart(5)} min  `);
+  socket.emit('ansi-output', `\x1b[33mS>\x1b[32m UpCPS:\x1b[36m${String(user.upCPS || 0).padStart(6)}  `);
+  socket.emit('ansi-output', `\x1b[33mT>\x1b[32m DnCPS:\x1b[36m${String(user.dnCPS || 0).padStart(6)}\x1b[0m\r\n`);
+
+  // Line 13: U) Time Limit, V) Time Used, W) UUCP
+  const timeLimit = Math.floor((user.timeLimit || 0) / 60);
+  const timeUsed = Math.floor((user.timeUsed || 0) / 60);
+  socket.emit('ansi-output', `\x1b[33mU>\x1b[32m Time Limit:\x1b[36m${String(timeLimit).padStart(5)} min  `);
+  socket.emit('ansi-output', `\x1b[33mV>\x1b[32m Used:\x1b[36m${String(timeUsed).padStart(5)} min  `);
+  socket.emit('ansi-output', `\x1b[33mW>\x1b[32m UUCP:\x1b[36m${(user.uucpa || '').padEnd(4)}\x1b[0m\r\n`);
+
+  // Line 14: Y) Chat Limit, Z) Chat Used
+  const chatLimit = Math.floor((user.chatLimit || 0) / 60);
+  const chatUsed = Math.floor(((user.chatLimit || 0) - (user.chatRemain || 0)) / 60);
+  socket.emit('ansi-output', `\x1b[33mY>\x1b[32m Chat Limit:\x1b[36m${String(chatLimit).padStart(5)} min  `);
+  socket.emit('ansi-output', `\x1b[33mZ>\x1b[32m Used:\x1b[36m${String(chatUsed).padStart(5)} min\x1b[0m\r\n`);
+
+  // Line 18: Commands
+  socket.emit('ansi-output', '\r\n\r\n\r\n');
+  socket.emit('ansi-output', '\x1b[33m<SPACE>\x1b[36m=Page 2  \x1b[33m<TAB>\x1b[36m=Exit  \x1b[33m~\x1b[36m=Save  \x1b[33mX\x1b[36m=No-Save  \x1b[33m+/-\x1b[36m=Next/Prev User\x1b[0m\r\n');
+  socket.emit('ansi-output', '\x1b[33m!\x1b[36m=Credits  \x1b[33m*\x1b[36m=Notes  \x1b[33m@\x1b[36m=Conf Acct  \x1b[33m?\x1b[36m=Answers  \x1b[33mDEL\x1b[36m=Delete  \x1b[33m9\x1b[36m=Reactivate\x1b[0m\r\n');
+}
+
+/**
+ * Display account information - Page 1 (Security Settings)
+ * Port from express.e:21614-21643
+ */
+export function displayAccountPage1(socket: any, user: any, slot: number) {
+  // Clear screen and display header
+  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // CLS
+  socket.emit('ansi-output', '\x1b[36m-= Account Editor: Page 2 of 2 =-\x1b[0m\r\n');
+  socket.emit('ansi-output', `\x1b[33mSlot #${slot}\x1b[0m\r\n\r\n`);
+
+  // Line 2: A) Name (repeated)
+  socket.emit('ansi-output', `\x1b[33mA>\x1b[32m Name...........:\x1b[36m${(user.username || '').padEnd(31)}\x1b[0m\r\n`);
+
+  // Line 3: B) Password Reset, C) Account Locked
+  const pwdReset = user.forcePwdReset ? 'Yes' : 'No';
+  const accountLocked = user.accountLocked ? 'Yes' : 'No';
+  socket.emit('ansi-output', `\x1b[33mB>\x1b[32m Password Reset.:\x1b[36m${pwdReset.padEnd(3)}\x1b[33mC>\x1b[32m Account Locked:\x1b[36m${accountLocked.padEnd(3)}\x1b[0m\r\n`);
+
+  // Line 4: D) Invalid Attempts
+  socket.emit('ansi-output', `\x1b[33mD>\x1b[32m Invalid Attempts:\x1b[36m${String(user.invalidAttempts || 0).padStart(3)}\x1b[0m\r\n`);
+
+  // Line 18: Commands
+  socket.emit('ansi-output', '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n');
+  socket.emit('ansi-output', '\x1b[33m<SPACE>\x1b[36m=Page 1  \x1b[33m<TAB>\x1b[36m=Exit  \x1b[33m~\x1b[36m=Save  \x1b[33mX\x1b[36m=No-Save  \x1b[33m+/-\x1b[36m=Next/Prev User\x1b[0m\r\n');
+}
+
+// handleEditUserAccount() - Enter account editing mode
+// 1:1 port from express.e:21211-21650 editInfo()
 export function handleEditUserAccount(socket: any, session: BBSSession, username: string) {
   db.getUserByUsername(username).then((user: any) => {
     if (!user) {
@@ -163,21 +263,23 @@ export function handleEditUserAccount(socket: any, session: BBSSession, username
       return;
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[36m-= Editing User: ${user.username} =-\x1b[0m\r\n`);
-    socket.emit('ansi-output', `Real Name: ${user.realname || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Location: ${user.location || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Phone: ${user.phone || 'Not set'}\r\n`);
-    socket.emit('ansi-output', `Security Level: ${user.secLevel}\r\n`);
-    socket.emit('ansi-output', `Expert Mode: ${user.expert ? 'Yes' : 'No'}\r\n`);
-    socket.emit('ansi-output', `ANSI: ${user.ansi ? 'Yes' : 'No'}\r\n\r\n`);
+    // Initialize account editing session (express.e:21217-21222)
+    session.tempData = {
+      accountEditing: true,
+      editingUser: user,
+      editingSlot: user.id,
+      page: 0,  // 0 = page 1, 1 = page 2
+      changes: false,
+      originalData: JSON.parse(JSON.stringify(user))  // Deep copy for change tracking
+    };
 
-    socket.emit('ansi-output', '\x1b[32mAccount editing interface not fully implemented yet.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    session.tempData = undefined;
+    // Display first page
+    displayAccountPage0(socket, user, user.id);
+
+    // Set state to wait for edit commands
+    session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
   }).catch((error: any) => {
-    console.error('Error fetching user:', error);
+console.error('Error fetching user:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError loading user data.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -224,7 +326,7 @@ export function handleViewUserStats(socket: any, session: BBSSession, username: 
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
   }).catch((error: any) => {
-    console.error('Error fetching user stats:', error);
+console.error('Error fetching user stats:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError loading user statistics.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -265,7 +367,7 @@ export function handleChangeSecLevel(socket: any, session: BBSSession, input: st
       session.tempData = { changeSecUser: user };
       session.subState = LoggedOnSubState.FILE_DIR_SELECT;
     }).catch((err: any) => {
-      console.error('Error loading user for sec level change:', err);
+console.error('Error loading user for sec level change:', err);
       socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -293,7 +395,7 @@ export function handleChangeSecLevel(socket: any, session: BBSSession, input: st
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
   }).catch((err: any) => {
-    console.error('Error updating security level:', err);
+console.error('Error updating security level:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mError updating security level.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -332,7 +434,7 @@ export function handleToggleUserFlags(socket: any, session: BBSSession, input: s
       session.tempData = { toggleFlagsUser: user, awaitingAnsi: false };
       session.subState = LoggedOnSubState.FILE_DIR_SELECT;
     }).catch((err: any) => {
-      console.error('Error loading user for flag toggle:', err);
+console.error('Error loading user for flag toggle:', err);
       socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -376,7 +478,7 @@ export function handleToggleUserFlags(socket: any, session: BBSSession, input: s
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
   }).catch((err: any) => {
-    console.error('Error updating user flags:', err);
+console.error('Error updating user flags:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mError updating user flags.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
@@ -429,7 +531,7 @@ export async function handleDeleteUserAccount(socket: any, session: BBSSession, 
         socket.disconnect();
       }, 2000);
     } catch (error: any) {
-      console.error('[DeleteAccount] Error deleting user:', error);
+console.error('[DeleteAccount] Error deleting user:', error);
       socket.emit('ansi-output', `\r\n\x1b[31mError deleting account: ${error.message}\x1b[0m\r\n`);
       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
@@ -473,7 +575,7 @@ export function handleSearchUsers(socket: any, session: BBSSession, searchTerm: 
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
   }).catch((err: any) => {
-    console.error('Error searching users:', err);
+console.error('Error searching users:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mError searching users.\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;

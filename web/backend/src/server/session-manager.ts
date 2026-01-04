@@ -85,9 +85,28 @@ export function getNextAvailableNodeId(): number {
 }
 
 /**
- * Create a new BBS session with default values
+ * Connection options for creating a session
+ * Used by all protocols (web, telnet, SSH) for unified session initialization
  */
-export function createSession(nodeId: number): BBSSession {
+export interface SessionConnectionOptions {
+  connectionType?: 'web' | 'telnet' | 'ssh';
+  remoteAddress?: string;
+  connectionHostname?: string;
+  connectionPort?: number;
+  connectionBaud?: number;
+  screenWidth?: number;
+  screenHeight?: number;
+}
+
+/**
+ * Create a new BBS session with default values
+ * Unified session creation for all connection types (web, telnet, SSH)
+ *
+ * @param nodeId - The node ID for this session
+ * @param options - Optional connection-specific settings
+ */
+export function createSession(nodeId: number, options: SessionConnectionOptions = {}): BBSSession {
+  const now = Date.now();
   return {
     state: BBSState.AWAIT,
     subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
@@ -95,14 +114,14 @@ export function createSession(nodeId: number): BBSSession {
     conferenceId: 1, // XIM doors read this property
     currentMsgBase: 1, // Start in Main message base (ID 1)
     timeRemaining: 60, // 60 minutes default
-    lastActivity: Date.now(),
+    lastActivity: now,
     confRJoin: 1, // Default to General conference (ID 1)
     msgBaseRJoin: 1, // Default to Main message base (ID 1)
     commandBuffer: '', // Buffer for command input
     menuPause: true, // Like AmiExpress - menu displays immediately by default
     inputBuffer: '', // Buffer for line-based input
     maskInput: false, // Echo typed characters unless password masking is active
-    connectionStart: Date.now(),
+    connectionStart: now,
     displayFlowPaused: false, // Whether screen flow is waiting for a pause key
     inDoorManager: false,
     doorInputHandler: undefined,
@@ -121,8 +140,8 @@ export function createSession(nodeId: number): BBSSession {
     currentStat: EnvStat.IDLE, // Environment status
     quietFlag: false, // Quiet mode (invisible to WHO)
     blockOLM: false, // Block Online Messages
-    loginTime: Date.now(), // Login timestamp
-    nodeStartTime: Date.now(), // Node start time for uptime
+    loginTime: now, // Login timestamp
+    nodeStartTime: now, // Node start time for uptime
     nodeId: nodeId, // Assign unique virtual node ID - express.e:163
     loginRetryCount: 0, // Initialize retry counter - express.e:29560
 
@@ -133,7 +152,18 @@ export function createSession(nodeId: number): BBSSession {
     // Command history (express.e:207-209)
     commandHistory: [], // Circular buffer of last 20 commands (historyBuf)
     historyIndex: 0, // Current position for next command storage (historyNum)
-    historyCycle: 0 // Current position when navigating history
+    historyCycle: 0, // Current position when navigating history
+
+    // Connection-specific fields (unified across all protocols)
+    connectionType: options.connectionType || 'web',
+    remoteAddress: options.remoteAddress || 'unknown',
+    connectionHostname: options.connectionHostname || 'localhost',
+    connectionPort: options.connectionPort || 3001,
+    connectionBaud: options.connectionBaud || 19200,
+    screenWidth: options.screenWidth || 80,
+    screenHeight: options.screenHeight || 24,
+    modemEmulationEnabled: false,
+    modemBps: 0
   };
 }
 
@@ -184,7 +214,7 @@ export function getSocketIdByNodeId(nodeId: number): string | undefined {
 export function setSession(socketId: string, session: BBSSession): void {
   const nodeId = session.nodeId;
   if (!nodeId) {
-    console.error('[Session Manager] CRITICAL: Tried to set session without nodeId!');
+console.error('[Session Manager] CRITICAL: Tried to set session without nodeId!');
     return;
   }
 

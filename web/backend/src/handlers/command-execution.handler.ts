@@ -19,6 +19,7 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler } from '../utils/error-handling.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BBSSession } from '../index';
 
 // Result codes from express.e
 const RESULT_SUCCESS = 0;
@@ -31,7 +32,7 @@ const RESULT_NOT_ALLOWED = -2;
  */
 function debugLog(socket: any, session: any, message: string, category: string = "CMD") {
   // Always log to console (backend.log)
-  console.log(message);
+console.log(message);
 
   // If sysop logged in, also send to terminal and session log
   if (socket && session?.user?.secLevel && session.user.secLevel >= 200) {
@@ -73,23 +74,19 @@ export function loadCommands(
   conferenceId?: number,
   nodeId: number = 0
 ): void {
-  console.log('Loading command definitions...');
-
   // express.e:4630-4650 - Load BBSCMD (priority: CONFCMD > NODECMD > BBSCMD)
   const bbsCommands = scanCommandDirectory(baseDir, CommandType.BBSCMD, conferenceId, nodeId);
-  console.log(`  Loaded ${bbsCommands.size} BBS commands`);
   for (const [name, cmd] of bbsCommands) {
     commandCache.bbscmd.set(name.toUpperCase(), cmd);
   }
 
   // express.e:4652-4670 - Load SYSCMD (priority: CONFSYSCMD > NODESYSCMD > SYSCMD)
   const sysCommands = scanCommandDirectory(baseDir, CommandType.SYSCMD, conferenceId, nodeId);
-  console.log(`  Loaded ${sysCommands.size} system commands`);
   for (const [name, cmd] of sysCommands) {
     commandCache.syscmd.set(name.toUpperCase(), cmd);
   }
 
-  console.log(`Total commands loaded: ${commandCache.bbscmd.size + commandCache.syscmd.size}`);
+  process.stdout.write(`[loadCommands] ${commandCache.bbscmd.size + commandCache.syscmd.size} commands loaded\n`);
 }
 
 /**
@@ -105,8 +102,6 @@ export async function reloadDoorCommands(
   conferenceId?: number,
   nodeId: number = 0
 ): Promise<{ success: boolean; message: string; doorsReloaded: number }> {
-  console.log('[Hot-Reload] Reloading door commands...');
-
   try {
     // Clear existing BBSCMD cache (keep SYSCMD)
     const beforeCount = commandCache.bbscmd.size;
@@ -121,7 +116,6 @@ export async function reloadDoorCommands(
 
     const afterCount = commandCache.bbscmd.size;
     const message = `Reloaded ${afterCount} door commands (was ${beforeCount})`;
-    console.log(`[Hot-Reload] ${message}`);
 
     return {
       success: true,
@@ -130,10 +124,6 @@ export async function reloadDoorCommands(
     };
   } catch (error) {
     const errorMsg = `Failed to reload doors: ${(error as Error).message}`;
-    console.error(`[Hot-Reload] ${errorMsg}`, error);
-
-    // Note: reloadDoorCommands doesn't have socket/session available
-    // Error is already logged to console and returned in response
 
     return {
       success: false,
@@ -217,7 +207,6 @@ async function runCommand(
 
   // express.e:28256 - If no external command found, try internal commands
   if (!commandDef) {
-    console.log(`[runCommand] No external command found for '${cmdUpper}', trying internal commands`);
     const { processBBSCommand } = require('./command-handler/internal-commands');
     const internalResult = await processBBSCommand(socket, session, cmdUpper, params);
     return internalResult;
@@ -235,12 +224,8 @@ async function runCommand(
   const userSecLevel = isScreenAutoCommand ? Number.MAX_SAFE_INTEGER : (session.user?.secLevel || 0);
   const requiredAccess = commandDef.access || 0;
 
-  if (requiredAccess === 0) {
-    // express.e:4703 - Access 0 means available to all
-    console.log(`  Access: 0 (public)`);
-  } else if (userSecLevel < requiredAccess) {
+  if (requiredAccess !== 0 && userSecLevel < requiredAccess) {
     // express.e:4705-4707 - User doesn't have sufficient access
-    console.log(`  Access denied: user level ${userSecLevel} < required ${requiredAccess}`);
     SysopDebugUtil.debug(
       socket,
       session,
@@ -254,32 +239,30 @@ async function runCommand(
     // because the user didn't explicitly type them
     if (!session.executingScreenCommand) {
       socket.emit('ansi-output', AnsiUtil.errorLine('You do not have access to that command.'));
-    } else {
-      console.log(`  (Screen command - failing silently)`);
     }
     return RESULT_NOT_ALLOWED;
-  } else {
-    console.log(`  Access granted: user level ${userSecLevel} >= required ${requiredAccess}`);
   }
 
-  // express.e:4710-4731 - Check password if required
+  // express.e:4710-4731 - Check password if required (express.e:4716-4730)
   if (commandDef.password) {
-    console.log(`  Command requires password`);
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Enter Password >: ');
 
-    // For now, we'll skip password checking and just return failure
-    // In a full implementation, we would wait for password input
-    console.log(`  Password checking not yet implemented - denying access`);
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid password!'));
-    return RESULT_NOT_ALLOWED;
+    // Store command for execution after password validation
+    session.tempData.passwordProtectedCommand = {
+      commandDef,
+      commandName: cmd
+    };
+
+    session.subState = LoggedOnSubState.COMMAND_PASSWORD_INPUT;
+    return RESULT_SUCCESS; // Wait for password input
   }
 
   // express.e:4733-4748 - Internal commands are now checked BEFORE external doors
   // (see lines 208-217 above - internal commands take priority)
 
   // express.e:4750-4807 - Execute the door/command
-  console.log(`  Executing ${commandDef.type} door: ${commandDef.location}`);
+  SysopDebugUtil.debug(socket, session, 'COMMAND', `Executing ${commandDef.type} door: ${commandDef.location}`, { type: commandDef.type, location: commandDef.location });
 
   // Cache command + params for XIM BB_MAINLINE replies (express.e:3794-3800).
   session.currentCommand = cmdUpper;
@@ -292,7 +275,6 @@ async function runCommand(
   const isFileScanCommand = ['FR', 'F', 'N', 'CS', 'SCAN', 'NSU'].includes(cmdUpper);
   if (isFileScanCommand) {
     session.currentStat = 8; // ENV_FILES
-    console.log(`  Set environment status to ENV_FILES (8) for file scan command`);
   }
 
   // Execute the door using the door handler
@@ -341,7 +323,7 @@ async function runCommand(
       await _executeDoor(socket, session, doorConfig);
       return RESULT_SUCCESS;
     } catch (error) {
-      console.error(`  Error executing door:`, error);
+console.error(`  Error executing door:`, error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -358,7 +340,7 @@ async function runCommand(
       return RESULT_FAILURE;
     }
   } else {
-    console.warn(`  executeDoor not available - command execution skipped`);
+console.warn(`  executeDoor not available - command execution skipped`);
     SysopDebugUtil.debug(
       socket,
       session,
@@ -380,4 +362,76 @@ export function getCommandCache() {
     syscmd: Array.from(commandCache.syscmd.entries()),
     bbscmd: Array.from(commandCache.bbscmd.entries())
   };
+}
+
+/**
+ * Handle password input for password-protected commands
+ * express.e:4716-4730
+ */
+export async function handleCommandPasswordInput(socket: any, session: BBSSession, password: string): Promise<void> {
+  const { AnsiUtil } = require('../utils/ansi.util');
+  const { LoggedOnSubState } = require('../constants/bbs-states');
+
+  if (!session.tempData.passwordProtectedCommand) {
+console.error('[CommandPassword] No password-protected command in session');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  const { commandDef, commandName } = session.tempData.passwordProtectedCommand;
+
+  // express.e:4725 - Case-insensitive password comparison (StriCmp)
+  if (password.toLowerCase() !== commandDef.password.toLowerCase()) {
+    // express.e:4726-4728 - Invalid password
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('InValid Password!'));
+    socket.emit('ansi-output', '\r\n');
+
+    // Clean up and return to menu
+    delete session.tempData.passwordProtectedCommand;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Password is correct - execute the command
+console.log(`[CommandPassword] Password correct, executing command: ${commandName}`);
+
+  // Clean up password data
+  delete session.tempData.passwordProtectedCommand;
+
+  // Execute the command (express.e:4750-4807)
+  const { executeCommandDoor } = require('./command-execution.handler');
+
+  // Set environment status based on command type
+  const { setEnvStat } = require('../utils/env.util');
+  const { EnvStat } = require('../constants/env-codes');
+
+  if (commandDef.type === 'AREXX' || commandDef.type === 'ARexx') {
+    setEnvStat(session, EnvStat.AREXX);
+  } else {
+    setEnvStat(session, EnvStat.DOORS);
+  }
+
+  // Execute the door/command
+  try {
+    if (commandDef.type === 'TypeScript' || commandDef.type === 'TS') {
+      const { executeTypeScriptDoor } = require('../doors/TypeScriptDoorManager');
+      await executeTypeScriptDoor(socket, session, commandDef.location, commandName);
+    } else if (commandDef.type === 'AREXX' || commandDef.type === 'ARexx') {
+      const { ArexxDoorManager } = require('../doors/ArexxDoorManager');
+      await ArexxDoorManager.executeDoor(socket, session, commandDef.location, commandName);
+    } else {
+      // 68K Amiga door
+      const { executeAmigaDoor } = require('../doors/amigaDoorManager');
+      await executeAmigaDoor(socket, session, commandDef.location, commandName, commandDef.args || '');
+    }
+  } catch (error: any) {
+console.error(`[CommandPassword] Error executing command ${commandName}:`, error);
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine(`Error executing command: ${error.message}`));
+    socket.emit('ansi-output', '\r\n');
+  }
+
+  // Return to menu after command execution
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

@@ -75,7 +75,7 @@ export class AuthHandler {
         user: publicUser
       });
     } catch (error) {
-      console.error('Login error:', error);
+console.error('Login error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -99,7 +99,7 @@ export class AuthHandler {
 
       res.json({ user: this.toPublicUser(user) });
     } catch (error) {
-      console.error('Me error:', error);
+console.error('Me error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -190,7 +190,7 @@ export class AuthHandler {
         user: this.toPublicUser(user)
       });
     } catch (error) {
-      console.error('Registration error:', error);
+console.error('Registration error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -223,7 +223,7 @@ export class AuthHandler {
 
       res.json({ accessToken });
     } catch (error) {
-      console.error('Token refresh error:', error);
+console.error('Token refresh error:', error);
       res.status(403).json({ error: 'Invalid refresh token' });
     }
   }

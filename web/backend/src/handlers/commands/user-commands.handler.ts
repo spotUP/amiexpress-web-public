@@ -98,7 +98,7 @@ function startZmodemUpload(socket: any, session: BBSSession): void {
     const fs = require('fs');
     fs.mkdirSync(playpen, { recursive: true });
   } catch (err) {
-    console.error('[ZMODEM] Failed to ensure playpen:', err);
+console.error('[ZMODEM] Failed to ensure playpen:', err);
   }
 
   const transport = getTransferTransport(session);
@@ -227,7 +227,7 @@ export function handleUserStatsCommand(socket: any, session: BBSSession): void {
   }
 
   // express.e:25544 - setEnvStat(ENV_STATS)
-  console.log('[ENV] User Statistics');
+console.log('[ENV] User Statistics');
 
   // express.e:25546 - aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
@@ -310,7 +310,7 @@ export async function handleJoinConferenceCommand(
   // This is handled by joinConference function
 
   // express.e:25122 - setEnvStat(ENV_JOIN)
-  console.log('[ENV] Join Conference');
+console.log('[ENV] Join Conference');
 
   // express.e:25124-25136 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
@@ -394,9 +394,13 @@ export async function handleJoinConferenceCommand(
       { text: ': ', color: 'white' }
     ]));
 
-    // Set state to wait for input
+    // Set state to wait for input (express.e:25169-25179)
     session.subState = LoggedOnSubState.READ_COMMAND;
-    // TODO: Add pendingJoinMsgBaseInput flag to session
+    session.tempData = {
+      waitingForJoinMsgBase: true,
+      newConf: newConf,
+      msgBaseCount: msgBaseCount
+    };
     return;
   }
 
@@ -421,7 +425,7 @@ export function handleUploadCommand(socket: any, session: BBSSession): void {
   }
 
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
-  console.log('[ENV] Uploading');
+console.log('[ENV] Uploading');
 
   // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
   // The first parameter 0 means show upload interface first, not immediate ZMODEM
@@ -443,7 +447,7 @@ export function handleDownloadCommand(socket: any, session: BBSSession, params: 
   }
 
   // express.e:24855 - setEnvStat(ENV_DOWNLOADING)
-  console.log('[ENV] Downloading');
+console.log('[ENV] Downloading');
 
   // If user has flagged files, send them via ZMODEM; otherwise fall back to download interface.
   const userId = session.user?.id;
@@ -508,9 +512,56 @@ export function displayFontSelectionMenu(socket: any, session: BBSSession): void
 }
 
 /**
- * Handle font selection input
- * Web-specific feature
+ * Handle conference join message base number input
+ * Called when user is prompted for message base number during conference join
  */
+export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  if (!session.tempData?.waitingForJoinMsgBase) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  const msgBaseNum = parseInt(input, 10);
+  const { newConf, msgBaseCount } = session.tempData;
+
+  // Clear waiting flag
+  session.tempData.waitingForJoinMsgBase = false;
+
+  // Validate message base number
+  if (isNaN(msgBaseNum) || msgBaseNum < 1 || msgBaseNum > msgBaseCount) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid message base number'));
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Get conference message bases (use injected dependencies)
+  const targetConf = _conferences.find((c: Conference) => c.id === newConf);
+  if (!targetConf) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('Conference not found'));
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  const confMessageBases = _messageBases.filter((mb: MessageBase) => mb.conferenceId === newConf);
+  if (msgBaseNum > confMessageBases.length) {
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('Message base not found'));
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // Join conference with selected message base (express.e:25181)
+  const msgBaseId = confMessageBases[msgBaseNum - 1].id;
+  await _joinConference(socket, session, newConf, msgBaseId);
+
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
 export async function handleFontSelectionInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const { db } = require('../database');
 
@@ -554,7 +605,7 @@ export async function handleFontSelectionInput(socket: any, session: BBSSession,
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   } catch (error) {
-    console.error('Error updating font preference:', error);
+console.error('Error updating font preference:', error);
     socket.emit('ansi-output', AnsiUtil.errorLine('Error saving font preference.'));
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.subState = LoggedOnSubState.DISPLAY_MENU;

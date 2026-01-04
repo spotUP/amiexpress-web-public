@@ -25,29 +25,29 @@ const playpenStorage = multer.diskStorage({
       // Use Node0/Playpen for uploads (express.e uses ramPen or Node#/Playpen)
       const playpenDir = path.join(config.get('dataDir'), 'Node0', 'Playpen');
 
-      console.log('[Upload] BBS data directory:', config.get('dataDir'));
-      console.log('[Upload] Playpen directory:', playpenDir);
+console.log('[Upload] BBS data directory:', config.get('dataDir'));
+console.log('[Upload] Playpen directory:', playpenDir);
 
       // Ensure directory exists
       if (!fs.existsSync(playpenDir)) {
-        console.log('[Upload] Creating playpen directory...');
+console.log('[Upload] Creating playpen directory...');
         fs.mkdirSync(playpenDir, { recursive: true });
-        console.log('[Upload] Playpen directory created');
+console.log('[Upload] Playpen directory created');
       }
 
       cb(null, playpenDir);
     } catch (error) {
-      console.error('[Upload] Error setting destination:', error);
+console.error('[Upload] Error setting destination:', error);
       cb(error as Error, '');
     }
   },
   filename: (req: any, file: any, cb: (error: Error | null, filename: string) => void) => {
     try {
       // Use original filename (already validated in UPLOAD_FILENAME_INPUT handler)
-      console.log('[Upload] Storing file as:', file.originalname);
+console.log('[Upload] Storing file as:', file.originalname);
       cb(null, file.originalname);
     } catch (error) {
-      console.error('[Upload] Error setting filename:', error);
+console.error('[Upload] Error setting filename:', error);
       cb(error as Error, '');
     }
   }
@@ -62,23 +62,23 @@ const upload = multer({
 
 // File upload endpoint with error handling
 fileRouter.post('/upload', (req: Request, res: Response) => {
-  console.log('[Upload] Upload request received from:', req.headers.origin);
+console.log('[Upload] Upload request received from:', req.headers.origin);
 
   // Use multer middleware with error handling
   upload.single('file')(req, res, (err: any) => {
     if (err) {
-      console.error('[Upload] Multer error:', err);
+console.error('[Upload] Multer error:', err);
       return res.status(500).json({ error: `Upload failed: ${err.message}` });
     }
 
     try {
       if (!req.file) {
-        console.error('[Upload] No file in request');
+console.error('[Upload] No file in request');
         return res.status(400).json({ error: 'No file provided' });
       }
 
-      console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
-      console.log('[Upload] Saved to:', req.file.path);
+console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
+console.log('[Upload] Saved to:', req.file.path);
 
       res.json({
         filename: req.file.filename || req.file.originalname,
@@ -87,7 +87,7 @@ fileRouter.post('/upload', (req: Request, res: Response) => {
         path: req.file.path
       });
     } catch (error) {
-      console.error('[Upload] Processing error:', error);
+console.error('[Upload] Processing error:', error);
       res.status(500).json({ error: 'Upload processing failed' });
     }
   });
@@ -95,23 +95,23 @@ fileRouter.post('/upload', (req: Request, res: Response) => {
 
 // Door upload endpoint
 fileRouter.post('/upload/door', (req: Request, res: Response) => {
-  console.log('[Door Upload] Upload request received from:', req.headers.origin);
+console.log('[Door Upload] Upload request received from:', req.headers.origin);
 
   // Use multer middleware with 'door' field name
   upload.single('door')(req, res, (err: any) => {
     if (err) {
-      console.error('[Door Upload] Multer error:', err);
+console.error('[Door Upload] Multer error:', err);
       return res.status(500).json({ error: `Upload failed: ${err.message}` });
     }
 
     try {
       if (!req.file) {
-        console.error('[Door Upload] No file in request');
+console.error('[Door Upload] No file in request');
         return res.status(400).json({ error: 'No file provided' });
       }
 
-      console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
-      console.log('[Door Upload] Saved to:', req.file.path);
+console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
+console.log('[Door Upload] Saved to:', req.file.path);
 
       // Move file to Doors/archives directory in BBS data directory
       const doorsArchivePath = path.join(config.get('dataDir'), 'Doors', 'archives');
@@ -121,7 +121,7 @@ fileRouter.post('/upload/door', (req: Request, res: Response) => {
 
       const destPath = path.join(doorsArchivePath, req.file.originalname);
       fs.copyFileSync(req.file.path, destPath);
-      console.log('[Door Upload] Copied to archives:', destPath);
+console.log('[Door Upload] Copied to archives:', destPath);
 
       // Clean up temp file
       fs.unlinkSync(req.file.path);
@@ -133,7 +133,7 @@ fileRouter.post('/upload/door', (req: Request, res: Response) => {
         path: destPath
       });
     } catch (error) {
-      console.error('[Door Upload] Processing error:', error);
+console.error('[Door Upload] Processing error:', error);
       res.status(500).json({ error: 'Door upload processing failed' });
     }
   });
@@ -182,11 +182,11 @@ fileRouter.get('/download/:fileId', async (req: Request, res: Response) => {
     }
 
     if (!filePath || !fs.existsSync(filePath)) {
-      console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
+console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
       return res.status(404).json({ error: 'File not found on server' });
     }
 
-    console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
+console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
 
     // Set headers for file download
     res.setHeader('Content-Disposition', `attachment; filename="${fileEntry.filename}"`);
@@ -201,7 +201,7 @@ fileRouter.get('/download/:fileId', async (req: Request, res: Response) => {
     // This matches express.e flow where statistics are updated after transfer
 
   } catch (error) {
-    console.error('[Download] Error:', error);
+console.error('[Download] Error:', error);
     res.status(500).json({ error: 'Download failed' });
   }
 });

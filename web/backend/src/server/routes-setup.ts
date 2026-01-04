@@ -41,27 +41,27 @@ const playpenStorage = multer.diskStorage({
   destination: (req: any, file: any, cb: (error: Error | null, destination: string) => void) => {
     try {
       const playpenDir = path.join(config.get('dataDir'), 'Node0', 'Playpen');
-      console.log('[Upload] BBS data directory:', config.get('dataDir'));
-      console.log('[Upload] Playpen directory:', playpenDir);
+console.log('[Upload] BBS data directory:', config.get('dataDir'));
+console.log('[Upload] Playpen directory:', playpenDir);
 
       if (!fs.existsSync(playpenDir)) {
-        console.log('[Upload] Creating playpen directory...');
+console.log('[Upload] Creating playpen directory...');
         fs.mkdirSync(playpenDir, { recursive: true });
-        console.log('[Upload] Playpen directory created');
+console.log('[Upload] Playpen directory created');
       }
 
       cb(null, playpenDir);
     } catch (error) {
-      console.error('[Upload] Error setting destination:', error);
+console.error('[Upload] Error setting destination:', error);
       cb(error as Error, '');
     }
   },
   filename: (req: any, file: any, cb: (error: Error | null, filename: string) => void) => {
     try {
-      console.log('[Upload] Storing file as:', file.originalname);
+console.log('[Upload] Storing file as:', file.originalname);
       cb(null, file.originalname);
     } catch (error) {
-      console.error('[Upload] Error setting filename:', error);
+console.error('[Upload] Error setting filename:', error);
       cb(error as Error, '');
     }
   }
@@ -146,12 +146,12 @@ export function registerHttpRoutes(app: Application): void {
   function serveSPA(prefix: string, distPath: string, name: string) {
     // Check if dist directory exists
     if (!fs.existsSync(distPath)) {
-      console.warn(`[Static] ${name} dist not found: ${distPath}`);
-      console.warn(`[Static] Run 'cd ${path.relative(projectRoot, path.dirname(distPath))} && npm run build'`);
+console.warn(`[Static] ${name} dist not found: ${distPath}`);
+console.warn(`[Static] Run 'cd ${path.relative(projectRoot, path.dirname(distPath))} && npm run build'`);
       return;
     }
 
-    console.log(`[Static] Serving ${name} at ${prefix} from ${distPath}`);
+console.log(`[Static] Serving ${name} at ${prefix} from ${distPath}`);
 
     // Serve static assets with caching
     const staticOptions = process.env.NODE_ENV === 'production'
@@ -172,7 +172,7 @@ export function registerHttpRoutes(app: Application): void {
       }
       const indexPath = join(distPath, 'index.html');
       if (!fs.existsSync(indexPath)) {
-        console.error(`[Static] ${name} index.html not found: ${indexPath}`);
+console.error(`[Static] ${name} index.html not found: ${indexPath}`);
         return res.status(500).send(`${name} not built. Run 'npm run build' in ${path.relative(projectRoot, path.dirname(distPath))}`);
       }
       res.sendFile(indexPath);
@@ -190,31 +190,31 @@ export function registerHttpRoutes(app: Application): void {
   // Serve BBS Terminal Frontend at / (fallback)
   const bbsFrontendPath = join(projectRoot, 'web/frontend/dist');
 
-  console.log(`[Static] Project root: ${projectRoot}`);
-  console.log(`[Static] Process cwd: ${process.cwd()}`);
-  console.log(`[Static] Frontend path: ${bbsFrontendPath}`);
-  console.log(`[Static] Frontend path exists: ${fs.existsSync(bbsFrontendPath)}`);
+console.log(`[Static] Project root: ${projectRoot}`);
+console.log(`[Static] Process cwd: ${process.cwd()}`);
+console.log(`[Static] Frontend path: ${bbsFrontendPath}`);
+console.log(`[Static] Frontend path exists: ${fs.existsSync(bbsFrontendPath)}`);
 
   if (fs.existsSync(bbsFrontendPath)) {
     const assetsPath = join(bbsFrontendPath, 'assets');
     const fontsPath = join(bbsFrontendPath, 'fonts');
-    console.log(`[Static] Assets path exists: ${fs.existsSync(assetsPath)}`);
-    console.log(`[Static] Fonts path exists: ${fs.existsSync(fontsPath)}`);
+console.log(`[Static] Assets path exists: ${fs.existsSync(assetsPath)}`);
+console.log(`[Static] Fonts path exists: ${fs.existsSync(fontsPath)}`);
     if (fs.existsSync(assetsPath)) {
       const assetFiles = fs.readdirSync(assetsPath);
-      console.log(`[Static] Assets count: ${assetFiles.length}, first 5: ${assetFiles.slice(0, 5).join(', ')}`);
+console.log(`[Static] Assets count: ${assetFiles.length}, first 5: ${assetFiles.slice(0, 5).join(', ')}`);
     }
     if (fs.existsSync(fontsPath)) {
       const fontFiles = fs.readdirSync(fontsPath);
-      console.log(`[Static] Fonts count: ${fontFiles.length}`);
+console.log(`[Static] Fonts count: ${fontFiles.length}`);
     }
   }
 
   if (!fs.existsSync(bbsFrontendPath)) {
-    console.warn(`[Static] BBS Frontend dist not found: ${bbsFrontendPath}`);
-    console.warn(`[Static] Run 'cd web/frontend && npm run build'`);
+console.warn(`[Static] BBS Frontend dist not found: ${bbsFrontendPath}`);
+console.warn(`[Static] Run 'cd web/frontend && npm run build'`);
   } else {
-    console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
+console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
 
     const bbsStaticOptions = process.env.NODE_ENV === 'production'
       ? {
@@ -243,7 +243,7 @@ export function registerHttpRoutes(app: Application): void {
       // Serve index.html for all other routes (SPA fallback)
       const indexPath = join(bbsFrontendPath, 'index.html');
       if (!fs.existsSync(indexPath)) {
-        console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
+console.error(`[Static] BBS Frontend index.html not found: ${indexPath}`);
         return res.status(500).send('BBS Frontend not built. Run \'npm run build\' in web/frontend');
       }
       res.sendFile(indexPath);
@@ -259,22 +259,22 @@ export function registerHttpRoutes(app: Application): void {
 
   // ===== File Upload Routes =====
   app.post('/api/upload', (req: Request, res: Response) => {
-    console.log('[Upload] Upload request received from:', req.headers.origin);
+console.log('[Upload] Upload request received from:', req.headers.origin);
 
     upload.single('file')(req, res, (err: any) => {
       if (err) {
-        console.error('[Upload] Multer error:', err);
+console.error('[Upload] Multer error:', err);
         return res.status(500).json({ error: `Upload failed: ${err.message}` });
       }
 
       try {
         if (!req.file) {
-          console.error('[Upload] No file in request');
+console.error('[Upload] No file in request');
           return res.status(400).json({ error: 'No file provided' });
         }
 
-        console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
-        console.log('[Upload] Saved to:', req.file.path);
+console.log('[Upload] File received:', req.file.originalname, req.file.size, 'bytes');
+console.log('[Upload] Saved to:', req.file.path);
 
         res.json({
           filename: req.file.filename || req.file.originalname,
@@ -283,7 +283,7 @@ export function registerHttpRoutes(app: Application): void {
           path: req.file.path
         });
       } catch (error) {
-        console.error('[Upload] Processing error:', error);
+console.error('[Upload] Processing error:', error);
         res.status(500).json({ error: 'Upload processing failed' });
       }
     });
@@ -291,22 +291,22 @@ export function registerHttpRoutes(app: Application): void {
 
   // Door upload endpoint
   app.post('/api/upload/door', (req: Request, res: Response) => {
-    console.log('[Door Upload] Upload request received from:', req.headers.origin);
+console.log('[Door Upload] Upload request received from:', req.headers.origin);
 
     upload.single('door')(req, res, (err: any) => {
       if (err) {
-        console.error('[Door Upload] Multer error:', err);
+console.error('[Door Upload] Multer error:', err);
         return res.status(500).json({ error: `Upload failed: ${err.message}` });
       }
 
       try {
         if (!req.file) {
-          console.error('[Door Upload] No file in request');
+console.error('[Door Upload] No file in request');
           return res.status(400).json({ error: 'No file provided' });
         }
 
-        console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
-        console.log('[Door Upload] Saved to:', req.file.path);
+console.log('[Door Upload] Door file received:', req.file.originalname, req.file.size, 'bytes');
+console.log('[Door Upload] Saved to:', req.file.path);
 
         // Move file to Doors/archives directory in BBS data directory
         const doorsArchivePath = path.join(config.get('dataDir'), 'Doors', 'archives');
@@ -316,7 +316,7 @@ export function registerHttpRoutes(app: Application): void {
 
         const destPath = path.join(doorsArchivePath, req.file.originalname);
         fs.copyFileSync(req.file.path, destPath);
-        console.log('[Door Upload] Copied to archives:', destPath);
+console.log('[Door Upload] Copied to archives:', destPath);
 
         // Clean up temp file
         fs.unlinkSync(req.file.path);
@@ -328,7 +328,7 @@ export function registerHttpRoutes(app: Application): void {
           path: destPath
         });
       } catch (error) {
-        console.error('[Door Upload] Processing error:', error);
+console.error('[Door Upload] Processing error:', error);
         res.status(500).json({ error: 'Door upload processing failed' });
       }
     });
@@ -337,20 +337,20 @@ export function registerHttpRoutes(app: Application): void {
   // ===== Door Hot-Reload Endpoint =====
   app.post('/api/doors/reload', async (req: Request, res: Response) => {
     try {
-      console.log('[Door Reload] Hot-reload request received');
+console.log('[Door Reload] Hot-reload request received');
 
       const bbsBaseDir = config.get('dataDir');
       const result = await reloadDoorCommands(bbsBaseDir, 1, 0);
 
       if (result.success) {
-        console.log(`[Door Reload] ${result.message}`);
+console.log(`[Door Reload] ${result.message}`);
         res.json({
           success: true,
           message: result.message,
           doorsReloaded: result.doorsReloaded
         });
       } else {
-        console.error(`[Door Reload] ${result.message}`);
+console.error(`[Door Reload] ${result.message}`);
         res.status(500).json({
           success: false,
           message: result.message,
@@ -358,7 +358,7 @@ export function registerHttpRoutes(app: Application): void {
         });
       }
     } catch (error) {
-      console.error('[Door Reload] Unexpected error:', error);
+console.error('[Door Reload] Unexpected error:', error);
       res.status(500).json({
         success: false,
         message: `Reload failed: ${(error as Error).message}`,
@@ -412,13 +412,13 @@ export function registerHttpRoutes(app: Application): void {
       }
 
       if (!filePath) {
-        console.error(`[Download] File not found: ${filename} in conf ${confNum}`);
+console.error(`[Download] File not found: ${filename} in conf ${confNum}`);
         return res.status(404).json({ error: 'File not found on server' });
       }
 
       const stats = amigafs.statSync(filePath);
       const actualFilename = path.basename(filePath);
-      console.log(`[Download] Serving file: ${actualFilename} from ${filePath} (${stats.size} bytes)`);
+console.log(`[Download] Serving file: ${actualFilename} from ${filePath} (${stats.size} bytes)`);
 
       res.setHeader('Content-Disposition', `attachment; filename="${actualFilename}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -428,7 +428,7 @@ export function registerHttpRoutes(app: Application): void {
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
     } catch (error) {
-      console.error('[Download] Error:', error);
+console.error('[Download] Error:', error);
       res.status(500).json({ error: 'Download failed' });
     }
   });
@@ -468,11 +468,11 @@ export function registerHttpRoutes(app: Application): void {
       }
 
       if (!filePath || !fs.existsSync(filePath)) {
-        console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
+console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
         return res.status(404).json({ error: 'File not found on server' });
       }
 
-      console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
+console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
 
       res.setHeader('Content-Disposition', `attachment; filename="${fileEntry.filename}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -481,7 +481,7 @@ export function registerHttpRoutes(app: Application): void {
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
     } catch (error) {
-      console.error('[Download] Error:', error);
+console.error('[Download] Error:', error);
       res.status(500).json({ error: 'Download failed' });
     }
   });
@@ -511,7 +511,7 @@ export function registerHttpRoutes(app: Application): void {
         downloads: user.downloads
       });
     } catch (error) {
-      console.error('Get user error:', error);
+console.error('Get user error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

@@ -33,18 +33,18 @@ export function setHelpers(helpers: {
 // Backward compatibility exports (deprecated)
 export function setChatState(state: ChatState) {
   // No-op: State now managed by ChatSessionUseCase
-  console.log('[DEPRECATED] setChatState called - state now managed by ChatSessionUseCase');
+console.log('[DEPRECATED] setChatState called - state now managed by ChatSessionUseCase');
 }
 
 export function setConstants(constants: { LoggedOnSubState: any }) {
   // No-op: Constants imported directly
-  console.log('[DEPRECATED] setConstants called - constants now imported directly');
+console.log('[DEPRECATED] setConstants called - constants now imported directly');
 }
 
 @injectable()
 export class ChatHandler {
   constructor(private chatSessionUseCase: ChatSessionUseCase) {
-    console.log('[ChatHandler] Initialized with DI');
+console.log('[ChatHandler] Initialized with DI');
   }
 
   /**
@@ -53,7 +53,7 @@ export class ChatHandler {
   startSysopPage(socket: any, session: BBSSession): void {
     if (!session.user) return;
 
-    console.log('Starting sysop page for user:', session.user.username);
+console.log('Starting sysop page for user:', session.user.username);
 
     // Create chat session via use case
     const chatSession = this.chatSessionUseCase.createChatSession(
@@ -62,7 +62,7 @@ export class ChatHandler {
     );
 
     // Log the page
-    console.log(`Operator paged at ${new Date().toISOString()} by ${session.user.username}`);
+console.log(`Operator paged at ${new Date().toISOString()} by ${session.user.username}`);
 
     // Trigger webhook for sysop page
     this.sendPagerWebhook(session);
@@ -129,7 +129,7 @@ export class ChatHandler {
   acceptChat(socket: any, session: BBSSession, chatSession: ChatSession): void {
     if (!session.user) return;
 
-    console.log('Sysop accepting chat for session:', chatSession.id);
+console.log('Sysop accepting chat for session:', chatSession.id);
 
     // Accept via use case
     const accepted = this.chatSessionUseCase.acceptChatSession(
@@ -239,7 +239,7 @@ export class ChatHandler {
         message: 'Sysop page request via O command'
       });
     } catch (error) {
-      console.error('[Webhook] Error sending sysop page webhook:', error);
+console.error('[Webhook] Error sending sysop page webhook:', error);
     }
   }
 }
@@ -255,7 +255,7 @@ function resolveChatHandler(): ChatHandler {
     const { container } = require('../../container');
     return container.resolve(ChatHandler);
   } catch (error) {
-    console.error('[ChatHandler] DI Resolution Error:', error);
+console.error('[ChatHandler] DI Resolution Error:', error);
     // Fallback: create instance manually if DI fails
     const { ChatSessionUseCase } = require('../../services/use-cases/chat-session.use-case');
     const useCase = new ChatSessionUseCase();

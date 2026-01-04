@@ -100,21 +100,108 @@ export async function handleNewFilesCommand(socket: any, session: BBSSession, pa
   }
 
   // express.e:25278 - setEnvStat(ENV_FILES)
-  console.log('[ENV] Files - New Files');
+console.log('[ENV] Files - New Files');
 
   // express.e:25279 - myNewFiles(params)
   if (_displayNewFiles) {
     await _displayNewFiles(socket, session, params);
     // displayNewFiles handles its own pause/prompt and state management
   } else {
-    // Fallback if displayNewFiles not injected yet
+    // Fallback: implement new files display inline (express.e:27831-28023)
+    await handleNewFilesDisplay(socket, session);
+  }
+}
+
+/**
+ * Display new files since last login or specified date
+ * express.e:27831-28023 myNewFiles()
+ */
+async function handleNewFilesDisplay(socket: any, session: BBSSession): Promise<void> {
+  const { db } = require('../../database');
+  const { AnsiUtil } = require('../../utils/ansi.util');
+
+  socket.emit('ansi-output', '\r\n');
+
+  // express.e:27850-27853 - Check if conference has file areas
+  const conferenceId = session.currentConference || 1;
+  const fileAreas = await db.getFileAreas(conferenceId);
+
+  if (fileAreas.length === 0) {
+    socket.emit('ansi-output', AnsiUtil.warningLine('No file areas available.'));
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.headerBox('New Files'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('New files display not yet implemented'));
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // express.e:27855 - Use user's last login date as default
+  const lastLogin = session.user.lastLogin || new Date(0);
+  const defaultDate = formatDate(lastLogin);
+
+  socket.emit('ansi-output', `Date as (mm-dd-yy) to search from (Enter)=${defaultDate}: `);
+
+  // For now, use default date (in full implementation would wait for user input)
+  // This matches "S" parameter behavior in express.e:27862-27863
+  const searchDate = lastLogin;
+
+  socket.emit('ansi-output', '\r\n');
+  socket.emit('ansi-output', `Directory Scan for (${defaultDate})\r\n\r\n`);
+
+  // express.e:27906-28019 - Loop through file areas and display new files
+  let filesFound = 0;
+
+  for (const area of fileAreas) {
+    socket.emit('ansi-output', `Scanning ${area.name}...\r\n`);
+
+    // Get all files in this area uploaded after search date
+    const files = await db.getFilesByArea(area.id);
+    const newFiles = files.filter((f: any) => new Date(f.uploadDate) >= searchDate);
+
+    if (newFiles.length > 0) {
+      for (const file of newFiles) {
+        // express.e:27993-27994 - Display file information
+        const fileDate = formatDate(new Date(file.uploadDate));
+        const fileSize = formatFileSize(file.size);
+        const desc = file.description || '';
+
+        socket.emit('ansi-output', `  ${file.filename.padEnd(20)} ${fileSize.padStart(10)} ${fileDate} ${desc}\r\n`);
+        filesFound++;
+      }
+      socket.emit('ansi-output', '\r\n');
+    }
+  }
+
+  if (filesFound === 0) {
+    socket.emit('ansi-output', 'No new files found.\r\n');
+  } else {
+    socket.emit('ansi-output', `\r\nTotal new files: ${filesFound}\r\n`);
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  session.menuPause = true;
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Format date as mm-dd-yy (express.e formatLongDate)
+ */
+function formatDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).substring(2);
+  return `${month}-${day}-${year}`;
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1048576) {
+    return `${(bytes / 1048576).toFixed(1)}MB`;
+  } else if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  } else {
+    return `${bytes}B`;
   }
 }
 
@@ -135,7 +222,7 @@ export async function handlePreviousConferenceCommand(socket: any, session: BBSS
   // This is handled by joinConference function
 
   // express.e:24533 - setEnvStat(ENV_JOIN)
-  console.log('[ENV] Join - Previous Conference');
+console.log('[ENV] Join - Previous Conference');
 
   // express.e:24534-24538 - Find previous accessible conference
   let newConf = (session.currentConf || 1) - 1;
@@ -177,7 +264,7 @@ export async function handleNextConferenceCommand(socket: any, session: BBSSessi
   // This is handled by joinConference function
 
   // express.e:24552 - setEnvStat(ENV_JOIN)
-  console.log('[ENV] Join - Next Conference');
+console.log('[ENV] Join - Next Conference');
 
   // express.e:24553-24557 - Find next accessible conference
   let newConf = (session.currentConf || 1) + 1;
@@ -212,7 +299,7 @@ export async function handlePreviousMessageBaseCommand(socket: any, session: BBS
   // This is handled by joinConference function
 
   // express.e:24569 - setEnvStat(ENV_JOIN)
-  console.log('[ENV] Join - Previous Message Base');
+console.log('[ENV] Join - Previous Message Base');
 
   // express.e:24570 - Get previous message base
   const currentConfId = session.currentConf || 1;
@@ -244,7 +331,7 @@ export async function handleNextMessageBaseCommand(socket: any, session: BBSSess
   // This is handled by joinConference function
 
   // express.e:24583 - setEnvStat(ENV_JOIN)
-  console.log('[ENV] Join - Next Message Base');
+console.log('[ENV] Join - Next Message Base');
 
   // express.e:24584 - Get next message base
   const currentConfId = session.currentConf || 1;

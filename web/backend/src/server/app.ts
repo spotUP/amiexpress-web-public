@@ -20,8 +20,37 @@ import { deploymentRouter } from '../api/deployment-routes';
 
 export const app = express();
 
-// Configure CORS
-app.use(cors());
+// Configure CORS with security restrictions
+const allowedOrigins = [
+  process.env.ALLOWED_ORIGIN,
+  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null,
+  process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : null,
+  process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3000' : null,
+  process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3001' : null,
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, curl, telnet clients)
+    if (!origin) return callback(null, true);
+
+    // Development mode: allow all origins (convenience)
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    // Production mode: strict origin checking
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 // Access log (HTTP only; telnet/ssh handled elsewhere)
 const projectRoot = path.resolve(__dirname, '../../../..');

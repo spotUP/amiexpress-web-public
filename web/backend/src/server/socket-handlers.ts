@@ -63,7 +63,7 @@ export function enableGameMode(socket: Socket, session: BBSSession, doorType: st
   session.gameModeEnabled = true;
   session.currentDoorType = doorType;
 
-  console.log(`[GameMode] Enabled for door (type=${doorType})`);
+console.log(`[GameMode] Enabled for door (type=${doorType})`);
 
   // Tell frontend to enable game mode (sends raw keydown/keyup events)
   socket.emit('game-mode', true);
@@ -85,7 +85,7 @@ export function disableGameMode(socket: Socket, session: BBSSession): void {
 
   // Tell frontend to disable game mode
   socket.emit('game-mode', false);
-  console.log('[GameMode] Disabled');
+console.log('[GameMode] Disabled');
 }
 
 /**
@@ -143,11 +143,11 @@ function getSpecialKeyChar(key: string): string | null {
  */
 export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatState?: any) {
   const clientIp = socket.handshake.address;
-  console.log(`Client connected from ${clientIp}`);
+console.log(`Client connected from ${clientIp}`);
 
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
-    console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
+console.warn(`⚠️ Rate limit exceeded for IP: ${clientIp}`);
     socket.emit('ansi-output', '\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[31mToo many connections from your IP.\x1b[0m\r\n');
     socket.emit('ansi-output', '\x1b[33mPlease wait a moment and try again.\x1b[0m\r\n');
@@ -162,7 +162,7 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   // express.e:7353 - runExecuteOn('CONNECT') when connection is established
   // Note: nodeId is 0 here as no session is assigned yet
   runExecuteOn('CONNECT', 0, {}).catch((err) =>
-    console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
+console.error('[Socket] EXECUTE_ON_CONNECT failed:', err)
   );
 
   const session = getSession(socket.id);
@@ -201,17 +201,17 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
       }
     });
 
-    console.log(`[get-active-users] Returning ${activeUsers.length} active users`);
+console.log(`[get-active-users] Returning ${activeUsers.length} active users`);
     socket.emit('active-users', { users: activeUsers });
   });
 
   // Monitor connection health
   socket.on('error', (error: Error) => {
-    console.error(`[SOCKET ERROR] Socket ${socket.id} error:`, error.message);
+console.error(`[SOCKET ERROR] Socket ${socket.id} error:`, error.message);
   });
 
   socket.on('connect_error', (error: Error) => {
-    console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.message);
+console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.message);
   });
 
   // Handle terminal resize from client (for responsive terminal sizing)
@@ -220,7 +220,7 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
     if (!session) return;
 
     const { cols, rows } = size;
-    console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
+console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
 
     // Update session terminal dimensions
     session.screenWidth = cols;
@@ -236,7 +236,7 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
     // Emit resize event to the door's BBSApi (if a door is running)
     // This uses the internal EventEmitter, not socket.emit (which goes to client)
     if (session.bbsApi && typeof session.bbsApi.emitInternal === 'function') {
-      console.log(`[TERMINAL] Emitting screen:resize to door via bbsApi.emitInternal`);
+console.log(`[TERMINAL] Emitting screen:resize to door via bbsApi.emitInternal`);
       session.bbsApi.emitInternal('screen:resize', { cols, rows });
     }
   });
@@ -248,37 +248,37 @@ export function registerSocketHandlers(io: SocketIOServer, socket: Socket, chatS
   // Register modular socket handlers (imported from separate modules)
   // These handlers were extracted from index.ts for better code organization
   import('./auth-socket-handlers').then(({ registerAuthHandlers }) => registerAuthHandlers(socket)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load auth-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load auth-socket-handlers:', err);
   });
   import('./file-socket-handlers').then(({ registerFileHandlers }) => registerFileHandlers(socket)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load file-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load file-socket-handlers:', err);
   });
   import('./chat-socket-handlers').then(({ registerChatHandlers }) => registerChatHandlers(socket, chatState)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load chat-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load chat-socket-handlers:', err);
   });
   import('./thread-socket-handlers').then(({ setupThreadHandlers }) => setupThreadHandlers(socket, session)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load thread-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load thread-socket-handlers:', err);
   });
   import('./pin-socket-handlers').then(({ setupPinHandlers }) => setupPinHandlers(socket, session)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load pin-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load pin-socket-handlers:', err);
   });
   import('./search-socket-handlers').then(({ setupSearchHandlers }) => setupSearchHandlers(socket, session)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load search-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load search-socket-handlers:', err);
   });
   import('./moderation-socket-handlers').then(({ setupModerationHandlers }) => setupModerationHandlers(socket, session, io)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load moderation-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load moderation-socket-handlers:', err);
   });
   import('./preference-socket-handlers').then(({ registerPreferenceHandlers }) => registerPreferenceHandlers(socket)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load preference-socket-handlers:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load preference-socket-handlers:', err);
   });
   import('../handlers/network-monitor.handler').then(({ registerNetworkMonitorHandlers }) => registerNetworkMonitorHandlers(socket)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load network-monitor.handler:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load network-monitor.handler:', err);
   });
   import('../handlers/voice-channel.handler').then(({ registerVoiceChannelHandlers }) => registerVoiceChannelHandlers(socket, io, sessions)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load voice-channel.handler:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load voice-channel.handler:', err);
   });
   import('../handlers/audio-video.handler').then(({ registerAudioVideoHandlers }) => registerAudioVideoHandlers(socket, io, sessions)).catch((err) => {
-    console.error('[SOCKET HANDLER ERROR] Failed to load audio-video.handler:', err);
+console.error('[SOCKET HANDLER ERROR] Failed to load audio-video.handler:', err);
   });
 
   // XIM injection handlers - disabled until type errors fixed
@@ -311,7 +311,7 @@ async function initializeSession(socket: Socket) {
     nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
     return nodeSession;
   } catch (error) {
-    console.error('Failed to assign node to session:', error);
+console.error('Failed to assign node to session:', error);
     SysopDebugUtil.debug(
       socket,
       null,
@@ -336,12 +336,12 @@ async function initializeSession(socket: Socket) {
  * Register command handler
  */
 function registerCommandHandler(socket: Socket) {
-  console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
-  console.error('[SOCKET-DEBUG] Registering command handler for socket:', socket.id);
+console.log('[socket-handlers] registerCommandHandler called, registering door:input listener');
+console.error('[SOCKET-DEBUG] Registering command handler for socket:', socket.id);
 
   // TEST: Register a simple ping handler to verify socket events work AT ALL
   socket.on('ping-test', (data: any) => {
-    console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
+console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
     socket.emit('pong-test', { received: data });
   });
 
@@ -361,17 +361,17 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
-    console.log('[socket-handlers] door:input received:', JSON.stringify(data));
+console.log('[socket-handlers] door:input received:', JSON.stringify(data));
     logDoorDebug(`SOCKET door:input data=${JSON.stringify(data)} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
 
     if (session.inDoorManager && session.doorInputHandler) {
       if (markDoorInput(session, data)) {
         return;
       }
-      console.log('[socket-handlers] Calling doorInputHandler from door:input');
+console.log('[socket-handlers] Calling doorInputHandler from door:input');
       session.doorInputHandler(data);
     } else {
-      console.log('[socket-handlers] door:input received but no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
+console.log('[socket-handlers] door:input received but no handler - inDoorManager:', session.inDoorManager, 'handler:', !!session.doorInputHandler);
     }
   });
 
@@ -380,15 +380,15 @@ function registerCommandHandler(socket: Socket) {
     const session = getSession(socket.id);
     if (!session) return;
 
-    console.log('[socket-handlers] mouse-click received:', data);
-    console.log('[socket-handlers] mouse-click check: inDoorManager=', session.inDoorManager, 'hasHandler=', !!session.doorInputHandler, 'mouseEnabled=', session.mouseEventsEnabled);
+console.log('[socket-handlers] mouse-click received:', data);
+console.log('[socket-handlers] mouse-click check: inDoorManager=', session.inDoorManager, 'hasHandler=', !!session.doorInputHandler, 'mouseEnabled=', session.mouseEventsEnabled);
 
     // Operator Chat Mouse Handling REMOVED (No visual targets/buttons in linear chat)
     
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     // Don't send to regular doors as they expect text input, not mouse events
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
-      console.log('[socket-handlers] Calling doorInputHandler with mouse click data');
+console.log('[socket-handlers] Calling doorInputHandler with mouse click data');
       // Pass mouse data as a special formatted string that the door can recognize
       session.doorInputHandler(JSON.stringify({ type: 'mouse-click', ...data }));
     }
@@ -399,11 +399,11 @@ function registerCommandHandler(socket: Socket) {
     const session = getSession(socket.id);
     if (!session) return;
 
-    console.log('[socket-handlers] mouse-drag received:', data);
+console.log('[socket-handlers] mouse-drag received:', data);
 
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
-      console.log('[socket-handlers] Calling doorInputHandler with mouse drag data');
+console.log('[socket-handlers] Calling doorInputHandler with mouse drag data');
       session.doorInputHandler(JSON.stringify({ type: 'mouse-drag', ...data }));
     }
   });
@@ -413,11 +413,11 @@ function registerCommandHandler(socket: Socket) {
     const session = getSession(socket.id);
     if (!session) return;
 
-    console.log('[socket-handlers] mouse-up received:', data);
+console.log('[socket-handlers] mouse-up received:', data);
 
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
-      console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
+console.log('[socket-handlers] Calling doorInputHandler with mouse up data');
       session.doorInputHandler(JSON.stringify({ type: 'mouse-up', ...data }));
     }
   });
@@ -449,7 +449,7 @@ function registerCommandHandler(socket: Socket) {
     const session = getSession(socket.id);
     if (!session) return;
 
-    console.log('[socket-handlers] keys:state received:', data);
+console.log('[socket-handlers] keys:state received:', data);
 
     // Update session key state
     if (!session.keyState) {
@@ -459,7 +459,7 @@ function registerCommandHandler(socket: Socket) {
 
     // If door is active and has a key state handler, call it
     if (session.inDoorManager && session.doorKeyStateHandler) {
-      console.log('[socket-handlers] Calling doorKeyStateHandler');
+console.log('[socket-handlers] Calling doorKeyStateHandler');
       session.doorKeyStateHandler(data);
     }
   });
@@ -517,13 +517,13 @@ function registerCommandHandler(socket: Socket) {
   });
 
   socket.on('command', (data: string) => {
-    console.error('[COMMAND-HANDLER-ENTRY] COMMAND EVENT FIRED!', socket.id);
-    console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
-    console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
+console.error('[COMMAND-HANDLER-ENTRY] COMMAND EVENT FIRED!', socket.id);
+console.log('=== COMMAND RECEIVED [v2024-FIXED] ===');
+console.log('Raw data:', JSON.stringify(data), 'length:', data.length, 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
 
     const session = getSession(socket.id);
     if (!session) {
-      console.error('No session found for socket:', socket.id);
+console.error('No session found for socket:', socket.id);
       return;
     }
 
@@ -608,32 +608,32 @@ function registerCommandHandler(socket: Socket) {
       return;
     }
 
-    console.log('Session state:', session.state, 'subState:', session.subState);
-    console.log('Input buffer:', JSON.stringify(session.inputBuffer));
+console.log('Session state:', session.state, 'subState:', session.subState);
+console.log('Input buffer:', JSON.stringify(session.inputBuffer));
 
     // Special debug for Enter key
     if (data === '\r') {
-      console.log('🎯 ENTER KEY DETECTED!');
-      console.log('🎯 Current subState:', session.subState);
-      console.log('🎯 Is POST_MESSAGE_SUBJECT?', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
-      console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
+console.log('🎯 ENTER KEY DETECTED!');
+console.log('🎯 Current subState:', session.subState);
+console.log('🎯 Is POST_MESSAGE_SUBJECT?', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
+console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
     }
 
     // Handle special chat keys (like F1 in AmiExpress)
     if ((session as any).inChat && data === '\x1b[OP') { // F1 key
-      console.log('🎯 F1 pressed during chat - exiting chat');
+console.log('🎯 F1 pressed during chat - exiting chat');
       exitChat(socket, session);
       return;
     }
 
     // If a door is active, call the door's input handler
-    console.log('[socket-handlers] ===== COMMAND EVENT HANDLER =====');
-    console.log('[socket-handlers] Received data:', JSON.stringify(data));
-    console.log('[socket-handlers] socketId:', socket.id);
-    console.log('[socket-handlers] session nodeId:', session.nodeId);
-    console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
-    console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
-    console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
+console.log('[socket-handlers] ===== COMMAND EVENT HANDLER =====');
+console.log('[socket-handlers] Received data:', JSON.stringify(data));
+console.log('[socket-handlers] socketId:', socket.id);
+console.log('[socket-handlers] session nodeId:', session.nodeId);
+console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
+console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
+console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
     logDoorDebug(
       `CMD data=${JSON.stringify(data)} node=${session.nodeId} inDoor=${session.inDoorManager} subState=${session.subState} handler=${!!session.doorInputHandler}`
     );
@@ -643,20 +643,20 @@ function registerCommandHandler(socket: Socket) {
         if (markDoorInput(session, data)) {
           return;
         }
-        console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
+console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
         logDoorDebug(`CMD->door handler dispatch`);
         session.doorInputHandler(data);
         return;
       } else {
-        console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
+console.log('[socket-handlers] ⚠️ inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
         logDoorDebug(`WARN missing handler while door active; emitting door:input fallback`);
         socket.emit('door:input', data);
         return;
       }
     }
-    console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');
-    console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
-    console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
+console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');
+console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
+console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
     // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
     let input = data;
@@ -665,20 +665,20 @@ function registerCommandHandler(socket: Socket) {
     }
     if (input.startsWith('\x1b[') && input.length >= 2) {
       handleCommand(socket, session, input).catch((error: any) => {
-        console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-        console.error('[COMMAND ERROR] Stack:', error.stack);
+console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+console.error('[COMMAND ERROR] Stack:', error.stack);
         socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
       });
     } else {
       for (const char of input) {
         handleCommand(socket, session, char).catch((error: any) => {
-          console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-          console.error('[COMMAND ERROR] Stack:', error.stack);
+console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
+console.error('[COMMAND ERROR] Stack:', error.stack);
           socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
         });
       }
     }
-    console.log('=== COMMAND PROCESSED ===\n');
+console.log('=== COMMAND PROCESSED ===\n');
   });
 
   // Binary transfer scaffold (upload/download via socket chunks)
@@ -842,7 +842,7 @@ function registerCommandHandler(socket: Socket) {
  */
 function registerDisconnectHandler(socket: Socket) {
   socket.on('disconnect', async (reason) => {
-    console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${socket.id}`);
+console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${socket.id}`);
 
     // GRACE PERIOD: Wait 3 seconds for potential reconnection before cleanup
     // This prevents kicking users out during brief network hiccups
@@ -850,13 +850,13 @@ function registerDisconnectHandler(socket: Socket) {
     const sessionBeforeDelay = getSession(socket.id);
 
     if (sessionBeforeDelay) {
-      console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
+console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
       await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
 
       // Check if socket reconnected during grace period
       const sessionAfterDelay = getSession(socket.id);
       if (sessionAfterDelay && sessionAfterDelay.socketId) {
-        console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup`);
+console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup`);
         return; // User reconnected, skip cleanup
       }
     }
@@ -886,7 +886,7 @@ function registerDisconnectHandler(socket: Socket) {
     if (userId) {
       const hasOtherSockets = Array.from(socketToUser.entries()).some(([id, uid]) => uid === userId && id !== socket.id);
 
-      console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
+console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
       socketToUser.delete(socket.id);
       socketToNodeId.delete(socket.id);
 
@@ -894,7 +894,7 @@ function registerDisconnectHandler(socket: Socket) {
       await nodeManager.releaseSession(socket.id);
 
       if (hasOtherSockets) {
-        console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
+console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
         return;
       }
 
@@ -904,7 +904,7 @@ function registerDisconnectHandler(socket: Socket) {
       }, DISCONNECT_GRACE_MS);
       trackPendingDisconnect(userId, socket.id, nodeId, timer);
 
-      console.log(`[DISCONNECT] Scheduled logoff for user ${userId} in ${DISCONNECT_GRACE_MS}ms`);
+console.log(`[DISCONNECT] Scheduled logoff for user ${userId} in ${DISCONNECT_GRACE_MS}ms`);
       return;
     }
 
@@ -918,7 +918,7 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
   if (userId) {
     const stillConnected = Array.from(socketToUser.values()).includes(userId);
     if (stillConnected) {
-      console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket detected`);
+console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket detected`);
       pendingDisconnects.delete(userId);
       return;
     }
@@ -942,14 +942,14 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
         duration: sessionDuration
       });
     } catch (error) {
-      console.error('[BBSEvent] Error emitting logout event:', error);
+console.error('[BBSEvent] Error emitting logout event:', error);
     }
 
     // Run logoff batches (mirror logon batch runner)
     try {
       await runLogoffBatches(session.nodeId || 0);
     } catch (err) {
-      console.error('[LOGOFF] Logoff batch runner failed:', err);
+console.error('[LOGOFF] Logoff batch runner failed:', err);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -971,23 +971,23 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
         location: session.user.location
       });
     } catch (err) {
-      console.error('[LOGOFF] EXECUTE_ON_LOGOFF failed:', err);
+console.error('[LOGOFF] EXECUTE_ON_LOGOFF failed:', err);
     }
 
     // MAIL_ON_LOGOFF tooltype - express.e:6739-6743
     try {
       await mailOnLogoff(session.user.username, session.user.location || '');
     } catch (err) {
-      console.error('[LOGOFF] MAIL_ON_LOGOFF failed:', err);
+console.error('[LOGOFF] MAIL_ON_LOGOFF failed:', err);
     }
 
     // Save command history to disk (express.e:25067, 7951, 28612, 28631)
     try {
       const { saveHistory } = require('../utils/command-history.util');
       await saveHistory(session, session.user.id);
-      console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
+console.log(`[CommandHistory] Saved ${session.commandHistory.length} commands for user ${session.user.username}`);
     } catch (error) {
-      console.error('[CommandHistory] Error saving command history:', error);
+console.error('[CommandHistory] Error saving command history:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -1009,9 +1009,9 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
     if (session.user.slotNumber) {
       try {
         userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
-        console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${session.user.slotNumber})`);
+console.log(`[LOGOFF] Saved user ${session.user.username} to disk (timeUsed=${session.user.timeUsed}, messagesPosted=${session.user.messagesPosted}, slot=${session.user.slotNumber})`);
       } catch (diskErr) {
-        console.error('[LOGOFF] Error writing user disk files:', diskErr);
+console.error('[LOGOFF] Error writing user disk files:', diskErr);
         SysopDebugUtil.debug(
           socket,
           session,
@@ -1036,9 +1036,9 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
       callersLogManager.logLogoff(nodeId, session.user.username);
 
       nodeFileManager.deleteNodeFiles(nodeId);
-      console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
+console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
     } catch (error) {
-      console.error(`[LOGOFF] Error deleting node files:`, error);
+console.error(`[LOGOFF] Error deleting node files:`, error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -1056,7 +1056,7 @@ async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, so
     try {
       await runSamiLogUpdate(session);
     } catch (error) {
-      console.error('[LOGOFF] SAmiLog update failed:', error);
+console.error('[LOGOFF] SAmiLog update failed:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -1116,7 +1116,7 @@ function resolveTransferPath(session: any, amigaPath: string): string | null {
     }
     return paths.resolveAmigaPath(amigaPath, nodeId, undefined);
   } catch (err) {
-    console.error('[socket-handlers] resolveTransferPath failed:', err);
+console.error('[socket-handlers] resolveTransferPath failed:', err);
     return null;
   }
 }

@@ -218,7 +218,7 @@ export class TelnetConnection extends EventEmitter {
   private handleTerminalType(): void {
     // First byte should be TTYPE_IS (0)
     if (this.ttypeData.length < 2 || this.ttypeData[0] !== TTYPE_IS) {
-      console.log(`[Telnet] Invalid TTYPE response on node ${this.nodeId}`);
+console.log(`[Telnet] Invalid TTYPE response on node ${this.nodeId}`);
       return;
     }
 
@@ -227,7 +227,7 @@ export class TelnetConnection extends EventEmitter {
     const terminalTypeString = String.fromCharCode(...terminalTypeBytes).toUpperCase();
 
     this.terminalType = terminalTypeString;
-    console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"`);
+console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"`);
 
     // Detect C64 based on terminal type string
     const isC64 = terminalTypeString.includes('C64') ||
@@ -350,7 +350,7 @@ export class TelnetConnection extends EventEmitter {
    * Handle socket errors
    */
   private handleError(error: Error): void {
-    console.error(`[Telnet] Connection error on node ${this.nodeId}:`, error.message);
+console.error(`[Telnet] Connection error on node ${this.nodeId}:`, error.message);
     this.emit('error', error);
   }
 
@@ -358,7 +358,7 @@ export class TelnetConnection extends EventEmitter {
    * Handle socket close
    */
   private handleClose(): void {
-    console.log(`[Telnet] Connection closed on node ${this.nodeId}`);
+console.log(`[Telnet] Connection closed on node ${this.nodeId}`);
     this.emit('close');
   }
 }
@@ -387,7 +387,7 @@ export class TelnetServer extends EventEmitter {
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.server.listen(this.port, () => {
-        console.log(`[Telnet Server] Listening on port ${this.port}`);
+console.log(`[Telnet Server] Listening on port ${this.port}`);
         resolve();
       });
 
@@ -407,7 +407,7 @@ export class TelnetServer extends EventEmitter {
       this.connections.clear();
 
       this.server.close(() => {
-        console.log('[Telnet Server] Stopped');
+console.log('[Telnet Server] Stopped');
         resolve();
       });
     });
@@ -419,10 +419,10 @@ export class TelnetServer extends EventEmitter {
    */
   private handleConnection(socket: Socket): void {
     const remoteAddress = socket.remoteAddress || 'unknown';
-    console.log(`[Telnet Server] New connection from ${remoteAddress}`);
+console.log(`[Telnet Server] New connection from ${remoteAddress}`);
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
-      console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
+console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
       socket.write('Too many requests. Try again later.\r\n');
       socket.end();
       return;
@@ -430,7 +430,7 @@ export class TelnetServer extends EventEmitter {
 
     // Check rate limiting (express.e uses similar connection tracking)
     if (!checkConnectionLimit(remoteAddress)) {
-      console.warn(`[Telnet Server] Rate limit exceeded for ${remoteAddress}`);
+console.warn(`[Telnet Server] Rate limit exceeded for ${remoteAddress}`);
       socket.write('Too many connections. Please try again later.\r\n');
       socket.end();
       return;
@@ -442,15 +442,15 @@ export class TelnetServer extends EventEmitter {
     // Store connection
     this.connections.set(connection.sessionId, connection);
 
-    // Create BBS session (express.e:1028-1044)
-    const session = createSession(connection.nodeId);
+    // Create BBS session with unified options (express.e:1028-1044)
     const cfg = config.getConfig();
-    session.connectionType = 'telnet';
-    session.remoteAddress = remoteAddress;
-    session.connectionHostname = cfg.hostname;
-    session.connectionPort = this.port;
-    session.connectionBaud = DEFAULT_CONNECTION_BAUD;
-    session.connectionStart = Date.now();
+    const session = createSession(connection.nodeId, {
+      connectionType: 'telnet',
+      remoteAddress: remoteAddress,
+      connectionHostname: cfg.hostname,
+      connectionPort: this.port,
+      connectionBaud: DEFAULT_CONNECTION_BAUD
+    });
     connection.session = session;
 
     // Map session to node ID for lookup
@@ -462,7 +462,7 @@ export class TelnetServer extends EventEmitter {
     });
 
     connection.on('window-size', (width: number, height: number) => {
-      console.log(`[Telnet] Node ${connection.nodeId} window size: ${width}x${height}`);
+console.log(`[Telnet] Node ${connection.nodeId} window size: ${width}x${height}`);
       this.emit('window-size', connection, width, height);
     });
 
@@ -472,7 +472,7 @@ export class TelnetServer extends EventEmitter {
     });
 
     connection.on('error', (error: Error) => {
-      console.error(`[Telnet] Error on node ${connection.nodeId}:`, error.message);
+console.error(`[Telnet] Error on node ${connection.nodeId}:`, error.message);
     });
 
     // Emit connection event
@@ -490,7 +490,7 @@ export class TelnetServer extends EventEmitter {
           (connection.terminalType.includes('C64') ||
            connection.terminalType.includes('COMMODORE') ||
            connection.terminalType.includes('PETSCII'))) {
-        console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-enabling PETSCII mode`);
+console.log(`[Telnet] C64 terminal detected (${connection.terminalType}) - auto-enabling PETSCII mode`);
         connection.session.terminalType = 'c64';
         connection.session.petsciiMode = true;
         connection.session.ansiEnabled = false;
@@ -523,7 +523,7 @@ export class TelnetServer extends EventEmitter {
    * Handle server errors
    */
   private handleError(error: Error): void {
-    console.error('[Telnet Server] Error:', error.message);
+console.error('[Telnet Server] Error:', error.message);
     this.emit('error', error);
   }
 

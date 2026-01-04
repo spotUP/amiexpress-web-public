@@ -115,7 +115,7 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
 
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
-  console.log('[ENV] Doors');
+console.log('[ENV] Doors');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Online Users (WHO)'));
@@ -192,7 +192,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 
   socket.emit('ansi-output', '\x1b[2J\x1b[H');
 
-  console.log('[ENV] Doors');
+console.log('[ENV] Doors');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Online Users (Detailed)'));
@@ -529,7 +529,7 @@ export function handleWriteUserParamsCommand(socket: any, session: BBSSession): 
     return;
   }
 
-  console.log('[ENV] Stats');
+console.log('[ENV] Stats');
 
   // Display menu and wait for option selection
   session.cmdShortcuts = false;
@@ -1145,10 +1145,10 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
   modemEmulator.install();
   if (bps > 0) {
     modemEmulator.enable(bps);
-    console.log(`[W Command] Modem emulation set to ${bps} bps`);
+console.log(`[W Command] Modem emulation set to ${bps} bps`);
   } else {
     modemEmulator.disable();
-    console.log(`[W Command] Modem emulation disabled (full speed)`);
+console.log(`[W Command] Modem emulation disabled (full speed)`);
   }
 
   _displayWCommandMenu(socket, session);

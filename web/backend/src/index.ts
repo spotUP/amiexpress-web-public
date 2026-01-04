@@ -501,9 +501,9 @@ bbsEventEmitter.setIO(io);
 
 // CRITICAL: Process-level error handlers to prevent crashes
 process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
-  console.error("[CRITICAL] Unhandled Promise Rejection:", reason);
-  console.error("[CRITICAL] Promise:", promise);
-  console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
+console.error("[CRITICAL] Unhandled Promise Rejection:", reason);
+console.error("[CRITICAL] Promise:", promise);
+console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
   // Log to file for debugging
   const fs = require("fs");
   const logPath = join(
@@ -519,8 +519,8 @@ process.on("unhandledRejection", (reason: any, promise: Promise<any>) => {
 });
 
 process.on("uncaughtException", (error: Error) => {
-  console.error("[CRITICAL] Uncaught Exception:", error);
-  console.error("[CRITICAL] Stack:", error.stack);
+console.error("[CRITICAL] Uncaught Exception:", error);
+console.error("[CRITICAL] Stack:", error.stack);
   // Log to file for debugging
   const fs = require("fs");
   const logPath = join(
@@ -534,30 +534,30 @@ process.on("uncaughtException", (error: Error) => {
   // Only exit for critical errors that could corrupt state
   const fatalErrors = ["EADDRINUSE", "EACCES", "EMFILE"];
   if (fatalErrors.some((code) => (error as any).code === code)) {
-    console.error("[CRITICAL] Fatal error - shutting down");
+console.error("[CRITICAL] Fatal error - shutting down");
     process.exit(1);
   }
 });
 
 // Socket.IO global error handler
 io.engine.on("connection_error", (err: any) => {
-  console.error("[Socket.IO] Connection error:", err);
-  console.error("[Socket.IO] Error code:", err.code);
-  console.error("[Socket.IO] Error message:", err.message);
-  console.error("[Socket.IO] Error context:", err.context);
+console.error("[Socket.IO] Connection error:", err);
+console.error("[Socket.IO] Error code:", err.code);
+console.error("[Socket.IO] Error message:", err.message);
+console.error("[Socket.IO] Error context:", err.context);
 });
 
 // Socket.IO authentication middleware for operator chat
 io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   const hasToken = !!token;
-  console.log(
+console.log(
     `[Socket.IO Auth] New connection, has token: ${hasToken}, socket id: ${socket.id}`
   );
 
   // If no token provided, allow connection (for BBS clients)
   if (!token) {
-    console.log(
+console.log(
       "[Socket.IO Auth] No token provided, allowing anonymous connection"
     );
     return next();
@@ -574,13 +574,13 @@ io.use(async (socket, next) => {
       const jwtSecret =
         process.env.JWT_SECRET || "amiexpress-secret-key-change-in-production";
       if (!process.env.JWT_SECRET) {
-        console.warn(
+console.warn(
           "[Socket.IO Auth] JWT_SECRET not set, using fallback (not recommended for production)"
         );
       }
 
       const decoded = jwt.verify(token, jwtSecret) as any;
-      console.log("[Socket.IO Auth] JWT decoded successfully:", {
+console.log("[Socket.IO Auth] JWT decoded successfully:", {
         userId: decoded.userId,
         username: decoded.username,
       });
@@ -588,7 +588,7 @@ io.use(async (socket, next) => {
       // Get user from database
       const user = await db.getUserById(decoded.userId);
       if (!user) {
-        console.error(
+console.error(
           "[Socket.IO Auth] User not found in database:",
           decoded.userId
         );
@@ -616,7 +616,7 @@ io.use(async (socket, next) => {
         // Also attach to socket for direct access
         (socket as any).session = session;
 
-        console.log(
+console.log(
           `[Socket.IO Auth] Web chat user authenticated: ${user.username} (nodeId: ${nodeId})`
         );
       } else {
@@ -630,7 +630,7 @@ io.use(async (socket, next) => {
           nodeId: 0, // Admin UI doesn't have a node
         };
 
-        console.log(
+console.log(
           `[Socket.IO Auth] Admin authenticated: ${user.username} (secLevel: ${user.secLevel})`
         );
       }
@@ -641,14 +641,14 @@ io.use(async (socket, next) => {
       const errorMsg = isExpired
         ? "Session expired - please log in again"
         : (jwtError as Error).message;
-      console.log("[Socket.IO Auth] JWT verification failed:", errorMsg);
-      console.log(
+console.log("[Socket.IO Auth] JWT verification failed:", errorMsg);
+console.log(
         "[Socket.IO Auth] Token preview:",
         token?.substring(0, 20) + "..."
       );
 
       // Try operator page token (UUID from Discord links) as fallback
-      console.log(
+console.log(
         "[Socket.IO Auth] Checking if token is an operator page token instead..."
       );
       try {
@@ -656,7 +656,7 @@ io.use(async (socket, next) => {
         const page = operatorChatRepo.getPageRequestByToken(token);
 
         if (page) {
-          console.log(
+console.log(
             `[Socket.IO Auth] Valid operator page token for page ${page.id}`
           );
 
@@ -673,12 +673,12 @@ io.use(async (socket, next) => {
 
           return next();
         } else {
-          console.log(
+console.log(
             "[Socket.IO Auth] No operator page found for token (may be expired or invalid)"
           );
         }
       } catch (repoError) {
-        console.error(
+console.error(
           "[Socket.IO Auth] Error looking up operator page:",
           repoError
         );
@@ -691,7 +691,7 @@ io.use(async (socket, next) => {
       throw new Error("Invalid authentication token");
     }
   } catch (error: any) {
-    console.error("[Socket.IO Auth] Authentication failed:", error.message);
+console.error("[Socket.IO Auth] Authentication failed:", error.message);
     next(new Error(error.message || "Authentication failed"));
   }
 });
@@ -845,7 +845,7 @@ setOlmDependencies({
 setPreferenceChatCommandsDependencies({
   startSysopPage: (socket: any, session: any) => {
     // Placeholder for sysop page - handled elsewhere
-    console.log("[SYSOP] Page sysop requested");
+console.log("[SYSOP] Page sysop requested");
   },
   db,
 });
@@ -882,7 +882,7 @@ function setupTelnetSSHHandler(
   io: any
 ) {
   const remoteAddress = connection.getRemoteAddress();
-  console.log(
+console.log(
     `[${type.toUpperCase()}] Connection from ${remoteAddress} on node ${
       connection.nodeId
     }`
@@ -975,10 +975,28 @@ function setupTelnetSSHHandler(
     }
 
     // Process through BBS command handler (same as Socket.IO)
+    // Must use SAME routing logic as socket-handlers.ts:641-656
     if (connection.session) {
-      // Call handleCommand directly (same logic as Socket.IO 'command' event)
+      const session = connection.session;
+
+      // Check if door is active and needs input (socket-handlers.ts:641-656)
+      if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
+        if (session.doorInputHandler) {
+          // Route input to active door's input handler
+console.log('[TELNET] Routing input to doorInputHandler');
+          session.doorInputHandler(input);
+          return;
+        } else {
+          // Door active but no handler - emit door:input event for fallback
+console.log('[TELNET] Door active but no handler - emitting door:input');
+          emitter.emit('door:input', input);
+          return;
+        }
+      }
+
+      // No door active - route to BBS command handler
       const { handleCommand } = await import("./handlers/command.handler");
-      handleCommand(emitter as any, connection.session, input, io);
+      handleCommand(emitter as any, session, input, io);
     }
   });
 
@@ -996,7 +1014,7 @@ function setupTelnetSSHHandler(
         connection.session.screenWidth = info.width;
         connection.session.screenHeight = info.height;
         connection.session.petsciiMode = info.isC64;
-        console.log(
+console.log(
           `[${type.toUpperCase()}] Terminal detected: ${info.terminalType} (${
             info.isC64 ? "C64" : "Modern"
           }) - ${info.width}x${info.height}`
@@ -1019,20 +1037,20 @@ function setupTelnetSSHHandler(
         const isC64 = width === 40 && height === 25;
         connection.session.terminalType = isC64 ? "c64" : "modern";
         connection.session.petsciiMode = isC64;
-        console.log(
+console.log(
           `[${type.toUpperCase()}] Terminal detected via NAWS: ${width}x${height} (${
             isC64 ? "C64" : "Modern"
           })`
         );
       } else {
-        console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
+console.log(`[${type.toUpperCase()}] Window size: ${width}x${height}`);
       }
     }
   });
 
   // Handle disconnect
   connection.on("close", () => {
-    console.log(
+console.log(
       `[${type.toUpperCase()}] Disconnected: node ${connection.nodeId}`
     );
     // Cleanup session
@@ -1043,7 +1061,7 @@ function setupTelnetSSHHandler(
 
   // Handle errors
   connection.on("error", (error: Error) => {
-    console.error(
+console.error(
       `[${type.toUpperCase()}] Error on node ${connection.nodeId}:`,
       error.message
     );
@@ -1081,12 +1099,12 @@ function setupTelnetSSHHandler(
 
 io.on("connection", async (socket) => {
   const clientIp = socket.handshake.address;
-  console.log(`Client connected from ${clientIp}`);
+console.log(`Client connected from ${clientIp}`);
 
   // Check if this is a web chat user (session already created in JWT auth middleware)
   const existingSession = (socket as any).session;
   if (existingSession?.chatOnly) {
-    console.log(
+console.log(
       `[Socket.IO] Web chat user ${existingSession.user?.username} - skipping BBS initialization`
     );
     // Just register the socket handlers for chat functionality
@@ -1096,7 +1114,7 @@ io.on("connection", async (socket) => {
 
   // Check connection rate limit
   if (!checkConnectionLimit(clientIp)) {
-    console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
+console.warn(`[WARNING] Rate limit exceeded for IP: ${clientIp}`);
     socket.emit(
       "ansi-output",
       "\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
@@ -1120,7 +1138,7 @@ io.on("connection", async (socket) => {
   // CHAT-ONLY MODE: Skip all BBS screens and launch livechat directly
   const chatOnly = socket.handshake?.query?.chatOnly === "true";
   if (chatOnly) {
-    console.log(
+console.log(
       "[ChatOnly] Launching livechat door directly (door will handle login)"
     );
 
@@ -1192,7 +1210,7 @@ io.on("connection", async (socket) => {
       path: "Doors/livechat",
     };
 
-    console.log("[ChatOnly] Executing LiveChat door");
+console.log("[ChatOnly] Executing LiveChat door");
     await executeDoor(socket, session, liveChatDoor);
 
     return;
@@ -1203,7 +1221,7 @@ io.on("connection", async (socket) => {
   try {
     nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
   } catch (error) {
-    console.error("Failed to assign node to session:", error);
+console.error("Failed to assign node to session:", error);
     socket.emit(
       "ansi-output",
       "\r\n\x1b[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n"
@@ -1248,7 +1266,7 @@ io.on("connection", async (socket) => {
   // Small delay to ensure socket is ready to receive data (fixes race condition after rebuilds)
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  console.log(
+console.log(
     `[Connection] Starting welcome sequence for node ${nodeSession.nodeId}`
   );
 
@@ -1307,57 +1325,15 @@ io.on("connection", async (socket) => {
   // User can read the banner during this pause before screen clear
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
-  const session: BBSSession = {
-    state: BBSState.AWAIT,
-    subState: LoggedOnSubState.DISPLAY_CONNECT, // Start with connection screen
-    currentConf: 1, // Start in General conference (ID 1) → Conf1/
-    conferenceId: 1, // XIM doors read this property
-    currentMsgBase: 1, // Start in Main message base (ID 1)
-    timeRemaining: 60, // 60 minutes default
-    lastActivity: sessionStart,
-    confRJoin: 1, // Default to General conference (ID 1)
-    msgBaseRJoin: 1, // Default to Main message base (ID 1)
-    commandBuffer: "", // Buffer for command input
-    menuPause: true, // Like AmiExpress - menu displays immediately by default
-    inputBuffer: "", // Buffer for line-based input
-    maskInput: false, // Echo typed characters unless password masking is active
+  // Create session using unified createSession function (same as telnet/SSH)
+  // Use nodeSession.nodeId from node manager (NOT getNextAvailableNodeId which could differ)
+  const session = createSession(nodeSession.nodeId, {
     connectionType: "web",
     remoteAddress: clientIp,
     connectionHostname: bbsConfig.hostname,
     connectionPort: bbsConfig.port,
-    connectionBaud: DEFAULT_CONNECTION_BAUD,
-    connectionStart: sessionStart,
-    relConfNum: 0, // Relative conference number
-    currentConfName: "General", // Current conference name (matches ID 4)
-    cmdShortcuts: false, // Like AmiExpress - default to line input mode, not hotkeys
-    shortcuts: new Map(), // Loaded shortcuts from .keys
-    doorExpertMode: false, // Like AmiExpress - doors can force menu display (express.e:28583)
-
-    // Phase 9: Initialize security fields (express.e:447-455)
-    acsLevel: -1, // Will be set on login
-    securityFlags: "", // Temporary per-session ACS overrides
-    secOverride: "", // Permanent override denials
-    overrideDefaultAccess: false, // Skip default access checks
-    userSpecificAccess: false, // User has specific access file
-    currentStat: EnvStat.IDLE, // Environment status
-    quietFlag: false, // Quiet mode (invisible to WHO)
-    blockOLM: false, // Block Online Messages
-    loginTime: Date.now(), // Login timestamp
-    nodeStartTime: Date.now(), // Node start time for uptime
-    nodeId: getNextAvailableNodeId(), // Assign unique virtual node ID - express.e:163
-    loginRetryCount: 0, // Initialize retry counter - express.e:29560
-
-    // Phase 10: Initialize message pointers (express.e:199-200)
-    lastMsgReadConf: 0, // Last message manually read
-    lastNewReadConf: 0, // Last message auto-scanned
-
-    // Command history (express.e:31561-31563)
-    commandHistory: [], // Circular buffer of last 20 commands (historyBuf)
-    historyIndex: 0, // Current position for next command storage (historyNum)
-    historyCycle: 0, // Current position when navigating history
-    modemEmulationEnabled: false,
-    modemBps: 0,
-  };
+    connectionBaud: DEFAULT_CONNECTION_BAUD
+  });
   setSession(socket.id, session); // Use helper to store by nodeId
 
   // CRITICAL: Register all socket event handlers IMMEDIATELY after session setup
@@ -1375,7 +1351,7 @@ io.on("connection", async (socket) => {
   try {
     await triggerSamiLogRefresh();
   } catch (error) {
-    console.error("[SamiLog] Initial refresh failed:", error);
+console.error("[SamiLog] Initial refresh failed:", error);
   }
 
   // express.e:29524 - Run FRONTEND syscmd (optional - runs custom telnet frontend screen)
@@ -1387,14 +1363,14 @@ io.on("connection", async (socket) => {
     await runSysCommand(socket, session, "FRONTEND", "");
   } catch (err) {
     // FRONTEND syscmd is optional - continue if not found
-    console.log("[Connection] FRONTEND syscmd not found, continuing");
+console.log("[Connection] FRONTEND syscmd not found, continuing");
   }
 
   // express.e:29527-29528 - ANSI prompt (unless FORCE_ANSI tooltype is set)
   // "ANSI, RIP or No graphics (A/r/n)?"
   // Skip if in password reset mode (express.e:29152-29213)
   if (session.passwordResetState) {
-    console.log(
+console.log(
       `[Connection] Skipping ANSI prompt - in password reset mode for node ${nodeSession.nodeId}`
     );
     return;
@@ -1405,7 +1381,7 @@ io.on("connection", async (socket) => {
     "\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? "
   );
 
-  console.log(
+console.log(
     `[Connection] Welcome sequence complete for node ${nodeSession.nodeId}, waiting for ANSI response`
   );
 
@@ -1437,7 +1413,7 @@ io.on("connection", async (socket) => {
 // IMPORTANT: Database must be initialized BEFORE accepting connections
 (async () => {
   try {
-    console.log("Initializing database and loading data...");
+console.log("Initializing database and loading data...");
     await initializeData();
 
     // Initialize operator chat handler
@@ -1446,23 +1422,23 @@ io.on("connection", async (socket) => {
     );
     const operatorChatRepo = db.getOperatorChatRepository();
     initOperatorChatHandler(io, operatorChatRepo);
-    console.log("[OK] Operator chat handler initialized");
+console.log("[OK] Operator chat handler initialized");
 
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");
     const sysConfigForPush = db.getConfigRepository().getSystemConfig();
     if (initWebPush(sysConfigForPush || undefined)) {
-      console.log("[OK] Web push notifications enabled");
+console.log("[OK] Web push notifications enabled");
     } else {
-      console.log(
+console.log(
         "[INFO] Web push notifications disabled (VAPID keys not configured)"
       );
     }
 
     // Register HTTP routes (auth, sessions, config, upload, download, etc.)
     registerHttpRoutes(app);
-    console.log("[OK] HTTP routes registered");
-    console.log("[OK] Database initialization complete");
+console.log("[OK] HTTP routes registered");
+console.log("[OK] Database initialization complete");
 
     // Now start accepting connections
     // Bind to 0.0.0.0 for cloud deployments (Render, etc)
@@ -1480,7 +1456,7 @@ io.on("connection", async (socket) => {
         }
       }
     } catch (err) {
-      console.warn(
+console.warn(
         "[CONFIG] Unable to load system config for ports, using defaults/env:",
         err
       );
@@ -1493,17 +1469,17 @@ io.on("connection", async (socket) => {
       );
       const sysopCount = Number(sysopUsers.rows?.[0]?.count ?? 0);
       if (sysopCount === 0) {
-        console.log(
+console.log(
           "[SETUP] No sysop-level users found - FIRST new user will automatically become sysop (level 255)"
         );
         // Set global flag that the new user handler will check
         (global as any).firstUserIsSysop = true;
       } else {
-        console.log(`[SETUP] Found ${sysopCount} sysop-level user(s)`);
+console.log(`[SETUP] Found ${sysopCount} sysop-level user(s)`);
         (global as any).firstUserIsSysop = false;
       }
     } catch (err: any) {
-      console.warn(
+console.warn(
         "[SETUP] Failed to check for sysop users:",
         err.message || err
       );
@@ -1512,8 +1488,8 @@ io.on("connection", async (socket) => {
 
     // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
-      console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
-      console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
+console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
+console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
     });
 
     // Start telnet server
@@ -1525,7 +1501,7 @@ io.on("connection", async (socket) => {
       // Handle C64 terminal auto-detection (skip graphics prompt, show BBSTITLE directly)
       telnetServer.on("c64-detected", async (connection: TelnetConnection) => {
         if (connection.session) {
-          console.log(
+console.log(
             "[C64] Auto-detected C64 terminal, showing PETSCII BBSTITLE"
           );
           const { displayScreen } = await import("./handlers/screen.handler");
@@ -1555,11 +1531,11 @@ io.on("connection", async (socket) => {
         }
       });
       await telnetServer.start();
-      console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
-      console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
+console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
+console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
     } catch (error) {
-      console.error(`[WARNING] Failed to start Telnet server:`, error);
-      console.log("   BBS will continue without telnet support");
+console.error(`[WARNING] Failed to start Telnet server:`, error);
+console.log("   BBS will continue without telnet support");
     }
 
     // Start SSH server
@@ -1569,13 +1545,13 @@ io.on("connection", async (socket) => {
       if (hostKey) {
         sshHostKeys = [hostKey];
       } else {
-        console.warn(
+console.warn(
           "[SSH] No SSH host key found. SSH server will not accept connections."
         );
-        console.warn(
+console.warn(
           "[SSH] Generate a key via the admin configuration portal or by running:"
         );
-        console.warn(
+console.warn(
           '[SSH]   ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""'
         );
       }
@@ -1585,18 +1561,18 @@ io.on("connection", async (socket) => {
         setupTelnetSSHHandler(connection, "ssh", io);
       });
       await sshServer.start();
-      console.log(`[OK] SSH Server ready on port ${sshPort}`);
-      console.log(`[SSH] Connect: ssh -p ${sshPort} user@localhost`);
+console.log(`[OK] SSH Server ready on port ${sshPort}`);
+console.log(`[SSH] Connect: ssh -p ${sshPort} user@localhost`);
     } catch (error) {
-      console.error(`[WARNING] Failed to start SSH server:`, error);
-      console.log("   BBS will continue without SSH support");
+console.error(`[WARNING] Failed to start SSH server:`, error);
+console.log("   BBS will continue without SSH support");
     }
 
-    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("[READY] AmiExpress BBS is ready for connections!");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+console.log("[READY] AmiExpress BBS is ready for connections!");
+console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   } catch (error) {
-    console.error("[ERROR] Failed to start server:", error);
+console.error("[ERROR] Failed to start server:", error);
     process.exit(1);
   }
 })();

@@ -300,7 +300,7 @@ function readScreenTextWithMetadata(filePath: string): ReadScreenResult {
       height: sauceInfo.tInfo2
     };
   } catch (error) {
-    console.warn(`[SCREEN] ${encoding} decode failed, falling back to utf-8:`, (error as Error).message);
+console.warn(`[SCREEN] ${encoding} decode failed, falling back to utf-8:`, (error as Error).message);
     return {
       text: buffer.toString('utf-8'),
       encoding: 'utf-8',
@@ -326,17 +326,17 @@ function readScreenWithTransforms(filePath: string): ReadScreenResult {
 
   // Log encoding detection
   if (debugEnabled) {
-    console.log(`[SCREEN] readScreenWithTransforms: ${filePath}`);
-    console.log(`[SCREEN]   Encoding: ${result.encoding}, iCE: ${result.iceColors}`);
+console.log(`[SCREEN] readScreenWithTransforms: ${filePath}`);
+console.log(`[SCREEN]   Encoding: ${result.encoding}, iCE: ${result.iceColors}`);
     if (result.width || result.height) {
-      console.log(`[SCREEN]   SAUCE dimensions: ${result.width}x${result.height}`);
+console.log(`[SCREEN]   SAUCE dimensions: ${result.width}x${result.height}`);
     }
   }
 
   // Apply iCE colors transformation if needed
   if (result.iceColors) {
     if (debugEnabled) {
-      console.log(`[SCREEN]   Applying iCE colors transformation`);
+console.log(`[SCREEN]   Applying iCE colors transformation`);
     }
     result.text = transformIceColors(result.text);
   }
@@ -442,7 +442,7 @@ function transformIceColors(content: string): string {
 const SCREEN_DEBUG_ENABLED = process.env.SCREEN_DEBUG !== '0';
 const screenDebug = (...args: any[]) => {
   if (SCREEN_DEBUG_ENABLED) {
-    console.log('[SCREEN]', ...args);
+console.log('[SCREEN]', ...args);
   }
 };
 const SCREEN_FLOW_SCREENS = new Set([
@@ -456,7 +456,7 @@ const SCREEN_FLOW_SCREENS = new Set([
 ]);
 const screenFlowLog = (screenName: string, ...args: any[]) => {
   if (SCREEN_FLOW_SCREENS.has(screenName.toUpperCase())) {
-    console.log('[SCREEN FLOW]', ...args);
+console.log('[SCREEN FLOW]', ...args);
   }
 };
 
@@ -733,7 +733,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
         msgBaseList = '                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m\r\n';
       }
     } catch (error) {
-      console.error('[parseMciCodes] Error getting message base list:', error);
+console.error('[parseMciCodes] Error getting message base list:', error);
       SysopDebugUtil.debug(
         null,
         session,
@@ -765,7 +765,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
         msgBaseDesc = '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       \r\n';
       }
     } catch (error) {
-      console.error('[parseMciCodes] Error getting message base descriptions:', error);
+console.error('[parseMciCodes] Error getting message base descriptions:', error);
       SysopDebugUtil.debug(
         null,
         session,
@@ -857,7 +857,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       msgBaseName = messageBases[currentMsgBase - 1]?.name || 'Default';
     }
   } catch (error) {
-    console.error('[parseMciCodes] Error getting message base name:', error);
+console.error('[parseMciCodes] Error getting message base name:', error);
     SysopDebugUtil.debug(
       null,
       session,
@@ -902,7 +902,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       totalFiles += files.length;
     }
   } catch (error) {
-    console.error('[parseMciCodes] Error getting file count:', error);
+console.error('[parseMciCodes] Error getting file count:', error);
     SysopDebugUtil.debug(
       null,
       session,
@@ -1070,13 +1070,13 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       } else if (code.startsWith('CC_')) {
         // express.e:5555-5563 - processSysCommand()
         const commandStr = code.substring(3).replace(/\|+$/, '').trim();
-        console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', session.state, 'subState:', session.subState);
+console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', session.state, 'subState:', session.subState);
         screenDebug('[MCI] Sequential: ~CC_ processSysCommand:', commandStr);
         const spacePos = commandStr.indexOf(' ');
         const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
         const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
         const result = await processCommand(socket, session, cmdCode, cmdParams);
-        console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
+console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
       } else if (code.startsWith('SS_') || code.startsWith('2S')) {
         // express.e:5496-5504 - displayFile()
         const prefix = code.startsWith('SS_') ? 3 : 2;
@@ -1248,7 +1248,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       // String mode: Create placeholder for later replacement
       filesToDisplay.push(randomFile);
       const placeholder = `{{DISPLAY_FILE:${filesToDisplay.length - 1}}}`;
-      console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
+console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
       parsed = parsed.replace(srMatch[0], placeholder);
     }
   }
@@ -1393,7 +1393,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       rankedUsers.byDownloadBytes = [...allUsers].sort((a, b) => (b.downloadBytes || 0) - (a.downloadBytes || 0));
       rankedUsers.byMessages = [...allUsers].sort((a, b) => (b.messagesPosted || 0) - (a.messagesPosted || 0));
     } catch (error) {
-      console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error);
+console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error);
     }
 
     // Get total users count
@@ -1488,11 +1488,11 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
         embeddedContent = addAnsiEscapes(embeddedContent);
       }
       // Replace placeholder with embedded content
-      console.log(`[MCI] Replacing placeholder ${placeholder} with ${embeddedContent.length} bytes from ${filename}`);
+console.log(`[MCI] Replacing placeholder ${placeholder} with ${embeddedContent.length} bytes from ${filename}`);
       parsed = parsed.replace(placeholder, embeddedContent);
     } else {
       // File not found - remove placeholder
-      console.log(`[MCI] File not found, removing placeholder: ${filename}`);
+console.log(`[MCI] File not found, removing placeholder: ${filename}`);
       screenDebug(`[MCI] ~SS_ file not found: ${filename}`);
       parsed = parsed.replace(placeholder, '');
     }
@@ -1580,7 +1580,7 @@ export function loadScreenFile(
     const ci = findCaseInsensitive(dir, base) || resolved;
     const normalized = resolvePetsciiPath(ci, !!session?.petsciiMode).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
     if (normalized !== ci) {
-      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${ci} -> ${normalized}`);
+console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${ci} -> ${normalized}`);
     }
     paths.push(normalized);
     screenDebug(`[MCI] ~SS_ resolving Amiga path: ${screenName} -> ${normalized}`);
@@ -1591,7 +1591,7 @@ export function loadScreenFile(
     const resolved = findCaseInsensitive(path.dirname(fsPath), path.basename(fsPath));
     const normalized = (resolved || fsPath).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
     if (normalized !== (resolved || fsPath)) {
-      console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fsPath)} -> ${normalized}`);
+console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fsPath)} -> ${normalized}`);
     }
     paths.push(normalized);
   }
@@ -1724,7 +1724,7 @@ export function loadScreenFile(
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, session?.petsciiMode, session?.ripMode);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false);
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
@@ -1743,7 +1743,7 @@ export function loadScreenFile(
           return { content: readScreenWithTransforms(securityVariant).text, isPetscii: false, isRip: false, filePath: securityVariant };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
-          console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
         }
       }
     }
@@ -1768,7 +1768,7 @@ export function loadScreenFile(
               return { content, isPetscii: true, isRip: false, filePath: fileToUse };
             } catch (error) {
               SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${fileToUse}`, { error: (error as Error).message }, DebugSeverity.WARNING);
-              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             }
           } else if (isRipFile(fileToUse)) {
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
@@ -1778,7 +1778,7 @@ export function loadScreenFile(
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
-          console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error reading file: ${(error as Error).message})`);
         }
       } else {
         screenDebug(`[loadScreenFile]     (not found)`);
@@ -1795,7 +1795,7 @@ export function loadScreenFile(
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, session?.petsciiMode, session?.ripMode);
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false);
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
@@ -1810,7 +1810,7 @@ export function loadScreenFile(
             return { content: readScreenWithTransforms(secPath).text, isPetscii: false, isRip: false, filePath: secPath };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
-          console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
         }
       }
     }
@@ -1835,7 +1835,7 @@ export function loadScreenFile(
               return { content, isPetscii: true, isRip: false, filePath: tryPath };
             } catch (error) {
               SysopDebugUtil.debug(null, session, 'PETSCII', `Failed to convert ${tryPath}`, { error: (error as Error).message }, DebugSeverity.WARNING);
-              console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
+console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             }
           } else if (isRipFile(tryPath)) {
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
@@ -1848,7 +1848,7 @@ export function loadScreenFile(
       screenDebug(`[loadScreenFile]     (not found after trying extensions)`);
     } catch (error) {
       SysopDebugUtil.debugFileError(null, session, 'read', filePath, error as Error, DebugSeverity.WARNING);
-      console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
     }
   }
 
@@ -1870,14 +1870,14 @@ export function loadScreenFile(
           return { content, isPetscii: false, isRip: false, filePath: candidate };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', candidate, error as Error, DebugSeverity.WARNING);
-          console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
+console.error(`[loadScreenFile]     (error reading fallback ${candidate}): ${(error as Error).message}`);
         }
       }
     }
   }
 
-  console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
-  console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
+console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
+console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
   SysopDebugUtil.warn(null, session, 'Screen File', `Screen "${screenName}" not found after trying ${attemptNum} locations`);
 
   if (screenName.toUpperCase() === 'AWAITSCREEN') {
@@ -1891,7 +1891,7 @@ export function loadScreenFile(
         screenDebug(`[loadScreenFile]  Using ANSI fallback screen ${ansiFallback}`);
         return { content, isPetscii: false, isRip: false, filePath: ansiFallback };
       } catch (error) {
-        console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error reading ANSI fallback screen: ${(error as Error).message})`);
         SysopDebugUtil.debugFileError(
           null,
           session,
@@ -1911,7 +1911,7 @@ export function loadScreenFile(
         screenDebug(`[loadScreenFile]  Using PETSCII fallback screen ${petsciiFallback}`);
         return { content, isPetscii: true, isRip: false, filePath: petsciiFallback };
       } catch (error) {
-        console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
+console.error(`[loadScreenFile]     (error reading fallback screen: ${(error as Error).message})`);
         SysopDebugUtil.debugFileError(
           null,
           session,
@@ -1984,7 +1984,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // [NEWLINE-DEBUG] Log raw content newlines
     const rawNewlines = (content.match(/\n/g) || []).length;
     const rawCRLF = (content.match(/\r\n/g) || []).length;
-    console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} bytes, ${rawNewlines} \\n, ${rawCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} bytes, ${rawNewlines} \\n, ${rawCRLF} \\r\\n`);
 
     screenDebug(`[displayScreen]  Screen loaded successfully: ${screenName}`);
     screenDebug(`[displayScreen] Content length: ${content.length} bytes`);
@@ -2023,7 +2023,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         .map(s => s.trim())
         .filter(s => s.length > 0);
 
-      console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
+console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
       segments.forEach((s, i) => console.log(`[SEGMENT]   ${i}: "${s.substring(0, 60).replace(/\n/g, '\\n')}..."`));
       screenDebug(`[displayScreen] ~SP segment processing: ${segments.length} segments for ${screenName}`);
 
@@ -2050,7 +2050,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         // [NEWLINE-DEBUG] Log parsed segment newlines
         const parsedSegmentNewlines = (parsed.match(/\n/g) || []).length;
         const parsedSegmentCRLF = (parsed.match(/\r\n/g) || []).length;
-        console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} bytes, ${parsedSegmentNewlines} \\n, ${parsedSegmentCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} bytes, ${parsedSegmentNewlines} \\n, ${parsedSegmentCRLF} \\r\\n`);
 
         // DON'T set lastScreenHadPause here - let pauseDisplayFlow handle the pause
         // to avoid double pause prompts. screenSegments is already set for subsequent segments.
@@ -2072,7 +2072,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         // [NEWLINE-DEBUG] Log parsed content newlines (single segment case)
         const parsedNewlines = (parsed.match(/\n/g) || []).length;
         const parsedCRLF = (parsed.match(/\r\n/g) || []).length;
-        console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes, ${parsedNewlines} \\n, ${parsedCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes, ${parsedNewlines} \\n, ${parsedCRLF} \\r\\n`);
       }
     } else {
       // Normal processing (no ~SP segments or not a flow screen)
@@ -2093,7 +2093,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // [NEWLINE-DEBUG] Log parsed content newlines (normal case)
       const parsedNormalNewlines = (parsed.match(/\n/g) || []).length;
       const parsedNormalCRLF = (parsed.match(/\r\n/g) || []).length;
-      console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes NORMAL: ${parsed.length} bytes, ${parsedNormalNewlines} \\n, ${parsedNormalCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes NORMAL: ${parsed.length} bytes, ${parsedNormalNewlines} \\n, ${parsedNormalCRLF} \\r\\n`);
     }
 
     // Log MCI parsing results
@@ -2110,7 +2110,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // [NEWLINE-DEBUG] Log after addAnsiEscapes
       const afterAnsiNewlines = (parsed.match(/\n/g) || []).length;
       const afterAnsiCRLF = (parsed.match(/\r\n/g) || []).length;
-      console.log(`[NEWLINE-DEBUG] AFTER addAnsiEscapes: ${parsed.length} bytes, ${afterAnsiNewlines} \\n, ${afterAnsiCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] AFTER addAnsiEscapes: ${parsed.length} bytes, ${afterAnsiNewlines} \\n, ${afterAnsiCRLF} \\r\\n`);
     }
 
     // Normalize line endings for terminal display
@@ -2119,7 +2119,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // [NEWLINE-DEBUG] Log after line ending normalization (CRITICAL)
     const afterNormalizeNewlines = (parsed.match(/\n/g) || []).length;
     const afterNormalizeCRLF = (parsed.match(/\r\n/g) || []).length;
-    console.log(`[NEWLINE-DEBUG] AFTER NORMALIZE: ${parsed.length} bytes, ${afterNormalizeNewlines} \\n, ${afterNormalizeCRLF} \\r\\n`);
+console.log(`[NEWLINE-DEBUG] AFTER NORMALIZE: ${parsed.length} bytes, ${afterNormalizeNewlines} \\n, ${afterNormalizeCRLF} \\r\\n`);
 
     // For flow screens (BULL/NODE_BULL/CONF_BULL/LOGON/etc.), ensure the frame ends
     // with a newline so the pause prompt does not collide with the final line of content.
@@ -2145,8 +2145,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const pageSize = Math.max(1, pageHeight - 1); // leave room for prompt line
 
     // [NEWLINE-DEBUG] Log line splitting
-    console.log(`[NEWLINE-DEBUG] SPLIT INTO LINES: ${lines.length} lines`);
-    console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) => `  [${i}] len=${line.length}: ${line.substring(0, 80)}`).join('\n'));
+console.log(`[NEWLINE-DEBUG] SPLIT INTO LINES: ${lines.length} lines`);
+console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) => `  [${i}] len=${line.length}: ${line.substring(0, 80)}`).join('\n'));
 
     // Note: eventName defined earlier for ~SP segment processing
     const slowmoSpeed = session.slowmo || 0;
@@ -2267,8 +2267,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
               const result = await handleCommand(socket, session, commandStr);
               screenDebug(`[displayScreen]  Command completed:`, commandStr, 'Result:', result);
             } catch (error) {
-              console.error(`[displayScreen]  ERROR executing command ${commandStr}:`, error);
-              console.error(`[displayScreen] Error stack:`, (error as Error).stack);
+console.error(`[displayScreen]  ERROR executing command ${commandStr}:`, error);
+console.error(`[displayScreen] Error stack:`, (error as Error).stack);
               SysopDebugUtil.debug(
                 socket,
                 session,
@@ -2411,12 +2411,12 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // Screen Wipe Animation Playback
     // If a wipe animation is detected, generate and send frames instead of direct output
     if (hasWipeAnimation && wipeResult.wipeType) {
-      console.log(`[WIPE] Starting wipe animation: ${wipeResult.wipeType}`);
+console.log(`[WIPE] Starting wipe animation: ${wipeResult.wipeType}`);
       screenDebug(`[displayScreen] Playing wipe animation: ${wipeResult.wipeType}`);
 
       // Generate animation frames
       const wipeFrames = getWipeFrames(wipeResult.wipeType, parsed);
-      console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
+console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
 
       // Get direct socket emit (bypasses modem emulator wrapper if installed)
       // This ensures wipe animation controls its own timing without modem interference
@@ -2448,7 +2448,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         }
       }
 
-      console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
+console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
       screenDebug(`[displayScreen] Wipe animation complete: ${wipeFrames.length} frames`);
     } else if (!inlineEmitted) {
       // Normal display: Double-buffered display
@@ -2513,11 +2513,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   } else {
     // Screen not found - return false silently (matches express.e behavior)
     // Caller decides whether to show error or skip
-    console.error(`[displayScreen] ========================================`);
-    console.error(`[displayScreen]  SCREEN FILE NOT FOUND: ${screenName}`);
-    console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
-    console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
-    console.error(`[displayScreen] ========================================`);
+console.error(`[displayScreen] ========================================`);
+console.error(`[displayScreen]  SCREEN FILE NOT FOUND: ${screenName}`);
+console.error(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
+console.error(`[displayScreen] (Detailed path attempts logged by loadScreenFile above)`);
+console.error(`[displayScreen] ========================================`);
     SysopDebugUtil.debug(
       socket,
       session,
@@ -2562,7 +2562,7 @@ export async function runQueuedScreenCommands(socket: any, session: BBSSession):
       try {
         await handleCommand(socket, session, commandStr);
       } catch (error) {
-        console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, error);
+console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, error);
         SysopDebugUtil.debug(
           socket,
           session,
@@ -2712,7 +2712,7 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
   const segmentNum = segState.currentIndex + 1;
   segState.currentIndex = segmentNum;
 
-  console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: "${segment.substring(0, 100)}..."`);
+console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: "${segment.substring(0, 100)}..."`);
   screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segment.substring(0, 50)}...`);
 
   // Parse and execute this segment's MCI codes

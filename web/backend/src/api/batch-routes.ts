@@ -32,17 +32,17 @@ function listBatches(): string[] {
   // Scan all batch roots for files starting with "batch" (case-insensitive)
   const found = new Set<string>();
   const roots = batchRoots();
-  console.log('[BatchEditor] Scanning roots:', roots);
+console.log('[BatchEditor] Scanning roots:', roots);
 
   for (const root of roots) {
     if (!amigafs.existsSync(root)) {
-      console.log('[BatchEditor] Root does not exist:', root);
+console.log('[BatchEditor] Root does not exist:', root);
       continue;
     }
 
     try {
       const files = amigafs.readdirSync(root);
-      console.log(`[BatchEditor] Files in ${root}:`, files.filter(f => f.toLowerCase().startsWith('batch')));
+console.log(`[BatchEditor] Files in ${root}:`, files.filter(f => f.toLowerCase().startsWith('batch')));
       files.forEach((file) => {
         // Match files starting with "batch" but not ending with .info (case-insensitive)
         if (file.toLowerCase().startsWith('batch') && !file.toLowerCase().endsWith('.info')) {
@@ -50,12 +50,12 @@ function listBatches(): string[] {
           // Only include regular files, not directories
           if (amigafs.statSync(fullPath).isFile()) {
             found.add(file);
-            console.log('[BatchEditor] Added batch file:', file);
+console.log('[BatchEditor] Added batch file:', file);
           }
         }
       });
     } catch (err) {
-      console.error(`[BatchEditor] Error scanning ${root}:`, err);
+console.error(`[BatchEditor] Error scanning ${root}:`, err);
     }
   }
 
@@ -146,7 +146,7 @@ function ensureBatchFiles() {
         try {
           amigafs.copyFileSync(existing, target);
         } catch (err) {
-          console.error(`[BatchEditor] Failed to copy ${existing} to ${target}:`, err);
+console.error(`[BatchEditor] Failed to copy ${existing} to ${target}:`, err);
         }
       }
       continue;
@@ -156,7 +156,7 @@ function ensureBatchFiles() {
       try {
         amigafs.writeFileSync(target, '', 'utf-8');
       } catch (err) {
-        console.error(`[BatchEditor] Failed to create ${target}:`, err);
+console.error(`[BatchEditor] Failed to create ${target}:`, err);
       }
     }
   }
@@ -168,7 +168,7 @@ export function createBatchRouter(): ReturnType<typeof express.Router> {
 
   router.get('/', (_req: Request, res: Response) => {
     const batches = listBatches();
-    console.log('[BatchRouter] GET / - returning batches:', batches);
+console.log('[BatchRouter] GET / - returning batches:', batches);
     res.json({ batches });
   });
 

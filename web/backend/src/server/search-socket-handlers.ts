@@ -38,7 +38,7 @@ export function setupSearchHandlers(socket: Socket, session: any) {
         count: results.length
       });
     } catch (error) {
-      console.error('[Search] Error:', error);
+console.error('[Search] Error:', error);
       socket.emit('chat:error', { error: 'Search failed' });
     }
   });

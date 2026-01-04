@@ -43,7 +43,7 @@ export async function handlePageSysopCommand(
 
     // Note: Success messages are already sent by handlePageSysop
   } catch (error) {
-    console.error('[Page Sysop Command] Error:', error);
+console.error('[Page Sysop Command] Error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError paging sysop. Please try again later.\x1b[0m\r\n');
   }
 }

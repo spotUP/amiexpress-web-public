@@ -99,7 +99,7 @@ export function setNewUserDependencies(deps: NewUserDependencies) {
  * express.e:30003-30050 (newUserAccount)
  */
 export async function startNewUserRegistration(socket: Socket, session: any, username: string) {
-  console.log(' [NEW USER] Starting registration for:', username);
+console.log(' [NEW USER] Starting registration for:', username);
 
   session.state = BBSState.REGISTERING;
   session.inputBuffer = '';
@@ -432,7 +432,7 @@ async function showScreen(socket: Socket, session: any, screenName?: string): Pr
   try {
     return await displayScreen(socket, session, screenName);
   } catch (error) {
-    console.warn('[NEW USER] Failed to display screen', screenName, error);
+console.warn('[NEW USER] Failed to display screen', screenName, error);
     return false;
   }
 }
@@ -481,7 +481,7 @@ async function getComputerChoices(): Promise<string[]> {
       }
     }
   } catch (error) {
-    console.warn('[NEW USER] Unable to load computer types from repository:', error);
+console.warn('[NEW USER] Unable to load computer types from repository:', error);
   }
 
   if (choices.length === 0) {
@@ -524,7 +524,7 @@ function getSecurityPolicy(): SecurityPolicy {
       }
     }
   } catch (error) {
-    console.warn('[NEW USER] Unable to load security policy from config:', error);
+console.warn('[NEW USER] Unable to load security policy from config:', error);
   }
   return defaults;
 }
@@ -969,7 +969,7 @@ function findQuestionnaireScript(session: any): string | null {
       return path.join(nodeDir, match);
     }
   } catch (error) {
-    console.warn('[NEW USER] Unable to scan node directory for scripts:', error);
+console.warn('[NEW USER] Unable to scan node directory for scripts:', error);
   }
 
   return null;
@@ -997,7 +997,7 @@ function loadScriptSteps(scriptPath: string): ScriptStep[] {
     }
     return steps;
   } catch (error) {
-    console.warn('[NEW USER] Unable to load questionnaire script:', scriptPath, error);
+console.warn('[NEW USER] Unable to load questionnaire script:', scriptPath, error);
     return [];
   }
 }
@@ -1030,13 +1030,13 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
   try {
     amigafs.writeFileSync(questionnaire.tempAnswerPath, `${content}\r\n`, 'utf8');
   } catch (error) {
-    console.warn('[NEW USER] Failed to write TempAns file:', error);
+console.warn('[NEW USER] Failed to write TempAns file:', error);
   }
 
   try {
     amigafs.appendFileSync(questionnaire.finalAnswerPath, `${content}\r\n`, 'utf8');
   } catch (error) {
-    console.warn('[NEW USER] Failed to append Answers file:', error);
+console.warn('[NEW USER] Failed to append Answers file:', error);
   }
 }
 
@@ -1076,7 +1076,7 @@ async function getNewUserDefaults() {
       autoRejoin: systemConfig.new_user_auto_rejoin
     };
   } catch (error) {
-    console.warn('[NEW USER] Failed to load system defaults for new users:', error);
+console.warn('[NEW USER] Failed to load system defaults for new users:', error);
     return null;
   }
 }
@@ -1119,7 +1119,7 @@ async function createAccount(socket: Socket, session: any) {
       socket.emit('ansi-output', '\r\n\x1b[33;1m*** FIRST USER DETECTED ***\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33;1mYou have been automatically assigned System Operator status (Level 255)\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33;1mWelcome, Sysop!\x1b[0m\r\n\r\n');
-      console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
+console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
       // Clear the flag so subsequent users get normal security level
       (global as any).firstUserIsSysop = false;
     }
@@ -1187,7 +1187,7 @@ async function createAccount(socket: Socket, session: any) {
         computerType: data.computerType
       });
     } catch (error) {
-      console.error('[Webhook] Error sending new user webhook:', error);
+console.error('[Webhook] Error sending new user webhook:', error);
     }
 
     // Run EXECUTE_ON_NEW_USER command from bbsConfig.info (express.e:6726)
@@ -1197,14 +1197,14 @@ async function createAccount(socket: Socket, session: any) {
         location: data.location
       });
     } catch (error) {
-      console.error('[NewUser] Error running EXECUTE_ON_NEW_USER:', error);
+console.error('[NewUser] Error running EXECUTE_ON_NEW_USER:', error);
     }
 
     // MAIL_ON_NEW_USER tooltype - express.e:6728-6732
     try {
       await mailOnNewUser(data.username, data.location);
     } catch (error) {
-      console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
+console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     }
 
     // Fetch the full user object
@@ -1218,9 +1218,9 @@ async function createAccount(socket: Socket, session: any) {
     // DISK-BASED: Write user to user.data, user.keys, user.misc files
     try {
       userFileManager.writeUserFiles(newUser, newUserId);
-      console.log(`[NewUser] Wrote user ${data.username} to disk files (slot ${newUserId})`);
+console.log(`[NewUser] Wrote user ${data.username} to disk files (slot ${newUserId})`);
     } catch (error) {
-      console.error('[NewUser] Error writing user to disk files:', error);
+console.error('[NewUser] Error writing user to disk files:', error);
       // Continue anyway - database has the user, sync can happen later
     }
 
@@ -1265,14 +1265,14 @@ async function createAccount(socket: Socket, session: any) {
         timestamp: Date.now()
       });
     } catch (error) {
-      console.error('[BBSEvent] Error emitting new user login event:', error);
+console.error('[BBSEvent] Error emitting new user login event:', error);
     }
 
     // Show welcome screen and bulletins
     socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
     socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
   } catch (error) {
-    console.error(' [NEW USER] Account creation error:', error);
+console.error(' [NEW USER] Account creation error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
     session.state = BBSState.AWAIT;
   }

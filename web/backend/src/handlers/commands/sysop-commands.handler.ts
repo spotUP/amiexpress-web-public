@@ -55,7 +55,7 @@ export function handleRemoteShellCommand(socket: any, session: BBSSession): void
   // Set environment status - express.e:24431
   _setEnvStat(session, EnvStat.SHELL);
 
-  console.log('[ENV] Shell');
+console.log('[ENV] Shell');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Remote Shell'));
@@ -100,10 +100,11 @@ export async function handleAccountEditingCommand(socket: any, session: BBSSessi
     return;
   }
 
-  console.log('[ENV] Sysop');
+console.log('[ENV] Sysop');
 
   // Log activity - express.e:24457
-  // TODO: Add callersLog('\tAccount editing.\n')
+  const { callersLogManager } = require('../../services/CallersLogManager');
+  callersLogManager.logActivity(session.nodeId || 1, '\tAccount editing.\n');
 
   // Call account editing menu - express.e:24458 (editAccounts)
   await handleAccountEditorMenu(socket, session, _db);
@@ -129,7 +130,7 @@ export async function handleCallersLogCommand(socket: any, session: BBSSession, 
   // Set environment status - express.e:24468
   _setEnvStat(session, EnvStat.SYSOP);
 
-  console.log('[ENV] Sysop');
+console.log('[ENV] Sysop');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Callers Log'));
@@ -204,7 +205,7 @@ export function handleEditDirectoryFilesCommand(socket: any, session: BBSSession
     return;
   }
 
-  console.log('[ENV] Emacs');
+console.log('[ENV] Emacs');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Edit Directory Files'));
@@ -258,7 +259,7 @@ export function handleEditAnyFileCommand(socket: any, session: BBSSession, param
     return;
   }
 
-  console.log('[ENV] Emacs');
+console.log('[ENV] Emacs');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Edit Any File'));
@@ -312,7 +313,7 @@ export function handleChangeDirectoryCommand(socket: any, session: BBSSession, p
     return;
   }
 
-  console.log('[ENV] Sysop');
+console.log('[ENV] Sysop');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Navigate Filesystem'));

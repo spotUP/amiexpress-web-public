@@ -69,7 +69,7 @@ export async function handleReadMessagesFullCommand(
     return;
   }
 
-  console.log('[ENV] Mail - Read');
+console.log('[ENV] Mail - Read');
 
   // Get messages from DISK (AmiExpress format)
   // Database is only for web UI/search, not for BBS message reading
@@ -426,7 +426,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     return;
   }
 
-  // F - Forward message - express.e:11178-11191
+  // F - Forward message - express.e:11178-11191, forwardMSG:9807-9871
   if (command === 'F') {
     const msg = messages[currentIndex];
     // Check if user can forward this message:
@@ -434,10 +434,21 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     // - Private messages to you
     // - Messages to ALL
     if (!msg.isPrivate || msg.toUser === session.user.username || msg.toUser === 'ALL') {
+      // Store original message for forwarding
+      session.tempData.forwardOriginalMessage = msg;
+      session.tempData.forwardOriginalIndex = currentIndex;
+      session.tempData.forwardData = {
+        originalToUser: msg.toUser,
+        originalSubject: msg.subject,
+        canDeleteOriginal: msg.toUser === session.user.username && checkSecurity(session.user, ACSPermission.DELETE_MESSAGE)
+      };
+
+      // Prompt for recipient (express.e:9816-9821)
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Message forwarding not yet implemented'));
-      socket.emit('ansi-output', '\r\n');
-      await displaySingleMessage(socket, session, currentIndex);
+      socket.emit('ansi-output', '                       [32m([33m------------------------------[32m)[0m\r\n');
+      socket.emit('ansi-output', '     [36mTo[33m: [32m([33mEnter[32m)[0m=[32m\'[33mALL[32m\'[32m?[0m ');
+
+      session.subState = LoggedOnSubState.FORWARD_MESSAGE_TO;
     } else {
       socket.emit('ansi-output', '\r\n');
       socket.emit('ansi-output', 'Not your message.\r\n');
@@ -564,7 +575,7 @@ export function handleEnterMessageFullCommand(
   // Set environment status - express.e:24862
   _setEnvStat(session, EnvStat.MAIL);
 
-  console.log('[ENV] Mail');
+console.log('[ENV] Mail');
 
   // Start private message posting workflow
   socket.emit('ansi-output', '\r\n');

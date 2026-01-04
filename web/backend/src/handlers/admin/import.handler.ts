@@ -14,6 +14,7 @@ import { AmigaParserService } from '../../services/amiga-parser.service';
 import { ImportValidationService } from '../../services/import-validation.service';
 import { ImportMappingService } from '../../services/import-mapping.service';
 import { AmigaExportService } from '../../services/amiga-export.service';
+import { bbsEventEmitter } from '../../services/bbs-event-emitter';
 import type { Database } from '../../database';
 import type { ImportOptions } from '../../services/import-transaction.service';
 
@@ -55,10 +56,15 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
   const transactionService = new ImportTransactionService(db, parser, validator, mapper);
   const exportService = new AmigaExportService(db);
 
-  // Setup progress event broadcasting (for WebSocket/SSE in future)
+  // Setup progress event broadcasting via WebSocket
   transactionService.on('progress', (event) => {
-    console.log(`[ImportAPI] Progress: ${event.sessionId} - ${event.progress}% - ${event.message}`);
-    // TODO: Broadcast via WebSocket to connected admin clients
+console.log(`[ImportAPI] Progress: ${event.sessionId} - ${event.progress}% - ${event.message}`);
+    // Broadcast to connected admin clients via Socket.IO
+    bbsEventEmitter.emitImportProgress({
+      sessionId: event.sessionId,
+      progress: event.progress,
+      message: event.message
+    });
   });
 
   /**
@@ -71,8 +77,8 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         return res.status(400).json({ error: 'No archive file provided' });
       }
 
-      console.log('[ImportAPI] Upload received:', req.file.originalname);
-      console.log('[ImportAPI] Saved to:', req.file.path);
+console.log('[ImportAPI] Upload received:', req.file.originalname);
+console.log('[ImportAPI] Saved to:', req.file.path);
 
       // Create import session
       const session = await transactionService.createSession(req.file.path);
@@ -84,7 +90,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         size: req.file.size,
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Upload error:', error);
+console.error('[ImportAPI] Upload error:', error);
       res.status(500).json({
         error: 'Upload failed',
         message: error.message,
@@ -99,7 +105,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
   router.post('/validate/:sessionId', async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.params;
-      console.log('[ImportAPI] Validating session:', sessionId);
+console.log('[ImportAPI] Validating session:', sessionId);
 
       const result = await transactionService.validateSession(sessionId);
 
@@ -111,7 +117,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         summary: result.summary,
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Validation error:', error);
+console.error('[ImportAPI] Validation error:', error);
       res.status(500).json({
         error: 'Validation failed',
         message: error.message,
@@ -144,7 +150,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         },
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Session status error:', error);
+console.error('[ImportAPI] Session status error:', error);
       res.status(500).json({
         error: 'Failed to get session status',
         message: error.message,
@@ -171,7 +177,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         })),
       });
     } catch (error: any) {
-      console.error('[ImportAPI] List sessions error:', error);
+console.error('[ImportAPI] List sessions error:', error);
       res.status(500).json({
         error: 'Failed to list sessions',
         message: error.message,
@@ -203,7 +209,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         stripSecretsFromInfo: req.body.stripSecretsFromInfo === true,
       };
 
-      console.log('[ImportAPI] Executing import:', sessionId, options);
+console.log('[ImportAPI] Executing import:', sessionId, options);
 
       // Execute import (async, returns immediately)
       const result = await transactionService.executeImport(sessionId, options);
@@ -219,7 +225,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         },
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Import execution error:', error);
+console.error('[ImportAPI] Import execution error:', error);
       res.status(500).json({
         error: 'Import failed',
         message: error.message,
@@ -234,7 +240,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
   router.delete('/session/:sessionId', async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.params;
-      console.log('[ImportAPI] Deleting session:', sessionId);
+console.log('[ImportAPI] Deleting session:', sessionId);
 
       await transactionService.deleteSession(sessionId);
 
@@ -243,7 +249,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         message: 'Session deleted',
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Delete session error:', error);
+console.error('[ImportAPI] Delete session error:', error);
       res.status(500).json({
         error: 'Failed to delete session',
         message: error.message,
@@ -258,7 +264,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
   router.post('/cancel/:sessionId', async (req: Request, res: Response) => {
     try {
       const { sessionId } = req.params;
-      console.log('[ImportAPI] Cancelling import:', sessionId);
+console.log('[ImportAPI] Cancelling import:', sessionId);
 
       transactionService.cancelImport(sessionId);
 
@@ -267,7 +273,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         message: 'Import cancelled',
       });
     } catch (error: any) {
-      console.error('[ImportAPI] Cancel import error:', error);
+console.error('[ImportAPI] Cancel import error:', error);
       res.status(500).json({
         error: 'Failed to cancel import',
         message: error.message,
@@ -292,7 +298,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         format: req.body.format || 'zip',
       };
 
-      console.log('[ExportAPI] Creating export with options:', options);
+console.log('[ExportAPI] Creating export with options:', options);
 
       const result = await exportService.exportBBS(options);
 
@@ -312,7 +318,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         });
       }
     } catch (error: any) {
-      console.error('[ExportAPI] Export creation error:', error);
+console.error('[ExportAPI] Export creation error:', error);
       res.status(500).json({
         error: 'Export failed',
         message: error.message,
@@ -333,7 +339,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         exports,
       });
     } catch (error: any) {
-      console.error('[ExportAPI] List exports error:', error);
+console.error('[ExportAPI] List exports error:', error);
       res.status(500).json({
         error: 'Failed to list exports',
         message: error.message,
@@ -371,7 +377,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
 
       (res as any).download(filePath, filename);
     } catch (error: any) {
-      console.error('[ExportAPI] Download error:', error);
+console.error('[ExportAPI] Download error:', error);
       res.status(500).json({
         error: 'Download failed',
         message: error.message,
@@ -394,7 +400,7 @@ export function createImportRouter(db: Database): ReturnType<typeof express.Rout
         message: 'Export deleted',
       });
     } catch (error: any) {
-      console.error('[ExportAPI] Delete export error:', error);
+console.error('[ExportAPI] Delete export error:', error);
       res.status(500).json({
         error: 'Failed to delete export',
         message: error.message,

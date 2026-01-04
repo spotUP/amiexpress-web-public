@@ -40,7 +40,7 @@ let SCREEN_MENU: string = "MENU";
  */
 function debugLog(socket: any, session: BBSSession | undefined, message: string, category: string = "CMD") {
   // Always log to console (backend.log)
-  console.log(message);
+console.log(message);
 
   // If sysop logged in, also send to terminal and session log
   if (socket && session?.user?.secLevel && session.user.secLevel >= 200) {
@@ -70,9 +70,9 @@ export function setFileAreas(areas: any[]) {
 }
 
 export function setProcessOlmMessageQueue(fn: any) {
-  console.log("🔧 setProcessOlmMessageQueue called, fn type:", typeof fn);
+console.log("🔧 setProcessOlmMessageQueue called, fn type:", typeof fn);
   processOlmMessageQueue = fn;
-  console.log(
+console.log(
     "🔧 processOlmMessageQueue set, now type:",
     typeof processOlmMessageQueue
   );
@@ -181,10 +181,10 @@ export async function handleCommand(
   session: BBSSession,
   data: string
 ) {
-  console.log("=== handleCommand called ===");
-  console.log("data:", JSON.stringify(data));
-  console.log("session.state:", session.state);
-  console.log("session.subState:", session.subState);
+console.log("=== handleCommand called ===");
+console.log("data:", JSON.stringify(data));
+console.log("session.state:", session.state);
+console.log("session.subState:", session.subState);
   const trimmedScreenCommand = (data || "").trim();
   const isAwaitScreenRunning =
     (session as any).pendingScreenCommand &&
@@ -193,7 +193,7 @@ export async function handleCommand(
     !!((session as any).executingScreenCommand && trimmedScreenCommand.length > 1);
   const isScreenDoorsPath = /^DOORS:/i.test(trimmedScreenCommand);
   if (allowScreenCommand) {
-    console.log(
+console.log(
       "[handleCommand] Executing screen-initiated command (state bypass enabled)"
     );
   }
@@ -205,7 +205,7 @@ export async function handleCommand(
   // NI (NodeIn) executes on connection, NO (NodeOut) executes on logout
   // They create tracking files that WHO2 door reads to display connected users
   if (data === "DOORS:who/NI" || data === "DOORS:who/No") {
-    console.log(`[WHO2] Executing helper tool: ${data}`);
+console.log(`[WHO2] Executing helper tool: ${data}`);
     const fs = require("fs");
     const path = require("path");
     const nodeId = session.nodeId || 0;
@@ -223,17 +223,17 @@ export async function handleCommand(
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
         const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${new Date().toISOString()}\n`;
         fs.writeFileSync(nodeFile, nodeData);
-        console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
+console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
       } else {
         // NodeOut - remove node tracking file on logout
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
         if (fs.existsSync(nodeFile)) {
           fs.unlinkSync(nodeFile);
-          console.log(`[WHO2] NO removed tracking file: ${nodeFile}`);
+console.log(`[WHO2] NO removed tracking file: ${nodeFile}`);
         }
       }
   } catch (error: any) {
-      console.error(`[WHO2] Error executing ${data}:`, error);
+console.error(`[WHO2] Error executing ${data}:`, error);
     }
     return; // Done - don't process further
   }
@@ -250,7 +250,7 @@ export async function handleCommand(
     const parts = normalized.split(/\s+/);
     const command = parts[0];
     const params = parts.slice(1).join(" ");
-    console.log(
+console.log(
       "[handleCommand] Running screen command immediately:",
       command,
       params
@@ -258,7 +258,7 @@ export async function handleCommand(
     try {
       await processCommand(socket, session, command, params);
     } catch (error) {
-      console.error("[handleCommand] Screen command failed:", error);
+console.error("[handleCommand] Screen command failed:", error);
     }
     return;
   }
@@ -269,11 +269,11 @@ export async function handleCommand(
       // User pressed key after connection screen (welcome + node list)
       // reference-board BBS layout: everything shown on connect, now just show ANSI prompt
       // express.e:29528 - ANSI prompt
-      console.log("📋 Connection screen viewed, showing ANSI prompt");
+console.log("📋 Connection screen viewed, showing ANSI prompt");
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: "" }; // Initialize input buffer
       if ((session as any).pendingScreenCommand) {
-        console.log(
+console.log(
           "[handleCommand] Await screen command still running, deferring prompt"
         );
         (session as any).pendingScreenCommand
@@ -286,7 +286,7 @@ export async function handleCommand(
             }
           })
           .catch((error: any) => {
-            console.error(
+console.error(
               "[handleCommand] Pending screen command rejected:",
               error
             );
@@ -306,7 +306,7 @@ export async function handleCommand(
 
     if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
       if ((session as any).pendingScreenCommand) {
-        console.log(
+console.log(
           "[handleCommand] ANSI prompt input ignored until screen command completes"
         );
         return;
@@ -316,7 +316,7 @@ export async function handleCommand(
       if (data === "\r") {
         // Enter pressed - process the buffered input
         const answer = (session.tempData?.inputBuffer || "").toUpperCase();
-        console.log("📋 Graphics prompt response:", answer || "(empty = ANSI)");
+console.log("📋 Graphics prompt response:", answer || "(empty = ANSI)");
 
         // express.e:29538-29546 - Check for specific letters in the string
         // Default (empty/just Enter) = ANSI enabled
@@ -344,10 +344,10 @@ export async function handleCommand(
           session.ansiEnabled = true; // PETSCII needs ANSI codes
           (session.tempData as any).termWidth = 40;
           (session.tempData as any).termHeight = 25;
-          console.log("📋 PETSCII mode enabled: 40x25 terminal");
+console.log("📋 PETSCII mode enabled: 40x25 terminal");
         }
 
-        console.log(
+console.log(
           "📋 Graphics mode set:",
           session.petsciiMode
             ? "PETSCII"
@@ -392,7 +392,7 @@ export async function handleCommand(
 
     if (session.subState === LoggedOnSubState.DISPLAY_BBSTITLE) {
       // User pressed key after BBSTITLE, now ready for login
-      console.log("📋 BBSTITLE viewed, transitioning to login");
+console.log("📋 BBSTITLE viewed, transitioning to login");
       session.state = BBSState.LOGON;
       session.subState = undefined;
       socket.emit(
@@ -418,10 +418,10 @@ export async function handleCommand(
     session.state !== BBSState.LOGON &&
     session.state !== BBSState.REGISTERING
   ) {
-    console.log(
+console.log(
       "❌ Not in LOGGEDON/LOGON or REGISTERING state, ignoring command"
     );
-    console.log("   Current state:", session.state);
+console.log("   Current state:", session.state);
     return;
   }
 

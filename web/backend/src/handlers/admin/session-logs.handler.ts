@@ -14,20 +14,20 @@ export class SessionLogsHandler {
    */
   async getActiveSessions(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('[SessionLogsHandler] getActiveSessions called, user:', req.user?.username, 'secLevel:', req.user?.secLevel);
+console.log('[SessionLogsHandler] getActiveSessions called, user:', req.user?.username, 'secLevel:', req.user?.secLevel);
 
       // Require sysop access (secLevel >= 255)
       if (!req.user || req.user.secLevel < 255) {
-        console.log('[SessionLogsHandler] Access denied - insufficient privileges');
+console.log('[SessionLogsHandler] Access denied - insufficient privileges');
         res.status(403).json({ error: 'Sysop access required' });
         return;
       }
 
       const sessions = sessionLogManager.getActiveSessions();
-      console.log('[SessionLogsHandler] Returning sessions:', sessions.length);
+console.log('[SessionLogsHandler] Returning sessions:', sessions.length);
       res.json({ sessions });
     } catch (error) {
-      console.error('[SessionLogsHandler] Error getting active sessions:', error);
+console.error('[SessionLogsHandler] Error getting active sessions:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -54,7 +54,7 @@ export class SessionLogsHandler {
 
       res.json({ log });
     } catch (error) {
-      console.error('[SessionLogsHandler] Error getting session log:', error);
+console.error('[SessionLogsHandler] Error getting session log:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -83,7 +83,7 @@ export class SessionLogsHandler {
       res.setHeader('Content-Type', 'text/plain');
       res.send(output);
     } catch (error) {
-      console.error('[SessionLogsHandler] Error getting session log raw:', error);
+console.error('[SessionLogsHandler] Error getting session log raw:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -103,7 +103,7 @@ export class SessionLogsHandler {
       const stats = sessionLogManager.getStats();
       res.json({ stats });
     } catch (error) {
-      console.error('[SessionLogsHandler] Error getting stats:', error);
+console.error('[SessionLogsHandler] Error getting stats:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -130,7 +130,7 @@ export class SessionLogsHandler {
 
       res.json({ filePath });
     } catch (error) {
-      console.error('[SessionLogsHandler] Error saving session log:', error);
+console.error('[SessionLogsHandler] Error saving session log:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

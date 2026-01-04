@@ -27,7 +27,7 @@ import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;
-let _findSecurityScreen: (basePath: string, secLevel: number, petsciiMode?: boolean, ripMode?: boolean) => string | null;
+let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean) => string | null;
 let _confScreenDir: string;
 let _db: any;
 let _hasKeysFile: any;
@@ -97,7 +97,7 @@ export async function handleFileListCommand(socket: any, session: BBSSession, pa
     return;
   }
 
-  console.log('[ENV] Files');
+console.log('[ENV] Files');
 
   // Import and use the new FileListingHandler
   const { FileListingHandler } = require('./file-listing.handler');
@@ -124,7 +124,7 @@ export async function handleFileListRawCommand(socket: any, session: BBSSession,
     return;
   }
 
-  console.log('[ENV] Files');
+console.log('[ENV] Files');
 
   // Import and use the new FileListingHandler
   const { FileListingHandler } = require('./file-listing.handler');
@@ -457,7 +457,7 @@ async function flagFiles(socket: any, session: BBSSession, pattern: string): Pro
       );
     });
   } catch (error) {
-    console.error('[flagFiles] Error:', error);
+console.error('[flagFiles] Error:', error);
     socket.emit('ansi-output', AnsiUtil.errorLine('Error searching for files'));
   }
 }
@@ -579,7 +579,7 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
     return;
   }
 
-  console.log('[ENV] Bulletins');
+console.log('[ENV] Bulletins');
 
   // Check if BullHelp.txt exists - Bulletins are at BBS root, NOT in Screens/
   const dataDir = config.get('dataDir');
@@ -620,7 +620,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
   // Display BullHelp screen - use full path with dataDir
   const dataDir = config.get('dataDir');
   const bullHelpBasePath = path.join(dataDir, 'Bulletins', 'BullHelp');
-  const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
+  const helpScreen = _findSecurityScreen(bullHelpBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
   if (helpScreen) {
     _displayScreen(socket, session, helpScreen);
@@ -644,7 +644,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
   const dataDir = config.get('dataDir');
   const bulletinBasePath = path.join(dataDir, 'Bulletins', `Bull${bulletinNum}`);
-  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, session.petsciiMode, session.ripMode);
+  const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, null, session.ripMode);
 
   socket.emit('ansi-output', '\r\n');
 

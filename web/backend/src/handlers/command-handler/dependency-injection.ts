@@ -119,9 +119,9 @@ export function setDoors(doorsList: any[]) {
 }
 
 export function setProcessOlmMessageQueue(fn: any) {
-  console.log('[DI] setProcessOlmMessageQueue called, fn type:', typeof fn);
+console.log('[DI] setProcessOlmMessageQueue called, fn type:', typeof fn);
   container.registerInstance(DI_TOKENS.ProcessOlmMessageQueue, fn);
-  console.log('[DI] processOlmMessageQueue registered in container');
+console.log('[DI] processOlmMessageQueue registered in container');
 }
 
 export function setCheckSecurity(fn: any) {

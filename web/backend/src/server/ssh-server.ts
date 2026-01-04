@@ -56,7 +56,7 @@ export class SSHConnection extends EventEmitter {
     if (ctx.method === 'password') {
       // For now, accept any authentication - BBS will handle login
       // In production, you might want to validate against user database here
-      console.log(`[SSH] Authentication attempt: ${ctx.username}`);
+console.log(`[SSH] Authentication attempt: ${ctx.username}`);
       ctx.accept();
     } else if (ctx.method === 'none') {
       // Allow "none" authentication - BBS will prompt for login
@@ -71,7 +71,7 @@ export class SSHConnection extends EventEmitter {
    * Set up session and shell
    */
   private handleReady(): void {
-    console.log(`[SSH] Connection ready on node ${this.nodeId}`);
+console.log(`[SSH] Connection ready on node ${this.nodeId}`);
 
     this.connection.on('session', (accept: AcceptConnection<any>) => {
       const session = accept();
@@ -80,7 +80,7 @@ export class SSHConnection extends EventEmitter {
         // Store terminal dimensions from PTY request
         this.terminalWidth = info.cols || 80;
         this.terminalHeight = info.rows || 24;
-        console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight}`);
+console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight}`);
         if (typeof accept === 'function') {
           accept();
         }
@@ -90,7 +90,7 @@ export class SSHConnection extends EventEmitter {
         // Handle terminal resize
         this.terminalWidth = info.cols || 80;
         this.terminalHeight = info.rows || 24;
-        console.log(`[SSH] Window resize: ${this.terminalWidth}x${this.terminalHeight}`);
+console.log(`[SSH] Window resize: ${this.terminalWidth}x${this.terminalHeight}`);
         this.emit('window-size', this.terminalWidth, this.terminalHeight);
         if (typeof accept === 'function') {
           accept();
@@ -98,7 +98,7 @@ export class SSHConnection extends EventEmitter {
       });
 
       session.on('shell', (accept: () => void, reject: () => void) => {
-        console.log(`[SSH] Shell requested on node ${this.nodeId}`);
+console.log(`[SSH] Shell requested on node ${this.nodeId}`);
         this.stream = accept();
 
         // Forward data from client to BBS
@@ -108,7 +108,7 @@ export class SSHConnection extends EventEmitter {
 
         // Handle stream close
         this.stream.on('close', () => {
-          console.log(`[SSH] Stream closed on node ${this.nodeId}`);
+console.log(`[SSH] Stream closed on node ${this.nodeId}`);
           this.connection.end();
         });
 
@@ -118,7 +118,7 @@ export class SSHConnection extends EventEmitter {
 
       session.on('exec', (accept: () => void, reject: () => void, info: any) => {
         // Reject exec requests - BBS only supports interactive shell
-        console.log(`[SSH] Exec request rejected: ${info.command}`);
+console.log(`[SSH] Exec request rejected: ${info.command}`);
         reject();
       });
     });
@@ -164,7 +164,7 @@ export class SSHConnection extends EventEmitter {
    * Handle connection errors
    */
   private handleError(error: Error): void {
-    console.error(`[SSH] Connection error on node ${this.nodeId}:`, error.message);
+console.error(`[SSH] Connection error on node ${this.nodeId}:`, error.message);
     this.emit('error', error);
   }
 
@@ -172,7 +172,7 @@ export class SSHConnection extends EventEmitter {
    * Handle connection close
    */
   private handleClose(): void {
-    console.log(`[SSH] Connection closed on node ${this.nodeId}`);
+console.log(`[SSH] Connection closed on node ${this.nodeId}`);
     this.emit('close');
   }
 }
@@ -200,9 +200,9 @@ export class SSHServerImpl extends EventEmitter {
     return new Promise((resolve, reject) => {
       // Check if host keys are provided
       if (this.hostKeys.length === 0) {
-        console.warn('[SSH Server] No host keys provided - SSH server disabled');
-        console.warn('[SSH Server] To enable: Generate keys via the admin configuration portal');
-        console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""');
+console.warn('[SSH Server] No host keys provided - SSH server disabled');
+console.warn('[SSH Server] To enable: Generate keys via the admin configuration portal');
+console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ssh_host_rsa_key -N ""');
         resolve(); // Resolve successfully but don't start
         return;
       }
@@ -215,13 +215,13 @@ export class SSHServerImpl extends EventEmitter {
         this.server.on('error', this.handleError.bind(this));
 
         this.server.listen(this.port, '0.0.0.0', () => {
-          console.log(`[SSH Server] Listening on port ${this.port}`);
+console.log(`[SSH Server] Listening on port ${this.port}`);
           resolve();
         });
 
         this.server.on('error', reject);
       } catch (error: any) {
-        console.error('[SSH Server] Failed to start:', error.message);
+console.error('[SSH Server] Failed to start:', error.message);
         reject(error);
       }
     });
@@ -240,7 +240,7 @@ export class SSHServerImpl extends EventEmitter {
 
       if (this.server) {
         this.server.close(() => {
-          console.log('[SSH Server] Stopped');
+console.log('[SSH Server] Stopped');
           resolve();
         });
       } else {
@@ -254,17 +254,17 @@ export class SSHServerImpl extends EventEmitter {
    */
   private handleConnection(client: Connection): void {
     const remoteAddress = (client as any)._sock?.remoteAddress || 'unknown';
-    console.log(`[SSH Server] New connection from ${remoteAddress}`);
+console.log(`[SSH Server] New connection from ${remoteAddress}`);
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
-      console.warn(`[SSH Server] Connection from ${remoteAddress} blocked (suspicious activity).`);
+console.warn(`[SSH Server] Connection from ${remoteAddress} blocked (suspicious activity).`);
       client.end();
       return;
     }
 
     // Check rate limiting
     if (!checkConnectionLimit(remoteAddress)) {
-      console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
+console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
       client.end();
       return;
     }
@@ -277,21 +277,21 @@ export class SSHServerImpl extends EventEmitter {
 
     // Wait for connection to be ready before creating BBS session
     connection.on('ready', () => {
-      // Create BBS session (same as telnet)
-      const session = createSession(connection.nodeId);
+      // Create BBS session with unified options (same as telnet)
       const cfg = config.getConfig();
-      session.connectionType = 'ssh';
-      session.remoteAddress = remoteAddress;
-      session.connectionHostname = cfg.hostname;
-      session.connectionPort = this.port;
-      session.connectionBaud = DEFAULT_CONNECTION_BAUD;
-      session.connectionStart = Date.now();
+      const session = createSession(connection.nodeId, {
+        connectionType: 'ssh',
+        remoteAddress: remoteAddress,
+        connectionHostname: cfg.hostname,
+        connectionPort: this.port,
+        connectionBaud: DEFAULT_CONNECTION_BAUD
+      });
       connection.session = session;
 
       // Map session to node ID for lookup
       setSession(connection.sessionId, session);
 
-      console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
+console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
 
       // Show graphics prompt (same as telnet server)
       session.subState = LoggedOnSubState.ANSI_PROMPT;
@@ -305,7 +305,7 @@ export class SSHServerImpl extends EventEmitter {
     });
 
     connection.on('window-size', (width: number, height: number) => {
-      console.log(`[SSH] Node ${connection.nodeId} window size: ${width}x${height}`);
+console.log(`[SSH] Node ${connection.nodeId} window size: ${width}x${height}`);
       this.emit('window-size', connection, width, height);
     });
 
@@ -315,7 +315,7 @@ export class SSHServerImpl extends EventEmitter {
     });
 
     connection.on('error', (error: Error) => {
-      console.error(`[SSH] Error on node ${connection.nodeId}:`, error.message);
+console.error(`[SSH] Error on node ${connection.nodeId}:`, error.message);
     });
 
     // Emit connection event
@@ -326,7 +326,7 @@ export class SSHServerImpl extends EventEmitter {
    * Handle server errors
    */
   private handleError(error: Error): void {
-    console.error('[SSH Server] Error:', error.message);
+console.error('[SSH Server] Error:', error.message);
     this.emit('error', error);
   }
 

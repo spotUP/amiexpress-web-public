@@ -71,7 +71,7 @@ export function registerAuthHandlers(socket: Socket) {
         }
       }
     } catch (error) {
-      console.warn('[AUTH] Unable to load max_password_fails from config:', error);
+console.warn('[AUTH] Unable to load max_password_fails from config:', error);
     }
     return 5;
   };
@@ -79,17 +79,17 @@ export function registerAuthHandlers(socket: Socket) {
   // Handle session restoration after reconnect
   socket.on('restore-session', async (sessionData: { userId?: string; username?: string; nodeId?: number; savedAt?: number }) => {
     try {
-      console.log('[Session Restore] Attempting to restore session for user:', sessionData.username);
+console.log('[Session Restore] Attempting to restore session for user:', sessionData.username);
 
       if (!sessionData.userId || !sessionData.username) {
-        console.log('[Session Restore] Missing required session data');
+console.log('[Session Restore] Missing required session data');
         socket.emit('session-restore-failed', 'Invalid session data');
         return;
       }
 
       // Check if session is too old (should match frontend check)
       if (sessionData.savedAt && Date.now() - sessionData.savedAt > 120000) {
-        console.log('[Session Restore] Session expired (> 2 minutes old)');
+console.log('[Session Restore] Session expired (> 2 minutes old)');
         socket.emit('session-restore-failed', 'Session expired');
         return;
       }
@@ -97,7 +97,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Get user from database
       const user = await db.getUserById(sessionData.userId);
       if (!user) {
-        console.log('[Session Restore] User not found:', sessionData.userId);
+console.log('[Session Restore] User not found:', sessionData.userId);
         socket.emit('session-restore-failed', 'User not found');
         return;
       }
@@ -105,7 +105,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Check if there's an existing session for this user
       const existingSession = userSessions.get(String(user.id));
       if (existingSession) {
-        console.log('[Session Restore] Found existing session for user, rebinding to new socket');
+console.log('[Session Restore] Found existing session for user, rebinding to new socket');
 
         // Update socket mappings
         socketToUser.set(socket.id, String(user.id));
@@ -121,7 +121,7 @@ export function registerAuthHandlers(socket: Socket) {
         // Load command history from database
         const { loadHistory } = require('../utils/command-history.util');
         loadHistory(existingSession, user.id).catch((err: any) => {
-          console.error('[Session Restore] Failed to load command history:', err);
+console.error('[Session Restore] Failed to load command history:', err);
         });
 
         // Notify client of successful restoration
@@ -140,13 +140,13 @@ export function registerAuthHandlers(socket: Socket) {
           currentConf: existingSession.currentConf,
         });
 
-        console.log('[Session Restore] Session restored successfully for user:', user.username);
+console.log('[Session Restore] Session restored successfully for user:', user.username);
       } else {
-        console.log('[Session Restore] No existing session found, falling back to normal login');
+console.log('[Session Restore] No existing session found, falling back to normal login');
         socket.emit('session-restore-failed', 'No session found');
       }
     } catch (error) {
-      console.error('[Session Restore] Error restoring session:', error);
+console.error('[Session Restore] Error restoring session:', error);
       socket.emit('session-restore-failed', 'Internal error');
     }
   });
@@ -171,7 +171,7 @@ export function registerAuthHandlers(socket: Socket) {
 
       // Check if login is with JWT token or username/password
       if (data.token) {
-        console.log('Socket login attempt with JWT token');
+console.log('Socket login attempt with JWT token');
 
         // Verify JWT token
         const decoded = await db.verifyAccessToken(data.token);
@@ -192,16 +192,16 @@ export function registerAuthHandlers(socket: Socket) {
         }
       } else if (data.username && typeof data.password === 'string') {
         const safeUsername = sanitizeInput(data.username);
-        console.log('Socket login attempt with username/password:', safeUsername);
+console.log('Socket login attempt with username/password:', safeUsername);
 
         // express.e:29627-29628 - Empty username counts as retry
         if (safeUsername.length === 0) {
           session.loginRetryCount++;
           const maxFails = getMaxPasswordFails();
-          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty username)`);
+console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty username)`);
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-            console.log('Too many login errors, disconnecting');
+console.log('Too many login errors, disconnecting');
             SysopDebugUtil.debug(
               socket,
               session,
@@ -233,7 +233,7 @@ export function registerAuthHandlers(socket: Socket) {
         const existingUser = await db.getUserByUsername(safeUsername);
 
         if (!existingUser) {
-          console.log('User not found, prompting for new user creation');
+console.log('User not found, prompting for new user creation');
           SysopDebugUtil.debug(
             socket,
             session,
@@ -256,10 +256,10 @@ export function registerAuthHandlers(socket: Socket) {
           // Empty password counts as invalid attempt (express.e re-prompts with error)
           session.loginRetryCount++;
           const maxFails = getMaxPasswordFails();
-          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty password)`);
+console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (empty password)`);
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-            console.log('Too many login errors, disconnecting');
+console.log('Too many login errors, disconnecting');
             SysopDebugUtil.debug(
               socket,
               session,
@@ -287,17 +287,17 @@ export function registerAuthHandlers(socket: Socket) {
           return;
         }
 
-        console.log('[LOGIN] Authenticating user:', safeUsername);
+console.log('[LOGIN] Authenticating user:', safeUsername);
         user = await db.authenticateUser(safeUsername, passwordValue);
-        console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
+console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
         if (!user) {
           // express.e:29209 & 29343 - Invalid password message with linebreak
           session.loginRetryCount++;
           const maxFails = getMaxPasswordFails();
-          console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (invalid password)`);
+console.log(`Login retry count: ${session.loginRetryCount}/${maxFails} (invalid password)`);
 
           if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
-            console.log('Too many login errors, disconnecting');
+console.log('Too many login errors, disconnecting');
             SysopDebugUtil.debug(
               socket,
               session,
@@ -349,7 +349,7 @@ export function registerAuthHandlers(socket: Socket) {
           if (!handleFailure()) return;
           return;
         }
-        console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
+console.log('[LOGIN] User authenticated successfully, proceeding with login flow');
 
         // Reset retry counter on successful login
         session.loginRetryCount = 0;
@@ -360,13 +360,13 @@ export function registerAuthHandlers(socket: Socket) {
         if (user.slotNumber) {
           try {
             userFileManager.updateUserDataFile(user, user.slotNumber);
-            console.log(`[LOGIN] Synced user ${user.username} to disk files (slot ${user.slotNumber})`);
+console.log(`[LOGIN] Synced user ${user.username} to disk files (slot ${user.slotNumber})`);
           } catch (error) {
-            console.error(`[LOGIN] Failed to sync user to disk:`, error);
+console.error(`[LOGIN] Failed to sync user to disk:`, error);
             // Don't fail login - disk sync is best-effort
           }
         } else {
-          console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sync`);
+console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sync`);
         }
 
         // Generate JWT tokens for this session
@@ -416,7 +416,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Load command history from database
       const { loadHistory } = require('../utils/command-history.util');
       loadHistory(session, user.id).catch((err: any) => {
-        console.error('[LOGIN] Failed to load command history:', err);
+console.error('[LOGIN] Failed to load command history:', err);
       });
 
       // Test sysop debug system
@@ -435,7 +435,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Run daily batch for this node (once per calendar day, per node) to mirror AmiExpress batch runner
       // NOTE: Don't await - run in background so login flow continues immediately
       runLoginBatches(session.nodeId || 0).catch((err) => {
-        console.error('[LOGIN] Batch scheduler failed:', err);
+console.error('[LOGIN] Batch scheduler failed:', err);
         SysopDebugUtil.debug(
           socket,
           session,
@@ -451,18 +451,18 @@ export function registerAuthHandlers(socket: Socket) {
         username: user.username,
         location: user.location
       }).catch((err) => {
-        console.error('[LOGIN] EXECUTE_ON_LOGON failed:', err);
+console.error('[LOGIN] EXECUTE_ON_LOGON failed:', err);
       });
 
       // MAIL_ON_LOGON tooltype - express.e:6716-6720
       mailOnLogon(user.username, user.location || '').catch((err) => {
-        console.error('[LOGIN] MAIL_ON_LOGON failed:', err);
+console.error('[LOGIN] MAIL_ON_LOGON failed:', err);
       });
 
       // CRITICAL SESSION MIGRATION: Move session from socket-based to user-based storage
       // This fixes the multi-socket connection issue where new sockets get fresh sessions
-      console.log(`[SESSION-MIGRATION] User ${user.id} logged in on socket ${socket.id}`);
-      console.log(`[SESSION-MIGRATION] Migrating session from socket-based to user-based storage`);
+console.log(`[SESSION-MIGRATION] User ${user.id} logged in on socket ${socket.id}`);
+console.log(`[SESSION-MIGRATION] Migrating session from socket-based to user-based storage`);
 
       // Remove from socket-based pre-login storage
       sessions.delete(socket.id);
@@ -473,7 +473,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Map this socket to the user
       socketToUser.set(socket.id, user.id);
 
-      console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
+console.log(`[SESSION-MIGRATION] Session now keyed by user ID: ${user.id}`);
 
       // Emit BBS event for LiveChat integration
       try {
@@ -484,7 +484,7 @@ export function registerAuthHandlers(socket: Socket) {
           timestamp: Date.now()
         });
       } catch (error) {
-        console.error('[BBSEvent] Error emitting login event:', error);
+console.error('[BBSEvent] Error emitting login event:', error);
       }
 
       // CRITICAL: Write node{n}.user and node{n}.userkeys files for WHO door compatibility
@@ -493,12 +493,12 @@ export function registerAuthHandlers(socket: Socket) {
       try {
         nodeFileManager.writeNodeUserFile(nodeId, user);
         nodeFileManager.writeNodeUserKeysFile(nodeId, user);
-        console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
+console.log(`[LOGIN] Node files created for node ${nodeId}: ${user.username}`);
 
         // Write to CallersLog
         callersLogManager.logLogin(nodeId, user.username);
       } catch (error) {
-        console.error(`[LOGIN] Error writing node files:`, error);
+console.error(`[LOGIN] Error writing node files:`, error);
         SysopDebugUtil.debugFileError(
           socket,
           session,
@@ -521,7 +521,7 @@ export function registerAuthHandlers(socket: Socket) {
         const { systemStats } = await import('../services/SystemStatsService');
         await systemStats.incrementCalls(user.id);
       } catch (error) {
-        console.error('[SystemStats] Error tracking login:', error);
+console.error('[SystemStats] Error tracking login:', error);
         SysopDebugUtil.debug(
           socket,
           session,
@@ -543,7 +543,7 @@ export function registerAuthHandlers(socket: Socket) {
             calls: user.calls + 1
           });
         } catch (error) {
-          console.error('[Webhook] Error sending user login webhook:', error);
+console.error('[Webhook] Error sending user login webhook:', error);
           SysopDebugUtil.debug(
             socket,
             session,
@@ -593,7 +593,7 @@ export function registerAuthHandlers(socket: Socket) {
       // Detected by ?chatOnly=true query parameter or session.tempData.chatOnly flag
       const chatOnly = socket.handshake?.query?.chatOnly === 'true' || session.tempData?.chatOnly;
       if (chatOnly) {
-        console.log('[AUTH] Chat-only mode detected - auto-launching LiveChat door');
+console.log('[AUTH] Chat-only mode detected - auto-launching LiveChat door');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DOOR_RUNNING;
 
@@ -614,7 +614,7 @@ export function registerAuthHandlers(socket: Socket) {
         try {
           await executeDoor(socket, session, liveChatDoor, []);
         } catch (error) {
-          console.error('[AUTH] Failed to launch LiveChat door:', error);
+console.error('[AUTH] Failed to launch LiveChat door:', error);
           socket.emit('ansi-output', '\r\n\x1b[31mFailed to launch LiveChat. Please try again.\x1b[0m\r\n');
         }
 
@@ -626,7 +626,7 @@ export function registerAuthHandlers(socket: Socket) {
       // This prevents showing the LOGON screen when the user's socket reconnects
       // (e.g., due to network blips, browser tab sleeping, page refresh)
       if (data.token) {
-        console.log('[AUTH] Token-based reconnection - skipping LOGON/bulletin flow');
+console.log('[AUTH] Token-based reconnection - skipping LOGON/bulletin flow');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         const { displayMainMenu } = require('../handlers/command-handler/menu');
@@ -648,18 +648,18 @@ export function registerAuthHandlers(socket: Socket) {
         // NOTE: We don't pass an onComplete callback because handleCommand (command.handler.ts:692-693)
         // automatically calls advanceDisplayFlow() when pagination completes in a display flow state.
         // Passing a callback that calls handleCommand would cause DOUBLE advancement (BULL displays twice).
-        console.log('[LOGIN] LOGON displayed, adding pause per express.e:29854');
+console.log('[LOGIN] LOGON displayed, adding pause per express.e:29854');
         doPause(socket, session);
-        console.log('[LOGIN] Pause set up, waiting for user input to continue');
+console.log('[LOGIN] Pause set up, waiting for user input to continue');
         return;
       }
 
       // No LOGON screen - immediately trigger the bulletin display flow
-      console.log('[LOGIN] No LOGON screen, immediately triggering bulletin flow');
+console.log('[LOGIN] No LOGON screen, immediately triggering bulletin flow');
       const { handleCommand } = require('../handlers/command.handler');
       await handleCommand(socket, session, '');
     } catch (error) {
-      console.error('Socket login error:', error);
+console.error('Socket login error:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -676,7 +676,7 @@ export function registerAuthHandlers(socket: Socket) {
   socket.on('check-username', async (data: { username: string }) => {
     try {
         const safeUsername = sanitizeInput(data.username);
-        console.log('🔍 Checking if username exists:', safeUsername);
+console.log('🔍 Checking if username exists:', safeUsername);
 
       // Empty username check
       if (safeUsername.length === 0) {
@@ -713,7 +713,7 @@ export function registerAuthHandlers(socket: Socket) {
 
       if (!existingUser) {
         // User not found - prompt for new user creation (express.e:29622-29651)
-        console.log('User not found, prompting for new user creation');
+console.log('User not found, prompting for new user creation');
         const prompt =
           safeUsername.toUpperCase() === 'NEW'
             ? '[C]ontinue as a new user? '
@@ -724,11 +724,11 @@ export function registerAuthHandlers(socket: Socket) {
         });
       } else {
         // User exists - prompt for password
-        console.log('User exists, requesting password');
+console.log('User exists, requesting password');
         socket.emit('prompt-password');
       }
     } catch (error) {
-      console.error('Username check error:', error);
+console.error('Username check error:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -751,7 +751,7 @@ export function registerAuthHandlers(socket: Socket) {
 
       if (response === 'C' || response === '') {
         // Continue as new user - express.e:29646-29651
-        console.log('User chose to create new account:', safeUsername);
+console.log('User chose to create new account:', safeUsername);
 
         // Start new user account creation flow
         session.state = BBSState.REGISTERING;
@@ -763,11 +763,11 @@ export function registerAuthHandlers(socket: Socket) {
       } else {
         // express.e:29622 - Retry login increments retry counter
         session.loginRetryCount++;
-        console.log(`Login retry count: ${session.loginRetryCount}/5 (user chose retry)`);
+console.log(`Login retry count: ${session.loginRetryCount}/5 (user chose retry)`);
 
         // express.e:29633-29637 - Check if too many errors
         if (session.loginRetryCount >= 5) {
-          console.log('Too many login errors, disconnecting');
+console.log('Too many login errors, disconnecting');
           SysopDebugUtil.debug(
             socket,
             session,
@@ -783,12 +783,12 @@ export function registerAuthHandlers(socket: Socket) {
 
         // Retry login - send back to login screen with username prompt
         // express.e prefills the previous username for convenience
-        console.log('User chose to retry login');
+console.log('User chose to retry login');
         socket.emit('ansi-output', `\r\nUsername: ${safeUsername}`);
         socket.emit('retry-login', { prefillUsername: safeUsername });
       }
     } catch (error) {
-      console.error('New user response error:', error);
+console.error('New user response error:', error);
       SysopDebugUtil.debug(
         socket,
         session,
@@ -884,13 +884,13 @@ export function registerAuthHandlers(socket: Socket) {
           socket.emit('mask-input', false);
           socket.emit('retry-login', {});
         } catch (err) {
-          console.error('[AUTH] Failed to update password:', err);
+console.error('[AUTH] Failed to update password:', err);
           socket.emit('ansi-output', '\r\n\x1b[31mFailed to update password. Please try again later.\x1b[0m\r\n');
           setTimeout(() => socket.disconnect(), 500);
         }
       }
     } catch (error) {
-      console.error('Password reset error:', error);
+console.error('Password reset error:', error);
       SysopDebugUtil.debug(
         socket,
         session,

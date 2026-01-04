@@ -74,6 +74,9 @@ export enum LoggedOnSubState {
   FM_CONFIRM_DELETE = 'fm_confirm_delete',            // Confirm file deletion
   FM_MOVE_DEST_INPUT = 'fm_move_dest_input',          // Move destination directory input
 
+  // Command execution
+  COMMAND_PASSWORD_INPUT = 'command_password_input',      // Command password input (express.e:4716-4730)
+
   // Message operations
   READ_MESSAGES = 'read_messages',
   MSG_READER_NAV = 'msg_reader_nav',                    // Message reader navigation
@@ -96,6 +99,10 @@ export enum LoggedOnSubState {
   POST_MESSAGE_INSERT_LINE = 'post_message_insert_line',        // Insert line number input
   POST_MESSAGE_INSERT_TEXT = 'post_message_insert_text',        // Insert line text input
   POST_MESSAGE_UPLOAD_FILE = 'post_message_upload_file',        // Upload text file input
+  FORWARD_MESSAGE_TO = 'forward_message_to',                    // Forward message recipient input
+  FORWARD_MESSAGE_SUBJECT = 'forward_message_subject',          // Forward message subject input
+  FORWARD_MESSAGE_PRIVATE = 'forward_message_private',          // Forward message privacy choice
+  FORWARD_MESSAGE_DELETE_ORIGINAL = 'forward_message_delete_original', // Delete original message confirmation
   JM_INPUT = 'jm_input',                                // Jump to message number input
   RL_CONFIRM = 'rl_confirm',                            // Read last message confirmation
 

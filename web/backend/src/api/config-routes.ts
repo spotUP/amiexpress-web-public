@@ -58,7 +58,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
   // Error handler wrapper
   const handleError = (res: Response, error: unknown) => {
-    console.error('Config API error:', error);
+console.error('Config API error:', error);
 
     const message = error instanceof Error ? error.message : 'An error occurred';
     const statusCode = message.includes('not found') ? 404 :
@@ -253,9 +253,9 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
           `Conf${config.conference_id}/`
         );
 
-        console.log(`[ConfigAPI] Auto-created directories and files for Conf${config.conference_id}`);
+console.log(`[ConfigAPI] Auto-created directories and files for Conf${config.conference_id}`);
       } catch (setupError) {
-        console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError);
+console.error(`[ConfigAPI] Failed to auto-create conference files:`, setupError);
         // Don't fail the entire request - database record was created successfully
       }
 
@@ -370,7 +370,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       // This ensures we get the actual doors available on the system
       const { getDoors } = await import('../handlers/door.handler');
       const backendDoors = getDoors();
-      console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
+console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
 
       // Transform backend Door format to frontend Door format
       // Backend uses: id, name, command, type, path, accessLevel, etc.
@@ -392,7 +392,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         door_options: []
       }));
 
-      console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
+console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       sendResponse(res, frontendDoors);
     } catch (error) {
       handleError(res, error);
@@ -1186,10 +1186,10 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
 
       // Fallback to database if disk files missing or empty
       if (!users || users.length === 0) {
-        console.warn('[API] user.data files not found or empty, falling back to database');
+console.warn('[API] user.data files not found or empty, falling back to database');
         users = await database.getUsers({});
       } else {
-        console.log(`[API] Loaded ${users.length} users from disk files`);
+console.log(`[API] Loaded ${users.length} users from disk files`);
 
         // CRITICAL: Deduplicate users by username (keep most recent by calls)
         // Disk files can have duplicate records from multiple logins/updates
@@ -1201,7 +1201,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
           }
         }
         users = Array.from(userMap.values());
-        console.log(`[API] Deduplicated to ${users.length} unique users`);
+console.log(`[API] Deduplicated to ${users.length} unique users`);
       }
 
       // Remove password hashes from response
@@ -1790,7 +1790,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       // Get updated config
       const updatedConfig = operatorChatRepo.getConfig();
 
-      console.log(`[Config API] Operator chat config updated by ${context.username}`);
+console.log(`[Config API] Operator chat config updated by ${context.username}`);
       sendResponse(res, updatedConfig, 'Operator chat configuration updated');
     } catch (error) {
       handleError(res, error);
@@ -1844,7 +1844,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
         req.headers['user-agent']
       );
 
-      console.log(`[Push] Saved subscription for user ${context.userId}`);
+console.log(`[Push] Saved subscription for user ${context.userId}`);
       sendResponse(res, { success: true });
     } catch (error) {
       handleError(res, error);
@@ -1867,7 +1867,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       const operatorChatRepo = database.getOperatorChatRepository();
       operatorChatRepo.removePushSubscription(endpoint);
 
-      console.log('[Push] Removed subscription');
+console.log('[Push] Removed subscription');
       sendResponse(res, { success: true });
     } catch (error) {
       handleError(res, error);

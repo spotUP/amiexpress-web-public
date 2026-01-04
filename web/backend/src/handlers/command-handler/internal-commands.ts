@@ -120,7 +120,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
   // FIX: Prioritize external BBS commands (doors) over internal hardcoded commands.
   // If a command exists in the BBSCMD cache, it's a door and should always run.
   if (commandCache.bbscmd.has(command)) {
-    console.log(`[InternalRouter] Overriding internal command '${command}' with external BBSCMD door.`);
+console.log(`[InternalRouter] Overriding internal command '${command}' with external BBSCMD door.`);
     const { runBbsCommand } = require('../command-execution.handler');
     return runBbsCommand(socket, session, command, params);
   }
@@ -193,12 +193,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       return RESULT_SUCCESS;
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
-      console.log('🔥 BEFORE calling handleLiveChatCommand, params:', params);
+console.log('🔥 BEFORE calling handleLiveChatCommand, params:', params);
       try {
         await handleLiveChatCommand(socket, session, params);
-        console.log('✅ AFTER calling handleLiveChatCommand successfully');
+console.log('✅ AFTER calling handleLiveChatCommand successfully');
       } catch (error) {
-        console.error('❌ ERROR in handleLiveChatCommand:', error);
+console.error('❌ ERROR in handleLiveChatCommand:', error);
         throw error;
       }
       return RESULT_SUCCESS;
@@ -390,14 +390,14 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'DOORMAN': { // Door Manager plugin - for installing/managing doors
       try {
-        console.log('[DOORMAN] Starting Door Manager...');
+console.log('[DOORMAN] Starting Door Manager...');
         const doorManagerPath = '../../doors/DoorManager';
         const { executeDoor: executeDoorManager } = await import(doorManagerPath);
-        console.log('[DOORMAN] Module imported successfully');
+console.log('[DOORMAN] Module imported successfully');
         await executeDoorManager(socket, session);
-        console.log('[DOORMAN] executeDoor completed');
+console.log('[DOORMAN] executeDoor completed');
       } catch (error) {
-        console.error('[DOORMAN] Fatal error:', error);
+console.error('[DOORMAN] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
@@ -415,12 +415,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'GA': { // GetAnswer - Test simple Amiga door (8KB XIM door)
       try {
-        console.log('[GA] Starting GetAnswer door...');
+console.log('[GA] Starting GetAnswer door...');
         const { AmigaDoorSession } = await import('../../amiga-emulation/AmigaDoorSession');
         // Door path is relative to project root, not backend directory
         const doorPath = path.join(process.cwd(), '../../doors/GetAnswer/GetAnswer');
 
-        console.log(`[GA] Door path: ${doorPath}`);
+console.log(`[GA] Door path: ${doorPath}`);
 
         if (!fs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
@@ -453,7 +453,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
               shared.dosLibrary.queueInput(data);
             }
           } catch (err) {
-            console.error('[GA] Error routing door input:', err);
+console.error('[GA] Error routing door input:', err);
           }
         };
         // Persist session so socket-handlers sees doorInputHandler
@@ -464,7 +464,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
             userSessions.set((session as any).user.id, session);
           }
         } catch (err) {
-          console.error('[GA] Unable to persist session for door input:', err);
+console.error('[GA] Unable to persist session for door input:', err);
         }
 
         await amigaSession.start();
@@ -480,14 +480,14 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
             userSessions.set((session as any).user.id, session);
           }
         } catch (err) {
-          console.error('[GA] Unable to persist session after door:', err);
+console.error('[GA] Unable to persist session after door:', err);
         }
 
         socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       } catch (error) {
-        console.error('[GA] Fatal error:', error);
+console.error('[GA] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
@@ -499,11 +499,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'MULTITOP': { // MultiTop - Top users door from reference-board
       try {
-        console.log('[MULTITOP] Starting MultiTop door...');
+console.log('[MULTITOP] Starting MultiTop door...');
         const { AmigaDoorSession } = await import('../../amiga-emulation/AmigaDoorSession');
         const doorPath = path.join(process.cwd(), '../../doors/MultiTopDoor');
 
-        console.log(`[MULTITOP] Door path: ${doorPath}`);
+console.log(`[MULTITOP] Door path: ${doorPath}`);
 
         if (!fs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
@@ -526,7 +526,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       } catch (error) {
-        console.error('[MULTITOP] Fatal error:', error);
+console.error('[MULTITOP] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -537,12 +537,12 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'WH': { // What - Test door with message ports
       try {
-        console.log('[WH] Starting What door...');
+console.log('[WH] Starting What door...');
         const { AmigaDoorSession } = await import('../../amiga-emulation/AmigaDoorSession');
         // Door path
         const doorPath = path.join(process.cwd(), '../../Doors/What/WHAT');
 
-        console.log(`[WH] Door path: ${doorPath}`);
+console.log(`[WH] Door path: ${doorPath}`);
 
         if (!fs.existsSync(doorPath)) {
           socket.emit('ansi-output', '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
@@ -564,7 +564,7 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       } catch (error) {
-        console.error('[WH] Fatal error:', error);
+console.error('[WH] Fatal error:', error);
         socket.emit('ansi-output', '\r\n\x1b[31mError starting What door:\x1b[0m\r\n');
         socket.emit('ansi-output', `${(error as Error).message}\r\n`);
         socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
@@ -577,11 +577,11 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
     default:
       // Not an internal command - return RESULT_FAILURE to allow external door lookup
       // express.e:4733-4748 - Internal commands checked first, then external command files
-      console.log(`[processBBSCommand] Command '${command}' not recognized as internal - returning RESULT_FAILURE`);
+console.log(`[processBBSCommand] Command '${command}' not recognized as internal - returning RESULT_FAILURE`);
       return RESULT_FAILURE;
   }
 
   // All internal commands use early return, so we only reach here if something went wrong
-  console.warn(`[processBBSCommand] Unexpected: reached end of function without return`);
+console.warn(`[processBBSCommand] Unexpected: reached end of function without return`);
   return RESULT_FAILURE;
 }

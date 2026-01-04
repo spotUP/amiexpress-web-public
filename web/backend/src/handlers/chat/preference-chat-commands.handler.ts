@@ -150,7 +150,7 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
     return;
   }
 
-  console.log('[ENV] Mail');
+console.log('[ENV] Mail');
 
   // express.e:24662-24664 - Start private message to sysop
   socket.emit('ansi-output', '\r\n');
@@ -194,7 +194,7 @@ export function handlePageSysopCommand(socket: any, session: BBSSession): void {
   // Check if pages are exhausted (pagesAllowed = 0)
   if (session.pagesAllowed === 0) {
     // Fall back to comment system
-    console.log('[ENV] Mail');
+console.log('[ENV] Mail');
 
     if (!checkSecurity(session.user, ACSPermission.COMMENT_TO_SYSOP)) {
       ErrorHandler.permissionDenied(socket, 'leave comments for sysop', {
@@ -221,57 +221,12 @@ export function handlePageSysopCommand(socket: any, session: BBSSession): void {
     return;
   }
 
-  console.log('[ENV] Request Chat');
+console.log('[ENV] Request Chat');
 
   // Call sysop page system (from chat.handler.ts)
   _startSysopPage(socket, session);
 }
 
-/**
- * OLM Command - Online Message (Node-to-Node Message)
- *
- * From express.e:25406-25470:
- * PROC internalCommandOLM(params)
- *   - Check ACS_OLM permission and multicom toggle
- *   - Set ENV_ONLINEMSG environment status
- *   - Show "OLM MESSAGE SYSTEM" header
- *   - Prompt for node number or R to reply
- *   - Accept Q to quit
- *   - Use message editor (edit() function)
- *   - Validate node number and status
- *   - Check if node has messages suppressed (olmBlocked)
- *   - Send message to destination node
- * ENDPROC result
- *
- * Allows users to send real-time messages to other logged-in nodes.
- */
-export function handleOnlineMessageCommand(socket: any, session: BBSSession, params: string = ''): void {
-  if (!checkSecurity(session.user, ACSPermission.OLM)) {
-    ErrorHandler.permissionDenied(socket, 'send online messages', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  console.log('[ENV] Online Message');
-
-  // TODO: Implement OLM system - requires:
-  // 1. Multi-node session tracking
-  // 2. Node status monitoring
-  // 3. Real-time message delivery
-  // 4. Message editor integration
-  // 5. Reply tracking (lastOlmNode)
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('*', 'blue'));
-  socket.emit('ansi-output', 'OLM MESSAGE SYSTEM');
-  socket.emit('ansi-output', AnsiUtil.colorize('*', 'blue'));
-  socket.emit('ansi-output', '\r\n\r\n');
-  socket.emit('ansi-output', AnsiUtil.warningLine('Online message system not yet implemented'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'This would allow you to send messages to other nodes in real-time.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-}
+// OLM (Online Message) system is fully implemented in handlers/transfer/olm.handler.ts
+// express.e:25406-25503 - Complete 1:1 port with multi-node tracking, message editor,
+// reply tracking (R command), quiet mode (Q command), and real-time delivery.

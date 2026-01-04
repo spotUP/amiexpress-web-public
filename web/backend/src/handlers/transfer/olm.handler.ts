@@ -47,7 +47,7 @@ export function setOlmDependencies(deps: {
  * express.e:25406-25503 - PROC internalCommandOLM(params)
  */
 export async function handleOlmCommand(socket: Socket, session: BBSSession, params: string = '') {
-  console.log('[OLM] handleOlmCommand called with params:', params);
+console.log('[OLM] handleOlmCommand called with params:', params);
 
   // Guard against missing user - prevent crash
   if (!session.user) {
@@ -210,7 +210,7 @@ export async function handleOlmComposeInput(socket: Socket, session: BBSSession,
  * express.e:25449-25500
  */
 async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: number, messageLines: string[]) {
-  console.log('[OLM] Sending message to node', nodenum);
+console.log('[OLM] Sending message to node', nodenum);
 
   // Guard against missing user
   if (!session.user) {
@@ -238,7 +238,7 @@ async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: numb
   // This is CRITICAL - the sessions map is keyed by nodeId, not socket ID!
   const targetSocketId = getSocketIdByNodeId(nodenum);
 
-  console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, socketId=${targetSocketId}, user=${targetSession?.user?.username || 'none'}`)
+console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, socketId=${targetSocketId}, user=${targetSession?.user?.username || 'none'}`)
 
   // express.e:25459 - Check if target is blocked
   if (targetSession && targetSession.blockOLM) {
@@ -305,7 +305,7 @@ async function sendOlmMessage(socket: Socket, session: BBSSession, nodenum: numb
  */
 function sendOlmPacket(targetSocketId: string, targetSession: BBSSession, msg: string, last: number, senderNodeId?: number): boolean {
   try {
-    console.log('📤 [OLM] Sending packet to', targetSocketId, 'last:', last);
+console.log('📤 [OLM] Sending packet to', targetSocketId, 'last:', last);
 
     // express.e:1452-1473 - Receiving side handles SV_INCOMING_MSG
     if (!targetSession.olmBuffer) {
@@ -344,7 +344,7 @@ function sendOlmPacket(targetSocketId: string, targetSession: BBSSession, msg: s
 
     return true;
   } catch (error) {
-    console.error('❌ [OLM] Error sending packet:', error);
+console.error('❌ [OLM] Error sending packet:', error);
     return false;
   }
 }
@@ -359,7 +359,7 @@ export function processOlmQueue(socket: Socket, session: BBSSession) {
     return;
   }
 
-  console.log('📬 [OLM] Processing queued messages:', session.olmQueue.length);
+console.log('📬 [OLM] Processing queued messages:', session.olmQueue.length);
 
   // Display all queued messages
   for (const msg of session.olmQueue) {
@@ -382,12 +382,12 @@ export function processOlmQueue(socket: Socket, session: BBSSession) {
  * so they know not to send OLMs to users in quiet mode
  */
 function sendQuietFlag(session: BBSSession, quietFlag: boolean) {
-  console.log(`🔇 [OLM] Broadcasting quiet flag: ${quietFlag} for user ${session.user?.username}`);
+console.log(`🔇 [OLM] Broadcasting quiet flag: ${quietFlag} for user ${session.user?.username}`);
 
   // Update database with user's quiet preference (persist across sessions)
   if (session.user?.id && db) {
     db.updateUser(session.user.id, { blockOLM: quietFlag }).catch((err: Error) => {
-      console.error('[OLM] Error updating blockOLM in database:', err);
+console.error('[OLM] Error updating blockOLM in database:', err);
     });
   }
 
@@ -407,7 +407,7 @@ function sendQuietFlag(session: BBSSession, quietFlag: boolean) {
  * express.e:25505-25515 - PROC internalCommandQ
  */
 export async function handleQuietCommand(socket: Socket, session: BBSSession) {
-  console.log('🔇 [OLM] handleQuietCommand called');
+console.log('🔇 [OLM] handleQuietCommand called');
 
   // express.e:25506 - Check security
   if (!checkSecurity(session.user, ACSPermission.QUIET_NODE)) {

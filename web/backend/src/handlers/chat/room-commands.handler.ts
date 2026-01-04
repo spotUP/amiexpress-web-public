@@ -124,7 +124,7 @@ export async function handleRoomCommand(socket: Socket, session: BBSSession, par
     }
 
   } catch (error) {
-    console.error('Error in ROOM command:', error);
+console.error('Error in ROOM command:', error);
     sendRoomError(socket, 'Error processing ROOM command. Please try again.');
   }
 }
@@ -352,7 +352,7 @@ async function whoInRoom(socket: Socket, session: BBSSession) {
     socket.emit('ansi-output', AnsiUtil.line(''));
 
   } catch (error) {
-    console.error('Error in WHO command:', error);
+console.error('Error in WHO command:', error);
     sendRoomError(socket, 'Error listing room members');
   }
 }
@@ -448,10 +448,10 @@ async function setRoomTopic(socket: Socket, session: BBSSession, topic: string) 
     const msg = AnsiUtil.line(AnsiUtil.warning('*** Topic changed by ' + session.user?.username + ': ' + topic.trim() + ' ***'));
     io.to(socketRoom).emit('ansi-output', msg);
 
-    console.log('✅ Room topic updated:', session.currentRoomName, topic.trim());
+console.log('✅ Room topic updated:', session.currentRoomName, topic.trim());
 
   } catch (error) {
-    console.error('Error setting room topic:', error);
+console.error('Error setting room topic:', error);
     sendRoomError(socket, 'Error setting room topic');
   }
 }

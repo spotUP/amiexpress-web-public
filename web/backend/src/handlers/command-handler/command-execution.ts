@@ -164,17 +164,17 @@ export async function processBBSCommand(
   command: string,
   params: string = ""
 ) {
-  console.log(
+console.log(
     "processBBSCommand called with command:",
     JSON.stringify(command)
   );
 
   // Clear screen before showing command output (authentic BBS behavior)
-  console.log("Command processing: clearing screen for command output");
+console.log("Command processing: clearing screen for command output");
   socket.emit("ansi-output", "\x1b[2J\x1b[H");
 
   // Map commands to internalCommandX functions from AmiExpress
-  console.log("Entering switch statement for command:", command);
+console.log("Entering switch statement for command:", command);
   switch (command) {
     case "D": // Download File(s) (internalCommandD) - express.e:24853-24857
       const { DownloadHandler } = require("../file/download.handler");
@@ -236,12 +236,12 @@ export async function processBBSCommand(
       return;
 
     case "LIVECHAT": // Modern Real-Time Internode Chat (Enhancement)
-      console.log("🔥 BEFORE calling handleLiveChatCommand, params:", params);
+console.log("🔥 BEFORE calling handleLiveChatCommand, params:", params);
       try {
         await handleLiveChatCommand(socket, session, params);
-        console.log("✅ AFTER calling handleLiveChatCommand successfully");
+console.log("✅ AFTER calling handleLiveChatCommand successfully");
       } catch (error) {
-        console.error("❌ ERROR in handleLiveChatCommand:", error);
+console.error("❌ ERROR in handleLiveChatCommand:", error);
         throw error;
       }
       return;
@@ -442,15 +442,15 @@ export async function processBBSCommand(
     case "DOORMAN": {
       // Door Manager plugin - for installing/managing doors
       try {
-        console.log("[DOORMAN] Starting Door Manager...");
+console.log("[DOORMAN] Starting Door Manager...");
         const {
           executeDoor: executeDoorDoorManager,
         } = require("../doors/DoorManager");
-        console.log("[DOORMAN] Module imported successfully");
+console.log("[DOORMAN] Module imported successfully");
         await executeDoorDoorManager(socket, session);
-        console.log("[DOORMAN] executeDoor completed");
+console.log("[DOORMAN] executeDoor completed");
       } catch (error) {
-        console.error("[DOORMAN] Fatal error:", error);
+console.error("[DOORMAN] Fatal error:", error);
         socket.emit(
           "ansi-output",
           "\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n"
@@ -475,7 +475,7 @@ export async function processBBSCommand(
     case "GA": {
       // GetAnswer - Test simple Amiga door (8KB XIM door)
       try {
-        console.log("[GA] Starting GetAnswer door...");
+console.log("[GA] Starting GetAnswer door...");
         const {
           AmigaDoorSession,
         } = require("../amiga-emulation/AmigaDoorSession");
@@ -485,7 +485,7 @@ export async function processBBSCommand(
           "../../doors/GetAnswer/GetAnswer"
         );
 
-        console.log(`[GA] Door path: ${doorPath}`);
+console.log(`[GA] Door path: ${doorPath}`);
 
         if (!fs.existsSync(doorPath)) {
           socket.emit(
@@ -516,7 +516,7 @@ export async function processBBSCommand(
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       } catch (error) {
-        console.error("[GA] Fatal error:", error);
+console.error("[GA] Fatal error:", error);
         socket.emit(
           "ansi-output",
           "\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n"
@@ -545,10 +545,10 @@ export async function processBBSCommand(
       }
 
       // Check if command matches a door (BBSCMD)
-      console.log(`[Command Handler] Checking for door match: "${command}"`);
-      console.log(`[Command Handler] Available doors: ${doors.length}`);
+console.log(`[Command Handler] Checking for door match: "${command}"`);
+console.log(`[Command Handler] Available doors: ${doors.length}`);
       if (doors.length > 0) {
-        console.log(
+console.log(
           `[Command Handler] Sample door commands: ${doors
             .slice(0, 5)
             .map((d) => d.command)
@@ -562,7 +562,7 @@ export async function processBBSCommand(
 
       if (matchingDoor) {
         // Execute the door
-        console.log(
+console.log(
           `[Command Handler] Found matching door: ${matchingDoor.name}`
         );
         await executeDoor(socket, session, matchingDoor);
@@ -570,11 +570,11 @@ export async function processBBSCommand(
       }
 
       // No matching door - unknown command
-      console.log(`[Command Handler] No matching door found for: ${command}`);
+console.log(`[Command Handler] No matching door found for: ${command}`);
       socket.emit("ansi-output", `\r\nUnknown command: ${command}\r\n`);
 
       // Sysop debug message (appears after "Unknown command" and before "Press any key")
-      console.log('>>> ABOUT TO CALL SysopDebugUtil.debug()');
+console.log('>>> ABOUT TO CALL SysopDebugUtil.debug()');
       SysopDebugUtil.debug(
         socket,
         session,

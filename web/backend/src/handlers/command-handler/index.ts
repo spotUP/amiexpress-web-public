@@ -184,12 +184,12 @@ export function registerCommandHandlers(doorSystem: any) {
     });
   }
 
-  console.log("✅ Command handlers registered successfully");
+console.log("✅ Command handlers registered successfully");
 }
 
 // Migration helper for existing code
 export function migrateToModularHandler() {
-  console.log("📝 Migrating to modular command handler architecture");
+console.log("📝 Migrating to modular command handler architecture");
 
   // This function helps migrate existing code that depends on the old monolithic handler
   return {

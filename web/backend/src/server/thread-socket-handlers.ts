@@ -32,7 +32,7 @@ export function setupThreadHandlers(socket: Socket, session: any) {
         title: title || `Thread: ${message.message.substring(0, 50)}...`
       });
     } catch (error) {
-      console.error('[Thread] Create error:', error);
+console.error('[Thread] Create error:', error);
       socket.emit('chat:error', { error: 'Failed to create thread' });
     }
   });
@@ -65,7 +65,7 @@ export function setupThreadHandlers(socket: Socket, session: any) {
 
       socket.emit('chat:thread:reply', { threadId, reply });
     } catch (error) {
-      console.error('[Thread] Reply error:', error);
+console.error('[Thread] Reply error:', error);
       socket.emit('chat:error', { error: 'Failed to reply to thread' });
     }
   });
@@ -91,7 +91,7 @@ export function setupThreadHandlers(socket: Socket, session: any) {
         replies
       });
     } catch (error) {
-      console.error('[Thread] Get messages error:', error);
+console.error('[Thread] Get messages error:', error);
       socket.emit('chat:error', { error: 'Failed to load thread' });
     }
   });

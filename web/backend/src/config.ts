@@ -82,11 +82,11 @@ export class ConfigManager {
     this.loadConfig();
 
     // Log dataDir for debugging
-    console.log('[ConfigManager] Initialized with dataDir:', this.config.dataDir);
-    console.log('[ConfigManager] process.cwd():', process.cwd());
-    console.log('[ConfigManager] BBS_DATA_DIR env:', process.env.BBS_DATA_DIR || '(not set)');
+console.log('[ConfigManager] Initialized with dataDir:', this.config.dataDir);
+console.log('[ConfigManager] process.cwd():', process.cwd());
+console.log('[ConfigManager] BBS_DATA_DIR env:', process.env.BBS_DATA_DIR || '(not set)');
     // Emit a dedicated startup line for ops logs
-    console.log(`[CONFIG_DEBUG] dataDir=${this.config.dataDir}`);
+console.log(`[CONFIG_DEBUG] dataDir=${this.config.dataDir}`);
   }
 
   private getDefaultConfig(): BBSConfig {
@@ -177,18 +177,18 @@ export class ConfigManager {
     try {
       // In a real implementation, this would read from a config file
       // For now, we just use defaults
-      console.log('Configuration loaded from:', this.configPath);
+console.log('Configuration loaded from:', this.configPath);
     } catch (error) {
-      console.warn('Failed to load config, using defaults:', error);
+console.warn('Failed to load config, using defaults:', error);
     }
   }
 
   public saveConfig(): void {
     try {
       // In a real implementation, this would write to a config file
-      console.log('Configuration saved to:', this.configPath);
+console.log('Configuration saved to:', this.configPath);
     } catch (error) {
-      console.error('Failed to save config:', error);
+console.error('Failed to save config:', error);
     }
   }
 

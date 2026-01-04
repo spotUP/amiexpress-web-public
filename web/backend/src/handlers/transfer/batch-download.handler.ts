@@ -153,7 +153,7 @@ export class BatchDownloadHandler {
       socket.emit('ansi-output', '\r\n\x1b[33mBatch download cancelled.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       if (session.tempData?.pendingGoodbye) {
-        const { handleGoodbyeCommand } = require('./system-commands.handler');
+        const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
         const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
         delete session.tempData.pendingGoodbye;
         delete session.tempData.pendingGoodbyeParams;
@@ -205,7 +205,7 @@ export class BatchDownloadHandler {
 
     // If this batch was triggered from goodbye, continue the logoff flow automatically
     if (session.tempData?.pendingGoodbye) {
-      const { handleGoodbyeCommand } = require('./system-commands.handler');
+      const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
       const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
       delete session.tempData.pendingGoodbye;
       delete session.tempData.pendingGoodbyeParams;
@@ -288,7 +288,7 @@ export class BatchDownloadHandler {
       lastDownloadTime: user.lastDownloadTime
     });
 
-    console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
+console.log(`[BATCH DOWNLOAD] User ${user.username} downloaded ${fileInfo.name} (${fileInfo.size} bytes)`);
   }
 
   private static async updateConferenceDownloadStats(
@@ -317,7 +317,7 @@ export class BatchDownloadHandler {
         bytesDownload: target.bytesDownload
       });
     } catch (err) {
-      console.error('[BATCH DOWNLOAD] Failed to persist conference download stats', err);
+console.error('[BATCH DOWNLOAD] Failed to persist conference download stats', err);
     }
   }
 
@@ -331,7 +331,7 @@ export class BatchDownloadHandler {
       session.conferences = confs;
       return confs;
     } catch (err) {
-      console.error('[BATCH DOWNLOAD] Failed to load conferences for accounting', err);
+console.error('[BATCH DOWNLOAD] Failed to load conferences for accounting', err);
       return undefined;
     }
   }

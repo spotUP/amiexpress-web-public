@@ -88,7 +88,7 @@ export class FileMaintenanceHandler {
     }
 
     // express.e:24903 - setEnvStat(ENV_FILES)
-    console.log('[FM] Starting file maintenance');
+console.log('[FM] Starting file maintenance');
 
     // express.e:24905 - parseParams(params)
     const parsedParams = this.parseParams(params);
@@ -698,14 +698,15 @@ export class FileMaintenanceHandler {
 
     for (const key of keys) {
       try {
-        const rows = await _db.query(`SELECT value FROM system_config WHERE key LIKE '${key}.%'`);
+        // Use parameterized query to prevent SQL injection
+        const rows = await _db.query(`SELECT value FROM system_config WHERE key LIKE ? || '.%'`, [key]);
         for (const row of rows.rows || []) {
           if (row.value) {
             results.push(row.value);
           }
         }
       } catch (error) {
-        console.error(`[FM] Failed to read ${key} paths:`, error);
+console.error(`[FM] Failed to read ${key} paths:`, error);
       }
     }
 
@@ -739,7 +740,7 @@ export class FileMaintenanceHandler {
         await _db.query('DELETE FROM file_entries WHERE id = $1', [row.id]);
       }
     } catch (error) {
-      console.error('[FM] Failed to delete DB entries:', error);
+console.error('[FM] Failed to delete DB entries:', error);
     }
   }
 
@@ -766,7 +767,7 @@ export class FileMaintenanceHandler {
         await _db.query('UPDATE file_entries SET areaid = $1 WHERE id = $2', [destAreaId, id]);
       }
     } catch (error) {
-      console.error('[FM] Failed to move DB entry:', error);
+console.error('[FM] Failed to move DB entry:', error);
     }
   }
 
@@ -787,7 +788,7 @@ export class FileMaintenanceHandler {
         return res.rows[0].id;
       }
     } catch (error) {
-      console.error('[FM] Failed to map dir to area:', error);
+console.error('[FM] Failed to map dir to area:', error);
     }
     return null;
   }

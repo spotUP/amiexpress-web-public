@@ -53,32 +53,32 @@ export async function processCommand(
   params: string,
   processBBSCommand: (socket: any, session: BBSSession, command: string, params: string) => Promise<void>
 ): Promise<string> {
-  console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
 
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);
   if (sysResult === COMMAND_RESULT_SUCCESS) {
-    console.log('[CommandPriority] Executed as SysCommand');
+console.log('[CommandPriority] Executed as SysCommand');
     return COMMAND_RESULT_SUCCESS;
   }
   if (sysResult === COMMAND_RESULT_NOT_ALLOWED) {
-    console.log('[CommandPriority] SysCommand denied by permissions');
+console.log('[CommandPriority] SysCommand denied by permissions');
     return COMMAND_RESULT_NOT_ALLOWED;
   }
 
   // Try BbsCommand second
   const bbsResult = await runBbsCommand(socket, session, command, params);
   if (bbsResult === COMMAND_RESULT_SUCCESS) {
-    console.log('[CommandPriority] Executed as BbsCommand');
+console.log('[CommandPriority] Executed as BbsCommand');
     return COMMAND_RESULT_SUCCESS;
   }
   if (bbsResult === COMMAND_RESULT_NOT_ALLOWED) {
-    console.log('[CommandPriority] BbsCommand denied by permissions');
+console.log('[CommandPriority] BbsCommand denied by permissions');
     return COMMAND_RESULT_NOT_ALLOWED;
   }
 
   // Try InternalCommand last
-  console.log('[CommandPriority] Trying as InternalCommand');
+console.log('[CommandPriority] Trying as InternalCommand');
   await processBBSCommand(socket, session, command, params);
   return COMMAND_RESULT_SUCCESS;
 }

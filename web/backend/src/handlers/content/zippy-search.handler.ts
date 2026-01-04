@@ -42,7 +42,7 @@ export class ZippySearchHandler {
     }
 
     // setEnvStat(ENV_FILES) - express.e:26132
-    console.log('[ENV] Files');
+console.log('[ENV] Files');
 
     // express.e:26137-26140
     socket.emit('ansi-output', '\r\n');
@@ -270,7 +270,7 @@ export class ZippySearchHandler {
       return 0; // RESULT_SUCCESS
 
     } catch (error) {
-      console.error('[ZIPPY SEARCH] Error reading DIR file:', error);
+console.error('[ZIPPY SEARCH] Error reading DIR file:', error);
       return 0; // RESULT_SUCCESS
     }
   }

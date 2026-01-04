@@ -291,12 +291,12 @@ async function handleBulkAccountEditor(socket: any, session: BBSSession, db: Dat
             userFileManager.updateUserDataFile(updatedUser, updatedUser.slotNumber);
           }
         } catch (error) {
-          console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
         }
       }
       socket.emit('ansi-output', `\r\nUpdated ${newUsers.length} new account(s) to level ${level}.\r\n`);
     } catch (err) {
-      console.error('Bulk update error:', err);
+console.error('Bulk update error:', err);
       socket.emit('ansi-output', '\r\n\x1b[31mError applying bulk changes.\x1b[0m\r\n');
     }
 
@@ -417,9 +417,9 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
           if (user.slotNumber) {
             try {
               userFileManager.updateUserDataFile(user, user.slotNumber);
-              console.log(`[UserEditor] Updated user ${user.username} disk files`);
+console.log(`[UserEditor] Updated user ${user.username} disk files`);
             } catch (error) {
-              console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
             }
           }
           socket.emit('ansi-output', '\r\nSaved.\r\n');
@@ -467,9 +467,9 @@ async function handleEditInfoCommand(socket: any, session: BBSSession, db: Datab
     if (user.slotNumber) {
       try {
         userFileManager.updateUserDataFile(user, user.slotNumber);
-        console.log(`[UserEditor] Updated user ${user.username} disk files`);
+console.log(`[UserEditor] Updated user ${user.username} disk files`);
       } catch (error) {
-        console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
+console.error(`[UserEditor] Error updating user ${user.id} disk files:`, error);
       }
     }
     state.changes = false;

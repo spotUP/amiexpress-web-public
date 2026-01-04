@@ -59,7 +59,7 @@ export async function handlePreviousConferenceCommand(
     await _saveMsgPointers(session.currentConf, session.currentMsgBase);
   }
 
-  console.log('[ENV] Join');
+console.log('[ENV] Join');
 
   // Find previous accessible conference - express.e:24535-24538
   let newConf = (session.currentConf || 1) - 1;
@@ -97,7 +97,7 @@ export async function handleNextConferenceCommand(
     await _saveMsgPointers(session.currentConf, session.currentMsgBase);
   }
 
-  console.log('[ENV] Join');
+console.log('[ENV] Join');
 
   const numConf = _getNumConferences();
 

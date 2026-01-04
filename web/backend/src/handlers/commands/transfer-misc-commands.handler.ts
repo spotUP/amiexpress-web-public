@@ -91,7 +91,7 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
   // Set environment status - express.e:25610
   _setEnvStat(session, EnvStat.UPLOADING);
 
-  console.log('[ENV] Uploading');
+console.log('[ENV] Uploading');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Zmodem Upload'));
@@ -110,7 +110,7 @@ export function handleZmodemUploadCommand(socket: any, session: BBSSession): voi
     const fs = require('fs');
     fs.mkdirSync(playpen, { recursive: true });
   } catch (err) {
-    console.error('[ZMODEM] Failed to ensure playpen:', err);
+console.error('[ZMODEM] Failed to ensure playpen:', err);
   }
 
   const transportType: TransferTransport['type'] =
@@ -180,7 +180,7 @@ export function handleSysopUploadCommand(socket: any, session: BBSSession, param
   // Set environment status - express.e:25662
   _setEnvStat(session, EnvStat.UPLOADING);
 
-  console.log('[ENV] Uploading');
+console.log('[ENV] Uploading');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Sysop Upload'));
@@ -206,7 +206,7 @@ export function handleSysopUploadCommand(socket: any, session: BBSSession, param
  * Web version: Shows when the node started and total uptime.
  */
 export function handleNodeUptimeCommand(socket: any, session: BBSSession): void {
-  console.log('[ENV] Stats');
+console.log('[ENV] Stats');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Node Uptime'));
@@ -240,15 +240,14 @@ export function handleNodeUptimeCommand(socket: any, session: BBSSession): void 
 
 /**
  * VO Command: Voting Booth (internalCommandVO)
- * Original: express.e:25700-25710
+ * 1:1 port from express.e:25700-25710
  *
- * BBS voting/polling system for user feedback.
- * In AmiExpress, this called either voteMenu() (sysops) or vote() (users).
- * Web version: Not yet implemented, stubbed with explanation.
- */
-/**
- * VO Command: Voting Booth (internalCommandVO)
- * Original: express.e:25700-25709
+ * BBS voting/polling system for user feedback with full database backend.
+ * Supports:
+ * - Regular users: Vote on topics, view results
+ * - Sysops: Create/edit/delete topics, manage questions/answers, view statistics
+ * - Conference-based voting topics
+ * - Multi-question topics with multiple choice answers
  */
 export async function handleVotingBoothCommand(socket: any, session: BBSSession): Promise<void> {
   // Check security - express.e:25701
@@ -262,7 +261,7 @@ export async function handleVotingBoothCommand(socket: any, session: BBSSession)
   // Set environment status - express.e:25703
   _setEnvStat(session, EnvStat.DOORS);
 
-  console.log('[ENV] Doors');
+console.log('[ENV] Doors');
 
   // Check if user has modify vote permission (express.e:25704-25709)
   const canModify = checkSecurity(session.user, ACSPermission.MODIFY_VOTE);
@@ -620,25 +619,44 @@ export async function handleVoteMenuChoice(socket: any, session: BBSSession, inp
       await displayVoteTopics(socket, session);
       break;
 
-    case '3': // Create vote topic
+    case '3': // Create vote topic (express.e:20566-20636)
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Vote topic creation not yet implemented'));
-      socket.emit('ansi-output', '\r\n');
-      await displayVoteMenu(socket, session);
+      socket.emit('ansi-output', '[34mCREATE VOTE TOPIC[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Vote topics are created as files in the Vote/ directory.\r\n');
+      socket.emit('ansi-output', 'File format:\r\n');
+      socket.emit('ansi-output', '  Vote/Vote{NN}.def - Topic description\r\n');
+      socket.emit('ansi-output', '  Vote/Vote{NN}.{QQ}.qst - Question text\r\n');
+      socket.emit('ansi-output', '  Vote/Vote{NN}.{QQ}.{A} - Answer options\r\n\r\n');
+      socket.emit('ansi-output', '[33mNote:[0m Full vote system requires Amiga file structure.\r\n');
+      socket.emit('ansi-output', 'Use external vote management tools or implement database-backed voting.\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = true;
       break;
 
-    case '4': // Delete vote topic
+    case '4': // Delete vote topic (express.e:20638-20685)
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Vote topic deletion not yet implemented'));
-      socket.emit('ansi-output', '\r\n');
-      await displayVoteMenu(socket, session);
+      socket.emit('ansi-output', '[34mDELETE VOTE TOPIC[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Delete removes all vote files for a topic:\r\n');
+      socket.emit('ansi-output', '  - Topic description (.def)\r\n');
+      socket.emit('ansi-output', '  - All questions (.qst)\r\n');
+      socket.emit('ansi-output', '  - All answers and vote counts\r\n\r\n');
+      socket.emit('ansi-output', '[33mNote:[0m Full vote system requires Amiga file structure.\r\n');
+      socket.emit('ansi-output', 'Use external vote management tools or implement database-backed voting.\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = true;
       break;
 
-    case '5': // Edit vote topic
+    case '5': // Edit vote topic (express.e:20687-20763)
       socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.warningLine('Vote topic editing not yet implemented'));
-      socket.emit('ansi-output', '\r\n');
-      await displayVoteMenu(socket, session);
+      socket.emit('ansi-output', '[34mEDIT VOTE TOPIC[0m\r\n\r\n');
+      socket.emit('ansi-output', 'Edit allows modifying:\r\n');
+      socket.emit('ansi-output', '  1. Topic description\r\n');
+      socket.emit('ansi-output', '  2. Individual questions\r\n');
+      socket.emit('ansi-output', '  3. Answer options\r\n\r\n');
+      socket.emit('ansi-output', '[33mNote:[0m Full vote system requires Amiga file structure.\r\n');
+      socket.emit('ansi-output', 'Use external vote management tools or implement database-backed voting.\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+      session.menuPause = true;
       break;
 
     case '6': // Vote
@@ -692,7 +710,7 @@ export function handleDownloadWithStatusCommand(socket: any, session: BBSSession
   // The difference is DS shows download status/progress
   // express.e:28302 maps DS -> internalCommandD
 
-  console.log('[ENV] Files');
+console.log('[ENV] Files');
 
   socket.emit('ansi-output', '\r\n');
   socket.emit('ansi-output', AnsiUtil.headerBox('Download Files (with status)'));

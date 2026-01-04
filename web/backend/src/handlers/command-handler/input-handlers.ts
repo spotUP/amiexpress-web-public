@@ -231,7 +231,7 @@ export async function handleSpecializedInput(
   // PRIORITY 1: Handle internode chat mode input - REAL-TIME keystroke transmission
   // When user is in active chat session, transmit each keystroke immediately
   if (session.subState === LoggedOnSubState.CHAT) {
-    console.log("💬 [COMMAND] User in CHAT mode, real-time input");
+console.log("💬 [COMMAND] User in CHAT mode, real-time input");
 
     // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
@@ -264,7 +264,7 @@ export async function handleSpecializedInput(
 
       // Check for /END or /EXIT command
       if (input.toUpperCase() === "/END" || input.toUpperCase() === "/EXIT") {
-        console.log("💬 [COMMAND] User wants to end chat");
+console.log("💬 [COMMAND] User wants to end chat");
         const { handleChatEnd } = require("../internode-chat.handler");
         await handleChatEnd(socket, session);
         return;
@@ -272,7 +272,7 @@ export async function handleSpecializedInput(
 
       // Check for /HELP command
       if (input.toUpperCase() === "/HELP") {
-        console.log("💬 [COMMAND] User requested help");
+console.log("💬 [COMMAND] User requested help");
         socket.emit(
           "ansi-output",
           "\r\n" +
@@ -288,7 +288,7 @@ export async function handleSpecializedInput(
 
       // Regular message - finalize and send to scroll area
       if (input.length > 0) {
-        console.log("💬 [COMMAND] Finalizing message:", input);
+console.log("💬 [COMMAND] Finalizing message:", input);
         const { handleChatMessage } = require("../internode-chat.handler");
         await handleChatMessage(socket, session, { message: input });
         session.inputBuffer = ""; // Clear buffer after sending
@@ -324,7 +324,7 @@ export async function handleSpecializedInput(
   // PRIORITY 2: Handle group chat room mode input
   // When user is in a chat room, intercept all input
   if (session.subState === LoggedOnSubState.CHAT_ROOM) {
-    console.log("💬 User in CHAT_ROOM mode, handling room input");
+console.log("💬 User in CHAT_ROOM mode, handling room input");
     const input = data.trim();
 
     // Check for /LEAVE or /EXIT command
@@ -419,7 +419,7 @@ async function handleRemainingStates(
     if (displayFlowStates.has(session.subState as LoggedOnSubState)) {
       // Display flow states - handle pause/pagination here directly
       // Don't delegate back to handleCommand to avoid infinite loops
-      console.log("[handleRemainingStates] Display flow state:", session.subState);
+console.log("[handleRemainingStates] Display flow state:", session.subState);
 
       // If paginated screen is active, handle the keypress
       if (session.paginatedScreen) {
@@ -474,7 +474,7 @@ async function handleRemainingStates(
     }
 
     // For other states, log but don't block
-    console.log(
+console.log(
       "❌ Not in handled command input state, current subState:",
       session.subState,
       "- IGNORING COMMAND"
@@ -490,7 +490,7 @@ async function handleReadCommand(
   session: BBSSession,
   data: string
 ) {
-  console.log("✅ In READ_COMMAND state, reading line input");
+console.log("✅ In READ_COMMAND state, reading line input");
 
   // Initialize inputBuffer if needed
   if (!session.inputBuffer) {
@@ -574,7 +574,7 @@ async function handleReadShortcuts(
   session: BBSSession,
   data: string
 ) {
-  console.log("🔥 In READ_SHORTCUTS state, processing single key");
+console.log("🔥 In READ_SHORTCUTS state, processing single key");
 
   try {
     const translated = translateShortcut(session, data);
@@ -584,7 +584,7 @@ async function handleReadShortcuts(
       await processCommand(socket, session, translated, "");
     }
   } catch (error) {
-    console.error("Error in shortcut processing:", error);
+console.error("Error in shortcut processing:", error);
     socket.emit(
       "ansi-output",
       "\r\n" + AnsiUtil.errorLine("Shortcut processing error. Returning to menu...") + "\r\n"
@@ -601,7 +601,7 @@ async function handleReadShortcuts(
  * Handle PROCESS_COMMAND state (simplified)
  */
 async function handleProcessCommand(socket: any, session: BBSSession) {
-  console.log(
+console.log(
     "⚙️ In PROCESS_COMMAND state, executing command:",
     (session as any).commandText
   );
@@ -619,7 +619,7 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
         return;
       }
     } catch (error) {
-      console.error("Error processing command:", error);
+console.error("Error processing command:", error);
       socket.emit(
         "ansi-output",
         "\r\n\x1b[31mError processing command.\x1b[0m\r\n"
@@ -636,16 +636,16 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
 
   // After processing: Check if command changed subState
   (session as any).commandText = undefined;
-  console.log("🔍 [AFTER COMMAND] subState is:", session.subState);
+console.log("🔍 [AFTER COMMAND] subState is:", session.subState);
 
   // Skip menu display if Door Manager or Sysop Menu is active
   if ((session as any).inDoorManager) {
-    console.log("✅ [AFTER COMMAND] Special mode is active - NOT showing menu");
+console.log("✅ [AFTER COMMAND] Special mode is active - NOT showing menu");
     return;
   }
 
   if (session.subState === LoggedOnSubState.PROCESS_COMMAND) {
-    console.log(
+console.log(
       "⚠️ [AFTER COMMAND] subState is still PROCESS_COMMAND, showing menu"
     );
     // Command didn't change state, so default to showing menu
@@ -653,7 +653,7 @@ async function handleProcessCommand(socket: any, session: BBSSession) {
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   } else {
-    console.log(
+console.log(
       "✅ [AFTER COMMAND] subState was changed to:",
       session.subState,
       "- NOT showing menu"
@@ -680,7 +680,7 @@ export async function handleCommand(
   cachedCore = mod;
   const fn = mod?.handleCommand;
   if (typeof fn !== "function") {
-    console.error("command-handler/core.handleCommand not available");
+console.error("command-handler/core.handleCommand not available");
     return;
   }
   await fn(socket, session, data);

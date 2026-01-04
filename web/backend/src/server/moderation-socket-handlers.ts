@@ -38,7 +38,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
         message: `User kicked successfully`
       });
     } catch (error) {
-      console.error('[Moderation] Kick error:', error);
+console.error('[Moderation] Kick error:', error);
       socket.emit('chat:error', { error: 'Failed to kick user' });
     }
   });
@@ -72,7 +72,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
         message: `User banned successfully`
       });
     } catch (error) {
-      console.error('[Moderation] Ban error:', error);
+console.error('[Moderation] Ban error:', error);
       socket.emit('chat:error', { error: 'Failed to ban user' });
     }
   });
@@ -88,7 +88,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
         message: `User unbanned successfully`
       });
     } catch (error) {
-      console.error('[Moderation] Unban error:', error);
+console.error('[Moderation] Unban error:', error);
       socket.emit('chat:error', { error: 'Failed to unban user' });
     }
   });
@@ -113,7 +113,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
         message: `User muted${duration ? ' for ' + duration + 's' : ''}`
       });
     } catch (error) {
-      console.error('[Moderation] Mute error:', error);
+console.error('[Moderation] Mute error:', error);
       socket.emit('chat:error', { error: 'Failed to mute user' });
     }
   });
@@ -129,7 +129,7 @@ export function setupModerationHandlers(socket: Socket, session: any, io: any) {
         message: `User unmuted successfully`
       });
     } catch (error) {
-      console.error('[Moderation] Unmute error:', error);
+console.error('[Moderation] Unmute error:', error);
       socket.emit('chat:error', { error: 'Failed to unmute user' });
     }
   });

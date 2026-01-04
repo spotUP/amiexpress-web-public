@@ -39,7 +39,7 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
 
   // Error handler wrapper
   const handleError = (res: Response, error: unknown, statusCode: number = 500) => {
-    console.error('[Chat API] Error:', error);
+console.error('[Chat API] Error:', error);
 
     const message = error instanceof Error ? error.message : 'An error occurred';
     const response: ApiResponse = {
@@ -86,7 +86,7 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
       const user = await database.authenticateUser(safeUsername, password);
 
       if (!user) {
-        console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
+console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
         return handleError(res, new Error('Invalid username or password'), 401);
       }
 
@@ -103,7 +103,7 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
 
       const token = jwt.sign(payload, secret, { expiresIn });
 
-      console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!rememberMe})`);
+console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!rememberMe})`);
 
       sendResponse(res, {
         token,
@@ -176,7 +176,7 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
     const { username } = req.body;
 
     if (username) {
-      console.log(`[Chat API] User logged out: ${username}`);
+console.log(`[Chat API] User logged out: ${username}`);
     }
 
     sendResponse(res, { loggedOut: true }, 'Logged out successfully');

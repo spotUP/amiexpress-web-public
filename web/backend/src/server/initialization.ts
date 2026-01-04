@@ -85,6 +85,7 @@ import {
   setDoors,
   getDoors,
   setDoorSessions,
+  getDoorSessions,
   setDatabase as setDatabaseForDoorHandler,
   setHelpers as setHelpersForDoorHandler,
   setConstants as setConstantsForDoorHandler,
@@ -146,7 +147,7 @@ function ensureArosRomsAvailable(): void {
     }
 
     if (!sourceDir) {
-      console.warn('[AROS] AROS ROMs not found in web/backend/data; skipping copy');
+console.warn('[AROS] AROS ROMs not found in web/backend/data; skipping copy');
       return;
     }
 
@@ -156,11 +157,10 @@ function ensureArosRomsAvailable(): void {
       const dest = path.join(targetDir, file);
       if (!fs.existsSync(dest)) {
         fs.copyFileSync(src, dest);
-        console.log(`[AROS] Copied ${file} to ${dest}`);
       }
     }
   } catch (error) {
-    console.warn('[AROS] Failed to copy AROS ROMs:', error);
+console.warn('[AROS] Failed to copy AROS ROMs:', error);
   }
 }
 
@@ -179,10 +179,6 @@ const SCREEN_BULL = 'BULL';
 const SCREEN_NODE_BULL = 'NODE_BULL';
 const SCREEN_CONF_BULL = 'CONF_BULL';
 const SCREEN_MENU = 'MENU';
-
-// Global data caches (loaded from database)
-export let doors: Door[] = [];
-export let doorSessions: DoorSession[] = [];
 
 // Chat system state (mirrors AmiExpress chatFlag, sysopAvail, pagedFlag)
 export let chatState: ChatState = {
@@ -207,7 +203,6 @@ async function initializeDefaultWebhook() {
     const webhookUrl = process.env.BBS_WEBHOOK_URL || process.env.DEPLOY_WEBHOOK_URL;
 
     if (!webhookUrl) {
-      console.log('[Webhook Init] No webhook URL configured in environment variables');
       return;
     }
 
@@ -215,7 +210,6 @@ async function initializeDefaultWebhook() {
     const existingWebhooks = await db.getWebhooks();
 
     if (existingWebhooks.length > 0) {
-      console.log(`[Webhook Init] Found ${existingWebhooks.length} existing webhook(s), skipping initialization`);
       return;
     }
 
@@ -249,9 +243,8 @@ async function initializeDefaultWebhook() {
       triggers: allTriggers
     });
 
-    console.log(`[Webhook Init] ✓ Created default ${webhookType} webhook with ${allTriggers.length} triggers`);
   } catch (error) {
-    console.error('[Webhook Init] Error initializing default webhook:', error);
+console.error('[Webhook Init] Error initializing default webhook:', error);
   }
 }
 
@@ -264,7 +257,6 @@ export async function initializeData() {
 
     // Initialize database schema first
     await db.init();
-    console.log('Database schema initialized');
 
     // Initialize default webhook if configured
     await initializeDefaultWebhook();
@@ -285,7 +277,6 @@ export async function initializeData() {
           location: entry.location || `BBS:Conf${i + 1}/`
         });
       }
-      console.log(`[Conference Init] Loaded ${conferences.length} conferences from ConfConfig.info`);
     } else {
       // Fallback: check for Conf.DB headers (original AmiExpress format)
       const confDbHeaders = conferenceFileManager.getAllConferenceHeaders();
@@ -295,7 +286,6 @@ export async function initializeData() {
           name: header.name || `Conference ${i + 1}`,
           location: `BBS:Conf${i + 1}/`
         }));
-        console.log(`[Conference Init] Loaded ${conferences.length} conferences from Conf.DB files`);
       } else {
         // Last resort: scan for Conf*.info files on disk
         const confFiles = fs.readdirSync(bbsRoot).filter((f: string) => /^Conf\d+\.info$/.test(f));
@@ -310,7 +300,6 @@ export async function initializeData() {
               location: `BBS:Conf${i}/`
             });
           }
-          console.log(`[Conference Init] Found ${conferences.length} Conf*.info files on disk`);
         } else {
           // Absolute fallback: use database
           conferences = await db.getConferences();
@@ -318,7 +307,6 @@ export async function initializeData() {
             await db.initializeDefaultData();
             conferences = await db.getConferences();
           }
-          console.log(`[Conference Init] Using ${conferences.length} conferences from database`);
         }
       }
     }
@@ -344,7 +332,6 @@ export async function initializeData() {
     fileAreas = loadFileAreasFromDisk(bbsRoot, conferences);
     await ensureRootScreens(bbsRoot);
     await ensureConferenceStructure(bbsRoot, conferences, fileAreas);
-    console.log(`[Initialization] Loaded ${fileAreas.length} file areas from disk`);
 
     // Load file entries for all file areas
     fileEntries = []; // TODO: Load file entries per-area as needed
@@ -397,7 +384,7 @@ export async function initializeData() {
     // Inject dependencies into door handler
     // Note: initializeDoors() already sets the doors internally, so we use getDoors()
     setDoors(getDoors());
-    setDoorSessions(doorSessions);
+    setDoorSessions(getDoorSessions());
     setDatabaseForDoorHandler(db);
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
     setConstantsForDoorHandler({ LoggedOnSubState });
@@ -537,7 +524,7 @@ export async function initializeData() {
       conferences,
       messageBases,
       fileAreas,
-      doors,
+      doors: getDoors(),
       processOlmMessageQueue,
       checkSecurity,
       setEnvStat,
@@ -555,21 +542,15 @@ export async function initializeData() {
     setCheckSecurity(checkSecurity);
     setSetEnvStat(setEnvStat);
     setGetRecentCallerActivityForCommandHandler(getRecentCallerActivity);
-    setDoorsForCommandHandler(doors);
+    setDoorsForCommandHandler(getDoors());
     setConstantsForCommandHandler({ SCREEN_MENU });
     setConstantsForMenuDependencies({ SCREEN_MENU });
 
     // Inject dependencies into command execution handler
     setCommandExecutionDependencies(executeDoor, processBBSCommand);
 
-    console.log('Database initialized with:', {
-      conferences: conferences.length,
-      messageBases: messageBases.length,
-      fileAreas: fileAreas.length,
-      messages: messages.length,
-      doors: doors.length
-    });
+    process.stdout.write(`[initializeData] Loaded ${conferences.length} conferences, ${messageBases.length} bases, ${fileAreas.length} areas, ${getDoors().length} doors\n`);
   } catch (error) {
-    console.error('Failed to initialize data:', error);
+    // console.error eliminated to prevent terminal pollution
   }
 }

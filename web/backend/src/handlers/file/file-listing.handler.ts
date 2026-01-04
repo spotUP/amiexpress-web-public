@@ -215,7 +215,7 @@ export class FileListingHandler {
         entries = await readDirFile(dirFilePath);
       } catch (error: any) {
         // Log error but continue to next directory instead of failing completely
-        console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
+console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         socket.emit('ansi-output', `\x1b[33mCould not read directory ${dirDisplayName}\x1b[0m\r\n`);
         continue;
       }
@@ -310,7 +310,7 @@ export class FileListingHandler {
     dirDisplayName: string,
     error: any
   ): void {
-    console.error(`[FileListing] Failed to read ${dirDisplayName} directory file:`, error);
+console.error(`[FileListing] Failed to read ${dirDisplayName} directory file:`, error);
     const sysopName = config.get('sysopName') || 'Sysop';
     socket.emit(
       `\x1b[31mThere is a problem with File listings, please tell ${sysopName}\x1b[0m\r\n`
@@ -322,10 +322,25 @@ export class FileListingHandler {
 
   /**
    * Check if user can access HOLD directory
+   * Port from express.e:346 (default level 201) and lines 26863, 26896 (dual check with OR logic)
    */
   private static canAccessHold(session: Session): boolean {
-    // TODO: Check user security level / permissions
-    // For now, sysop only (level 255)
-    return session.user?.secLevel >= 255;
+    if (!session.user) return false;
+
+    // express.e:340-350 - Read HOLD_ACCESS_LEVEL from bbsConfig.info if present, default to 201
+    const { loadBBSConfig } = require('../../services/bbs-config-file.service');
+    const bbsRoot = require('../../config').config.get('bbsRoot') || process.cwd();
+    const bbsConfig = loadBBSConfig(bbsRoot);
+    const holdAccessLevel = bbsConfig.hold_access_level ?? 201; // Default from express.e:346
+
+    // express.e:26863,26896 - Dual check with OR logic:
+    // IF (loggedOnUser.secStatus>=holdAccessLevel) OR (checkSecurity(ACS_HOLD_ACCESS))
+    const { checkSecurity } = require('../../utils/acs.util');
+    const { ACSPermission } = require('../../constants/acs-permissions');
+
+    return (
+      session.user.secLevel >= holdAccessLevel ||
+      checkSecurity(session.user, ACSPermission.HOLD_ACCESS)
+    );
   }
 }

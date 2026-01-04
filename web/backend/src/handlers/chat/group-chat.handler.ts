@@ -80,7 +80,7 @@ function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: 
  * Broadcast a chat message to all room members
  */
 function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string) {
-  console.log('📡 [BROADCAST] Starting broadcast:', {
+console.log('📡 [BROADCAST] Starting broadcast:', {
     roomId,
     senderUsername,
     messageLength: message.length,
@@ -93,15 +93,15 @@ function broadcastRoomMessage(roomId: string, senderUsername: string, message: s
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message + '\r\n';
 
-  console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
+console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
 
   // Emit raw ANSI output for simple terminal clients
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('ansi-output', output);
-    console.log('📡 [BROADCAST] Sent ansi-output (excluding:', excludeSocketId + ')');
+console.log('📡 [BROADCAST] Sent ansi-output (excluding:', excludeSocketId + ')');
   } else {
     io.to(socketRoom).emit('ansi-output', output);
-    console.log('📡 [BROADCAST] Sent ansi-output to all in room');
+console.log('📡 [BROADCAST] Sent ansi-output to all in room');
   }
 
   // Also emit structured chat:message event for advanced clients (LiveChat door)
@@ -118,13 +118,13 @@ function broadcastRoomMessage(roomId: string, senderUsername: string, message: s
 
   if (excludeSocketId) {
     io.to(socketRoom).except(excludeSocketId).emit('chat:message', structuredMessage);
-    console.log('📡 [BROADCAST] Sent chat:message (excluding:', excludeSocketId + ')');
+console.log('📡 [BROADCAST] Sent chat:message (excluding:', excludeSocketId + ')');
   } else {
     io.to(socketRoom).emit('chat:message', structuredMessage);
-    console.log('📡 [BROADCAST] Sent chat:message to all in room');
+console.log('📡 [BROADCAST] Sent chat:message to all in room');
   }
 
-  console.log('📡 [BROADCAST] Broadcast complete');
+console.log('📡 [BROADCAST] Broadcast complete');
 }
 
 /**
@@ -141,7 +141,7 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
   maxUsers?: number;
 }) {
   try {
-    console.log('📦 Room create request:', session.user?.id, data.roomName);
+console.log('📦 Room create request:', session.user?.id, data.roomName);
 
     // Validate user is logged in
     if (!session.user?.id || !session.user?.username) {
@@ -185,7 +185,7 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
       password: data.password || null
     });
 
-    console.log('✅ Room created:', roomId, roomName);
+console.log('✅ Room created:', roomId, roomName);
 
     // Send success message
     socket.emit('ansi-output', AnsiUtil.successLine('Room "' + roomName + '" created successfully!'));
@@ -201,7 +201,7 @@ export async function handleRoomCreate(socket: Socket, session: BBSSession, data
     });
 
   } catch (error) {
-    console.error('❌ Error creating room:', error);
+console.error('❌ Error creating room:', error);
     sendRoomError(socket, 'Failed to create room. Please try again.');
   }
 }
@@ -218,7 +218,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
   password?: string;
 }) {
   try {
-    console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roomName);
+console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roomName);
 
     // Validate user is logged in
     if (!session.user?.id || !session.user?.username) {
@@ -284,7 +284,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     // Check if user is already in this room (stale sessions can leave entries behind)
     const alreadyIn = await db.isUserInRoom(room.room_id, session.user?.id);
     if (alreadyIn) {
-      console.log('ℹ️ User already in room, rejoining:', session.user?.username, room.room_name);
+console.log('ℹ️ User already in room, rejoining:', session.user?.username, room.room_name);
     }
 
     // Join room in database
@@ -300,7 +300,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
     session.previousSubState = session.subState;
     session.subState = LoggedOnSubState.CHAT_ROOM;
 
-    console.log('✅ User joined room:', session.user?.username, room.room_name);
+console.log('✅ User joined room:', session.user?.username, room.room_name);
 
     // Send room info to user
     socket.emit('ansi-output', AnsiUtil.clearScreen());
@@ -350,7 +350,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
       userId: session.user?.id,
       username: session.user?.username
     });
-    console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', socketRoom);
+console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', socketRoom);
 
     // Emit room joined event to this user (include members list for LiveChat)
     const roomJoinedData = {
@@ -364,11 +364,11 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
         is_muted: m.is_muted
       }))
     };
-    console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
+console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
     socket.emit('room:joined', roomJoinedData);
 
   } catch (error) {
-    console.error('❌ Error joining room:', error);
+console.error('❌ Error joining room:', error);
     sendRoomError(socket, 'Failed to join room. Please try again.');
   }
 }
@@ -380,7 +380,7 @@ export async function handleRoomJoin(socket: Socket, session: BBSSession, data: 
  */
 export async function handleRoomLeave(socket: Socket, session: BBSSession) {
   try {
-    console.log('🚪 Room leave request:', session.user?.id, session.currentRoomName);
+console.log('🚪 Room leave request:', session.user?.id, session.currentRoomName);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
@@ -410,7 +410,7 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
       userId: session.user?.id,
       username: username
     });
-    console.log('📢 Broadcast room:user-left:', username, 'to room:', socketRoom);
+console.log('📢 Broadcast room:user-left:', username, 'to room:', socketRoom);
 
     // Restore previous state
     if (session.previousState && session.previousSubState) {
@@ -426,7 +426,7 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
     session.previousState = undefined;
     session.previousSubState = undefined;
 
-    console.log('✅ User left room:', username, roomName);
+console.log('✅ User left room:', username, roomName);
 
     // Send confirmation to user
     socket.emit('ansi-output', AnsiUtil.successLine('You left ' + roomName));
@@ -435,7 +435,7 @@ export async function handleRoomLeave(socket: Socket, session: BBSSession) {
     socket.emit('room:left', { roomName });
 
   } catch (error) {
-    console.error('❌ Error leaving room:', error);
+console.error('❌ Error leaving room:', error);
     sendRoomError(socket, 'Failed to leave room. Please try again.');
   }
 }
@@ -482,10 +482,10 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
     // Broadcast message to all room members EXCEPT sender (they already see their own message)
     broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10));
 
-    console.log('💬 Room message:', session.user?.username, '→', session.currentRoomName, message.substring(0, 50));
+console.log('💬 Room message:', session.user?.username, '→', session.currentRoomName, message.substring(0, 50));
 
   } catch (error) {
-    console.error('❌ Error sending room message:', error);
+console.error('❌ Error sending room message:', error);
     sendRoomError(socket, 'Failed to send message. Please try again.');
   }
 }
@@ -498,14 +498,14 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
  */
 export async function handleRoomList(socket: Socket, session: BBSSession, data?: { showPrivate?: boolean }) {
   try {
-    console.log('📋 Room list request:', session.user?.id);
+console.log('📋 Room list request:', session.user?.id);
 
     const onlyPublic = !data?.showPrivate;
     const rooms = await db.listChatRooms(onlyPublic);
 
     // CRITICAL: Emit structured room:list event for SDK doors like LiveChat
     socket.emit('room:list', { rooms });
-    console.log('📋 Sent room:list event with', rooms.length, 'rooms');
+console.log('📋 Sent room:list event with', rooms.length, 'rooms');
 
     // Also send ANSI output for terminal display
     socket.emit('ansi-output', AnsiUtil.headerBox('Available Chat Rooms'));
@@ -536,7 +536,7 @@ export async function handleRoomList(socket: Socket, session: BBSSession, data?:
     socket.emit('ansi-output', AnsiUtil.line('Use ROOM JOIN <name> to join a room'));
 
   } catch (error) {
-    console.error('❌ Error listing rooms:', error);
+console.error('❌ Error listing rooms:', error);
     sendRoomError(socket, 'Failed to list rooms. Please try again.');
   }
 }
@@ -549,7 +549,7 @@ export async function handleRoomList(socket: Socket, session: BBSSession, data?:
  */
 export async function handleRoomKick(socket: Socket, session: BBSSession, data: { targetUsername: string }) {
   try {
-    console.log('👢 Room kick request:', session.user?.id, data.targetUsername);
+console.log('👢 Room kick request:', session.user?.id, data.targetUsername);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
@@ -625,10 +625,10 @@ export async function handleRoomKick(socket: Socket, session: BBSSession, data: 
     // Broadcast kick to room
     broadcastRoomSystem(session.currentRoomId, target.username + ' was kicked by ' + session.user?.username);
 
-    console.log('✅ User kicked:', target.username, 'by', session.user?.username);
+console.log('✅ User kicked:', target.username, 'by', session.user?.username);
 
   } catch (error) {
-    console.error('❌ Error kicking user:', error);
+console.error('❌ Error kicking user:', error);
     sendRoomError(socket, 'Failed to kick user. Please try again.');
   }
 }
@@ -641,7 +641,7 @@ export async function handleRoomKick(socket: Socket, session: BBSSession, data: 
  */
 export async function handleRoomMute(socket: Socket, session: BBSSession, data: { targetUsername: string; mute: boolean }) {
   try {
-    console.log('🔇 Room mute request:', session.user?.id, data.targetUsername, data.mute);
+console.log('🔇 Room mute request:', session.user?.id, data.targetUsername, data.mute);
 
     // Validate user is in a room
     if (!session.currentRoomId) {
@@ -700,10 +700,10 @@ export async function handleRoomMute(socket: Socket, session: BBSSession, data: 
       }
     }
 
-    console.log('✅ User ' + action + ':', target.username, 'by', session.user?.username);
+console.log('✅ User ' + action + ':', target.username, 'by', session.user?.username);
 
   } catch (error) {
-    console.error('❌ Error muting user:', error);
+console.error('❌ Error muting user:', error);
     sendRoomError(socket, 'Failed to mute user. Please try again.');
   }
 }
@@ -718,7 +718,7 @@ export async function handleRoomDisconnect(socket: Socket, session: BBSSession) 
       return; // Not in a room, nothing to do
     }
 
-    console.log('🚪 Room disconnect cleanup:', session.user?.username, session.currentRoomName);
+console.log('🚪 Room disconnect cleanup:', session.user?.username, session.currentRoomName);
 
     const roomId = session.currentRoomId;
     const username = session.user?.username || 'User';
@@ -734,7 +734,7 @@ export async function handleRoomDisconnect(socket: Socket, session: BBSSession) 
     });
 
   } catch (error) {
-    console.error('❌ Error in room disconnect:', error);
+console.error('❌ Error in room disconnect:', error);
   }
 }
 
@@ -753,7 +753,7 @@ async function isUserMuted(roomId: string, userId: string): Promise<boolean> {
     const member = members.find((m: any) => m.user_id === userId);
     return member ? member.is_muted : false;
   } catch (error) {
-    console.error('Error checking mute status:', error);
+console.error('Error checking mute status:', error);
     return false;
   }
 }

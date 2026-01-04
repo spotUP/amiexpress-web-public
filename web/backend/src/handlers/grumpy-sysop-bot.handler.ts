@@ -408,7 +408,7 @@ const RULE_BASED_RESPONSES = {
 async function getGroqResponse(userMessage: string, context: ChatContext): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
+console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
     return null;
   }
 
@@ -424,7 +424,7 @@ async function getGroqResponse(userMessage: string, context: ChatContext): Promi
       { role: 'user', content: userMessage }
     ];
 
-    console.log('[Grumpy Bot] Trying Groq (llama-3.1-8b-instant)...');
+console.log('[Grumpy Bot] Trying Groq (llama-3.1-8b-instant)...');
 
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
@@ -445,12 +445,12 @@ async function getGroqResponse(userMessage: string, context: ChatContext): Promi
 
     const content = response.data.choices[0]?.message?.content;
     if (content) {
-      console.log('[Grumpy Bot] SUCCESS - Using Groq response');
+console.log('[Grumpy Bot] SUCCESS - Using Groq response');
       return content;
     }
     return null;
   } catch (error) {
-    console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.message : error);
+console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -461,7 +461,7 @@ async function getGroqResponse(userMessage: string, context: ChatContext): Promi
 async function getGeminiResponse(userMessage: string, context: ChatContext): Promise<string | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
+console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
     return null;
   }
 
@@ -475,7 +475,7 @@ async function getGeminiResponse(userMessage: string, context: ChatContext): Pro
 
     const fullPrompt = `${systemPrompt}\n\n${conversationHistory}\nUser: ${userMessage}\nAssistant:`;
 
-    console.log('[Grumpy Bot] Trying Gemini (gemini-1.5-flash)...');
+console.log('[Grumpy Bot] Trying Gemini (gemini-1.5-flash)...');
 
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -500,12 +500,12 @@ async function getGeminiResponse(userMessage: string, context: ChatContext): Pro
 
     const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (content) {
-      console.log('[Grumpy Bot] SUCCESS - Using Gemini response');
+console.log('[Grumpy Bot] SUCCESS - Using Gemini response');
       return content;
     }
     return null;
   } catch (error) {
-    console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.message : error);
+console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -535,11 +535,11 @@ async function discoverFreeModels(): Promise<string[]> {
       })
       .map(model => model.id);
 
-    console.log(`[Grumpy Bot] Discovered ${freeModels.length} free models:`, freeModels.slice(0, 5));
+console.log(`[Grumpy Bot] Discovered ${freeModels.length} free models:`, freeModels.slice(0, 5));
 
     return freeModels;
   } catch (error) {
-    console.error('[Grumpy Bot] Failed to discover free models:', error instanceof Error ? error.message : error);
+console.error('[Grumpy Bot] Failed to discover free models:', error instanceof Error ? error.message : error);
     return [];
   }
 }
@@ -549,16 +549,16 @@ async function getFreeModel(): Promise<string | null> {
 
   // Use cached models if available and not expired
   if (cachedFreeModels.length > 0 && (now - lastModelDiscovery) < MODEL_CACHE_DURATION) {
-    console.log('[Grumpy Bot] Using cached free model:', cachedFreeModels[0]);
+console.log('[Grumpy Bot] Using cached free model:', cachedFreeModels[0]);
     return cachedFreeModels[0];
   }
 
   // Discover new free models
-  console.log('[Grumpy Bot] Discovering free models...');
+console.log('[Grumpy Bot] Discovering free models...');
   const freeModels = await discoverFreeModels();
 
   if (freeModels.length === 0) {
-    console.log('[Grumpy Bot] No free models found');
+console.log('[Grumpy Bot] No free models found');
     return null;
   }
 
@@ -574,13 +574,13 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
   const freeModel = await getFreeModel();
 
   if (!freeModel) {
-    console.log('[Grumpy Bot] No OpenRouter free models available');
+console.log('[Grumpy Bot] No OpenRouter free models available');
     return null;
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
+console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
     return null;
   }
 
@@ -596,7 +596,7 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
       { role: 'user', content: userMessage }
     ];
 
-    console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
+console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
 
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
@@ -619,20 +619,20 @@ async function getOpenRouterResponse(userMessage: string, context: ChatContext):
 
     const content = response.data.choices[0]?.message?.content;
     if (content) {
-      console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response');
+console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response');
       return content;
     }
     return null;
   } catch (error: any) {
-    console.error('[Grumpy Bot] OpenRouter failed:', error.message);
+console.error('[Grumpy Bot] OpenRouter failed:', error.message);
     if (error.response) {
-      console.error('[Grumpy Bot] Status:', error.response.status);
-      console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
+console.error('[Grumpy Bot] Status:', error.response.status);
+console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     }
 
     // If this model failed, try to find another one
     if (cachedFreeModels.length > 1) {
-      console.log('[Grumpy Bot] Trying next OpenRouter model...');
+console.log('[Grumpy Bot] Trying next OpenRouter model...');
       cachedFreeModels.shift();
       return getOpenRouterResponse(userMessage, context);
     }
@@ -661,7 +661,7 @@ async function getAIResponse(userMessage: string, context: ChatContext): Promise
   response = await getOpenRouterResponse(userMessage, context);
   if (response) return response;
 
-  console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
+console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
   return null;
 }
 
@@ -782,12 +782,12 @@ export async function getGrumpySysopResponse(
   const aiResponse = await getAIResponse(userMessage, context);
 
   if (aiResponse) {
-    console.log('[Grumpy Bot] Using AI response');
+console.log('[Grumpy Bot] Using AI response');
     return `[AI] ${aiResponse}`;
   }
 
   // Fall back to rule-based
-  console.log('[Grumpy Bot] Using rule-based response');
+console.log('[Grumpy Bot] Using rule-based response');
   return `[RB] ${getRuleBasedResponse(userMessage)}`;
 }
 

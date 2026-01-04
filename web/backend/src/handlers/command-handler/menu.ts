@@ -25,7 +25,7 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu once after the entire scan finishes
   if ((session as any).inConfScan && !forceMenuDisplay) {
-    console.log('[menu] displayMainMenu SKIPPED (in confScan)');
+console.log('[menu] displayMainMenu SKIPPED (in confScan)');
     return;
   }
 
@@ -34,7 +34,7 @@ export async function displayMainMenu(socket: any, session: BBSSession, forceMen
   const now = Date.now();
   const lastMenuTime = (session as any)._lastMainMenuTime || 0;
   if (now - lastMenuTime < 500 && !forceMenuDisplay) {
-    console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - lastMenuTime, 'ms ago)');
+console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - lastMenuTime, 'ms ago)');
     return;
   }
   (session as any)._lastMainMenuTime = now;
@@ -119,7 +119,7 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu prompt once after the entire scan finishes
   if ((session as any).inConfScan) {
-    console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
+console.log('[menu] displayMenuPrompt SKIPPED (in confScan)');
     return;
   }
 
@@ -128,27 +128,27 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   const now = Date.now();
   const lastPromptTime = (session as any)._lastMenuPromptTime || 0;
   if (now - lastPromptTime < 500) {
-    console.log('[menu] displayMenuPrompt SKIPPED (debounce - last prompt was', now - lastPromptTime, 'ms ago)');
+console.log('[menu] displayMenuPrompt SKIPPED (debounce - last prompt was', now - lastPromptTime, 'ms ago)');
     return;
   }
   (session as any)._lastMenuPromptTime = now;
 
-  console.log('[menu] displayMenuPrompt called');
+console.log('[menu] displayMenuPrompt called');
 
   const config = getConfig();
   const messageBases = getMessageBases() || [];
 
   if (!config || typeof config.get !== 'function') {
-    console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
+console.warn('[Menu Prompt] Config not injected; skipping menu prompt render.');
     return;
   }
 
-  console.log('  - bbsName:', config.get('bbsName'));
-  console.log('  - currentConf:', session.currentConf);
-  console.log('  - currentConfName:', session.currentConfName);
-  console.log('  - relConfNum:', session.relConfNum);
-  console.log('  - currentMsgBase:', session.currentMsgBase);
-  console.log('  - timeRemaining:', session.timeRemaining);
+console.log('  - bbsName:', config.get('bbsName'));
+console.log('  - currentConf:', session.currentConf);
+console.log('  - currentConfName:', session.currentConfName);
+console.log('  - relConfNum:', session.relConfNum);
+console.log('  - currentMsgBase:', session.currentMsgBase);
+console.log('  - timeRemaining:', session.timeRemaining);
 
   // Process queued OLM messages before showing prompt - express.e:1464-1473
   const { processOlmQueue } = require('../transfer/olm.handler');
@@ -164,19 +164,19 @@ export function displayMenuPrompt(socket: any, session: BBSSession) {
   const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
   const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
 
-  console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
-  console.log('  - currentMsgBase found:', !!currentMsgBase);
+console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
+console.log('  - currentMsgBase found:', !!currentMsgBase);
 
   if (msgBasesInConf.length > 1 && currentMsgBase) {
     // Multiple message bases: show "ConfName - MsgBaseName"
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log(' Sending multi-msgbase prompt:', prompt);
+console.log(' Sending multi-msgbase prompt:', prompt);
     socket.emit('ansi-output', prompt);
   } else {
     // Single message base: just show conference name
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
-    console.log(' Sending single-msgbase prompt:', prompt);
+console.log(' Sending single-msgbase prompt:', prompt);
     socket.emit('ansi-output', prompt);
   }
 

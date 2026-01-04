@@ -103,7 +103,7 @@ async function displayBullHelpScreen(socket: any, session: any, baseDirs: string
 
       socket.emit('ansi-output', content);
     } catch (error) {
-      console.error(`Error reading BullHelp file: ${bullHelpPath}`, error);
+console.error(`Error reading BullHelp file: ${bullHelpPath}`, error);
       socket.emit('ansi-output', AnsiUtil.errorLine('Error reading bulletin help.'));
     }
   } else {
@@ -170,7 +170,7 @@ async function displayBulletin(
 
       return true;
     } catch (error) {
-      console.error(`Error reading bulletin file: ${bulletinPath}`, error);
+console.error(`Error reading bulletin file: ${bulletinPath}`, error);
       socket.emit('ansi-output', AnsiUtil.errorLine('Error reading bulletin.'));
       return false;
     }
@@ -200,7 +200,7 @@ export async function handleBulletinCommand(socket: any, session: any, params: s
 
   // express.e:24614 - setEnvStat(ENV_BULLETINS)
   // For web version, we'll just log this
-  console.log('[ENV] Bulletins');
+console.log('[ENV] Bulletins');
 
   // BBS directory structure
   const { config } = require('../config');

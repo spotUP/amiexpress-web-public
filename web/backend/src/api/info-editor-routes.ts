@@ -66,9 +66,21 @@ function parseTooltypes(filePath: string): Tooltype[] {
       const content = fs.readFileSync(filePath, 'utf8');
       lines = content.split(/\r?\n/);
     } else {
-      // Binary file - use strings command
-      const output = execSync(`strings "${filePath}"`, { encoding: 'utf8' });
-      lines = output.split('\n');
+      // Binary file - use native extraction
+      const buffer = fs.readFileSync(filePath);
+      let currentString = '';
+      const extracted: string[] = [];
+
+      for (let i = 0; i < buffer.length; i++) {
+        const charCode = buffer[i];
+        if (charCode >= 32 && charCode <= 126) {
+          currentString += String.fromCharCode(charCode);
+        } else {
+          if (currentString.length >= 2) extracted.push(currentString);
+          currentString = '';
+        }
+      }
+      lines = extracted;
     }
 
     for (const line of lines) {
@@ -108,7 +120,7 @@ function parseTooltypes(filePath: string): Tooltype[] {
       }
     }
   } catch (error) {
-    console.error(`[InfoEditor] Error parsing ${filePath}:`, error);
+console.error(`[InfoEditor] Error parsing ${filePath}:`, error);
   }
 
   return tooltypes;
@@ -169,7 +181,7 @@ infoEditorRouter.get('/files', async (req: Request, res: Response) => {
     res.json({ files });
 
   } catch (error) {
-    console.error('[InfoEditor] Error listing files:', error);
+console.error('[InfoEditor] Error listing files:', error);
     res.status(500).json({
       error: 'Failed to list .info files',
       message: (error as Error).message
@@ -214,7 +226,7 @@ infoEditorRouter.get('/file', async (req: Request, res: Response) => {
     res.json(metadata);
 
   } catch (error) {
-    console.error('[InfoEditor] Error reading file:', error);
+console.error('[InfoEditor] Error reading file:', error);
     res.status(500).json({
       error: 'Failed to read .info file',
       message: (error as Error).message
@@ -275,7 +287,7 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
         backupPath
       });
     } catch (parseError) {
-      console.error('[InfoEditor] Error modifying binary .info file:', parseError);
+console.error('[InfoEditor] Error modifying binary .info file:', parseError);
 
       // Fallback: create .tooltypes.txt file
       const tooltypesPath = fullPath + '.tooltypes.txt';
@@ -301,7 +313,7 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
     }
 
   } catch (error) {
-    console.error('[InfoEditor] Error updating file:', error);
+console.error('[InfoEditor] Error updating file:', error);
     res.status(500).json({
       error: 'Failed to update .info file',
       message: (error as Error).message
@@ -366,7 +378,7 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
         message: `${key} is now ${updatedTooltype?.commented ? 'disabled' : 'enabled'}`
       });
     } catch (parseError) {
-      console.error('[InfoEditor] Error modifying binary .info file:', parseError);
+console.error('[InfoEditor] Error modifying binary .info file:', parseError);
       res.status(500).json({
         error: 'Failed to modify .info file',
         message: (parseError as Error).message
@@ -374,7 +386,7 @@ infoEditorRouter.post('/toggle', async (req: Request, res: Response) => {
     }
 
   } catch (error) {
-    console.error('[InfoEditor] Error toggling tooltype:', error);
+console.error('[InfoEditor] Error toggling tooltype:', error);
     res.status(500).json({
       error: 'Failed to toggle tooltype',
       message: (error as Error).message

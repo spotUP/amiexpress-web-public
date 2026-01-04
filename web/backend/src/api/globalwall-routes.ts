@@ -101,7 +101,7 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
         res.status(result.statusCode).json({ error: 'Failed to fetch comments' });
       }
     } catch (error) {
-      console.error('[GlobalWall API] Error fetching comments:', error);
+console.error('[GlobalWall API] Error fetching comments:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -131,7 +131,7 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
         res.status(result.statusCode).json({ error: 'Failed to update comment' });
       }
     } catch (error) {
-      console.error('[GlobalWall API] Error updating comment:', error);
+console.error('[GlobalWall API] Error updating comment:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -153,7 +153,7 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
         res.status(result.statusCode).json({ error: 'Failed to delete comment' });
       }
     } catch (error) {
-      console.error('[GlobalWall API] Error deleting comment:', error);
+console.error('[GlobalWall API] Error deleting comment:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -187,7 +187,7 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
 
       res.json(gwallConfig);
     } catch (error) {
-      console.error('[GlobalWall API] Error reading config:', error);
+console.error('[GlobalWall API] Error reading config:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -228,7 +228,7 @@ export function createGlobalWallRouter(database: Database): ReturnType<typeof ex
 
       res.json({ success: true, message: 'Configuration saved successfully' });
     } catch (error) {
-      console.error('[GlobalWall API] Error saving config:', error);
+console.error('[GlobalWall API] Error saving config:', error);
       res.status(500).json({ error: (error as Error).message });
     }
   });

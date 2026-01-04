@@ -14,7 +14,7 @@ import { sendChatMessage, acceptChat } from "../handlers/chat/chat.handler";
  * Register chat socket event handlers
  */
 export function registerChatHandlers(socket: Socket, chatState: any) {
-  console.log(
+console.log(
     "[CHAT DEBUG] registerChatHandlers called for socket:",
     socket.id
   );
@@ -28,7 +28,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
       eventName.startsWith("chat:") ||
       eventName.startsWith("chat-only")
     ) {
-      console.log(
+console.log(
         "[CHAT DEBUG] Socket received event:",
         eventName,
         JSON.stringify(args)
@@ -36,7 +36,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
     }
   });
 
-  console.log(
+console.log(
     "[CHAT DEBUG] Registering chat-only-login-submit handler for socket:",
     socket.id
   );
@@ -46,7 +46,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   socket.on(
     "chat-only-login-submit",
     async (credentials: { username: string; password: string }) => {
-      console.log(
+console.log(
         "[CHAT-ONLY-LOGIN] Received login attempt for:",
         credentials.username
       );
@@ -56,7 +56,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         const user = await db.getUserByUsername(credentials.username);
 
         if (!user) {
-          console.log(
+console.log(
             "[CHAT-ONLY-LOGIN] User not found:",
             credentials.username
           );
@@ -71,7 +71,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         );
 
         if (!passwordValid) {
-          console.log(
+console.log(
             "[CHAT-ONLY-LOGIN] Invalid password for user:",
             credentials.username
           );
@@ -80,7 +80,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         }
 
         // Success - send user data back
-        console.log(
+console.log(
           "[CHAT-ONLY-LOGIN] Login successful for:",
           credentials.username
         );
@@ -90,7 +90,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
           id: user.id,
         });
       } catch (error) {
-        console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
+console.error("[CHAT-ONLY-LOGIN] Error during login:", error);
         socket.emit("chat-only-login-error", "Login failed - server error");
       }
     }
@@ -156,15 +156,15 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   socket.on(
     "chat:message",
     async (data: { message?: string; content?: string; room?: string }) => {
-      console.log("📨 [SOCKET.IO] Received chat:message event from client");
-      console.log("📨 [SOCKET.IO] Data:", data);
-      console.log("📨 [SOCKET.IO] Socket ID:", socket.id);
+console.log("📨 [SOCKET.IO] Received chat:message event from client");
+console.log("📨 [SOCKET.IO] Data:", data);
+console.log("📨 [SOCKET.IO] Socket ID:", socket.id);
       const session = getSessionBySocketId(socket.id);
       if (!session) {
-        console.log("❌ [SOCKET.IO] No session found for socket:", socket.id);
+console.log("❌ [SOCKET.IO] No session found for socket:", socket.id);
         return;
       }
-      console.log(
+console.log(
         "📨 [SOCKET.IO] Session found, user:",
         session.user?.username
       );
@@ -178,7 +178,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         const roomData = {
           message: data.content || data.message || "",
         };
-        console.log("📨 [SOCKET.IO] Routing to handleRoomMessage:", roomData);
+console.log("📨 [SOCKET.IO] Routing to handleRoomMessage:", roomData);
         await handleRoomMessage(socket, session, roomData);
       } else {
         // Route to internode chat handler (1:1 BBS chat)
@@ -187,7 +187,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         } = require("../handlers/chat/internode-chat.handler");
         await handleChatMessage(socket, session, data);
       }
-      console.log("📨 [SOCKET.IO] chat:message completed");
+console.log("📨 [SOCKET.IO] chat:message completed");
     }
   );
 
@@ -230,13 +230,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
       room?: string;
       password?: string;
     }) => {
-      console.log("[CHAT DEBUG] room:join received:", data);
+console.log("[CHAT DEBUG] room:join received:", data);
       const session = getSessionBySocketId(socket.id);
       if (!session) {
-        console.log("[CHAT DEBUG] No session found for socket:", socket.id);
+console.log("[CHAT DEBUG] No session found for socket:", socket.id);
         return;
       }
-      console.log(
+console.log(
         "[CHAT DEBUG] Session found - userId:",
         session.user?.id,
         "username:",
@@ -251,7 +251,7 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
         roomName: data.roomName || data.room,
         password: data.password,
       };
-      console.log("[CHAT DEBUG] Normalized room:join data:", normalizedData);
+console.log("[CHAT DEBUG] Normalized room:join data:", normalizedData);
 
       const { handleRoomJoin } = require("../handlers/chat/group-chat.handler");
       await handleRoomJoin(socket, session, normalizedData);
@@ -267,13 +267,13 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   });
 
   socket.on("room:message", async (data: { message: string }) => {
-    console.log("[CHAT DEBUG] room:message received:", data);
+console.log("[CHAT DEBUG] room:message received:", data);
     const session = getSessionBySocketId(socket.id);
     if (!session) {
-      console.log("[CHAT DEBUG] No session for room:message");
+console.log("[CHAT DEBUG] No session for room:message");
       return;
     }
-    console.log(
+console.log(
       "[CHAT DEBUG] Message from:",
       session.user?.username,
       "in room:",
@@ -287,16 +287,16 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   });
 
   socket.on("room:list", async (data?: { showPrivate?: boolean }) => {
-    console.log("[CHAT DEBUG] room:list event received for socket:", socket.id);
+console.log("[CHAT DEBUG] room:list event received for socket:", socket.id);
     const session = getSessionBySocketId(socket.id);
-    console.log(
+console.log(
       "[CHAT DEBUG] room:list session lookup result:",
       session
         ? `found (user: ${session.user?.username}, nodeId: ${session.nodeId})`
         : "NOT FOUND"
     );
     if (!session) {
-      console.log("[CHAT DEBUG] room:list returning early - no session");
+console.log("[CHAT DEBUG] room:list returning early - no session");
       return;
     }
 
@@ -328,27 +328,27 @@ export function registerChatHandlers(socket: Socket, chatState: any) {
   socket.on(
     "chat:keystroke",
     (data: { channelId: string; userId: number; char: string }) => {
-      console.log(
+console.log(
         "[BACKEND] Received chat:keystroke:",
         data,
         "socketId:",
         socket.id
       );
       const session = getSessionBySocketId(socket.id);
-      console.log(
+console.log(
         "[BACKEND] Session found:",
         !!session,
         "currentRoomId:",
         session?.currentRoomId
       );
       if (!session || !session.currentRoomId) {
-        console.log("[BACKEND] Skipping keystroke - no session or room");
+console.log("[BACKEND] Skipping keystroke - no session or room");
         return;
       }
 
       // Broadcast keystroke to other users in the same room (not back to sender)
       const socketRoom = "room:" + session.currentRoomId;
-      console.log("[BACKEND] Broadcasting to room:", socketRoom);
+console.log("[BACKEND] Broadcasting to room:", socketRoom);
       socket.to(socketRoom).emit("chat:keystroke", {
         channelId: session.currentRoomId,
         userId: data.userId,

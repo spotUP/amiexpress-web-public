@@ -71,7 +71,7 @@ export function initializeContainer(dependencies: {
     container.registerInstance(DI_TOKENS.Constants, dependencies.constants);
   }
 
-  console.log('[DI Container] Initialized with all dependencies');
+console.log('[DI Container] Initialized with all dependencies');
 }
 
 /**
@@ -82,7 +82,7 @@ export function updateDependency<K extends keyof typeof DI_TOKENS>(
   value: any
 ) {
   container.registerInstance(DI_TOKENS[key], value);
-  console.log(`[DI Container] Updated ${key}`);
+console.log(`[DI Container] Updated ${key}`);
 }
 
 /**
@@ -97,7 +97,7 @@ export function getDependency<T>(token: symbol): T {
  */
 export function clearContainer() {
   container.clearInstances();
-  console.log('[DI Container] Cleared');
+console.log('[DI Container] Cleared');
 }
 
 export { container };

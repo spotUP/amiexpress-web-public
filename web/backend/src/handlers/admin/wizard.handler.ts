@@ -62,7 +62,7 @@ export async function enhancePrompt(req: Request, res: Response) {
     });
 
   } catch (error: any) {
-    console.error('Enhancement error:', error);
+console.error('Enhancement error:', error);
     res.status(500).json({
       error: 'Enhancement failed',
       message: error.message
@@ -88,7 +88,7 @@ export async function analyzePrompt(req: Request, res: Response) {
     res.json(metadata);
 
   } catch (error: any) {
-    console.error('Analysis error:', error);
+console.error('Analysis error:', error);
     res.status(500).json({
       error: 'Analysis failed',
       message: error.message
@@ -122,7 +122,7 @@ export async function enhanceAudioDescription(req: Request, res: Response) {
     });
 
   } catch (error: any) {
-    console.error('Audio enhancement error:', error);
+console.error('Audio enhancement error:', error);
     res.status(500).json({
       error: 'Audio enhancement failed',
       message: error.message
@@ -148,7 +148,7 @@ export async function analyzeAudioDescription(req: Request, res: Response) {
     res.json(metadata);
 
   } catch (error: any) {
-    console.error('Audio analysis error:', error);
+console.error('Audio analysis error:', error);
     res.status(500).json({
       error: 'Audio analysis failed',
       message: error.message
@@ -179,9 +179,9 @@ export async function generateGame(req: Request, res: Response) {
     const sdkPath = path.join(projectRoot, 'sdk');
     const doorsPath = path.join(projectRoot, 'doors');
 
-    console.log('[wizard.handler] Project root:', projectRoot);
-    console.log('[wizard.handler] SDK path:', sdkPath);
-    console.log('[wizard.handler] Doors path:', doorsPath);
+console.log('[wizard.handler] Project root:', projectRoot);
+console.log('[wizard.handler] SDK path:', sdkPath);
+console.log('[wizard.handler] Doors path:', doorsPath);
 
     // Create game using SDK CLI
     const result = await createGameWithSDK(sdkPath, doorsPath, gameName, prompt, metadata, answers);
@@ -194,7 +194,7 @@ export async function generateGame(req: Request, res: Response) {
     });
 
   } catch (error: any) {
-    console.error('Generation error:', error);
+console.error('Generation error:', error);
     res.status(500).json({
       success: false,
       error: 'Game generation failed',

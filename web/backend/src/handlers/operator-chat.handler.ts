@@ -62,7 +62,7 @@ function stopPagingDots(pageId: string): void {
   if (interval) {
     clearInterval(interval);
     activePagingIntervals.delete(pageId);
-    console.log(`[Operator Chat] Stopped paging dots for page ${pageId}`);
+console.log(`[Operator Chat] Stopped paging dots for page ${pageId}`);
   }
 }
 
@@ -70,7 +70,7 @@ function stopPagingDots(pageId: string): void {
  * Initialize operator chat handler
  */
 export function initOperatorChatHandler(io: any, repository: OperatorChatRepository) {
-  console.log('[Operator Chat] Handler initialized');
+console.log('[Operator Chat] Handler initialized');
 
   // Listen for sysop status updates
   io.on('connection', (socket: Socket) => {
@@ -82,18 +82,18 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
       socket.join(`user:${session.user.id}`);
       socket.join('sysops'); // Global sysops room for broadcasts
       repository.updateSysopStatus(session.user.id, SysopAvailability.AVAILABLE, 'Online');
-      console.log(`[Operator Chat] Sysop ${session.user.username} (ID:${session.user.id}) connected, joined sysops room`);
+console.log(`[Operator Chat] Sysop ${session.user.username} (ID:${session.user.id}) connected, joined sysops room`);
     } else if (session?.user) {
-      console.log(`[Operator Chat] Non-sysop user ${session.user.username} (secLevel:${session.user.secLevel}) connected`);
+console.log(`[Operator Chat] Non-sysop user ${session.user.username} (secLevel:${session.user.secLevel}) connected`);
     } else {
-      console.log(`[Operator Chat] Anonymous socket connected (no session)`);
+console.log(`[Operator Chat] Anonymous socket connected (no session)`);
     }
 
     socket.on('disconnect', () => {
       const sess = (socket as any).session as BBSSession;
       if (sess?.user && sess.user.secLevel >= 100) {
         repository.updateSysopStatus(sess.user.id, SysopAvailability.OFFLINE, 'Offline');
-        console.log(`[Operator Chat] Sysop ${sess.user.username} disconnected`);
+console.log(`[Operator Chat] Sysop ${sess.user.username} disconnected`);
       }
     });
 
@@ -106,7 +106,7 @@ export function initOperatorChatHandler(io: any, repository: OperatorChatReposit
       repository.updateSysopStatus(session.user.id, data.availability, data.statusMessage);
       socket.emit('operator:status-updated', { availability: data.availability });
 
-      console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data.availability}`);
+console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data.availability}`);
     });
 
     socket.on('operator:get-pending-pages', async () => {
@@ -236,8 +236,8 @@ export async function handlePageSysop(
   const config = repository.getConfig();
 
   // Debug logging
-  console.log('[Operator Chat] Page request from user:', session.user?.username, 'secLevel:', session.user?.secLevel);
-  console.log('[Operator Chat] Config allowedSecLevels:', config.allowedSecLevels, 'length:', config.allowedSecLevels?.length);
+console.log('[Operator Chat] Page request from user:', session.user?.username, 'secLevel:', session.user?.secLevel);
+console.log('[Operator Chat] Config allowedSecLevels:', config.allowedSecLevels, 'length:', config.allowedSecLevels?.length);
 
   // Check if feature is enabled
   if (!config.enabled) {
@@ -252,7 +252,7 @@ export async function handlePageSysop(
   const isSysop = userSecLevel >= 100;
 
   if (!isSysop && config.allowedSecLevels && config.allowedSecLevels.length > 0 && !config.allowedSecLevels.includes(userSecLevel)) {
-    console.log('[Operator Chat] Permission denied - user secLevel:', userSecLevel, 'not in allowedSecLevels:', config.allowedSecLevels);
+console.log('[Operator Chat] Permission denied - user secLevel:', userSecLevel, 'not in allowedSecLevels:', config.allowedSecLevels);
     return {
       success: false,
       message: '\x1b[31mYou do not have permission to page the sysop.\x1b[0m'
@@ -301,7 +301,21 @@ export async function handlePageSysop(
   // Discord/push notifications are optional extras
   const availableSysops = await checkSysopAvailability(io, repository);
   if (availableSysops.length === 0) {
-    console.log('[Operator Chat] No sysops online, page will be queued for notification');
+console.log('[Operator Chat] No sysops online, page will be queued for notification');
+  }
+
+  // Get actual conference name
+  const { getDatabase } = require('./command-handler/dependency-injection');
+  const db = getDatabase();
+  let conferenceName = `Conference ${session.currentConf}`;
+  try {
+    const conferences = await db.getConferences();
+    const currentConf = conferences.find((c: any) => c.id === session.currentConf);
+    if (currentConf) {
+      conferenceName = currentConf.name;
+    }
+  } catch (error) {
+console.error('[Operator Chat] Failed to get conference name:', error);
   }
 
   // Create page request
@@ -310,7 +324,7 @@ export async function handlePageSysop(
     userHandle: session.user!.username,
     nodeId: session.nodeId || 0,
     conferenceId: session.currentConf,
-    conferenceName: `Conference ${session.currentConf}`, // TODO: Get actual name
+    conferenceName,
     timeOnline: Math.floor((Date.now() - (session.connectionStart || Date.now())) / 1000),
     lastCommand: session.commandText || 'O'
   };
@@ -325,7 +339,7 @@ export async function handlePageSysop(
 
   // MAIL_ON_SYSOP_PAGE tooltype - express.e:24197-24201
   mailOnSysopPage(session.user!.username).catch((err) =>
-    console.error('[Operator Chat] MAIL_ON_SYSOP_PAGE failed:', err)
+console.error('[Operator Chat] MAIL_ON_SYSOP_PAGE failed:', err)
   );
 
   // Join user-specific rooms so targeted emits reach this socket
@@ -336,16 +350,16 @@ export async function handlePageSysop(
       // Also ensure the user session is mapped for direct lookup (critical for grumpy bot)
       if (!userSessions.has(session.user.id)) {
         userSessions.set(session.user.id, session);
-        console.log(`[Operator Chat] Added user ${session.user.id} to userSessions map`);
+console.log(`[Operator Chat] Added user ${session.user.id} to userSessions map`);
       }
       // Also map socket to user for lookup
       socketToUser.set(socket.id, session.user.id);
       // Verify room membership
       const rooms = Array.from(socket.rooms || []);
-      console.log(`[Operator Chat] User ${session.user.username} (socket ${socket.id}) joined rooms: ${rooms.join(', ')}`);
+console.log(`[Operator Chat] User ${session.user.username} (socket ${socket.id}) joined rooms: ${rooms.join(', ')}`);
     }
   } catch (err) {
-    console.error('[Operator Chat] Failed to join page/user rooms:', err);
+console.error('[Operator Chat] Failed to join page/user rooms:', err);
   }
 
   // Set cooldown
@@ -419,11 +433,11 @@ export async function handlePageSysop(
   activePagingIntervals.set(pageRequest.id, dotInterval);
   session.tempData = { ...session.tempData, dotIntervalId: dotInterval };
 
-  console.log(`[Operator Chat] Page created: ${pageRequest.id} from ${session.user!.username}@Node${session.nodeId}`);
+console.log(`[Operator Chat] Page created: ${pageRequest.id} from ${session.user!.username}@Node${session.nodeId}`);
 
   // Send notifications asynchronously (don't block paging UI)
   sendPageNotifications(io, repository, pageRequest, config).catch(err => {
-    console.error('[Operator Chat] Failed to send notifications:', err);
+console.error('[Operator Chat] Failed to send notifications:', err);
   });
 
   return {
@@ -464,9 +478,9 @@ async function sendPageNotifications(
     // Emit to sysops room ONLY (not all connected sockets)
     io.to('sysops').emit('operator:page', pageData);
     notificationUpdates.socketIO = true;
-    console.log(`[Operator Chat] Socket.IO notification sent to sysops room for page ${page.id}`, pageData);
+console.log(`[Operator Chat] Socket.IO notification sent to sysops room for page ${page.id}`, pageData);
   } catch (error) {
-    console.error('[Operator Chat] Socket.IO notification failed:', error);
+console.error('[Operator Chat] Socket.IO notification failed:', error);
   }
 
   // 2. Discord webhook notification
@@ -497,10 +511,10 @@ async function sendPageNotifications(
       if (response.data?.id) {
         notificationUpdates.discord = true;
         notificationUpdates.discordMessageId = response.data.id;
-        console.log(`[Operator Chat] Discord notification sent for page ${page.id}, message ID: ${response.data.id}`);
+console.log(`[Operator Chat] Discord notification sent for page ${page.id}, message ID: ${response.data.id}`);
       }
     } catch (error) {
-      console.error('[Operator Chat] Discord notification failed:', error);
+console.error('[Operator Chat] Discord notification failed:', error);
     }
   }
 
@@ -543,9 +557,9 @@ async function sendPageNotifications(
           success: r.success
         }));
 
-        console.log(`[Operator Chat] Push notifications sent: ${results.filter((r: any) => r.success).length}/${results.length} succeeded`);
+console.log(`[Operator Chat] Push notifications sent: ${results.filter((r: any) => r.success).length}/${results.length} succeeded`);
       } else {
-        console.log('[Operator Chat] No push subscriptions registered');
+console.log('[Operator Chat] No push subscriptions registered');
         notificationUpdates.browserPush = false;
         notificationUpdates.pushResults = [];
       }
@@ -554,7 +568,7 @@ async function sendPageNotifications(
       notificationUpdates.pushResults = [];
     }
   } catch (error) {
-    console.error('[Operator Chat] Push notification failed:', error);
+console.error('[Operator Chat] Push notification failed:', error);
     notificationUpdates.browserPush = false;
     notificationUpdates.pushResults = [];
   }
@@ -577,7 +591,7 @@ async function acceptPage(
 ): Promise<void> {
   const page = repository.getPageRequest(pageId);
   if (!page || page.status !== PageStatus.PENDING) {
-    console.error(`[Operator Chat] Cannot accept page ${pageId}: not found or not pending`);
+console.error(`[Operator Chat] Cannot accept page ${pageId}: not found or not pending`);
     return;
   }
 
@@ -591,7 +605,7 @@ async function acceptPage(
       sysopSocket.join(`page:${pageId}`);
       sysopSocket.join(`user:${page.userId}`);
     } catch (err) {
-      console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId}:`, err);
+console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId}:`, err);
     }
   }
 
@@ -600,7 +614,7 @@ async function acceptPage(
 
   // Load existing chat messages
   const existingMessages = repository.getChatMessages(pageId);
-  console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages for page ${pageId}`);
+console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages for page ${pageId}`);
 
   // Create chat session
   const chatSession: ChatSession = {
@@ -674,7 +688,7 @@ async function acceptPage(
   });
 
   io.emit('operator:page-accepted', { pageId, sysopHandle });
-  console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
+console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
 }
 
 /**
@@ -715,7 +729,7 @@ async function sendChatMessage(
   if (senderType === 'sysop') (chatSession as any).sysopTypingBuffer = '';
 
   // If bot-controlled and message is from user, generate bot response
-  console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSession as any).isBotControlled}, senderType=${senderType}`);
+console.log(`[Operator Chat] Checking bot response: isBotControlled=${(chatSession as any).isBotControlled}, senderType=${senderType}`);
   if ((chatSession as any).isBotControlled && senderType === 'user') {
     const page = repository.getPageRequest(pageId);
     if (page) {
@@ -731,12 +745,12 @@ async function sendChatMessage(
       if (message.trim() !== '') {
         context.messageHistory.push({ role: 'user', content: message });
         (chatSession as any).botMessageHistory = context.messageHistory;
-        console.log(`[Operator Chat] Added user message to history: "${message}"`);
+console.log(`[Operator Chat] Added user message to history: "${message}"`);
       }
 
       // Trigger bot reply ONLY if user sent an empty message (Double Enter signal)
       if (message.trim() === '') {
-        console.log(`[Operator Chat] User sent double-enter (empty message), triggering bot response...`);
+console.log(`[Operator Chat] User sent double-enter (empty message), triggering bot response...`);
         
         getGrumpySysopResponse(message, context).then(botResponse => {
           // Add bot message to history
@@ -751,7 +765,7 @@ async function sendChatMessage(
             });
           }, 500 + Math.random() * 500); // 0.5-1.0s delay
         }).catch(err => {
-          console.error('[Operator Chat] Bot response error:', err);
+console.error('[Operator Chat] Bot response error:', err);
         });
       }
     }
@@ -831,7 +845,7 @@ async function endChat(io: any, repository: OperatorChatRepository, pageId: stri
 
   io.to(`page:${pageId}`).emit('operator:chat-ended', { pageId });
   activeChatSessions.delete(pageId);
-  console.log(`[Operator Chat] Chat session ${pageId} ended`);
+console.log(`[Operator Chat] Chat session ${pageId} ended`);
 }
 
 /**
@@ -869,9 +883,9 @@ async function logChatTranscript(repository: OperatorChatRepository, session: Ch
     const sysLogsPath = path.join(bbsRoot, 'SysLogs');
     const logEntry = `\n${transcript.join('\n')}\n`;
     fs.appendFileSync(sysLogsPath, logEntry, 'utf8');
-    console.log(`[Operator Chat] Transcript written to SysLogs for page ${session.pageId}`);
+console.log(`[Operator Chat] Transcript written to SysLogs for page ${session.pageId}`);
   } catch (error) {
-    console.error(`[Operator Chat] Failed to write to SysLogs:`, error);
+console.error(`[Operator Chat] Failed to write to SysLogs:`, error);
   }
 }
 
@@ -885,17 +899,17 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
 
   // Debug: Log pending pages status
   if (pending.length > 0) {
-    console.log(`[Operator Chat] Checking ${pending.length} pending pages, timeout=${config.pageTimeout}s`);
+console.log(`[Operator Chat] Checking ${pending.length} pending pages, timeout=${config.pageTimeout}s`);
   }
 
   for (const page of pending) {
     const elapsed = now - page.createdAt.getTime();
     const timeoutMs = config.pageTimeout * 1000;
-    console.log(`[Operator Chat] Page ${page.id}: elapsed=${Math.floor(elapsed/1000)}s, timeout=${config.pageTimeout}s, willTimeout=${elapsed > timeoutMs}`);
+console.log(`[Operator Chat] Page ${page.id}: elapsed=${Math.floor(elapsed/1000)}s, timeout=${config.pageTimeout}s, willTimeout=${elapsed > timeoutMs}`);
 
     if (elapsed > timeoutMs) {
       // Activate grumpy bot instead of timing out
-      console.log(`[Operator Chat] Page ${page.id} timed out - activating grumpy bot`);
+console.log(`[Operator Chat] Page ${page.id} timed out - activating grumpy bot`);
 
       // Get user's session to update subState directly
       // Use the centralized userSessions map for reliable lookup
@@ -903,7 +917,7 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
 
       // Fallback: try socket room lookup if direct lookup failed
       if (!userSession) {
-        console.log(`[Operator Chat] Direct session lookup failed for userId ${page.userId}, trying socket rooms`);
+console.log(`[Operator Chat] Direct session lookup failed for userId ${page.userId}, trying socket rooms`);
         const userSocketsFromRoom = Array.from(io.sockets.adapter.rooms.get(`user:${page.userId}`) || []);
         for (const socketId of userSocketsFromRoom) {
           const sock = io.sockets.sockets.get(socketId);
@@ -932,9 +946,9 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
 
         userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
         userSession.inputBuffer = '';
-        console.log(`[Operator Chat] Set user session subState to OPERATOR_CHAT_ACTIVE for bot chat, userId=${page.userId}`);
+console.log(`[Operator Chat] Set user session subState to OPERATOR_CHAT_ACTIVE for bot chat, userId=${page.userId}`);
       } else {
-        console.warn(`[Operator Chat] Could not find user session for page ${page.id}, userId=${page.userId}. Available userSessions: ${Array.from(userSessions.keys()).join(', ')}`);
+console.warn(`[Operator Chat] Could not find user session for page ${page.id}, userId=${page.userId}. Available userSessions: ${Array.from(userSessions.keys()).join(', ')}`);
       }
 
       // Mark session as bot-controlled
@@ -942,9 +956,9 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
       if (chatSession) {
         (chatSession as any).isBotControlled = true;
         (chatSession as any).botMessageHistory = [];
-        console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
+console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
       } else {
-        console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
+console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
       }
 
       // Send intro message with natural typing simulation
@@ -954,7 +968,7 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
         sendChatMessage(io, repository, page.id, 'bot', 'GrumpyBot', 'sysop', introMsg, page.nodeId);
       });
 
-      console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
+console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
     }
   }
 }
@@ -1106,13 +1120,13 @@ export async function handleUserChatMessage(
 ): Promise<void> {
   const pageId = session.tempData?.pageId;
   if (!pageId) {
-    console.error('[Operator Chat] No pageId in session tempData');
+console.error('[Operator Chat] No pageId in session tempData');
     return;
   }
 
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) {
-    console.error(`[Operator Chat] Chat session not found: ${pageId}`);
+console.error(`[Operator Chat] Chat session not found: ${pageId}`);
     return;
   }
 
@@ -1191,7 +1205,7 @@ export async function handleUserQuitChat(
 ): Promise<void> {
   const pageId = session.tempData?.pageId;
   if (!pageId) {
-    console.error('[Operator Chat] No pageId in session tempData');
+console.error('[Operator Chat] No pageId in session tempData');
     return;
   }
 
@@ -1237,7 +1251,7 @@ export async function handleUserCancelPage(
 
   // Show "Aborted!" like express.e does when user presses CTRL-C
   socket.emit('ansi-output', 'Aborted!\r\n\r\n');
-  console.log(`[Operator Chat] User cancelled page ${pageId}`);
+console.log(`[Operator Chat] User cancelled page ${pageId}`);
 }
 
 /**
@@ -1245,12 +1259,12 @@ export async function handleUserCancelPage(
  * Called when user socket connects to listen for chat acceptance/end
  */
 export function setupOperatorChatListeners(socket: any, session: BBSSession): void {
-  console.log(`[Operator Chat] Setting up listeners for socket ${socket.id}, user=${session.user?.username || 'anonymous'}`);
+console.log(`[Operator Chat] Setting up listeners for socket ${socket.id}, user=${session.user?.username || 'anonymous'}`);
 
   // Listen for chat accepted (sysop accepted the page)
   // Note: Split-screen setup is sent from acceptPage, so we just update state here
   socket.on('operator:chat-accepted', (data: { pageId: string; sysopHandle: string }) => {
-    console.log(`[Operator Chat] User ${session.user?.username} received chat-accepted for page ${data.pageId}, current pageId=${session.tempData?.pageId}`);
+console.log(`[Operator Chat] User ${session.user?.username} received chat-accepted for page ${data.pageId}, current pageId=${session.tempData?.pageId}`);
 
     if (session.tempData?.pageId === data.pageId) {
       // CRITICAL: Stop paging dots via module-level Map (reliable cleanup)
@@ -1270,7 +1284,7 @@ export function setupOperatorChatListeners(socket: any, session: BBSSession): vo
 
   // Listen for chat ended (sysop or timeout ended the chat)
   socket.on('operator:chat-ended', (data: { pageId: string }) => {
-    console.log(`[Operator Chat] User ${session.user?.username} received chat-ended for page ${data.pageId}`);
+console.log(`[Operator Chat] User ${session.user?.username} received chat-ended for page ${data.pageId}`);
 
     if (session.tempData?.pageId === data.pageId) {
       // CRITICAL: Stop paging dots via module-level Map (reliable cleanup)

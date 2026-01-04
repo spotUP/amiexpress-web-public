@@ -472,10 +472,10 @@ export async function handleCFConfSelectInput(socket: any, session: BBSSession, 
 // === UTILITY FUNCTIONS ===
 
 // Scan flag bit masks (from express.e)
-const MAIL_SCAN_MASK = 4;   // Bit 2 - Mail scanning enabled
-const FILE_SCAN_MASK = 8;   // Bit 3 - File scanning enabled
-const ZOOM_SCAN_MASK = 16;  // Bit 4 - Zoom scanning enabled
-const MAILSCAN_ALL = 32;    // Bit 5 - Scan all messages (not just new)
+const ZOOM_SCAN_MASK = 2;   // Bit 1 - Zoom/QWK scanning enabled (express.e:axconsts.e:47)
+const MAIL_SCAN_MASK = 4;   // Bit 2 - Mail scanning enabled (express.e:axconsts.e:45)
+const FILE_SCAN_MASK = 8;   // Bit 3 - File scanning enabled (express.e:axconsts.e:46)
+const MAILSCAN_ALL = 128;   // Bit 7 - Scan all messages, not just addressed to user (express.e:axconsts.e:48)
 
 /**
  * Get user's scan flags for a conference/base
@@ -496,7 +496,7 @@ async function getUserScanFlags(userId: string, confId: number, msgBaseId: numbe
     // No entry yet, return default
     return 12; // MAIL_SCAN_MASK | FILE_SCAN_MASK
   } catch (error) {
-    console.error('[CF] Error getting scan flags:', error);
+console.error('[CF] Error getting scan flags:', error);
     return 12;
   }
 }
@@ -537,6 +537,6 @@ async function toggleScanFlag(
       [userId, confId, msgBaseId, newFlags]
     );
   } catch (error) {
-    console.error('[CF] Error toggling scan flag:', error);
+console.error('[CF] Error toggling scan flag:', error);
   }
 }

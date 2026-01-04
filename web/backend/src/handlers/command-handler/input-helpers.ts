@@ -29,7 +29,7 @@ export function handleBufferedInput(
     const result = callback(input);
     if (result instanceof Promise) {
       result.catch(error => {
-        console.error('Error in buffered input callback:', error);
+console.error('Error in buffered input callback:', error);
       });
     }
     return true;
@@ -75,7 +75,7 @@ export function handleSingleKeyInput(
     const result = callback(data);
     if (result instanceof Promise) {
       result.catch(error => {
-        console.error('Error in single key input callback:', error);
+console.error('Error in single key input callback:', error);
       });
     }
   }

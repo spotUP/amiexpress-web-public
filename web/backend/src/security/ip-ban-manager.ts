@@ -26,7 +26,7 @@ export class IpBanManager {
 
     if (recent.length >= DEFAULT_CONNECTION_LIMIT) {
       this.bans.set(ip, now + DEFAULT_BAN_DURATION_MS);
-      console.warn(`[Security] ${ip} exceeded ${DEFAULT_CONNECTION_LIMIT} connections in ${DEFAULT_CONNECTION_WINDOW_MS / 1000}s; applied ${DEFAULT_BAN_DURATION_MS / 60000}m ban.`);
+console.warn(`[Security] ${ip} exceeded ${DEFAULT_CONNECTION_LIMIT} connections in ${DEFAULT_CONNECTION_WINDOW_MS / 1000}s; applied ${DEFAULT_BAN_DURATION_MS / 60000}m ban.`);
       return false;
     }
 
@@ -48,7 +48,7 @@ export class IpBanManager {
 
     if (recent.length >= DEFAULT_FAILURE_LIMIT) {
       this.bans.set(ip, now + DEFAULT_BAN_DURATION_MS);
-      console.warn(`[Security] ${ip} recorded ${DEFAULT_FAILURE_LIMIT} authentication failures in ${DEFAULT_FAILURE_WINDOW_MS / 1000}s; applied ${DEFAULT_BAN_DURATION_MS / 60000}m ban.`);
+console.warn(`[Security] ${ip} recorded ${DEFAULT_FAILURE_LIMIT} authentication failures in ${DEFAULT_FAILURE_WINDOW_MS / 1000}s; applied ${DEFAULT_BAN_DURATION_MS / 60000}m ban.`);
       return false;
     }
 

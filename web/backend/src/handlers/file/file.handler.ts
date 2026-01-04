@@ -121,11 +121,11 @@ export function displayFileAreaContents(socket: any, session: BBSSession, area: 
 
 // displayFileList() - Main file listing function (1:1 with AmiExpress)
 export function displayFileList(socket: any, session: BBSSession, params: string, reverse: boolean = false) {
-  console.log('displayFileList called with params:', params, 'reverse:', reverse);
+console.log('displayFileList called with params:', params, 'reverse:', reverse);
 
   // Parse parameters (like parseParams in AmiExpress)
   const parsedParams = parseParams(params);
-  console.log('Parsed params:', parsedParams);
+console.log('Parsed params:', parsedParams);
 
   // Check for non-stop flag (NS parameter)
   const nonStopDisplay = parsedParams.includes('NS');
@@ -409,9 +409,9 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
       };
 
       fileAreaManager.deleteFileEntry(file.filename, fileArea as any);
-      console.log(`[FileDelete] Removed ${file.filename} from DIR${areaId}`);
+console.log(`[FileDelete] Removed ${file.filename} from DIR${areaId}`);
     } catch (error) {
-      console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, error);
+console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, error);
     }
   }
 
@@ -666,12 +666,12 @@ export async function displayFileStatus(socket: any, session: BBSSession, params
 // ===== New Files (N command) =====
 
 export async function displayNewFiles(socket: any, session: BBSSession, params: string) {
-  console.log('[displayNewFiles] Called with params:', params);
+console.log('[displayNewFiles] Called with params:', params);
 
   try {
     // Parse parameters (like parseParams in AmiExpress)
     const parsedParams = parseParams(params);
-    console.log('[displayNewFiles] Parsed params:', parsedParams);
+console.log('[displayNewFiles] Parsed params:', parsedParams);
 
     // Check for non-stop flag (NS parameter) - express.e:27869,27900
     const nonStopDisplay = parsedParams.includes('NS');
@@ -695,7 +695,7 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
       searchDate = session.user?.newSinceDate || session.user?.lastLogin || new Date(Date.now() - 86400000);
     }
 
-    console.log('[displayNewFiles] Search date:', searchDate);
+console.log('[displayNewFiles] Search date:', searchDate);
 
     // Always show header during confScan (express.e doesn't suppress this)
     socket.emit('ansi-output', '\r\n');
@@ -703,9 +703,9 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
 
     // Get file areas for current conference from database
     const conferenceId = session.currentConf || 1;
-    console.log('[displayNewFiles] Getting file areas for conference:', conferenceId);
+console.log('[displayNewFiles] Getting file areas for conference:', conferenceId);
     const areas = await db.getFileAreas(conferenceId);
-    console.log('[displayNewFiles] Found', areas.length, 'file areas');
+console.log('[displayNewFiles] Found', areas.length, 'file areas');
 
   if (areas.length === 0) {
     socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
@@ -723,7 +723,7 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
     }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   } catch (error) {
-    console.error('[displayNewFiles] ERROR:', error);
+console.error('[displayNewFiles] ERROR:', error);
     socket.emit('ansi-output', `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -763,7 +763,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
 
       // If user chose to stop, break out of loop
       if (!shouldContinue) {
-        console.log('[displayNewFilesFromDatabase] User stopped scan');
+console.log('[displayNewFilesFromDatabase] User stopped scan');
         break;
       }
 
@@ -823,7 +823,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
           if (session.newFilesPauseFlag) {
             const cont = await checkForPause(socket, session);
             if (!cont) {
-              console.log('[displayNewFilesFromDatabase] User stopped during file listing');
+console.log('[displayNewFilesFromDatabase] User stopped during file listing');
               return; // Exit early
             }
           }
@@ -832,7 +832,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
         emitLine(`\r\n\x1b[36m${newFiles.length} new file(s) in this area\x1b[0m\r\n`, 2);
       }
     } catch (error) {
-      console.error(`[displayNewFilesFromDatabase] Error for area ${area.name}:`, error);
+console.error(`[displayNewFilesFromDatabase] Error for area ${area.name}:`, error);
     }
   }
 
@@ -904,14 +904,14 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
 // ===== Upload/Download Interfaces =====
 
 export function displayUploadInterface(socket: any, session: BBSSession, params: string) {
-  console.log('displayUploadInterface called with params:', params);
-  console.log('🔍 [Upload Debug] Total fileAreas:', fileAreas.length);
-  console.log('🔍 [Upload Debug] session.currentConf:', session.currentConf);
-  console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.id, name: a.name, confId: a.conferenceId })));
+console.log('displayUploadInterface called with params:', params);
+console.log('🔍 [Upload Debug] Total fileAreas:', fileAreas.length);
+console.log('🔍 [Upload Debug] session.currentConf:', session.currentConf);
+console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.id, name: a.name, confId: a.conferenceId })));
 
   // Check if there are file directories to upload to (NDIRS check)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
-  console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
+console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
 
   if (currentFileAreas.length === 0) {
     socket.emit('ansi-output', '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
@@ -953,7 +953,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 }
 
 export function displayDownloadInterface(socket: any, session: BBSSession, params: string) {
-  console.log('displayDownloadInterface called with params:', params);
+console.log('displayDownloadInterface called with params:', params);
 
   // Check if there are file directories to download from (NDIRS check)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
@@ -1047,7 +1047,7 @@ export function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 // ===== File Upload/Download WebSocket Handlers =====
 
 export function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
-  console.log('startFileUpload called for area:', fileArea.name);
+console.log('startFileUpload called for area:', fileArea.name);
 
   socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n\r\n`);
 
@@ -1104,7 +1104,7 @@ export function startFileUpload(socket: any, session: BBSSession, fileArea: any)
 }
 
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
-  console.log('startFileDownload called for area:', fileArea.name);
+console.log('startFileDownload called for area:', fileArea.name);
 
   socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n`);
   socket.emit('ansi-output', '\x1b[36m-= Download Files =-\x1b[0m\r\n');

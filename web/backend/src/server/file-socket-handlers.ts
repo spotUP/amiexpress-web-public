@@ -53,7 +53,7 @@ async function loadConferences(session: any, database: any) {
     session.conferences = confs;
     return confs;
   } catch (err) {
-    console.error("[Upload] Failed to load conferences for accounting", err);
+console.error("[Upload] Failed to load conferences for accounting", err);
     return undefined;
   }
 }
@@ -141,7 +141,7 @@ export async function processBatchFile(
 
       // Extract FILE_ID.DIZ (express.e:19258-19285) - skip if already extracted
       if (!session.tempData.skipDizExtraction) {
-        console.log(
+console.log(
           `[FILE_ID.DIZ] Attempting extraction for ${currentFile.filename}`
         );
         try {
@@ -154,7 +154,7 @@ export async function processBatchFile(
 
           if (dizLines && dizLines.length > 0) {
             finalDescription = dizLines.join("\n");
-            console.log(
+console.log(
               `[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`
             );
             socket.emit(
@@ -162,15 +162,15 @@ export async function processBatchFile(
               `\r\n\x1b[36m[FILE_ID.DIZ found and used for description]\x1b[0m\r\n`
             );
           } else {
-            console.log(
+console.log(
               `[FILE_ID.DIZ] No FILE_ID.DIZ found or timed out, using batch description`
             );
           }
         } catch (error) {
-          console.error(`[FILE_ID.DIZ] Extraction error:`, error);
+console.error(`[FILE_ID.DIZ] Extraction error:`, error);
         }
       } else {
-        console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
+console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
       }
 
       // Test file integrity (express.e:19348-19354)
@@ -185,7 +185,7 @@ export async function processBatchFile(
           setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
         );
         testStatus = await Promise.race([testPromise, timeoutPromise]);
-        console.log(`[testFile] Result: ${testStatus}`);
+console.log(`[testFile] Result: ${testStatus}`);
 
         if (
           testStatus === TestResult.SUCCESS ||
@@ -206,7 +206,7 @@ export async function processBatchFile(
           fileStatus = "hold"; // Mark for HOLD directory (express.e:19364-19369)
         }
       } catch (error) {
-        console.error(`[testFile] Error:`, error);
+console.error(`[testFile] Error:`, error);
         testStatus = TestResult.NOT_TESTED;
         socket.emit("ansi-output", "\r\nTest skipped (error)...\r\n");
       }
@@ -233,9 +233,9 @@ export async function processBatchFile(
           session.currentConf,
           config.get("dataDir")
         );
-        console.log(`[Upload] File moved to: ${finalFilePath}`);
+console.log(`[Upload] File moved to: ${finalFilePath}`);
       } catch (error: any) {
-        console.error(`[Upload] Error moving file: ${error.message}`);
+console.error(`[Upload] Error moving file: ${error.message}`);
         // Continue with original path on error
       }
     }
@@ -303,7 +303,7 @@ export async function processBatchFile(
         uploadDirNum, // express.e: uploads go to DIR{maxDirs}
         addSentBy // SENTBY_FILES from node config
       );
-      console.log(
+console.log(
         `[Upload] Wrote DIR entry for ${currentFile.filename} to DIR${uploadDirNum}`
       );
 
@@ -325,14 +325,14 @@ export async function processBatchFile(
             "Upload" // Standard upload subdirectory name
           );
         } catch (filesBBSError: any) {
-          console.error(
+console.error(
             `[Upload] Error writing FILES.BBS: ${filesBBSError.message}`
           );
           // Don't fail upload on FILES.BBS write error - it's supplementary
         }
       }
     } catch (error: any) {
-      console.error(`[Upload] Error writing DIR file: ${error.message}`);
+console.error(`[Upload] Error writing DIR file: ${error.message}`);
       // Don't fail upload on DIR write error
     }
 
@@ -392,7 +392,7 @@ export async function processBatchFile(
             session.user!,
             session.user!.slotNumber
           );
-          console.log(
+console.log(
             `[Upload] Updated user ${
               session.user!.username
             } disk files with upload stats (uploads=${
@@ -402,7 +402,7 @@ export async function processBatchFile(
             })`
           );
         } catch (diskErr) {
-          console.error("[Upload] Error writing user disk files:", diskErr);
+console.error("[Upload] Error writing user disk files:", diskErr);
           // Continue anyway - database has the stats, sync can happen later
         }
       }
@@ -424,7 +424,7 @@ export async function processBatchFile(
         });
       }
     } catch (err) {
-      console.error("[Upload] Failed to persist conference upload stats", err);
+console.error("[Upload] Failed to persist conference upload stats", err);
     }
 
     // Log file upload (express.e:9493 callersLog)
@@ -448,7 +448,7 @@ export async function processBatchFile(
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error("[BBSEvent] Error emitting upload event:", error);
+console.error("[BBSEvent] Error emitting upload event:", error);
     }
 
     // Trigger webhook for file upload
@@ -466,7 +466,7 @@ export async function processBatchFile(
         description: finalDescription.substring(0, 100),
       });
     } catch (error) {
-      console.error("[Webhook] Error sending file upload webhook:", error);
+console.error("[Webhook] Error sending file upload webhook:", error);
     }
 
     // Update sysop upload statistics (express.e:19440)
@@ -482,7 +482,7 @@ export async function processBatchFile(
         fileStatus === "hold" || fileStatus === "private"
       );
     } catch (error: any) {
-      console.error(`[Upload] Error updating sysop stats: ${error.message}`);
+console.error(`[Upload] Error updating sysop stats: ${error.message}`);
     }
 
     // Clear currentUploadedFile so next file can be processed
@@ -499,7 +499,7 @@ export async function processBatchFile(
 
     if (isLastFile) {
       // This was the last (or only) file - auto-complete the upload
-      console.log("[Upload] Last file processed, auto-completing upload batch");
+console.log("[Upload] Last file processed, auto-completing upload batch");
       await handleUploadBatchComplete(socket, session);
       return;
     }
@@ -519,7 +519,7 @@ export async function processBatchFile(
     // That handler will show the completion statistics
     return;
   } catch (error: any) {
-    console.error("File upload error:", error);
+console.error("File upload error:", error);
 
     // Show specific error message to user
     const errorMessage = error.message || "Unknown database error";
@@ -546,7 +546,7 @@ export async function handleUploadBatchComplete(
   session: BBSSession
 ) {
   if (!session.tempData) {
-    console.log("[Upload] No upload context for batch complete");
+console.log("[Upload] No upload context for batch complete");
     return;
   }
 
@@ -584,7 +584,7 @@ export async function handleUploadBatchComplete(
       session.nodeId || 1 // nodeId for EXECUTE_ON_UPLOAD
     );
   } catch (error: any) {
-    console.error(
+console.error(
       `[Upload] Error sending upload notification: ${error.message}`
     );
   }
@@ -632,8 +632,8 @@ async function processFileUpload(
     session.tempData = uploadSession;
   }
 
-  console.log("[processFileUpload] Processing:", data);
-  console.log("[processFileUpload] session.tempData:", session.tempData);
+console.log("[processFileUpload] Processing:", data);
+console.log("[processFileUpload] session.tempData:", session.tempData);
 
   // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
   const isRegularFileUpload =
@@ -642,7 +642,7 @@ async function processFileUpload(
   // Check if Door Manager is active - it has its own file-uploaded handler for door archives
   // But allow regular file uploads to proceed normally even if inDoorManager is true
   if (session.inDoorManager && !isRegularFileUpload) {
-    console.log(
+console.log(
       "[processFileUpload] Door Manager is active (door archive upload), skipping"
     );
     return;
@@ -682,7 +682,7 @@ async function processFileUpload(
         `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
       );
 
-      console.log("[processFileUpload] File selected, checking for DIZ...");
+console.log("[processFileUpload] File selected, checking for DIZ...");
 
       // Try to extract FILE_ID.DIZ
       if (data.path) {
@@ -749,7 +749,7 @@ async function processFileUpload(
             return;
           }
         } catch (error) {
-          console.error("[processFileUpload] Error extracting DIZ:", error);
+console.error("[processFileUpload] Error extracting DIZ:", error);
           // Continue with manual description entry (express.e:19290-19301)
           const maxDescLines = 10;
           const sizeStr = formatFileSize(data.size);
@@ -801,7 +801,7 @@ export function registerFileHandlers(socket: Socket) {
       uploadStartTime?: number;
     }) => {
       const receiveTime = Date.now();
-      console.log(
+console.log(
         "[file-upload] Received file from browser:",
         data.filename,
         data.size,
@@ -814,7 +814,7 @@ export function registerFileHandlers(socket: Socket) {
         const durationMs = receiveTime - data.uploadStartTime;
         const durationSec = durationMs / 1000;
         uploadCPS = durationSec > 0 ? Math.floor(data.size / durationSec) : 0;
-        console.log(
+console.log(
           `[file-upload] Transfer time: ${durationMs}ms, CPS: ${uploadCPS}`
         );
       }
@@ -854,7 +854,7 @@ export function registerFileHandlers(socket: Socket) {
         const buffer = Buffer.from(data.data);
         fs.writeFileSync(filePath, buffer);
 
-        console.log("[file-upload] Wrote file to:", filePath);
+console.log("[file-upload] Wrote file to:", filePath);
 
         // Process the upload inline instead of emitting event
         // Call the processing function directly
@@ -884,7 +884,7 @@ export function registerFileHandlers(socket: Socket) {
   // Handle upload batch complete from frontend
   // Frontend emits this when all pending files have been uploaded
   socket.on("upload-batch-complete", async () => {
-    console.log(
+console.log(
       "[upload-batch-complete] Frontend signaled batch upload complete"
     );
     await handleUploadBatchComplete(socket, session);
@@ -900,12 +900,12 @@ export function registerFileHandlers(socket: Socket) {
       cps: number;
       path?: string;
     }) => {
-      console.log(
+console.log(
         `[file-download-complete] ${data.filename}: ${data.size} bytes in ${data.durationMs}ms (${data.cps} CPS)`
       );
 
       if (!session.user) {
-        console.log(
+console.log(
           "[file-download-complete] No user in session, skipping CPS update"
         );
         return;
@@ -915,7 +915,7 @@ export function registerFileHandlers(socket: Socket) {
       const currentTopCPS = session.user.topDownloadCPS || 0;
       if (data.cps > currentTopCPS) {
         session.user.topDownloadCPS = data.cps;
-        console.log(
+console.log(
           `[file-download-complete] New top download CPS for ${session.user.username}: ${data.cps} (was ${currentTopCPS})`
         );
 
@@ -938,18 +938,18 @@ export function registerFileHandlers(socket: Socket) {
                 session.user,
                 session.user.slotNumber
               );
-              console.log(
+console.log(
                 `[file-download-complete] Updated user ${session.user.username} disk files with download CPS`
               );
             } catch (diskErr) {
-              console.error(
+console.error(
                 "[file-download-complete] Error writing user disk files:",
                 diskErr
               );
             }
           }
         } catch (err) {
-          console.error(
+console.error(
             "[file-download-complete] Failed to persist download CPS",
             err
           );
@@ -967,7 +967,7 @@ export function registerFileHandlers(socket: Socket) {
       size: number;
       path?: string;
     }) => {
-      console.log("File uploaded event received:", data);
+console.log("File uploaded event received:", data);
 
       // Check if this is a regular file upload to a file area (has uploadMode and fileArea)
       const isRegularFileUpload =
@@ -976,7 +976,7 @@ export function registerFileHandlers(socket: Socket) {
       // Check if Door Manager is active - it has its own file-uploaded handler for door archives
       // But allow regular file uploads to proceed normally even if inDoorManager is true
       if (session.inDoorManager && !isRegularFileUpload) {
-        console.log(
+console.log(
           "[file-uploaded] Door Manager is active (door archive upload), skipping normal file upload handler"
         );
         return;
@@ -1016,14 +1016,14 @@ export function registerFileHandlers(socket: Socket) {
             `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
           );
 
-          console.log("[file-uploaded] File selected, checking for DIZ...");
-          console.log("[file-uploaded] dataDir:", config.get("dataDir"));
+console.log("[file-uploaded] File selected, checking for DIZ...");
+console.log("[file-uploaded] dataDir:", config.get("dataDir"));
 
           // Try to extract FILE_ID.DIZ (express.e:19258-19285)
           if (data.path) {
             try {
               const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
-              console.log("[file-uploaded] nodeWorkDir:", nodeWorkDir);
+console.log("[file-uploaded] nodeWorkDir:", nodeWorkDir);
 
               socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
 
@@ -1100,7 +1100,7 @@ export function registerFileHandlers(socket: Socket) {
                 return;
               }
             } catch (error) {
-              console.error("[FILE_ID.DIZ] Extraction error:", error);
+console.error("[FILE_ID.DIZ] Extraction error:", error);
               // On error, fall back to prompting for description (express.e:19290-19301)
               const maxDescLines = 10;
               const sizeStr = formatFileSize(data.size);
@@ -1150,10 +1150,10 @@ export function registerFileHandlers(socket: Socket) {
     async (data: { filename: string; fileId?: number }) => {
       const requestedFilename = sanitizeInput(data.filename);
       const normalizedRequestedFilename = normalizeForComparison(data.filename);
-      console.log("[Download] File download started:", requestedFilename);
+console.log("[Download] File download started:", requestedFilename);
 
       if (!session.user) {
-        console.error("[Download] No user session for download");
+console.error("[Download] No user session for download");
         return;
       }
 
@@ -1176,7 +1176,7 @@ export function registerFileHandlers(socket: Socket) {
         }
 
         if (!fileEntry) {
-          console.error(
+console.error(
             "[Download] File not found in database:",
             requestedFilename
           );
@@ -1219,11 +1219,11 @@ export function registerFileHandlers(socket: Socket) {
               session.user,
               session.user.slotNumber
             );
-            console.log(
+console.log(
               `[Download] Updated user ${session.user.username} disk files with download stats (downloads=${session.user.downloads}, bytes=${session.user.bytesDownload}, slot=${session.user.slotNumber})`
             );
           } catch (diskErr) {
-            console.error("[Download] Error writing user disk files:", diskErr);
+console.error("[Download] Error writing user disk files:", diskErr);
             // Continue anyway - database has the stats, sync can happen later
           }
         }
@@ -1250,17 +1250,17 @@ export function registerFileHandlers(socket: Socket) {
             conference: conference?.name || "Unknown",
           });
         } catch (error) {
-          console.error(
+console.error(
             "[Webhook] Error sending file download webhook:",
             error
           );
         }
 
-        console.log(
+console.log(
           `[Download] Updated stats for ${session.user.username} - ${fileEntry.filename} (${fileEntry.size} bytes)`
         );
       } catch (error) {
-        console.error("[Download] Error updating statistics:", error);
+console.error("[Download] Error updating statistics:", error);
       }
     }
   );

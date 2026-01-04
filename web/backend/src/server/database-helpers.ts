@@ -24,7 +24,7 @@ export async function callersLog(userId: string | null, username: string, action
       [nodeId, userId, username, action, details || null]
     );
   } catch (error) {
-    console.error('Error logging caller activity:', error);
+console.error('Error logging caller activity:', error);
     // Fail silently like express.e would
   }
 }
@@ -48,7 +48,7 @@ export async function getRecentCallerActivity(limit: number = 20, nodeId?: numbe
     const result = await db.query(query, params);
     return result.rows;
   } catch (error) {
-    console.error('Error getting caller activity:', error);
+console.error('Error getting caller activity:', error);
     return [];
   }
 }
@@ -77,7 +77,7 @@ export async function getUserStats(userId: string): Promise<any> {
 
     return result.rows[0];
   } catch (error) {
-    console.error('Error getting user stats:', error);
+console.error('Error getting user stats:', error);
     return {
       bytes_uploaded: 0,
       bytes_downloaded: 0,
@@ -119,7 +119,7 @@ export async function searchFileDescriptions(searchPattern: string, conferenceId
     const result = await db.query(query, [conferenceId, `%${searchPattern}%`]);
     return result.rows;
   } catch (error) {
-    console.error('[searchFileDescriptions] Database error:', error);
+console.error('[searchFileDescriptions] Database error:', error);
     return [];
   }
 }
@@ -140,7 +140,7 @@ export async function getFileEntry(fileId: number): Promise<any | null> {
     `, [fileId]);
     return result.rows[0] || null;
   } catch (error) {
-    console.error('[getFileEntry] Error:', error);
+console.error('[getFileEntry] Error:', error);
     return null;
   }
 }
@@ -155,7 +155,7 @@ export async function deleteFileEntry(fileId: number): Promise<boolean> {
     `, [fileId]);
     return ((result as any).rowCount || 0) > 0;
   } catch (error) {
-    console.error('[deleteFileEntry] Error:', error);
+console.error('[deleteFileEntry] Error:', error);
     return false;
   }
 }
@@ -172,7 +172,7 @@ export async function moveFileEntry(fileId: number, newAreaId: number): Promise<
     `, [fileId, newAreaId]);
     return ((result as any).rowCount || 0) > 0;
   } catch (error) {
-    console.error('[moveFileEntry] Error:', error);
+console.error('[moveFileEntry] Error:', error);
     return false;
   }
 }
@@ -189,7 +189,7 @@ export async function updateFileDescription(fileId: number, newDescription: stri
     `, [fileId, newDescription]);
     return ((result as any).rowCount || 0) > 0;
   } catch (error) {
-    console.error('[updateFileDescription] Error:', error);
+console.error('[updateFileDescription] Error:', error);
     return false;
   }
 }
@@ -207,7 +207,7 @@ export async function getFileAreas(conferenceId: number): Promise<any[]> {
     `, [conferenceId]);
     return result.rows;
   } catch (error) {
-    console.error('[getFileAreas] Error:', error);
+console.error('[getFileAreas] Error:', error);
     return [];
   }
 }
@@ -243,7 +243,7 @@ export async function searchFilesByName(filename: string, conferenceId: number):
     const result = await db.query(query, [conferenceId, sqlPattern]);
     return result.rows;
   } catch (error) {
-    console.error('[searchFilesByName] Error:', error);
+console.error('[searchFilesByName] Error:', error);
     return [];
   }
 }
@@ -295,7 +295,7 @@ export async function searchFilesAdvanced(
     const result = await db.query(query, params);
     return result.rows;
   } catch (error) {
-    console.error('[searchFilesAdvanced] Error:', error);
+console.error('[searchFilesAdvanced] Error:', error);
     return [];
   }
 }
@@ -314,7 +314,7 @@ export async function resetNewMailScanPointers(conferenceId: number, messageBase
     `, [conferenceId, messageBaseId]);
     return (result as any).rowCount || 0;
   } catch (error) {
-    console.error('[resetNewMailScanPointers] Error:', error);
+console.error('[resetNewMailScanPointers] Error:', error);
     return 0;
   }
 }
@@ -331,7 +331,7 @@ export async function resetLastMessageReadPointers(conferenceId: number, message
     `, [conferenceId, messageBaseId]);
     return (result as any).rowCount || 0;
   } catch (error) {
-    console.error('[resetLastMessageReadPointers] Error:', error);
+console.error('[resetLastMessageReadPointers] Error:', error);
     return 0;
   }
 }
@@ -364,7 +364,7 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
       userCount: parseInt(userResult.rows[0].count)
     };
   } catch (error) {
-    console.error('[getConferenceStats] Error:', error);
+console.error('[getConferenceStats] Error:', error);
     return {
       messageCount: 0,
       lowestMsgNum: 0,
@@ -403,7 +403,7 @@ export async function updateMessageNumberRange(conferenceId: number, messageBase
 
     return true;
   } catch (error) {
-    console.error('[updateMessageNumberRange] Error:', error);
+console.error('[updateMessageNumberRange] Error:', error);
     return false;
   }
 }
@@ -432,7 +432,7 @@ export async function getActiveVoteTopics(conferenceId: number): Promise<any[]> 
     `, [conferenceId]);
     return result.rows;
   } catch (error) {
-    console.error('[getActiveVoteTopics] Error:', error);
+console.error('[getActiveVoteTopics] Error:', error);
     return [];
   }
 }
@@ -448,7 +448,7 @@ export async function getVoteTopic(conferenceId: number, topicNumber: number): P
     `, [conferenceId, topicNumber]);
     return result.rows[0] || null;
   } catch (error) {
-    console.error('[getVoteTopic] Error:', error);
+console.error('[getVoteTopic] Error:', error);
     return null;
   }
 }
@@ -465,7 +465,7 @@ export async function getVoteQuestions(topicId: number): Promise<any[]> {
     `, [topicId]);
     return result.rows;
   } catch (error) {
-    console.error('[getVoteQuestions] Error:', error);
+console.error('[getVoteQuestions] Error:', error);
     return [];
   }
 }
@@ -482,7 +482,7 @@ export async function getVoteAnswers(questionId: number): Promise<any[]> {
     `, [questionId]);
     return result.rows;
   } catch (error) {
-    console.error('[getVoteAnswers] Error:', error);
+console.error('[getVoteAnswers] Error:', error);
     return [];
   }
 }
@@ -498,7 +498,7 @@ export async function hasUserVoted(userId: string, topicId: number): Promise<boo
     `, [userId, topicId]);
     return result.rows.length > 0;
   } catch (error) {
-    console.error('[hasUserVoted] Error:', error);
+console.error('[hasUserVoted] Error:', error);
     return false;
   }
 }
@@ -540,7 +540,7 @@ export async function submitVote(userId: string, topicId: number, conferenceId: 
     return true;
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('[submitVote] Error:', error);
+console.error('[submitVote] Error:', error);
     return false;
   } finally {
     client.release();
@@ -569,7 +569,7 @@ export async function getVoteStatistics(topicId: number): Promise<any[]> {
     `, [topicId]);
     return result.rows;
   } catch (error) {
-    console.error('[getVoteStatistics] Error:', error);
+console.error('[getVoteStatistics] Error:', error);
     return [];
   }
 }
@@ -586,7 +586,7 @@ export async function createVoteTopic(conferenceId: number, topicNumber: number,
     `, [conferenceId, topicNumber, title, description, userId]);
     return result.rows[0].id;
   } catch (error) {
-    console.error('[createVoteTopic] Error:', error);
+console.error('[createVoteTopic] Error:', error);
     return null;
   }
 }
@@ -603,7 +603,7 @@ export async function createVoteQuestion(topicId: number, questionNumber: number
     `, [topicId, questionNumber, questionText]);
     return result.rows[0].id;
   } catch (error) {
-    console.error('[createVoteQuestion] Error:', error);
+console.error('[createVoteQuestion] Error:', error);
     return null;
   }
 }
@@ -620,7 +620,7 @@ export async function createVoteAnswer(questionId: number, answerLetter: string,
     `, [questionId, answerLetter.toUpperCase(), answerText]);
     return result.rows[0].id;
   } catch (error) {
-    console.error('[createVoteAnswer] Error:', error);
+console.error('[createVoteAnswer] Error:', error);
     return null;
   }
 }
@@ -636,7 +636,7 @@ export async function deleteVoteTopic(topicId: number): Promise<boolean> {
     `, [topicId]);
     return true;
   } catch (error) {
-    console.error('[deleteVoteTopic] Error:', error);
+console.error('[deleteVoteTopic] Error:', error);
     return false;
   }
 }
@@ -654,7 +654,7 @@ export async function getNextTopicNumber(conferenceId: number): Promise<number> 
     const nextNum = result.rows[0].next_number;
     return nextNum <= 25 ? nextNum : 0; // Return 0 if all 25 slots are full
   } catch (error) {
-    console.error('[getNextTopicNumber] Error:', error);
+console.error('[getNextTopicNumber] Error:', error);
     return 0;
   }
 }
@@ -684,7 +684,7 @@ export async function loadFlagged(socket: any, session: BBSSession) {
       socket.emit('ansi-output', '\x07'); // sendBELL()
     }
   } catch (error) {
-    console.error('Error loading flagged files:', error);
+console.error('Error loading flagged files:', error);
     // Fail silently like express.e would if file doesn't exist
   }
 }
@@ -698,16 +698,16 @@ export async function loadHistory(session: BBSSession) {
   // Load command history from disk files (express.e:2669-2688, 28577)
   // Uses the user's slot number (ID) to load persisted history
   if (!session.user) {
-    console.log('[CommandHistory] No user logged in, skipping loadHistory');
+console.log('[CommandHistory] No user logged in, skipping loadHistory');
     return;
   }
 
   try {
     const { loadHistory: loadHistoryUtil } = require('../utils/command-history.util');
     await loadHistoryUtil(session, session.user.id);
-    console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${session.user.username}`);
+console.log(`[CommandHistory] Loaded ${session.commandHistory.length} commands for user ${session.user.username}`);
   } catch (error) {
-    console.error('[CommandHistory] Error in loadHistory wrapper:', error);
+console.error('[CommandHistory] Error in loadHistory wrapper:', error);
   }
 }
 
