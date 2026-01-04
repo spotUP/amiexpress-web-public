@@ -453,7 +453,7 @@ async function handleRemainingStates(
         const input = session.inputBuffer || "";
         session.inputBuffer = "";
         socket.emit("ansi-output", "\r\n");
-        handleBulletinInputFromDisplayFileCommands(socket, session, input);
+        await handleBulletinInputFromDisplayFileCommands(socket, session, input);
         return;
       }
       // Handle Backspace

@@ -1070,11 +1070,13 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       } else if (code.startsWith('CC_')) {
         // express.e:5555-5563 - processSysCommand()
         const commandStr = code.substring(3).replace(/\|+$/, '').trim();
+        console.log('[MCI][CC_] EXECUTING INLINE COMMAND:', commandStr, 'state:', session.state, 'subState:', session.subState);
         screenDebug('[MCI] Sequential: ~CC_ processSysCommand:', commandStr);
         const spacePos = commandStr.indexOf(' ');
         const cmdCode = spacePos >= 0 ? commandStr.substring(0, spacePos) : commandStr;
         const cmdParams = spacePos >= 0 ? commandStr.substring(spacePos + 1) : '';
-        await processCommand(socket, session, cmdCode, cmdParams);
+        const result = await processCommand(socket, session, cmdCode, cmdParams);
+        console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
       } else if (code.startsWith('SS_') || code.startsWith('2S')) {
         // express.e:5496-5504 - displayFile()
         const prefix = code.startsWith('SS_') ? 3 : 2;
@@ -1354,6 +1356,114 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   parsed = parsed.replace(/%U/g, username);
   parsed = parsed.replace(/%N/g, '1');
   parsed = parsed.replace(/%C/g, conferences.length.toString());
+
+  // MultiTop bulletin codes - @READUSERKEYS directive (strip it, it's not displayed)
+  parsed = parsed.replace(/@READUSERKEYS\s*/gi, '');
+
+  // MultiTop bulletin codes - %XX.YYCC format for user ranking data
+  // Format: %XX.YYCC where XX=slot(01-30), YY=field width, CC=code type
+  // Code types: UB=Upload Bytes, DB=Download Bytes, UC=Upload CPS, DC=Download CPS,
+  //             MS=Messages, TU=Total Users, SC=System Calls
+  const multiTopRegex = /%(\d{2})\.(\d{2})([A-Z]{2})/g;
+  let multiTopMatch;
+  const multiTopReplacements: Array<{match: string; slot: number; width: number; code: string}> = [];
+
+  // Collect all MultiTop codes first
+  while ((multiTopMatch = multiTopRegex.exec(parsed)) !== null) {
+    multiTopReplacements.push({
+      match: multiTopMatch[0],
+      slot: parseInt(multiTopMatch[1], 10),
+      width: parseInt(multiTopMatch[2], 10),
+      code: multiTopMatch[3]
+    });
+  }
+
+  // Process MultiTop codes if any found
+  if (multiTopReplacements.length > 0) {
+    // Fetch users sorted by different criteria for ranking
+    let rankedUsers: {
+      byUploadBytes: any[];
+      byDownloadBytes: any[];
+      byMessages: any[];
+    } = { byUploadBytes: [], byDownloadBytes: [], byMessages: [] };
+
+    try {
+      const allUsers = await db.getUsers({ limit: 100 });
+      rankedUsers.byUploadBytes = [...allUsers].sort((a, b) => (b.uploadBytes || 0) - (a.uploadBytes || 0));
+      rankedUsers.byDownloadBytes = [...allUsers].sort((a, b) => (b.downloadBytes || 0) - (a.downloadBytes || 0));
+      rankedUsers.byMessages = [...allUsers].sort((a, b) => (b.messagesPosted || 0) - (a.messagesPosted || 0));
+    } catch (error) {
+      console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error);
+    }
+
+    // Get total users count
+    let totalUsers = 0;
+    try {
+      totalUsers = rankedUsers.byUploadBytes.length;
+    } catch (error) {
+      // Ignore
+    }
+
+    // Replace each MultiTop code
+    for (const rep of multiTopReplacements) {
+      const slotIdx = rep.slot - 1; // Convert to 0-indexed
+      let value = '';
+
+      switch (rep.code) {
+        case 'UB': // Upload Bytes
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
+            const bytes = rankedUsers.byUploadBytes[slotIdx].uploadBytes || 0;
+            value = formatBytes(bytes);
+          }
+          break;
+        case 'DB': // Download Bytes
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
+            const bytes = rankedUsers.byDownloadBytes[slotIdx].downloadBytes || 0;
+            value = formatBytes(bytes);
+          }
+          break;
+        case 'UC': // Upload CPS (use uploadBytes / timesCalled as approximation)
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
+            const user = rankedUsers.byUploadBytes[slotIdx] as any;
+            const cps = user.timesCalled > 0 ? Math.floor((user.uploadBytes || 0) / user.timesCalled) : 0;
+            value = cps.toString();
+          }
+          break;
+        case 'DC': // Download CPS (use downloadBytes / timesCalled as approximation)
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
+            const user = rankedUsers.byDownloadBytes[slotIdx] as any;
+            const cps = user.timesCalled > 0 ? Math.floor((user.downloadBytes || 0) / user.timesCalled) : 0;
+            value = cps.toString();
+          }
+          break;
+        case 'MS': // Messages Posted
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byMessages.length) {
+            value = (rankedUsers.byMessages[slotIdx].messagesPosted || 0).toString();
+          }
+          break;
+        case 'TU': // Total Users
+          value = totalUsers.toString();
+          break;
+        case 'SC': // System Calls (use todayCalls from stats)
+          value = todayCalls.toString();
+          break;
+        default:
+          value = '0';
+      }
+
+      // Pad to field width
+      value = value.padStart(rep.width, ' ');
+      parsed = parsed.replace(rep.match, value);
+    }
+  }
+
+  // Helper function to format bytes
+  function formatBytes(bytes: number): string {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return bytes.toString() + ' B';
+  }
 
   // Process ~SS_ file display codes (express.e:5490-5500)
   // Replace {{DISPLAY_FILE:N}} placeholders with actual file content
@@ -1913,6 +2023,8 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         .map(s => s.trim())
         .filter(s => s.length > 0);
 
+      console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
+      segments.forEach((s, i) => console.log(`[SEGMENT]   ${i}: "${s.substring(0, 60).replace(/\n/g, '\\n')}..."`));
       screenDebug(`[displayScreen] ~SP segment processing: ${segments.length} segments for ${screenName}`);
 
       if (segments.length > 1) {
@@ -2040,14 +2152,22 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     const slowmoSpeed = session.slowmo || 0;
     let slowmoCount = session.slowmoCount || 0;
 
-    // Modem emulation (web extension): throttle like a real link when enabled
-    const modemBps = session.modemEmulationEnabled ? (session.modemBps || session.user?.baud || 0) : 0;
-    const modemActive = modemBps > 0;
-    // Approximate bytes/sec on the wire: 1 start + 8 data + 1 stop bits
-    const modemBytesPerSec = modemActive ? Math.max(1, Math.floor(modemBps / 10)) : 0;
+    // emitWithModem handles modem speed throttling dynamically by checking session state each call
 
     const emitWithModem = async (payload: string) => {
-      if (!modemActive || modemBytesPerSec <= 0) {
+      // When we do our OWN throttling, use directEmit to bypass ModemEmulator (avoid double-throttling)
+      // When we DON'T throttle, use socket.emit so ModemEmulator can intercept if it's enabled
+      const directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
+
+      // Check CURRENT session state for modem emulation (not captured value)
+      // This allows the user to enable modem emulation mid-session
+      const currentModemEnabled = session.modemEmulationEnabled;
+      const currentModemBps = currentModemEnabled ? (session.modemBps || session.user?.baud || 0) : 0;
+      const currentModemActive = currentModemBps > 0;
+      const currentBytesPerSec = currentModemActive ? Math.max(1, Math.floor(currentModemBps / 10)) : 0;
+
+      if (!currentModemActive || currentBytesPerSec <= 0) {
+        // NOT doing our own throttling - use socket.emit so ModemEmulator can intercept
         socket.emit(eventName, payload);
         return;
       }
@@ -2075,21 +2195,21 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         const buf = Buffer.from(tok, 'utf-8');
         const isEscape = tok.startsWith('\x1b');
         if (isEscape) {
-          socket.emit(eventName, tok);
+          directEmit(eventName, tok);
           continue;
         }
         let offset = 0;
         while (offset < buf.length) {
           const now = process.hrtime.bigint();
           const elapsedMs = Number(now - start) / 1_000_000;
-          const allowed = Math.max(0, Math.floor(modemBytesPerSec * (elapsedMs / 1000)) - sentBytes);
+          const allowed = Math.max(0, Math.floor(currentBytesPerSec * (elapsedMs / 1000)) - sentBytes);
           if (allowed <= 0) {
             await sleep(2);
             continue;
           }
           const toSend = Math.min(allowed, buf.length - offset, 256);
           const chunk = buf.slice(offset, offset + toSend).toString('utf-8');
-          socket.emit(eventName, chunk);
+          directEmit(eventName, chunk);
           offset += toSend;
           sentBytes += toSend;
         }
@@ -2191,8 +2311,11 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       }
       // If modem emulation is active and its link is slower than this slowmo rate,
       // cap to modem speed; if slowmo is already slower, leave it untouched.
-      if (modemActive && modemBytesPerSec > 0) {
-        const modemBytesPerMs = modemBytesPerSec / 1000;
+      // Check CURRENT session state (not captured value)
+      const currentModemBps = session.modemEmulationEnabled ? (session.modemBps || session.user?.baud || 0) : 0;
+      if (currentModemBps > 0) {
+        const currentBytesPerSec = Math.max(1, Math.floor(currentModemBps / 10));
+        const modemBytesPerMs = currentBytesPerSec / 1000;
         if (modemBytesPerMs < bytesPerMs) {
           bytesPerMs = modemBytesPerMs;
         }
@@ -2589,6 +2712,7 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
   const segmentNum = segState.currentIndex + 1;
   segState.currentIndex = segmentNum;
 
+  console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: "${segment.substring(0, 100)}..."`);
   screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segment.substring(0, 50)}...`);
 
   // Parse and execute this segment's MCI codes

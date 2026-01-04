@@ -8,7 +8,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const GRAPHIC_EXTENSIONS = ['.TXT.GR'];
+// Default extensions if ScreenTypes.info not available
+const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
 const TEXT_EXTENSIONS = ['.TXT', '.txt'];
 
 function resolveCaseInsensitivePath(targetPath: string): string | null {
@@ -37,82 +38,128 @@ function resolveCaseInsensitivePath(targetPath: string): string | null {
 }
 
 /**
+ * Get screen type extension with dot prefix
+ * express.e:31918-31923 - Adds '.' prefix if not present
+ *
+ * @param screenTypeExt - Screen type extension (e.g., "GR", "IBM", ".TXT.GR")
+ * @returns Extension with dot prefix (e.g., ".GR", ".IBM", ".TXT.GR")
+ */
+function normalizeScreenTypeExtension(screenTypeExt: string): string {
+  // express.e:31918 - IF (tempstr2[0]<>".")
+  if (screenTypeExt[0] !== '.') {
+    // express.e:31919 - StringF(tempstr,'.\s',tempstr2)
+    return `.${screenTypeExt}`;
+  }
+  // express.e:31922 - screenTypeExt.add(tempstr2)
+  return screenTypeExt;
+}
+
+/**
  * Find security screen file with appropriate security level
  *
- * Security screens are named: BaseName{SecurityLevel}.TXT
- * Examples: Bull100.TXT, Bull50.TXT, Bull.TXT
+ * 1:1 port from express.e:6246-6310 findSecurityScreen()
  *
- * Algorithm (express.e:6246-6310):
- * 1. Round user's security level down to nearest 5
- * 2. Check for screens at that level, then decrement by 5
- * 3. Minimum level checked is 5
- * 4. Finally check for non-security screen (no level suffix)
- *
- * Extension priority (express.e:6258-6295):
- * - RIP mode: .RIP first, then .TXT
- * - PETSCII mode: .seq first, then .TXT
- * - Normal mode: .TXT
+ * Algorithm:
+ * 1. If DEF_SCREENS: Check non-security screens first, then security screens
+ * 2. If not DEF_SCREENS: Check security screens first, then non-security screens
+ * 3. For each check: RIP mode → User screen type → Plain .TXT
+ * 4. Security levels checked from user's level down to minLevel (5) in steps of 5
  *
  * @param screenDirAndName - Full path to screen without extension (e.g., "/path/to/Bulletins/Bull1")
  * @param userSecLevel - User's security level (0-255)
- * @param petsciiMode - Whether PETSCII mode is enabled (prefer .seq files)
- * @param ripMode - Whether RIP mode is enabled (prefer .rip files)
+ * @param userScreenTypeExt - User's preferred screen type extension (e.g., ".TXT.GR", ".IBM")
+ * @param ripMode - Whether RIP mode is enabled (prefer .RIP files)
+ * @param defScreens - DEF_SCREENS tooltype (if true, check non-security first)
  * @returns Full path to found screen file, or null if not found
  */
 export function findSecurityScreen(
   screenDirAndName: string,
   userSecLevel: number = 0,
-  petsciiMode: boolean = false,
-  ripMode: boolean = false
+  userScreenTypeExt: string | null = null,
+  ripMode: boolean = false,
+  defScreens: boolean = false
 ): string | null {
   const minLevel = 5;
 
-  // Extensions to try based on graphics mode (express.e:6258-6295)
-  // RIP mode checks .RIP first, PETSCII checks .seq first
-  let extensions: string[];
-  if (ripMode) {
-    extensions = ['.rip', '.RIP', ...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
-  } else if (petsciiMode) {
-    extensions = ['.seq', '.SEQ', ...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
-  } else {
-    extensions = [...GRAPHIC_EXTENSIONS, ...TEXT_EXTENSIONS];
-  }
-
-  // express.e:6256-6260 - Check security screens
-  // Round down to nearest 5
-  let secLevel = Math.floor(userSecLevel / 5) * 5;
-
-  // express.e:6260-6276 - Check security level screens (highest to lowest)
-  while (secLevel >= minLevel) {
-    // Check each extension
-    for (const ext of extensions) {
-      const securityScreenPath = `${screenDirAndName}${secLevel}${ext}`;
-      const resolvedSecurityPath = resolveCaseInsensitivePath(securityScreenPath);
-
-      if (resolvedSecurityPath) {
-        console.log(`[SCREEN] Found security screen: ${resolvedSecurityPath} (level ${secLevel})`);
-        return resolvedSecurityPath;
+  /**
+   * Check for a screen file with given security level
+   * express.e:6258-6288
+   *
+   * Priority:
+   * 1. RIP mode: .RIP
+   * 2. User screen type: .TXT.GR, .IBM, etc.
+   * 3. Plain text: .TXT
+   */
+  const checkScreen = (basePath: string): string | null => {
+    // express.e:6258-6260 - IF ripMode check .RIP first
+    if (ripMode) {
+      const ripPath = `${basePath}.RIP`;
+      const resolved = resolveCaseInsensitivePath(ripPath);
+      if (resolved) {
+        console.log(`[SCREEN] Found RIP screen: ${resolved}`);
+        return resolved;
       }
     }
 
-    // express.e:6274 - Decrement by 5
-    secLevel = secLevel - 5;
-  }
+    // express.e:6264-6267 - Check user's screen type preference
+    if (userScreenTypeExt) {
+      const normalized = normalizeScreenTypeExtension(userScreenTypeExt);
+      const userTypePath = `${basePath}${normalized}`;
+      const resolved = resolveCaseInsensitivePath(userTypePath);
+      if (resolved) {
+        console.log(`[SCREEN] Found user screen type: ${resolved}`);
+        return resolved;
+      }
+    }
 
-  // express.e:6280-6302 - Check non-security screens at end
-  // This is the fallback screen with no security level suffix
-  for (const ext of extensions) {
-    const defaultScreenPath = `${screenDirAndName}${ext}`;
-    const resolvedDefaultPath = resolveCaseInsensitivePath(defaultScreenPath);
+    // express.e:6269-6270 - Fallback to .TXT
+    for (const txtExt of TEXT_EXTENSIONS) {
+      const txtPath = `${basePath}${txtExt}`;
+      const resolved = resolveCaseInsensitivePath(txtPath);
+      if (resolved) {
+        console.log(`[SCREEN] Found text screen: ${resolved}`);
+        return resolved;
+      }
+    }
 
-    if (resolvedDefaultPath) {
-      console.log(`[SCREEN] Found default screen: ${resolvedDefaultPath}`);
-      return resolvedDefaultPath;
+    return null;
+  };
+
+  // express.e:6251-6271 - DEF_SCREENS means find non-security screens first
+  if (defScreens) {
+    // express.e:6257-6271 - Check non-security screens first
+    const nonSecurityScreen = checkScreen(screenDirAndName);
+    if (nonSecurityScreen) {
+      return nonSecurityScreen;
     }
   }
 
-  // express.e:6304 - No screen found
-  console.warn(`[SCREEN] Not found: ${screenDirAndName} (checked levels ${userSecLevel} down to ${minLevel}, plus default)`);
+  // express.e:6273-6290 - Check security screens
+  // Round down to nearest 5
+  let secLevel = Math.floor(userSecLevel / 5) * 5;
+
+  // Check security level screens (highest to lowest)
+  while (secLevel >= minLevel) {
+    const securityBasePath = `${screenDirAndName}${secLevel}`;
+    const securityScreen = checkScreen(securityBasePath);
+    if (securityScreen) {
+      return securityScreen;
+    }
+
+    // express.e:6288 - Decrement by 5
+    secLevel = secLevel - 5;
+  }
+
+  // express.e:6292-6306 - Check non-security screens at end if not DEF_SCREENS
+  if (!defScreens) {
+    const nonSecurityScreen = checkScreen(screenDirAndName);
+    if (nonSecurityScreen) {
+      return nonSecurityScreen;
+    }
+  }
+
+  // express.e:6308 - No screen found
+  console.warn(`[SCREEN] Not found: ${screenDirAndName} (checked levels ${userSecLevel} down to ${minLevel})`);
   return null;
 }
 
@@ -124,8 +171,9 @@ export function findSecurityScreen(
  * @param conferenceDir - Conference directory name (e.g., "Conf1")
  * @param bulletinNumber - Bulletin number (1, 2, 3, etc.)
  * @param userSecLevel - User's security level
- * @param petsciiMode - Whether PETSCII mode is enabled
+ * @param userScreenTypeExt - User's preferred screen type extension
  * @param ripMode - Whether RIP mode is enabled
+ * @param defScreens - DEF_SCREENS tooltype
  * @returns Full path to bulletin file, or null
  */
 export function findBulletinFile(
@@ -133,8 +181,9 @@ export function findBulletinFile(
   conferenceDir: string,
   bulletinNumber: number,
   userSecLevel: number = 0,
-  petsciiMode: boolean = false,
-  ripMode: boolean = false
+  userScreenTypeExt: string | null = null,
+  ripMode: boolean = false,
+  defScreens: boolean = false
 ): string | null {
   // express.e:24636 - StringF(str,'\sBulletins/Bull\d',confScreenDir,stat)
   const bulletinPath = path.join(
@@ -145,7 +194,7 @@ export function findBulletinFile(
     `Bull${bulletinNumber}`
   );
 
-  return findSecurityScreen(bulletinPath, userSecLevel, petsciiMode, ripMode);
+  return findSecurityScreen(bulletinPath, userSecLevel, userScreenTypeExt, ripMode, defScreens);
 }
 
 /**
@@ -154,16 +203,18 @@ export function findBulletinFile(
  * @param baseDir - Base BBS directory
  * @param conferenceDir - Conference directory name
  * @param userSecLevel - User's security level
- * @param petsciiMode - Whether PETSCII mode is enabled
+ * @param userScreenTypeExt - User's preferred screen type extension
  * @param ripMode - Whether RIP mode is enabled
+ * @param defScreens - DEF_SCREENS tooltype
  * @returns Full path to BullHelp file, or null
  */
 export function findBullHelpFile(
   baseDir: string,
   conferenceDir: string,
   userSecLevel: number = 0,
-  petsciiMode: boolean = false,
-  ripMode: boolean = false
+  userScreenTypeExt: string | null = null,
+  ripMode: boolean = false,
+  defScreens: boolean = false
 ): string | null {
   // express.e:24618-24619 - StrCopy(str,confScreenDir); StrAdd(str,'Bulletins/BullHelp')
   const bullHelpPath = path.join(
@@ -174,5 +225,5 @@ export function findBullHelpFile(
     'BullHelp'
   );
 
-  return findSecurityScreen(bullHelpPath, userSecLevel, petsciiMode, ripMode);
+  return findSecurityScreen(bullHelpPath, userSecLevel, userScreenTypeExt, ripMode, defScreens);
 }

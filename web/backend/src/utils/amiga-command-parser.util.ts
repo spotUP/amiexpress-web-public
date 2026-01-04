@@ -286,10 +286,9 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     type = (DoorType[typeStr.toUpperCase() as keyof typeof DoorType]) || DoorType.SIM;
   }
 
-  // Build command definition
+  // Build command definition - use case-insensitive replacement for DOORS: prefix
   const normalizedLocation = locationKey
-    .replace('DOORS:', 'doors/')
-    .replace('Doors:', 'doors/')
+    .replace(/^doors:/i, 'doors/')
     .replace(':', '/');
 
   const cmd: CommandDefinition = {

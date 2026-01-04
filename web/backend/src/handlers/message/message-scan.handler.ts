@@ -282,13 +282,20 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   // NOTE: We use internal handler directly instead of runSysCommand('N')
   // because n.info points to AquaScan which writes to files, not terminal
   const { joinConference } = require('../operations/conference.handler');
+  const { checkForPause } = require('../../utils/flag-pause.util');
 
   // express.e:28071 - setEnvStat(ENV_SCANNING)
   session.currentStat = 9; // ENV_SCANNING
   console.log('[confScan] Starting conference scan (express.e:28066-28150)');
 
+  // Initialize line count for pause tracking during scan
+  if (!session.tempData) session.tempData = {};
+  session.tempData.lineCount = 0;
+
   // express.e:28083 - aePuts('\b\nScanning conferences for mail...\b\n\b\n')
   socket.emit('ansi-output', '\r\nScanning conferences for mail and files...\r\n\r\n');
+  // Count the lines we just output for pause tracking
+  session.tempData.lineCount = (session.tempData.lineCount || 0) + 3;
 
   // Suppress menu prompts during conference scan
   session.inConfScan = true;
@@ -359,6 +366,14 @@ export async function performConferenceScan(socket: any, session: any): Promise<
 
         // express.e:28104 - newFilesPauseFlag:=FALSE
         session.newFilesPauseFlag = false;
+
+        // express.e:27765-27768 - checkForPause() after each conference scan
+        // This ensures user can see output before it scrolls away
+        const shouldContinue = await checkForPause(socket, session);
+        if (!shouldContinue) {
+          console.log(`[confScan] User stopped scan at conference ${conf}`);
+          mystat = -1; // RESULT_FAILURE - user aborted
+        }
       }
     } catch (err) {
       console.error(`[confScan] Conference ${conf} scan failed:`, err);

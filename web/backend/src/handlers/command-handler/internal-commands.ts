@@ -247,11 +247,10 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
       handleWriteUserParamsCommand(socket, session);
       return RESULT_SUCCESS;
 
-    // WHO command removed - should use BBSCMD door instead (WHO.info → DOORS:RTW/RTW)
-    // See express.e:26094-26103 - calls who(0) which launches door
-    // case 'WHO': // Node Information (internalCommandWHO) - express.e:26094-26103
-    //   handleWhoCommand(socket, session);
-    //   return;
+    case 'WHO': // Who's Online (internalCommandWHO) - express.e:26094-26103
+      const { handleWhoCommand } = require('../commands/info-commands.handler');
+      handleWhoCommand(socket, session);
+      return RESULT_SUCCESS;
 
     case 'WHD': // Who's Online - Detailed (internalCommandWHD) - express.e:26104-26112
       handleWhoDetailedCommand(socket, session);

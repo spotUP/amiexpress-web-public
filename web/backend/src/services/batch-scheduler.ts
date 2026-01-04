@@ -497,42 +497,97 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
   // Command format: samilog -UC"N" -O"output/path"count
   if (program.includes('samilog/samilog') || program.includes('typescript:samilog')) {
     console.log('[BatchScheduler] Running TypeScript SAmiLog');
+    const samilog = await import('../services/SamiLogService');
 
-    // Parse SAmiLog arguments: -UC"node" -O"output"count
-    let nodeNum = nodeId || 1;
-    let outputPath = 'Bulletins/bull6.txt';
-    let count = 15;
-
+    // Parse all stacked commands in order
     for (const arg of amigaArgs) {
-      // Parse -UC"N" for node number
-      const ucMatch = arg.match(/^-UC"(\d+)"$/i);
-      if (ucMatch) {
-        nodeNum = parseInt(ucMatch[1], 10);
-        console.log(`[BatchScheduler] SAmiLog node: ${nodeNum}`);
+      // 1. -C (Clear)
+      if (arg.toUpperCase() === '-C') {
+        await samilog.clearStore();
+        continue;
       }
 
-      // Parse -O"path"count for output and count
-      const oMatch = arg.match(/^-O"([^"]+)"(\d+)$/i);
-      if (oMatch) {
-        const rawPath = oMatch[1];
-        count = parseInt(oMatch[2], 10);
+      // 2. -S (Strip MiniLog)
+      const sMatch = arg.match(/^-S"(\d+)"$/i);
+      if (sMatch) {
+        await samilog.stripMiniLog(parseInt(sMatch[1], 10));
+        continue;
+      }
 
-        // Resolve BBS: assign and convert to Unix path
-        if (rawPath.toLowerCase() === '*') {
-          outputPath = 'Bulletins/bull6.txt'; // Default
+      // 3. -D (Docs)
+      const dMatch = arg.match(/^-D"([^"]+)"$/i);
+      if (dMatch) {
+        const fullPath = resolveAssign(dMatch[1]);
+        await samilog.createDocs(fullPath);
+        continue;
+      }
+
+      // 4. -U (Update)
+      const uMatch = arg.match(/^-U([SC]*)"(\d+)"$/i);
+      if (uMatch) {
+        const flags = uMatch[1].toUpperCase();
+        const updateNode = parseInt(uMatch[2], 10);
+        const updateOptions = {
+          ignoreSysop: flags.includes('S'),
+          createMiniLog: flags.includes('C')
+        };
+        await samilog.updateStoreFromCallersLog(updateNode, updateOptions);
+        continue;
+      }
+
+      // 5. -W (Weekly Stats)
+      const wMatch = arg.match(/^-W(N*)"([^"]+)"$/i);
+      if (wMatch) {
+        const options = { noAnsi: wMatch[1].toUpperCase().includes('N') };
+        const fullPath = resolveAssign(wMatch[2]);
+        const content = samilog.generateWeeklyStats(options);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content, 'latin1');
+        continue;
+      }
+
+      // 6. -R (Record Stats)
+      const rMatch = arg.match(/^-R(N*)"([^"]+)"$/i);
+      if (rMatch) {
+        const options = { noAnsi: rMatch[1].toUpperCase().includes('N') };
+        const fullPath = resolveAssign(rMatch[2]);
+        const content = samilog.generateRecordStats(options);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content, 'latin1');
+        continue;
+      }
+
+      // 7. -O (Output Bulletin)
+      const oMatch = arg.match(/^-O([NLFSTR]*)"([^"]+)"(\d+)$/i);
+      if (oMatch) {
+        const flags = oMatch[1].toUpperCase();
+        const rawPath = oMatch[2];
+        const count = parseInt(oMatch[3], 10);
+        const options = {
+          noAnsi: flags.includes('N'),
+          logoffTimes: flags.includes('L'),
+          fullNodes: flags.includes('F'),
+          showFiles: flags.includes('S'),
+          noTexts: flags.includes('T'),
+          noRecords: flags.includes('R')
+        };
+
+        let fullPath;
+        if (rawPath === '*' || rawPath.toLowerCase() === 'console:') {
+          console.log('[BatchScheduler] SAmiLog output to CONSOLE');
+          // For now, we can't easily pipe back to actual console from batch
+          continue;
         } else {
-          outputPath = resolveAssign(rawPath).replace(config.get('dataDir') + path.sep, '');
+          fullPath = resolveAssign(rawPath);
         }
-        console.log(`[BatchScheduler] SAmiLog output: ${outputPath}, count: ${count}`);
+
+        const content = samilog.generateBulletin(count, options);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content, 'latin1');
+        console.log(`[BatchScheduler] SAmiLog bulletin written to ${rawPath}`);
+        continue;
       }
     }
-
-    const baseDir = config.get('dataDir');
-    const content = generateSamiLogBulletin(count);
-    const fullPath = path.join(baseDir, outputPath);
-    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-    fs.writeFileSync(fullPath, content, 'utf-8');
-    console.log(`[BatchScheduler] SAmiLog bulletin written to ${outputPath}`);
     return;
   }
 

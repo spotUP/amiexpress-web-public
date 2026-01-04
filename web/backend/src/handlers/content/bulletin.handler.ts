@@ -36,9 +36,14 @@ function buildBulletinBaseDirs(dataDir: string): string[] {
   return [dataDir];
 }
 
-function findBullHelpAcross(baseDirs: string[], conferenceDir: string, userSecLevel: number): string | null {
+function findBullHelpAcross(
+  baseDirs: string[],
+  conferenceDir: string,
+  userSecLevel: number,
+  userScreenType: string | null = null
+): string | null {
   for (const baseDir of baseDirs) {
-    const candidate = findBullHelpFile(baseDir, conferenceDir, userSecLevel);
+    const candidate = findBullHelpFile(baseDir, conferenceDir, userSecLevel, userScreenType);
     if (candidate) {
       return candidate;
     }
@@ -50,10 +55,11 @@ function findBulletinAcross(
   baseDirs: string[],
   conferenceDir: string,
   bulletinNumber: number,
-  userSecLevel: number
+  userSecLevel: number,
+  userScreenType: string | null = null
 ): string | null {
   for (const baseDir of baseDirs) {
-    const candidate = findBulletinFile(baseDir, conferenceDir, bulletinNumber, userSecLevel);
+    const candidate = findBulletinFile(baseDir, conferenceDir, bulletinNumber, userSecLevel, userScreenType);
     if (candidate) {
       return candidate;
     }
@@ -69,11 +75,12 @@ function findBulletinAcross(
  * @param session - BBS session
  * @param baseDirs - Candidate base directories to search (root + legacy BBS)
  */
-function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], conferenceDir: string): void {
+async function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], conferenceDir: string): Promise<void> {
   // express.e:24618-24620 - Find and display BullHelp screen
   const userSecLevel = session.user?.secLevel || 0;
+  const userScreenType = session.user?.screentype || null;
 
-  const bullHelpPath = findBullHelpAcross(baseDirs, conferenceDir, userSecLevel);
+  const bullHelpPath = findBullHelpAcross(baseDirs, conferenceDir, userSecLevel, userScreenType);
 
   if (bullHelpPath) {
     // Load and display the file
@@ -82,7 +89,8 @@ function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], co
 
       // Parse MCI codes
       if (_parseMciCodes) {
-        content = _parseMciCodes(content, session);
+        const parseResult = await _parseMciCodes(content, session);
+        content = parseResult.parsed || content;
       }
 
       // Add ESC prefix to ANSI codes
@@ -120,18 +128,19 @@ function displayBullHelpScreen(socket: any, session: any, baseDirs: string[], co
  * @param nonStop - If true, disable pause prompts
  * @returns True if bulletin was displayed, false otherwise
  */
-function displayBulletin(
+async function displayBulletin(
   socket: any,
   session: any,
   baseDirs: string[],
   conferenceDir: string,
   bulletinNumber: number,
   nonStop: boolean = false
-): boolean {
+): Promise<boolean> {
   // express.e:24636-24640 - Find and display bulletin file
   const userSecLevel = session.user?.secLevel || 0;
+  const userScreenType = session.user?.screentype || null;
 
-  const bulletinPath = findBulletinAcross(baseDirs, conferenceDir, bulletinNumber, userSecLevel);
+  const bulletinPath = findBulletinAcross(baseDirs, conferenceDir, bulletinNumber, userSecLevel, userScreenType);
 
   if (bulletinPath) {
     // Load and display the file
@@ -140,7 +149,8 @@ function displayBulletin(
 
       // Parse MCI codes
       if (_parseMciCodes) {
-        content = _parseMciCodes(content, session);
+        const parseResult = await _parseMciCodes(content, session);
+        content = parseResult.parsed || content;
       }
 
       // Add ESC prefix to ANSI codes
@@ -179,7 +189,7 @@ function displayBulletin(
  * @param session - BBS session
  * @param params - Command parameters (bulletin number, flags like NS)
  */
-export function handleBulletinCommand(socket: any, session: any, params: string = ''): void {
+export async function handleBulletinCommand(socket: any, session: any, params: string = ''): Promise<void> {
   // express.e:24613 - Check ACS_READ_BULLETINS permission
   if (!checkSecurity(session.user, ACSPermission.READ_BULLETINS)) {
     ErrorHandler.permissionDenied(socket, 'read bulletins', {
@@ -197,8 +207,9 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   const dataDir = config.getConfig().dataDir;
   const baseDirs = buildBulletinBaseDirs(dataDir);
   const conferenceDir = `Conf${session.currentConf || 1}`;
+  const userScreenType = session.user?.screentype || null;
 
-  if (!findBullHelpAcross(baseDirs, conferenceDir, session.user?.secLevel || 0)) {
+  if (!findBullHelpAcross(baseDirs, conferenceDir, session.user?.secLevel || 0, userScreenType)) {
     // express.e:24619-24620 - myError(ERR_NO_BULLS)
     ErrorHandler.sendError(socket, 'No bulletins are available.', {
       nextState: LoggedOnSubState.DISPLAY_MENU
@@ -214,7 +225,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   // If bulletin number provided, display it directly
   if (bulletinNumber !== null) {
     // express.e:24636-24640 - Display bulletin
-    displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
+    await displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // express.e:24643-24646 - Jump back to inputAgain (prompt for another bulletin)
     // For now, just return to menu - we'll implement the loop in future iteration
@@ -223,7 +234,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
   }
 
   // express.e:24629-24633 - No params provided, show help and prompt
-  displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
+  await displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
 
   // express.e:24635-24636 - Prompt for bulletin number
   socket.emit('ansi-output', '\r\n');
@@ -246,7 +257,7 @@ export function handleBulletinCommand(socket: any, session: any, params: string 
  * @param session - BBS session
  * @param input - User's input (bulletin number or ?)
  */
-export function handleBulletinInput(socket: any, session: any, input: string): void {
+export async function handleBulletinInput(socket: any, session: any, input: string): Promise<void> {
   const trimmedInput = input.trim();
 
   // express.e:24638-24641 - Handle empty input (return to menu)
@@ -263,7 +274,7 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;
-    displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
+    await displayBullHelpScreen(socket, session, baseDirs, conferenceDir);
 
     // Prompt again
     socket.emit('ansi-output', '\r\n');
@@ -285,7 +296,7 @@ export function handleBulletinInput(socket: any, session: any, input: string): v
     const dataDir = config.getConfig().dataDir;
     const baseDirs = buildBulletinBaseDirs(dataDir);
     const conferenceDir = `Conf${session.currentConf || 1}`;
-    displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
+    await displayBulletin(socket, session, baseDirs, conferenceDir, bulletinNumber, nonStopDisplayFlag);
 
     // Prompt for another bulletin (express.e:24643 - JUMP inputAgain)
     socket.emit('ansi-output', '\r\n');

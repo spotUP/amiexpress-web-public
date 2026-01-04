@@ -731,9 +731,17 @@ export async function displayNewFiles(socket: any, session: BBSSession, params: 
 
 // Display new files from database - express.e:27906-27950 myNewFiles()
 async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
-  const { checkForPause, flagPause } = require('../utils/flag-pause.util');
+  const { checkForPause, flagPause } = require('../../utils/flag-pause.util');
   let foundNewFiles = false;
   let totalNewFiles = 0;
+
+  // Helper to emit output and track lines for pause purposes
+  const emitLine = (text: string, lineCount: number = 1) => {
+    socket.emit('ansi-output', text);
+    // Track lines for checkForPause()
+    if (!session.tempData) session.tempData = {};
+    session.tempData.lineCount = (session.tempData.lineCount || 0) + lineCount;
+  };
 
   // Loop through all file areas in conference - express.e:27906 WHILE(fLLoop<=dirScan)
   for (let dirIndex = 0; dirIndex < areas.length; dirIndex++) {
@@ -741,7 +749,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
 
     try {
       // express.e:27914,27928 - Output "Scanning directory X" for each directory
-      socket.emit('ansi-output', `Scanning ${area.name || 'directory ' + (dirIndex + 1)}...\r\n`);
+      emitLine(`Scanning ${area.name || 'directory ' + (dirIndex + 1)}...\r\n`, 1);
 
       // express.e:27934-27938 - Pause after each directory
       // During confScan (newFilesPauseFlag=TRUE), use checkForPause()
@@ -784,34 +792,44 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
         foundNewFiles = true;
         totalNewFiles += newFiles.length;
 
-        // Display area header
-        socket.emit('ansi-output', `\r\n\x1b[33m${area.name}\x1b[0m\r\n`);
+        // Display area header (2-3 lines)
+        emitLine(`\r\n\x1b[33m${area.name}\x1b[0m\r\n`, 2);
         if (area.description) {
-          socket.emit('ansi-output', `${area.description}\r\n`);
+          emitLine(`${area.description}\r\n`, 1);
         }
-        socket.emit('ansi-output', '\r\n');
+        emitLine('\r\n', 1);
 
-        // Display each new file
-        newFiles.forEach((file: any) => {
+        // Display each new file with pause check
+        for (const file of newFiles) {
           const sizeKB = Math.ceil(file.size / 1024);
           const uploadDate = new Date(file.uploaddate).toLocaleDateString();
 
           // Format: filename  sizeKB  date  uploader
-          socket.emit('ansi-output',
+          emitLine(
             `\x1b[32m${file.filename.padEnd(20)}\x1b[0m ` +
             `\x1b[36m${String(sizeKB).padStart(6)}KB\x1b[0m ` +
             `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
-            `\x1b[37m${file.uploader}\x1b[0m\r\n`
+            `\x1b[37m${file.uploader}\x1b[0m\r\n`,
+            1
           );
 
           // Show description if available
           if (file.description) {
             const desc = file.description.substring(0, 70);
-            socket.emit('ansi-output', `  \x1b[37m${desc}\x1b[0m\r\n`);
+            emitLine(`  \x1b[37m${desc}\x1b[0m\r\n`, 1);
           }
-        });
 
-        socket.emit('ansi-output', `\r\n\x1b[36m${newFiles.length} new file(s) in this area\x1b[0m\r\n`);
+          // Check for pause after each file listing
+          if (session.newFilesPauseFlag) {
+            const cont = await checkForPause(socket, session);
+            if (!cont) {
+              console.log('[displayNewFilesFromDatabase] User stopped during file listing');
+              return; // Exit early
+            }
+          }
+        }
+
+        emitLine(`\r\n\x1b[36m${newFiles.length} new file(s) in this area\x1b[0m\r\n`, 2);
       }
     } catch (error) {
       console.error(`[displayNewFilesFromDatabase] Error for area ${area.name}:`, error);
@@ -819,15 +837,15 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
   }
 
   // Summary - express.e always shows this
-  socket.emit('ansi-output', '\r\n');
+  emitLine('\r\n', 1);
   if (foundNewFiles) {
-    socket.emit('ansi-output', `\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`);
+    emitLine(`\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`, 1);
   } else {
-    socket.emit('ansi-output', '\x1b[33mNo new files found since last login\x1b[0m\r\n');
+    emitLine('\x1b[33mNo new files found since last login\x1b[0m\r\n', 1);
   }
 
   if (!nonStop) {
-    socket.emit('ansi-output', '\r\n');
+    emitLine('\r\n', 1);
   }
 }
 

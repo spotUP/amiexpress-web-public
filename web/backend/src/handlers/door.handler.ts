@@ -1501,7 +1501,7 @@ async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Doo
     if (showPreloader) {
       const { showPreloaderWhile } = require('../../../../sdk/utils/door-preloader');
       // Pass socket directly - session.socket doesn't exist, socket is a separate parameter
-      const doorDisplayName = door.title || door.name || door.command || 'Application';
+      const doorDisplayName = door.name || door.command || 'Application';
       doorModule = await showPreloaderWhile(
         socket,
         doorDisplayName,
