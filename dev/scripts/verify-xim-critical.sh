@@ -65,6 +65,28 @@ if grep -q "doorParams = paramString" web/backend/src/handlers/door.handler.ts; 
 fi
 
 echo ""
+
+# Check #3: AEDoorPort owned by door task
+echo "[3/3] Verifying AEDoorPort is owned by door task (not BBS task)..."
+# Check for currentTask within createAEDoorPort function (multiline call, up to 25 lines)
+if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.currentTask"; then
+  echo "      [OK] AEDoorPort uses this.currentTask (door task)"
+else
+  echo "      [ERROR] AEDoorPort does not use this.currentTask"
+  echo "      Port must be owned by door task to receive signals!"
+  echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #3"
+  FAILED=1
+fi
+
+# Check that it's NOT using bbsTask
+if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.bbsTask"; then
+  echo "      [ERROR] AEDoorPort uses this.bbsTask instead of this.currentTask"
+  echo "      This signals BBS task instead of door task - door hangs in Wait()!"
+  echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #3"
+  FAILED=1
+fi
+
+echo ""
 echo "=== Verification Complete ==="
 
 if [ $FAILED -eq 1 ]; then

@@ -4709,11 +4709,13 @@ console.log(
     // and Wait for 0x11000 = bit 16 (reply) | bit 12 (AEDoorPort)
     const AEDOORPORT_SIGBIT = 12;
 
-    // CRITICAL: Use BBS task as owner, NOT the door task
-    // This prevents door from signaling itself when it sends to AEDoorPort
+    // CRITICAL: Use DOOR task as owner so door gets signaled when messages arrive
+    // Door calls GetMsg() on AEDoorPort1, then Wait(0x1000) to block until signaled.
+    // When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
+    // Previous code used bbsTask which signaled wrong task causing doors to hang.
     const portAddr = this.createPublicPort(
       name,
-      this.bbsTask,
+      this.currentTask,  // Door task, not BBS task
       AEDOORPORT_SIGBIT
     );
 
@@ -4721,7 +4723,7 @@ console.log(
       `[ExecLibrary] Created AEDoorPort "${name}" at 0x${portAddr.toString(
         16
       )} ` +
-        `(sigBit=${AEDOORPORT_SIGBIT}, owner=BBS Task 0x${this.bbsTask.address.toString(
+        `(sigBit=${AEDOORPORT_SIGBIT}, owner=Door Task 0x${this.currentTask.address.toString(
           16
         )})`
     );

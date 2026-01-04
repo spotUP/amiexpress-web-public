@@ -140,7 +140,72 @@ Without the command name, AquaScan validation fails and the door exits.
 
 ---
 
-## CRITICAL REQUIREMENT #3: XIM Message Reply Order
+## CRITICAL REQUIREMENT #3: AEDoorPort Must Be Owned by Door Task
+
+### The Issue
+AEDoorPort1 must be owned by the DOOR task (currentTask), NOT the BBS task (bbsTask). When messages arrive, Signal() must wake the DOOR task that's blocking in Wait(), not the BBS task.
+
+### Where This Is Implemented
+**File:** `web/backend/src/amiga-emulation/api/ExecLibrary.ts`
+
+**Function:** `createAEDoorPort()` (around line 4708)
+
+### CORRECT Implementation
+```typescript
+// CRITICAL: Use DOOR task as owner so door gets signaled when messages arrive
+// Door calls GetMsg() on AEDoorPort1, then Wait(0x1000) to block until signaled.
+// When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
+const portAddr = this.createPublicPort(
+  name,
+  this.currentTask,  // Door task, not BBS task
+  AEDOORPORT_SIGBIT
+);
+```
+
+### WRONG Implementation (DO NOT USE)
+```typescript
+// WRONG - Signals BBS task instead of door task, door never wakes from Wait()!
+const portAddr = this.createPublicPort(
+  name,
+  this.bbsTask,  // <- WRONG! Door hangs in Wait()
+  AEDOORPORT_SIGBIT
+);
+```
+
+### How to Verify
+```bash
+# Check port creation in ExecLibrary.ts
+grep -A5 "createPublicPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -B2 -A2 "AEDoorPort"
+
+# MUST use: this.currentTask
+# MUST NOT use: this.bbsTask
+```
+
+### Test Cases
+**Check backend log after door starts:**
+```
+Expected: [ExecLibrary] Created AEDoorPort "AEDoorPort1" at 0x100000 (sigBit=12, owner=Door Task 0x90000)
+Wrong:    [ExecLibrary] Created AEDoorPort "AEDoorPort1" at 0x100000 (sigBit=12, owner=BBS Task 0x88000)
+```
+
+### Why This Matters
+1. Door calls `GetMsg(AEDoorPort1)` → no messages
+2. Door calls `Wait(0x1000)` → blocks waiting for signal on bit 12
+3. BBS calls `PutMsg(AEDoorPort1, msg)` → queues message
+4. BBS calls `Signal(port->sigTask, 0x1000)` → wakes task
+5. **If sigTask is BBS task:** Door never wakes, hangs forever
+6. **If sigTask is door task:** Door wakes, calls GetMsg, gets message
+
+### Reference
+- **Exec message passing:** AmigaOS NDK docs
+- **Wait/Signal protocol:** Doors block in Wait() until signaled
+
+### Regression History
+- **2026-01-04:** Fixed - was using bbsTask, causing all XIM doors to hang
+
+---
+
+## CRITICAL REQUIREMENT #4: XIM Message Reply Order
 
 ### The Issue
 XIM messages MUST be replied to in the order they are received. Doors expect synchronous request-reply protocol.
