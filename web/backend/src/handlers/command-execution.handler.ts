@@ -266,8 +266,11 @@ async function runCommand(
 
   // Cache command + params for XIM BB_MAINLINE replies (express.e:3794-3800).
   session.currentCommand = cmdUpper;
-  session.commandParams = params || '';
-  session.doorParams = params || '';
+  // IMPORTANT: doorParams must be FULL command line (command + params) for EXPRESS_VERSION
+  // See XIM_CRITICAL_REQUIREMENTS.md #2. This may be overwritten by door.handler.ts:2240.
+  const fullCommandLine = cmdUpper + (params ? ' ' + params : '');
+  session.commandParams = fullCommandLine;
+  session.doorParams = fullCommandLine;
 
   // Set environment status (express.e:4710)
   // For file scan commands (FR, F, N, CS, SCAN, NSU), set ENV_FILES (8)
