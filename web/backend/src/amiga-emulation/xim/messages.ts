@@ -176,13 +176,18 @@ console.log(`  String: "${messageString}"`);
 
   /**
    * Write to the embedded message string (msg->String)
+   * Also updates strPtr to point to the embedded buffer in case door reads via pointer
    */
   writeMessageString(msgAddr: number, value: string): void {
-    this.writeString(
-      msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
-      value,
-      DoorConstants.MESSAGE_STRING_CAPACITY
-    );
+    const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
+
+    // Write the string to embedded buffer
+    this.writeString(stringAddr, value, DoorConstants.MESSAGE_STRING_CAPACITY);
+
+    // CRITICAL: Update strPtr to point to embedded buffer
+    // Some doors read via strPtr instead of embedded buffer directly
+    // If strPtr is 0 (not set by door), door would read garbage and crash
+    this.writeStringPointer(msgAddr, stringAddr);
   }
 
   /**

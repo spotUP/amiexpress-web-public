@@ -278,6 +278,8 @@ export interface BBSSession {
   currentMsgBase: number;
   timeRemaining: number;
   lastActivity: number;
+  logonTime?: number; // Unix timestamp when user logged on (express.e:540)
+  lastTimeUpdate?: number; // Unix timestamp of last time update (express.e:541,552)
   confRJoin: number; // Default conference to join (from user preferences)
   msgBaseRJoin: number; // Default message base to join
   commandBuffer: string; // Buffer for command input

@@ -56,6 +56,7 @@ export class DisconnectionModal {
         bg: 'black',
         border: { fg: 'red' },
       },
+      trapFocus: true,
       // @ts-ignore - zIndex exists but not in types
       zIndex: 999,
     });

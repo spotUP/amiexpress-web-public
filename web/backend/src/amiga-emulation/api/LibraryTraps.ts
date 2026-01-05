@@ -1141,6 +1141,22 @@ console.log(
     this.emulator.setRegister(15, sp + 4); // Pop return address from ORIGINAL stack
     const spAfter = this.emulator.getRegister(15);
 
+    // STACK CORRUPTION DETECTION: Validate return address looks reasonable
+    // Most door code is in range 0x1000-0x100000, return addresses outside suggest corruption
+    const libName = this.getLibraryName(library);
+    if (returnAddr < 0x1000 || returnAddr > 0x1000000) {
+      console.error(`[LibraryTraps][STACK_CORRUPT] ${libName}::${vector.name} - Invalid return address!`);
+      console.error(`  PC when trapped: 0x${pc.toString(16)}`);
+      console.error(`  SP: 0x${sp.toString(16)}`);
+      console.error(`  Return address at [SP]: 0x${returnAddr.toString(16)} (INVALID - outside [0x1000-0x1000000])`);
+      console.error(`  A6 (library base): 0x${a6.toString(16)}`);
+      console.error(`  Stack contents at SP:`);
+      for (let i = 0; i < 8; i++) {
+        const val = this.emulator.readMemory32(sp + i * 4);
+        console.error(`    [SP+${i * 4}]: 0x${val.toString(16)}`);
+      }
+    }
+
     if (DEBUG_LIBRARY_TRAPS) {
 console.log(
         `[LibraryTraps]   SP before pop: 0x${sp.toString(

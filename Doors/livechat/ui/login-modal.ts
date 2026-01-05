@@ -62,6 +62,7 @@ export class LoginModal {
         bg: 'black',
         border: { fg: 'cyan' },
       },
+      trapFocus: true,
       // @ts-ignore - zIndex exists but not in types
       zIndex: 999,
     });
@@ -169,26 +170,21 @@ export class LoginModal {
       this.handleSubmit();
     });
 
-    // Intercept Enter key at screen level to prevent textarea clearing
-    this.screen.key(['enter'], () => {
-      // Use getFocused() method - there is no .focused property on Screen
-      const focused = this.screen.getFocused();
+    // Enter key handling on focused fields
+    this.usernameInput.key(['enter', 'return'], () => {
+      this.passwordInput.focus();
+      this.screen.render();
+      return true;
+    });
 
+    this.passwordInput.key(['enter', 'return'], () => {
+      this.handleSubmit();
+      return true;
+    });
 
-      if (focused === this.usernameInput) {
-        // Move to password field
-        this.passwordInput.focus();
-        this.screen.render();
-        return false;
-      } else if (focused === this.passwordInput) {
-        // Submit form
-        this.handleSubmit();
-        return false;
-      } else if (focused === this.loginButton) {
-        // Button pressed
-        this.handleSubmit();
-        return false;
-      }
+    this.loginButton.key(['enter', 'return'], () => {
+      this.handleSubmit();
+      return true;
     });
 
     // ESC key to clear
@@ -200,19 +196,23 @@ export class LoginModal {
       this.screen.render();
     });
 
-    // Tab to switch between fields - MUST be at screen level because screen intercepts Tab
-    this.screen.key(['tab'], () => {
-      const focused = this.screen.getFocused();
-
-      if (focused === this.usernameInput) {
-        this.passwordInput.focus();
-      } else if (focused === this.passwordInput) {
-        this.loginButton.focus();
-      } else if (focused === this.loginButton) {
-        this.usernameInput.focus();
-      }
+    // Tab to switch between fields
+    this.usernameInput.key(['tab'], () => {
+      this.passwordInput.focus();
       this.screen.render();
-      return false; // Prevent default Tab handling
+      return true;
+    });
+
+    this.passwordInput.key(['tab'], () => {
+      this.loginButton.focus();
+      this.screen.render();
+      return true;
+    });
+
+    this.loginButton.key(['tab'], () => {
+      this.usernameInput.focus();
+      this.screen.render();
+      return true;
     });
   }
 

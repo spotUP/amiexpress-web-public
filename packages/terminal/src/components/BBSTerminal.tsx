@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
+import { ModemEmulator } from '../utils/modem-emulator';
 
 // RIP Graphics types (inline to avoid package dependency)
 const RIP_WIDTH = 640;
@@ -111,6 +112,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const zmodemRef = useRef<any | null>(null);
   const mediaHandlerRef = useRef<MediaHandler | null>(null);
   const sfxBufferRef = useRef<string>('');
+  const modemEmulatorRef = useRef<ModemEmulator | null>(null);
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
@@ -439,6 +441,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     term.open(terminalRef.current);
     terminalInstance.current = term;
 
+    // Initialize modem emulator for client-side speed throttling
+    modemEmulatorRef.current = new ModemEmulator(term);
+
     // Add native wheel event listener directly to xterm element (React onWheel doesn't capture xterm's wheel events)
     const xtermElement = terminalRef.current.querySelector('.xterm-screen') || terminalRef.current;
     const nativeWheelHandler = (ev: WheelEvent) => {
@@ -615,9 +620,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const KEY_REPEAT_DELAY = 250;  // Initial delay before repeat starts (ms) - allows single char typing
     const KEY_REPEAT_RATE = 33;    // Interval between repeats (ms) - 30 keys/sec
 
-    // Keys that should NOT auto-repeat (games track state for these)
+    // Keys that should NOT auto-repeat
+    // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs
+    // Games that need single-press arrow handling should track state themselves
     const NO_REPEAT_KEYS = new Set([
-      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
       'w', 'W', 'a', 'A', 's', 'S', 'd', 'D',
       ' ', 'Control', 'Shift', 'Alt', 'Meta',
       'Escape', 'Enter', 'Tab'
@@ -745,7 +751,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('video:start-stream', async (data, callback) => {
       try {
         const { options } = data;
-        await mediaHandler.startVideo(options?.width, options?.height, options?.fps);
+        await mediaHandler.startVideo(options?.width, options?.height, options?.fps, options?.mode);
         callback({ success: true, streamId: `video-${socket.id}` });
       } catch (err: any) {
         callback({ success: false, error: err.message });
@@ -1183,7 +1189,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         console.log('[RIP] Buffered RIP content, length:', ripBuffer.current.length);
       }
 
-      term.write(data);
+      // Use modem emulator for client-side speed throttling
+      if (modemEmulatorRef.current) {
+        modemEmulatorRef.current.write(data);
+      } else {
+        term.write(data);
+      }
       term.refresh(0, term.rows - 1);
     });
 
@@ -1200,6 +1211,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.write(data);
       term.refresh(0, term.rows - 1);
       console.log('[PETSCII] PETSCII content written to terminal');
+    });
+
+    // Modem speed emulation handler
+    socket.on('modem-speed', (bps: number) => {
+      console.log(`[ModemEmulator] Speed changed to ${bps} bps`);
+      if (modemEmulatorRef.current) {
+        if (bps > 0) {
+          modemEmulatorRef.current.enable(bps);
+        } else {
+          modemEmulatorRef.current.disable();
+        }
+      }
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)

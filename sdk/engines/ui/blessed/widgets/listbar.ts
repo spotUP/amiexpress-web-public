@@ -4,7 +4,7 @@
 
 import { Box } from './box';
 import { Button } from './button';
-import type { Colors, ElementOptions } from '../core/types';
+import type { Colors, ElementOptions, KeyEvent } from '../core/types';
 
 export interface ListbarOptions extends ElementOptions {
   style?: ElementOptions['style'] & {
@@ -89,17 +89,31 @@ export class Listbar extends Box {
     }
 
     // Setup navigation keys
-    this.key(['left', 'h'], () => {
+    this.on('keypress', this._onKeypress.bind(this));
+  }
+
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.focused) return false;
+
+    if (key.name === 'left' || key.name === 'h') {
       this.selectPrevious();
-    });
+      this.screen?.render();
+      return true;
+    }
 
-    this.key(['right', 'l'], () => {
+    if (key.name === 'right' || key.name === 'l') {
       this.selectNext();
-    });
+      this.screen?.render();
+      return true;
+    }
 
-    this.key(['enter', 'space'], () => {
+    if (key.name === 'enter' || key.name === 'space') {
       this.selectCurrent();
-    });
+      this.screen?.render();
+      return true;
+    }
+
+    return false;
   }
 
   /**

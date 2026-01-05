@@ -566,16 +566,33 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
         // Track if we see the same jump size repeatedly (indicates stuck execution pattern)
         // BUT: Don't trigger on legitimate Wait() loops - doors wait for XIM messages
-        // ALSO: Don't trigger for XIM doors at all - they legitimately loop polling for messages
+        // XIM doors CAN legitimately loop polling for messages while waiting for input
         const isInWaitLoop = this.emulator.isPaused() ||
                             (this.libraryManager?.execLibrary as any)?.currentTask?.isWaiting;
         const isXIMDoor = this.config.doorType === 'XIM';
+        const isPCInCodeRegion = pcAfterBatch >= this.codeLowerBound && pcAfterBatch <= this.codeUpperBound;
 
-        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize && !isInWaitLoop && !isXIMDoor) {
+        // CRITICAL: Check if XIM door is waiting for user input (sent JH_HK/JH_LI, awaiting reply)
+        // When waiting for input, doors poll GetMsg repeatedly - this is NORMAL, not stuck!
+        // The PC may be in trap handler code (0xc00000+) which is outside door's code region
+        const isWaitingForXIMInput = this.ximProtocol?.isWaitingForLineInput() ?? false;
+
+        // Skip stuck detection if:
+        // 1. Emulator is paused or task is waiting (isInWaitLoop)
+        // 2. XIM door with PC in valid code region (normal execution)
+        // 3. XIM door waiting for user input (polling GetMsg for our reply)
+        const skipStuckDetection = isInWaitLoop || (isXIMDoor && isPCInCodeRegion) || isWaitingForXIMInput;
+
+        // DEBUG: Log stuck loop detection state when PC is outside code region
+        if (!isPCInCodeRegion && pcAfterBatch > 0x100000) {
+          console.log(`[DoorLifecycleManager][STUCK_DEBUG] pc=0x${pcAfterBatch.toString(16)} jumpSize=0x${jumpSize.toString(16)} lastJump=0x${(this.executionState.lastJumpSize || 0).toString(16)} skip=${skipStuckDetection} inWait=${isInWaitLoop} ximWait=${isWaitingForXIMInput} count=${this.executionState.stuckLoopCount}`);
+        }
+
+        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize && !skipStuckDetection) {
           this.executionState.stuckLoopCount++;
           if (this.executionState.stuckLoopCount > 10) {
 console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x${jumpSize.toString(16)} repeatedly (${this.executionState.stuckLoopCount} times)`);
-console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}`);
+console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}, code region: [0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`);
             this.terminate();
             return;
           }

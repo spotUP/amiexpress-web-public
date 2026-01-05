@@ -3,16 +3,7 @@
  */
 
 import { Box } from './box';
-import type { ElementOptions } from '../core/types';
-
-export interface VideoOptions extends ElementOptions {
-  src?: string;
-  file?: string;
-  autoPlay?: boolean;
-  loop?: boolean;
-  controls?: boolean;
-  muted?: boolean;
-}
+import type { ElementOptions, VideoOptions } from '../core/types';
 
 export class Video extends Box {
   private src: string = '';

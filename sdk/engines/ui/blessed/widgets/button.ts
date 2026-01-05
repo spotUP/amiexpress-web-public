@@ -9,13 +9,13 @@ export class Button extends Element {
   constructor(options: ButtonOptions = {}) {
     const baseStyle = options.style ?? {};
     const focusStyle = {
-      fg: 'white',
-      bg: 'lightblue',
+      fg: 'black',
+      bg: 'yellow',
       ...(baseStyle.focus ?? {}),
     };
     const hoverStyle = {
-      fg: 'white',
-      bg: 'lightblue',
+      fg: 'black',
+      bg: 'cyan',
       ...(baseStyle.hover ?? {}),
     };
 
@@ -61,14 +61,17 @@ export class Button extends Element {
     });
   }
 
-  private _onKeypress(ch: any, key: KeyEvent): void {
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
     if (!this.focused) {
-      return;
+      return false;
     }
 
     if (key.name === 'enter' || key.name === 'space') {
       this.press();
+      return true;
     }
+
+    return false;
   }
 
   private _onClick(): void {

@@ -15,29 +15,29 @@ echo ""
 
 FAILED=0
 
-# Check #1: INIT/STAT messages are sent
-echo "[1/2] Verifying sendStartupMessage() calls sendInitAndStatusMessages()..."
-if grep -q "this.sendInitAndStatusMessages()" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts; then
-  echo "      [OK] sendInitAndStatusMessages() is called"
+# Check #1: BBS does NOT send INIT/STAT (door sends JH_REGISTER first)
+echo "[1/5] Verifying BBS does NOT send INIT/STAT messages..."
+if grep -q "waiting for door to send JH_REGISTER" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts; then
+  echo "      [OK] BBS waits for door to initiate (correct XIM protocol)"
 else
-  echo "      [ERROR] sendStartupMessage() does not call sendInitAndStatusMessages()"
-  echo "      This will cause AquaScan, JoinCnf, and other old-style XIM doors to hang!"
+  echo "      [ERROR] sendStartupMessage() does not wait for door to send JH_REGISTER"
+  echo "      BBS must NOT send first - door initiates with JH_REGISTER!"
   echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #1"
   FAILED=1
 fi
 
-# Check that it's NOT skipping
-if grep -q "Skipping startup messages" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts; then
-  echo "      [ERROR] sendStartupMessage() is skipping INIT/STAT messages"
-  echo "      This will cause doors to hang in polling loops!"
+# Check that it's NOT calling sendInitAndStatusMessages
+if grep -q "this\.sendInitAndStatusMessages()" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts | grep -v "DO NOT CALL"; then
+  echo "      [ERROR] sendStartupMessage() calls sendInitAndStatusMessages()"
+  echo "      BBS must NOT send INIT/STAT - door sends JH_REGISTER first!"
   echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #1"
   FAILED=1
 fi
 
 echo ""
 
-# Check #2: EXPRESS_VERSION uses fullCommandLine
-echo "[2/2] Verifying doorParams uses fullCommandLine (command + params)..."
+# Check #2a: EXPRESS_VERSION uses fullCommandLine in door.handler.ts
+echo "[2/5] Verifying doorParams uses fullCommandLine (command + params)..."
 if grep -q "fullCommandLine.*door.command" web/backend/src/handlers/door.handler.ts; then
   echo "      [OK] fullCommandLine is constructed from door.command"
 else
@@ -66,23 +66,55 @@ fi
 
 echo ""
 
-# Check #3: AEDoorPort owned by door task
-echo "[3/3] Verifying AEDoorPort is owned by door task (not BBS task)..."
-# Check for currentTask within createAEDoorPort function (multiline call, up to 25 lines)
-if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.currentTask"; then
-  echo "      [OK] AEDoorPort uses this.currentTask (door task)"
+# Check #2b: DoorMessageHandler EXPRESS_VERSION fallback returns doorParams, not version
+echo "[3/5] Verifying DoorMessageHandler EXPRESS_VERSION returns doorParams..."
+if grep -A10 "case XIMCommand.EXPRESS_VERSION" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts | grep -q "doorParams\|commandParams"; then
+  echo "      [OK] DoorMessageHandler EXPRESS_VERSION reads doorParams/commandParams"
 else
-  echo "      [ERROR] AEDoorPort does not use this.currentTask"
-  echo "      Port must be owned by door task to receive signals!"
+  echo "      [ERROR] DoorMessageHandler EXPRESS_VERSION does not read doorParams"
+  echo "      Fallback handler must return command line, not version number!"
+  echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #2"
+  FAILED=1
+fi
+
+# Check that it's NOT using getExpressMajorVersion
+if grep -A10 "case XIMCommand.EXPRESS_VERSION" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts | grep -q "getExpressMajorVersion"; then
+  echo "      [ERROR] DoorMessageHandler EXPRESS_VERSION returns getExpressMajorVersion() instead of doorParams"
+  echo "      This returns version number instead of command line ('N S U')!"
+  echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #2"
+  FAILED=1
+fi
+
+echo ""
+
+# Check #4: AEDoorPort owned by BBS task (not door task)
+echo "[4/5] Verifying AEDoorPort is owned by BBS task (not door task)..."
+# Check for bbsTask within createAEDoorPort function (multiline call, up to 25 lines)
+if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.bbsTask"; then
+  echo "      [OK] AEDoorPort uses this.bbsTask (BBS Handler Task)"
+else
+  echo "      [ERROR] AEDoorPort does not use this.bbsTask"
+  echo "      Port must be owned by BBS Handler Task to prevent door from signaling itself!"
   echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #3"
   FAILED=1
 fi
 
-# Check that it's NOT using bbsTask
-if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.bbsTask"; then
-  echo "      [ERROR] AEDoorPort uses this.bbsTask instead of this.currentTask"
-  echo "      This signals BBS task instead of door task - door hangs in Wait()!"
+# Check that it's NOT using currentTask
+if grep -A25 "createAEDoorPort" web/backend/src/amiga-emulation/api/ExecLibrary.ts | grep -q "this\.currentTask"; then
+  echo "      [ERROR] AEDoorPort uses this.currentTask instead of this.bbsTask"
+  echo "      This causes signal bit mismatch - door deadlocks in Wait()!"
   echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #3"
+  FAILED=1
+fi
+
+# Check #5: XIM message reply order (verify ReplyMsg is implemented)
+echo "[5/5] Verifying XIM message reply is implemented..."
+if grep -q "ReplyMsg\|replyMsg" web/backend/src/amiga-emulation/session/DoorMessageHandler.ts; then
+  echo "      [OK] ReplyMsg handling is implemented"
+else
+  echo "      [ERROR] ReplyMsg handling is not implemented"
+  echo "      Doors expect synchronous request-reply protocol!"
+  echo "      See: Documentation/3-Developers/XIM_CRITICAL_REQUIREMENTS.md #4"
   FAILED=1
 fi
 

@@ -1696,9 +1696,6 @@ export class Screen extends Element {
 
   // Called by external input handler
   _handleKey(ch: any, key: KeyEvent): void {
-    // DEBUG: Log all key events
-    console.log(`[Screen._handleKey] key.name=${key.name} key.full=${key.full} focused=${this._focused?.constructor?.name || 'null'}`);
-
     // Attempt to unlock audio on first interaction
     if ((this as any)._audioUnlocked === undefined) {
       (this as any)._audioUnlocked = true;
@@ -1747,7 +1744,6 @@ export class Screen extends Element {
 
     // Default Tab/Shift-Tab and Arrow keys for focus navigation (only if not handled by widget)
     if (!handled) {
-      console.log(`[Screen._handleKey] Not handled by widget, checking default navigation for key.name=${key.name}`);
       const keyName = key.name;
       if (keyName === 'tab') {
         if (key.shift) {

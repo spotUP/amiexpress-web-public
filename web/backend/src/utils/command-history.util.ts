@@ -38,6 +38,13 @@ export function addToHistory(session: BBSSession, text: string): void {
       session.historyIndex = 0;
     }
   }
+
+  // Persist history immediately so it survives logoff/reconnect even if logoff save fails.
+  if (session.user?.id) {
+    saveHistory(session, session.user.id).catch((error) => {
+      console.error('[CommandHistory] Error saving history after add:', error);
+    });
+  }
 }
 
 /**

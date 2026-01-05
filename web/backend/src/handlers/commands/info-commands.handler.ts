@@ -14,6 +14,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
+import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 
@@ -43,49 +44,49 @@ export function setInfoCommandsDependencies(deps: {
  * @param session - Current BBS session
  */
 export function handleVersionCommand(socket: any, session: BBSSession): void {
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('AmiExpress Web Version Information'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\x1b[2J\x1b[H');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('AmiExpress Web Version Information'));
+  emitText(socket, '\r\n');
 
   // Version string (like express.e:25691)
-  socket.emit('ansi-output', AnsiUtil.colorize('AmiExpress Web v5.6.0', 'cyan'));
-  socket.emit('ansi-output', ' (2025-10-23)\r\n');
-  socket.emit('ansi-output', 'Modern web implementation of the classic AmiExpress BBS\r\n');
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('AmiExpress Web v5.6.0', 'cyan'));
+  emitText(socket, ' (2025-10-23)\r\n');
+  emitText(socket, 'Modern web implementation of the classic AmiExpress BBS\r\n');
+  emitText(socket, '\r\n');
 
   // Original version attribution (like express.e:25693-25694)
-  socket.emit('ansi-output', AnsiUtil.colorize('Original Version:', 'yellow'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '  (C)1989-91 Mike Thomas, Synthetic Technologies\r\n');
-  socket.emit('ansi-output', '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n');
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('Original Version:', 'yellow'));
+  emitText(socket, '\r\n');
+  emitText(socket, '  (C)1989-91 Mike Thomas, Synthetic Technologies\r\n');
+  emitText(socket, '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n');
+  emitText(socket, '\r\n');
 
   // Web implementation details
-  socket.emit('ansi-output', AnsiUtil.colorize('Built with:', 'yellow'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '  - Node.js/TypeScript backend\r\n');
-  socket.emit('ansi-output', '  - React frontend\r\n');
-  socket.emit('ansi-output', '  - SQLite database\r\n');
-  socket.emit('ansi-output', '  - Socket.io real-time communication\r\n');
-  socket.emit('ansi-output', '  - xterm.js terminal emulation\r\n');
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('Built with:', 'yellow'));
+  emitText(socket, '\r\n');
+  emitText(socket, '  - Node.js/TypeScript backend\r\n');
+  emitText(socket, '  - React frontend\r\n');
+  emitText(socket, '  - SQLite database\r\n');
+  emitText(socket, '  - Socket.io real-time communication\r\n');
+  emitText(socket, '  - xterm.js terminal emulation\r\n');
+  emitText(socket, '\r\n');
 
   // Features
-  socket.emit('ansi-output', AnsiUtil.colorize('Features:', 'yellow'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '  - Compatible with AmiExpress v5.6.0 commands\r\n');
-  socket.emit('ansi-output', '  - WebSocket-based file transfers\r\n');
-  socket.emit('ansi-output', '  - Real-time chat and messaging\r\n');
-  socket.emit('ansi-output', '  - QWK/FTN mail support\r\n');
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('Features:', 'yellow'));
+  emitText(socket, '\r\n');
+  emitText(socket, '  - Compatible with AmiExpress v5.6.0 commands\r\n');
+  emitText(socket, '  - WebSocket-based file transfers\r\n');
+  emitText(socket, '  - Real-time chat and messaging\r\n');
+  emitText(socket, '  - QWK/FTN mail support\r\n');
+  emitText(socket, '\r\n');
 
   // Registration (like express.e:25697)
-  socket.emit('ansi-output', AnsiUtil.colorize('Registered to: Open Source Community', 'green'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('Registered to: Open Source Community', 'green'));
+  emitText(socket, '\r\n');
+  emitText(socket, '\r\n');
 
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   // Return to menu without an extra pause; the next keypress should redraw the menu once.
   session.menuPause = false;
   session.paginatedScreen = undefined;
@@ -113,13 +114,13 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
     return;
   }
 
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  emitText(socket, '\x1b[2J\x1b[H');
 
 console.log('[ENV] Doors');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Online Users (WHO)'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('Online Users (WHO)'));
+  emitText(socket, '\r\n');
 
   // Get all online users - express.e:26097 calls who(0)
   const allOnlineUsers = Array.from(_sessions.values())
@@ -134,15 +135,15 @@ console.log('[ENV] Doors');
     }));
 
   if (allOnlineUsers.length === 0) {
-    socket.emit('ansi-output', 'No users currently online.\r\n');
+    emitText(socket, 'No users currently online.\r\n');
   } else {
     // Column headers
-    socket.emit('ansi-output', AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Conference'.padEnd(15), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Idle  Node', 'cyan'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '='.repeat(75) + '\r\n');
+    emitText(socket, AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Conference'.padEnd(15), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Idle  Node', 'cyan'));
+    emitText(socket, '\r\n');
+    emitText(socket, '='.repeat(75) + '\r\n');
 
     // User list
     allOnlineUsers.forEach(userInfo => {
@@ -151,7 +152,7 @@ console.log('[ENV] Doors');
         const idleStr = userInfo.idle > 0 ? userInfo.idle.toString().padStart(4) : '    ';
         const quietIndicator = userInfo.quiet ? AnsiUtil.colorize(' (Q)', 'yellow') : '';
 
-        socket.emit('ansi-output',
+        emitText(socket,
           userInfo.username.padEnd(16) +
           userInfo.realname.padEnd(20) +
           userInfo.conference.padEnd(15) +
@@ -162,8 +163,8 @@ console.log('[ENV] Doors');
     });
   }
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  emitText(socket, '\r\n');
+  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   session.menuPause = false;
   session.paginatedScreen = undefined;
   session.lastScreenHadPause = false;
@@ -190,13 +191,13 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
     return;
   }
 
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  emitText(socket, '\x1b[2J\x1b[H');
 
 console.log('[ENV] Doors');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Online Users (Detailed)'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('Online Users (Detailed)'));
+  emitText(socket, '\r\n');
 
   // Get all online users with detailed status - express.e:26107 calls who(1)
   const detailedOnlineUsers = Array.from(_sessions.values())
@@ -214,15 +215,15 @@ console.log('[ENV] Doors');
     }));
 
   if (detailedOnlineUsers.length === 0) {
-    socket.emit('ansi-output', 'No users currently online.\r\n');
+    emitText(socket, 'No users currently online.\r\n');
   } else {
     // Column headers (detailed view includes activity)
-    socket.emit('ansi-output', AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Activity'.padEnd(20), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Node', 'cyan'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '='.repeat(75) + '\r\n');
+    emitText(socket, AnsiUtil.colorize('User Name'.padEnd(16), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Real Name'.padEnd(20), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Activity'.padEnd(20), 'cyan'));
+    emitText(socket, AnsiUtil.colorize('Node', 'cyan'));
+    emitText(socket, '\r\n');
+    emitText(socket, '='.repeat(75) + '\r\n');
 
     // Detailed user list
     detailedOnlineUsers.forEach(userInfo => {
@@ -230,7 +231,7 @@ console.log('[ENV] Doors');
       if (!userInfo.quiet || session.user?.secLevel === 255) {
         const quietIndicator = userInfo.quiet ? AnsiUtil.colorize(' (Q)', 'yellow') : '';
 
-        socket.emit('ansi-output',
+        emitText(socket,
           userInfo.username.padEnd(16) +
           userInfo.realname.padEnd(20) +
           userInfo.activity.padEnd(20) +
@@ -240,8 +241,8 @@ console.log('[ENV] Doors');
     });
   }
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  emitText(socket, '\r\n');
+  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   session.menuPause = false;
   session.paginatedScreen = undefined;
   session.lastScreenHadPause = false;
@@ -294,226 +295,226 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
     return `${bps} bps`;
   })();
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('USER CONFIGURATION'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('USER CONFIGURATION'));
+  emitText(socket, '\r\n');
 
   // Option 0: Login Name - express.e:25724-25728
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_NAME)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  0] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  0] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  0');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('LOGIN NAME.............. ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.username, 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  0');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('LOGIN NAME.............. ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.username, 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 1: Email - express.e:25729-25733
   if (!checkSecurity(session.user, ACSPermission.EDIT_EMAIL)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  1] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  1] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  1');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('EMAIL ADDRESS........... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.email || 'Not set', 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  1');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('EMAIL ADDRESS........... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.email || 'Not set', 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 2: Real Name - express.e:25734-25738
   if (!checkSecurity(session.user, ACSPermission.EDIT_REAL_NAME)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  2] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  2] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  2');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('REAL NAME............... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.realname || 'Not set', 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  2');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('REAL NAME............... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.realname || 'Not set', 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 3: Internet Name - express.e:25739-25743
   if (!checkSecurity(session.user, ACSPermission.EDIT_INTERNET_NAME)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  3] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  3] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  3');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('INTERNET NAME........... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.username.toLowerCase(), 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  3');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('INTERNET NAME........... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.username.toLowerCase(), 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 4: Location - express.e:25744-25748
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_LOCATION)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  4] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  4] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  4');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('LOCATION................ ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.location || 'Not set', 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  4');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('LOCATION................ ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.location || 'Not set', 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 5: Phone - express.e:25749-25753
   if (!checkSecurity(session.user, ACSPermission.EDIT_PHONE_NUMBER)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  5] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  5] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  5');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('PHONE NUMBER............ ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.phone || 'Not set', 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  5');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('PHONE NUMBER............ ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.phone || 'Not set', 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 6: Password - express.e:25754-25758
   if (!checkSecurity(session.user, ACSPermission.EDIT_PASSWORD)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[  6] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[  6] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', '  6');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('PASSWORD................ ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize('ENCRYPTED', 'cyan'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, '  6');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('PASSWORD................ ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize('ENCRYPTED', 'cyan'));
+    emitText(socket, '\r\n');
   }
 
   // Option 7: Lines Per Screen - express.e:25759-25760
   const linesPerScreen = currentUser.linesPerScreen || 'Auto';
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', '  7');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('LINES PER SCREEN........ ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(linesPerScreen.toString(), 'yellow'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, '  7');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('LINES PER SCREEN........ ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(linesPerScreen.toString(), 'yellow'));
+  emitText(socket, '\r\n');
 
   // Option 8: Computer - express.e:25761-25767
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', '  8');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('COMPUTER................ ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(currentUser.computer || 'Unknown', 'yellow'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, '  8');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('COMPUTER................ ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(currentUser.computer || 'Unknown', 'yellow'));
+  emitText(socket, '\r\n');
 
   // Option 9: Screen Type - express.e:25768-25774
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', '  9');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('SCREEN TYPE............. ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(currentUser.screenType || 'Web Terminal', 'yellow'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, '  9');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('SCREEN TYPE............. ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(currentUser.screenType || 'Web Terminal', 'yellow'));
+  emitText(socket, '\r\n');
 
   // Option 10: Screen Clear - express.e:25775-25779
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', ' 10');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('SCREEN CLEAR............ ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(currentUser.ansi ? 'YES' : 'NO', currentUser.ansi ? 'green' : 'white'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 10');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('SCREEN CLEAR............ ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(currentUser.ansi ? 'YES' : 'NO', currentUser.ansi ? 'green' : 'white'));
+  emitText(socket, '\r\n');
 
   // Option 11: Transfer Protocol - express.e:25780-25790
   if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[ 11] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[ 11] [DISABLED]\r\n', 'red'));
   } else {
     const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
     const userProtocol = currentUser.protocol || 'zmodem';
     const protocolName = PROTOCOL_DISPLAY_NAMES[userProtocol] || userProtocol.toUpperCase();
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', ' 11');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('TRANSFER PROTOCOL....... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(protocolName, 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 11');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('TRANSFER PROTOCOL....... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(protocolName, 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 12: Editor Type - express.e:25791-25800
   if (!checkSecurity(session.user, ACSPermission.FULL_EDIT)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[ 12] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[ 12] [DISABLED]\r\n', 'red'));
   } else {
     const editorType = currentUser.editorType || 0;
     let editorName = 'PROMPT';
     if (editorType === 1) editorName = 'LINE EDITOR';
     else if (editorType === 2) editorName = 'FULLSCREEN EDITOR';
 
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', ' 12');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('EDITOR TYPE............. ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(editorName, 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 12');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('EDITOR TYPE............. ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(editorName, 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 13: Zoom Type - express.e:25801-25808
   if (!checkSecurity(session.user, ACSPermission.ZOOM_MAIL)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[ 13] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[ 13] [DISABLED]\r\n', 'red'));
   } else {
     const zoomType = currentUser.zoomType || 0;
     const zoomName = zoomType === 1 ? 'ASCII' : 'QWK';
 
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', ' 13');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('ZOOM TYPE............... ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(zoomName, 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 13');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('ZOOM TYPE............... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(zoomName, 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 14: Available for Chat/OLM - express.e:25809-25816
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[ 14] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[ 14] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', ' 14');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('AVAILABLE FOR CHAT/OLM.. ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize(currentUser.availableForChat ? 'YES' : 'NO', currentUser.availableForChat ? 'green' : 'white'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 14');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('AVAILABLE FOR CHAT/OLM.. ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(currentUser.availableForChat ? 'YES' : 'NO', currentUser.availableForChat ? 'green' : 'white'));
+    emitText(socket, '\r\n');
   }
 
   // Option 15: Translator - express.e:25817-25820
   if (!checkSecurity(session.user, ACSPermission.TRANSLATION)) {
-    socket.emit('ansi-output', AnsiUtil.colorize('[ 15] [DISABLED]\r\n', 'red'));
+    emitText(socket, AnsiUtil.colorize('[ 15] [DISABLED]\r\n', 'red'));
   } else {
-    socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-    socket.emit('ansi-output', ' 15');
-    socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-    socket.emit('ansi-output', AnsiUtil.colorize('TRANSLATOR.............. ', 'magenta'));
-    socket.emit('ansi-output', AnsiUtil.colorize('English', 'yellow'));
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 15');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('TRANSLATOR.............. ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize('English', 'yellow'));
+    emitText(socket, '\r\n');
   }
 
   // Option 16: Background File Check - express.e:25821-25829
   // Simplified for web version - always show as available
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', ' 16');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('BACKGROUND FILE CHECK... ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize('NO', 'white'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 16');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('BACKGROUND FILE CHECK... ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize('NO', 'white'));
+  emitText(socket, '\r\n');
 
   // Option 17: Modem Emulation Speed (web extension)
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', ' 17');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('MODEM EMULATION SPEED.. ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(modemLabel, 'yellow'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 17');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('MODEM EMULATION SPEED.. ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(modemLabel, 'yellow'));
+  emitText(socket, '\r\n');
 
   // Option 18: Terminal Font (web extension)
   const userFont = currentUser.fontPreference || 'TopazPlus_a1200';
-  socket.emit('ansi-output', AnsiUtil.colorize('[', 'blue'));
-  socket.emit('ansi-output', ' 18');
-  socket.emit('ansi-output', AnsiUtil.colorize('] ', 'blue'));
-  socket.emit('ansi-output', AnsiUtil.colorize('TERMINAL FONT.......... ', 'magenta'));
-  socket.emit('ansi-output', AnsiUtil.colorize(userFont, 'yellow'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, AnsiUtil.colorize('[', 'blue'));
+  emitText(socket, ' 18');
+  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+  emitText(socket, AnsiUtil.colorize('TERMINAL FONT.......... ', 'magenta'));
+  emitText(socket, AnsiUtil.colorize(userFont, 'yellow'));
+  emitText(socket, '\r\n');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'Which to change <CR>=QUIT ? ');
+  emitText(socket, '\r\n');
+  emitText(socket, 'Which to change <CR>=QUIT ? ');
 }
 
 /**
@@ -560,7 +561,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
 
   // CR/empty = quit (express.e:25836-25840)
   if (trimmed === '') {
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, '\r\n');
     // Each option already saves immediately, no need to save again here
     session.inputBuffer = '';
     session.menuPause = true;
@@ -578,7 +579,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     return;
   }
 
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
 
   // Handle each option (express.e:25846-26028)
   switch (option) {
@@ -587,7 +588,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Name: ');
+      emitText(socket, 'Name: ');
       session.subState = LoggedOnSubState.W_EDIT_NAME;
       session.tempData = { originalUsername: session.user.username };
       break;
@@ -597,7 +598,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Email Address: ');
+      emitText(socket, 'Email Address: ');
       session.subState = LoggedOnSubState.W_EDIT_EMAIL;
       break;
 
@@ -606,7 +607,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Real Name: (Alpha Numeric) ');
+      emitText(socket, 'Real Name: (Alpha Numeric) ');
       session.subState = LoggedOnSubState.W_EDIT_REALNAME;
       break;
 
@@ -615,7 +616,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Internet Name: (Alpha Numeric No Spaces) ');
+      emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
       session.subState = LoggedOnSubState.W_EDIT_INTERNETNAME;
       break;
 
@@ -624,7 +625,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'From: ');
+      emitText(socket, 'From: ');
       session.subState = LoggedOnSubState.W_EDIT_LOCATION;
       break;
 
@@ -633,7 +634,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Phone: ');
+      emitText(socket, 'Phone: ');
       session.subState = LoggedOnSubState.W_EDIT_PHONE;
       break;
 
@@ -642,22 +643,22 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Enter New Password: ');
+      emitText(socket, 'Enter New Password: ');
       session.subState = LoggedOnSubState.W_EDIT_PASSWORD;
       break;
 
     case 7: // Edit Lines Per Screen - express.e:25976-25980
-      socket.emit('ansi-output', 'Lines Per Screen (0=Auto): ');
+      emitText(socket, 'Lines Per Screen (0=Auto): ');
       session.subState = LoggedOnSubState.W_EDIT_LINES;
       break;
 
     case 8: // Edit Computer - express.e:25981-25986
-      socket.emit('ansi-output', 'Computer Type: ');
+      emitText(socket, 'Computer Type: ');
       session.subState = LoggedOnSubState.W_EDIT_COMPUTER;
       break;
 
     case 9: // Edit Screen Type - express.e:25987-25992
-      socket.emit('ansi-output', 'Screen Type: ');
+      emitText(socket, 'Screen Type: ');
       session.subState = LoggedOnSubState.W_EDIT_SCREENTYPE;
       break;
 
@@ -673,18 +674,18 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         return;
       }
       // Display protocol selection menu
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'));
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n');
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', 'Select (1-7) or <CR>=Cancel: ');
+      emitText(socket, '\r\n');
+      emitText(socket, AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'));
+      emitText(socket, '\r\n');
+      emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
+      emitText(socket, AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n');
+      emitText(socket, AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n');
+      emitText(socket, AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n');
+      emitText(socket, AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n');
+      emitText(socket, AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n');
+      emitText(socket, AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n');
+      emitText(socket, '\r\n');
+      emitText(socket, 'Select (1-7) or <CR>=Cancel: ');
       session.subState = LoggedOnSubState.W_EDIT_PROTOCOL;
       break;
 
@@ -724,7 +725,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      socket.emit('ansi-output', 'Translator: ');
+      emitText(socket, 'Translator: ');
       session.subState = LoggedOnSubState.W_EDIT_TRANSLATOR;
       break;
 
@@ -734,24 +735,24 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       break;
 
     case 17: // Modem emulation speed (web extension)
-      socket.emit('ansi-output', '\r\nSelect Modem Speed:\r\n');
+      emitText(socket, '\r\nSelect Modem Speed:\r\n');
       MODEM_OPTIONS.forEach((opt, idx) => {
-        socket.emit('ansi-output', `[${idx}] ${opt.label}\r\n`);
+        emitText(socket, `[${idx}] ${opt.label}\r\n`);
       });
-      socket.emit('ansi-output', `Select (0-${MODEM_OPTIONS.length - 1}) or <CR>=Cancel: `);
+      emitText(socket, `Select (0-${MODEM_OPTIONS.length - 1}) or <CR>=Cancel: `);
       session.subState = LoggedOnSubState.W_EDIT_MODEM_SPEED;
       break;
 
     case 18: // Terminal font (web extension)
-      socket.emit('ansi-output', '\r\nSelect Terminal Font:\r\n');
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[2] ', 'blue') + 'TopazPlus_a500   - Classic Amiga Topaz (500)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[3] ', 'blue') + 'Topaz_a1200      - Original Topaz (1200)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[4] ', 'blue') + 'Topaz_a500       - Original Topaz (500)\r\n');
-      socket.emit('ansi-output', AnsiUtil.colorize('[5] ', 'blue') + 'mosoul           - MO\'Soul (alternate)\r\n');
-      socket.emit('ansi-output', '\r\n');
-      socket.emit('ansi-output', 'Select (1-5) or <CR>=Cancel: ');
+      emitText(socket, '\r\nSelect Terminal Font:\r\n');
+      emitText(socket, '\r\n');
+      emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'TopazPlus_a1200  - Classic Amiga Topaz (1200)\r\n');
+      emitText(socket, AnsiUtil.colorize('[2] ', 'blue') + 'TopazPlus_a500   - Classic Amiga Topaz (500)\r\n');
+      emitText(socket, AnsiUtil.colorize('[3] ', 'blue') + 'Topaz_a1200      - Original Topaz (1200)\r\n');
+      emitText(socket, AnsiUtil.colorize('[4] ', 'blue') + 'Topaz_a500       - Original Topaz (500)\r\n');
+      emitText(socket, AnsiUtil.colorize('[5] ', 'blue') + 'mosoul           - MO\'Soul (alternate)\r\n');
+      emitText(socket, '\r\n');
+      emitText(socket, 'Select (1-5) or <CR>=Cancel: ');
       session.subState = LoggedOnSubState.W_EDIT_FONT;
       break;
 
@@ -782,21 +783,21 @@ export async function handleWEditNameInput(socket: any, session: BBSSession, inp
 
   // Check for wildcards (express.e:25859-25862)
   if (trimmed.includes('*') || trimmed.includes('?')) {
-    socket.emit('ansi-output', 'No wildcards allowed in a name.\r\n\r\n');
-    socket.emit('ansi-output', 'Name: ');
+    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
+    emitText(socket, 'Name: ');
     return;
   }
 
   // Check for duplicate (express.e:25863-25868)
-  socket.emit('ansi-output', '\r\nChecking for duplicate name...');
+  emitText(socket, '\r\nChecking for duplicate name...');
   const existing = await db.getUserByUsername(trimmed);
   if (existing && existing.id !== session.user.id) {
-    socket.emit('ansi-output', 'Already in use!, try another.\r\n\r\n');
-    socket.emit('ansi-output', 'Name: ');
+    emitText(socket, 'Already in use!, try another.\r\n\r\n');
+    emitText(socket, 'Name: ');
     return;
   }
 
-  socket.emit('ansi-output', 'Ok!\r\n');
+  emitText(socket, 'Ok!\r\n');
   session.user.username = trimmed;
   await db.updateUser(session.user.id, { username: trimmed });
 
@@ -846,12 +847,12 @@ export async function handleWEditRealnameInput(socket: any, session: BBSSession,
 
   // Check for wildcards
   if (trimmed.includes('*') || trimmed.includes('?')) {
-    socket.emit('ansi-output', 'No wildcards allowed in a name.\r\n\r\n');
-    socket.emit('ansi-output', 'Real Name: (Alpha Numeric) ');
+    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
+    emitText(socket, 'Real Name: (Alpha Numeric) ');
     return;
   }
 
-  socket.emit('ansi-output', '\r\nOk!\r\n');
+  emitText(socket, '\r\nOk!\r\n');
   session.user.realname = trimmed;
   await db.updateUser(session.user.id, { realname: trimmed });
 
@@ -874,19 +875,19 @@ export async function handleWEditInternetnameInput(socket: any, session: BBSSess
 
   // Check for spaces
   if (trimmed.includes(' ')) {
-    socket.emit('ansi-output', '\r\nNo spaces allowed.\r\n\r\n');
-    socket.emit('ansi-output', 'Internet Name: (Alpha Numeric No Spaces) ');
+    emitText(socket, '\r\nNo spaces allowed.\r\n\r\n');
+    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
     return;
   }
 
   // Check for wildcards
   if (trimmed.includes('*') || trimmed.includes('?')) {
-    socket.emit('ansi-output', 'No wildcards allowed in a name.\r\n\r\n');
-    socket.emit('ansi-output', 'Internet Name: (Alpha Numeric No Spaces) ');
+    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
+    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
     return;
   }
 
-  socket.emit('ansi-output', '\r\nOk!\r\n');
+  emitText(socket, '\r\nOk!\r\n');
   // For web version, just store in a custom field or ignore
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -947,7 +948,7 @@ export function handleWEditPasswordInput(socket: any, session: BBSSession, input
 
   // Store password temporarily and ask for confirmation
   session.tempData = { newPassword: trimmed };
-  socket.emit('ansi-output', '\r\nReenter New Password: ');
+  emitText(socket, '\r\nReenter New Password: ');
   session.subState = LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM;
 }
 
@@ -960,7 +961,7 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
 
   // Empty = cancel
   if (trimmed === '') {
-    socket.emit('ansi-output', '\r\nPasswords do not match, changes not saved\r\n');
+    emitText(socket, '\r\nPasswords do not match, changes not saved\r\n');
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
@@ -969,7 +970,7 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
 
   // Check if passwords match (express.e:25957)
   if (trimmed !== originalPassword) {
-    socket.emit('ansi-output', '\r\nPasswords do not match, changes not saved\r\n');
+    emitText(socket, '\r\nPasswords do not match, changes not saved\r\n');
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
@@ -980,7 +981,7 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
 
-  socket.emit('ansi-output', '\r\nPassword updated successfully.\r\n');
+  emitText(socket, '\r\nPassword updated successfully.\r\n');
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
   session.tempData = {};
@@ -1001,8 +1002,8 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
 
   const lines = parseInt(trimmed, 10);
   if (isNaN(lines) || lines < 0 || lines > 100) {
-    socket.emit('ansi-output', '\r\nInvalid number. Please enter 0-100.\r\n');
-    socket.emit('ansi-output', 'Lines Per Screen (0=Auto): ');
+    emitText(socket, '\r\nInvalid number. Please enter 0-100.\r\n');
+    emitText(socket, 'Lines Per Screen (0=Auto): ');
     return;
   }
 
@@ -1080,8 +1081,8 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
   const selectedProtocol = protocolMap[trimmed];
 
   if (!selectedProtocol) {
-    socket.emit('ansi-output', '\r\nInvalid selection. Please enter 1-7.\r\n');
-    socket.emit('ansi-output', 'Select (1-7) or <CR>=Cancel: ');
+    emitText(socket, '\r\nInvalid selection. Please enter 1-7.\r\n');
+    emitText(socket, 'Select (1-7) or <CR>=Cancel: ');
     return;
   }
 
@@ -1091,7 +1092,7 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
 
   const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
   const protocolName = PROTOCOL_DISPLAY_NAMES[selectedProtocol] || selectedProtocol.toUpperCase();
-  socket.emit('ansi-output', `\r\nProtocol set to: ${protocolName}\r\n`);
+  emitText(socket, `\r\nProtocol set to: ${protocolName}\r\n`);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1126,7 +1127,7 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
 
   const choice = parseInt(trimmed, 10);
   if (isNaN(choice) || choice < 0 || choice >= MODEM_OPTIONS.length) {
-    socket.emit('ansi-output', `\r\nInvalid selection. Use 0-${MODEM_OPTIONS.length - 1}.\r\n`);
+    emitText(socket, `\r\nInvalid selection. Use 0-${MODEM_OPTIONS.length - 1}.\r\n`);
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
@@ -1150,6 +1151,16 @@ console.log(`[W Command] Modem emulation set to ${bps} bps`);
     modemEmulator.disable();
 console.log(`[W Command] Modem emulation disabled (full speed)`);
   }
+
+  // Send updated modem speed to frontend for client-side emulation
+console.log(`[W Command] Emitting modem-speed event with bps=${bps}`);
+  socket.emit('modem-speed', bps);
+console.log(`[W Command] modem-speed event emitted`);
+
+  // Disable AnsiBuffer batching when modem emulation is enabled
+  const { getAnsiBuffer } = require('../../utils/ansi-buffer.util');
+  const ansiBuffer = getAnsiBuffer(socket);
+  ansiBuffer.setFlushDelay(bps > 0 ? 0 : 16);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1175,7 +1186,7 @@ export async function handleWEditFontInput(socket: any, session: BBSSession, inp
 
   const selectedFont = fontMap[trimmed];
   if (!selectedFont) {
-    socket.emit('ansi-output', '\r\nInvalid selection. Use 1-5.\r\n');
+    emitText(socket, '\r\nInvalid selection. Use 1-5.\r\n');
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
@@ -1187,7 +1198,7 @@ export async function handleWEditFontInput(socket: any, session: BBSSession, inp
 
   // Send font change event to frontend
   socket.emit('set-font', selectedFont);
-  socket.emit('ansi-output', `\r\nFont set to: ${selectedFont}\r\n`);
+  emitText(socket, `\r\nFont set to: ${selectedFont}\r\n`);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;

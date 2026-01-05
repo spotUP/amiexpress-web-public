@@ -4709,13 +4709,14 @@ console.log(
     // and Wait for 0x11000 = bit 16 (reply) | bit 12 (AEDoorPort)
     const AEDOORPORT_SIGBIT = 12;
 
-    // CRITICAL: Use DOOR task as owner so door gets signaled when messages arrive
-    // Door calls GetMsg() on AEDoorPort1, then Wait(0x1000) to block until signaled.
-    // When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
-    // Previous code used bbsTask which signaled wrong task causing doors to hang.
+    // CRITICAL FIX (Dec 27): Create AEDoorPort with BBS Handler Task as owner
+    // This prevents the door from signaling itself when it sends messages.
+    // Real Amiga has TWO tasks: BBS task owns AEDoorPort, Door task runs binary.
+    // When door calls PutMsg(AEDoorPort), it signals BBS task (not itself).
+    // See: Documentation/6-Progress/archive/2025-12/AQUASCAN_SIGNAL_FIX.md
     const portAddr = this.createPublicPort(
       name,
-      this.currentTask,  // Door task, not BBS task
+      this.bbsTask,  // BBS task, not Door task
       AEDOORPORT_SIGBIT
     );
 
@@ -4723,7 +4724,7 @@ console.log(
       `[ExecLibrary] Created AEDoorPort "${name}" at 0x${portAddr.toString(
         16
       )} ` +
-        `(sigBit=${AEDOORPORT_SIGBIT}, owner=Door Task 0x${this.currentTask.address.toString(
+        `(sigBit=${AEDOORPORT_SIGBIT}, owner=BBS Task 0x${this.bbsTask.address.toString(
           16
         )})`
     );

@@ -11,6 +11,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { emitText, emitPrompt, flushOutput } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
@@ -93,10 +94,10 @@ console.log('[ENV] Join');
 
   // If params contain ".", delegate to J command (join conference) - express.e:25197-25200
   if (parsedParams.length > 0 && parsedParams[0].includes('.')) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.warningLine('Use J command to join conferences (e.g., "J 1.2")'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    emitText(socket, '\r\n');
+    emitText(socket, AnsiUtil.warningLine('Use J command to join conferences (e.g., "J 1.2")'));
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
@@ -116,10 +117,10 @@ console.log('[ENV] Join');
   const currentConfBases = _messageBases.filter(mb => mb.conferenceId === session.currentConf);
 
   if (currentConfBases.length === 0) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('This conference does not contain multiple message bases'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    emitText(socket, '\r\n');
+    emitText(socket, AnsiUtil.errorLine('This conference does not contain multiple message bases'));
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
@@ -140,16 +141,16 @@ console.log('[ENV] Join');
     // Try to display JoinMsgBase screen (conference-specific or generic)
     _displayScreen(socket, session, 'JOINMSGBASE');
 
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', 'Available message bases:\r\n');
+    emitText(socket, '\r\n');
+    emitText(socket, 'Available message bases:\r\n');
     currentConfBases.forEach((mb, index) => {
       const num = index + 1;
       const currentIndicator = mb.id === session.currentMsgBase ? AnsiUtil.colorize(' <-- Current', 'green') : '';
-      socket.emit('ansi-output', `${num}. ${mb.name}${currentIndicator}\r\n`);
+      emitText(socket, `${num}. ${mb.name}${currentIndicator}\r\n`);
     });
 
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.complexPrompt([
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.complexPrompt([
       { text: 'Message Base Number ', color: 'white' },
       { text: `(1-${msgBaseCount})`, color: 'cyan' },
       { text: ': ', color: 'white' }
@@ -172,15 +173,15 @@ console.log('[ENV] Join');
     // Join the message base - express.e:25232
     _joinConference(socket, session, session.currentConf!, selectedBase.id);
 
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    emitText(socket, '\r\n');
+    emitText(socket, AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   } else {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid message base number'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    emitText(socket, '\r\n');
+    emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
   }
 
   session.menuPause = false;
@@ -194,7 +195,7 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
   const tempData = session.tempData || {};
   const currentConfBases = tempData.currentConfBases || [];
 
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
 
   // If empty input, cancel
   if (!input.trim()) {
@@ -206,9 +207,9 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
   const msgBaseNum = parseInt(input.trim());
 
   if (isNaN(msgBaseNum) || msgBaseNum < 1 || msgBaseNum > currentConfBases.length) {
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid message base number'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
+    emitText(socket, '\r\n');
+    emitPrompt(socket, AnsiUtil.pressKeyPrompt());
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -218,13 +219,13 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
 
   if (selectedBase) {
     _joinConference(socket, session, session.currentConf!, selectedBase.id);
-    socket.emit('ansi-output', AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
+    emitText(socket, AnsiUtil.successLine(`Joined message base: ${selectedBase.name}`));
   } else {
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid message base'));
+    emitText(socket, AnsiUtil.errorLine('Invalid message base'));
   }
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  emitText(socket, '\r\n');
+  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -257,9 +258,9 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
 
 console.log('[ENV] Sysop');
 
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('Node Management'));
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('Node Management'));
+  emitText(socket, '\r\n');
 
   // Original AmiExpress (express.e:25281-25370):
   // - who(0) - shows all nodes
@@ -269,18 +270,18 @@ console.log('[ENV] Sysop');
   //
   // Web version is single-node, so this command is not applicable
 
-  socket.emit('ansi-output', AnsiUtil.colorize('Node Management - Original AmiExpress Feature', 'yellow'));
-  socket.emit('ansi-output', '\r\n\r\n');
-  socket.emit('ansi-output', 'This command managed multi-node BBS systems in the original AmiExpress.\r\n');
-  socket.emit('ansi-output', 'The web version is single-node, so this feature is not applicable.\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.colorize('Features in original:', 'cyan'));
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '  - View all node status\r\n');
-  socket.emit('ansi-output', '  - Take nodes offline/bring online\r\n');
-  socket.emit('ansi-output', '  - Disconnect users from specific nodes\r\n');
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+  emitText(socket, AnsiUtil.colorize('Node Management - Original AmiExpress Feature', 'yellow'));
+  emitText(socket, '\r\n\r\n');
+  emitText(socket, 'This command managed multi-node BBS systems in the original AmiExpress.\r\n');
+  emitText(socket, 'The web version is single-node, so this feature is not applicable.\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.colorize('Features in original:', 'cyan'));
+  emitText(socket, '\r\n');
+  emitText(socket, '  - View all node status\r\n');
+  emitText(socket, '  - Take nodes offline/bring online\r\n');
+  emitText(socket, '  - Disconnect users from specific nodes\r\n');
+  emitText(socket, '\r\n');
+  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -347,52 +348,52 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
   }
 
   // Clear screen and display full-screen ANSI menu - express.e:22718-22777
-  socket.emit('ansi-output', '\x1b[2J'); // Clear screen
-  socket.emit('ansi-output', '\x1b[?25l'); // Hide cursor
+  emitText(socket, '\x1b[2J'); // Clear screen
+  emitText(socket, '\x1b[?25l'); // Hide cursor
 
   // Title - express.e:22720
-  socket.emit('ansi-output', `\x1b[2;1H                      \x1b[33mCONFERENCE MAINTENANCE\x1b[0m\r\n`);
+  emitText(socket, `\x1b[2;1H                      \x1b[33mCONFERENCE MAINTENANCE\x1b[0m\r\n`);
 
   // Conference header - express.e:22724-22725
-  socket.emit('ansi-output', `\x1b[4;1H \x1b[32mConference \x1b[34m[\x1b[0m${confStr.padEnd(5)}\x1b[34m]\x1b[36m:\x1b[0m ${confTitle.padEnd(29)}\r\n`);
+  emitText(socket, `\x1b[4;1H \x1b[32mConference \x1b[34m[\x1b[0m${confStr.padEnd(5)}\x1b[34m]\x1b[36m:\x1b[0m ${confTitle.padEnd(29)}\r\n`);
 
   // Warning - express.e:22726
-  socket.emit('ansi-output', `\x1b[6;1H\x1b[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\r\n`);
+  emitText(socket, `\x1b[6;1H\x1b[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\r\n`);
 
   // Left column options - express.e:22727-22734
-  socket.emit('ansi-output', `\x1b[8;2H\x1b[33m1.>\x1b[32m Ratio\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[9;2H\x1b[33m2.>\x1b[32m Ratio Type\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[10;2H\x1b[33m3.>\x1b[32m Reset New Mail Scan Pointers\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[11;2H\x1b[33m4.>\x1b[32m Reset Last Message Read Pointers\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[12;2H\x1b[33m5.>\x1b[32m Dump all user stats to Conf.Stats\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[13;2H\x1b[33m6.>\x1b[32m Set Default New Mail Scan\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[14;2H\x1b[33m7.>\x1b[32m Set Default New File Scan\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[15;2H\x1b[33m8.>\x1b[32m Set Default Zoom Flag\x1b[0m\r\n`);
+  emitText(socket, `\x1b[8;2H\x1b[33m1.>\x1b[32m Ratio\x1b[0m\r\n`);
+  emitText(socket, `\x1b[9;2H\x1b[33m2.>\x1b[32m Ratio Type\x1b[0m\r\n`);
+  emitText(socket, `\x1b[10;2H\x1b[33m3.>\x1b[32m Reset New Mail Scan Pointers\x1b[0m\r\n`);
+  emitText(socket, `\x1b[11;2H\x1b[33m4.>\x1b[32m Reset Last Message Read Pointers\x1b[0m\r\n`);
+  emitText(socket, `\x1b[12;2H\x1b[33m5.>\x1b[32m Dump all user stats to Conf.Stats\x1b[0m\r\n`);
+  emitText(socket, `\x1b[13;2H\x1b[33m6.>\x1b[32m Set Default New Mail Scan\x1b[0m\r\n`);
+  emitText(socket, `\x1b[14;2H\x1b[33m7.>\x1b[32m Set Default New File Scan\x1b[0m\r\n`);
+  emitText(socket, `\x1b[15;2H\x1b[33m8.>\x1b[32m Set Default Zoom Flag\x1b[0m\r\n`);
 
   // Right column options - express.e:22737-22751
-  socket.emit('ansi-output', `\x1b[8;40H\x1b[33m9.>\x1b[32m Reset Messages Posted\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[9;40H\x1b[33mA.>\x1b[32m Reset Voting Booth\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[10;40H\x1b[33mB.>\x1b[32m Next   Msg # \x1b[0m${String(mailStat.highMsgNum || 0).padStart(8)}\r\n`);
-  socket.emit('ansi-output', `\x1b[11;40H\x1b[33mC.>\x1b[32m Lowest Msg # \x1b[0m${String(mailStat.lowestKey || 0).padStart(8)}\r\n`);
-  socket.emit('ansi-output', `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${String(stats.userCount).padStart(4)} \x1b[32mUsers\x1b[0m\r\n`);
+  emitText(socket, `\x1b[8;40H\x1b[33m9.>\x1b[32m Reset Messages Posted\x1b[0m\r\n`);
+  emitText(socket, `\x1b[9;40H\x1b[33mA.>\x1b[32m Reset Voting Booth\x1b[0m\r\n`);
+  emitText(socket, `\x1b[10;40H\x1b[33mB.>\x1b[32m Next   Msg # \x1b[0m${String(mailStat.highMsgNum || 0).padStart(8)}\r\n`);
+  emitText(socket, `\x1b[11;40H\x1b[33mC.>\x1b[32m Lowest Msg # \x1b[0m${String(mailStat.lowestKey || 0).padStart(8)}\r\n`);
+  emitText(socket, `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${String(stats.userCount).padStart(4)} \x1b[32mUsers\x1b[0m\r\n`);
 
   // Calculate percentage in use - express.e:22752-22765
   const totalUsers = stats.userCount;
   const capacity = 1000; // Default capacity
   let pctInUse = capacity > 0 ? (totalUsers / capacity * 100).toFixed(1) : '0.0';
   const pctColor = parseFloat(pctInUse) >= 90 ? '\x1b[31m' : '\x1b[33m'; // Red if >= 90%, yellow otherwise
-  socket.emit('ansi-output', `\x1b[13;44H${pctColor}${pctInUse}% In use    \x1b[0m\r\n`);
+  emitText(socket, `\x1b[13;44H${pctColor}${pctInUse}% In use    \x1b[0m\r\n`);
 
   // Dir cache options - express.e:22767-22774 (disabled for web)
-  socket.emit('ansi-output', `\x1b[14;40H\x1b[33mE.>\x1b[32m Ram Dir Cache(s) \x1b[0mDisabled\r\n`);
-  socket.emit('ansi-output', `\x1b[15;40H\x1b[33m                        \r\n`);
+  emitText(socket, `\x1b[14;40H\x1b[33mE.>\x1b[32m Ram Dir Cache(s) \x1b[0mDisabled\r\n`);
+  emitText(socket, `\x1b[15;40H\x1b[33m                        \r\n`);
 
   // Footer - express.e:22776
-  socket.emit('ansi-output', `\x1b[17;2H\x1b[33m<TAB>\x1b[36m to exit \x1b[33m-/+\x1b[36m=\x1b[0mPrev/Next Conference \x1b[0m\r\n`);
+  emitText(socket, `\x1b[17;2H\x1b[33m<TAB>\x1b[36m to exit \x1b[33m-/+\x1b[36m=\x1b[0mPrev/Next Conference \x1b[0m\r\n`);
 
   // Position cursor and show - express.e:22778-22779
-  socket.emit('ansi-output', `\x1b[18;2H`);
-  socket.emit('ansi-output', '\x1b[?25h'); // Show cursor
+  emitText(socket, `\x1b[18;2H`);
+  emitText(socket, '\x1b[?25h'); // Show cursor
 }
 
 /**
@@ -413,29 +414,29 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
   // Handle choice - express.e:22781-22944
   switch (choice) {
     case '1': // Ratio
-      socket.emit('ansi-output', '\x1b[0mRatio > ');
+      emitPrompt(socket, '\x1b[0mRatio > ');
       session.subState = LoggedOnSubState.CM_INPUT_RATIO;
       return;
 
     case '2': // Ratio Type
-      socket.emit('ansi-output', '\x1b[0mRatio Type > ');
+      emitPrompt(socket, '\x1b[0mRatio Type > ');
       session.subState = LoggedOnSubState.CM_INPUT_RATIO_TYPE;
       return;
 
     case '3': // Reset New Mail Scan Pointers - express.e:22797-22799
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
       await _resetNewMailScanPointers(conf, msgBase);
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '4': // Reset Last Message Read Pointers - express.e:22800-22802
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
       await _resetLastMessageReadPointers(conf, msgBase);
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '5': // Dump user stats - express.e:22803-22805
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
         const db = getDatabase();
@@ -489,34 +490,34 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
         fs.writeFileSync(statsFile, output, 'utf8');
 
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mUser statistics dumped to ${path.basename(statsFile)}\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[32mUser statistics dumped to ${path.basename(statsFile)}\x1b[0m\r\n`);
       } catch (error) {
 console.error('[CM] Error dumping user stats:', error);
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError dumping user stats\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[31mError dumping user stats\x1b[0m\r\n`);
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '6': // Set Default New Mail Scan - express.e:22798-22806
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
       session.tempData.cmAction = 'setMailScan';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '7': // Set Default New File Scan - express.e:22807-22815
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
       session.tempData.cmAction = 'setFileScan';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '8': // Set Default Zoom Flag - express.e:22816-22824
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
       session.tempData.cmAction = 'setZoomFlag';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '9': // Reset Messages Posted - express.e:22833-22835
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
         const db = getDatabase();
@@ -526,16 +527,16 @@ console.error('[CM] Error dumping user stats:', error);
           `UPDATE conf_base SET messages_posted = 0 WHERE conference_id = $1`,
           [confId]
         );
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mMessages posted counters reset for conference ${confId}\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[32mMessages posted counters reset for conference ${confId}\x1b[0m\r\n`);
       } catch (error) {
 console.error('[CM] Error resetting messages posted:', error);
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError resetting messages posted\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[31mError resetting messages posted\x1b[0m\r\n`);
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case 'A': // Reset Voting Booth - express.e:22836-22838
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
         const db = getDatabase();
@@ -548,35 +549,35 @@ console.error('[CM] Error resetting messages posted:', error);
           DELETE FROM vote_status
           WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
         `, [confId]);
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[32mVoting booth reset for conference ${confId}.\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[32mVoting booth reset for conference ${confId}.\x1b[0m\r\n`);
 console.log(`[CM] Voting booth reset for conference ${confId}`);
       } catch (error) {
 console.error('[CM] Error resetting voting booth:', error);
-        socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError resetting voting booth.\x1b[0m\r\n`);
+        emitText(socket, `\x1b[18;2H \x1b[31mError resetting voting booth.\x1b[0m\r\n`);
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case 'B': // Modify next message number - express.e:22839-22844
-      socket.emit('ansi-output', '\x1b[0mNext Message > ');
+      emitPrompt(socket, '\x1b[0mNext Message > ');
       session.subState = LoggedOnSubState.CM_INPUT_HIGH_MSG;
       return;
 
     case 'C': // Modify lowest message number - express.e:22845-22850
-      socket.emit('ansi-output', '\x1b[0mLow Message  > ');
+      emitPrompt(socket, '\x1b[0mLow Message  > ');
       session.subState = LoggedOnSubState.CM_INPUT_LOW_MSG;
       return;
 
     case 'D': // Set conference capacity - express.e:22851-22859
-      socket.emit('ansi-output', '\x1b[0mSize in records > ');
+      emitPrompt(socket, '\x1b[0mSize in records > ');
       session.subState = LoggedOnSubState.CM_INPUT_CAPACITY;
       return;
 
     case '\t': // TAB - exit - express.e:22924-22925
     case 'Q':
     case '':
-      socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen and home
-      socket.emit('ansi-output', '\x1b[?25h'); // Show cursor
+      emitText(socket, '\x1b[2J\x1b[H'); // Clear screen and home
+      emitText(socket, '\x1b[?25h'); // Show cursor
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       delete session.tempData.cmConf;
@@ -639,14 +640,14 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
         `UPDATE conf_base SET ratio = $1 WHERE conference_id = $2`,
         [value, conf]
       );
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mRatio updated to ${value} for all users\x1b[0m\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[32mRatio updated to ${value} for all users\x1b[0m\r\n`);
     } else if (field === 'RATIO_TYPE') {
       // express.e:22789-22796 - Update ratio type for all users in conference
       await db.query(
         `UPDATE conf_base SET ratio_type = $1 WHERE conference_id = $2`,
         [value, conf]
       );
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mRatio type updated to ${value} for all users\x1b[0m\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[32mRatio type updated to ${value} for all users\x1b[0m\r\n`);
     } else if (field === 'CAPACITY') {
       // express.e:22851-22859 - Set conference capacity (max users)
       // This would resize the conference database file in Amiga version
@@ -655,7 +656,7 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
         `UPDATE conferences SET max_users = $1 WHERE id = $2`,
         [value, conf]
       );
-      socket.emit('ansi-output', `\x1b[18;2H \x1b[32mConference capacity set to ${value} users\x1b[0m\r\n`);
+      emitText(socket, `\x1b[18;2H \x1b[32mConference capacity set to ${value} users\x1b[0m\r\n`);
     }
   }
 
@@ -673,7 +674,7 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
   const action = session.tempData.cmAction;
   const confId = session.tempData.cmConf || session.currentConf || 1;
 
-  socket.emit('ansi-output', `\x1b[18;2H \x1b[0mWorking....\r\n`);
+  emitText(socket, `\x1b[18;2H \x1b[0mWorking....\r\n`);
 
   try {
     const db = getDatabase();
@@ -726,10 +727,10 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
         break;
     }
 
-    socket.emit('ansi-output', `\x1b[18;2H \x1b[32mDefault flags updated for all users in conference ${confId}\x1b[0m\r\n`);
+    emitText(socket, `\x1b[18;2H \x1b[32mDefault flags updated for all users in conference ${confId}\x1b[0m\r\n`);
   } catch (error) {
 console.error('[CM] Error updating default flags:', error);
-    socket.emit('ansi-output', `\x1b[18;2H \x1b[31mError updating flags\x1b[0m\r\n`);
+    emitText(socket, `\x1b[18;2H \x1b[31mError updating flags\x1b[0m\r\n`);
   }
 
   delete session.tempData.cmAction;

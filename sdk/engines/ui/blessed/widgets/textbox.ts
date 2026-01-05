@@ -117,16 +117,16 @@ export class Textbox extends Element {
     return Math.max(0, Math.min(pos, this.value.length));
   }
 
-  private _onKeypress(ch: any, key: KeyEvent): void {
-    if (!this.focused) return;
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.focused) return false;
 
     // Ignore Tab - it's handled by screen for focus navigation
-    if (key.name === 'tab') return;
+    if (key.name === 'tab') return false;
 
     // Ctrl+A to select all
     if (key.ctrl && key.name === 'a') {
       this.selectAll();
-      return;
+      return true;
     }
 
     // Character input - insert printable characters (including Unicode)
@@ -137,7 +137,7 @@ export class Textbox extends Element {
       // Block: control characters (0-31) and DEL (127)
       if (charCode >= 32 && charCode !== 127) {
         this.insertChar(ch);
-        return;
+        return true;
       }
     }
 
@@ -145,11 +145,11 @@ export class Textbox extends Element {
     switch (key.name) {
       case 'backspace':
         this.deleteChar();
-        break;
+        return true;
 
       case 'delete':
         this.deleteCharForward();
-        break;
+        return true;
 
       case 'left':
         if (key.shift) {
@@ -158,7 +158,7 @@ export class Textbox extends Element {
           this.clearSelection();
           this.cursorLeft();
         }
-        break;
+        return true;
 
       case 'right':
         if (key.shift) {
@@ -167,7 +167,7 @@ export class Textbox extends Element {
           this.clearSelection();
           this.cursorRight();
         }
-        break;
+        return true;
 
       case 'home':
         if (key.shift) {
@@ -176,7 +176,7 @@ export class Textbox extends Element {
           this.clearSelection();
           this.cursorHome();
         }
-        break;
+        return true;
 
       case 'end':
         if (key.shift) {
@@ -185,14 +185,16 @@ export class Textbox extends Element {
           this.clearSelection();
           this.cursorEnd();
         }
-        break;
+        return true;
 
       case 'escape':
         this.clearSelection();
         this.blur();
         this.cancel();
-        break;
+        return true;
     }
+
+    return false;
   }
 
   /**
@@ -626,16 +628,16 @@ export class Textarea extends Element {
     }
   }
 
-  private _onKeypress(ch: any, key: KeyEvent): void {
-    if (!this.focused) return;
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.focused) return false;
 
     // Ignore Tab (except Shift+Tab) - handled by screen for focus navigation
-    if (key.name === 'tab' && !key.shift) return;
+    if (key.name === 'tab' && !key.shift) return false;
 
     // Ctrl+A to select all
     if (key.ctrl && key.name === 'a') {
       this.selectAll();
-      return;
+      return true;
     }
 
     // Character input - printable characters (including Unicode)
@@ -645,18 +647,18 @@ export class Textarea extends Element {
       // Block: control characters (0-31) and DEL (127)
       if (charCode >= 32 && charCode !== 127) {
         this.insertChar(ch);
-        return;
+        return true;
       }
     }
 
     switch (key.name) {
       case 'backspace':
         this.deleteChar();
-        break;
+        return true;
 
       case 'delete':
         this.deleteCharForward();
-        break;
+        return true;
 
       case 'left':
         if (key.shift) {
@@ -665,7 +667,7 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorLeft();
         }
-        break;
+        return true;
 
       case 'right':
         if (key.shift) {
@@ -674,7 +676,7 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorRight();
         }
-        break;
+        return true;
 
       case 'up':
         if (key.shift) {
@@ -683,7 +685,7 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorUp();
         }
-        break;
+        return true;
 
       case 'down':
         if (key.shift) {
@@ -692,7 +694,7 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorDown();
         }
-        break;
+        return true;
 
       case 'home':
         if (key.shift) {
@@ -701,7 +703,7 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorHome();
         }
-        break;
+        return true;
 
       case 'end':
         if (key.shift) {
@@ -710,18 +712,18 @@ export class Textarea extends Element {
           this.clearSelection();
           this.cursorEnd();
         }
-        break;
+        return true;
 
       case 'enter':
         // Multi-line: Enter inserts newline
         this.insertChar('\n');
-        break;
+        return true;
 
       case 'escape':
         this.clearSelection();
         this.blur();
         this.cancel();
-        break;
+        return true;
 
       case 'tab':
         // Shift+Tab submits, Tab inserts spaces
@@ -730,8 +732,10 @@ export class Textarea extends Element {
         } else {
           this.insertChar('  ');  // Insert 2 spaces
         }
-        break;
+        return true;
     }
+
+    return false;
   }
 
   /**

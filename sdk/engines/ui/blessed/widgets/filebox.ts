@@ -54,6 +54,7 @@ export class FileBox extends Box {
     this.list.key(['escape', 'q'], () => {
       this.emit('cancel');
       this.hide();
+      return true;
     });
 
     // Load initial directory

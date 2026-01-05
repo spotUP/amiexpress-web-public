@@ -33,6 +33,7 @@ export function createSettingsOverlay(
     keys: true,
     closable: true,
     draggable: true,
+    trapFocus: true,
     ch: ' ',
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
   });

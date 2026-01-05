@@ -379,6 +379,9 @@ export interface XIMState {
   chainCommand?: string;
   logonType?: number;
   doorCommand?: string;
+  // Native door detection: set to true ONLY after 500ms timer fires with no XIM data requests
+  // XIM doors that send JH_HK/etc should NOT have input injected - they receive via reply
+  isNativeDoor?: boolean;
 }
 
 /**

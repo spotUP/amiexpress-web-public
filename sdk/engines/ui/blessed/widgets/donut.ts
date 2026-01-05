@@ -39,7 +39,7 @@ export class Donut extends Canvas {
 
     this.options.stroke = this.options.stroke || 'magenta';
     this.options.fill = this.options.fill || 'white';
-    this.options.radius = this.options.radius || 14;
+    this.options.radius = this.options.radius || 8;
     this.options.arcWidth = this.options.arcWidth || 4;
     this.options.spacing = this.options.spacing || 2;
     this.options.yPadding = this.options.yPadding || 2;

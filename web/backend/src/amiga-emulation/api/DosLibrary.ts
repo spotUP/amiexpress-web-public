@@ -7,6 +7,7 @@ import { PathManager } from "./PathManager";
 import { AmigaFileCache } from "./AmigaFileCache";
 import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
+import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 
 // ========== File Operation Debugging ==========
 // Set DEBUG_FILE_OPS=1 to log all file operations (Open, Close, Read, Write, Lock, etc.)
@@ -1219,9 +1220,13 @@ console.log(
       bytes.push(this.emulator.readMemory(bufferAddr + i));
     }
 
+    // Convert Amiga/Latin-1 bytes to ASCII (fixes non-breaking space 0xA0 -> 0x20)
+    // This ensures files written by doors (like MultiTop bulletins) display correctly
+    const asciiBytes = convertAmigaBytesToAscii(bytes);
+
     // NEW: Use FileManager if enabled
     if (this.useNewFileSystem && this.fileManager) {
-      const dataBuffer = Buffer.from(bytes);
+      const dataBuffer = Buffer.from(asciiBytes);
       const result = this.fileManager.write(handle, dataBuffer);
 
     if (result.bytesWritten < 0) {
@@ -1275,7 +1280,7 @@ console.log(
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
-      const rawBuf = Buffer.from(bytes);
+      const rawBuf = Buffer.from(asciiBytes);
       let text = rawBuf.toString('latin1');
 
       // DEBUG: Log WHO2 door output
@@ -1364,7 +1369,7 @@ console.log(
 
     // Write bytes to buffer
     for (let i = 0; i < length; i++) {
-      fileHandle.buffer[fileHandle.position + i] = bytes[i];
+      fileHandle.buffer[fileHandle.position + i] = asciiBytes[i];
     }
 
     // Update file position

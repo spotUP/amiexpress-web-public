@@ -51,8 +51,11 @@ export class DoorConstants {
   static readonly MESSAGE_FILLER3_OFFSET = 0x104;
   static readonly MESSAGE_REPLY_PORT_OFFSET = 14;
   static readonly MESSAGE_LENGTH_OFFSET = 18;
-  // SIZEOF jhMessage = 0x108 (20-byte mn + 200-byte string + 11 LONG fields, includes strptr/filler3).
-  static readonly MESSAGE_TOTAL_LENGTH = 0x108;
+  // Extended jhMessage size: some doors (AquaScan, etc.) access offsets up to 0x14a
+  // for extended user/account data. Allocate 0x150 (336 bytes) to cover all accesses.
+  // Standard: 0x108 (264 bytes) = 20-byte mn + 200-byte string + 11 LONG fields
+  // Extended: 0x150 (336 bytes) = standard + 72 bytes for filler4-filler12 (9 LONGs + slack)
+  static readonly MESSAGE_TOTAL_LENGTH = 0x150;
   static readonly DIF_DATA_PTR_OFFSET = 0x1c;
   static readonly DIF_STRING_PTR_OFFSET = 0x20;
   static readonly NODE_STATUS_SIZE = 0x100;

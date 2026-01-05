@@ -85,26 +85,23 @@ console.log(`[Audio] User ${session.user?.username} stopped audio streaming`);
       return;
     }
 
-    const roomId = session.currentVoiceChannelId || session.currentRoomId;
-    if (!roomId) {
-      callback?.({ success: false, error: 'Not in a voice channel or chat room' });
-      return;
-    }
-
     const streamId = `video-${socket.id}`;
-console.log(`[Video] User ${session.user?.username} starting video stream: ${streamId} in room ${roomId}`);
+    const roomId = session.currentVoiceChannelId || session.currentRoomId;
+    console.log(`[Video] User ${session.user?.username} starting video stream: ${streamId}${roomId ? ` in room ${roomId}` : ' (standalone)'}`);
 
     // Notify the client (frontend) to actually start capturing from the camera
     socket.emit('video:start-stream', { source: data.source, options: data.options, streamId });
 
-    // Notify others in the room
-    const voiceRoomId = `voice:${roomId}`;
-    socket.to(voiceRoomId).emit('video:stream-started', {
-      userId: session.user?.id,
-      username: session.user?.username,
-      streamId,
-      options: data.options
-    });
+    // Notify others in the room if in one
+    if (roomId) {
+      const voiceRoomId = `voice:${roomId}`;
+      socket.to(voiceRoomId).emit('video:stream-started', {
+        userId: session.user?.id,
+        username: session.user?.username,
+        streamId,
+        options: data.options
+      });
+    }
 
     callback?.({ success: true, streamId });
   });
@@ -147,47 +144,204 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
     });
   });
 
-  // Handle raw video data and convert to ASCII
-  socket.on('video:data', (data: { width: number, height: number, data: ArrayBuffer }) => {
+  // Handle raw video data and convert to ASCII art
+  // Inspired by Python/Pillow ASCII art techniques with calibrated characters
+  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'halfblock' | 'ascii', data: ArrayBuffer }) => {
     const session = sessions.get(socket.id);
-    if (!session) return;
 
-    const roomId = session.currentVoiceChannelId || session.currentRoomId;
-    if (!roomId) return;
-
-    const { width, height, data: buffer } = data;
+    const { width, height, colored, mode = 'halfblock', data: buffer } = data;
     const pixels = new Uint8Array(buffer);
-    
-    // Convert to ASCII
-    const chars = ' .:-=+*#%@';
-    let asciiFrame = '';
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const luminance = pixels[y * width + x];
-        const charIdx = Math.floor((luminance / 255) * (chars.length - 1));
-        const char = chars[charIdx];
-        
-        // Simple ANSI grayscale mapping using 16 colors
-        // 0-63: black, 64-127: dark gray, 128-191: light gray, 192-255: white
-        let colorCode = '37'; // Default white
-        if (luminance < 64) colorCode = '30';
-        else if (luminance < 128) colorCode = '90';
-        else if (luminance < 192) colorCode = '37';
-        else colorCode = '97';
-        
-        asciiFrame += `\x1b[${colorCode}m${char}`;
+
+    // ========== COLOR PALETTE ==========
+    // Full 16-color ANSI palette with RGB values for distance calculation
+    // Uses standard CGA/VGA color values
+    const PALETTE: { name: string; r: number; g: number; b: number }[] = [
+      // Dark colors (0-7)
+      { name: 'black', r: 0, g: 0, b: 0 },
+      { name: 'red', r: 170, g: 0, b: 0 },
+      { name: 'green', r: 0, g: 170, b: 0 },
+      { name: 'yellow', r: 170, g: 85, b: 0 },
+      { name: 'blue', r: 0, g: 0, b: 170 },
+      { name: 'magenta', r: 170, g: 0, b: 170 },
+      { name: 'cyan', r: 0, g: 170, b: 170 },
+      { name: 'white', r: 170, g: 170, b: 170 },
+      // Bright colors (8-15)
+      { name: 'lightblack', r: 85, g: 85, b: 85 },  // gray
+      { name: 'lightred', r: 255, g: 85, b: 85 },
+      { name: 'lightgreen', r: 85, g: 255, b: 85 },
+      { name: 'lightyellow', r: 255, g: 255, b: 85 },
+      { name: 'lightblue', r: 85, g: 85, b: 255 },
+      { name: 'lightmagenta', r: 255, g: 85, b: 255 },
+      { name: 'lightcyan', r: 85, g: 255, b: 255 },
+      { name: 'lightwhite', r: 255, g: 255, b: 255 },
+    ];
+
+    // Find nearest palette color using weighted Euclidean distance
+    // Human eye is more sensitive to green, then red, then blue
+    const rgbToBlessed = (r: number, g: number, b: number): string => {
+      let minDist = Infinity;
+      let bestColor = 'white';
+
+      for (const color of PALETTE) {
+        // Weighted distance (perception-based)
+        const dr = (r - color.r) * 0.30;
+        const dg = (g - color.g) * 0.59;
+        const db = (b - color.b) * 0.11;
+        const dist = dr * dr + dg * dg + db * db;
+
+        if (dist < minDist) {
+          minDist = dist;
+          bestColor = color.name;
+        }
       }
-      if (y < height - 1) asciiFrame += '\r\n';
+
+      return bestColor;
+    };
+
+    // Color transformation functions (inspired by Python version)
+    const dimColor = (r: number, g: number, b: number): [number, number, number] => {
+      // Dim to 40% for background - creates depth
+      return [Math.floor(r * 0.4), Math.floor(g * 0.4), Math.floor(b * 0.4)];
+    };
+
+    const brightenColor = (r: number, g: number, b: number): [number, number, number] => {
+      // Brighten by 20% for foreground pop
+      return [
+        Math.min(255, Math.floor(r * 1.2)),
+        Math.min(255, Math.floor(g * 1.2)),
+        Math.min(255, Math.floor(b * 1.2))
+      ];
+    };
+
+    // ========== CHARACTER SETS ==========
+    // Characters sorted by visual density (calibrated - darkest to lightest)
+    // Based on actual pixel coverage when rendered
+    const CHARSET_FULL = ' `.-\':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@';
+    const CHARSET_SYMBOLS = ' .\'`^",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$';
+    const CHARSET_SIMPLE = ' .-:=+*#%@';
+    const CHARSET_BLOCK = ' ░▒▓█';
+
+    // Use the rich character set
+    const charset = CHARSET_SYMBOLS;
+    const charCount = charset.length;
+
+    // Get pixel RGB at position
+    const getPixel = (x: number, y: number): [number, number, number] => {
+      const idx = y * width + x;
+      if (colored) {
+        return [pixels[idx * 3], pixels[idx * 3 + 1], pixels[idx * 3 + 2]];
+      } else {
+        const gray = pixels[idx];
+        return [gray, gray, gray];
+      }
+    };
+
+    // Calculate luminance for character selection
+    const getLuminance = (r: number, g: number, b: number): number => {
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    };
+
+    let asciiFrame = '';
+    let lastFg = '';
+    let lastBg = '';
+
+    if (mode === 'halfblock') {
+      // ========== HALF-BLOCK MODE ==========
+      // Uses ▀ character with fg+bg colors for 2x vertical resolution
+      const UPPER_HALF = '\u2580'; // ▀
+
+      for (let y = 0; y < height; y += 2) {
+        for (let x = 0; x < width; x++) {
+          // Top pixel -> foreground color
+          const [r1, g1, b1] = getPixel(x, y);
+          const fgColor = rgbToBlessed(r1, g1, b1);
+
+          // Bottom pixel -> background color
+          let bgColor: string;
+          if (y + 1 < height) {
+            const [r2, g2, b2] = getPixel(x, y + 1);
+            bgColor = rgbToBlessed(r2, g2, b2);
+          } else {
+            bgColor = fgColor;
+          }
+
+          // Optimize: only emit color tags when they change
+          if (fgColor !== lastFg || bgColor !== lastBg) {
+            if (lastFg || lastBg) asciiFrame += '{/}';
+            asciiFrame += `{${fgColor}-fg}{${bgColor}-bg}`;
+            lastFg = fgColor;
+            lastBg = bgColor;
+          }
+
+          asciiFrame += UPPER_HALF;
+        }
+
+        if (lastFg || lastBg) {
+          asciiFrame += '{/}';
+          lastFg = '';
+          lastBg = '';
+        }
+        if (y + 2 < height) asciiFrame += '\n';
+      }
+    } else {
+      // ========== ASCII CHARACTER MODE ==========
+      // Uses density-sorted characters with fg color + dimmed bg color
+      // Like the Python ASCIIArt class approach
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const [r, g, b] = getPixel(x, y);
+
+          // Select character based on luminance
+          const luminance = getLuminance(r, g, b);
+          const charIndex = Math.floor((luminance / 255) * (charCount - 1));
+          const char = charset[charIndex];
+
+          // Foreground: slightly brightened pixel color
+          const [fr, fg, fb] = brightenColor(r, g, b);
+          const fgColor = rgbToBlessed(fr, fg, fb);
+
+          // Background: dimmed pixel color (creates depth like the Python version)
+          const [br, bg2, bb] = dimColor(r, g, b);
+          const bgColor = rgbToBlessed(br, bg2, bb);
+
+          // Optimize: only emit color tags when they change
+          if (fgColor !== lastFg || bgColor !== lastBg) {
+            if (lastFg || lastBg) asciiFrame += '{/}';
+            asciiFrame += `{${fgColor}-fg}{${bgColor}-bg}`;
+            lastFg = fgColor;
+            lastBg = bgColor;
+          }
+
+          asciiFrame += char;
+        }
+
+        if (lastFg || lastBg) {
+          asciiFrame += '{/}';
+          lastFg = '';
+          lastBg = '';
+        }
+        if (y < height - 1) asciiFrame += '\n';
+      }
     }
 
-    const voiceRoomId = `voice:${roomId}`;
-    // Broadcast the ASCII frame to everyone in the voice room (including sender for local preview)
-    io.to(voiceRoomId).emit('video:frame', {
-      userId: session.user?.id,
+    const frameData = {
+      userId: session?.user?.id,
       streamId: `video-${socket.id}`,
       frame: asciiFrame
-    });
+    };
+
+    // Always send frame back to originating socket (for standalone demos)
+    socket.emit('video:frame', frameData);
+
+    // Also broadcast to voice room if in one
+    if (session) {
+      const roomId = session.currentVoiceChannelId || session.currentRoomId;
+      if (roomId) {
+        const voiceRoomId = `voice:${roomId}`;
+        socket.to(voiceRoomId).emit('video:frame', frameData);
+      }
+    }
   });
 
   // Relay pre-rendered video frames (ASCII) to other participants

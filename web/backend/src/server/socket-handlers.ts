@@ -473,7 +473,7 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)
-  socket.on('key-down', (data: { key: string; code: string; repeat?: boolean }) => {
+  socket.on('key-down', (data: { key: string; code: string }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -485,7 +485,7 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
 
     // If door is active and has a key state handler, call it (SDK doors)
     if (session.inDoorManager && session.doorKeyStateHandler) {
-      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState, repeat: data.repeat });
+      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState });
     }
 
     // Route through KeyRepeatManager for 68K doors (handles repeat timing)
@@ -495,10 +495,9 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
         session.keyRepeatManager.keyDown(data.key, char);
       }
     } else if (session.inDoorManager && session.doorInputHandler) {
-      // SDK doors: send directly to input handler (no repeat)
+      // SDK doors: send directly to input handler (no repeat, they handle their own)
       const char = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
       if (char) {
-        console.log(`[key-down] Sending to doorInputHandler: key=${data.key} char=${char}`);
         session.doorInputHandler(char);
       }
     }

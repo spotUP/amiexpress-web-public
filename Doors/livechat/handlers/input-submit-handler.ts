@@ -29,7 +29,7 @@ export function createSubmitHandler(
   handleCommandActions: (r: any) => { handled: boolean },
   showLoading: (text: string) => void,
   showUserList: () => void,
-  addChatMessage: (msg: string) => void,
+  addChatMessage: (msg: string, applyMarkdown?: boolean) => void,
   addSystemMessage: (msg: string) => void,
   replyToThread: (socket: Socket, messageId: number, message: string) => void,
   pinMessage: (socket: Socket, roomId: string, messageId: number) => void,
@@ -119,14 +119,14 @@ export function createSubmitHandler(
         if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.target && r.data?.message) {
           const processedMsg = replaceEmojis(r.data.message);
           socket.emit('chat:dm', { to: r.data.target, message: processedMsg });
-          addChatMessage(`{magenta-fg}[DM to ${r.data.target}]: ${processedMsg}{/magenta-fg}`);
+          addChatMessage(`{magenta-fg}[DM to ${r.data.target}]: ${processedMsg}{/magenta-fg}`, false);
         }
 
         if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
           const processedMsg = replaceEmojis(r.message);
           socket.emit('room:message', { message: processedMsg });
           const action = processedMsg.replace('ACTION: ', '');
-          addChatMessage(`{magenta-fg}* ${action}{/magenta-fg}`);
+          addChatMessage(`{magenta-fg}* ${action}{/magenta-fg}`, false);
         }
 
         if (cmdName === 'away' || cmdName === 'afk') {
@@ -207,7 +207,7 @@ export function createSubmitHandler(
           // Add local echo immediately (server skips echoing own messages back)
           const time = formatTime(new Date());
           const color = getUserColor(username);
-          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`);
+          addChatMessage(`{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${username}{/${color}-fg}> ${processedMsg}`, false);
 
           // Clear typing preview
           updateTypingPreview();

@@ -244,11 +244,7 @@ export class List extends Element {
   }
 
   private _onKeypress(ch: any, key: KeyEvent): boolean {
-    // DEBUG: Log all keypress events
-    console.log(`[List._onKeypress] key.name=${key.name} key.full=${key.full} interactive=${this.interactive} focused=${this.focused} selected=${this.selected}`);
-
     if (!this.interactive || !this.focused) {
-      console.log(`[List._onKeypress] Returning false (interactive=${this.interactive}, focused=${this.focused})`);
       return false;
     }
 
@@ -256,17 +252,13 @@ export class List extends Element {
 
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
-      console.log(`[List._onKeypress] UP - before: selected=${this.selected}`);
       this.up();
-      console.log(`[List._onKeypress] UP - after: selected=${this.selected}`);
       this.screen?.render();
       return true;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
-      console.log(`[List._onKeypress] DOWN - before: selected=${this.selected}`);
       this.down();
-      console.log(`[List._onKeypress] DOWN - after: selected=${this.selected}`);
       this.screen?.render();
       return true;
     }

@@ -136,6 +136,7 @@ export interface ElementOptions {
   // Modal/Dialog features
   closable?: boolean;  // Add X close button and ESC key binding
   closeOnEscape?: boolean;  // Close on ESC key (default: true when closable)
+  trapFocus?: boolean;  // Trap focus and suppress global keys while visible
 
   // Label
   label?: string;
@@ -287,6 +288,140 @@ export interface LogOptions extends ElementOptions {
   scrollback?: number;
   scrollOnInput?: boolean;
 }
+
+export interface TreeNode {
+  name?: string;
+  extended?: boolean;
+  children?: TreeNode[] | Record<string, TreeNode> | ((node: TreeNode) => TreeNode[] | Record<string, TreeNode>);
+  childrenContent?: TreeNode[] | Record<string, TreeNode>;
+  parent?: TreeNode | null;
+  position?: number;
+  depth?: number;
+}
+
+export interface TreeTemplate {
+  extend?: string;
+  retract?: string;
+  lines?: boolean;
+  spaces?: boolean;
+}
+
+export interface TreeOptions extends ElementOptions {
+  extended?: boolean;
+  keys?: string[] | boolean;
+  vi?: boolean;
+  mouse?: boolean;
+  scrollable?: boolean;
+  ignoreKeys?: string[];
+  template?: TreeTemplate;
+  selectedBg?: string | number | number[];
+  selectedFg?: string | number | number[];
+  bold?: boolean;
+}
+
+export interface AutocompleteSuggestion {
+  label: string;
+  insertText?: string;
+  detail?: string;
+  kind?: 'text' | 'keyword' | 'function' | 'variable' | 'user';
+  sortText?: string;
+  documentation?: string;
+}
+
+export interface AutocompleteContext {
+  currentLine: string;
+  cursorPosition: number;
+  lineNumber: number;
+  documentContent: string[];
+}
+
+export interface AutocompleteProvider {
+  trigger?: string;
+  shouldTrigger?: (context: AutocompleteContext) => boolean;
+  getSuggestions: (context: AutocompleteContext) => Promise<AutocompleteSuggestion[]>;
+}
+
+export interface AutocompleteOptions extends ElementOptions {
+  providers?: AutocompleteProvider[];
+  onSelect?: (suggestion: AutocompleteSuggestion) => void;
+  onCancel?: () => void;
+}
+
+export interface VideoOptions extends ElementOptions {
+  src?: string;
+  file?: string;
+  autoPlay?: boolean;
+  loop?: boolean;
+  controls?: boolean;
+  muted?: boolean;
+}
+
+export interface TabPanelOptions extends ElementOptions {
+  tabs?: {
+    label: string;
+    content: string | any;
+    key?: string;
+  }[];
+  activeTab?: number;
+  barHeight?: number;
+  style?: ElementOptions['style'] & {
+    tab?: Colors;
+    activeTab?: Colors;
+  };
+}
+
+export interface AccordionItem {
+  label: string;
+  content: string | any;
+  expanded?: boolean;
+}
+
+export interface AccordionOptions extends ElementOptions {
+  items?: AccordionItem[];
+  multiple?: boolean;  // Allow multiple sections to be expanded at once
+  style?: ElementOptions['style'] & {
+    header?: Colors;
+    expanded?: Colors;
+  };
+}
+
+export interface CollapsibleOptions extends ElementOptions {
+  label?: string;
+  expanded?: boolean;
+  collapsedHeight?: number;
+  style?: ElementOptions['style'] & {
+    header?: Colors;
+  };
+}
+
+export interface StackedGaugeOptions extends ElementOptions {
+  stack?: {
+    percent: number;
+    color: string;
+    label?: string;
+  }[];
+  showLabel?: boolean;
+}
+
+export interface ColorPickerOptions extends ElementOptions {
+  color?: string;
+  onSelect?: (color: string) => void;
+}
+
+export interface FileExplorerOptions extends ElementOptions {
+  cwd?: string;
+  showPreview?: boolean;
+  showDetails?: boolean;
+}
+
+export interface CarouselOptions {
+  screen: Screen;
+  interval?: number;
+  controlKeys?: boolean;
+  rotate?: boolean;
+}
+
+export type CarouselPage = (screen: Screen, page: number) => void;
 
 // ============================================================================
 // Forward Declarations

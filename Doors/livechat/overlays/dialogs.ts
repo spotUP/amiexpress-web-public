@@ -33,9 +33,9 @@ export function createDialogs(s: Screen, ib: any) {
     s.render();
   }
 
-  const md = blessed.message({ parent: s, top: 'center', left: 'center', width: 50, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } } });
-  const pd = blessed.prompt({ parent: s, top: 'center', left: 'center', width: 50, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
-  const qd = blessed.question({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } } });
+  const md = blessed.message({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } } });
+  const pd = blessed.prompt({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
+  const qd = blessed.question({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } } });
 
   function showMessageDialog(t: string, cb?: () => void) {
     mo.position.width = s.width;

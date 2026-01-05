@@ -7,37 +7,7 @@
 
 import { Box } from './box';
 import { List } from './list';
-import type { ElementOptions } from '../core/types';
-
-export interface TreeNode {
-  name?: string;
-  extended?: boolean;
-  children?: TreeNode[] | Record<string, TreeNode> | ((node: TreeNode) => TreeNode[] | Record<string, TreeNode>);
-  childrenContent?: TreeNode[] | Record<string, TreeNode>;
-  parent?: TreeNode | null;
-  position?: number;
-  depth?: number;
-}
-
-export interface TreeTemplate {
-  extend?: string;
-  retract?: string;
-  lines?: boolean;
-  spaces?: boolean;
-}
-
-export interface TreeOptions extends ElementOptions {
-  extended?: boolean;
-  keys?: string[] | boolean;
-  vi?: boolean;
-  mouse?: boolean;
-  scrollable?: boolean;
-  ignoreKeys?: string[];
-  template?: TreeTemplate;
-  selectedBg?: string | number | number[];
-  selectedFg?: string | number | number[];
-  bold?: boolean;
-}
+import type { ElementOptions, TreeNode, TreeOptions } from '../core/types';
 
 /**
  * Tree Widget
@@ -98,6 +68,7 @@ export class Tree extends Box {
           }
 
           this.emit('select', selectedNode, this.rows.selected);
+          return true;
         });
       }
     }
@@ -111,15 +82,18 @@ export class Tree extends Box {
           selectedNode.extended = false;
           this.setData(this.data);
           this.screen?.render();
+          return true;
         } else if (selectedNode.parent) {
           // Move to parent node
           const parentIndex = this.nodeLines.indexOf(selectedNode.parent);
           if (parentIndex >= 0) {
             this.rows.select(parentIndex);
             this.screen?.render();
+            return true;
           }
         }
       }
+      return false;
     });
 
     // Right arrow: expand current node (or move to first child if already expanded)
@@ -131,15 +105,18 @@ export class Tree extends Box {
           selectedNode.extended = true;
           this.setData(this.data);
           this.screen?.render();
+          return true;
         } else {
           // Move to first child (it will be the next item in the list)
           const currentIndex = this.rows.selected;
           if (currentIndex < this.nodeLines.length - 1) {
             this.rows.select(currentIndex + 1);
             this.screen?.render();
+            return true;
           }
         }
       }
+      return false;
     });
   }
 

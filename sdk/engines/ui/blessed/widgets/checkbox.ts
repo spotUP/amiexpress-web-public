@@ -19,12 +19,29 @@ export class Checkbox extends Box {
   private uncheckChar: string;
 
   constructor(options: CheckboxOptions = {}) {
+    const baseStyle = options.style || {};
+    const focusStyle = {
+      fg: 'black',
+      bg: 'yellow',
+      ...(baseStyle.focus || {}),
+    };
+    const hoverStyle = {
+      fg: 'black',
+      bg: 'cyan',
+      ...(baseStyle.hover || {}),
+    };
+
     super({
       ...options,
       focusable: true,
       clickable: true,
       height: options.height || 1,
       width: options.width || (options.text ? options.text.length + 4 : 3),
+      style: {
+        ...baseStyle,
+        focus: focusStyle,
+        hover: hoverStyle,
+      },
     });
 
     this._checked = options.checked || false;
@@ -46,21 +63,16 @@ export class Checkbox extends Box {
     // Toggle on space/enter
     this.key(['space', 'enter'], () => {
       this.toggle();
+      return true;
     });
 
-    // Focus styling
+    // Focus/blur handlers
     this.on('focus', () => {
-      if (this.options.style && this.options.style.focus) {
-        this.options.style = { ...this.options.style, ...this.options.style.focus };
-      }
       this.screen?.render();
     });
 
     this.on('blur', () => {
-      if (this.options.style && this.options.style.focus) {
-        // Reset to original style (simplified)
-        this.screen?.render();
-      }
+      this.screen?.render();
     });
   }
 

@@ -21,12 +21,29 @@ export class RadioButton extends Box {
   public value: any;
 
   constructor(options: RadioButtonOptions = {}) {
+    const baseStyle = options.style || {};
+    const focusStyle = {
+      fg: 'black',
+      bg: 'yellow',
+      ...(baseStyle.focus || {}),
+    };
+    const hoverStyle = {
+      fg: 'black',
+      bg: 'cyan',
+      ...(baseStyle.hover || {}),
+    };
+
     super({
       ...options,
       focusable: true,
       clickable: true,
       height: options.height || 1,
       width: options.width || (options.text ? options.text.length + 4 : 3),
+      style: {
+        ...baseStyle,
+        focus: focusStyle,
+        hover: hoverStyle,
+      },
     });
 
     this._checked = options.checked || false;
@@ -49,21 +66,16 @@ export class RadioButton extends Box {
     // Select on space/enter
     this.key(['space', 'enter'], () => {
       this.select();
+      return true;
     });
 
-    // Focus styling
+    // Focus/blur handlers
     this.on('focus', () => {
-      if (this.options.style && this.options.style.focus) {
-        this.options.style = { ...this.options.style, ...this.options.style.focus };
-      }
       this.screen?.render();
     });
 
     this.on('blur', () => {
-      if (this.options.style && this.options.style.focus) {
-        // Reset to original style (simplified)
-        this.screen?.render();
-      }
+      this.screen?.render();
     });
   }
 

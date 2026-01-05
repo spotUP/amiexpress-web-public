@@ -262,71 +262,93 @@ else
   printf "%b\n" "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
 fi
 
-# Check if SDK is built
-printf "%b\n" "${CYAN}→ SDK: Rebuilding to ensure latest changes...${RESET}"
-(cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
-if [ $? -eq 0 ]; then
-  printf "%b\n" "   ${GREEN}[OK] SDK built successfully${RESET}"
-else
-  printf "%b\n" "   ${RED}[ERROR] SDK build failed${RESET}"
-  printf "%b\n" "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
-  exit 1
+# Check if SDK needs rebuild (smart caching)
+SDK_NEEDS_BUILD=false
+if [ ! -d "$REPO_ROOT/sdk/dist" ]; then
+  SDK_NEEDS_BUILD=true
+elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
+  SDK_NEEDS_BUILD=true
 fi
 
-# Build all SDK doors (CRITICAL - prevents stale code issues)
-printf "%b\n" "${CYAN}→ SDK Doors: Building all example/installed doors...${RESET}"
-DOOR_COUNT=0
-DOOR_ERRORS=0
+if [ "$SDK_NEEDS_BUILD" = true ]; then
+  printf "%b\n" "${CYAN}-> SDK: Building (source changed)...${RESET}"
+  (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
+  if [ $? -eq 0 ]; then
+    printf "%b\n" "   ${GREEN}[OK] SDK built successfully${RESET}"
+  else
+    printf "%b\n" "   ${RED}[ERROR] SDK build failed${RESET}"
+    printf "%b\n" "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
+    exit 1
+  fi
+else
+  printf "%b\n" "   ${GREEN}[OK] SDK up to date (skipped rebuild)${RESET}"
+fi
+
+# Build all SDK doors IN PARALLEL (CRITICAL - prevents stale code issues)
+printf "%b\n" "${CYAN}-> SDK Doors: Building all example/installed doors (parallel)...${RESET}"
+DOOR_PIDS=""
+DOOR_NAMES=""
 
 for door_dir in "$REPO_ROOT/sdk/doors"/*/ ; do
   if [ -f "$door_dir/package.json" ]; then
     door_name=$(basename "$door_dir")
-    # Only rebuild if source exists (some doors might be JS-only)
+    # Only rebuild if source exists and is newer than dist
     if [ -d "$door_dir/src" ]; then
-      printf "%b" "   ${WHITE}→ Building $door_name...${RESET}"
-      (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1)
-      if [ $? -eq 0 ]; then
-        printf "%b\n" " ${GREEN}[OK]${RESET}"
-        ((DOOR_COUNT++))
-      else
-        printf "%b\n" " ${YELLOW}[SKIP]${RESET}"
-        ((DOOR_ERRORS++))
+      # Skip if dist/index.js exists and is newer than all src files
+      if [ -f "$door_dir/dist/index.js" ]; then
+        NEWEST_SRC=$(find "$door_dir/src" -name "*.ts" -newer "$door_dir/dist/index.js" 2>/dev/null | head -1)
+        if [ -z "$NEWEST_SRC" ]; then
+          continue  # Skip - dist is up to date
+        fi
       fi
+      # Build in background
+      (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1) &
+      DOOR_PIDS="$DOOR_PIDS $!"
+      DOOR_NAMES="$DOOR_NAMES $door_name"
     fi
   fi
 done
 
-if [ $DOOR_COUNT -gt 0 ]; then
-  printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT SDK door(s)${RESET}"
-  if [ $DOOR_ERRORS -gt 0 ]; then
-    printf "%b\n" "   ${YELLOW}[WARNING] $DOOR_ERRORS door(s) skipped (build errors)${RESET}"
+# Wait for all door builds
+DOOR_COUNT=0
+DOOR_ERRORS=0
+for pid in $DOOR_PIDS; do
+  wait $pid
+  if [ $? -eq 0 ]; then
+    ((DOOR_COUNT++))
+  else
+    ((DOOR_ERRORS++))
   fi
+done
+
+if [ $DOOR_COUNT -gt 0 ] || [ $DOOR_ERRORS -gt 0 ]; then
+  printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT door(s)${RESET}${DOOR_ERRORS:+, ${YELLOW}$DOOR_ERRORS skipped${RESET}}"
 else
-  printf "%b\n" "   ${WHITE}[INFO] No SDK doors found to build${RESET}"
+  printf "%b\n" "   ${GREEN}[OK] All doors up to date (skipped rebuild)${RESET}"
 fi
 
 # Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
 check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
 
+# Check if Terminal package needs rebuild (smart caching)
+TERM_NEEDS_BUILD=false
 if [ ! -d "$REPO_ROOT/packages/terminal/dist" ] || [ ! -f "$REPO_ROOT/packages/terminal/dist/index.js" ]; then
-  printf "%b\n" "${CYAN}→ Terminal Package: Building (first time)...${RESET}"
+  TERM_NEEDS_BUILD=true
+elif [ -n "$(find "$REPO_ROOT/packages/terminal/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/packages/terminal/dist/index.js" 2>/dev/null | head -1)" ]; then
+  TERM_NEEDS_BUILD=true
+fi
+
+if [ "$TERM_NEEDS_BUILD" = true ]; then
+  printf "%b\n" "${CYAN}-> Terminal Package: Building (source changed)...${RESET}"
   (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error)
   if [ $? -eq 0 ]; then
-    printf "%b\n" "   ${GREEN}[OK] Terminal Package built successfully${RESET}"
+    printf "%b\n" "   ${GREEN}[OK] Terminal Package built${RESET}"
   else
     printf "%b\n" "   ${RED}[ERROR] Terminal Package build failed${RESET}"
-    printf "%b\n" "   ${WHITE}Try running: cd packages/terminal && npm run build${RESET}"
     exit 1
   fi
 else
-  # Always rebuild to ensure latest changes
-  printf "%b\n" "${CYAN}→ Terminal Package: Rebuilding...${RESET}"
-  (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error > /dev/null 2>&1)
-  if [ $? -eq 0 ]; then
-    printf "%b\n" "   ${GREEN}[OK] Terminal Package rebuilt${RESET}"
-  else
-    printf "%b\n" "   ${YELLOW}[WARNING] Terminal Package rebuild had issues${RESET}"
-  fi
+  printf "%b\n" "   ${GREEN}[OK] Terminal Package up to date (skipped rebuild)${RESET}"
 fi
 
 # Check SDK Preview Frontend dependencies
@@ -339,92 +361,94 @@ DO_BUILD_SDK=true
 if [ "$OPEN_MODE" = "bbs-only" ]; then
   DO_BUILD_ADMIN=false
   DO_BUILD_SDK=false
-  printf "%b\n" "${CYAN}→ Building frontends (BBS-only mode: skipping Admin/SDK)…${RESET}"
+  printf "%b\n" "${CYAN}-> Building frontends (BBS-only mode)...${RESET}"
 elif [ "$OPEN_MODE" = "sdk-only" ]; then
   DO_BUILD_BBS=false
   DO_BUILD_ADMIN=false
-  printf "%b\n" "${CYAN}→ Building frontends (SDK-only mode)…${RESET}"
+  printf "%b\n" "${CYAN}-> Building frontends (SDK-only mode)...${RESET}"
 else
-  printf "%b\n" "${CYAN}→ Building all frontends for unified deployment...${RESET}"
+  printf "%b\n" "${CYAN}-> Building all frontends IN PARALLEL...${RESET}"
 fi
-printf "%b\n" "   ${WHITE}(This takes 15-30 seconds, please wait...)${RESET}"
 
-STEP_NUM=1
+# Start all frontend builds in parallel (HUGE time savings)
+BBS_PID=""
+ADMIN_PID=""
+SDK_PID=""
 
-# Build BBS Terminal Frontend (/)
 if [ "$DO_BUILD_BBS" = true ]; then
-  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building BBS Terminal... "
-  (cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
-  BUILD_PID=$!
-  while kill -0 $BUILD_PID 2>/dev/null; do
-    printf "."
-    sleep 1
-  done
-  wait $BUILD_PID
-  if [ $? -eq 0 ]; then
-    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  # Skip if dist exists and is newer than src
+  if [ -d "$REPO_ROOT/web/frontend/dist" ]; then
+    NEWEST_SRC=$(find "$REPO_ROOT/web/frontend/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/web/frontend/dist/index.html" 2>/dev/null | head -1)
+    if [ -z "$NEWEST_SRC" ]; then
+      printf "%b\n" "   ${GREEN}[1/3] BBS Terminal: up to date (skipped)${RESET}"
+    else
+      (cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+      BBS_PID=$!
+      printf "%b\n" "   ${CYAN}[1/3] BBS Terminal: building...${RESET}"
+    fi
   else
-    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+    (cd "$REPO_ROOT/web/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+    BBS_PID=$!
+    printf "%b\n" "   ${CYAN}[1/3] BBS Terminal: building...${RESET}"
   fi
-else
-  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping BBS Terminal build (sdk-only mode)"
 fi
-STEP_NUM=$((STEP_NUM + 1))
 
-# Build Admin Config Frontend (/admin/)
 if [ "$DO_BUILD_ADMIN" = true ]; then
-  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building Admin Config... "
-  (cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
-  BUILD_PID=$!
-  while kill -0 $BUILD_PID 2>/dev/null; do
-    printf "."
-    sleep 1
-  done
-  wait $BUILD_PID
-  if [ $? -eq 0 ]; then
-    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  if [ -d "$REPO_ROOT/web/config-app/dist" ]; then
+    NEWEST_SRC=$(find "$REPO_ROOT/web/config-app/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/web/config-app/dist/index.html" 2>/dev/null | head -1)
+    if [ -z "$NEWEST_SRC" ]; then
+      printf "%b\n" "   ${GREEN}[2/3] Admin Config: up to date (skipped)${RESET}"
+    else
+      (cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
+      ADMIN_PID=$!
+      printf "%b\n" "   ${CYAN}[2/3] Admin Config: building...${RESET}"
+    fi
   else
-    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+    (cd "$REPO_ROOT/web/config-app" && npm run build --loglevel=error > /dev/null 2>&1) &
+    ADMIN_PID=$!
+    printf "%b\n" "   ${CYAN}[2/3] Admin Config: building...${RESET}"
   fi
-else
-  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping Admin Config build (BBS-only/sdk-only mode)"
 fi
-STEP_NUM=$((STEP_NUM + 1))
 
-# Build SDK Preview Frontend (/sdk/)
 if [ "$DO_BUILD_SDK" = true ]; then
-  printf "%b" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Building SDK Preview... "
-  (cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
-  BUILD_PID=$!
-  while kill -0 $BUILD_PID 2>/dev/null; do
-    printf "."
-    sleep 1
-  done
-  wait $BUILD_PID
-  if [ $? -eq 0 ]; then
-    printf "%b\n" " ${GREEN}[OK]${RESET}"
+  if [ -d "$REPO_ROOT/sdk/tools/preview/frontend/dist" ]; then
+    NEWEST_SRC=$(find "$REPO_ROOT/sdk/tools/preview/frontend/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/sdk/tools/preview/frontend/dist/index.html" 2>/dev/null | head -1)
+    if [ -z "$NEWEST_SRC" ]; then
+      printf "%b\n" "   ${GREEN}[3/3] SDK Preview: up to date (skipped)${RESET}"
+    else
+      (cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+      SDK_PID=$!
+      printf "%b\n" "   ${CYAN}[3/3] SDK Preview: building...${RESET}"
+    fi
   else
-    printf "%b\n" " ${YELLOW}[WARNING]${RESET}"
+    (cd "$REPO_ROOT/sdk/tools/preview/frontend" && npm run build --loglevel=error > /dev/null 2>&1) &
+    SDK_PID=$!
+    printf "%b\n" "   ${CYAN}[3/3] SDK Preview: building...${RESET}"
   fi
-else
-  printf "%b\n" "   ${MAGENTA}[${STEP_NUM}/3]${RESET} Skipping SDK Preview build (BBS-only mode)"
 fi
 
-if [ "$DO_BUILD_BBS" = true ] || [ "$DO_BUILD_ADMIN" = true ] || [ "$DO_BUILD_SDK" = true ]; then
-  printf "%b\n" "   ${GREEN}[OK] Frontend build phase complete${RESET}"
-else
-  printf "%b\n" "   ${GREEN}[OK] Frontend builds skipped${RESET}"
+# Wait for all builds to complete
+BUILD_ERRORS=0
+if [ -n "$BBS_PID" ]; then
+  wait $BBS_PID || ((BUILD_ERRORS++))
+fi
+if [ -n "$ADMIN_PID" ]; then
+  wait $ADMIN_PID || ((BUILD_ERRORS++))
+fi
+if [ -n "$SDK_PID" ]; then
+  wait $SDK_PID || ((BUILD_ERRORS++))
 fi
 
-# TypeScript check for backend (quick check only, don't block startup)
-printf "%b\n" "${CYAN}→ Running quick TypeScript check...${RESET}"
-(cd "$REPO_ROOT/web/backend" && npx tsc --noEmit > /dev/null 2>&1)
-if [ $? -ne 0 ]; then
-  printf "%b\n" "   ${YELLOW}[WARNING] TypeScript errors detected in backend${RESET}"
-  printf "%b\n" "   ${WHITE}Run 'cd web/backend && npx tsc --noEmit' to see details${RESET}"
+if [ $BUILD_ERRORS -eq 0 ]; then
+  printf "%b\n" "   ${GREEN}[OK] Frontend builds complete${RESET}"
 else
-  printf "%b\n" "   ${GREEN}[OK] TypeScript check passed${RESET}"
+  printf "%b\n" "   ${YELLOW}[WARNING] $BUILD_ERRORS frontend build(s) had issues${RESET}"
 fi
+
+# TypeScript check runs in background (non-blocking - just warns)
+printf "%b\n" "${CYAN}-> TypeScript check running in background...${RESET}"
+(cd "$REPO_ROOT/web/backend" && npx tsc --noEmit > /dev/null 2>&1; if [ $? -ne 0 ]; then echo "[TS] TypeScript errors - run: cd web/backend && npx tsc --noEmit"; fi) &
+TS_CHECK_PID=$!
 
 echo ""
 printf "%b\n" "${GREEN}${BOLD}→ Environment setup complete!${RESET}"

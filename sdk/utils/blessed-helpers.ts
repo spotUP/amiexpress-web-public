@@ -571,6 +571,24 @@ export function createScreen(
     ...options
   });
 
+  // Enable mouse toggle (F12/Alt+M) by default for all doors using this helper
+  screen.enableMouseToggle();
+
+  // Auto-join default room 'lobby' if not in a room yet
+  // This is required for real-time media (webcam, audio) to function
+  if (bbs && typeof bbs.getCurrentRoomId === 'function' && !bbs.getCurrentRoomId()) {
+    console.log('[createScreen] Not in a room, auto-joining "lobby" for media services...');
+    bbs.joinRoom('lobby').then((result: any) => {
+      if (result.success) {
+        console.log('[createScreen] Successfully joined "lobby"');
+      } else {
+        console.warn(`[createScreen] Failed to auto-join "lobby": ${result.error}`);
+      }
+    }).catch((err: any) => {
+      console.error(`[createScreen] Error auto-joining "lobby": ${err.message}`);
+    });
+  }
+
   // Listen for resize events from backend if bbs is provided
   if (bbs && typeof bbs.on === 'function') {
     console.log('[createScreen] Setting up screen:resize listener via bbs.on()');

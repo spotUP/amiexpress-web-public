@@ -59,6 +59,14 @@ export { Panel } from './widgets/panel';
 export type { PanelOptions } from './widgets/panel';
 export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
+export { Autocomplete } from './widgets/autocomplete';
+export { AutocompleteManager, UsernameProvider, BBSCodeProvider, WordProvider, TemplateProvider } from './utils/AutocompleteManager';
+export { TabPanel } from './widgets/tabpanel';
+export { Accordion } from './widgets/accordion';
+export { Collapsible } from './widgets/collapsible';
+export { StackedGauge } from './widgets/stacked-gauge';
+export { ColorPicker } from './widgets/colorpicker';
+export { FileExplorer } from './widgets/fileexplorer';
 
 // Extended Widgets (Consolidated from Contrib)
 export { Bar, bar } from './widgets/bar';
@@ -82,7 +90,7 @@ export type { SparklineOptions } from './widgets/sparkline';
 export { StackedBar, stackedBar } from './widgets/stacked-bar';
 export type { StackedBarData, StackedBarOptions } from './widgets/stacked-bar';
 export { Tree, tree } from './widgets/tree';
-export type { TreeNode, TreeTemplate, TreeOptions } from './widgets/tree';
+export type { TreeNode, TreeTemplate, TreeOptions } from './core/types';
 
 // Renamed extended widgets to avoid conflicts
 export { ContribCanvas, contribCanvas } from './widgets/contrib-canvas';
@@ -142,7 +150,15 @@ import { Image, ImageOptions } from './widgets/image';
 import { Viewport, ViewportOptions } from './widgets/viewport';
 import { Canvas, CanvasOptions } from './widgets/canvas';
 import { IFrame, IFrameOptions } from './widgets/iframe';
-import { Video, VideoOptions } from './widgets/video';
+import { Video } from './widgets/video';
+import { Autocomplete } from './widgets/autocomplete';
+import { AutocompleteManager, UsernameProvider, BBSCodeProvider, WordProvider, TemplateProvider } from './utils/AutocompleteManager';
+import { TabPanel } from './widgets/tabpanel';
+import { Accordion } from './widgets/accordion';
+import { Collapsible } from './widgets/collapsible';
+import { StackedGauge } from './widgets/stacked-gauge';
+import { ColorPicker } from './widgets/colorpicker';
+import { FileExplorer } from './widgets/fileexplorer';
 
 import type {
   ScreenOptions,
@@ -154,6 +170,14 @@ import type {
   ProgressBarOptions,
   TableOptions as BaseTableOptions,
   LogOptions as BaseLogOptions,
+  AutocompleteOptions,
+  TabPanelOptions,
+  AccordionOptions,
+  CollapsibleOptions,
+  StackedGaugeOptions,
+  ColorPickerOptions,
+  FileExplorerOptions,
+  VideoOptions,
 } from './core/types';
 
 /**
@@ -420,6 +444,55 @@ export function video(options?: VideoOptions): Video {
   return new Video({ ...options, tags: true });
 }
 
+/**
+ * Create an autocomplete widget
+ */
+export function autocomplete(options?: AutocompleteOptions): Autocomplete {
+  return new Autocomplete({ ...options, tags: true });
+}
+
+/**
+ * Create a tab panel widget
+ */
+export function tabpanel(options?: TabPanelOptions): TabPanel {
+  return new TabPanel({ ...options, tags: true });
+}
+
+/**
+ * Create an accordion widget
+ */
+export function accordion(options?: AccordionOptions): Accordion {
+  return new Accordion({ ...options, tags: true });
+}
+
+/**
+ * Create a collapsible widget
+ */
+export function collapsible(options?: CollapsibleOptions): Collapsible {
+  return new Collapsible({ ...options, tags: true });
+}
+
+/**
+ * Create a stacked gauge widget
+ */
+export function stackedgauge(options?: StackedGaugeOptions): StackedGauge {
+  return new StackedGauge({ ...options, tags: true });
+}
+
+/**
+ * Create a color picker widget
+ */
+export function colorpicker(options?: ColorPickerOptions): ColorPicker {
+  return new ColorPicker({ ...options, tags: true });
+}
+
+/**
+ * Create a file explorer widget
+ */
+export function fileexplorer(options?: FileExplorerOptions): FileExplorer {
+  return new FileExplorer({ ...options, tags: true });
+}
+
 // Default export with all factory functions
 // Import all classes so they're available for the default export
 import { Screen as ScreenClass } from './core/screen';
@@ -463,6 +536,13 @@ import { Viewport as ViewportClass } from './widgets/viewport';
 import { Canvas as CanvasClass } from './widgets/canvas';
 import { IFrame as IFrameClass } from './widgets/iframe';
 import { Video as VideoClass } from './widgets/video';
+import { Autocomplete as AutocompleteClass } from './widgets/autocomplete';
+import { TabPanel as TabPanelClass } from './widgets/tabpanel';
+import { Accordion as AccordionClass } from './widgets/accordion';
+import { Collapsible as CollapsibleClass } from './widgets/collapsible';
+import { StackedGauge as StackedGaugeClass } from './widgets/stacked-gauge';
+import { ColorPicker as ColorPickerClass } from './widgets/colorpicker';
+import { FileExplorer as FileExplorerClass } from './widgets/fileexplorer';
 import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
 import { Panel as PanelClass } from './widgets/panel';
 import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
@@ -535,6 +615,18 @@ export default {
   Canvas: CanvasClass,
   IFrame: IFrameClass,
   Video: VideoClass,
+  Autocomplete: AutocompleteClass,
+  AutocompleteManager: AutocompleteManager,
+  UsernameProvider: UsernameProvider,
+  BBSCodeProvider: BBSCodeProvider,
+  WordProvider: WordProvider,
+  TemplateProvider: TemplateProvider,
+  TabPanel: TabPanelClass,
+  Accordion: AccordionClass,
+  Collapsible: CollapsibleClass,
+  StackedGauge: StackedGaugeClass,
+  ColorPicker: ColorPickerClass,
+  FileExplorer: FileExplorerClass,
   ContextMenu: ContextMenuClass,
   Panel: PanelClass,
   DockablePanel: DockablePanelClass,
@@ -600,6 +692,13 @@ export default {
   canvas,
   iframe,
   video,
+  autocomplete,
+  tabpanel,
+  accordion,
+  collapsible,
+  stackedgauge,
+  colorpicker,
+  fileexplorer,
 };
 
 // Modal Helpers - Utilities for centering and managing modals

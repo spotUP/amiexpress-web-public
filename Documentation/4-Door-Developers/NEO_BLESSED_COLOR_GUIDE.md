@@ -72,10 +72,11 @@ const box = new Box({
 
 ---
 
-## Supported Colors (Only 16!)
+## Supported Colors (Full 16-Color Palette)
 
-Neo-blessed supports ONLY these 16 named colors:
+Neo-blessed supports the full 16-color ANSI palette:
 
+### Standard Colors (0-7)
 | Foreground Tag | Background Tag | Style Name |
 |---------------|----------------|------------|
 | `{black-fg}` | `{black-bg}` | 'black' |
@@ -86,7 +87,21 @@ Neo-blessed supports ONLY these 16 named colors:
 | `{magenta-fg}` | `{magenta-bg}` | 'magenta' |
 | `{cyan-fg}` | `{cyan-bg}` | 'cyan' |
 | `{white-fg}` | `{white-bg}` | 'white' |
-| `{gray-fg}` | - | 'gray' |
+| `{gray-fg}` | `{gray-bg}` | 'gray' |
+
+### Bright Colors (8-15)
+| Foreground Tag | Background Tag | Style Name |
+|---------------|----------------|------------|
+| `{lightblack-fg}` | `{lightblack-bg}` | 'lightblack' (same as gray) |
+| `{lightred-fg}` | `{lightred-bg}` | 'lightred' |
+| `{lightgreen-fg}` | `{lightgreen-bg}` | 'lightgreen' |
+| `{lightyellow-fg}` | `{lightyellow-bg}` | 'lightyellow' |
+| `{lightblue-fg}` | `{lightblue-bg}` | 'lightblue' |
+| `{lightmagenta-fg}` | `{lightmagenta-bg}` | 'lightmagenta' |
+| `{lightcyan-fg}` | `{lightcyan-bg}` | 'lightcyan' |
+| `{lightwhite-fg}` | `{lightwhite-bg}` | 'lightwhite' |
+
+**Alternate names:** `{brightred-fg}` = `{lightred-fg}`, etc.
 
 **Style tags:** `{bold}`, `{underline}`, `{blink}`, `{inverse}`
 

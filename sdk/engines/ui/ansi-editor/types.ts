@@ -70,39 +70,20 @@ export interface EditorOperation {
   timestamp: number;
 }
 
-/**
- * Autocomplete context passed to providers
- */
-export interface AutocompleteContext {
-  currentLine: string;
-  cursorPosition: number;
-  documentContent: string[];
-  lineNumber: number;
-}
+import type {
+  AutocompleteContext,
+  AutocompleteSuggestion,
+  AutocompleteProvider
+} from '../blessed/core/types';
+
+export type {
+  AutocompleteContext,
+  AutocompleteSuggestion,
+  AutocompleteProvider
+};
 
 /**
- * Autocomplete suggestion
- */
-export interface AutocompleteSuggestion {
-  label: string;
-  insertText: string;
-  detail?: string;
-  sortText?: string;
-  filterText?: string;
-  kind?: 'text' | 'keyword' | 'function' | 'variable' | 'user';
-}
-
-/**
- * Autocomplete provider interface
- */
-export interface AutocompleteProvider {
-  trigger?: string;
-  getSuggestions(context: AutocompleteContext): Promise<AutocompleteSuggestion[]>;
-  shouldTrigger?(context: AutocompleteContext): boolean;
-}
-
-/**
- * ANSI token types
+ * Minimal session interface for editor
  */
 export type ANSITokenType = 'text' | 'ansi' | 'reset' | 'color' | 'style';
 

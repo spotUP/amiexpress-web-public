@@ -2,7 +2,7 @@
  * Event emitter implementation for blessed elements
  */
 
-export type EventHandler = (...args: any[]) => void;
+export type EventHandler = (...args: any[]) => boolean | void;
 
 export class EventEmitter {
   private events: Map<string, EventHandler[]> = new Map();
@@ -18,7 +18,7 @@ export class EventEmitter {
   once(event: string, handler: EventHandler): this {
     const wrapper = (...args: any[]) => {
       this.removeListener(event, wrapper);
-      handler(...args);
+      return handler(...args);
     };
     return this.on(event, wrapper);
   }
@@ -49,14 +49,17 @@ export class EventEmitter {
       return false;
     }
 
+    let handled = false;
     for (const handler of handlers.slice()) {
       try {
-        handler(...args);
+        if (handler(...args) === true) {
+          handled = true;
+        }
       } catch (err) {
       }
     }
 
-    return true;
+    return handled;
   }
 
   listeners(event: string): EventHandler[] {

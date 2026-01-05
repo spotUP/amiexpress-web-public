@@ -20,7 +20,9 @@ export function createSearchOverlay(
     label: ' Message Search ',
     tags: true,
     keys: true,
-    mouse: true
+    mouse: true,
+    hidden: true,
+    trapFocus: true,
   });
 
   // Search input
@@ -106,6 +108,7 @@ export function createSearchOverlay(
     onClose();
   });
 
+  overlay.show();
   searchInput.focus();
   screen.render();
 
@@ -124,6 +127,7 @@ export function createSearchOverlay(
       screen.render();
     },
     destroy: () => {
+      overlay.hide();
       overlay.destroy();
       screen.render();
     }

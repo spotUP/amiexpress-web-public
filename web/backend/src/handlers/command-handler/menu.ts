@@ -15,6 +15,8 @@ import {
   getScreenMenu
 } from './dependency-injection';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { emitText, emitPrompt } from '../../utils/output.util';
+import { updateTimeUsed, getTimeRemainingMinutes } from '../../utils/time-tracking.util';
 
 /**
  * Display main menu (express.e:28586)
@@ -102,6 +104,10 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   // Reset doorExpertMode after menu display (express.e:28586)
   session.doorExpertMode = false;
 
+  // Update time used and check if exceeded (express.e:28591-28592)
+  // Note: updateTimeUsed is also called in displayMenuPrompt, but express.e calls it here too
+  updateTimeUsed(socket, session);
+
   // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display)
   displayMenuPrompt(socket, session);
 
@@ -150,6 +156,9 @@ console.log('  - relConfNum:', session.relConfNum);
 console.log('  - currentMsgBase:', session.currentMsgBase);
 console.log('  - timeRemaining:', session.timeRemaining);
 
+  // Update time used before displaying prompt (express.e:28591-28592)
+  updateTimeUsed(socket, session);
+
   // Process queued OLM messages before showing prompt - express.e:1464-1473
   const { processOlmQueue } = require('../transfer/olm.handler');
   if (processOlmQueue) {
@@ -158,7 +167,8 @@ console.log('  - timeRemaining:', session.timeRemaining);
 
   // Like AmiExpress: Use BBS name, relative conference number, conference name
   const bbsName = config.get('bbsName');
-  const timeLeft = Math.floor(session.timeRemaining);
+  // Calculate time remaining in minutes (express.e:28417,28419)
+  const timeLeft = getTimeRemainingMinutes(session);
 
   // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
   const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
@@ -172,12 +182,12 @@ console.log('  - currentMsgBase found:', !!currentMsgBase);
     const displayName = `${session.currentConfName} - ${currentMsgBase.name}`;
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${displayName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
 console.log(' Sending multi-msgbase prompt:', prompt);
-    socket.emit('ansi-output', prompt);
+    emitPrompt(socket, prompt);
   } else {
     // Single message base: just show conference name
     const prompt = `\r\n\x1b[35m${bbsName} \x1b[36m[${session.relConfNum}:${session.currentConfName}]\x1b[0m Menu (\x1b[33m${timeLeft}\x1b[0m mins left): `;
 console.log(' Sending single-msgbase prompt:', prompt);
-    socket.emit('ansi-output', prompt);
+    emitPrompt(socket, prompt);
   }
 
 }

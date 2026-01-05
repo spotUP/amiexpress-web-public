@@ -77,7 +77,9 @@ SDK doors (`sdk/doors/`) load `dist/index.js` not source. **MUST BUILD before te
 
 Neo-blessed now defaults to `tags: true` on all widgets. Colors work automatically.
 
-**ONLY 16 colors supported:** black, red, green, yellow, blue, magenta, cyan, white, gray
+**Full 16-color ANSI palette supported:**
+- Standard (0-7): black, red, green, yellow, blue, magenta, cyan, white, gray
+- Bright (8-15): lightblack, lightred, lightgreen, lightyellow, lightblue, lightmagenta, lightcyan, lightwhite
 
 **Use blessed tags in content:**
 ```typescript

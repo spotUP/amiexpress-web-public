@@ -20,7 +20,10 @@ export function createThreadView(screen: Screen, threadData: any) {
     vi: true,
     mouse: true,
     scrollable: true,
-    scrollbar: { ch: '█' }
+    scrollbar: { ch: '█' },
+    focusable: true,
+    hidden: true,
+    trapFocus: true,
   });
 
   // Parent message
@@ -43,10 +46,12 @@ export function createThreadView(screen: Screen, threadData: any) {
   overlay.setContent(content);
 
   overlay.key(['escape', 'q'], () => {
+    overlay.hide();
     overlay.destroy();
     screen.render();
   });
 
+  overlay.show();
   overlay.focus();
   screen.render();
 

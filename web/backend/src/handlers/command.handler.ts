@@ -218,6 +218,7 @@ import { finalizeCommand } from '../utils/command-response.util';
 
 // Import utilities
 import { AnsiUtil } from '../utils/ansi.util';
+import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { callersLogManager } from '../services/CallersLogManager';
 import { runLoginBatches } from '../services/batch-scheduler';
@@ -286,11 +287,11 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) {
           session.inputBuffer = session.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b');
+          emitText(socket, '\b \b');
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data);
+        emitText(socket, data);
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_SUBJECT:
@@ -301,11 +302,11 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) {
           session.inputBuffer = session.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b');
+          emitText(socket, '\b \b');
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data);
+        emitText(socket, data);
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_PRIVATE:
@@ -316,11 +317,11 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer?.length) {
           session.inputBuffer = session.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b');
+          emitText(socket, '\b \b');
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data);
+        emitText(socket, data);
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_BODY:
@@ -332,16 +333,16 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       if (data === '\r' || data === '\n') {
         const line = session.inputBuffer;
         session.inputBuffer = '';
-        socket.emit('ansi-output', '\r\n'); // Move to the next line like express.e
+        emitText(socket, '\r\n'); // Move to the next line like express.e
         await handleMessageBodyInput(socket, session, line);
       } else if (data === '\x7f' || data === '\b') {
         if (session.inputBuffer.length > 0) {
           session.inputBuffer = session.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b'); // Erase last char visibly
+          emitText(socket, '\b \b'); // Erase last char visibly
         }
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer += data;
-        socket.emit('ansi-output', data); // Echo printable characters
+        emitText(socket, data); // Echo printable characters
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_DELETE_LINE:
@@ -407,7 +408,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data);
+        emitText(socket, data);
       }
       return;
     case LoggedOnSubState.POST_MESSAGE_QUOTE_RANGE:
@@ -419,7 +420,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data); // Echo printable characters
+        emitText(socket, data); // Echo printable characters
       }
       return;
 
@@ -439,7 +440,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data); // Echo printable characters
+        emitText(socket, data); // Echo printable characters
       }
       return;
     case LoggedOnSubState.FORWARD_MESSAGE_SUBJECT:
@@ -451,7 +452,7 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
         if (session.inputBuffer?.length) session.inputBuffer = session.inputBuffer.slice(0, -1);
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         session.inputBuffer = (session.inputBuffer || '') + data;
-        socket.emit('ansi-output', data); // Echo printable characters
+        emitText(socket, data); // Echo printable characters
       }
       return;
     case LoggedOnSubState.FORWARD_MESSAGE_PRIVATE:
@@ -648,8 +649,8 @@ console.error('[display flow] Error loading flagged/history:', error);
     }
   } catch (error) {
 console.error('Error in display state handling:', error);
-    socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -857,14 +858,14 @@ console.log(' Connection screen viewed, showing ANSI prompt');
 console.log('[handleCommand] Await screen command still running, deferring prompt');
         session.pendingScreenCommand.then(() => {
           if (session.subState === LoggedOnSubState.ANSI_PROMPT) {
-            socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+            emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
           }
         }).catch(error => {
 console.error('[handleCommand] Pending screen command rejected:', error);
-          socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+          emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
         });
       } else {
-        socket.emit('ansi-output', '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
+        emitPrompt(socket, '\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n)? ');
       }
       return;
     }
@@ -924,20 +925,20 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ans
         session.subState = undefined;
         session.tempData = session.tempData || {};
         session.tempData.loginPhase = 'username';
-        socket.emit('ansi-output', '\r\n\r\nUsername: ');
+        emitPrompt(socket, '\r\n\r\nUsername: ');
         socket.emit('prompt-login'); // Tell frontend to show login form
         return;
       } else if (data === '\x7f' || data === '\b') {
         // Backspace - remove last character from buffer
         if (session.tempData?.inputBuffer && session.tempData.inputBuffer.length > 0) {
           session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
-          socket.emit('ansi-output', '\b \b'); // Echo backspace
+          emitText(socket, '\b \b'); // Echo backspace
         }
         return;
       } else if (data.length === 1 && data >= ' ' && data <= '~') {
         // Printable character - add to buffer and echo it
         session.tempData.inputBuffer = (session.tempData?.inputBuffer || '') + data;
-        socket.emit('ansi-output', data); // Echo the character
+        emitText(socket, data); // Echo the character
         return;
       }
       // Ignore other control characters
@@ -951,9 +952,9 @@ console.log(' BBSTITLE viewed, transitioning to login');
       session.subState = undefined;
       session.tempData = session.tempData || {};
       session.tempData.loginPhase = 'username';
-      socket.emit('ansi-output', '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', 'Username: ');
+      emitText(socket, '\r\n\r\n\x1b[36m-= Welcome to AmiExpress-Web =-\x1b[0m\r\n\r\n');
+      emitText(socket, '\x1b[32mPlease login to continue.\x1b[0m\r\n\r\n');
+      emitPrompt(socket, 'Username: ');
       socket.emit('prompt-login'); // Tell frontend to show login form
       return;
     }
@@ -994,7 +995,7 @@ console.log('   Current state:', session.state);
     if (cleanData === '\x7f' || cleanData === '\b') {
       if (session.tempData?.inputBuffer?.length) {
         session.tempData.inputBuffer = session.tempData.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       return;
     }
@@ -1019,9 +1020,9 @@ console.log('   Current state:', session.state);
         if (char >= ' ' && char <= '~') {
           appendChar(char);
           if (phase === 'password') {
-            socket.emit('ansi-output', '*');
+            emitText(socket, '*');
           } else {
-            socket.emit('ansi-output', char);
+            emitText(socket, char);
           }
         }
       }
@@ -1042,7 +1043,7 @@ console.log('   Current state:', session.state);
         // Store username, ask for password
         session.tempData.loginUsername = input.trim();
         session.tempData.loginPhase = 'password';
-        socket.emit('ansi-output', '\r\nPassword: ');
+        emitPrompt(socket, '\r\nPassword: ');
         return;
       }
 
@@ -1055,7 +1056,7 @@ console.log('   Current state:', session.state);
         const passwordLower = input.toLowerCase();
 
         if (!username) {
-          socket.emit('ansi-output', '\r\nUsername: ');
+          emitPrompt(socket, '\r\nUsername: ');
           session.tempData.loginPhase = 'username';
           return;
         }
@@ -1069,7 +1070,7 @@ console.log('   Current state:', session.state);
           const result = await authUseCase.authenticate(username, password);
 
           if (!result.success) {
-            socket.emit('ansi-output', '\r\nInvalid PassWord\r\nUsername: ');
+            emitPrompt(socket, '\r\nInvalid PassWord\r\nUsername: ');
             session.tempData.loginPhase = 'username';
             session.tempData.loginUsername = '';
             return;
@@ -1097,6 +1098,18 @@ console.log('   Current state:', session.state);
             modemEmulator.enable(userBaud);
 console.log(`[LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.username}`);
           }
+
+          // Send modem speed to frontend for client-side emulation (web terminal only)
+          // Telnet uses server-side throttling, web terminal needs client-side throttling
+console.log(`[LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
+          socket.emit('modem-speed', userBaud);
+console.log(`[LOGIN] modem-speed event emitted`);
+
+          // Disable AnsiBuffer batching when modem emulation is enabled
+          // This prevents chunky output - client throttles smoothly instead
+          const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+          const ansiBuffer = getAnsiBuffer(socket);
+          ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
 
           // Install ANSI filter to strip codes for ANSI-disabled terminals
           // Note: This must be installed AFTER modem emulator so ANSI filter runs first
@@ -1144,7 +1157,7 @@ console.error('[SystemStats] Error tracking login:', error);
           }
 
           // Welcome message
-          socket.emit('ansi-output', '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
+          emitText(socket, '\r\n\x1b[32mLogin successful.\x1b[0m\r\n');
 
           // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
           // LOGON screen contains ~CC_wall, ~CC_gwall etc. that need to execute
@@ -1163,7 +1176,7 @@ console.log('[LOGIN] No LOGON screen (telnet), proceeding to bulletin flow');
           await handleCommand(socket, session, '', io);
         } catch (err: any) {
 console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
-          socket.emit('ansi-output', '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
+          emitPrompt(socket, '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
           session.tempData.loginPhase = 'username';
           session.tempData.loginUsername = '';
         }
@@ -1183,9 +1196,9 @@ console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
         appendChar(char);
         // Echo only for username; mask password
         if (phase === 'password') {
-          socket.emit('ansi-output', '*');
+          emitText(socket, '*');
         } else {
-          socket.emit('ansi-output', char);
+          emitText(socket, char);
         }
       }
     }
@@ -1222,17 +1235,17 @@ console.log(' [COMMAND] User in CHAT mode, real-time input');
         // Insert smiley into input buffer
         session.inputBuffer += result.smiley;
         // Restore screen and echo smiley
-        socket.emit('ansi-output', restorePickerArea() + result.smiley);
+        emitText(socket, restorePickerArea() + result.smiley);
         // Transmit smiley to partner
         for (const char of result.smiley) {
           await handleChatKeystroke(socket, session, { keystroke: char });
         }
       } else if (result.action === 'cancel') {
         // Just restore screen
-        socket.emit('ansi-output', restorePickerArea());
+        emitText(socket, restorePickerArea());
       } else {
         // Update picker display
-        socket.emit('ansi-output', renderPicker(session.smileyPickerState));
+        emitText(socket, renderPicker(session.smileyPickerState));
       }
       return;
     }
@@ -1242,19 +1255,19 @@ console.log(' [COMMAND] User in CHAT mode, real-time input');
       const pickerState = createPickerState();
       pickerState.isOpen = true;
       session.smileyPickerState = pickerState;
-      socket.emit('ansi-output', savePickerArea() + renderPicker(pickerState));
+      emitText(socket, savePickerArea() + renderPicker(pickerState));
       return;
     }
 
     // Handle arrow keys for cursor movement (left/right navigation)
     if (data === '\x1b[D') {
       // Left arrow - just move cursor left locally (don't transmit)
-      socket.emit('ansi-output', '\x1b[D');
+      emitText(socket, '\x1b[D');
       return;
     }
     else if (data === '\x1b[C') {
       // Right arrow - just move cursor right locally (don't transmit)
-      socket.emit('ansi-output', '\x1b[C');
+      emitText(socket, '\x1b[C');
       return;
     }
     // Ignore up/down arrows
@@ -1267,7 +1280,7 @@ console.log(' [COMMAND] User in CHAT mode, real-time input');
       const input = (session.inputBuffer || '').trim();
 
       // Echo newline to move cursor to next line (express.e:2342)
-      socket.emit('ansi-output', '\r\n');
+      emitText(socket, '\r\n');
 
       // Check for /END or /EXIT command
       if (input.toUpperCase() === '/END' || input.toUpperCase() === '/EXIT') {
@@ -1280,7 +1293,7 @@ console.log(' [COMMAND] User wants to end chat');
       // Check for /HELP command
       if (input.toUpperCase() === '/HELP') {
 console.log(' [COMMAND] User requested help');
-        socket.emit('ansi-output',
+        emitText(socket,
           '\r\n' +
           '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
           '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
@@ -1306,7 +1319,7 @@ console.log(' [COMMAND] Finalizing message:', input);
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // Echo backspace to local terminal (express.e:2307-2319)
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
         // Don't transmit backspace if we're typing a command
         const isCommand = session.inputBuffer.trim().startsWith('/');
         if (!isCommand) {
@@ -1318,7 +1331,7 @@ console.log(' [COMMAND] Finalizing message:', input);
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character to local terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
       // Don't transmit commands (starting with /) to partner
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {
@@ -1344,7 +1357,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_WAITING state');
       await handleUserCancelPage(socket.server, repository, session, socket);
     } else if (input) {
       // Any other input while waiting - remind user they're waiting
-      socket.emit('ansi-output', '\r\n\x1b[33mWaiting for sysop... Press CTRL+C or Q to cancel.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[33mWaiting for sysop... Press CTRL+C or Q to cancel.\x1b[0m\r\n');
     }
     return;
   }
@@ -1379,17 +1392,17 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
         // Insert smiley into input buffer
         session.inputBuffer += result.smiley;
         // Restore screen and echo smiley
-        socket.emit('ansi-output', restorePickerArea() + result.smiley);
+        emitText(socket, restorePickerArea() + result.smiley);
         // Transmit smiley to sysop
         for (const char of result.smiley) {
           await handleOperatorChatKeystroke(socket.server, session, char);
         }
       } else if (result.action === 'cancel') {
         // Just restore screen
-        socket.emit('ansi-output', restorePickerArea());
+        emitText(socket, restorePickerArea());
       } else {
         // Update picker display
-        socket.emit('ansi-output', renderPicker(session.smileyPickerState));
+        emitText(socket, renderPicker(session.smileyPickerState));
       }
       return;
     }
@@ -1399,7 +1412,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       const pickerState = createPickerState();
       pickerState.isOpen = true;
       session.smileyPickerState = pickerState;
-      socket.emit('ansi-output', savePickerArea() + renderPicker(pickerState));
+      emitText(socket, savePickerArea() + renderPicker(pickerState));
       return;
     }
 
@@ -1434,7 +1447,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
           '\x1b[S\x1b[21;1H' + // Scroll up, move to line 21
           '\x1b[36mCommands: /quit /end - Exit, /help - Help, Ctrl+E - Smileys\x1b[0m' +
           '\x1b8\x1b[K'; // Restore cursor, clear input line
-        socket.emit('ansi-output', helpMessage);
+        emitText(socket, helpMessage);
         return;
       }
 
@@ -1447,7 +1460,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // Echo backspace at line 24 (current cursor position)
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
         // Don't transmit backspace if typing a command
         const isCommand = session.inputBuffer.trim().startsWith('/');
         if (!isCommand) {
@@ -1459,7 +1472,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character at line 24 (current cursor position)
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
       // Don't transmit commands (starting with /) to sysop
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {
@@ -1490,13 +1503,13 @@ console.log(' User in CHAT_ROOM mode, handling room input');
 
       const members = await chatRoomUseCase.getRoomMembers(session.currentRoomId || 'default');
       const output = chatRoomUseCase.formatMembersList(members);
-      socket.emit('ansi-output', output);
+      emitText(socket, output);
       return;
     }
 
     // Check for /HELP command
     if (input.toUpperCase() === '/HELP') {
-      socket.emit('ansi-output',
+      emitText(socket,
         '\r\n' +
         '\x1b[36mChat Room Commands:\x1b[0m\r\n' +
         '  \x1b[33m/LEAVE\x1b[0m or \x1b[33m/EXIT\x1b[0m  - Leave the room\r\n' +
@@ -1557,13 +1570,13 @@ console.log(' [OLM] User entering node number');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // express.e:2307-2319 - Send backspace sequence: BS + space + BS
         // This moves cursor back, overwrites char with space, moves cursor back again
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', session.maskInput ? '*' : data);
+      emitText(socket, session.maskInput ? '*' : data);
     }
     return;
   }
@@ -1591,13 +1604,13 @@ console.log(' [OLM] User composing message');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // express.e:2307-2319 - Send backspace sequence: BS + space + BS
         // This moves cursor back, overwrites char with space, moves cursor back again
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', session.maskInput ? '*' : data);
+      emitText(socket, session.maskInput ? '*' : data);
     }
     return;
   }
@@ -1677,13 +1690,13 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // express.e:2307-2319 - Send backspace sequence: BS + space + BS
         // This moves cursor back, overwrites char with space, moves cursor back again
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', session.maskInput ? '*' : data);
+      emitText(socket, session.maskInput ? '*' : data);
     }
     return;
   }
@@ -1708,11 +1721,11 @@ console.log(' [DOWNLOAD] User entering filename (line-buffered)');
     } else if (data === '\x7f' || data === '\b') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -1752,8 +1765,8 @@ console.log(' In file area selection state');
 
      if (input === '' || (isNaN(areaNumber) && input !== '0')) {
        // Empty input or invalid - return to menu with error handling
-       socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection. Returning to main menu...\x1b[0m\r\n');
-       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+       emitText(socket, '\r\n\x1b[31mInvalid selection. Returning to main menu...\x1b[0m\r\n');
+       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
        session.menuPause = false;
        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
        session.tempData = undefined;
@@ -1766,8 +1779,8 @@ console.log(' In file area selection state');
        const doorNumber = parseInt(input);
 
        if (isNaN(doorNumber) || doorNumber < 1 || doorNumber > availableDoors.length) {
-         socket.emit('ansi-output', '\r\n\x1b[31mInvalid door number. Please enter a number between 1 and ' + availableDoors.length + '.\x1b[0m\r\n');
-         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+         emitText(socket, '\r\n\x1b[31mInvalid door number. Please enter a number between 1 and ' + availableDoors.length + '.\x1b[0m\r\n');
+         emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
          session.menuPause = false;
          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
          session.tempData = undefined;
@@ -1785,8 +1798,8 @@ console.log(' In file area selection state');
        const fileNumber = parseInt(input);
 
        if (isNaN(fileNumber) || fileNumber < 1 || fileNumber > areaFiles.length) {
-         socket.emit('ansi-output', '\r\n\x1b[31mInvalid file number. Please enter a number between 1 and ' + areaFiles.length + '.\x1b[0m\r\n');
-         socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+         emitText(socket, '\r\n\x1b[31mInvalid file number. Please enter a number between 1 and ' + areaFiles.length + '.\x1b[0m\r\n');
+         emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
          session.menuPause = false;
          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
          session.tempData = undefined;
@@ -1800,8 +1813,8 @@ console.log(' In file area selection state');
 
     // Handle file area selection for upload/download
      if (isNaN(areaNumber) || areaNumber === 0) {
-       socket.emit('ansi-output', '\r\n\x1b[31mInvalid file area number. Please enter a valid number.\x1b[0m\r\n');
-       socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+       emitText(socket, '\r\n\x1b[31mInvalid file area number. Please enter a valid number.\x1b[0m\r\n');
+       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
        session.menuPause = false;
        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
        session.tempData = undefined;
@@ -1813,8 +1826,8 @@ console.log(' In file area selection state');
     const selectedArea = currentFileAreas[areaNumber - 1]; // 1-based indexing
 
     if (!selectedArea) {
-      socket.emit('ansi-output', '\r\nInvalid file area number.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\nInvalid file area number.\r\n');
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
     }
@@ -1842,7 +1855,7 @@ console.log(' In file area selection state');
 
     // Empty input or Q/A to abort - express.e:20140-20142
     if (input === '' || input.toUpperCase() === 'Q' || input.toUpperCase() === 'A') {
-      socket.emit('ansi-output', '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
       return;
@@ -1906,26 +1919,26 @@ console.log(' In file area selection state');
 
     // Report errors
     for (const err of errors) {
-      socket.emit('ansi-output', `\r\n\x1b[31m${err}\x1b[0m`);
+      emitText(socket, `\r\n\x1b[31m${err}\x1b[0m`);
     }
 
     if (selectedFiles.length === 0) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNo valid files selected.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[32mSelect files to download: \x1b[0m');
+      emitText(socket, '\r\n\x1b[31mNo valid files selected.\x1b[0m\r\n');
+      emitPrompt(socket, '\x1b[32mSelect files to download: \x1b[0m');
       return;
     }
 
     // Show selected files and confirm
-    socket.emit('ansi-output', `\r\n\x1b[32mFiles selected for download (${selectedFiles.length}):\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[32mFiles selected for download (${selectedFiles.length}):\x1b[0m\r\n`);
     selectedFiles.forEach((file: any, index: number) => {
       const name = file.filename || file.name;
       const size = file.size || 0;
-      socket.emit('ansi-output', `  ${index + 1}. ${name} (${size} bytes)\r\n`);
+      emitText(socket, `  ${index + 1}. ${name} (${size} bytes)\r\n`);
     });
 
     const totalSize = selectedFiles.reduce((sum: number, f: any) => sum + (f.size || 0), 0);
-    socket.emit('ansi-output', `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
+    emitText(socket, `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
+    emitPrompt(socket, '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
 
     session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
     session.tempData = {
@@ -1942,7 +1955,7 @@ console.log(' In file area selection state');
 
     // Check for abort (A or a alone) - express.e:17667-17671
     if ((input === 'A' || input === 'a') && input.length === 1) {
-      socket.emit('ansi-output', '\r\n');
+      emitText(socket, '\r\n');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       session.tempData = undefined;
@@ -1951,11 +1964,11 @@ console.log(' In file area selection state');
 
     // Blank line - start transfer (express.e:17673)
     if (input === '') {
-      socket.emit('ansi-output', '\r\n');
+      emitText(socket, '\r\n');
 
       // Check if any files were queued
       if (!session.tempData?.uploadBatch || session.tempData.uploadBatch.length === 0) {
-        socket.emit('ansi-output', 'No files queued for upload.\r\n');
+        emitText(socket, 'No files queued for upload.\r\n');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         session.tempData = undefined;
@@ -1981,16 +1994,16 @@ console.log(' In file area selection state');
     // Validate filename (express.e:17680-17684, 19212-19231)
     const validation = validateFilename(input);
     if (!validation.valid) {
-      socket.emit('ansi-output', `\r\n${validation.error}\r\n`);
-      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\n${validation.error}\r\n`);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
       return;
     }
 
     // Check for duplicates (express.e:17685-17689)
     const isDuplicate = await checkForFile(input, session.currentConf);
     if (isDuplicate) {
-      socket.emit('ansi-output', 'File Exists, or has a symbol (#?*).\r\n');
-      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, 'File Exists, or has a symbol (#?*).\r\n');
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
       return;
     }
 
@@ -2007,10 +2020,10 @@ console.log(' In file area selection state');
 
     // Prompt for description (express.e:17689-17698)
     const maxDescLines = 10; // max_desclines from config
-    socket.emit('ansi-output', `\r\nPlease enter a description, you only have ${maxDescLines} lines.\r\n`);
-    socket.emit('ansi-output', 'Press return alone to end.  Begin  with (/) to make upload \'Private\' to Sysop.\r\n');
-    socket.emit('ansi-output', '                                [--------------------------------------------]\r\n');
-    socket.emit('ansi-output', `\x1b[13D${input.padEnd(13)}\x1b[0m:`); // Show filename with cursor at description start
+    emitText(socket, `\r\nPlease enter a description, you only have ${maxDescLines} lines.\r\n`);
+    emitText(socket, 'Press return alone to end.  Begin  with (/) to make upload \'Private\' to Sysop.\r\n');
+    emitText(socket, '                                [--------------------------------------------]\r\n');
+    emitText(socket, `\x1b[13D${input.padEnd(13)}\x1b[0m:`); // Show filename with cursor at description start
 
     // Initialize description storage
     session.tempData.currentDescription = [];
@@ -2032,7 +2045,7 @@ console.log(' In file area selection state');
     if (data === '\x7f' || data === '\b') {
       if (session.tempData.currentLineBuffer.length > 0) {
         session.tempData.currentLineBuffer = session.tempData.currentLineBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Echo backspace (move back, space, move back)
+        emitText(socket, '\b \b'); // Echo backspace (move back, space, move back)
       }
       return;
     }
@@ -2059,7 +2072,7 @@ console.log(' In file area selection state');
         session.tempData.currentUploadIndex = 0;
 
         // Trigger file processing by calling processBatchFile directly
-        socket.emit('ansi-output', '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');
+        emitText(socket, '\r\n\r\n\x1b[36mProcessing upload...\x1b[0m\r\n');
 
         // Process the upload directly (not via socket event - that doesn't work)
         await processBatchFile(socket, session, {
@@ -2080,7 +2093,7 @@ console.log(' In file area selection state');
 
       // Move to next filename
       session.tempData.uploadCount++;
-      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }
@@ -2101,21 +2114,21 @@ console.log(' In file area selection state');
 
       // Move to next filename
       session.tempData.uploadCount++;
-      socket.emit('ansi-output', `\r\nFileName ${session.tempData.uploadCount}: `);
+      emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);
       session.subState = LoggedOnSubState.UPLOAD_FILENAME_INPUT;
       return;
     }
 
       // Prompt for next description line (express.e:19326)
       // Format: newline + 32 spaces + ':' (aligns with first line at column 33)
-      socket.emit('ansi-output', '\r\n                                :');
+      emitText(socket, '\r\n                                :');
       return;
     }
 
     // Regular character - add to buffer and echo to terminal
     if (data.length === 1 && data >= ' ' && data <= '~') {
       session.tempData.currentLineBuffer += data;
-      socket.emit('ansi-output', data); // Echo character to terminal
+      emitText(socket, data); // Echo character to terminal
     }
     return;
   }
@@ -2131,8 +2144,8 @@ console.log(' In web upload mode - ignoring key press (waiting for file-uploaded
 
     // In terminal mode, any key press cancels upload
 console.log(' In file upload state - canceling upload');
-    socket.emit('ansi-output', '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mUpload canceled\x1b[0m\r\n');
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -2278,7 +2291,7 @@ console.log(' Continuing file list display');
     if (tempData.userListPage) {
       const input = data.trim().toUpperCase();
       if (input === 'Q') {
-        socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+        emitText(socket, '\r\nReturning to main menu...\r\n');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
@@ -2309,7 +2322,7 @@ console.log(' In conference selection state');
       const msgBaseId = parseInt(input);
       if (isNaN(msgBaseId) || msgBaseId === 0) {
         // Empty input or invalid - return to menu
-        socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+        emitText(socket, '\r\nReturning to main menu...\r\n');
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.tempData = undefined;
@@ -2319,8 +2332,8 @@ console.log(' In conference selection state');
       const currentConfBases = session.tempData.currentConfBases;
       const selectedBase = currentConfBases.find((mb: any) => mb.id === msgBaseId);
       if (!selectedBase) {
-        socket.emit('ansi-output', '\r\nInvalid message base number.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        emitText(socket, '\r\nInvalid message base number.\r\n');
+        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         session.tempData = undefined;
@@ -2329,8 +2342,8 @@ console.log(' In conference selection state');
 
       // Join the selected message base
       session.currentMsgBase = msgBaseId;
-      socket.emit('ansi-output', `\r\n\x1b[32mJoined message base: ${selectedBase.name}\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[32mJoined message base: ${selectedBase.name}\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       session.tempData = undefined;
@@ -2341,7 +2354,7 @@ console.log(' In conference selection state');
     const relConfNum = parseInt(input); // Relative conference number (1-based)
     if (isNaN(relConfNum) || relConfNum === 0) {
       // Empty input or invalid - return to menu
-      socket.emit('ansi-output', '\r\nReturning to main menu...\r\n');
+      emitText(socket, '\r\nReturning to main menu...\r\n');
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -2349,8 +2362,8 @@ console.log(' In conference selection state');
 
     // Validate relative conference number and convert to conference object
     if (relConfNum < 1 || relConfNum > getConferences().length) {
-      socket.emit('ansi-output', '\r\nInvalid conference number.\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\nInvalid conference number.\r\n');
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
@@ -2362,8 +2375,8 @@ console.log(' In conference selection state');
     // Find first message base for this conference (express.e uses first base as default)
     const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
     if (confMessageBases.length === 0) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNo message bases available in this conference!\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\n\x1b[31mNo message bases available in this conference!\x1b[0m\r\n');
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
@@ -2372,7 +2385,7 @@ console.log(' In conference selection state');
 
     // Join the selected conference
     if (await joinConference(socket, session, confId, firstMsgBaseId)) {
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     }
@@ -2454,7 +2467,7 @@ console.log(' In conference selection state');
     if (data === '\r' || data === '\n') {
       const line = session.inputBuffer;
       session.inputBuffer = '';
-      socket.emit('ansi-output', '\r\n'); // Move to next line
+      emitText(socket, '\r\n'); // Move to next line
       await handleMessageBodyInput(socket, session, line);
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
       // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
@@ -2462,13 +2475,13 @@ console.log(' In conference selection state');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // express.e:2307-2319 - Send backspace sequence: BS + space + BS
         // This moves cursor back, overwrites char with space, moves cursor back again
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -2683,8 +2696,8 @@ console.log(' Conference number entered:', input);
       if (isNaN(confNum) || confNum < 1 || confNum > getConferences().length) {
         // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
         await displayScreen(socket, session, 'JOINCONF');
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', AnsiUtil.complexPrompt([
+        emitText(socket, '\r\n');
+        emitPrompt(socket, AnsiUtil.complexPrompt([
           { text: 'Conference Number ', color: 'white' },
           { text: `(1-${getConferences().length})`, color: 'cyan' },
           { text: ': ', color: 'white' }
@@ -2700,10 +2713,10 @@ console.log(' Conference number entered:', input);
       const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
 
       if (confMessageBases.length === 0) {
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', AnsiUtil.errorLine('No message bases in this conference'));
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+        emitText(socket, '\r\n');
+        emitText(socket, AnsiUtil.errorLine('No message bases in this conference'));
+        emitText(socket, '\r\n');
+        emitPrompt(socket, AnsiUtil.pressKeyPrompt());
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
       }
@@ -2715,11 +2728,11 @@ console.log(' Conference number entered:', input);
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -2815,8 +2828,8 @@ console.log(' ENTER PRESSED - Processing input:', JSON.stringify(input), 'length
       if (session.tempData?.isPrivate && !session.messageRecipient) {
         if (input.length === 0) {
 console.log(' Recipient is empty, aborting private message posting');
-          socket.emit('ansi-output', '\r\nPrivate message posting aborted.\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+          emitText(socket, '\r\nPrivate message posting aborted.\r\n');
+          emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.menuPause = false;
           session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
           session.inputBuffer = '';
@@ -2825,7 +2838,7 @@ console.log(' Recipient is empty, aborting private message posting');
         }
 console.log(' Recipient accepted:', JSON.stringify(input), '- now prompting for subject');
         session.messageRecipient = input;
-        socket.emit('ansi-output', '\r\nEnter your message subject (or press Enter to abort): ');
+        emitPrompt(socket, '\r\nEnter your message subject (or press Enter to abort): ');
         session.inputBuffer = '';
         return;
       }
@@ -2840,8 +2853,8 @@ console.log(' Comment to sysop - setting recipient to SYSOP');
       // Handle subject input
       if (input.length === 0) {
 console.log(' Subject is empty, aborting message posting');
-        socket.emit('ansi-output', '\r\nMessage posting aborted.\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        emitText(socket, '\r\nMessage posting aborted.\r\n');
+        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         session.inputBuffer = '';
@@ -2850,20 +2863,20 @@ console.log(' Subject is empty, aborting message posting');
       }
 console.log(' Subject accepted:', JSON.stringify(input), '- moving to message body input');
       session.messageSubject = input;
-      socket.emit('ansi-output', '\r\nEnter your message (press Enter twice to finish):\r\n> ');
+      emitPrompt(socket, '\r\nEnter your message (press Enter twice to finish):\r\n> ');
       session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
       session.inputBuffer = '';
 console.log(' Changed state to POST_MESSAGE_BODY');
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
+        emitText(socket, '\b \b'); // Erase character from terminal
 console.log(' Backspace - buffer now:', JSON.stringify(session.inputBuffer));
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
       // Regular character - add to buffer and echo
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
 console.log(' Added character to buffer, current buffer:', JSON.stringify(session.inputBuffer));
     } else {
 console.log(' Ignoring non-printable character:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
@@ -2882,7 +2895,7 @@ console.log(' In message body input state, received:', JSON.stringify(data));
         // Empty line - end message posting
         const body = (session.messageBody || '').trim();
         if (body.length === 0) {
-          socket.emit('ansi-output', '\r\nMessage posting aborted.\r\n');
+          emitText(socket, '\r\nMessage posting aborted.\r\n');
         } else {
           // Store message in database
           try {
@@ -2898,16 +2911,16 @@ console.log(' In message body input state, received:', JSON.stringify(data));
               toUser: session.messageRecipient,
               parentId: session.tempData?.parentId
             });
-            socket.emit('ansi-output', '\r\nMessage posted successfully!\r\n');
+            emitText(socket, '\r\nMessage posted successfully!\r\n');
 
             // Log message posting activity
 console.log(`[Message] Posted by ${session.user?.username} in conf ${session.currentConf}: ${session.messageSubject}`);
           } catch (error) {
 console.error('[Message] Failed to store message:', error);
-            socket.emit('ansi-output', '\r\n\x1b[31mError posting message.\x1b[0m\r\n');
+            emitText(socket, '\r\n\x1b[31mError posting message.\x1b[0m\r\n');
           }
         }
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 
@@ -2925,18 +2938,18 @@ console.error('[Message] Failed to store message:', error);
         } else {
           session.messageBody = session.inputBuffer;
         }
-        socket.emit('ansi-output', '\r\n> '); // New line prompt
+        emitPrompt(socket, '\r\n> '); // New line prompt
         session.inputBuffer = '';
       }
     } else if (data === '\x7f') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b'); // Erase character from terminal
+        emitText(socket, '\b \b'); // Erase character from terminal
       }
     } else {
       // Regular character - add to buffer and echo
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -2955,12 +2968,12 @@ console.error('[Message] Failed to store message:', error);
       // Backspace (express.e:2304-2320)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -2976,12 +2989,12 @@ console.error('[Message] Failed to store message:', error);
       // Backspace (express.e:2304-2320)
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342)
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -3104,10 +3117,10 @@ console.error('[Message] Failed to store message:', error);
       await handleWOptionSelectInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      socket.emit('ansi-output', '\b \b');
+      emitText(socket, '\b \b');
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -3316,10 +3329,10 @@ console.error('[Message] Failed to store message:', error);
       await handleWEditModemSpeedInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      socket.emit('ansi-output', '\b \b');
+      emitText(socket, '\b \b');
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -3335,10 +3348,10 @@ console.log('[W_EDIT_FONT] Enter pressed, calling handleWEditFontInput with:', i
       await handleWEditFontInput(socket, session, input);
     } else if (data === '\x7f') {
       if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      socket.emit('ansi-output', '\b \b');
+      emitText(socket, '\b \b');
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   }
@@ -3372,11 +3385,11 @@ console.log(' In READ_COMMAND state, reading line input');
         for (let i = 0; i < session.inputBuffer.length; i++) {
           clearSequence += '\b \b';
         }
-        socket.emit('ansi-output', clearSequence);
+        emitText(socket, clearSequence);
 
         // Display previous command (express.e:2268, 2272)
         session.inputBuffer = previousCmd;
-        socket.emit('ansi-output', previousCmd);
+        emitText(socket, previousCmd);
       }
       return;
     }
@@ -3390,11 +3403,11 @@ console.log(' In READ_COMMAND state, reading line input');
         for (let i = 0; i < session.inputBuffer.length; i++) {
           clearSequence += '\b \b';
         }
-        socket.emit('ansi-output', clearSequence);
+        emitText(socket, clearSequence);
 
         // Display next command (express.e:2285, 2289)
         session.inputBuffer = nextCmd;
-        socket.emit('ansi-output', nextCmd);
+        emitText(socket, nextCmd);
       }
       return;
     }
@@ -3446,13 +3459,13 @@ console.log(' Empty command, redisplaying menu');
         session.inputBuffer = session.inputBuffer.slice(0, -1);
         // express.e:2307-2319 - Send backspace sequence: BS + space + BS
         // This moves cursor back, overwrites char with space, moves cursor back again
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
       // If buffer is empty, ignore backspace (prevents erasing prompt)
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
       // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
   } else if (session.subState === LoggedOnSubState.READ_SHORTCUTS) {
@@ -3524,8 +3537,8 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
         }
       } catch (error) {
 console.error('Error processing command:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError processing command.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        emitText(socket, '\r\n\x1b[31mError processing command.\x1b[0m\r\n');
+        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         session.menuPause = false;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
         return;
@@ -3581,17 +3594,17 @@ console.log(' In BULLETIN_INPUT state, buffering input');
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '');
       session.inputBuffer = '';
-      socket.emit('ansi-output', '\r\n');
+      emitText(socket, '\r\n');
 
       handleBulletinInputFromDisplayFileCommands(socket, session, input);
     } else if (data === '\x7f' || data === '\b') { // Backspace
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      socket.emit('ansi-output', data);
+      emitText(socket, data);
     }
     return;
    } else {
@@ -3678,7 +3691,7 @@ console.log('[CommandPriority] Trying as InternalCommand');
 // Process BBS commands (processInternalCommand equivalent)
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
   // Clear screen before showing command output (authentic BBS behavior)
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  emitText(socket, '\x1b[2J\x1b[H');
 
   // Map commands to internalCommandX functions from AmiExpress
   switch (command) {
@@ -3952,10 +3965,10 @@ console.log('[DOORMAN] Module imported successfully');
 console.log('[DOORMAN] executeDoor completed');
       } catch (error) {
 console.error('[DOORMAN] Fatal error:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
-        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
-        socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
-        socket.emit('ansi-output', 'Press any key to return to main menu...\r\n');
+        emitText(socket, '\r\n\x1b[31mError starting Door Manager:\x1b[0m\r\n');
+        emitText(socket, `${(error as Error).message}\r\n`);
+        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
+        emitPrompt(socket, 'Press any key to return to main menu...\r\n');
 
         // Clean up session state
         if (session.inDoorManager) {
@@ -3977,13 +3990,13 @@ console.log('[GA] Starting GetAnswer door...');
 console.log(`[GA] Door path: ${doorPath}`);
 
         if (!amigafs.existsSync(doorPath)) {
-          socket.emit('ansi-output', '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
+          emitText(socket, '\r\n\x1b[31mGetAnswer door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = true;
           return;
         }
 
-        socket.emit('ansi-output', '\r\n\x1b[36m Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
+        emitText(socket, '\r\n\x1b[36m Starting GetAnswer (8KB XIM door)...\x1b[0m\r\n\r\n');
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
@@ -4047,14 +4060,14 @@ console.error('[GA] Failed to persist session for door input:', err);
           /* ignore */
         }
 
-        socket.emit('ansi-output', '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[32mGetAnswer door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
       } catch (error) {
 console.error('[GA] Fatal error:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
-        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
-        socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
+        emitText(socket, '\r\n\x1b[31mError starting GetAnswer door:\x1b[0m\r\n');
+        emitText(socket, `${(error as Error).message}\r\n`);
+        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
         session.inDoorManager = false;
         delete session.doorInputHandler;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -4074,13 +4087,13 @@ console.log('[MULTITOP] Starting MultiTop door...');
 console.log(`[MULTITOP] Door path: ${doorPath}`);
 
         if (!amigafs.existsSync(doorPath)) {
-          socket.emit('ansi-output', '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
+          emitText(socket, '\r\n\x1b[31mMultiTop door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = false;
           return;
         }
 
-        socket.emit('ansi-output', '\r\n\x1b[36mStarting MultiTop (37KB)...\x1b[0m\r\n\r\n');
+        emitText(socket, '\r\n\x1b[36mStarting MultiTop (37KB)...\x1b[0m\r\n\r\n');
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
@@ -4090,13 +4103,13 @@ console.log(`[MULTITOP] Door path: ${doorPath}`);
 
         await amigaSession.start();
 
-        socket.emit('ansi-output', '\r\n\x1b[32mMultiTop door session completed.\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[32mMultiTop door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
       } catch (error) {
 console.error('[MULTITOP] Fatal error:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
-        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
+        emitText(socket, '\r\n\x1b[31mError starting MultiTop door:\x1b[0m\r\n');
+        emitText(socket, `${(error as Error).message}\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
       }
@@ -4113,13 +4126,13 @@ console.log('[WH] Starting What door...');
 console.log(`[WH] Door path: ${doorPath}`);
 
         if (!amigafs.existsSync(doorPath)) {
-          socket.emit('ansi-output', '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
+          emitText(socket, '\r\n\x1b[31mWhat door not found!\x1b[0m\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           session.menuPause = false;
           return;
         }
 
-        socket.emit('ansi-output', '\r\n\x1b[36mStarting What door (AEDoorPort test)...\x1b[0m\r\n\r\n');
+        emitText(socket, '\r\n\x1b[36mStarting What door (AEDoorPort test)...\x1b[0m\r\n\r\n');
 
         const amigaSession = new AmigaDoorSession(socket, {
           executablePath: doorPath,
@@ -4128,14 +4141,14 @@ console.log(`[WH] Door path: ${doorPath}`);
 
         await amigaSession.start();
 
-        socket.emit('ansi-output', '\r\n\x1b[32mWhat door session completed.\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[32mWhat door session completed.\x1b[0m\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       } catch (error) {
 console.error('[WH] Fatal error:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mError starting What door:\x1b[0m\r\n');
-        socket.emit('ansi-output', `${(error as Error).message}\r\n`);
-        socket.emit('ansi-output', `${(error as Error).stack}\r\n\r\n`);
+        emitText(socket, '\r\n\x1b[31mError starting What door:\x1b[0m\r\n');
+        emitText(socket, `${(error as Error).message}\r\n`);
+        emitText(socket, `${(error as Error).stack}\r\n\r\n`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = false;
       }
@@ -4179,8 +4192,8 @@ console.log(`[Command Handler] No matching door found for: ${command}`);
         DebugSeverity.INFO
       );
 
-      socket.emit('ansi-output', `\r\nUnknown command: ${command}\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\nUnknown command: ${command}\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       break;

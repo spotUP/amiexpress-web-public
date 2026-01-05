@@ -54,11 +54,44 @@ export class XIMSystemCommandsHandler {
   }
 
   /**
+   * Cancel old-style door timer when door sends data/environment requests
+   * This indicates it's a modern door that actively queries BBS state
+   */
+  cancelOldStyleDoorTimer(command: number): void {
+    // Input requests (JH_HK, JH_LI, JH_PM) indicate this IS an XIM door, not a native door
+    // XIM doors use the XIM protocol for I/O - we should NOT inject input for them
+    const isInputRequest =
+      command === XIMCommand.JH_HK ||
+      command === XIMCommand.JH_LI ||
+      command === XIMCommand.JH_PM;
+
+    if (isInputRequest) {
+      // This door uses XIM input commands - it's definitely an XIM door, not native
+      // Clear native flag to prevent injection
+      if (this.state.isNativeDoor) {
+        console.log(`[XIMSystem] Door sent XIM input request (cmd=${command}) - NOT a native door`);
+        this.state.isNativeDoor = false;
+      }
+      // Don't cancel timer for input requests - wait to see if data requests come
+      return;
+    }
+
+    // Data/environment requests - this is a modern XIM door
+    if (this.oldStyleDoorTimer) {
+      console.log(`[XIMSystem] Received post-register data request (cmd=${command}) - canceling old-style fallback`);
+      clearTimeout(this.oldStyleDoorTimer);
+      this.oldStyleDoorTimer = null;
+      this.receivedPostRegisterMessage = true;
+      this.state.isNativeDoor = false; // Definitely not native
+    }
+  }
+
+  /**
    * Handle door registration (JH_REGISTER)
    * From E sources (express.e:3379)
    */
   handleRegister(msg: XIMMessage): void {
-console.log('[XIMSystem] Door registering with BBS');
+    console.log(`[XIMSystem] Door registering with BBS, data=${msg.data}`);
 
     // express.e: for JH_REGISTER, return userLineLen in msg->Command (not Data).
     const rawLineLen =
@@ -110,6 +143,28 @@ console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
 
 console.log(`[XIMSystem] Registration acknowledged`);
     // express.e only sets msg.command for JH_REGISTER; avoid post-register memory writes.
+
+    // Old-style door compatibility: Wait 500ms after JH_REGISTER.
+    // If no follow-up data requests arrive, assume old door that needs native input injection.
+    // Modern XIM doors (Bulls, AquaScan) send BB_/DT_ requests immediately after registration.
+    // Old XIM doors (WALL, JoinCnf) send JH_HK and expect reply - they DON'T need injection.
+    // True native doors (non-XIM) poll GetMsg without sending any XIM commands.
+    this.receivedPostRegisterMessage = false;
+    this.state.isNativeDoor = false; // Default: not a native door until proven
+    this.oldStyleDoorTimer = setTimeout(() => {
+      if (!this.receivedPostRegisterMessage) {
+        // No data requests after 500ms - could be old-style XIM door or native door
+        // Old-style XIM doors will eventually send JH_HK (we should NOT inject)
+        // True native doors poll GetMsg without any XIM commands (we SHOULD inject)
+        // For now, mark as native so shouldInjectNativeInput() can work
+        // BUT only if we haven't received ANY XIM commands (not even JH_HK)
+        this.state.isNativeDoor = true;
+        console.log('[XIMSystem] No post-register data requests after 500ms');
+        console.log('[XIMSystem] Marking door as potentially native (may need input injection)');
+      } else {
+        console.log('[XIMSystem] Modern XIM door detected - uses XIM protocol for I/O');
+      }
+    }, 500);
   }
 
   /**

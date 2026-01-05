@@ -6,7 +6,8 @@
  */
 
 import { CoreDoor as Door, type DoorContext, type KeyPress } from '@amiexpress/bbs-door-sdk';
-import { Screen, Textbox, Box, Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, Textbox, Box, Text, Autocomplete, AutocompleteManager, UsernameProvider, BBSCodeProvider } from '@amiexpress/bbs-door-sdk';
+import type { AutocompleteContext } from '@amiexpress/bbs-door-sdk';
 import {
   EditorState,
   Viewport,
@@ -16,10 +17,7 @@ import {
   SearchManager,
   SearchDialog,
   ColorPicker,
-  AutocompleteManager,
-  AutocompleteDialog,
   type SearchOptions,
-  type AutocompleteContext,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
 
 interface MessageDraft {
@@ -123,25 +121,22 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
   // Create search manager
   const searchManager = new SearchManager(state.getLines());
 
-  // Create autocomplete manager
-  const autocompleteManager = AutocompleteManager.createDefault({
-    usernames: [], // TODO: Get usernames from BBS
+  // Create autocomplete manager with providers
+  const autocompleteManager = new AutocompleteManager([
+    new UsernameProvider([]), // TODO: Get usernames from BBS
+    new BBSCodeProvider()
+  ]);
+
+  // Create autocomplete widget
+  const ac = new Autocomplete({
+    parent: screen,
   });
 
-  // Create autocomplete dialog
-  const autocompleteDialog = new AutocompleteDialog({
-    parent: screen,
-    cursorRow: 0,
-    cursorCol: 0,
-    onSelect: (suggestion) => {
-      state.insertText(suggestion.insertText);
-      viewport.update();
-      statusBar.update();
-      screen.render();
-    },
-    onCancel: () => {
-      screen.render();
-    },
+  ac.on('select', (suggestion) => {
+    state.insertText(suggestion.insertText);
+    viewport.update();
+    statusBar.update();
+    screen.render();
   });
 
   let exitRequested = false;
@@ -206,18 +201,30 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
       };
 
       if (!autocompleteManager.shouldTrigger(context)) return;
-      const suggestions = await autocompleteManager.getSuggestions(context);
-      if (suggestions.length === 0) return;
       
-      const toolbarHeight = toolbar.getHeight();
-      const lineNumberWidth = 4;
-      const scroll = state.getScroll();
-      const visualRow = toolbarHeight + (cursor.line - scroll.top) + 1;
-      const visualCol = lineNumberWidth + 1 + cursor.col;
+      // Update widget's manager providers if they were changed
+      (ac as any).manager = autocompleteManager;
+      
+      // Trigger suggestions
+      await ac.suggest(context);
+      
+      if (ac.isVisible()) {
+        // Automatically position relative to the cursor in the viewport
+        const toolbarHeight = toolbar.getHeight();
+        const lineNumberWidth = 4;
+        const scroll = state.getScroll();
+        const visualRow = toolbarHeight + (cursor.line - scroll.top);
+        const visualCol = lineNumberWidth + cursor.col;
 
-      (autocompleteDialog as any).box.top = visualRow;
-      (autocompleteDialog as any).box.left = visualCol;
-      autocompleteDialog.show(suggestions);
+        // Position ac box
+        ac.top = visualRow + 1;
+        ac.left = visualCol;
+        
+        // Ensure it's on top and focused
+        ac.setFront();
+        ac.focus();
+        screen.render();
+      }
     },
   });
 

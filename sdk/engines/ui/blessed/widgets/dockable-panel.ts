@@ -149,11 +149,11 @@ export class DockablePanel extends Panel {
 
     // Automatic state persistence
     if (this.persistenceKey) {
-      this.on('drag-end', () => this.saveState());
-      this.on('resize-end', () => this.saveState());
-      this.on('dock', () => this.saveState());
-      this.on('minimize', () => this.saveState());
-      this.on('maximize', () => this.saveState());
+      this.on('drag-end', () => { void this.saveState(); });
+      this.on('resize-end', () => { void this.saveState(); });
+      this.on('dock', () => { void this.saveState(); });
+      this.on('minimize', () => { void this.saveState(); });
+      this.on('maximize', () => { void this.saveState(); });
     }
 
     // Focus panel when clicked anywhere on it (including when children are clicked)

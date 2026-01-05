@@ -77,9 +77,14 @@ function isConfAccessAreaName(user: any): boolean {
  */
 async function checkCommandExists(commandName: string): Promise<boolean> {
   try {
-    const { getCommandInfo } = require('../../services/CommandRegistry');
-    const commandInfo = await getCommandInfo(commandName.toUpperCase());
-    return commandInfo !== null;
+    const { getCommandCache } = require('../command-execution.handler');
+    const cache = getCommandCache();
+    const cmdUpper = commandName.toUpperCase();
+
+    // Check both SYSCMD and BBSCMD caches
+    const exists = cache.syscmd.some(([name]: [string, any]) => name === cmdUpper) ||
+                   cache.bbscmd.some(([name]: [string, any]) => name === cmdUpper);
+    return exists;
   } catch (error) {
 console.log(`[checkCommandExists] Command ${commandName} not found or error:`, error);
     return false;

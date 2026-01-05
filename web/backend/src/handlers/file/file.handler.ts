@@ -9,6 +9,7 @@ import { startPagination } from '../screen.handler';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { config } from '../../config';
+import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import * as path from 'path';
 import { fileAreaManager } from '../../services/FileAreaManager';
 
@@ -76,7 +77,7 @@ export function displayFileAreaContents(socket: any, session: BBSSession, area: 
     if (collector) {
       collector.push(msg);
     } else {
-      socket.emit('ansi-output', msg);
+      emitText(socket, msg);
     }
   };
 
@@ -144,7 +145,7 @@ console.log('Parsed params:', parsedParams);
   if (currentFileAreas.length === 0) {
     output.push('No file areas available in this conference.\r\n');
     output.push('\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    socket.emit('ansi-output', output.join(''));
+    emitText(socket, output.join(''));
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -155,8 +156,8 @@ console.log('Parsed params:', parsedParams);
     // Direct directory selection from params
     const dirSpan = getDirSpan(parsedParams[0], currentFileAreas.length);
     if (dirSpan.startDir === -1) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid directory selection.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\n\x1b[31mInvalid directory selection.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
@@ -173,10 +174,10 @@ console.log('Parsed params:', parsedParams);
   // Emit output with optional pagination (skip paging if NS flag present)
   const buffer = output.join('');
   if (nonStopDisplay) {
-    socket.emit('ansi-output', buffer);
+    emitText(socket, buffer);
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     return;
   }
 
@@ -185,7 +186,7 @@ console.log('Parsed params:', parsedParams);
     startPagination(socket, session, lines, 'ansi-output', undefined, () => {
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     });
   }
 }
@@ -216,7 +217,7 @@ export function getDirSpan(param: string, maxDirs: number): { startDir: number, 
 
 // Display directory selection prompt (like getDirSpan interactive prompt)
 export function displayDirectorySelectionPrompt(socket: any, session: BBSSession, fileAreas: any[], reverse: boolean, nonStop: boolean) {
-  socket.emit('ansi-output', '\x1b[36mDirectories: \x1b[32m(1-\x1b[33m' + fileAreas.length + '\x1b[32m) \x1b[36m, \x1b[32m(\x1b[33mA\x1b[32m)\x1b[36mll, \x1b[32m(\x1b[33mU\x1b[32m)\x1b[36mpload, \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[36m=none? \x1b[0m');
+  emitText(socket, '\x1b[36mDirectories: \x1b[32m(1-\x1b[33m' + fileAreas.length + '\x1b[32m) \x1b[36m, \x1b[32m(\x1b[33mA\x1b[32m)\x1b[36mll, \x1b[32m(\x1b[33mU\x1b[32m)\x1b[36mpload, \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[36m=none? \x1b[0m');
   session.subState = LoggedOnSubState.FILE_DIR_SELECT;
   session.tempData = { fileAreas, reverse, nonStop };
 }
@@ -253,7 +254,7 @@ export function displaySelectedFileAreas(
 
   // Finished displaying all areas (collector path defers final prompt to caller)
   if (!collector) {
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -263,8 +264,8 @@ export function displaySelectedFileAreas(
 
 // displayFileMaintenance() - File maintenance/search (FM command)
 export async function displayFileMaintenance(socket: any, session: BBSSession, params: string) {
-  socket.emit('ansi-output', '\x1b[36m-= File Maintenance =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'File maintenance and search functionality.\r\n\r\n');
+  emitText(socket, '\x1b[36m-= File Maintenance =-\x1b[0m\r\n');
+  emitText(socket, 'File maintenance and search functionality.\r\n\r\n');
 
   // Parse parameters (like AmiExpress FM command)
   const parsedParams = parseParams(params);
@@ -284,14 +285,14 @@ export async function displayFileMaintenance(socket: any, session: BBSSession, p
     return;
   } else {
     // Show menu
-    socket.emit('ansi-output', 'Available operations:\r\n');
-    socket.emit('ansi-output', 'FM D <filename> - Delete files\r\n');
-    socket.emit('ansi-output', 'FM M <filename> <area> - Move files\r\n');
-    socket.emit('ansi-output', 'FM S <pattern> - Search files\r\n');
-    socket.emit('ansi-output', '\r\nUse FM <operation> <parameters>\r\n');
+    emitText(socket, 'Available operations:\r\n');
+    emitText(socket, 'FM D <filename> - Delete files\r\n');
+    emitText(socket, 'FM M <filename> <area> - Move files\r\n');
+    emitText(socket, 'FM S <pattern> - Search files\r\n');
+    emitText(socket, '\r\nUse FM <operation> <parameters>\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -299,11 +300,11 @@ export async function displayFileMaintenance(socket: any, session: BBSSession, p
 // handleFileDelete() - Delete files (FM D command)
 export async function handleFileDelete(socket: any, session: BBSSession, params: string[]) {
   if (params.length === 0) {
-    socket.emit('ansi-output', 'Delete files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM D <filename> [area]\r\n');
-    socket.emit('ansi-output', 'Wildcards (* and ?) are supported.\r\n');
-    socket.emit('ansi-output', 'Area parameter is optional (defaults to current conference).\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, 'Delete files functionality.\r\n');
+    emitText(socket, 'Usage: FM D <filename> [area]\r\n');
+    emitText(socket, 'Wildcards (* and ?) are supported.\r\n');
+    emitText(socket, 'Area parameter is optional (defaults to current conference).\r\n\r\n');
+    emitText(socket, '\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -315,8 +316,8 @@ export async function handleFileDelete(socket: any, session: BBSSession, params:
   const matchingFiles = await _searchFilesByName(filename, session.currentConf || 1);
 
   if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', `\r\nNo files matching "${filename}" found.\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, `\r\nNo files matching "${filename}" found.\r\n`);
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -329,21 +330,21 @@ export async function handleFileDelete(socket: any, session: BBSSession, params:
   );
 
   if (allowedFiles.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have permission to delete these files.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mYou do not have permission to delete these files.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
   }
 
   // Display files to be deleted
-  socket.emit('ansi-output', `\r\nFiles matching "${filename}":\r\n\r\n`);
+  emitText(socket, `\r\nFiles matching "${filename}":\r\n\r\n`);
   allowedFiles.forEach((file: any, index: number) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${file.areaname})\r\n`);
+    emitText(socket, `${index + 1}. ${file.filename} (${file.areaname})\r\n`);
   });
 
-  socket.emit('ansi-output', '\r\n\x1b[31mWARNING: This action cannot be undone!\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[32mEnter file numbers to delete (comma-separated) or "ALL" for all: \x1b[0m');
+  emitText(socket, '\r\n\x1b[31mWARNING: This action cannot be undone!\x1b[0m\r\n');
+  emitText(socket, '\x1b[32mEnter file numbers to delete (comma-separated) or "ALL" for all: \x1b[0m');
 
   // Store context for confirmation
   session.tempData = {
@@ -358,8 +359,8 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
   const tempData = session.tempData as { operation: string, allowedFiles: any[], filename: string };
 
   if (!tempData || tempData.operation !== 'delete_files') {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid operation state.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mInvalid operation state.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -378,8 +379,8 @@ export async function handleFileDeleteConfirmation(socket: any, session: BBSSess
   }
 
   if (filesToDelete.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[33mNo files selected for deletion.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mNo files selected for deletion.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -415,14 +416,14 @@ console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, err
     }
   }
 
-  socket.emit('ansi-output', `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
+  emitText(socket, `\r\n\x1b[32mDeleted ${filesToDelete.length} file(s) successfully.\x1b[0m\r\n`);
 
   // Log deletion
   filesToDelete.forEach((file: any) => {
     callersLog(session.user!.id, session.user!.username, 'Deleted file', `${file.filename} (${file.areaname || ''})`);
   });
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
   session.tempData = undefined;
@@ -431,10 +432,10 @@ console.error(`[FileDelete] Error removing ${file.filename} from DIR file:`, err
 // handleFileMove() - Move files between areas (FM M command)
 export async function handleFileMove(socket: any, session: BBSSession, params: string[]) {
   if (params.length < 2) {
-    socket.emit('ansi-output', 'Move files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM M <filename> <destination_area>\r\n');
-    socket.emit('ansi-output', 'Wildcards (* and ?) are supported for filename.\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, 'Move files functionality.\r\n');
+    emitText(socket, 'Usage: FM M <filename> <destination_area>\r\n');
+    emitText(socket, 'Wildcards (* and ?) are supported for filename.\r\n\r\n');
+    emitText(socket, '\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -444,8 +445,8 @@ export async function handleFileMove(socket: any, session: BBSSession, params: s
   const destAreaId = parseInt(params[1]);
 
   if (isNaN(destAreaId)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid destination area number.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mInvalid destination area number.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -457,8 +458,8 @@ export async function handleFileMove(socket: any, session: BBSSession, params: s
   // Check destination area exists
   const destArea = allAreas.find((a: any) => a.id === destAreaId);
   if (!destArea) {
-    socket.emit('ansi-output', '\r\n\x1b[31mDestination file area not found.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mDestination file area not found.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -468,8 +469,8 @@ export async function handleFileMove(socket: any, session: BBSSession, params: s
   const matchingFiles = await _searchFilesByName(filename, session.currentConf || 1);
 
   if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', `\r\nNo files matching "${filename}" found in current conference.\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, `\r\nNo files matching "${filename}" found in current conference.\r\n`);
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -482,20 +483,20 @@ export async function handleFileMove(socket: any, session: BBSSession, params: s
   );
 
   if (allowedFiles.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have permission to move these files.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mYou do not have permission to move these files.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
   }
 
   // Display files to be moved
-  socket.emit('ansi-output', `\r\nFiles matching "${filename}" to move to ${destArea.name}:\r\n\r\n`);
+  emitText(socket, `\r\nFiles matching "${filename}" to move to ${destArea.name}:\r\n\r\n`);
   allowedFiles.forEach((file: any, index: number) => {
-    socket.emit('ansi-output', `${index + 1}. ${file.filename} (${file.areaname} -> ${destArea.name})\r\n`);
+    emitText(socket, `${index + 1}. ${file.filename} (${file.areaname} -> ${destArea.name})\r\n`);
   });
 
-  socket.emit('ansi-output', '\r\n\x1b[32mEnter file numbers to move (comma-separated) or "ALL" for all: \x1b[0m');
+  emitText(socket, '\r\n\x1b[32mEnter file numbers to move (comma-separated) or "ALL" for all: \x1b[0m');
 
   // Store context for confirmation
   session.tempData = {
@@ -511,8 +512,8 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
   const tempData = session.tempData as { operation: string, allowedFiles: any[], destArea: any, filename: string };
 
   if (!tempData || tempData.operation !== 'move_files') {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid operation state.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mInvalid operation state.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -531,8 +532,8 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
   }
 
   if (filesToMove.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[33mNo files selected for move.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[33mNo files selected for move.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -546,14 +547,14 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
 
   await Promise.all(movePromises);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
+  emitText(socket, `\r\n\x1b[32mMoved ${filesToMove.length} file(s) to ${tempData.destArea.name} successfully.\x1b[0m\r\n`);
 
   // Log move with destination
   filesToMove.forEach((file: any) => {
     callersLog(session.user!.id, session.user!.username, 'Moved file', `${file.filename} -> ${tempData.destArea.name}`);
   });
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
   session.tempData = undefined;
@@ -562,11 +563,11 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
 // handleFileSearch() - Search files by pattern (FM S command)
 export async function handleFileSearch(socket: any, session: BBSSession, params: string[]) {
   if (params.length === 0) {
-    socket.emit('ansi-output', 'Search files functionality.\r\n');
-    socket.emit('ansi-output', 'Usage: FM S <search_pattern> [area]\r\n');
-    socket.emit('ansi-output', 'Search pattern can be filename, description, or uploader.\r\n');
-    socket.emit('ansi-output', 'Area parameter is optional (defaults to current conference).\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, 'Search files functionality.\r\n');
+    emitText(socket, 'Usage: FM S <search_pattern> [area]\r\n');
+    emitText(socket, 'Search pattern can be filename, description, or uploader.\r\n');
+    emitText(socket, 'Area parameter is optional (defaults to current conference).\r\n\r\n');
+    emitText(socket, '\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -580,8 +581,8 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
   if (areaParam) {
     const parsedAreaId = parseInt(areaParam);
     if (isNaN(parsedAreaId)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\n\x1b[31mInvalid area number.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
@@ -591,8 +592,8 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
     const allAreas = await _getFileAreas(session.currentConf || 1);
     const areaExists = allAreas.find((a: any) => a.id === parsedAreaId);
     if (!areaExists) {
-      socket.emit('ansi-output', '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, '\r\n\x1b[31mFile area not found.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
       return;
@@ -604,25 +605,25 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
   const matchingFiles = await _searchFilesAdvanced(searchPattern, session.currentConf || 1, areaId);
 
   // Display results
-  socket.emit('ansi-output', `\r\nSearch results for "${searchPattern}":\r\n\r\n`);
+  emitText(socket, `\r\nSearch results for "${searchPattern}":\r\n\r\n`);
 
   if (matchingFiles.length === 0) {
-    socket.emit('ansi-output', 'No files found matching the search pattern.\r\n');
+    emitText(socket, 'No files found matching the search pattern.\r\n');
   } else {
-    socket.emit('ansi-output', `Found ${matchingFiles.length} file(s):\r\n\r\n`);
+    emitText(socket, `Found ${matchingFiles.length} file(s):\r\n\r\n`);
 
     matchingFiles.forEach((file: any) => {
       const sizeKB = Math.ceil(file.size / 1024);
       const dateStr = new Date(file.uploaddate).toLocaleDateString();
       const description = file.fileid_diz || file.description;
 
-      socket.emit('ansi-output', `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-      socket.emit('ansi-output', `  ${description}\r\n`);
-      socket.emit('ansi-output', `  Area: ${file.areaname}\r\n\r\n`);
+      emitText(socket, `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
+      emitText(socket, `  ${description}\r\n`);
+      emitText(socket, `  Area: ${file.areaname}\r\n\r\n`);
     });
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -630,8 +631,8 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
 // ===== File Status (FS command) =====
 
 export async function displayFileStatus(socket: any, session: BBSSession, params: string) {
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.headerBox('FILE STATUS'));
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.headerBox('FILE STATUS'));
 
   // Parse parameters to determine scope (like fileStatus(opt) in AmiExpress)
   const parsedParams = parseParams(params);
@@ -645,20 +646,20 @@ export async function displayFileStatus(socket: any, session: BBSSession, params
   const bytesAvail = Math.max(0, (userStats.bytes_uploaded * userRatio) - userStats.bytes_downloaded);
   const ratioDisplay = userRatio > 0 ? `${userRatio}:1` : 'DSBLD';
 
-  socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n\r\n');
-  socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail  Ratio\x1b[0m\r\n\r\n');
-  socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
+  emitText(socket, '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n\r\n');
+  emitText(socket, '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail  Ratio\x1b[0m\r\n\r\n');
+  emitText(socket, '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
 
   // Note: This would normally reference a conferences array from parent scope
   // For now we'll need to inject it
-  socket.emit('ansi-output', '\r\n\x1b[32mYour File Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Uploaded: ${userStats.files_uploaded || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Uploaded: ${userStats.bytes_uploaded || 0}\r\n`);
-  socket.emit('ansi-output', `Files Downloaded: ${userStats.files_downloaded || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Downloaded: ${userStats.bytes_downloaded || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Available: ${bytesAvail}\r\n`);
+  emitText(socket, '\r\n\x1b[32mYour File Statistics:\x1b[0m\r\n');
+  emitText(socket, `Files Uploaded: ${userStats.files_uploaded || 0}\r\n`);
+  emitText(socket, `Bytes Uploaded: ${userStats.bytes_uploaded || 0}\r\n`);
+  emitText(socket, `Files Downloaded: ${userStats.files_downloaded || 0}\r\n`);
+  emitText(socket, `Bytes Downloaded: ${userStats.bytes_downloaded || 0}\r\n`);
+  emitText(socket, `Bytes Available: ${bytesAvail}\r\n`);
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -698,8 +699,8 @@ console.log('[displayNewFiles] Parsed params:', parsedParams);
 console.log('[displayNewFiles] Search date:', searchDate);
 
     // Always show header during confScan (express.e doesn't suppress this)
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
+    emitText(socket, '\r\n');
+    emitText(socket, `Searching for files newer than: ${searchDate.toLocaleDateString()}\r\n\r\n`);
 
     // Get file areas for current conference from database
     const conferenceId = session.currentConf || 1;
@@ -708,7 +709,7 @@ console.log('[displayNewFiles] Getting file areas for conference:', conferenceId
 console.log('[displayNewFiles] Found', areas.length, 'file areas');
 
   if (areas.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
     finalizeCommand(socket, session, 'New files unavailable');
     return;
   }
@@ -718,13 +719,13 @@ console.log('[displayNewFiles] Found', areas.length, 'file areas');
 
     // Pause prompt controlled by newFilesPauseFlag (set by confScan) - express.e:27934-27938
     if (!session.newFilesPauseFlag) {
-      socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+      emitPrompt(socket, AnsiUtil.pressKeyPrompt());
       session.menuPause = true;
     }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   } catch (error) {
 console.error('[displayNewFiles] ERROR:', error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 }
@@ -737,7 +738,7 @@ async function displayNewFilesFromDatabase(socket: any, session: BBSSession, sea
 
   // Helper to emit output and track lines for pause purposes
   const emitLine = (text: string, lineCount: number = 1) => {
-    socket.emit('ansi-output', text);
+    emitText(socket, text);
     // Track lines for checkForPause()
     if (!session.tempData) session.tempData = {};
     session.tempData.lineCount = (session.tempData.lineCount || 0) + lineCount;
@@ -867,8 +868,8 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
 
       if (newFilesInArea.length > 0) {
         foundNewFiles = true;
-        socket.emit('ansi-output', `\r\n\x1b[33m${area.name} (DIR${currentDir})\x1b[0m\r\n`);
-        socket.emit('ansi-output', `${area.description}\r\n\r\n`);
+        emitText(socket, `\r\n\x1b[33m${area.name} (DIR${currentDir})\x1b[0m\r\n`);
+        emitText(socket, `${area.description}\r\n\r\n`);
 
         // Display new files (like displayIt2 in AmiExpress)
         newFilesInArea.forEach(file => {
@@ -876,13 +877,13 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
           const dateStr = file.uploadDate.toLocaleDateString();
           const description = file.fileIdDiz || file.description;
 
-          socket.emit('ansi-output', `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-          socket.emit('ansi-output', `  ${description}\r\n\r\n`);
+          emitText(socket, `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
+          emitText(socket, `  ${description}\r\n\r\n`);
         });
 
         // Pause between areas if not non-stop
         if (!nonStop && currentDir < endDir) {
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+          emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           session.subState = LoggedOnSubState.FILE_LIST_CONTINUE;
           session.tempData = { fileAreas, dirSpan, nonStop, currentDir: currentDir + step, searchDate, isNewFiles: true };
           return;
@@ -893,10 +894,10 @@ export function displayNewFilesInDirectories(socket: any, session: BBSSession, s
   }
 
   if (!foundNewFiles) {
-    socket.emit('ansi-output', 'No new files found since the specified date.\r\n');
+    emitText(socket, 'No new files found since the specified date.\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -914,40 +915,40 @@ console.log('🔍 [Upload Debug] fileAreas data:', fileAreas.map(a => ({ id: a.i
 console.log('🔍 [Upload Debug] Filtered currentFileAreas:', currentFileAreas.length);
 
   if (currentFileAreas.length === 0) {
-    socket.emit('ansi-output', '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
-    socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
+    emitText(socket, 'No file areas available in this conference.\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
   }
 
   // Display upload message (like UPLOADMSG.TXT)
-  socket.emit('ansi-output', '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Upload your files to share with the community.\r\n\r\n');
+  emitText(socket, '\x1b[36m-= Upload Files =-\x1b[0m\r\n');
+  emitText(socket, 'Upload your files to share with the community.\r\n\r\n');
 
   // Display user stats (like displayULStats in AmiExpress)
   const user = session.user!;
-  socket.emit('ansi-output', '\x1b[32mYour Upload Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Uploaded: ${user.uploads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Uploaded: ${user.bytesUpload || 0}\r\n\r\n`);
+  emitText(socket, '\x1b[32mYour Upload Statistics:\x1b[0m\r\n');
+  emitText(socket, `Files Uploaded: ${user.uploads || 0}\r\n`);
+  emitText(socket, `Bytes Uploaded: ${user.bytesUpload || 0}\r\n\r\n`);
 
   // Display available space (simplified - in production, calculate from file system)
-  socket.emit('ansi-output', '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
-  socket.emit('ansi-output', '1,000,000 bytes available\r\n\r\n');
+  emitText(socket, '\x1b[32mAvailable Upload Space:\x1b[0m\r\n');
+  emitText(socket, '1,000,000 bytes available\r\n\r\n');
 
   // express.e:19016 - "Filename lengths above 12 are not allowed."
-  socket.emit('ansi-output', 'Filename lengths above 12 are not allowed.\r\n');
-  socket.emit('ansi-output', '\x1b[33mYou can select multiple files for batch upload.\x1b[0m\r\n\r\n');
+  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n');
+  emitText(socket, '\x1b[33mYou can select multiple files for batch upload.\x1b[0m\r\n\r\n');
 
   // Display file areas for upload
-  socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
+  emitText(socket, '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
   currentFileAreas.forEach((area, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
+    emitText(socket, `${index + 1}. ${area.name} - ${area.description}\r\n`);
   });
 
   // Prompt for file area selection
-  socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
+  emitText(socket, '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
   session.subState = LoggedOnSubState.FILES_SELECT_AREA;
   session.tempData = { uploadMode: true, fileAreas: currentFileAreas, batchUpload: true };
 }
@@ -958,45 +959,45 @@ console.log('displayDownloadInterface called with params:', params);
   // Check if there are file directories to download from (NDIRS check)
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
   if (currentFileAreas.length === 0) {
-    socket.emit('ansi-output', '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-    socket.emit('ansi-output', 'No file areas available in this conference.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
+    emitText(socket, 'No file areas available in this conference.\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
   }
 
   // Display download message (like DOWNLOADMSG.TXT)
-  socket.emit('ansi-output', '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Download files from our collection.\r\n\r\n');
+  emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
+  emitText(socket, 'Download files from our collection.\r\n\r\n');
 
   // Display user stats (like displayULStats in AmiExpress)
   const user = session.user!;
-  socket.emit('ansi-output', '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Downloaded: ${user.downloads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
+  emitText(socket, '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
+  emitText(socket, `Files Downloaded: ${user.downloads || 0}\r\n`);
+  emitText(socket, `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
 
   // Display current protocol (simplified)
-  socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+  emitText(socket, '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
 
   // express.e:20031-20033 - "Space between filenames. Wildcards permitted."
-  socket.emit('ansi-output', 'Space between filenames.  ');
+  emitText(socket, 'Space between filenames.  ');
   // Check ACS_FILE_EXPANSION for wildcard support (express.e:20032)
   const { checkSecurity } = require('../utils/acs.util');
   const { ACSPermission } = require('../constants/acs-permissions');
   if (!checkSecurity(user, ACSPermission.FILE_EXPANSION)) {
-    socket.emit('ansi-output', 'No ');
+    emitText(socket, 'No ');
   }
-  socket.emit('ansi-output', 'Wildcards permitted.\r\n\r\n');
+  emitText(socket, 'Wildcards permitted.\r\n\r\n');
 
   // Display file areas for download
-  socket.emit('ansi-output', '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
+  emitText(socket, '\x1b[32mAvailable File Areas:\x1b[0m\r\n');
   currentFileAreas.forEach((area, index) => {
-    socket.emit('ansi-output', `${index + 1}. ${area.name} - ${area.description}\r\n`);
+    emitText(socket, `${index + 1}. ${area.name} - ${area.description}\r\n`);
   });
 
   // Prompt for file area selection
-  socket.emit('ansi-output', '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
+  emitText(socket, '\r\n\x1b[32mSelect file area (1-\x1b[33m' + currentFileAreas.length + '\x1b[32m) or press Enter to cancel: \x1b[0m');
   session.subState = LoggedOnSubState.FILES_SELECT_AREA;
   session.tempData = { downloadMode: true, fileAreas: currentFileAreas };
 }
@@ -1049,12 +1050,12 @@ export function dirLineNewFile(dirLine: string, searchDate: Date): boolean {
 export function startFileUpload(socket: any, session: BBSSession, fileArea: any) {
 console.log('startFileUpload called for area:', fileArea.name);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n\r\n`);
+  emitText(socket, `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n\r\n`);
 
   // Check if user has upload access to this area
   if (fileArea.uploadAccess > (session.user?.secLevel || 0)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have upload access to this file area.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mYou do not have upload access to this file area.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -1062,11 +1063,11 @@ console.log('startFileUpload called for area:', fileArea.name);
   }
 
   // Display available space (express.e:18991-18993)
-  socket.emit('ansi-output', '1,000,000 bytes available for uploading.  1,000,000 at one time.\r\n');
-  socket.emit('ansi-output', 'Filename lengths above 12 are not allowed.\r\n\r\n');
+  emitText(socket, '1,000,000 bytes available for uploading.  1,000,000 at one time.\r\n');
+  emitText(socket, 'Filename lengths above 12 are not allowed.\r\n\r\n');
 
   // Web-friendly flow: Show file picker immediately
-  socket.emit('ansi-output', '\x1b[36mSelect file to upload...\x1b[0m\r\n\r\n');
+  emitText(socket, '\x1b[36mSelect file to upload...\x1b[0m\r\n\r\n');
 
   const previousTempData = session.tempData || {};
   const uploadContext: UploadSessionContext = {
@@ -1106,23 +1107,23 @@ console.log('startFileUpload called for area:', fileArea.name);
 export function startFileDownload(socket: any, session: BBSSession, fileArea: any) {
 console.log('startFileDownload called for area:', fileArea.name);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n`);
-  socket.emit('ansi-output', '\x1b[36m-= Download Files =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Download files from our collection.\r\n\r\n');
+  emitText(socket, `\r\n\x1b[32mSelected file area: ${fileArea.name}\x1b[0m\r\n`);
+  emitText(socket, '\x1b[36m-= Download Files =-\x1b[0m\r\n');
+  emitText(socket, 'Download files from our collection.\r\n\r\n');
 
   // Display user stats (like displayULStats in AmiExpress)
   const user = session.user!;
-  socket.emit('ansi-output', '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
-  socket.emit('ansi-output', `Files Downloaded: ${user.downloads || 0}\r\n`);
-  socket.emit('ansi-output', `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
+  emitText(socket, '\x1b[32mYour Download Statistics:\x1b[0m\r\n');
+  emitText(socket, `Files Downloaded: ${user.downloads || 0}\r\n`);
+  emitText(socket, `Bytes Downloaded: ${user.bytesDownload || 0}\r\n\r\n`);
 
   // Display current protocol (WebSocket-based)
-  socket.emit('ansi-output', '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
+  emitText(socket, '\x1b[32mCurrent Transfer Protocol:\x1b[0m WebSocket\r\n\r\n');
 
   // Check if user has download access to this area
   if (fileArea.downloadAccess > (session.user?.secLevel || 0)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mYou do not have download access to this file area.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mYou do not have download access to this file area.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -1130,33 +1131,33 @@ console.log('startFileDownload called for area:', fileArea.name);
   }
 
   // Display download message (like DOWNLOADMSG.TXT)
-  socket.emit('ansi-output', '\r\n\x1b[32mDownload Message:\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Please select files to download. Files will be transferred using WebSocket protocol.\r\n\r\n');
+  emitText(socket, '\r\n\x1b[32mDownload Message:\x1b[0m\r\n');
+  emitText(socket, 'Please select files to download. Files will be transferred using WebSocket protocol.\r\n\r\n');
 
   // Display files in the area for selection
   const areaFiles = fileEntries.filter(file => file.areaId === fileArea.id);
   if (areaFiles.length === 0) {
-    socket.emit('ansi-output', 'No files available in this area.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, 'No files available in this area.\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
     return;
   }
 
-  socket.emit('ansi-output', '\x1b[32mAvailable Files:\x1b[0m\r\n\r\n');
+  emitText(socket, '\x1b[32mAvailable Files:\x1b[0m\r\n\r\n');
   areaFiles.forEach((file, index) => {
     const sizeKB = Math.ceil(file.size / 1024);
     const dateStr = file.uploadDate.toLocaleDateString();
     const description = file.fileIdDiz || file.description;
-    socket.emit('ansi-output', `${index + 1}. ${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-    socket.emit('ansi-output', `   ${description}\r\n\r\n`);
+    emitText(socket, `${index + 1}. ${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
+    emitText(socket, `   ${description}\r\n\r\n`);
   });
 
   // Prompt for file selection - express.e:20031 "Space between filenames"
   // Support multiple selections: space-separated numbers, ranges (1-3), or filenames
-  socket.emit('ansi-output', '\x1b[33mEnter file #s (e.g. 1 3 5), range (1-5), or filename(s):\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[32mSelect files to download: \x1b[0m');
+  emitText(socket, '\x1b[33mEnter file #s (e.g. 1 3 5), range (1-5), or filename(s):\x1b[0m\r\n');
+  emitText(socket, '\x1b[32mSelect files to download: \x1b[0m');
   session.subState = LoggedOnSubState.FILES_DOWNLOAD_SELECT;
   session.tempData = { downloadMode: true, fileArea, areaFiles, batchDownload: true };
 }
@@ -1166,8 +1167,8 @@ export function handleFileDownload(socket: any, session: BBSSession, fileIndex: 
   const selectedFile = tempData.areaFiles[fileIndex - 1];
 
   if (!selectedFile) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid file selection.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mInvalid file selection.\x1b[0m\r\n');
+    emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     session.tempData = undefined;
@@ -1183,7 +1184,7 @@ export function handleFileDownload(socket: any, session: BBSSession, fileIndex: 
   });
 
   // Return to menu after triggering download
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
   session.tempData = undefined;

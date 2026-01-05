@@ -37,6 +37,7 @@ export function createChatLog(
     zIndex: 1,
     persistenceKey: 'chat-main',
     topConstraint: MENU_HEIGHT,
+    bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: { type: 'line', fg: 'green' },
     style: {
       fg: 'white',

@@ -132,6 +132,8 @@ console.log(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`)
       ximPortAddr: doorPort,
       aePortAddr: doorPort,
       doorPortAddr: doorPort,
+      // Native door detection - starts false, set by 500ms timer if no XIM commands
+      isNativeDoor: false,
     } as XIMState;
 
     // Initialize specialized handlers
@@ -241,7 +243,7 @@ console.log(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(
 
     // Allocate memory for jhMessage structure
     const MEMF_PUBLIC_CLEAR = 0x10001;
-    const msgSize = DoorConstants.MESSAGE_TOTAL_LENGTH; // 0x108 = 264 bytes
+    const msgSize = DoorConstants.MESSAGE_TOTAL_LENGTH; // 0x150 = 336 bytes (extended)
     const msgAddr = this.execLibrary.allocMem(msgSize, MEMF_PUBLIC_CLEAR);
 
     if (msgAddr === 0) {
@@ -304,25 +306,39 @@ console.log(`[XIMProtocol] Input injected successfully`);
 
   /**
    * Check if native door input injection should be used.
-   * Returns true if door is registered but NOT waiting for XIM input commands.
-   * This indicates the door is polling GetMsg natively.
+   * Returns true ONLY for truly native doors that poll GetMsg without XIM protocol.
+   *
+   * XIM doors (like dRE!WAll, JoinCnf) send JH_HK/JH_LI to request input - they
+   * receive input via reply to their request, NOT via injected messages.
+   *
+   * Native doors don't speak XIM protocol - they just poll GetMsg waiting for
+   * the BBS to send them input messages proactively.
    */
   shouldInjectNativeInput(): boolean {
     const isRegistered = this.state.registered;
     const isWaiting = this.ioHandler.isWaitingForLineInput();
-    const result = isRegistered && !isWaiting;
+    const isNativeDoor = this.state.isNativeDoor === true;
 
-console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} result=${result}`);
+    console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor}`);
 
     // Must be registered
     if (!isRegistered) {
       return false;
     }
+
     // If waiting for line input/hotkey via XIM commands, don't inject
+    // The door sent JH_HK and is waiting for a reply - use queueInput instead
     if (isWaiting) {
       return false;
     }
-    // Door is registered but not waiting for XIM input - likely polling GetMsg natively
+
+    // Only inject for confirmed native doors (detected after 500ms timer)
+    // XIM doors should NOT have input injected - they use XIM protocol
+    if (!isNativeDoor) {
+      return false;
+    }
+
+    // This is a native door that needs input injection via PutMsg
     return true;
   }
 
@@ -492,6 +508,12 @@ console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (replying as-is)`
     }
 
     this.messageLogger?.(msg, humanName);
+
+    // Cancel old-style door timer if we receive data/environment requests
+    // This indicates a modern door that actively queries BBS state
+    if (msg.command !== XIMCommand.JH_REGISTER) {
+      this.systemCommandsHandler.cancelOldStyleDoorTimer(msg.command);
+    }
 
     // Handle system commands first (register/shutdown and others)
     if (this.isSystemCommand(msg.command)) {
@@ -917,6 +939,7 @@ console.log(
    * Handle BBS info commands
    */
   private handleBBSInfoCommand(msg: any): void {
+console.log(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorParams="${(this.bbsSession as any)?.doorParams}"`);
     switch (msg.command) {
       case XIMCommand.JH_BBSNAME:
         this.bbsInfoHandler.handleBBSName(msg);

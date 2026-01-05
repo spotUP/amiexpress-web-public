@@ -20,7 +20,10 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
     vi: true,
     mouse: true,
     scrollable: true,
-    scrollbar: { ch: '█' }
+    scrollbar: { ch: '█' },
+    focusable: true,
+    hidden: true,
+    trapFocus: true,
   });
 
   if (pinnedMessages.length === 0) {
@@ -42,10 +45,12 @@ export function createPinnedPanel(screen: Screen, pinnedMessages: any[]) {
   }
 
   overlay.key(['escape', 'q'], () => {
+    overlay.hide();
     overlay.destroy();
     screen.render();
   });
 
+  overlay.show();
   overlay.focus();
   screen.render();
 

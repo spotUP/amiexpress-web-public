@@ -19,6 +19,7 @@ import { config } from '../config';
 import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
+import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
@@ -502,8 +503,8 @@ console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
 
     // Check if door executable exists (use amigafs for case-insensitive matching)
     if (!amigafs.existsSync(doorInfo.resolvedPath)) {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor executable not found: ${doorInfo.resolvedPath}\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor executable not found: ${doorInfo.resolvedPath}\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -625,6 +626,7 @@ console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).c
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
+    socket.emit('door-active', true);
 
     // DO NOT enable game mode for 68K doors - they use normal character input via door:input
     // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
@@ -696,6 +698,7 @@ console.error('[launchAmigaDoor] Unable to persist session for door input:', err
     disableGameMode(socket, session);
 
     session.inDoorManager = false;
+    socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     try {
@@ -788,8 +791,8 @@ console.error(`[launchAmigaDoor] Error executing door:`, error);
       { doorPath: doorInfo.location, error: (error as Error).message, stack: (error as Error).stack },
       DebugSeverity.CRITICAL
     );
-    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -904,8 +907,8 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
       await handleCommand(socket, session, doorCommand);
       return;
     } else {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -914,9 +917,9 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
 
   // No door specified, show interactive arrow-key menu
   if (allDoors.length === 0) {
-    socket.emit('ansi-output', '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
-    socket.emit('ansi-output', 'No doors are currently available.\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\x1b[36m-= Door Games & Utilities =-\x1b[0m\r\n');
+    emitText(socket, 'No doors are currently available.\r\n');
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
     return;
@@ -945,8 +948,8 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 
   // Only clear screen on initial draw
   if (isInitialDraw) {
-    socket.emit('ansi-output', '\x1b[2J\x1b[H');
-    socket.emit('ansi-output', '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
+    emitText(socket, '\x1b[2J\x1b[H');
+    emitText(socket, '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
   }
 
   // Display doors (show up to 15 at a time)
@@ -964,15 +967,15 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
     // Redraw previous line (unselect)
     if (prevLine >= 3 && prevLine < 3 + pageSize) {
       const prevDoor = availableDoors[previousSelectedIndex];
-      socket.emit('ansi-output', `\x1b[${prevLine};1H`);
-      socket.emit('ansi-output', formatDoorLine(prevDoor, false));
+      emitText(socket, `\x1b[${prevLine};1H`);
+      emitText(socket, formatDoorLine(prevDoor, false));
     }
 
     // Redraw new line (select)
     if (newLine >= 3 && newLine < 3 + pageSize) {
       const newDoor = availableDoors[selectedIndex];
-      socket.emit('ansi-output', `\x1b[${newLine};1H`);
-      socket.emit('ansi-output', formatDoorLine(newDoor, true));
+      emitText(socket, `\x1b[${newLine};1H`);
+      emitText(socket, formatDoorLine(newDoor, true));
     }
 
     session.tempData.previousSelectedIndex = selectedIndex;
@@ -980,22 +983,22 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   }
 
   // Full redraw (initial draw OR scroll changed) - show all doors
-  socket.emit('ansi-output', '\x1b[3;1H');
+  emitText(socket, '\x1b[3;1H');
   visibleDoors.forEach((door: any, index: number) => {
     const globalIndex = scrollOffset + index;
     const isSelected = globalIndex === selectedIndex;
-    socket.emit('ansi-output', formatDoorLine(door, isSelected) + '\r\n');
+    emitText(socket, formatDoorLine(door, isSelected) + '\r\n');
   });
 
   // Clear any remaining lines from previous page
   for (let i = visibleDoors.length; i < pageSize; i++) {
-    socket.emit('ansi-output', '\x1b[2K\r\n');
+    emitText(socket, '\x1b[2K\r\n');
   }
 
   // Footer with instructions
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
+  emitText(socket, '\r\n');
+  emitText(socket, '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+  emitText(socket, '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
 
   session.tempData.previousSelectedIndex = selectedIndex;
   session.tempData.previousScrollOffset = scrollOffset;
@@ -1159,7 +1162,7 @@ console.log(`[DOOR Select] Executing via BBS command: ${doorCommand}`);
 
   // Q - Quit back to menu
   if (key === 'q') {
-    socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+    emitText(socket, '\x1b[2J\x1b[H'); // Clear screen
     session.tempData = {};
     session.menuPause = false;
     // Actually display the menu instead of just setting state
@@ -1313,7 +1316,7 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
         await executeAmigaDoor(socket, session, door, doorSession);
         break;
       default:
-        socket.emit('ansi-output', `Unknown door type: ${door.type}\r\n`);
+        emitText(socket, `Unknown door type: ${door.type}\r\n`);
 console.error(`Unknown door type: ${door.type}`);
         SysopDebugUtil.debugDoorError(
           socket,
@@ -1360,8 +1363,8 @@ console.error(`[executeDoor] CRITICAL ERROR in door ${door.name}:`, error);
 console.error(`[executeDoor] Stack trace:`, error.stack);
 
     // Notify user of error
-    socket.emit('ansi-output', `\r\n\r\n[ERROR] Door crashed: ${error.message}\r\n`);
-    socket.emit('ansi-output', `Press any key to continue...\r\n`);
+    emitText(socket, `\r\n\r\n[ERROR] Door crashed: ${error.message}\r\n`);
+    emitText(socket, `Press any key to continue...\r\n`);
 
     // Log critical error
     SysopDebugUtil.debugDoorError(
@@ -1419,8 +1422,8 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
 
     // If path is undefined, error out
     if (!doorPath) {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -1482,8 +1485,8 @@ console.log(`[executeTypeScriptDoor] Resolved path: ${doorPath}`);
     // because import() requires exact paths on case-sensitive filesystems
     const resolvedDoorPath = amigafs.resolvePath(doorPath);
     if (!resolvedDoorPath) {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -1535,8 +1538,8 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
     const isLegacyDoor = typeof doorModule.runDoor === 'function';
 
     if (!isSDKDoor && !isLegacyDoor) {
-      socket.emit('ansi-output', `\r\n\x1b[31mInvalid TypeScript door: Must export Door instance or runDoor() function\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export Door instance or runDoor() function\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -1560,7 +1563,8 @@ console.log(`[executeTypeScriptDoor] Set inDoorManager=true`);
 
     // Notify frontend that door is active
     socket.emit('door:status', { status: 'running' });
-console.log(`[executeTypeScriptDoor] Sent door:status: running`);
+    socket.emit('door-active', true);
+console.log(`[executeTypeScriptDoor] Sent door:status: running, door-active: true`);
 
     // Create BBS API instance for door
     const { createBBSApi } = require('../doors/BBSApi');
@@ -1641,7 +1645,8 @@ console.log(`[executeTypeScriptDoor] Cleared inDoorManager and doorInputHandler`
 
     // Notify frontend that door is stopped
     socket.emit('door:status', { status: 'stopped' });
-console.log(`[executeTypeScriptDoor] Sent door:status: stopped`);
+    socket.emit('door-active', false);
+console.log(`[executeTypeScriptDoor] Sent door:status: stopped, door-active: false`);
 
     // Return to menu and pause before showing (only if user is logged in)
     // CRITICAL: Don't show menu if we're in segment processing (~SP handling)
@@ -1690,6 +1695,7 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
 
   } catch (error) {
 console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error);
+
     if (wrappedSocket?._doorCleanup) {
       wrappedSocket._doorCleanup();
     }
@@ -1709,8 +1715,8 @@ console.error(`[executeTypeScriptDoor] Error executing TypeScript door:`, error)
       session.shortcuts.clear();
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
 
     try {
       const { createBBSApi } = require('../doors/BBSApi');
@@ -1744,6 +1750,7 @@ console.log(`[executeSDKDoor] Door path: ${door.path}`);
   // NOTE: Don't enable game mode by default - it blocks 'command' events which breaks bbs.getKey()
   // Doors that need real-time keyboard input (games) should call bbs.enableGameMode() themselves
   session.inDoorManager = true;
+  socket.emit('door-active', true);
   // enableGameMode(socket, session, 'SDK');
 
   try {
@@ -1751,8 +1758,8 @@ console.log(`[executeSDKDoor] Door path: ${door.path}`);
     let doorPath = door.path;
 
     if (!doorPath) {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -1787,8 +1794,8 @@ console.log(`[executeSDKDoor] Resolved path: ${doorPath}`);
 
     // Check if door exists (use amigafs for case-insensitive matching)
     if (!amigafs.existsSync(doorPath)) {
-      socket.emit('ansi-output', `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      emitText(socket, `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
+      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -1840,7 +1847,7 @@ console.log(`[executeSDKDoor] Child process spawned with PID: ${childProcess.pid
     childProcess.on('message', (message: any) => {
       if (message.type === 'output') {
         // Door emitted output event - send to user
-        socket.emit('ansi-output', message.text);
+        emitText(socket, message.text);
       } else if (message.type === 'disconnect') {
         // Door requested disconnect
 console.log('[executeSDKDoor] Door requested disconnect');
@@ -1852,7 +1859,7 @@ console.log('[executeSDKDoor] Door requested disconnect');
     // Handle stdout (fallback if not using IPC)
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        socket.emit('ansi-output', data.toString());
+        emitText(socket, data.toString());
       });
     }
 
@@ -1924,6 +1931,7 @@ console.log('[executeSDKDoor] Door execution completed');
 
     // Reset flags and return to menu
     delete session.inDoorManager;
+    socket.emit('door-active', false);
     session.cmdShortcuts = false;
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
@@ -1934,7 +1942,7 @@ console.log('[executeSDKDoor] Door execution completed');
 
   } catch (error) {
 console.error('[executeSDKDoor] Error:', error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
     session.cmdShortcuts = false;
     if (session.shortcuts?.clear) {
       session.shortcuts.clear();
@@ -1963,10 +1971,11 @@ console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePa
   enableGameMode(socket, session, 'XIM');
 
   // Move to fresh line
-  socket.emit('ansi-output', '\r\n');
+  emitText(socket, '\r\n');
 
   session.inDoorManager = true;
   session.subState = LoggedOnSubState.DOOR_RUNNING;
+  socket.emit('door-active', true);
 
   // Spawn the GCC executable
   const doorProcess = spawn(doorConfig.executablePath, [doorConfig.bbsSession.nodeId.toString()], {
@@ -1985,7 +1994,7 @@ console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePa
   // Handle stdout from the door
   doorProcess.stdout.on('data', (data: Buffer) => {
     const output = data.toString();
-    socket.emit('ansi-output', output);
+    emitText(socket, output);
   });
 
   // Handle stderr from the door
@@ -2001,10 +2010,11 @@ console.log(`[executeNativeGccDoor] Door exited with code ${code}`);
     // Clean up
     disableGameMode(socket, session);
     session.inDoorManager = false;
+    socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
-    socket.emit('ansi-output', `\r\nDoor exited (code: ${code})\r\n`);
+    emitText(socket, `\r\nDoor exited (code: ${code})\r\n`);
   });
 
   // Handle process errors
@@ -2013,10 +2023,11 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
 
     disableGameMode(socket, session);
     session.inDoorManager = false;
+    socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
-    socket.emit('ansi-output', `\r\nDoor execution failed: ${err.message}\r\n`);
+    emitText(socket, `\r\nDoor execution failed: ${err.message}\r\n`);
   });
 }
 
@@ -2124,8 +2135,8 @@ console.log(`[executeAmigaDoor] Found door at alternate path: ${altPath}`);
       if (!amigafs.existsSync(doorPath)) {
 console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
 console.error(`[executeAmigaDoor] Tried alternate paths:`, alternatePaths);
-        socket.emit('ansi-output', '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        emitText(socket, '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
+        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         return;
       }
     }
@@ -2398,12 +2409,13 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
     const amigaSession = new AmigaDoorSession(socket, doorConfig);
 
     // Move to a fresh line before the door renders any output (prevents menu prompt overlap)
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, '\r\n');
 
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
     session.subState = LoggedOnSubState.DOOR_RUNNING;
-console.log(`[executeAmigaDoor] Set session.inDoorManager=true, nodeId=${session.nodeId}, socketId=${socket.id}`);
+    socket.emit('door-active', true);
+console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: true, nodeId=${session.nodeId}, socketId=${socket.id}`);
 
     // DO NOT enable game mode for 68K doors - they use normal character input via door:input
     // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
@@ -2467,6 +2479,7 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     disableGameMode(socket, session);
 
     session.inDoorManager = false;
+    socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     try {
@@ -2552,8 +2565,9 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
 
   } catch (error) {
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     session.inDoorManager = false;
+    socket.emit('door-active', false);
     delete session.doorInputHandler;
     try {
       const { setSession, userSessions } = require('../server/session-manager');
@@ -2583,8 +2597,8 @@ console.log(`[executeMciDoor] Processing MCI door: ${door.name}`);
 
   if (!door.mciText) {
 console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
-    socket.emit('ansi-output', '\r\n\x1b[31mMCI door has no text to display.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, '\r\n\x1b[31mMCI door has no text to display.\x1b[0m\r\n');
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -2620,7 +2634,7 @@ console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
     const { addAnsiEscapes } = require('./screen.handler');
     processedText = addAnsiEscapes(processedText);
     processedText = processedText.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-    socket.emit('ansi-output', processedText);
+    emitText(socket, processedText);
   }
 
   // Handle manual pause if requested by MCI (~SP.)
@@ -2629,7 +2643,7 @@ console.error(`[executeMciDoor] No MCI_TEXT found for door: ${door.name}`);
     doPause(socket, session);
   } else {
     // Standard pause after display
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
@@ -2650,7 +2664,7 @@ async function executeWebDoor(socket: any, session: BBSSession, door: Door, door
       await executeCheckUPDoor(socket, session, door, doorSession);
       break;
     default:
-      socket.emit('ansi-output', 'Door implementation not found.\r\n');
+      emitText(socket, 'Door implementation not found.\r\n');
   }
 }
 
@@ -2658,26 +2672,26 @@ async function executeWebDoor(socket: any, session: BBSSession, door: Door, door
  * Execute SAmiLog callers log viewer door
  */
 async function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
-  socket.emit('ansi-output', '\x1b[36m-= Super AmiLog v3.00 =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'Advanced Callers Log Viewer\r\n\r\n');
+  emitText(socket, '\x1b[36m-= Super AmiLog v3.00 =-\x1b[0m\r\n');
+  emitText(socket, 'Advanced Callers Log Viewer\r\n\r\n');
 
   // Read from caller_activity table (express.e reads from BBS:NODE{x}/CALLERSLOG)
-  socket.emit('ansi-output', 'Recent callers:\r\n\r\n');
+  emitText(socket, 'Recent callers:\r\n\r\n');
 
   const recentActivity = await getRecentCallerActivity(20);
 
   if (recentActivity.length === 0) {
-    socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
+    emitText(socket, 'No caller activity recorded yet.\r\n');
   } else {
     recentActivity.forEach(activity => {
       const timestamp = new Date(activity.timestamp);
       const timeStr = timestamp.toLocaleTimeString('en-US', { hour12: false });
       const details = activity.details ? ` - ${activity.details}` : '';
-      socket.emit('ansi-output', `${timeStr} ${activity.username.padEnd(15)} ${activity.action}${details}\r\n`);
+      emitText(socket, `${timeStr} ${activity.username.padEnd(15)} ${activity.action}${details}\r\n`);
     });
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to exit SAmiLog...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mPress any key to exit SAmiLog...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -2686,11 +2700,11 @@ async function executeSAmiLogDoor(socket: any, session: BBSSession, door: Door, 
  * Execute CheckUP file checking utility
  */
 async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession) {
-  socket.emit('ansi-output', '\x1b[36m-= CheckUP v0.4 =-\x1b[0m\r\n');
-  socket.emit('ansi-output', 'File checking utility for upload directories\r\n\r\n');
+  emitText(socket, '\x1b[36m-= CheckUP v0.4 =-\x1b[0m\r\n');
+  emitText(socket, 'File checking utility for upload directories\r\n\r\n');
 
   // Check upload directory for files (in database, check for unchecked uploads)
-  socket.emit('ansi-output', 'Checking upload directory...\r\n');
+  emitText(socket, 'Checking upload directory...\r\n');
 
   // Query database for unchecked files (checked = 'N')
   const result = await db.query(
@@ -2700,23 +2714,23 @@ async function executeCheckUPDoor(socket: any, session: BBSSession, door: Door, 
   const uncheckedFiles = result.rows;
 
   if (uncheckedFiles.length > 0) {
-    socket.emit('ansi-output', `Files found in upload directory! (${uncheckedFiles.length})\r\n`);
-    socket.emit('ansi-output', 'Processing uploads...\r\n\r\n');
+    emitText(socket, `Files found in upload directory! (${uncheckedFiles.length})\r\n`);
+    emitText(socket, 'Processing uploads...\r\n\r\n');
 
     // Display each unchecked file
     for (const file of uncheckedFiles) {
       const sizeKB = Math.ceil(file.size / 1024);
-      socket.emit('ansi-output', `- ${file.filename.padEnd(15)} ${sizeKB.toString().padStart(5)}K by ${file.uploader}\r\n`);
-      socket.emit('ansi-output', '  Status: Archive OK\r\n');
+      emitText(socket, `- ${file.filename.padEnd(15)} ${sizeKB.toString().padStart(5)}K by ${file.uploader}\r\n`);
+      emitText(socket, '  Status: Archive OK\r\n');
     }
 
-    socket.emit('ansi-output', '\r\nAll files processed and ready for download.\r\n');
+    emitText(socket, '\r\nAll files processed and ready for download.\r\n');
   } else {
-    socket.emit('ansi-output', 'No unchecked files found in upload directory.\r\n');
-    socket.emit('ansi-output', 'All uploads have been processed.\r\n');
+    emitText(socket, 'No unchecked files found in upload directory.\r\n');
+    emitText(socket, 'All uploads have been processed.\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mCheckUP completed. Press any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -2754,8 +2768,8 @@ console.log(` [DOOR] Executing native door: ${door.name} (${door.path})`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
-    socket.emit('ansi-output', `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    emitText(socket, `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
+    emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
     return;
   }
@@ -2774,10 +2788,10 @@ console.log(' [AMIGA DOOR] Detected Amiga binary! Starting 68k emulation...');
 
       // Wait for session to complete
       // The AmigaDoorSession handles its own lifecycle
-      socket.emit('ansi-output', '\r\n\x1b[32mAmiga door session completed.\x1b[0m\r\n');
+      emitText(socket, '\r\n\x1b[32mAmiga door session completed.\x1b[0m\r\n');
     } catch (error) {
 console.error('[AMIGA DOOR] Error:', error);
-      socket.emit('ansi-output', `\r\n\x1b[31mAmiga door error: ${(error as Error).message}\x1b[0m\r\n`);
+      emitText(socket, `\r\n\x1b[31mAmiga door error: ${(error as Error).message}\x1b[0m\r\n`);
       doorSession.status = 'error';
     }
 
@@ -2804,7 +2818,7 @@ console.error('[AMIGA DOOR] Error:', error);
     // Capture stdout and send to user
     doorProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString();
-      socket.emit('ansi-output', output);
+      emitText(socket, output);
 
       // Store in door session history
       if (!doorSession.output) doorSession.output = [];
@@ -2815,7 +2829,7 @@ console.error('[AMIGA DOOR] Error:', error);
     doorProcess.stderr.on('data', (data: Buffer) => {
       const error = data.toString();
 console.error(`[DOOR ${door.id}] Error:`, error);
-      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+      emitText(socket, `\x1b[31m${error}\x1b[0m`);
     });
 
     // Wait for door to complete
@@ -2824,10 +2838,10 @@ console.error(`[DOOR ${door.id}] Error:`, error);
 console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
         if (code === 0) {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
           resolve();
         } else {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
           doorSession.status = 'error';
           resolve(); // Still resolve to continue
         }
@@ -2835,7 +2849,7 @@ console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
       doorProcess.on('error', (err: Error) => {
 console.error(`[DOOR ${door.id}] Spawn error:`, err);
-        socket.emit('ansi-output', `\r\n\x1b[31mError executing door: ${err.message}\x1b[0m\r\n`);
+        emitText(socket, `\r\n\x1b[31mError executing door: ${err.message}\x1b[0m\r\n`);
         doorSession.status = 'error';
         reject(err);
       });
@@ -2843,7 +2857,7 @@ console.error(`[DOOR ${door.id}] Spawn error:`, err);
       // Timeout after 10 minutes
       setTimeout(() => {
         doorProcess.kill();
-        socket.emit('ansi-output', '\r\n\x1b[31mDoor execution timeout (10 minutes).\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[31mDoor execution timeout (10 minutes).\x1b[0m\r\n');
         doorSession.status = 'error';
         resolve();
       }, 600000);
@@ -2851,11 +2865,11 @@ console.error(`[DOOR ${door.id}] Spawn error:`, err);
 
   } catch (error: any) {
 console.error(`[DOOR ${door.id}] Execution error:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
     doorSession.status = 'error';
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -2873,8 +2887,8 @@ console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
-    socket.emit('ansi-output', `\r\n\x1b[31mError: Script not found: ${door.path}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    emitText(socket, `\r\n\x1b[31mError: Script not found: ${door.path}\x1b[0m\r\n`);
+    emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
     return;
   }
@@ -2916,7 +2930,7 @@ console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
     // Capture stdout and send to user
     doorProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString();
-      socket.emit('ansi-output', output);
+      emitText(socket, output);
 
       // Store in door session history
       if (!doorSession.output) doorSession.output = [];
@@ -2927,7 +2941,7 @@ console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
     doorProcess.stderr.on('data', (data: Buffer) => {
       const error = data.toString();
 console.error(`[DOOR ${door.id}] Error:`, error);
-      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+      emitText(socket, `\x1b[31m${error}\x1b[0m`);
     });
 
     // Wait for door to complete
@@ -2936,10 +2950,10 @@ console.error(`[DOOR ${door.id}] Error:`, error);
 console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
         if (code === 0) {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
           resolve();
         } else {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
           doorSession.status = 'error';
           resolve(); // Still resolve to continue
         }
@@ -2947,7 +2961,7 @@ console.log(`[DOOR ${door.id}] Exited with code ${code}`);
 
       doorProcess.on('error', (err: Error) => {
 console.error(`[DOOR ${door.id}] Spawn error:`, err);
-        socket.emit('ansi-output', `\r\n\x1b[31mError executing script: ${err.message}\x1b[0m\r\n`);
+        emitText(socket, `\r\n\x1b[31mError executing script: ${err.message}\x1b[0m\r\n`);
         doorSession.status = 'error';
         reject(err);
       });
@@ -2955,7 +2969,7 @@ console.error(`[DOOR ${door.id}] Spawn error:`, err);
       // Timeout after 10 minutes
       setTimeout(() => {
         doorProcess.kill();
-        socket.emit('ansi-output', '\r\n\x1b[31mScript execution timeout (10 minutes).\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[31mScript execution timeout (10 minutes).\x1b[0m\r\n');
         doorSession.status = 'error';
         resolve();
       }, 600000);
@@ -2963,11 +2977,11 @@ console.error(`[DOOR ${door.id}] Spawn error:`, err);
 
   } catch (error: any) {
 console.error(`[DOOR ${door.id}] Execution error:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
     doorSession.status = 'error';
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -2985,8 +2999,8 @@ console.log(`[executePythonDoor] Door path: ${door.path}`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
-    socket.emit('ansi-output', `\r\n\x1b[31mError: Python script not found: ${door.path}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    emitText(socket, `\r\n\x1b[31mError: Python script not found: ${door.path}\x1b[0m\r\n`);
+    emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
     return;
   }
@@ -3043,7 +3057,7 @@ console.log(`[executePythonDoor] Door path: ${door.path}`);
     // Capture stdout and send to user
     pythonProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString();
-      socket.emit('ansi-output', output);
+      emitText(socket, output);
 
       // Store in door session history
       if (!doorSession.output) doorSession.output = [];
@@ -3054,7 +3068,7 @@ console.log(`[executePythonDoor] Door path: ${door.path}`);
     pythonProcess.stderr.on('data', (data: Buffer) => {
       const error = data.toString();
 console.error(`[Python Door ${door.id}] Error:`, error);
-      socket.emit('ansi-output', `\x1b[31m${error}\x1b[0m`);
+      emitText(socket, `\x1b[31m${error}\x1b[0m`);
     });
 
     // Allow user input to Python script via stdin
@@ -3074,10 +3088,10 @@ console.log(`[Python Door ${door.id}] Exited with code ${code}`);
         delete session.doorInputHandler;
 
         if (code === 0) {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
           resolve();
         } else {
-          socket.emit('ansi-output', `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
+          emitText(socket, `\r\n\r\n\x1b[31m${door.name} exited with error code ${code}.\x1b[0m\r\n`);
           doorSession.status = 'error';
           resolve();
         }
@@ -3085,7 +3099,7 @@ console.log(`[Python Door ${door.id}] Exited with code ${code}`);
 
       pythonProcess.on('error', (err: Error) => {
 console.error(`[Python Door ${door.id}] Spawn error:`, err);
-        socket.emit('ansi-output', `\r\n\x1b[31mError executing Python script: ${err.message}\x1b[0m\r\n`);
+        emitText(socket, `\r\n\x1b[31mError executing Python script: ${err.message}\x1b[0m\r\n`);
         doorSession.status = 'error';
 
         // Clean up input handler
@@ -3097,7 +3111,7 @@ console.error(`[Python Door ${door.id}] Spawn error:`, err);
       // Timeout after 30 minutes
       setTimeout(() => {
         pythonProcess.kill();
-        socket.emit('ansi-output', '\r\n\x1b[31mPython door timeout (30 minutes).\x1b[0m\r\n');
+        emitText(socket, '\r\n\x1b[31mPython door timeout (30 minutes).\x1b[0m\r\n');
         doorSession.status = 'error';
 
         // Clean up input handler
@@ -3109,11 +3123,11 @@ console.error(`[Python Door ${door.id}] Spawn error:`, err);
 
   } catch (error: any) {
 console.error(`[Python Door ${door.id}] Execution error:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError: ${error.message}\x1b[0m\r\n`);
     doorSession.status = 'error';
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -3132,8 +3146,8 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
-    socket.emit('ansi-output', `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    emitText(socket, `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
+    emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
     return;
   }
@@ -3190,7 +3204,7 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
 
       // Output functions
       output: (text: string) => {
-        socket.emit('ansi-output', text);
+        emitText(socket, text);
         if (!doorSession.output) doorSession.output = [];
         doorSession.output.push(text);
       },
@@ -3203,7 +3217,7 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
       // Input functions
       input: (prompt: string): Promise<string> => {
         return new Promise((resolve) => {
-          socket.emit('ansi-output', prompt);
+          emitText(socket, prompt);
 
           const inputHandler = (data: string) => {
             delete session.doorInputHandler;
@@ -3258,15 +3272,15 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
 console.log(`[executeARexxDoor] Executing script: ${doorPath}`);
     await arexxEngine.executeScript(doorPath, arexxContext);
 
-    socket.emit('ansi-output', `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
+    emitText(socket, `\r\n\r\n\x1b[32m${door.name} completed.\x1b[0m\r\n`);
 
   } catch (error: any) {
 console.error(`[ARexx Door ${door.id}] Execution error:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError executing ARexx script: ${error.message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n\x1b[31mError executing ARexx script: ${error.message}\x1b[0m\r\n`);
     doorSession.status = 'error';
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
 }
@@ -3492,8 +3506,8 @@ console.log(`[executeClientDoor] Client door session started: ${sessionId}`);
 
   } catch (error) {
 console.error(`[executeClientDoor] Error starting client door:`, error);
-    socket.emit('ansi-output', `\r\n\x1b[31mError starting door: ${(error as Error).message}\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    emitText(socket, `\r\n\x1b[31mError starting door: ${(error as Error).message}\x1b[0m\r\n`);
+    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.inDoorManager;

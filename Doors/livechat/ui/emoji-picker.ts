@@ -63,6 +63,7 @@ export class EmojiPicker {
         fg: 'white',
         bg: 'black',
       },
+      trapFocus: true,
       // @ts-ignore - zIndex exists but not in types
       zIndex: 1000,
     });

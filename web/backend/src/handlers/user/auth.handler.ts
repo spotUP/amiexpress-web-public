@@ -145,7 +145,7 @@ console.error('Me error:', error);
         ratio: 0,
         ratioType: 0,
         timeTotal: 0,
-        timeLimit: 60, // 60 minutes default
+        timeLimit: 3600, // 3600 seconds = 60 minutes default (express.e:7684)
         timeUsed: 0,
         chatLimit: 0,
         chatUsed: 0,

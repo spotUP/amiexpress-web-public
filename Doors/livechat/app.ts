@@ -458,6 +458,7 @@ export async function createApp(session: DoorSession) {
     persistenceKey: 'sidebar',
     zIndex: 1,
     topConstraint: MENU_HEIGHT,
+    bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: { type: 'line', fg: 'cyan' },
     style: {
       fg: 'white',
@@ -770,82 +771,121 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== RESPONSIVE LAYOUT ==========
-  // Handle terminal resize and adjust layout for different screen sizes
-  // NOTE: Must update element.position (not element.options) because _getCoords() reads from position
-  screen.responsiveLayout.onResize((width, height) => {
-    // Validate dimensions are positive numbers to prevent crashes
+  // Dynamic layout engine that handles screen resize, sidebar drag/resize, and docking
+  function updateLayout() {
+    const width = (screen as any).width;
+    const height = (screen as any).height;
+    
+    // Validate dimensions
     if (!width || !height || width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height)) {
       return;
     }
 
-    const breakpoint = screen.responsiveLayout.getBreakpoint();
+    // Calculate available space
+    const menuHeight = MENU_HEIGHT;
+    const footerHeight = STATUS_HEIGHT + INPUT_HEIGHT;
+    const contentHeight = height - menuHeight - footerHeight;
 
-    // Update chat panel dimensions based on new screen size
-    // Use position properties, not options (options are only read at construction)
-    let chatWidth = width - SIDEBAR_WIDTH;
-    const chatHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;  // Removed TYPING_HEIGHT since typing bar is hidden
+    // Sidebar state
+    const sidebarVisible = !sidebarPanel.hidden;
+    const sidebarDock = sidebarPanel.getDockPosition();
+    const sidebarW = sidebarVisible ? (sidebarPanel.width as number) : 0;
+    
+    // 1. Sidebar Panel Layout
+    // We only force dimensions/position if docked. Floating panels manage themselves.
+    if (sidebarVisible) {
+        if (sidebarDock === 'left') {
+            sidebarPanel.position.left = 0;
+            sidebarPanel.position.top = menuHeight;
+            sidebarPanel.position.height = contentHeight;
+        } else if (sidebarDock === 'right') {
+            sidebarPanel.position.left = width - sidebarW;
+            sidebarPanel.position.top = menuHeight;
+            sidebarPanel.position.height = contentHeight;
+        } else if (sidebarDock === 'top') {
+            // If docked top, we might need to adjust contentHeight, but let's keep it simple for now
+            // sidebarPanel.position.top = menuHeight;
+        }
+    }
 
-    // Update full-width elements (percentage widths need recalculation on resize)
+    // 2. Chat Panel Layout
+    let chatLeft = 0;
+    let chatWidth = width;
+
+    if (sidebarVisible) {
+        if (sidebarDock === 'left') {
+            chatLeft = sidebarW;
+            chatWidth = width - sidebarW;
+        } else if (sidebarDock === 'right') {
+            chatLeft = 0;
+            chatWidth = width - sidebarW;
+        }
+        // If floating or top/bottom, chat takes full width (sidebar floats on top)
+    }
+
+    chatPanel.position.left = chatLeft;
+    chatPanel.position.top = menuHeight;
+    chatPanel.position.width = chatWidth;
+    chatPanel.position.height = contentHeight;
+
+    // 3. Inner Chat Log Layout
+    chatLog.position.width = Math.max(1, chatWidth - 2);
+    chatLog.position.height = Math.max(1, contentHeight - 2);
+
+    // 4. Footer & Overlays
     statusBar.position.width = width;
-    inputBox.position.width = width - EMOJI_BUTTON_WIDTH;  // Leave space for emoji button
-    emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;  // Position button at right edge
+    inputBox.position.width = width - EMOJI_BUTTON_WIDTH;
+    emojiButton.position.left = width - EMOJI_BUTTON_WIDTH;
     menuBar.element.position.width = width;
     
-    // Update commandSuggestions width (now parented to screen for left alignment)
+    // Command suggestions
     (commandSuggestions as any).width = width;
     commandSuggestions.position.width = width;
-    commandSuggestions.position.left = 0;
-    
-    ghostText.position.width = width;           // Responsive ghost text
+    ghostText.position.width = width;
 
     if (commandSuggestionsVisible) {
       commandSuggestions.setFront();
       ghostText.setFront();
     }
 
-    if (breakpoint === 'small') {
-      // Hide sidebar on small screens (< 80 cols)
-      channelList.hide();
-      userList.hide();
-      chatPanel.position.left = 0;
-      chatPanel.position.width = width;
-      chatPanel.position.height = chatHeight;
-      // Update chatLog to match panel (minus 2 for resize handles)
-      chatLog.position.width = width - 2;
-      chatLog.position.height = chatHeight - 2;
-      typingBar.position.left = 0;
-      typingBar.position.width = width;
-    } else {
-      // Show sidebar on medium/large screens
-      if (sidebarTab === 'channels') {
-        channelList.show();
-      } else {
-        userList.show();
-      }
-      chatPanel.position.left = SIDEBAR_WIDTH;
-      chatPanel.position.width = chatWidth;
-      chatPanel.position.height = chatHeight;
-      // Update chatLog to match panel (minus 2 for resize handles)
-      chatLog.position.width = chatWidth - 2;
-      chatLog.position.height = chatHeight - 2;
-      typingBar.position.left = SIDEBAR_WIDTH;
-      typingBar.position.width = chatWidth;
-    }
+    // Typing bar (hidden but updated)
+    typingBar.position.left = chatLeft;
+    typingBar.position.width = chatWidth;
 
-    // Invalidate coordinate cache for all modified elements
+    // 5. Invalidate Caches
+    invalidateCache(sidebarPanel);
+    invalidateCache(chatPanel);
+    invalidateCache(chatLog);
     invalidateCache(statusBar);
     invalidateCache(inputBox);
     invalidateCache(emojiButton);
     invalidateCache(menuBar.element);
     invalidateCache(commandSuggestions);
     invalidateCache(ghostText);
-    invalidateCache(chatPanel);
-    invalidateCache(chatLog);
     invalidateCache(typingBar);
-    invalidateCache(channelList);
-    invalidateCache(userList);
 
     screen.render();
+  }
+
+  // Bind layout updates to sidebar events
+  sidebarPanel.on('drag', updateLayout);
+  sidebarPanel.on('resize', updateLayout);
+  sidebarPanel.on('dock', updateLayout);
+  sidebarPanel.on('hide', updateLayout);
+  sidebarPanel.on('show', updateLayout);
+
+  // Handle terminal resize
+  screen.responsiveLayout.onResize((width, height) => {
+    const breakpoint = screen.responsiveLayout.getBreakpoint();
+    
+    if (breakpoint === 'small') {
+      // Auto-hide sidebar on small screens if it's currently docked
+      if (!sidebarPanel.hidden && sidebarPanel.getDockPosition() !== 'float') {
+        sidebarPanel.hide();
+      }
+    }
+    
+    updateLayout();
   });
 
   function getChannelDisplayName(channelId?: string): string {
@@ -911,6 +951,7 @@ export async function createApp(session: DoorSession) {
       bg: 'black',
       border: { fg: 'red' },
     },
+    trapFocus: true,
   });
 
   const passwordInput = blessed.passbox({
@@ -992,21 +1033,12 @@ export async function createApp(session: DoorSession) {
     hidden: true,
   });
 
-  // Loading spinner
-  const loadingBox = blessed.loading({
-    parent: screen,
-    top: 'center',
-    left: 'center',
-    width: '50%',
-    height: 5,
-    label: ' Loading ',
-    border: { type: 'line' },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      border: { fg: 'cyan' },
-    },
-    hidden: true,
+  // Loading spinner (using SDK DoorLoader)
+  const loader = new DoorLoader(screen, {
+    overlay: true,
+    overlayOpacity: 0.5,
+    spinner: true,
+    barColor: 'cyan',
   });
 
   // ========== SETTINGS OVERLAY ==========
@@ -1362,11 +1394,11 @@ export async function createApp(session: DoorSession) {
   registry.register(unmuteCmd);
 
   function showLoading(text: string) {
-    loadingBox.load(text);
+    loader.show(text);
   }
 
   function hideLoading() {
-    loadingBox.stop();
+    loader.hide();
   }
 
   // Confirmation dialog (using Question widget)

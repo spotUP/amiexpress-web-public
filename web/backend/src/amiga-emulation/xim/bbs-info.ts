@@ -131,30 +131,25 @@ console.log(`[XIMBBSInfo] JH_SYSOP: "${sysopName}"`);
   }
 
   /**
-   * Handle EXPRESS_VERSION (Get Door Command Args)
+   * Handle EXPRESS_VERSION (Get BBS Version)
    *
-   * CRITICAL: Real Amiga behavior differs from express.e source!
-   * - express.e:3808-3810 says return getExpressMajorVer() (version)
-   * - Real Amiga log (Aquascan N.log) shows EXPRESS_VERSION returns JUST the args
-   *   Line 22-24: msg request 152, string: "N S U" (NOT "AquaScan.020 N S U")
-   * - BB_MAINLINE (second call) returns version ("v5.3")
+   * From express.e:3808-3810:
+   *   CASE EXPRESS_VERSION
+   *     getExpressMajorVer(tempstring)
+   *     AstrCopy(msg.string,tempstring,200)
    *
-   * AquaScan uses EXPRESS_VERSION to get its invocation args:
-   * - "N" = NEWSCAN mode, "S" = Skip scanned, "U" = User mode
-   * Without the correct args, door doesn't know its mode and exits immediately.
-   *
-   * We match Real Amiga behavior, not express.e source, for door compatibility.
+   * Real Amiga behavior (from actual logs): Returns door command args like "J 2" or "N S U".
+   * This contradicts express.e source which says return version, but doors expect args.
+   * Evidence: AQUASCAN_NSU_DEBUG_SESSION.md shows EXPRESS_VERSION returning "N S U" on real Amiga.
    */
   handleExpressVersion(msg: XIMMessage): void {
-    // XIM doors expect COMMAND PARAMETERS here, not BBS version (Real Amiga behavior).
-    // Door needs "S U" flags to know scan mode. Without them, exits immediately.
-    const doorParams =
-      (this.bbsSession as any)?.doorParams ||
-      (this.bbsSession as any)?.commandParams ||
-      '';
-    const result = typeof doorParams === 'string' ? doorParams.trim() : '';
+    // Return door args per REAL AMIGA behavior (not express.e source)
+    const session: any = this.bbsSession || {};
+    const fullCommandLine = session.doorParams || session.commandParams || '';
+    const command = session.doorCommand || session.command || '';
+    const result = fullCommandLine.trim() || command.trim();
 
-console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning params="${result}" for XIM door`);
+console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning door args="${result}" (real Amiga behavior)`);
 
     this.messageParser.writeMessageString(msg.msgAddr, result);
 
@@ -488,37 +483,33 @@ console.log(`  [RESULT] ${value}`);
   }
 
   /**
-   * Handle main line command
+   * Handle main line command (BB_MAINLINE)
    *
-   * CRITICAL: Real Amiga behavior differs from express.e source!
-   * Real Amiga log shows BB_MAINLINE returns VERSION on second call:
-   * - First BB_MAINLINE: empty string
-   * - EXPRESS_VERSION: "N S U" (door args)
-   * - Second BB_MAINLINE: "v5.3" (version)
+   * From express.e:3794-3800:
+   *   CASE BB_MAINLINE
+   *     IF StrLen(params)>0
+   *       StringF(tempstring,'\s \s',command,params)   // "N S U"
+   *     ELSE
+   *       StrCopy(tempstring,command)                   // "N"
+   *     ENDIF
+   *     AstrCopy(msg.string,tempstring,200)
    *
-   * Since EXPRESS_VERSION now returns door args, BB_MAINLINE should
-   * return the BBS version to match Real Amiga behavior.
+   * Returns the command + parameters that invoked the door.
+   * This is how XIM doors get their invocation args!
    */
   handleMainLine(msg: XIMMessage): void {
-    // Real Amiga pattern (from Aquascan N.log):
-    // - First BB_MAINLINE: returns EMPTY
-    // - EXPRESS_VERSION: returns door args ("N S U")
-    // - Second BB_MAINLINE: returns version ("v5.3")
-    //
-    // Track call count to return appropriate value
-    const callCount = ((this.state as any).mainlineCallCount || 0) + 1;
-    (this.state as any).mainlineCallCount = callCount;
+    // Get full command line from session (doorParams contains "command params" or just "command")
+    // door.handler.ts:2241 builds: fullCommandLine = door.command + (paramString ? ' ' + paramString : '')
+    const session: any = this.bbsSession || {};
 
-    let result: string;
-    if (callCount === 1) {
-      // First call: return empty string
-      result = '';
-console.log(`[XIMBBSInfo] BB_MAINLINE (call #${callCount}) - returning EMPTY (Real Amiga behavior)`);
-    } else {
-      // Subsequent calls: return version
-      result = this.getExpressMajorVersion();
-console.log(`[XIMBBSInfo] BB_MAINLINE (call #${callCount}) - returning version "${result}" (Real Amiga behavior)`);
-    }
+    // doorParams/commandParams already contains full command line (e.g., "N S U")
+    const fullCommandLine = session.doorParams || session.commandParams || '';
+    const command = session.doorCommand || session.command || '';
+
+    // Use doorParams if set, otherwise just use command
+    const result = fullCommandLine.trim() || command.trim();
+
+console.log(`[XIMBBSInfo] BB_MAINLINE - doorCommand="${command}" doorParams="${fullCommandLine}" result="${result}"`);
 
     this.messageParser.writeMessageString(msg.msgAddr, result);
     const verify = this.messageParser.readString(

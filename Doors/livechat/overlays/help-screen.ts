@@ -24,6 +24,7 @@ export function createHelpScreen(
     mouse: true,
     keys: true,
     closable: true,  // Adds [X] button and ESC key binding
+    trapFocus: true,
     ch: ' ',
     style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
   });

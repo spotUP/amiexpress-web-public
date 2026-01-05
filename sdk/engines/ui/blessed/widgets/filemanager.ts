@@ -35,6 +35,15 @@ export class FileManager extends List {
         },
         item: {
           fg: 'white',
+          hover: {
+            bg: 'blue',
+            fg: 'yellow',
+          },
+        },
+        focus: {
+          border: {
+            fg: 'white',
+          }
         },
         ...(options.style || {}),
       },
@@ -45,6 +54,15 @@ export class FileManager extends List {
     this.directories = options.directories || [];
 
     this.updateItems();
+
+    // Handle focus/blur for visual feedback
+    this.on('focus', () => {
+      this.screen?.render();
+    });
+
+    this.on('blur', () => {
+      this.screen?.render();
+    });
 
     // Handle selection
     this.on('select', (item: any) => {
@@ -57,11 +75,13 @@ export class FileManager extends List {
       if (selected) {
         this.handleSelection(selected);
       }
+      return true;
     });
 
     // Backspace to go up
     this.key(['backspace'], () => {
       this.upDirectory();
+      return true;
     });
   }
 
@@ -225,7 +245,10 @@ export class FileManager extends List {
     };
 
     this.once('file', onFile);
-    this.key(['escape'], onCancel);
+    this.key(['escape'], () => {
+      onCancel();
+      return true;
+    });
   }
 
   /**

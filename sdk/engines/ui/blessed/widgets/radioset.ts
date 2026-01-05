@@ -4,7 +4,7 @@
 
 import { Box } from './box';
 import { RadioButton, RadioButtonOptions } from './radiobutton';
-import type { ElementOptions } from '../core/types';
+import type { ElementOptions, KeyEvent } from '../core/types';
 
 export interface RadioSetOptions extends ElementOptions {
   items?: Array<string | RadioButtonOptions>;
@@ -26,6 +26,7 @@ export class RadioSet extends Box {
     const items = options.items || [];
     const vertical = options.vertical !== false;
     const spacing = options.spacing || 1;
+    this.selectedIndex = options.selected ?? -1;
 
     // Create radio buttons
     items.forEach((item, index) => {
@@ -47,20 +48,34 @@ export class RadioSet extends Box {
       radio.on('select', () => {
         this.selectRadio(index);
       });
-
-      if (index === options.selected) {
-        this.selectedIndex = index;
-      }
     });
+
+    // RE-RENDER ON FOCUS/BLUR
+    this.on('focus', () => this.screen?.render());
+    this.on('blur', () => this.screen?.render());
+
+    this.enableMouse();
 
     // Arrow key navigation
-    this.key(['up', 'left'], () => {
-      this.selectPrevious();
-    });
+    this.on('keypress', this._onKeypress.bind(this));
+  }
 
-    this.key(['down', 'right'], () => {
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.focused) return false;
+
+    if (key.name === 'up' || key.name === 'left') {
+      this.selectPrevious();
+      this.screen?.render();
+      return true;
+    }
+
+    if (key.name === 'down' || key.name === 'right') {
       this.selectNext();
-    });
+      this.screen?.render();
+      return true;
+    }
+
+    return false;
   }
 
   /**

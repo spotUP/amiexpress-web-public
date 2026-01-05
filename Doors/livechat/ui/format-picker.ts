@@ -67,6 +67,7 @@ export class FormatPicker {
         fg: 'white',
         bg: 'black',
       },
+      trapFocus: true,
       zIndex: 1000,
     });
 
@@ -251,15 +252,9 @@ export class FormatPicker {
   hide() {
     this.overlay.hide();
     
-    // Release focus trap
-    if (this.overlay.screen) {
-      this.overlay.screen.releaseFocusTrap();
-      
-      // Remove global click handler
-      if (this.globalClickHandler) {
-        this.overlay.screen.removeListener('click', this.globalClickHandler);
-        this.globalClickHandler = null;
-      }
+    if (this.overlay.screen && this.globalClickHandler) {
+      this.overlay.screen.removeListener('click', this.globalClickHandler);
+      this.globalClickHandler = null;
     }
 
     if (this.overlay.screen) this.overlay.screen.render();

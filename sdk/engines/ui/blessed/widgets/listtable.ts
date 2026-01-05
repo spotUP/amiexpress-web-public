@@ -3,7 +3,7 @@
  */
 
 import { Box } from './box';
-import type { ElementOptions } from '../core/types';
+import type { ElementOptions, KeyEvent } from '../core/types';
 
 export interface ListTableOptions extends Omit<ElementOptions, 'align'> {
   rows?: string[][];
@@ -56,19 +56,18 @@ export class ListTable extends Box {
     if (this.interactive) {
       this.enableMouse();
       this.enableKeys();
+      this.options.focusable = true; // Enable focus
+
+      // Focus/blur handlers
+      this.on('focus', () => {
+        this.screen?.render();
+      });
+      this.on('blur', () => {
+        this.screen?.render();
+      });
 
       // Navigation keys
-      this.key(['up', 'k'], () => {
-        this.selectPrevious();
-      });
-
-      this.key(['down', 'j'], () => {
-        this.selectNext();
-      });
-
-      this.key(['enter', 'space'], () => {
-        this.emit('select', this.selectedRow, this.rows[this.selectedRow]);
-      });
+      this.on('keypress', this._onKeypress.bind(this));
 
       this.on('click', (data: any) => {
         const rowIndex = this.getRowFromY(data.y);
@@ -86,6 +85,29 @@ export class ListTable extends Box {
         this.selectNext();
       });
     }
+  }
+
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    if (!this.interactive || !this.focused) return false;
+
+    if (key.name === 'up' || key.name === 'k') {
+      this.selectPrevious();
+      this.screen?.render();
+      return true;
+    }
+
+    if (key.name === 'down' || key.name === 'j') {
+      this.selectNext();
+      this.screen?.render();
+      return true;
+    }
+
+    if (key.name === 'enter' || key.name === 'space') {
+      this.emit('select', this.rows[this.selectedRow], this.selectedRow);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -165,8 +187,9 @@ export class ListTable extends Box {
       const line = border + cells.join(border) + border;
 
       if (this.interactive && rowIdx === this.selectedRow) {
-        // Highlight selected row
-        lines.push(`{blue-fg}{white-bg}${line}{/}`);
+        // Highlight selected row: High contrast when focused, subtle when not
+        const style = this.focused ? '{black-fg}{yellow-bg}' : '{white-fg}{blue-bg}';
+        lines.push(`${style}${line}{/}`);
       } else {
         lines.push(line);
       }

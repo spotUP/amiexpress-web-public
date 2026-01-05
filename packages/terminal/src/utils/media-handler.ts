@@ -131,8 +131,12 @@ export class MediaHandler {
 
   /**
    * Start capturing video from the webcam
+   * @param width - Output width in characters
+   * @param height - Output height in pixels (halved for halfblock mode)
+   * @param fps - Frames per second
+   * @param mode - Render mode: 'halfblock' (2x resolution) or 'ascii' (classic characters)
    */
-  async startVideo(width: number = 80, height: number = 24, fps: number = 10): Promise<void> {
+  async startVideo(width: number = 80, height: number = 24, fps: number = 10, mode: 'halfblock' | 'ascii' = 'halfblock'): Promise<void> {
     try {
       if (!this.mediaStream) {
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -155,35 +159,36 @@ export class MediaHandler {
       this.canvasElement.height = height;
 
       const context = this.canvasElement.getContext('2d', { willReadFrequently: true });
-      
+      const renderMode = mode;
+
       this.videoCaptureInterval = setInterval(() => {
         if (context && this.videoElement && this.videoElement.readyState === 4) {
           // Draw video frame to small canvas
           context.drawImage(this.videoElement, 0, 0, width, height);
-          
+
           // Get image data
           const imageData = context.getImageData(0, 0, width, height);
-          
-          // Convert to a compact format (e.g., grayscale array) to send to server
-          // The server will then convert this to ASCII characters and ANSI colors
-          const data = new Uint8Array(width * height);
-          for (let i = 0; i < imageData.data.length; i += 4) {
-            const r = imageData.data[i];
-            const g = imageData.data[i+1];
-            const b = imageData.data[i+2];
-            // Luminance formula
-            data[i/4] = (0.299 * r + 0.587 * g + 0.114 * b);
+
+          // Send full RGB data for color conversion on server
+          // Format: R,G,B,R,G,B,... (3 bytes per pixel)
+          const data = new Uint8Array(width * height * 3);
+          for (let i = 0, j = 0; i < imageData.data.length; i += 4, j += 3) {
+            data[j] = imageData.data[i];     // R
+            data[j+1] = imageData.data[i+1]; // G
+            data[j+2] = imageData.data[i+2]; // B
           }
-          
-          this.socket.emit('video:data', { 
-            width, 
-            height, 
-            data: data.buffer 
+
+          this.socket.emit('video:data', {
+            width,
+            height,
+            colored: true,
+            mode: renderMode,
+            data: data.buffer
           }, [data.buffer]);
         }
       }, 1000 / fps);
 
-      console.log(`[MediaHandler] Video capture started at ${fps} FPS`);
+      console.log(`[MediaHandler] Video capture started at ${fps} FPS, mode: ${mode}`);
 
     } catch (err) {
       console.error('[MediaHandler] Failed to start video:', err);

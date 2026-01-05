@@ -88,11 +88,24 @@ export class Carousel {
     }
 
     if (this.options.controlKeys) {
-      this.screen.key(['right', 'left', 'home', 'end'], (ch: any, key: any) => {
-        if (key.name == 'right') this.next();
-        if (key.name == 'left') this.prev();
-        if (key.name == 'home') this.home();
-        if (key.name == 'end') this.end();
+      this.screen.on('keypress', (ch: any, key: any) => {
+        if (key.name === 'right' || (key.name === 'l')) {
+          this.next();
+          return true;
+        }
+        if (key.name === 'left' || (key.name === 'h')) {
+          this.prev();
+          return true;
+        }
+        if (key.name === 'home') {
+          this.home();
+          return true;
+        }
+        if (key.name === 'end') {
+          this.end();
+          return true;
+        }
+        return false;
       });
     }
   }

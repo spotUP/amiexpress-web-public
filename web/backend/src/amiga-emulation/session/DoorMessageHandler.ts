@@ -48,6 +48,30 @@ export class DoorMessageHandler {
   private nonStopDisplayFlag: boolean = false;
   private waitingForPause: boolean = false;
 
+  /**
+   * Convert Amiga/Latin-1 character bytes to ASCII equivalents for terminal display.
+   * Amiga BBSes use Latin-1 character set, but modern terminals expect ASCII or UTF-8.
+   * Key mappings:
+   * - 0xA0 (non-breaking space in Latin-1) -> 0x20 (regular space)
+   * - Other high-bit characters (0x80-0xFF) -> stripped or converted as needed
+   */
+  private amigaCharToAscii(byte: number): number {
+    // Non-breaking space (0xA0) -> regular space (0x20)
+    // This fixes MultiTop and other doors using 0xA0 as thousands separator
+    if (byte === 0xA0) {
+      return 0x20;
+    }
+
+    // For now, pass through ASCII (0x00-0x7F) and strip other high-bit chars
+    // Extended Latin-1 chars (0x80-0xFF) would need individual mappings if used
+    if (byte >= 0x80 && byte <= 0xFF && byte !== 0xA0) {
+      // Strip unrecognized high-bit characters to avoid display issues
+      return 0x20; // Convert to space for safety
+    }
+
+    return byte;
+  }
+
   // Old-style door compatibility fallback
   private oldStyleDoorTimer: NodeJS.Timeout | null = null;
   private receivedPostRegisterMessage: boolean = false;
@@ -458,12 +482,14 @@ console.error("[DoorMessageHandler] Failed to allocate AEDoor message buffer");
     );
 
     // Read string (first MESSAGE_STRING_CAPACITY bytes max)
+    // Convert Amiga/Latin-1 characters to ASCII for proper terminal display
     let str = "";
     const stringBase = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
     for (let i = 0; i < DoorConstants.MESSAGE_STRING_CAPACITY; i++) {
       const ch = this.emulator.readMemory(stringBase + i);
       if (ch === 0) break;
-      str += String.fromCharCode(ch);
+      const asciiChar = this.amigaCharToAscii(ch);
+      str += String.fromCharCode(asciiChar);
     }
 
     // Log in AmiExpress format (matches express.e logging)
@@ -474,11 +500,12 @@ console.log(`string: ${str}`);
 
     // Use XIM Protocol handler to process and respond
     if (this.ximProtocol) {
+console.log(`[DoorMessageHandler] Delegating to XIMProtocol for cmd=${command} (doorParams="${(this.config.bbsSession as any)?.doorParams}")`);
       const ximMessage = this.ximProtocol.parseMessage(msgAddr);
       await this.ximProtocol.handleMessage(ximMessage);
     } else {
 console.log(
-        `[DoorMessageHandler] WARNING: XIM Protocol not initialized!`
+        `[DoorMessageHandler] WARNING: XIM Protocol not initialized! Falling back to processCommand (doorParams="${(this.config.bbsSession as any)?.doorParams}")`
       );
       // Fall back to command processor
       await this.processCommand(command, data, str, msgAddr, mn_ReplyPort);
@@ -503,10 +530,13 @@ console.log(
 console.log(`[DoorMessageHandler] Processing command ${command}...`);
     this.logMessageRequest(msgAddr, command, data, str);
 
-    // Cancel old-style door timer if we receive any message other than JH_REGISTER
-    // This indicates it's a modern door that sends follow-up requests
-    if (command !== XIMCommand.JH_REGISTER && this.oldStyleDoorTimer) {
-console.log(`[DoorMessageHandler] Received post-register message (cmd=${command}) - canceling old-style fallback`);
+    // Cancel old-style door timer if we receive data/environment requests (BB_, DT_, etc.)
+    // This indicates it's a modern door that actively queries BBS state.
+    // Don't cancel for input requests (JH_HK, JH_LI, JH_PM) - those can be auto-injected.
+    const isDataRequest = command >= 100; // BB_, DT_, and other data requests are >= 100
+    const isInputRequest = command === XIMCommand.JH_HK || command === XIMCommand.JH_LI || command === XIMCommand.JH_PM;
+    if (command !== XIMCommand.JH_REGISTER && !isInputRequest && this.oldStyleDoorTimer) {
+console.log(`[DoorMessageHandler] Received post-register data request (cmd=${command}) - canceling old-style fallback`);
       clearTimeout(this.oldStyleDoorTimer);
       this.oldStyleDoorTimer = null;
       this.receivedPostRegisterMessage = true;
@@ -1253,19 +1283,18 @@ console.log(`[DoorMessageHandler]   Set paged flag to: ${pagedFlag}`);
 
       case XIMCommand.BB_MAINLINE:
         // express.e:3794-3800: Main command line (command + params)
+        // doorParams already contains full command line (e.g., "N S U")
+        // set by door.handler.ts:2241-2242
         {
-          const command =
-            (this.config.bbsSession as any)?.doorCommand ||
-            (this.config.bbsSession as any)?.currentCommand ||
-            (this.config.bbsSession as any)?.command ||
-            '';
-          const params =
+          const fullCommandLine =
             (this.config.bbsSession as any)?.doorParams ||
             (this.config.bbsSession as any)?.commandParams ||
-            (this.config.bbsSession as any)?.params ||
             '';
-          const trimmedParams = typeof params === 'string' ? params.trim() : '';
-          const mainLine = trimmedParams ? `${command} ${trimmedParams}` : `${command}`;
+          const command =
+            (this.config.bbsSession as any)?.doorCommand ||
+            (this.config.bbsSession as any)?.command ||
+            '';
+          const mainLine = (fullCommandLine || command).trim();
 console.log(`[DoorMessageHandler]   BB_MAINLINE: "${mainLine}"`);
           this.writeStringToMessage(msgAddr, mainLine);
         }
@@ -1305,11 +1334,16 @@ console.log(`[DoorMessageHandler]   BB_LINECOUNT SET: ${this.lineCount}`);
 
       // System commands
       case XIMCommand.EXPRESS_VERSION:
-        // express.e:3808-3810: Returns getExpressMajorVer() string
+        // REAL AMIGA BEHAVIOR: Returns door args, NOT version!
+        // Evidence: AQUASCAN_NSU_DEBUG_SESSION.md shows EXPRESS_VERSION returning "N S U"
+        // express.e:3808-3810 says return version, but actual doors expect args
         {
-          const version = this.getExpressMajorVersion();
-console.log(`[DoorMessageHandler]   EXPRESS_VERSION: "${version}"`);
-          this.writeStringToMessage(msgAddr, version);
+          // Return door args per real Amiga behavior
+          const doorParams = (this.config.bbsSession as any)?.doorParams || '';
+          const doorCommand = (this.config.bbsSession as any)?.doorCommand || '';
+          const result = doorParams.trim() || doorCommand.trim();
+console.log(`[DoorMessageHandler]   EXPRESS_VERSION: returning door args="${result}" (real Amiga behavior)`);
+          this.writeStringToMessage(msgAddr, result);
         }
         break;
 
@@ -2105,7 +2139,8 @@ console.log(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}
     for (let i = 0; i < DoorConstants.MESSAGE_STRING_CAPACITY; i++) {
       const ch = this.emulator.readMemory(stringBase + i);
       if (ch === 0) break;
-      str += String.fromCharCode(ch);
+      const asciiChar = this.amigaCharToAscii(ch);
+      str += String.fromCharCode(asciiChar);
     }
 
 console.log(

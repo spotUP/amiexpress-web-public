@@ -38,10 +38,11 @@
  */
 
 // Common types (shared by both runtimes)
+// Note: We avoid exporting * from here if it conflicts with specific engines
 export * from './common';
 
 // Core SDK v2.0 - Professional Door API
-export { Door as CoreDoor, Output, Input, Storage } from './core';
+export { Door as CoreDoor, Output, Input as CoreInput, Storage } from './core';
 export type {
   DoorContext,
   DoorConfig,
@@ -156,6 +157,119 @@ export {
 // UI Library - Blessed (full neo-blessed port without Node.js dependencies)
 export * as blessed from './engines/ui/blessed/index';
 export { default as Blessed } from './engines/ui/blessed/index';
+
+// Export blessed classes and types directly for easier access
+export {
+  Screen,
+  Element,
+  Box,
+  Text,
+  List,
+  Form,
+  Textbox,
+  Input,
+  Textarea,
+  Button,
+  ProgressBar,
+  Table,
+  Log,
+  ScrollableBox,
+  ScrollableText,
+  Checkbox,
+  RadioButton,
+  RadioSet,
+  Message,
+  Question,
+  Prompt,
+  Loading,
+  Listbar,
+  BigText,
+  FileManager,
+  Overlay,
+  ListTable,
+  ANSIImage,
+  Terminal,
+  Layout,
+  PassBox,
+  FileBox,
+  Image,
+  Viewport as BlessedViewport,
+  Canvas,
+  IFrame,
+  Video,
+  ContextMenu,
+  Panel,
+  DockablePanel,
+  Autocomplete,
+  AutocompleteManager,
+  UsernameProvider,
+  BBSCodeProvider,
+  WordProvider,
+  TemplateProvider,
+  TabPanel,
+  Accordion,
+  Collapsible,
+  StackedGauge,
+  ColorPicker as BlessedColorPicker,
+  FileExplorer,
+} from './engines/ui/blessed/index';
+
+export type {
+  ScreenOptions,
+  ElementOptions,
+  ListOptions,
+  FormOptions,
+  TextboxOptions,
+  ButtonOptions,
+  ProgressBarOptions,
+  TableOptions,
+  LogOptions,
+  AutocompleteOptions,
+  AutocompleteContext,
+  AutocompleteSuggestion,
+  AutocompleteProvider,
+  TabPanelOptions,
+  AccordionOptions,
+  AccordionItem,
+  CollapsibleOptions,
+  StackedGaugeOptions,
+  ColorPickerOptions,
+  FileExplorerOptions,
+} from './engines/ui/blessed/core/types';
+
+// ANSI Editor SDK
+export { 
+  ANSIUtils, 
+  EditorState, 
+  CursorManager, 
+  Clipboard, 
+  SearchManager,
+  showANSIEditor,
+  Viewport,
+  StatusBar,
+  SearchDialog,
+  ColorPicker,
+  Toolbar,
+  AutocompleteDialog,
+  KeyboardHandler
+} from './engines/ui/ansi-editor/index';
+
+export type {
+  EditorSession,
+  EditorOptions,
+  KeyBinding,
+  EditorOperation,
+  ANSIToken,
+  ANSITokenType,
+  ANSIColor,
+  ViewportInfo,
+  SearchResult,
+  EditorEventHandler,
+  EditorEvents,
+  ANSIColorName,
+  ANSIColorInfo,
+  ToolbarAction
+} from './engines/ui/ansi-editor/index';
 
 // Components
 export { MenuSystem } from './components/menus/menu-system';

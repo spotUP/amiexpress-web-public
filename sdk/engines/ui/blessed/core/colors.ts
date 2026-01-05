@@ -721,6 +721,22 @@ export function parseTags(text: string): string {
         case 'white-fg':
         case 'gray-fg':
         case 'grey-fg':
+        case 'lightblack-fg':
+        case 'lightred-fg':
+        case 'lightgreen-fg':
+        case 'lightyellow-fg':
+        case 'lightblue-fg':
+        case 'lightmagenta-fg':
+        case 'lightcyan-fg':
+        case 'lightwhite-fg':
+        case 'brightblack-fg':
+        case 'brightred-fg':
+        case 'brightgreen-fg':
+        case 'brightyellow-fg':
+        case 'brightblue-fg':
+        case 'brightmagenta-fg':
+        case 'brightcyan-fg':
+        case 'brightwhite-fg':
         case 'black':
         case 'red':
         case 'green':
@@ -745,6 +761,22 @@ export function parseTags(text: string): string {
         case 'white-bg':
         case 'gray-bg':
         case 'grey-bg':
+        case 'lightblack-bg':
+        case 'lightred-bg':
+        case 'lightgreen-bg':
+        case 'lightyellow-bg':
+        case 'lightblue-bg':
+        case 'lightmagenta-bg':
+        case 'lightcyan-bg':
+        case 'lightwhite-bg':
+        case 'brightblack-bg':
+        case 'brightred-bg':
+        case 'brightgreen-bg':
+        case 'brightyellow-bg':
+        case 'brightblue-bg':
+        case 'brightmagenta-bg':
+        case 'brightcyan-bg':
+        case 'brightwhite-bg':
         case 'bg':
           return defaultBg;
 
@@ -782,6 +814,7 @@ export function parseTags(text: string): string {
       case 'grey':
         return fg(name === 'grey' ? 'gray' : name);
 
+      // Standard foreground colors (0-7)
       case 'black-fg':
         return fg('black');
       case 'red-fg':
@@ -802,6 +835,33 @@ export function parseTags(text: string): string {
       case 'grey-fg':
         return fg('gray');
 
+      // Bright/light foreground colors (8-15)
+      case 'lightblack-fg':
+      case 'brightblack-fg':
+        return fg('lightblack');
+      case 'lightred-fg':
+      case 'brightred-fg':
+        return fg('lightred');
+      case 'lightgreen-fg':
+      case 'brightgreen-fg':
+        return fg('lightgreen');
+      case 'lightyellow-fg':
+      case 'brightyellow-fg':
+        return fg('lightyellow');
+      case 'lightblue-fg':
+      case 'brightblue-fg':
+        return fg('lightblue');
+      case 'lightmagenta-fg':
+      case 'brightmagenta-fg':
+        return fg('lightmagenta');
+      case 'lightcyan-fg':
+      case 'brightcyan-fg':
+        return fg('lightcyan');
+      case 'lightwhite-fg':
+      case 'brightwhite-fg':
+        return fg('lightwhite');
+
+      // Standard background colors (0-7)
       case 'black-bg':
         return bg('black');
       case 'red-bg':
@@ -821,6 +881,32 @@ export function parseTags(text: string): string {
       case 'gray-bg':
       case 'grey-bg':
         return bg('gray');
+
+      // Bright/light background colors (8-15)
+      case 'lightblack-bg':
+      case 'brightblack-bg':
+        return bg('lightblack');
+      case 'lightred-bg':
+      case 'brightred-bg':
+        return bg('lightred');
+      case 'lightgreen-bg':
+      case 'brightgreen-bg':
+        return bg('lightgreen');
+      case 'lightyellow-bg':
+      case 'brightyellow-bg':
+        return bg('lightyellow');
+      case 'lightblue-bg':
+      case 'brightblue-bg':
+        return bg('lightblue');
+      case 'lightmagenta-bg':
+      case 'brightmagenta-bg':
+        return bg('lightmagenta');
+      case 'lightcyan-bg':
+      case 'brightcyan-bg':
+        return bg('lightcyan');
+      case 'lightwhite-bg':
+      case 'brightwhite-bg':
+        return bg('lightwhite');
 
       case 'fg':
         return value ? fg(value) : '';

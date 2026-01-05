@@ -80,6 +80,12 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
       return;
     }
 
+    // Reset token budget for a new burst after idle
+    if (!this.processing && this.queue.length === 0) {
+      this.startTime = process.hrtime.bigint();
+      this.bytesSent = 0;
+    }
+
     // Queue the data
     this.queue.push(data);
 

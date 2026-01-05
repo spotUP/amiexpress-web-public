@@ -43,9 +43,9 @@ export class Overlay extends Box {
     // Enable key handling
     this.enableKeys();
 
-    // Auto-focus when shown - also emit web transparency event and trap focus
+    // Auto-focus when shown - also emit web transparency event and trap focus (optional)
     this.on('show', () => {
-      if (this.screen) {
+      if (this.screen && this.options.trapFocus) {
         (this.screen as any).trapFocus(this);
       }
       this._emitOverlayWidgetEvent(true);
@@ -56,7 +56,7 @@ export class Overlay extends Box {
 
     // Emit hide event for web transparency and release focus trap
     this.on('hide', () => {
-      if (this.screen) {
+      if (this.screen && this.options.trapFocus) {
         (this.screen as any).releaseFocusTrap();
       }
       this._emitOverlayWidgetEvent(false);
