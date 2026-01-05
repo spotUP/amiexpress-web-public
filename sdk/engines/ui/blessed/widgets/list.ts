@@ -162,11 +162,12 @@ export class List extends Element {
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
       const isHovered = index === this._hoveredItem && !isSelected;
-      // ONLY show the marker if the list IS INTERACTIVE AND FOCUSED
-      const marker = (this.interactive && this.focused) ? (isSelected ? '> ' : '  ') : (isSelected ? '  ' : '  ');
+      
+      // Clearer selection markers: » for focused, > for unfocused selection
+      const marker = isSelected ? (this.focused ? '» ' : '> ') : '  ';
       const start = newLines.length;
 
-      // Get item styles - check both nested and top-level style properties
+      // Get item styles
       const itemSelectedStyle = (this.options.style as any)?.item?.selected || (this.options.style as any)?.selected;
       const itemHoverStyle = (this.options.style as any)?.item?.hover || (this.options.style as any)?.hover;
 
@@ -175,9 +176,8 @@ export class List extends Element {
       let openTags = '';
       let closeTags = '';
 
-      // PRIORITY: Selected style (for keyboard/click selection) > Hover style (mouse over)
       if (this.interactive && isSelected && itemSelectedStyle) {
-        // Apply selected style to selected item
+        // Apply selected style
         if (itemSelectedStyle.fg) {
           openTags += `{${itemSelectedStyle.fg}-fg}`;
           closeTags = `{/${itemSelectedStyle.fg}-fg}` + closeTags;
@@ -187,8 +187,8 @@ export class List extends Element {
           closeTags = `{/${itemSelectedStyle.bg}-bg}` + closeTags;
         }
         
-        // Ensure bold/underline from selected style is applied
-        if (itemSelectedStyle.bold) openTags += '{bold}';
+        // Highlight active selection with BOLD when focused
+        if (this.focused) openTags += '{bold}';
         if (itemSelectedStyle.underline) openTags += '{underline}';
       } else if (isHovered && itemHoverStyle) {
         // Apply hover style to hovered item (but not selected)
@@ -243,35 +243,45 @@ export class List extends Element {
     (this as any)._contentDirty = false;
   }
 
-  private _onKeypress(ch: any, key: KeyEvent): void {
-    if (!this.interactive || !this.focused) return;
+  private _onKeypress(ch: any, key: KeyEvent): boolean {
+    // DEBUG: Log all keypress events
+    console.log(`[List._onKeypress] key.name=${key.name} key.full=${key.full} interactive=${this.interactive} focused=${this.focused} selected=${this.selected}`);
+
+    if (!this.interactive || !this.focused) {
+      console.log(`[List._onKeypress] Returning false (interactive=${this.interactive}, focused=${this.focused})`);
+      return false;
+    }
 
     const vi = (this.options as any).vi;
 
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
+      console.log(`[List._onKeypress] UP - before: selected=${this.selected}`);
       this.up();
+      console.log(`[List._onKeypress] UP - after: selected=${this.selected}`);
       this.screen?.render();
-      return;
+      return true;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
+      console.log(`[List._onKeypress] DOWN - before: selected=${this.selected}`);
       this.down();
+      console.log(`[List._onKeypress] DOWN - after: selected=${this.selected}`);
       this.screen?.render();
-      return;
+      return true;
     }
 
     // Home/End - jump to first/last item
     if (key.name === 'home' || (vi && key.name === 'g')) {
       this.select(0);
       this.screen?.render();
-      return;
+      return true;
     }
 
     if (key.name === 'end' || (vi && key.name === 'G')) {
       this.select(this.items.length - 1);
       this.screen?.render();
-      return;
+      return true;
     }
 
     // Page Up/Down - jump by 10 items (or visible height if available)
@@ -279,21 +289,21 @@ export class List extends Element {
       const jump = Math.min(10, this.selected);
       this.select(this.selected - jump);
       this.screen?.render();
-      return;
+      return true;
     }
 
     if (key.name === 'pagedown') {
       const jump = Math.min(10, this.items.length - 1 - this.selected);
       this.select(this.selected + jump);
       this.screen?.render();
-      return;
+      return true;
     }
 
     // Enter/Space - select item
     if (key.name === 'enter' || key.name === 'space') {
       this.emit('select', this.items[this.selected], this.selected);
       this.emit('action', this.items[this.selected], this.selected);
-      return;
+      return true;
     }
 
     // Escape - cancel/blur
@@ -301,13 +311,13 @@ export class List extends Element {
       this.blur();
       this.emit('cancel');
       this.screen?.render();
-      return;
+      return true;
     }
 
     // Type-to-search: jump to first item starting with typed character
     if (ch && typeof ch === 'string' && ch.length === 1 && /[a-zA-Z0-9]/.test(ch)) {
       // Guard against empty list to prevent division by zero
-      if (this.items.length === 0) return;
+      if (this.items.length === 0) return false;
 
       const searchChar = ch.toLowerCase();
       const startIndex = (this.selected + 1) % this.items.length;
@@ -321,10 +331,12 @@ export class List extends Element {
         if (plainItem.toLowerCase().startsWith(searchChar)) {
           this.select(index);
           this.screen?.render();
-          return;
+          return true;
         }
       }
     }
+
+    return false;
   }
 
   setItems(items: string[]): void {

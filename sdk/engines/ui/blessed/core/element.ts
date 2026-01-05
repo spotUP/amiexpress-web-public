@@ -68,6 +68,7 @@ export class Element extends EventEmitter {
   private input: boolean = false;
   protected _hovered: boolean = false;
   protected _overBorder: boolean = false;
+  protected _scrollbarHovered: boolean = false; // Hover state for scrollbar thumb
   protected _resizing: boolean = false;
   private _lastClickTime: number = 0;
 
@@ -1532,6 +1533,9 @@ export class Element extends EventEmitter {
       this.emit('show');
       // Emit overlay event for elements with opacity
       this._emitOverlayEvent(true);
+      if (this.options.trapFocus && this.screen) {
+        this.screen.trapFocus(this);
+      }
     }
   }
 
@@ -1545,6 +1549,9 @@ export class Element extends EventEmitter {
       this.emit('hide');
       // Emit overlay event for elements with opacity
       this._emitOverlayEvent(false);
+      if (this.options.trapFocus && this.screen?.getFocusTrap?.() === this) {
+        this.screen.releaseFocusTrap();
+      }
     }
   }
 
@@ -1987,7 +1994,7 @@ export class Element extends EventEmitter {
   /**
    * Key handler - register a key binding
    */
-  key(keys: string | string[], listener: (ch: any, key: any) => void): void {
+  key(keys: string | string[], listener: (ch: any, key: any) => boolean | void): void {
     if (!Array.isArray(keys)) {
       keys = [keys];
     }
@@ -2000,7 +2007,7 @@ export class Element extends EventEmitter {
   /**
    * Remove key handler
    */
-  unkey(keys: string | string[], listener: (ch: any, key: any) => void): void {
+  unkey(keys: string | string[], listener: (ch: any, key: any) => boolean | void): void {
     if (!Array.isArray(keys)) {
       keys = [keys];
     }
@@ -2039,122 +2046,99 @@ export class Element extends EventEmitter {
    * Returns true if the event was handled by this element
    */
   onMouse(event: any): boolean {
-    // Clear hover state and ignore mouse events on disabled elements
-    if (this.disabled) {
+    if (this.hidden || !this.visible) return false;
+
+    const coords = this._getCoords();
+    if (!coords) return false;
+
+    // Check if mouse is over the element
+    const isOver = event.x >= coords.xi && event.x < coords.xl &&
+                   event.y >= coords.yi && event.y < coords.yl;
+
+    if (!isOver) {
       if (this._hovered) {
-        this._hovered = false;
-        this.screen?.render();
+        this.onMouseLeave();
       }
       return false;
     }
 
-    // Check if mouse is over this element
-    if (!this.hasMouseOver(event.x, event.y)) return false;
-
-    // Emit specific mouse events
-    this.emit('mouse', event);
-
-    if (event.action === 'mousedown') {
-      // Unlock audio on first interaction
-      if (this.screen && (this.screen as any)._audioUnlocked === undefined) {
-        (this.screen as any)._audioUnlocked = true;
-        this.screen.emit('user-interaction');
-      }
-
-      // Check for scrollbar click first - this enables scrollbar dragging
-      if (event.button === 'left' && this.isOnScrollbar(event.x, event.y)) {
-        const geom = this._getScrollbarGeometry();
-        if (geom) {
-          // If clicking on thumb, start drag
-          // If clicking on track above/below thumb, jump to that position
-          if (event.y >= geom.thumbTop && event.y < geom.thumbTop + geom.thumbHeight) {
-            // Clicked on thumb - start drag
-            this._startScrollbarDrag(event.y);
-          } else {
-            // Clicked on track - jump to that position
-            const clickRatio = (event.y - geom.trackTop) / geom.trackHeight;
-            const newScroll = Math.round(clickRatio * geom.maxScroll);
-            this.setScroll(newScroll);
-            this.screen?.render();
-            // Start drag from new position
-            this._startScrollbarDrag(event.y);
-          }
-          return true; // Handled by scrollbar
-        }
-      }
-
-      // Only emit click events if element is clickable
-      if (this.clickable) {
-        this.emit('mousedown', event);
-        if (event.button === 'left') {
-          // Double-click detection
-          const now = Date.now();
-          if (now - this._lastClickTime < 300) {
-            // DOUBLE CLICK detected
-            this.setFront();
-            this.emit('doubleclick', event);
-            this._lastClickTime = 0; // Reset
-          } else {
-            this._lastClickTime = now;
-            this.emit('click', event);
-          }
-        } else if (event.button === 'right') {
-          this.emit('rightclick', event);
-        }
-        return true; // Handled by clickable element
-      }
-    } else if (event.action === 'mouseup') {
-      if (this.clickable) {
-        this.emit('mouseup', event);
-        return true;
-      }
-    } else if (event.action === 'mousemove') {
-      this.emit('mousemove', event);
-      
-      // Track border hover state
-      const overBorder = this.isOnBorder(event.x, event.y);
-      if (this._overBorder !== overBorder) {
-        this._overBorder = overBorder;
+    // SCROLLBAR HOVER DETECTION
+    if (this.hasScrollbar()) {
+      const wasHovered = this._scrollbarHovered;
+      this._scrollbarHovered = this.isOnScrollbarThumb(event.x, event.y);
+      if (wasHovered !== this._scrollbarHovered) {
         this.screen?.render();
       }
-
-      // Update hover state for ALL elements (not just clickable)
-      if (!this._hovered) {
-        this._hovered = true;
-        this.emit('mouseenter', event);
-        this.screen?.render();  // Trigger render to show hover style
-      }
-      // Mousemove usually doesn't stop propagation unless we're dragging,
-      // but let's return true if we're clickable to be safe
-      return this.clickable;
-    } else if (event.action === 'wheelup') {
-      this.emit('wheelup', event);
-      // Default scroll behavior - widgets can override by handling wheelup event
-      if (!this.listenerCount('wheelup')) {
-        this.scroll(-1);
-      }
-      return true; // Scroll handled
-    } else if (event.action === 'wheeldown') {
-      this.emit('wheeldown', event);
-      // Default scroll behavior - widgets can override by handling wheeldown event
-      if (!this.listenerCount('wheeldown')) {
-        this.scroll(1);
-      }
-      return true; // Scroll handled
     }
 
-    return false;
+    // Check if mouse is over border
+    const border = this.hasBorder() ? 1 : 0;
+    const overBorder = event.x === coords.xi || event.x === coords.xl - 1 ||
+                       event.y === coords.yi || event.y === coords.yl - 1;
+
+    if (overBorder !== this._overBorder) {
+      this._overBorder = overBorder;
+      this.screen?.render();
+    }
+
+    if (!this._hovered) {
+      this._hovered = true;
+      this.emit('mouseenter', event);
+      this.screen?.render();
+    }
+
+    this.emit('mouse', event);
+    this.emit(event.action, event);
+
+    if (event.action === 'mousedown') {
+      // Check for scrollbar click
+      if (this.hasScrollbar() && this.isOnScrollbar(event.x, event.y)) {
+        this._startScrollbarDrag(event);
+        return true;
+      }
+
+      this.emit('click', event);
+      if (this.clickable) {
+        this.focus();
+        return true;
+      }
+    }
+
+    return this.clickable;
   }
 
   /**
-   * Handle mouse leave
+   * Check if coordinates are on the scrollbar thumb specifically
    */
+  private isOnScrollbarThumb(x: number, y: number): boolean {
+    if (!this.isOnScrollbar(x, y)) return false;
+
+    const pos = this._getCoords();
+    if (!pos) return false;
+
+    const border = this.hasBorder() ? 1 : 0;
+    const contentHeight = this._lines.length;
+    const viewHeight = this.iheight;
+
+    if (contentHeight <= viewHeight) return false;
+
+    const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
+    const maxScroll = contentHeight - viewHeight;
+    const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
+    const thumbYStart = pos.yi + border + Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
+    const thumbYEnd = thumbYStart + scrollbarHeight;
+
+    return y >= thumbYStart && y < thumbYEnd;
+  }
+
   onMouseLeave(): void {
-    if (this._hovered || this._overBorder) {
-      this._hovered = false;
-      this._overBorder = false;
-      this.emit('mouseleave');
-      this.screen?.render();  // Trigger render to remove hover style
+    if (!this._hovered) return;
+    this._hovered = false;
+    this._overBorder = false;
+    this._scrollbarHovered = false;
+    this.emit('mouseleave');
+    if (this.screen) {
+      this.screen.render();
     }
   }
 
@@ -2563,7 +2547,14 @@ export class Element extends EventEmitter {
 
     // Get thumb style - use scrollbar.style for the thumb (the draggable part)
     // This is what the user typically wants to customize
-    const thumbStyleObj = scrollbarOptions?.style || { fg: 'white', bg: 'black', inverse: true };
+    let thumbStyleObj = scrollbarOptions?.style || { fg: 'white', bg: 'black', inverse: true };
+
+    // Apply hover style to scrollbar thumb if mouse is over it
+    if (this._scrollbarHovered) {
+      // Use high-contrast yellow for hover feedback
+      thumbStyleObj = { ...thumbStyleObj, fg: 'yellow', bold: true, inverse: false };
+    }
+
     const thumbAttr = this.sattr(thumbStyleObj);
 
     const border = this.hasBorder() ? 1 : 0;

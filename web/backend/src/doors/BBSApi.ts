@@ -350,8 +350,9 @@ console.log('[BBSApi] Game mode disabled');
    * Required for neo-blessed and other UI frameworks that use mouse input
    */
   enableMouseEvents(): void {
+    console.log('[BBSApi] enableMouseEvents() called, session:', typeof this.session, 'session.mouseEventsEnabled before:', this.session.mouseEventsEnabled);
     this.session.mouseEventsEnabled = true;
-console.log('[BBSApi] Mouse events enabled');
+    console.log('[BBSApi] Mouse events enabled, session.mouseEventsEnabled after:', this.session.mouseEventsEnabled);
   }
 
   /**

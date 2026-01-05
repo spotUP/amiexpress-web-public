@@ -11,10 +11,10 @@
  */
 
 import { Panel, PanelOptions } from './panel';
+import { Box } from './box';
+import { Button } from './button';
 import type { Element } from '../core/element';
 import type { Screen } from '../core/screen';
-
-const { Box } = require('./box');
 
 export type DockPosition = 'top' | 'bottom' | 'left' | 'right' | 'center' | 'float';
 
@@ -36,6 +36,7 @@ export interface DockablePanelOptions extends PanelOptions {
   zIndex?: number;
   persistenceKey?: string;
   topConstraint?: number; // Minimum 'top' coordinate allowed
+  bottomConstraint?: number; // Minimum space from bottom
 }
 
 export interface PanelState {
@@ -93,6 +94,7 @@ export class DockablePanel extends Panel {
   private ghostBox?: Element;
   private persistenceKey?: string;
   private topConstraint: number = 0;
+  private bottomConstraint: number = 0;
   private tabs: DockablePanel[] = [];
   private activeTab: number = 0;
   private tabButtons: any[] = [];
@@ -131,6 +133,7 @@ export class DockablePanel extends Panel {
     this.allowAutoDock = options.allowAutoDock !== false;  // Default: true (enabled)
     this.persistenceKey = options.persistenceKey;
     this.topConstraint = options.topConstraint || 0;
+    this.bottomConstraint = options.bottomConstraint || 0;
 
     // Suppress the border label from the base Panel/Box class
     // DockablePanel uses its own titleBar widget for the title
@@ -278,13 +281,18 @@ export class DockablePanel extends Panel {
     const currentWidth = typeof this.position.width === 'number' ? this.position.width : this.width;
     const currentHeight = typeof this.position.height === 'number' ? this.position.height : this.height;
 
+    // Calculate max height based on constraints
+    const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+
     // Ensure panel doesn't extend beyond screen bounds
     let newLeft = Math.max(0, Math.min(currentLeft, this.screen.width - currentWidth));
-    let newTop = Math.max(0, Math.min(currentTop, this.screen.height - currentHeight));
+    // Respect top constraint for position
+    let newTop = Math.max(this.topConstraint, Math.min(currentTop, this.screen.height - currentHeight - this.bottomConstraint));
 
     // If panel is larger than screen, resize it
     let newWidth = Math.min(currentWidth, this.screen.width);
-    let newHeight = Math.min(currentHeight, this.screen.height);
+    // Respect height constraints
+    let newHeight = Math.min(currentHeight, maxScreenHeight);
 
     // Apply min constraints
     if (this.minWidth) newWidth = Math.max(newWidth, this.minWidth);
@@ -343,7 +351,6 @@ export class DockablePanel extends Panel {
 
     // Add minimize button
     if (options.showMinimizeButton !== false) {
-      const Button = require('./button').Button;
       this.minimizeButton = new Button({
         parent: this.titleBar,
         right: (options.showCloseButton !== false ? 4 : 1),
@@ -351,7 +358,7 @@ export class DockablePanel extends Panel {
         width: 3,
         height: 1,
         content: '[_]', // Minimize icon
-        border: false,  // No border for inline title bar button
+        border: { type: 'none' },  // No border for inline title bar button
         padding: 0,     // No padding - content fills the space
         style: {
           fg: 'yellow',
@@ -374,7 +381,6 @@ export class DockablePanel extends Panel {
 
     // Add close button
     if (options.showCloseButton) {
-      const Button = require('./button').Button;
       this.closeButton = new Button({
         parent: this.titleBar,
         right: 1,
@@ -382,7 +388,7 @@ export class DockablePanel extends Panel {
         width: 3,
         height: 1,
         content: '[X]',
-        border: false,  // No border for inline title bar button
+        border: { type: 'none' },  // No border for inline title bar button
         padding: 0,     // No padding - content fills the space
         style: {
           fg: 'white',
@@ -1203,7 +1209,6 @@ export class DockablePanel extends Panel {
     }
     this.tabButtons = [];
 
-    const Button = require('./button').Button;
     let currentX = 1;
 
     this.tabs.forEach((panel, index) => {
@@ -1282,6 +1287,10 @@ export class DockablePanel extends Panel {
   private applyDockPosition(position: DockPosition): void {
     if (!this.screen) return;
 
+    // Calculate available height considering constraints
+    const top = this.topConstraint;
+    const height = Math.max(5, this.screen.height - this.topConstraint - this.bottomConstraint);
+
     switch (position) {
       case 'top':
         this.position.left = 0;
@@ -1297,15 +1306,18 @@ export class DockablePanel extends Panel {
         break;
       case 'left':
         this.position.left = 0;
-        this.position.top = 0;
-        this.position.width = Math.floor(this.screen.width * 0.3);
-        this.position.height = this.screen.height;
+        this.position.top = top;
+        // Respect current/configured width if available, otherwise default to 30%
+        this.position.width = this.panelState.width || Math.floor(this.screen.width * 0.3);
+        this.position.height = height;
         break;
       case 'right':
-        this.position.left = Math.floor(this.screen.width * 0.7);
-        this.position.top = 0;
-        this.position.width = Math.floor(this.screen.width * 0.3);
-        this.position.height = this.screen.height;
+        // Respect current/configured width
+        const w = this.panelState.width || Math.floor(this.screen.width * 0.3);
+        this.position.left = this.screen.width - w;
+        this.position.width = w;
+        this.position.top = top;
+        this.position.height = height;
         break;
       case 'center':
         this.position.left = Math.floor(this.screen.width * 0.25);

@@ -24,6 +24,8 @@ door.onStart(async (ctx: DoorContext) => {
     user: (ctx as any).user,
     bbsSession: (ctx as any).bbsSession,
     bbs: ctx.output,
+    video: ctx.video,
+    audio: ctx.audio,
     params: [],
   };
 

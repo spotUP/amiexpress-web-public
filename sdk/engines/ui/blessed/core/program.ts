@@ -69,12 +69,15 @@ export class Program extends EventEmitter {
   private _readInput: boolean = false;
 
   // Key and mouse handlers
-  private keyHandlers: Map<string, ((ch: any, key: KeyEvent) => void)[]> = new Map();
+  private keyHandlers: Map<string, ((ch: any, key: KeyEvent) => boolean | void)[]> = new Map();
   private mouseHandlers: ((event: MouseEvent) => void)[] = [];
 
   // Mouse state
   private _mouseEnabled: boolean = false;
   private _lastMouseEvent: MouseEvent | null = null;
+
+  // Guard against re-entry in data handler (prevents feedback loop from _emitKey)
+  private _handlingData: boolean = false;
 
   constructor(options: ProgramOptions = {}) {
     super();
@@ -99,6 +102,19 @@ export class Program extends EventEmitter {
     if (options.title) {
       this.setTitle(options.title);
     }
+
+    // Listen for 'data' events (from web frontend via setupInputHandler)
+    // This connects the input path for web-based doors
+    // Guard prevents feedback loop since _emitKey also emits 'data'
+    this.on('data', (data: string) => {
+      if (this._handlingData) return;
+      this._handlingData = true;
+      try {
+        this._handleData(data);
+      } finally {
+        this._handlingData = false;
+      }
+    });
 
     // Emit ready
     this.emit('ready');
@@ -1364,63 +1380,150 @@ export class Program extends EventEmitter {
     return key;
   }
 
+  private _inputBuffer: string = '';
+
   /**
    * Handle input data
    */
   _handleData(data: string): void {
     if (this._paused) return;
 
-    // Check for JSON mouse events from web frontend (Socket.IO)
-    if (data.startsWith('{') && data.includes('"type"')) {
-      try {
-        const json = JSON.parse(data);
-        if (json.type && this._mouseEnabled) {
-          const mouseEvent = this.parseJsonMouseEvent(json);
-          if (mouseEvent) {
+    this._inputBuffer += data;
+
+    while (this._inputBuffer.length > 0) {
+      let processed = false;
+
+      // 1. Check for JSON mouse events from web frontend (Socket.IO)
+      if (this._inputBuffer.startsWith('{')) {
+        const endIdx = this._inputBuffer.indexOf('}');
+        if (endIdx !== -1) {
+          const chunk = this._inputBuffer.slice(0, endIdx + 1);
+          try {
+            const json = JSON.parse(chunk);
+            console.log(`[Program._handleData] JSON parsed: type=${json.type} mouseEnabled=${this._mouseEnabled}`);
+            if (json.type && this._mouseEnabled) {
+              const mouseEvent = this.parseJsonMouseEvent(json);
+              console.log(`[Program._handleData] mouseEvent=${JSON.stringify(mouseEvent)}`);
+              if (mouseEvent) {
+                this._lastMouseEvent = mouseEvent;
+                for (const handler of this.mouseHandlers) {
+                  handler(mouseEvent);
+                }
+                this.emit('mouse', mouseEvent);
+                console.log(`[Program._handleData] Emitted mouse event`);
+              }
+            } else if (json.type && !this._mouseEnabled) {
+              console.log(`[Program._handleData] Mouse NOT enabled, ignoring JSON mouse event`);
+            }
+            this._inputBuffer = this._inputBuffer.slice(endIdx + 1);
+            processed = true;
+            continue;
+          } catch (e) {
+            // Not valid JSON yet or ever, fall through to normal parsing if it's not JSON
+          }
+        } else if (this._inputBuffer.length > 1000) {
+          // Safety: clear buffer if it looks like broken JSON
+          this._inputBuffer = this._inputBuffer.slice(1);
+          continue;
+        } else {
+          // Wait for more data
+          break;
+        }
+      }
+
+      // 2. Check for mouse events (SGR: \x1b[< or X10: \x1b[M)
+      // SGR Mouse: \x1b[<b;x;yM or \x1b[<b;x;ym
+      const sgrMatch = this._inputBuffer.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+      if (sgrMatch) {
+        if (this._mouseEnabled) {
+          const mouseEvent = this.parseSGRMouse(sgrMatch);
+          this._lastMouseEvent = mouseEvent;
+          for (const handler of this.mouseHandlers) {
+            handler(mouseEvent);
+          }
+          this.emit('mouse', mouseEvent);
+        }
+        this._inputBuffer = this._inputBuffer.slice(sgrMatch[0].length);
+        processed = true;
+        continue;
+      }
+
+      // X10 Mouse: \x1b[Mcbxcy (3 encoded bytes after \x1b[M)
+      if (this._inputBuffer.startsWith('\x1b[M')) {
+        if (this._inputBuffer.length >= 6) {
+          const x10Match = this._inputBuffer.match(/^\x1b\[M(.)(.)(.)/);
+          if (x10Match && this._mouseEnabled) {
+            const mouseEvent = this.parseX10Mouse(x10Match);
             this._lastMouseEvent = mouseEvent;
             for (const handler of this.mouseHandlers) {
               handler(mouseEvent);
             }
             this.emit('mouse', mouseEvent);
-            return;
           }
-        }
-      } catch (e) {
-        // Not valid JSON, continue with normal parsing
-      }
-    }
-
-    // Check for mouse events (SGR: \x1b[< or X10: \x1b[M)
-    if (this._mouseEnabled && (data.includes('\x1b[<') || data.includes('\x1b[M'))) {
-      const mouseEvent = this.parseMouseEvent(data);
-      if (mouseEvent) {
-        this._lastMouseEvent = mouseEvent;
-
-        for (const handler of this.mouseHandlers) {
-          handler(mouseEvent);
-        }
-
-        this.emit('mouse', mouseEvent);
-        return;
-      }
-    }
-
-    // Parse key
-    const key = this.parseKey(data);
-    if (key) {
-      // Emit to specific key handlers
-      const handlers = this.keyHandlers.get(key.full || key.name);
-      if (handlers) {
-        for (const handler of handlers) {
-          handler(data, key);
+          this._inputBuffer = this._inputBuffer.slice(6);
+          processed = true;
+          continue;
+        } else {
+          // Wait for more data
+          break;
         }
       }
 
-      // Emit generic keypress event
-      this.emit('keypress', data, key);
-    }
+      // 3. Parse key/escape sequences
+      // Long sequences first
+      const keyMatch = this._inputBuffer.match(/^(\x1b\[([0-9;]+)?([A-Za-z~])|\x1bO[PQRSABCDHF]|\x1b[a-zA-Z0-9])/);
+      if (keyMatch) {
+        const key = this.parseKey(keyMatch[0]);
+        if (key) {
+          this._emitKey(keyMatch[0], key);
+        }
+        this._inputBuffer = this._inputBuffer.slice(keyMatch[0].length);
+        processed = true;
+        continue;
+      }
 
-    // Emit raw data event
+      // Special single bytes
+      const singleByte = this._inputBuffer[0];
+      if (singleByte === '\r' || singleByte === '\n' || singleByte === '\t' || 
+          singleByte === '\x1b' || singleByte === '\x7f' || singleByte === '\x08' ||
+          (singleByte.charCodeAt(0) >= 1 && singleByte.charCodeAt(0) <= 26) ||
+          (singleByte.charCodeAt(0) >= 32 && singleByte.charCodeAt(0) <= 126)) {
+        
+        // Handle \x1b as potential start of sequence (if not followed by anything, it's Esc)
+        if (singleByte === '\x1b' && this._inputBuffer.length === 1) {
+          // Wait to see if more comes
+          // But after a short timeout we should treat it as Esc
+          // For now, let's just break and wait
+          break;
+        }
+
+        const key = this.parseKey(singleByte);
+        if (key) {
+          this._emitKey(singleByte, key);
+        }
+        this._inputBuffer = this._inputBuffer.slice(1);
+        processed = true;
+        continue;
+      }
+
+      // Unknown byte, just discard to avoid infinite loop
+      if (!processed) {
+        this._inputBuffer = this._inputBuffer.slice(1);
+      }
+    }
+  }
+
+  /**
+   * Helper to emit key events
+   */
+  private _emitKey(data: string, key: KeyEvent): void {
+    const handlers = this.keyHandlers.get(key.full || key.name);
+    if (handlers) {
+      for (const handler of handlers) {
+        handler(data, key);
+      }
+    }
+    this.emit('keypress', data, key);
     this.emit('data', data);
   }
 

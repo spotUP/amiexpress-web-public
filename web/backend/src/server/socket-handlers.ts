@@ -378,19 +378,27 @@ console.log('[socket-handlers] door:input received but no handler - inDoorManage
   // Handle mouse clicks (for ANSI editor and other mouse-enabled features)
   socket.on('mouse-click', (data: { x: number; y: number; button: number; shift: boolean; ctrl: boolean; alt: boolean }) => {
     const session = getSession(socket.id);
-    if (!session) return;
+    if (!session) {
+      console.log('[socket-handlers] mouse-click: no session found');
+      return;
+    }
 
 console.log('[socket-handlers] mouse-click received:', data);
 console.log('[socket-handlers] mouse-click check: inDoorManager=', session.inDoorManager, 'hasHandler=', !!session.doorInputHandler, 'mouseEnabled=', session.mouseEventsEnabled);
 
     // Operator Chat Mouse Handling REMOVED (No visual targets/buttons in linear chat)
-    
+
     // Only send mouse events if explicitly enabled (for ANSI editor, etc.)
     // Don't send to regular doors as they expect text input, not mouse events
     if (session.inDoorManager && session.doorInputHandler && session.mouseEventsEnabled) {
 console.log('[socket-handlers] Calling doorInputHandler with mouse click data');
       // Pass mouse data as a special formatted string that the door can recognize
-      session.doorInputHandler(JSON.stringify({ type: 'mouse-click', ...data }));
+      const jsonData = JSON.stringify({ type: 'mouse-click', ...data });
+console.log('[socket-handlers] Mouse JSON:', jsonData);
+      session.doorInputHandler(jsonData);
+    } else {
+console.log('[socket-handlers] NOT calling doorInputHandler - conditions not met');
+console.log('[socket-handlers] Details: inDoorManager=', session.inDoorManager, 'doorInputHandler exists=', !!session.doorInputHandler, 'mouseEventsEnabled=', session.mouseEventsEnabled);
     }
   });
 
@@ -465,7 +473,7 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)
-  socket.on('key-down', (data: { key: string; code: string }) => {
+  socket.on('key-down', (data: { key: string; code: string; repeat?: boolean }) => {
     const session = getSession(socket.id);
     if (!session) return;
 
@@ -477,7 +485,7 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
 
     // If door is active and has a key state handler, call it (SDK doors)
     if (session.inDoorManager && session.doorKeyStateHandler) {
-      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState });
+      session.doorKeyStateHandler({ key: data.key, pressed: true, keyState: session.keyState, repeat: data.repeat });
     }
 
     // Route through KeyRepeatManager for 68K doors (handles repeat timing)
@@ -487,9 +495,10 @@ console.log('[socket-handlers] Calling doorKeyStateHandler');
         session.keyRepeatManager.keyDown(data.key, char);
       }
     } else if (session.inDoorManager && session.doorInputHandler) {
-      // SDK doors: send directly to input handler (no repeat, they handle their own)
+      // SDK doors: send directly to input handler (no repeat)
       const char = data.key.length === 1 ? data.key : getSpecialKeyChar(data.key);
       if (char) {
+        console.log(`[key-down] Sending to doorInputHandler: key=${data.key} char=${char}`);
         session.doorInputHandler(char);
       }
     }
@@ -626,14 +635,12 @@ console.log('🎯 F1 pressed during chat - exiting chat');
       return;
     }
 
+    // If game mode is active, skip command handler - key-down events handle input
+    if (session.gameModeEnabled) {
+      return;
+    }
+
     // If a door is active, call the door's input handler
-console.log('[socket-handlers] ===== COMMAND EVENT HANDLER =====');
-console.log('[socket-handlers] Received data:', JSON.stringify(data));
-console.log('[socket-handlers] socketId:', socket.id);
-console.log('[socket-handlers] session nodeId:', session.nodeId);
-console.log('[socket-handlers] inDoorManager:', session.inDoorManager);
-console.log('[socket-handlers] doorInputHandler type:', typeof session.doorInputHandler);
-console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHandler);
     logDoorDebug(
       `CMD data=${JSON.stringify(data)} node=${session.nodeId} inDoor=${session.inDoorManager} subState=${session.subState} handler=${!!session.doorInputHandler}`
     );
@@ -643,7 +650,6 @@ console.log('[socket-handlers] doorInputHandler exists:', !!session.doorInputHan
         if (markDoorInput(session, data)) {
           return;
         }
-console.log('[socket-handlers] ✓ Calling doorInputHandler (door is active)');
         logDoorDebug(`CMD->door handler dispatch`);
         session.doorInputHandler(data);
         return;

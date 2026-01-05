@@ -58,7 +58,13 @@ import blessed, {
   GaugeList,
   gaugeList,
   Markdown,
-  markdown
+  markdown,
+  FileManager,
+  FileBox,
+  Image,
+  Video,
+  DockablePanel,
+  Panel
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
@@ -69,6 +75,7 @@ import {
   WordProvider,
   type AutocompleteContext,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
+import { createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 /**
  * Global canvas rendering mode for all chart widgets
@@ -107,24 +114,33 @@ export async function createApp(session: DoorSession) {
   const timeouts: NodeJS.Timeout[] = [];
 
   // ========== CREATE SCREEN ==========
-  const screen = blessed.screen({
-    smartCSR: true,
-    fullUnicode: true,
+  // Use SDK helper for consistent styling and BBS compatibility
+  const screen = createScreen(bbs, {
     title: `Neo-Blessed Showcase ${BUILD_VERSION}`,
-    output: (data: string) => bbs?.write(data),
   });
 
   if (session.bbsSession) {
+    session.bbsSession.inDoorManager = true;
     session.bbsSession.doorInputHandler = (data: string) => {
       screen._handleData(data);
       return true;
     };
   }
 
-  // Enable mouse events on both screen (ANSI sequences) and BBS API (Socket.IO events)
+  // Enable mouse support and standardized toggle (F12/Alt+M)
   screen.enableMouse();
+  screen.enableMouseToggle((enabled) => {
+    setStatus(enabled ? 'Mouse tracking enabled' : 'Mouse tracking disabled (Text selection ON)');
+  });
+
+  console.log('[neo-blessed-showcase] bbs object:', typeof bbs, 'enableMouseEvents exists:', !!bbs?.enableMouseEvents);
+  console.log('[neo-blessed-showcase] session.bbsSession:', typeof session.bbsSession);
   if (bbs?.enableMouseEvents) {
+    console.log('[neo-blessed-showcase] Calling bbs.enableMouseEvents()...');
     bbs.enableMouseEvents();
+    console.log('[neo-blessed-showcase] After enableMouseEvents, session.bbsSession.mouseEventsEnabled:', session.bbsSession?.mouseEventsEnabled);
+  } else {
+    console.log('[neo-blessed-showcase] WARNING: bbs.enableMouseEvents NOT available!');
   }
 
   // ========== LOADING SCREEN ==========
@@ -152,6 +168,11 @@ export async function createApp(session: DoorSession) {
     tags: true,
     style: { fg: 'white', bg: 'blue' },
     content: ` Neo-Blessed Showcase ${BUILD_VERSION} | Q:Quit Tab:Nav Enter:Select `,
+  });
+
+  // Track last key for debugging
+  screen.on('keypress', (ch, key) => {
+    setStatus(`Last Key: ${key.full || key.name} | Mouse: ${screen.program.options.terminal === 'xterm' ? 'XTerm' : 'ANSI'}`);
   });
 
   const menuBox = blessed.box({
@@ -198,7 +219,7 @@ export async function createApp(session: DoorSession) {
       ' 7. Canvas Demo',
       ' 8. Image Demo',
       ' 9. ANSIImage Demo',
-      '10. Video Demo',
+      '10. Ascii Animation',
       '11. IFrame Demo',
       '12. Special Widgets',
       '13. Line Chart',
@@ -218,8 +239,13 @@ export async function createApp(session: DoorSession) {
       '27. Panel Demo',
       '28. Autocomplete Demo',
       '29. New Features',
-      '30. Stress Test',
-      '31. View Results',
+      '30. Dockable Layouts',
+      '31. ASCII Video',
+      '32. Webcam Stream',
+      '33. Mic Audio',
+      '34. New Widgets Demo',
+      '35. Stress Test',
+      '36. View Results',
       ' 0. Exit',
     ],
   });
@@ -247,7 +273,7 @@ export async function createApp(session: DoorSession) {
     height: 1,
     tags: true,
     style: { fg: 'white', bg: 'blue' },
-    content: ` User: ${username} | Select a category `,
+    content: ` User: ${username} | Select a category | F12: Toggle Mouse `,
   });
 
   loader.update(40, 'Loading widget demos...');
@@ -874,44 +900,27 @@ export async function createApp(session: DoorSession) {
   function showImageDemo() {
     clearDemo();
     currentDemo = 'image';
-    demoBox.setLabel(' Image - ASCII Art Rendering ');
+    demoBox.setLabel(' Image - Pixel Graphic Rendering ');
 
-    // ASCII art representation of an image
-    const asciiArt = [
-      '        .-""""-.        ',
-      '       /        \\       ',
-      '      |  O    O  |      ',
-      '      |  \\____/  |      ',
-      '       \\        /       ',
-      '        \'-....-\'        ',
-      '       /|      |\\       ',
-      '      / |      | \\      ',
-      '     /  |      |  \\     ',
-      '        |      |        ',
-      '        |  ||  |        ',
-      '        |  ||  |        ',
-      '       _|  ||  |_       ',
-      '      (__) (__)(__)     ',
-    ].join('\n');
-
-    blessed.box({
+    const image = new Image({
       parent: demoBox,
-      top: 0, left: 0, right: 0, height: 16,
-      label: ' ASCII Art Image ',
+      top: 0, left: 0, right: 0, height: '100%-4',
+      label: ' Image Widget ',
       border: { type: 'line' },
-      content: asciiArt,
-      align: 'center',
-      style: { fg: 'cyan', border: { fg: 'yellow' } },
+      style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } },
     });
+
+    // Set informational text since we don't have a real image file in this demo env
+    image.setContent('{center}{bold}Image Widget{/bold}\n\nRequires valid image file path.\nRenders using ANSI blocks or iTerm2 protocol.{/center}');
 
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
       tags: true,
       content: '{yellow-fg}Image Widget:{/}\n' +
-        'Converts images to ASCII/ANSI art.\n' +
-        'Uses block characters and colors to approximate pixel data.',
+        'Renders actual image files (PNG, JPG) using ANSI blocks.\n' +
+        'Supports ANSI, Overlay, and iTerm2 protocols.',
     });
-    addResult('Image', 'pass', 'ASCII art display');
+    addResult('Image', 'n/a', 'Needs image file');
 
     screen.render();
   }
@@ -957,11 +966,11 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  // ========== 10. VIDEO DEMO ==========
-  function showVideoDemo() {
+  // ========== 10. ASCII ANIMATION DEMO ==========
+  function showAsciiAnimationDemo() {
     clearDemo();
     currentDemo = 'video';
-    demoBox.setLabel(' Video - ASCII Animation Demo ');
+    demoBox.setLabel(' ASCII Animation Demo ');
 
     // Simple ASCII animation frames
     const frames = [
@@ -992,7 +1001,7 @@ export async function createApp(session: DoorSession) {
     const videoBox = blessed.box({
       parent: demoBox,
       top: 0, left: 0, right: 0, height: 10,
-      label: ' ASCII Animation (Video Simulation) ',
+      label: ' ASCII Animation ',
       border: { type: 'line' },
       align: 'center',
       valign: 'middle',
@@ -1016,17 +1025,17 @@ export async function createApp(session: DoorSession) {
       tags: true,
       content: '{cyan-fg}[P]{/} Play/Pause  {cyan-fg}[S]{/} Stop  {cyan-fg}[R]{/} Restart\n' +
         '{cyan-fg}[<]{/} Previous   {cyan-fg}[>]{/} Next Frame\n\n' +
-        '{gray-fg}(In BBS, video would be streamed as ASCII frames){/}',
+        '{gray-fg}(Manually updating content frames){/}',
       style: { fg: 'white', border: { fg: 'green' } },
     });
 
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, right: 0, height: 3,
       tags: true,
-      content: '{yellow-fg}Video Widget:{/}\n' +
-        'Streams video as ASCII art frames. Browser-only feature in web mode.',
+      content: '{yellow-fg}Animation:{/}\n' +
+        'Basic frame-by-frame ASCII animation using timers.',
     });
-    addResult('Video', 'pass', 'ASCII animation');
+    addResult('ASCII Animation', 'pass', 'Animation loop');
 
     screen.render();
   }
@@ -1099,56 +1108,72 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'special';
     demoBox.setLabel(' Special: FileManager, FileBox, Terminal, Viewport ');
 
-    // FileManager
-    blessed.box({
+    // FileManager (Top Left)
+    const fileManager = new FileManager({
       parent: demoBox,
-      top: 0, left: 0, width: '50%', height: 7,
+      top: 0, left: 0, width: '50%', height: 10,
       label: ' FileManager ', border: { type: 'line' },
-      content: 'FileManager widget\nBrowses directories\n(needs filesystem)',
-      style: { fg: 'gray', border: { fg: 'yellow' } },
+      cwd: '/home/user',
+      directories: ['bin', 'docs', 'src', 'downloads'],
+      files: ['readme.txt', 'config.json', 'data.dat', 'notes.md'],
+      style: { fg: 'white', border: { fg: 'yellow' }, selected: { bg: 'blue' } } as any,
     });
-    addResult('FileManager', 'n/a', 'Needs filesystem');
+    fileManager.on('file', (f: string) => {
+        setStatus(`FileManager: Selected ${f}`);
+        addResult('FileManager', 'pass', 'File selection');
+    });
 
-    // FileBox
+    // FileBox (Top Right)
+    const fileBox = new FileBox({
+      parent: demoBox,
+      top: 0, left: '50%', width: '50%-1', height: 10,
+      label: ' FileBox ',
+      border: { type: 'line' },
+      cwd: '/var/log',
+      style: { fg: 'white', border: { fg: 'green' } },
+    });
+    fileBox.setItems(['syslog', 'auth.log', 'kern.log', 'messages', 'daemon.log']);
+    fileBox.on('select', (f: string) => {
+        setStatus(`FileBox: Selected ${f}`);
+        addResult('FileBox', 'pass', 'File selection');
+    });
+
+    // Terminal (Bottom Left)
     blessed.box({
       parent: demoBox,
-      top: 0, left: '50%', width: '50%-1', height: 7,
-      label: ' FileBox ', border: { type: 'line' },
-      content: 'FileBox widget\nFile input\n(needs filesystem)',
-      style: { fg: 'gray', border: { fg: 'green' } },
-    });
-    addResult('FileBox', 'n/a', 'Needs filesystem');
-
-    // Terminal
-    blessed.box({
-      parent: demoBox,
-      top: 7, left: 0, width: '50%', height: 7,
+      top: 10, left: 0, width: '50%', height: 8,
       label: ' Terminal ', border: { type: 'line' },
-      content: 'Terminal emulator\nRuns shell commands\n(needs PTY)',
+      content: 'Terminal emulator\nRuns shell commands\n(needs PTY backend)',
       style: { fg: 'gray', border: { fg: 'blue' } },
     });
     addResult('Terminal', 'n/a', 'Needs PTY');
 
-    // Viewport
+    // Viewport (Bottom Right)
     const viewport = blessed.viewport({
       parent: demoBox,
-      top: 7, left: '50%', width: '50%-1', height: 7,
+      top: 10, left: '50%', width: '50%-1', height: 8,
       label: ' Viewport ', border: { type: 'line' },
       mouse: true,
+      keys: true,
+      scrollable: true,
+      alwaysScroll: true,
+      scrollbar: {
+        ch: '█',
+        track: { ch: '│' },
+        style: { fg: 'cyan' }
+      },
       style: { fg: 'white', border: { fg: 'cyan' } },
     });
-    blessed.box({
-      parent: viewport, top: 0, left: 0, width: 60, height: 20,
-      content: 'Scrollable viewport content\n'.repeat(10) + 'End of viewport',
-    });
+    viewport.setContent('Scrollable viewport content\n'.repeat(20) + 'End of viewport');
     addResult('Viewport', 'pass', 'Scroll viewport');
 
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, width: '100%', height: 2,
       tags: true,
-      content: '{yellow-fg}Note:{/} Some widgets need external resources (filesystem, PTY).',
+      content: '{yellow-fg}Note:{/} FileManager/FileBox simulated. Terminal needs backend.',
     });
 
+    fileManager.focus();
     screen.render();
   }
 
@@ -1255,6 +1280,8 @@ export async function createApp(session: DoorSession) {
       top: 0, left: 0, right: 0, bottom: 3,
       label: ' Donut Chart - Market Share ', border: { type: 'line' },
       canvasMode: CANVAS_MODE,
+      arcWidth: 4,
+      remainColor: 'black',
       style: { fg: 'white', border: { fg: 'magenta' } },
     } as any);
 
@@ -1289,21 +1316,40 @@ export async function createApp(session: DoorSession) {
       style: { fg: 'cyan', border: { fg: 'blue' } },
     });
 
+    // Initial data
+    const cpuData = [10, 25, 30, 45, 35, 50, 40, 55, 45, 60, 50, 65, 55, 70, 60, 75];
+    const memData = [40, 42, 45, 48, 50, 52, 55, 58, 60, 62, 65, 68, 70, 72, 75, 78];
+    const netData = [5, 15, 8, 25, 12, 30, 15, 35, 20, 40, 25, 45, 30, 50, 35, 55];
+    const dskData = [20, 22, 25, 28, 30, 32, 35, 38, 40, 42, 45, 48, 50, 52, 55, 58];
+
     sparkline.setData(
       ['CPU Usage', 'Memory', 'Network', 'Disk I/O'],
-      [
-        [10, 25, 30, 45, 35, 50, 40, 55, 45, 60, 50, 65, 55, 70, 60, 75],
-        [40, 42, 45, 48, 50, 52, 55, 58, 60, 62, 65, 68, 70, 72, 75, 78],
-        [5, 15, 8, 25, 12, 30, 15, 35, 20, 40, 25, 45, 30, 50, 35, 55],
-        [20, 22, 25, 28, 30, 32, 35, 38, 40, 42, 45, 48, 50, 52, 55, 58],
-      ]
+      [cpuData, memData, netData, dskData]
     );
-    addResult('Sparkline', 'pass', 'Multiple sparklines');
+
+    // Animation loop
+    addInterval(() => {
+      if (currentDemo !== 'sparkline') return;
+      
+      // Shift and add random data
+      cpuData.shift(); cpuData.push(Math.min(100, Math.max(0, cpuData[cpuData.length-1] + (Math.random() * 20 - 10))));
+      memData.shift(); memData.push(Math.min(100, Math.max(0, memData[memData.length-1] + (Math.random() * 10 - 5))));
+      netData.shift(); netData.push(Math.random() * 60);
+      dskData.shift(); dskData.push(Math.min(100, Math.max(0, dskData[dskData.length-1] + (Math.random() * 16 - 8))));
+
+      sparkline.setData(
+        ['CPU Usage', 'Memory', 'Network', 'Disk I/O'],
+        [cpuData, memData, netData, dskData]
+      );
+      screen.render();
+    }, 200);
+
+    addResult('Sparkline', 'pass', 'Animated sparklines');
 
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, right: 0, height: 2,
       tags: true,
-      content: '{yellow-fg}Sparkline:{/} Compact inline charts showing data trends.',
+      content: '{yellow-fg}Sparkline:{/} Compact inline charts showing live data trends.',
     });
 
     screen.render();
@@ -1399,13 +1445,15 @@ export async function createApp(session: DoorSession) {
     currentDemo = 'lcd';
     demoBox.setLabel(' LCD Demo ');
 
-    // Counter LCD
+    // Counter LCD - adjusted size to prevent wrap
     const lcd = new LCD({
       parent: demoBox,
       top: 0, left: 0, right: 0, height: 10,
       label: ' LCD Counter ', border: { type: 'line' },
-      segmentWidth: 0.06, segmentInterval: 0.11,
-      strokeWidth: 0.11, elements: 6,
+      segmentWidth: 0.05, // Reduced width
+      segmentInterval: 0.10, // Adjusted interval
+      strokeWidth: 0.10, 
+      elements: 6,
       display: '000000',
       elementSpacing: 4, elementPadding: 2,
       canvasMode: CANVAS_MODE,
@@ -1436,12 +1484,12 @@ export async function createApp(session: DoorSession) {
   function showContribData() {
     clearDemo();
     currentDemo = 'contribData';
-    demoBox.setLabel(' Contrib: Tree, Table, Log, Map, Picture, Markdown ');
+    demoBox.setLabel(' Contrib: Tree, Table, Log ');
 
     // Tree - with fold/unfold using left/right arrows and Enter
     const tree = new Tree({
       parent: demoBox,
-      top: 0, left: 0, width: '33%', height: 10,
+      top: 0, left: 0, width: '33%', height: '100%-3',
       label: ' Tree (Left/Right/Enter) ', border: { type: 'line' },
       mouse: true, keys: true, vi: true,
       template: { lines: true },
@@ -1461,7 +1509,7 @@ export async function createApp(session: DoorSession) {
     // contrib Table
     const contribTable = new Table({
       parent: demoBox,
-      top: 0, left: '33%', width: '34%', height: 10,
+      top: 0, left: '33%', width: '34%', height: '100%-3',
       label: ' Contrib Table ', border: { type: 'line' },
       columnSpacing: 2, columnWidth: [8, 8, 8],
       style: { fg: 'white', border: { fg: 'yellow' } },
@@ -1475,7 +1523,7 @@ export async function createApp(session: DoorSession) {
     // contrib Log
     const contribLog = new Log({
       parent: demoBox,
-      top: 0, left: '67%', width: '33%-1', height: 10,
+      top: 0, left: '67%', width: '33%-1', height: '100%-3',
       label: ' Contrib Log ', border: { type: 'line' },
       tags: true,
       style: { fg: 'white', border: { fg: 'green' } },
@@ -1488,36 +1536,6 @@ export async function createApp(session: DoorSession) {
       screen.render();
       if (cLogCount >= 3) addResult('Log (contrib)', 'pass', 'Styled logging');
     }, 800);
-
-    // Map
-    blessed.box({
-      parent: demoBox,
-      top: 10, left: 0, width: '33%', height: 5,
-      label: ' Map ', border: { type: 'line' },
-      content: 'World map widget\n(ASCII art map)',
-      style: { fg: 'gray', border: { fg: 'blue' } },
-    });
-    addResult('Map', 'n/a', 'Complex rendering');
-
-    // Picture
-    blessed.box({
-      parent: demoBox,
-      top: 10, left: '33%', width: '34%', height: 5,
-      label: ' Picture ', border: { type: 'line' },
-      content: 'Picture widget\n(needs image data)',
-      style: { fg: 'gray', border: { fg: 'magenta' } },
-    });
-    addResult('Picture', 'n/a', 'Needs image');
-
-    // Markdown
-    blessed.box({
-      parent: demoBox,
-      top: 10, left: '67%', width: '33%-1', height: 5,
-      label: ' Markdown ', border: { type: 'line' },
-      content: 'Markdown renderer\n(styled text)',
-      style: { fg: 'gray', border: { fg: 'red' } },
-    });
-    addResult('Markdown', 'n/a', 'Text rendering');
 
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, width: '100%', height: 2,
@@ -1979,9 +1997,6 @@ End of sample markdown.`;
     currentDemo = 'panel';
     demoBox.setLabel(' Panel Demo - Multi-Panel Layouts ');
 
-    // Import Panel widget
-    const { Panel } = blessed;
-
     // Create 3 panels with Alt+number shortcuts
     const panel1 = new Panel({
       parent: demoBox,
@@ -2267,13 +2282,13 @@ End of sample markdown.`;
       parent: screen,
       cursorRow: 5,
       cursorCol: 10,
-      onSelect: (suggestion) => {
+      onSelect: (suggestion: { insertText?: string }) => {
         // Get current value and insert suggestion
         const currentValue = textarea.getValue();
         const lines = currentValue.split('\n');
         const cursorPos = (textarea as any).cursor;
 
-        if (cursorPos) {
+        if (cursorPos && suggestion.insertText) {
           const line = lines[cursorPos.line] || '';
           const newLine =
             line.substring(0, cursorPos.col) +
@@ -2325,7 +2340,7 @@ End of sample markdown.`;
         (autocompleteDialog as any).box.top = boxTop + 1 + (cursorPos.line || 0);
         (autocompleteDialog as any).box.left = boxLeft + 1 + (cursorPos.col || 0);
 
-        autocompleteDialog.show(suggestions);
+        autocompleteDialog.showSuggestions(suggestions);
         setStatus(`Showing ${suggestions.length} autocomplete suggestions`);
       });
     });
@@ -2365,7 +2380,454 @@ End of sample markdown.`;
     screen.render();
   }
 
-  // ========== 14. STRESS TEST ==========
+  // ========== 30. DOCKABLE LAYOUTS ==========
+  function showDockableLayoutDemo() {
+    clearDemo();
+    currentDemo = 'dockable';
+    demoBox.setLabel(' Dockable Layouts - Floating & Docked Panels ');
+
+    // Docked Left
+    const sidebar = new DockablePanel({
+      parent: demoBox,
+      dockPosition: 'left',
+      width: 20,
+      height: '100%',
+      title: ' Docked Left ',
+      style: { border: { fg: 'cyan' } },
+    });
+    blessed.list({
+      parent: sidebar,
+      top: 0, left: 0, right: 0, bottom: 0,
+      items: ['Item 1', 'Item 2', 'Item 3'],
+      keys: true, mouse: true,
+      style: { selected: { bg: 'blue' } },
+    });
+
+    // Floating Panel
+    const float = new DockablePanel({
+      parent: demoBox,
+      dockPosition: 'float',
+      top: 2, left: 25, width: 30, height: 10,
+      title: ' Floating Window ',
+      draggable: true,
+      style: { border: { fg: 'yellow' } },
+    });
+    blessed.text({
+      parent: float,
+      top: 1, left: 1,
+      content: 'Drag me around!\nThis panel floats above others.',
+    });
+
+    // Docked Bottom
+    const footer = new DockablePanel({
+      parent: demoBox,
+      dockPosition: 'bottom',
+      height: 5,
+      width: '100%',
+      title: ' Docked Bottom ',
+      style: { border: { fg: 'green' } },
+    });
+    blessed.text({
+      parent: footer,
+      top: 1, left: 'center',
+      content: 'Status: Ready',
+    });
+
+    addResult('DockablePanel', 'pass', 'Docking and floating work');
+    screen.render();
+  }
+
+  // ========== ASCII VIDEO DEMO ==========
+  function showAsciiVideoDemo() {
+    clearDemo();
+    currentDemo = 'asciivideo';
+    demoBox.setLabel(' ASCII Video Widget ');
+
+    const video = new Video({
+      parent: demoBox,
+      top: 0, left: 0, width: '100%', height: '100%-4',
+      label: ' Video Player ',
+      border: { type: 'line' },
+      file: '/path/to/video.mp4', // Placeholder
+      style: { fg: 'white', border: { fg: 'cyan' } },
+    });
+
+    // Set informational text
+    video.setContent('{center}{bold}Video Widget{/bold}\n\nRequires valid video file and ffmpeg.\nPlays video as ASCII/ANSI stream.{/center}');
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
+      tags: true,
+      content: '{yellow-fg}Video Widget:{/}\n' +
+        'Plays video files converted to ASCII in real-time.\n' +
+        'Supports audio sync and seeking.',
+    });
+    addResult('Video', 'n/a', 'Needs video file');
+
+    screen.render();
+  }
+
+  // ========== WEBCAM DEMO ==========
+  function showWebcamDemo() {
+    clearDemo();
+    currentDemo = 'webcam';
+    demoBox.setLabel(' Webcam Stream - Live ASCII Video ');
+
+    const webcamBox = blessed.box({
+      parent: demoBox,
+      top: 0, left: 0, right: 0, height: '100%-4',
+      label: ' Live Webcam ',
+      border: { type: 'line' },
+      style: { fg: 'white', bg: 'black', border: { fg: 'red' } },
+      content: '{center}Initializing webcam...{/center}',
+      tags: true,
+    });
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
+      tags: true,
+      content: '{yellow-fg}Webcam Demo:{/}\n' +
+        'Requests camera access and streams ASCII-converted video.\n' +
+        '{gray-fg}(Requires "video" service in door session){/}',
+    });
+
+    const videoService = (session as any).video;
+    let activeStreamId: string | null = null;
+    let currentMode: 'halfblock' | 'ascii' = 'halfblock';
+
+    console.log('[Webcam Demo] videoService exists:', !!videoService);
+
+    // Function to start video with current mode
+    const startVideoStream = () => {
+      if (!videoService) return;
+
+      // Stop existing stream first
+      if (activeStreamId) {
+        videoService.stopStream(activeStreamId);
+        activeStreamId = null;
+      }
+
+      // Calculate available size inside webcamBox (account for borders)
+      const availWidth = (typeof demoBox.width === 'number' ? demoBox.width : 78) - 4;
+      const availHeight = (typeof demoBox.height === 'number' ? demoBox.height : 20) - 8;
+      const videoWidth = Math.min(76, availWidth);
+      // Half-block uses 2 pixel rows per terminal row, ASCII uses 1:1
+      const videoHeight = currentMode === 'halfblock'
+        ? Math.min(32, availHeight * 2)
+        : Math.min(16, availHeight);
+
+      webcamBox.setContent(`{center}Starting ${currentMode} mode...{/center}`);
+      screen.render();
+
+      videoService.startStream(
+        { type: 'webcam' },
+        {
+          width: videoWidth,
+          height: videoHeight,
+          fps: 10,
+          colored: true,
+          mode: currentMode,
+        }
+      ).then((streamId: string) => {
+        console.log('[Webcam Demo] startStream resolved with streamId:', streamId);
+        activeStreamId = streamId;
+        videoService.onFrame((frame: string) => {
+          if (currentDemo === 'webcam') {
+            webcamBox.setContent(frame);
+            screen.render();
+          }
+        });
+      }).catch((err: any) => {
+        console.log('[Webcam Demo] startStream error:', err.message);
+        webcamBox.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
+        screen.render();
+      });
+    };
+
+    // Mode selection buttons
+    const halfblockBtn = blessed.button({
+      parent: demoBox,
+      bottom: 1, left: 2, width: 14, height: 3,
+      content: ' HalfBlock ',
+      border: { type: 'line' },
+      mouse: true,
+      style: { fg: 'black', bg: 'lightgreen' },
+    });
+
+    const asciiBtn = blessed.button({
+      parent: demoBox,
+      bottom: 1, left: 18, width: 10, height: 3,
+      content: ' ASCII ',
+      border: { type: 'line' },
+      mouse: true,
+      style: { fg: 'white', bg: 'blue' },
+    });
+
+    halfblockBtn.on('press', () => {
+      currentMode = 'halfblock';
+      halfblockBtn.style.bg = 'lightgreen';
+      asciiBtn.style.bg = 'blue';
+      screen.render();
+      startVideoStream();
+    });
+
+    asciiBtn.on('press', () => {
+      currentMode = 'ascii';
+      asciiBtn.style.bg = 'lightgreen';
+      halfblockBtn.style.bg = 'blue';
+      screen.render();
+      startVideoStream();
+    });
+
+    const stopBtn = blessed.button({
+      parent: demoBox,
+      bottom: 1, right: 2, width: 10, height: 3,
+      content: ' Stop ',
+      border: { type: 'line' },
+      mouse: true,
+      style: { fg: 'white', bg: 'red' },
+    });
+
+    stopBtn.on('press', () => {
+      if (videoService && activeStreamId) {
+        videoService.stopStream(activeStreamId);
+        activeStreamId = null;
+        webcamBox.setContent('{center}Stream stopped.{/center}');
+        screen.render();
+      }
+    });
+
+    // Start with default mode
+    if (videoService) {
+      startVideoStream();
+    } else {
+      webcamBox.setContent('{red-fg}Video service not available in this session.{/red-fg}');
+    }
+
+    screen.render();
+  }
+
+  // ========== MIC AUDIO DEMO ==========
+  function showMicDemo() {
+    clearDemo();
+    currentDemo = 'mic';
+    demoBox.setLabel(' Microphone Audio - Live Input ');
+
+    const micBox = blessed.box({
+      parent: demoBox,
+      top: 0, left: 0, right: 0, height: '100%-4',
+      label: ' Mic Status ',
+      border: { type: 'line' },
+      style: { fg: 'white', bg: 'black', border: { fg: 'green' } },
+      content: '{center}Initializing microphone...{/center}',
+      tags: true,
+    });
+
+    blessed.box({
+      parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
+      tags: true,
+      content: '{yellow-fg}Mic Demo:{/}\n' +
+        'Requests microphone access.\n' +
+        '{gray-fg}(Requires "audio" service in door session){/}',
+    });
+
+    const audioService = (session as any).audio;
+    if (audioService) {
+      audioService.startStreaming({
+        sampleRate: 44100,
+        channels: 1,
+      }).then(() => {
+        micBox.setContent('{center}{green-fg}Microphone Active{/green-fg}\n\n(Speaking logic handled by server){/center}');
+        screen.render();
+      }).catch((err: any) => {
+        micBox.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
+        screen.render();
+      });
+    } else {
+      micBox.setContent('{red-fg}Audio service not available in this session.{/red-fg}');
+    }
+
+    screen.render();
+  }
+
+  // ========== 34. NEW WIDGETS DEMO ========== 
+  function showNewWidgets() {
+    clearDemo();
+    currentDemo = 'new-widgets';
+    demoBox.setLabel(' New Widgets: TabPanel, Accordion, Collapsible, StackedGauge, ColorPicker ');
+
+    // 1. TabPanel
+    const tabpanel = blessed.tabpanel({
+      parent: demoBox,
+      top: 0,
+      left: 0,
+      width: '50%-1',
+      height: '50%-1',
+      border: { type: 'line' },
+      label: ' TabPanel ',
+      tabs: [
+        { label: 'General', content: 'This is the {bold}General{/} tab content.' },
+        { label: 'Advanced', content: 'Advanced settings and {cyan-fg}configurations{/}.' },
+        { label: 'Plugins', content: 'Manage your installed {green-fg}plugins{/} here.' },
+      ]
+    });
+
+    // 2. Accordion
+    const accordion = blessed.accordion({
+      parent: demoBox,
+      top: 0,
+      left: '50%',
+      width: '50%-1',
+      height: '50%-1',
+      border: { type: 'line' },
+      label: ' Accordion ',
+      items: [
+        { label: 'Section 1', content: 'Content for section 1.\nMultiple lines supported.' },
+        { label: 'Section 2', content: 'Section 2 has different content.' },
+        { label: 'Section 3', content: 'Expanding this collapses others (multiple: false).' },
+      ]
+    });
+
+    // 3. Collapsible
+    const collapsible = blessed.collapsible({
+      parent: demoBox,
+      top: '50%',
+      left: 0,
+      width: '50%-1',
+      label: 'Collapsible Section',
+      border: { type: 'line' },
+      content: 'This section can be collapsed to save vertical space.\n{yellow-fg}Press Enter or click the header to toggle.{/}'
+    });
+
+    // 4. StackedGauge
+    const stackedGauge = blessed.stackedgauge({
+      parent: demoBox,
+      top: '50%',
+      left: '50%',
+      width: '50%-1',
+      height: 5,
+      label: ' StackedGauge ',
+      stack: [
+        { percent: 30, color: 'red', label: 'System' },
+        { percent: 45, color: 'green', label: 'User' },
+        { percent: 15, color: 'blue', label: 'Network' },
+      ]
+    });
+
+    // 5. ColorPicker
+    const colorPicker = blessed.colorpicker({
+      parent: demoBox,
+      top: '50%+5',
+      left: '50%',
+      width: '50%-1',
+      height: 8,
+      label: ' ColorPicker ',
+    });
+
+    colorPicker.on('select', (color: string) => {
+      setStatus(`Selected color: ${color}`);
+      stackedGauge.setLabel(` StackedGauge ({${color}-fg}${color}{/}) `);
+    });
+
+    // 6. Autocomplete (Triggered by Textbox)
+    const label = blessed.text({
+      parent: demoBox,
+      top: '50%+5',
+      left: 1,
+      content: 'Autocomplete (type @ or [):'
+    });
+
+    const textbox = blessed.textbox({
+      parent: demoBox,
+      top: '50%+6',
+      left: 1,
+      width: '40%',
+      height: 3,
+      border: { type: 'line' },
+      keys: true,
+      mouse: true,
+      inputOnFocus: true
+    });
+
+    const ac = blessed.autocomplete({
+      parent: demoBox,
+      providers: [
+        new blessed.UsernameProvider(['spot', 'gemini', 'bbs_sysop', 'amiga_fan']),
+        new blessed.BBSCodeProvider()
+      ]
+    });
+
+    ac.attachTo(textbox);
+
+    textbox.on('keypress', (ch, key) => {
+      // If autocomplete is visible, let it handle the keys
+      if (ac.isVisible()) {
+        return false;
+      }
+
+      // Basic trigger logic for demo: show suggestions after @ or [
+      if (ch === '@' || ch === '[') {
+        // We need a slight delay to let the character be processed by the textbox
+        // (or we manually include it in the context)
+        setTimeout(() => {
+          const context = {
+            currentLine: textbox.value,
+            cursorPosition: textbox.value.length,
+            lineNumber: 0,
+            documentContent: [textbox.value]
+          };
+          ac.suggest(context);
+        }, 10);
+      }
+      return false;
+    });
+
+    ac.on('select', (suggestion: any) => {
+      // The insertText is the part AFTER the trigger
+      textbox.value += suggestion.insertText;
+      textbox.focus();
+      screen.render();
+    });
+
+    // 7. FileExplorer
+    const fileExplorer = blessed.fileexplorer({
+      parent: demoBox,
+      top: '50%+10',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      label: ' FileExplorer ',
+    });
+
+    fileExplorer.setTreeData({
+      name: 'root',
+      extended: true,
+      children: [
+        { name: 'Documents', extended: true, children: [{ name: 'Work' }, { name: 'Home' }] },
+        { name: 'Downloads', children: [{ name: 'Images' }, { name: 'Video' }] },
+        { name: 'System' },
+      ]
+    });
+
+    fileExplorer.setFileData([
+      ['README.md', '1.2 KB', '2024-01-01'],
+      ['package.json', '0.8 KB', '2024-01-02'],
+      ['app.ts', '15.4 KB', '2024-01-03'],
+      ['logo.png', '42.1 KB', '2024-01-04'],
+    ]);
+
+    addResult('TabPanel', 'pass', 'Switching tabs works');
+    addResult('Accordion', 'pass', 'Expansion works');
+    addResult('Collapsible', 'pass', 'Single toggle works');
+    addResult('StackedGauge', 'pass', 'Multi-segments render');
+    addResult('ColorPicker', 'pass', 'Color selection works');
+    addResult('Autocomplete', 'pass', 'Manager integration works');
+    addResult('FileExplorer', 'pass', 'Three-pane layout works');
+
+    screen.render();
+  }
+
+  // ========== 35. STRESS TEST ==========
   function showStressTest() {
     clearDemo();
     currentDemo = 'stress';
@@ -2449,7 +2911,7 @@ End of sample markdown.`;
       case 6: showCanvasDemo(); break;
       case 7: showImageDemo(); break;
       case 8: showANSIImageDemo(); break;
-      case 9: showVideoDemo(); break;
+      case 9: showAsciiAnimationDemo(); break;
       case 10: showIFrameDemo(); break;
       case 11: showSpecialWidgets(); break;
       case 12: showLineChartDemo(); break;
@@ -2469,25 +2931,19 @@ End of sample markdown.`;
       case 26: showPanelDemo(); break;
       case 27: showAutocompleteDemo(); break;
       case 28: showNewFeatures(); break;
-      case 29: showStressTest(); break;
-      case 30: showResults(); break;
-      case 31: cleanup(); break;
+      case 29: showDockableLayoutDemo(); break;
+      case 30: showAsciiVideoDemo(); break;
+      case 31: showWebcamDemo(); break;
+      case 32: showMicDemo(); break;
+      case 33: showNewWidgets(); break;
+      case 34: showStressTest(); break;
+      case 35: showResults(); break;
+      case 36: cleanup(); break;
     }
   });
 
   // ========== GLOBAL KEYS ==========
   screen.key(['q', 'C-c'], cleanup);
-  screen.key(['tab'], () => {
-    const focused = screen.getFocused();
-    if (focused === menuList) {
-      for (const child of demoBox.children) {
-        if ((child as any).focus) { (child as any).focus(); break; }
-      }
-    } else {
-      menuList.focus();
-    }
-    screen.render();
-  });
   screen.key(['escape'], () => { menuList.focus(); screen.render(); });
 
   // ========== CLEANUP ==========

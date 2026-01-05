@@ -65,7 +65,7 @@ export class Screen extends Element {
   private _dragging: Element | null = null;
 
   // Key handlers
-  private keyHandlers: Map<string, ((ch: any, key: KeyEvent) => void)[]> = new Map();
+  private keyHandlers: Map<string, ((ch: any, key: KeyEvent) => boolean | void)[]> = new Map();
 
   // Global keyboard shortcuts
   public keyBindings: KeyBindings = new KeyBindings();
@@ -692,7 +692,7 @@ export class Screen extends Element {
       this._renderPending = false;
       this._renderTimer = null;
       this._doRender();
-    }, 0);  // 0ms = next tick (use 16ms for ~60fps throttle if needed)
+    }, 16);  // 16ms = ~60fps throttle (prevents flicker from rapid keypresses like shift+arrow)
   }
 
   private _doRender(): void {
@@ -1636,6 +1636,27 @@ export class Screen extends Element {
     target.focus();
   }
 
+  /**
+   * Enable global key bindings (F12, Alt+M) to toggle mouse tracking.
+   * Useful for allowing users to disable mouse capture for text selection.
+   * @param callback Optional callback triggered on toggle, receives (enabled: boolean)
+   */
+  enableMouseToggle(callback?: (enabled: boolean) => void): void {
+    let mouseEnabled = true;
+    this.key(['f12', 'M-m'], () => {
+      mouseEnabled = !mouseEnabled;
+      if (mouseEnabled) {
+        this.enableMouse();
+      } else {
+        this.disableMouse();
+      }
+      if (callback) {
+        callback(mouseEnabled);
+      }
+      this.render();
+    });
+  }
+
   // ============================================================================
   // Key Handling
   // ============================================================================
@@ -1675,6 +1696,9 @@ export class Screen extends Element {
 
   // Called by external input handler
   _handleKey(ch: any, key: KeyEvent): void {
+    // DEBUG: Log all key events
+    console.log(`[Screen._handleKey] key.name=${key.name} key.full=${key.full} focused=${this._focused?.constructor?.name || 'null'}`);
+
     // Attempt to unlock audio on first interaction
     if ((this as any)._audioUnlocked === undefined) {
       (this as any)._audioUnlocked = true;
@@ -1684,39 +1708,73 @@ export class Screen extends Element {
     // Respect key locking
     if (this._lockKeys) return;
 
-    // Try registered screen key handlers first
-    const handlers = this.keyHandlers.get(key.full || key.name);
+    let focusTrap = this.focusTrap;
+    if (focusTrap && ((focusTrap as any).hidden || (focusTrap as any).destroyed)) {
+      this.releaseFocusTrap();
+      focusTrap = this.focusTrap;
+    }
+    const suppressGlobalKeys = !!focusTrap;
+    const focused = this._focused as any;
+    if (focusTrap && focused && focused !== focusTrap && !focused.hasAncestor?.(focusTrap)) {
+      const focusable = this._getFocusable();
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }
+
+    // Try registered screen key handlers first (unless focus is trapped)
+    const handlers = suppressGlobalKeys ? undefined : this.keyHandlers.get(key.full || key.name);
     let handled = false;
     if (handlers && handlers.length > 0) {
       for (const handler of handlers) {
-        handler(ch, key);
+        if (handler(ch, key) === true) handled = true;
       }
-      handled = true;
-    }
-
-    // Default Tab/Shift-Tab for focus navigation (only if no user handler)
-    if (!handled && key.name === 'tab') {
-      if (key.shift) {
-        this.focusPrevious();
-      } else {
-        this.focusNext();
-      }
-      this.render();
-      return;
     }
 
     // Emit to focused element
-    if (this._focused) {
-      // Emit generic keypress event
-      this._focused.emit('keypress', ch, key);
-      // Emit specific key event (for element.key() handlers)
+    if (!handled && this._focused) {
+      // Emit specific key event first (for element.key() handlers)
       const keyName = key.full || key.name;
       if (keyName) {
-        this._focused.emit(`keypress ${keyName}`, ch, key);
+        if (this._focused.emit(`keypress ${keyName}`, ch, key) === true) handled = true;
+      }
+      
+      // Emit generic keypress event
+      if (!handled) {
+        if (this._focused.emit('keypress', ch, key) === true) handled = true;
       }
     }
 
-    this.emit('keypress', ch, key);
+    // Default Tab/Shift-Tab and Arrow keys for focus navigation (only if not handled by widget)
+    if (!handled) {
+      console.log(`[Screen._handleKey] Not handled by widget, checking default navigation for key.name=${key.name}`);
+      const keyName = key.name;
+      if (keyName === 'tab') {
+        if (key.shift) {
+          this.focusPrevious();
+        } else {
+          this.focusNext();
+        }
+        this.render();
+        return;
+      }
+      
+      // Arrow keys for focus navigation (when not handled by widget)
+      if (!key.shift && (keyName === 'up' || keyName === 'left')) {
+        this.focusPrevious();
+        this.render();
+        return;
+      }
+      if (!key.shift && (keyName === 'down' || keyName === 'right')) {
+        this.focusNext();
+        this.render();
+        return;
+      }
+    }
+
+    if (!suppressGlobalKeys) {
+      this.emit('keypress', ch, key);
+    }
   }
 
   // ============================================================================
@@ -1789,14 +1847,10 @@ export class Screen extends Element {
     const findBorderElement = (el: any): any => {
       if (!el) return null;
       // Check if element has a border with fg color
-      if (el.options?.border && el.options?.style?.border?.fg) {
+      if (el.options?.border && el.options?.border.type !== 'none') {
         return el;
       }
-      // Also check el.style.border directly (some widgets set it there)
-      if (el.options?.border && el.style?.border?.fg) {
-        return el;
-      }
-      // Walk up to parent
+      // Walk up to parent (but stop at screen)
       if (el.parent && el.parent !== this) {
         return findBorderElement(el.parent);
       }
@@ -1814,9 +1868,11 @@ export class Screen extends Element {
         // Update both options.style.border and style.border for consistency
         if (prevBorderEl.options?.style?.border) {
           prevBorderEl.options.style.border.fg = prevBorderEl._originalBorderColor;
+          prevBorderEl.options.style.border.bold = prevBorderEl._originalBorderBold || false;
         }
         if (prevBorderEl.style?.border) {
           prevBorderEl.style.border.fg = prevBorderEl._originalBorderColor;
+          prevBorderEl.style.border.bold = prevBorderEl._originalBorderBold || false;
         }
       }
     }
@@ -1827,19 +1883,23 @@ export class Screen extends Element {
       element.focused = true;
       element.emit('focus');
 
-      // Automatically set white borders on focused elements
+      // Automatically set high-contrast borders on focused elements
       const borderEl = findBorderElement(element);
       if (borderEl) {
         // Store original border color if not already stored
+        const currentStyle = borderEl.options?.style?.border || borderEl.style?.border || {};
         if (!borderEl._originalBorderColor) {
-          borderEl._originalBorderColor = borderEl.options?.style?.border?.fg || borderEl.style?.border?.fg;
+          borderEl._originalBorderColor = currentStyle.fg || 'cyan';
+          borderEl._originalBorderBold = currentStyle.bold || false;
         }
-        // Set white border for focused element
+        // Set prominent white border for focused element
         if (borderEl.options?.style?.border) {
           borderEl.options.style.border.fg = 'white';
+          borderEl.options.style.border.bold = true;
         }
         if (borderEl.style?.border) {
           borderEl.style.border.fg = 'white';
+          borderEl.style.border.bold = true;
         }
       }
     }
