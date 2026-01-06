@@ -1161,17 +1161,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Check for RIP mode escape codes (express.e:25679-25683)
       // [1! = Enter RIP pixel/graphics mode
       // [2! = Return to RIP text mode
-      if (data.includes('\x1b[1!') || data.includes('[1!')) {
+      if (data.includes('\x1b[1!')) {
         console.log('[RIP] Entering RIP graphics mode');
         setRipMode(true);
         // Strip the escape code and continue processing
-        data = data.replace(/\x1b?\[1!/g, '');
+        data = data.replace(/\x1b\[1!/g, '');
       }
-      if (data.includes('\x1b[2!') || data.includes('[2!')) {
+      if (data.includes('\x1b[2!')) {
         console.log('[RIP] Exiting RIP graphics mode');
         setRipMode(false);
         // Strip the escape code and continue processing
-        data = data.replace(/\x1b?\[2!/g, '');
+        data = data.replace(/\x1b\[2!/g, '');
       }
 
       const currentFont = term.options.fontFamily;

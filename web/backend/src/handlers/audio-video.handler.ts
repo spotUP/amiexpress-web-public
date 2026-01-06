@@ -176,13 +176,13 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
       { name: 'lightwhite', r: 255, g: 255, b: 255 },
     ];
 
-    // Find nearest palette color using weighted Euclidean distance
-    // Human eye is more sensitive to green, then red, then blue
-    const rgbToBlessed = (r: number, g: number, b: number): string => {
+    // Find nearest palette color index using weighted Euclidean distance
+    const getClosestColorIndex = (r: number, g: number, b: number): number => {
       let minDist = Infinity;
-      let bestColor = 'white';
+      let bestIndex = 7; // Default to white
 
-      for (const color of PALETTE) {
+      for (let i = 0; i < PALETTE.length; i++) {
+        const color = PALETTE[i];
         // Weighted distance (perception-based)
         const dr = (r - color.r) * 0.30;
         const dg = (g - color.g) * 0.59;
@@ -191,31 +191,17 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
         if (dist < minDist) {
           minDist = dist;
-          bestColor = color.name;
+          bestIndex = i;
         }
       }
 
-      return bestColor;
+      return bestIndex;
     };
 
-    // Color transformation functions (inspired by Python version)
-    const dimColor = (r: number, g: number, b: number): [number, number, number] => {
-      // Dim to 40% for background - creates depth
-      return [Math.floor(r * 0.4), Math.floor(g * 0.4), Math.floor(b * 0.4)];
-    };
-
-    const brightenColor = (r: number, g: number, b: number): [number, number, number] => {
-      // Brighten by 20% for foreground pop
-      return [
-        Math.min(255, Math.floor(r * 1.2)),
-        Math.min(255, Math.floor(g * 1.2)),
-        Math.min(255, Math.floor(b * 1.2))
-      ];
-    };
+    const getAnsiColorName = (index: number): string => PALETTE[index].name;
 
     // ========== CHARACTER SETS ==========
     // Characters sorted by visual density (calibrated - darkest to lightest)
-    // Based on actual pixel coverage when rendered
     const CHARSET_FULL = ' `.-\':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@';
     const CHARSET_SYMBOLS = ' .\'`^",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$';
     const CHARSET_SIMPLE = ' .-:=+*#%@';
@@ -254,13 +240,15 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
         for (let x = 0; x < width; x++) {
           // Top pixel -> foreground color
           const [r1, g1, b1] = getPixel(x, y);
-          const fgColor = rgbToBlessed(r1, g1, b1);
+          const fgIndex = getClosestColorIndex(r1, g1, b1);
+          const fgColor = getAnsiColorName(fgIndex);
 
           // Bottom pixel -> background color
           let bgColor: string;
           if (y + 1 < height) {
             const [r2, g2, b2] = getPixel(x, y + 1);
-            bgColor = rgbToBlessed(r2, g2, b2);
+            const bgIndex = getClosestColorIndex(r2, g2, b2);
+            bgColor = getAnsiColorName(bgIndex);
           } else {
             bgColor = fgColor;
           }
@@ -284,33 +272,75 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
         if (y + 2 < height) asciiFrame += '\n';
       }
     } else {
-      // ========== ASCII CHARACTER MODE ==========
-      // Uses density-sorted characters with fg color + dimmed bg color
-      // Like the Python ASCIIArt class approach
-
+      // ========== ASCII CHARACTER MODE (ENHANCED 4-SHADE) ==========
+      // Maps luminance to 4 contrast zones for maximum dynamic range
+      
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const [r, g, b] = getPixel(x, y);
 
-          // Select character based on luminance
-          const luminance = getLuminance(r, g, b);
-          const charIndex = Math.floor((luminance / 255) * (charCount - 1));
+          // 1. Calculate Standard Luminance
+          const luma = getLuminance(r, g, b); // 0-255
+          const lumaNorm = luma / 255; // 0.0-1.0
+
+          // 2. Determine Base Hue (0-7)
+          const colorIndex = getClosestColorIndex(r, g, b);
+          const baseHue = colorIndex % 8; // Collapse bright/dim to base hue
+
+          let fgName: string;
+          let bgName: string;
+          let charIndex: number;
+
+          // 3. Apply 4-Zone Logic
+          if (lumaNorm < 0.25) {
+            // Zone 1: Deep Shadows (0% - 25%)
+            // BG: Black, FG: Dark Color
+            // Char: Density increases with luma
+            bgName = 'black';
+            fgName = getAnsiColorName(baseHue); // Dark version
+            const zoneProgress = lumaNorm / 0.25;
+            charIndex = Math.floor(zoneProgress * (charCount - 1));
+          } 
+          else if (lumaNorm < 0.50) {
+            // Zone 2: Mid-Shadows (25% - 50%)
+            // BG: Black, FG: Light Color
+            // Char: Density increases with luma
+            bgName = 'black';
+            fgName = getAnsiColorName(baseHue + 8); // Light version
+            const zoneProgress = (lumaNorm - 0.25) / 0.25;
+            charIndex = Math.floor(zoneProgress * (charCount - 1));
+          } 
+          else if (lumaNorm < 0.75) {
+            // Zone 3: Mid-Highlights (50% - 75%)
+            // BG: Light Color, FG: Dark Color
+            // Char: INVERTED density (starts full, thins out to reveal BG)
+            // This creates the "Dark on Light" effect
+            bgName = getAnsiColorName(baseHue + 8); // Light BG
+            fgName = getAnsiColorName(baseHue);     // Dark FG
+            const zoneProgress = (lumaNorm - 0.50) / 0.25;
+            // Invert character index
+            charIndex = (charCount - 1) - Math.floor(zoneProgress * (charCount - 1));
+          } 
+          else {
+            // Zone 4: Highlights (75% - 100%)
+            // BG: Light Color, FG: White
+            // Char: Density increases with luma (adding White to Light BG)
+            bgName = getAnsiColorName(baseHue + 8); // Light BG
+            fgName = 'white';                       // White FG
+            const zoneProgress = (lumaNorm - 0.75) / 0.25;
+            charIndex = Math.floor(zoneProgress * (charCount - 1));
+          }
+
+          // Clamp charIndex
+          charIndex = Math.max(0, Math.min(charCount - 1, charIndex));
           const char = charset[charIndex];
 
-          // Foreground: slightly brightened pixel color
-          const [fr, fg, fb] = brightenColor(r, g, b);
-          const fgColor = rgbToBlessed(fr, fg, fb);
-
-          // Background: dimmed pixel color (creates depth like the Python version)
-          const [br, bg2, bb] = dimColor(r, g, b);
-          const bgColor = rgbToBlessed(br, bg2, bb);
-
           // Optimize: only emit color tags when they change
-          if (fgColor !== lastFg || bgColor !== lastBg) {
+          if (fgName !== lastFg || bgName !== lastBg) {
             if (lastFg || lastBg) asciiFrame += '{/}';
-            asciiFrame += `{${fgColor}-fg}{${bgColor}-bg}`;
-            lastFg = fgColor;
-            lastBg = bgColor;
+            asciiFrame += `{${fgName}-fg}{${bgName}-bg}`;
+            lastFg = fgName;
+            lastBg = bgName;
           }
 
           asciiFrame += char;
