@@ -45,6 +45,10 @@
       "types": "./dist/core/types.d.ts",
       "default": "./dist/core/types.js"
     },
+    "./engines/graphics/braille-graphics": {
+      "types": "./dist/engines/graphics/braille-graphics.d.ts",
+      "default": "./dist/engines/graphics/braille-graphics.js"
+    },
     "./engines/ui/blessed": {
       "types": "./dist/engines/ui/blessed/index.d.ts",
       "import": "./dist-esm/engines/ui/blessed/index.js",

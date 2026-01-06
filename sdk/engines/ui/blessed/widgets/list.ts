@@ -18,6 +18,7 @@ export class List extends Element {
 
   // Hover tracking for per-item hover effects
   private _hoveredItem: number = -1;
+  private _lastKeyTime: number = 0;
 
   constructor(options: ListOptions = {}) {
     // Build scrollbar config: merge user options with defaults
@@ -48,6 +49,14 @@ export class List extends Element {
     this.interactive = options.interactive !== false;
     this.wrapItemsEnabled = options.wrapItems !== false;
 
+    // Ensure default hover style for interactive lists
+    if (this.interactive) {
+      this.style.item = this.style.item || {};
+      if (!this.style.item.hover && !this.style.hover) {
+        this.style.item.hover = { bg: 'cyan', fg: 'black' };
+      }
+    }
+
     // Update content
     this._updateContent();
 
@@ -76,6 +85,7 @@ export class List extends Element {
 
     // Key handlers
     if (options.keys !== false) {
+      this.removeAllListeners('keypress');
       this.on('keypress', this._onKeypress.bind(this));
     }
 
@@ -159,6 +169,13 @@ export class List extends Element {
     this.itemLineStart = [];
     this.itemLineCount = [];
 
+    const width = this.getItemWrapWidth();
+    if (width <= 0) {
+      console.warn(`[List] _updateContent: Invalid width ${width}`);
+      // Preserve existing content if width calculation fails (e.g. during scrollbar drag)
+      if (this.content) return;
+    }
+
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
       const isHovered = index === this._hoveredItem && !isSelected;
@@ -209,7 +226,7 @@ export class List extends Element {
       if (this.wrapItemsEnabled) {
         // Wrap long items to multiple lines
         const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
-        const wrapWidth = Math.max(1, this.getItemWrapWidth() - (this.interactive ? 2 : 0));
+        const wrapWidth = Math.max(1, width - (this.interactive ? 2 : 0));
         const wrapped = this.wrapAnsiText(parsed, wrapWidth);
 
         if (wrapped.length === 0) {
@@ -248,16 +265,23 @@ export class List extends Element {
       return false;
     }
 
+    // Debounce to prevent burst inputs (e.g. from rapid key repeat)
+    const now = Date.now();
+    if (now - this._lastKeyTime < 50) return true; // Handled (ignored)
+    this._lastKeyTime = now;
+
     const vi = (this.options as any).vi;
 
     // Up/Down navigation
     if (key.name === 'up' || (vi && key.name === 'k')) {
+      console.log(`[List] UP from ${this.selected}`);
       this.up();
       this.screen?.render();
       return true;
     }
 
     if (key.name === 'down' || (vi && key.name === 'j')) {
+      console.log(`[List] DOWN from ${this.selected}`);
       this.down();
       this.screen?.render();
       return true;

@@ -647,13 +647,17 @@ export class DockablePanel extends Panel {
     let newLeft = this.dragStartLeft + deltaX;
     let newTop = this.dragStartTop + deltaY;
 
+    // Sanitize coordinates
+    if (isNaN(newLeft)) newLeft = this.dragStartLeft;
+    if (isNaN(newTop)) newTop = this.dragStartTop;
+
     // Constrain to screen bounds (ensure at least a 3x3 'handle' remains on screen)
     if (this.screen) {
       const VISIBLE_HANDLE = 3;
       const sw = this.screen.width;
       const sh = this.screen.height;
-      const pw = this.width as number;
-      const ph = this.height as number;
+      const pw = (this.width as number) || 40;
+      const ph = (this.height as number) || 20;
 
       newLeft = Math.max(VISIBLE_HANDLE - pw, Math.min(newLeft, sw - VISIBLE_HANDLE));
       newTop = Math.max(this.topConstraint, Math.min(newTop, sh - VISIBLE_HANDLE)); // Respect topConstraint
@@ -789,6 +793,12 @@ export class DockablePanel extends Panel {
     const effectiveMinWidth = Math.max(ABS_MIN_WIDTH, this.minWidth || 0);
     const effectiveMinHeight = Math.max(ABS_MIN_HEIGHT, this.minHeight || 0);
 
+    // Sanitize calculations
+    if (isNaN(newWidth)) newWidth = this.dragStartWidth;
+    if (isNaN(newHeight)) newHeight = this.dragStartHeight;
+    if (isNaN(newLeft)) newLeft = this.dragStartLeft;
+    if (isNaN(newTop)) newTop = this.dragStartTop;
+
     if (newWidth < effectiveMinWidth) {
       if (edge.includes('w')) {
         newLeft = this.dragStartLeft + (this.dragStartWidth - effectiveMinWidth);
@@ -822,6 +832,10 @@ export class DockablePanel extends Panel {
       newLeft = Math.max(0, Math.min(newLeft, this.screen.width - 1));
       newTop = Math.max(this.topConstraint, Math.min(newTop, this.screen.height - 1));
     }
+
+    // Sanitize final values
+    newWidth = Math.max(1, newWidth);
+    newHeight = Math.max(1, newHeight);
 
     // Use position.* for runtime updates (not options.* which is only read at construction)
     this.position.width = newWidth;
@@ -1333,6 +1347,12 @@ export class DockablePanel extends Panel {
         this.position.height = this.panelState.savedHeight || this.panelState.height;
         break;
     }
+
+    // Sanitize dimensions
+    if (typeof this.position.width === 'number') this.position.width = Math.max(1, this.position.width);
+    if (typeof this.position.height === 'number') this.position.height = Math.max(1, this.position.height);
+    if (typeof this.position.left === 'number' && isNaN(this.position.left)) this.position.left = 0;
+    if (typeof this.position.top === 'number' && isNaN(this.position.top)) this.position.top = 0;
 
     // Invalidate coordinate cache for all children so they recalculate positions
     this._invalidateCoords();

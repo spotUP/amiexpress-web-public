@@ -27,12 +27,18 @@ function createPreloaderFrame(doorName: string, tick: number): string {
   const borderTop = `┌${'─'.repeat(width - 2)}┐`;
   const borderBot = `└${'─'.repeat(width - 2)}┘`;
   
-  const msg = ` Loading ${name}... ${spinner} `;
-  const msgPadding = width - 2 - msg.length;
+  const msgText = ` Loading ${name}... `;
+  const msgPadding = width - 2 - msgText.length;
   const msgLeft = Math.floor(msgPadding / 2);
   const msgRight = msgPadding - msgLeft;
+  const msgLine = `│${' '.repeat(msgLeft)}${ANSI.WHITE}${msgText}${ANSI.CYAN}${' '.repeat(msgRight)}│`;
+
+  const spinPadding = width - 2 - 1; // 1 char for spinner
+  const spinLeft = Math.floor(spinPadding / 2);
+  const spinRight = spinPadding - spinLeft;
+  const spinLine = `│${' '.repeat(spinLeft)}${ANSI.CYAN}${spinner}${ANSI.CYAN}${' '.repeat(spinRight)}│`;
   
-  const content = `│${' '.repeat(msgLeft)}${ANSI.YELLOW}${msg}${ANSI.CYAN}${' '.repeat(msgRight)}│`;
+  const emptyLine = `│${' '.repeat(width - 2)}│`;
   
   const vPad = '\n'.repeat(10); // Push down to center vertically
 
@@ -40,7 +46,10 @@ function createPreloaderFrame(doorName: string, tick: number): string {
     ANSI.CLEAR_SCREEN,
     vPad,
     `${leftPad}${ANSI.CYAN}${borderTop}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${content}${ANSI.RESET}`,
+    `\n${leftPad}${ANSI.CYAN}${emptyLine}${ANSI.RESET}`,
+    `\n${leftPad}${ANSI.CYAN}${msgLine}${ANSI.RESET}`,
+    `\n${leftPad}${ANSI.CYAN}${spinLine}${ANSI.RESET}`,
+    `\n${leftPad}${ANSI.CYAN}${emptyLine}${ANSI.RESET}`,
     `\n${leftPad}${ANSI.CYAN}${borderBot}${ANSI.RESET}`
   ].join('');
 }

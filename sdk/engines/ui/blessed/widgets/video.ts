@@ -12,6 +12,7 @@ export class Video extends Box {
   private controls: boolean;
   private muted: boolean;
   private playing: boolean = false;
+  private streaming: boolean = false;
   private currentTime: number = 0;
   private duration: number = 0;
 
@@ -76,6 +77,7 @@ export class Video extends Box {
     this.src = src;
     this.currentTime = 0;
     this.playing = false;
+    this.streaming = false;
 
     this.updateDisplay();
     this.emit('load', src);
@@ -86,9 +88,22 @@ export class Video extends Box {
   }
 
   /**
+   * Set raw video frame (ASCII)
+   */
+  setFrame(frame: string): void {
+    this.streaming = true;
+    this.setContent(frame);
+    if (this.screen) {
+      this.screen.render();
+    }
+  }
+
+  /**
    * Update display
    */
   private updateDisplay(): void {
+    if (this.streaming) return;
+
     const w = typeof this.width === 'number' ? this.width : 60;
     const h = typeof this.height === 'number' ? this.height : 20;
 

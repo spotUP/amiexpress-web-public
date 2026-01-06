@@ -190,6 +190,9 @@ export class Screen extends Element {
    * Setup key event routing from Program to Screen
    */
   private setupKeyRouting(): void {
+    // Remove existing listeners to prevent duplication if Program is reused
+    this.program.removeAllListeners('keypress');
+    
     // Listen to Program's keypress events
     this.program.on('keypress', (ch: any, key: KeyEvent) => {
       this._handleKey(ch, key);
