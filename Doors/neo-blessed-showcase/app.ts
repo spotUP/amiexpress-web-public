@@ -66,6 +66,7 @@ import blessed, {
   DockablePanel,
   Panel
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { BrailleVUMeter } from '@amiexpress/bbs-door-sdk/engines/graphics/braille-graphics';
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
   AutocompleteManager,
@@ -2637,8 +2638,23 @@ End of sample markdown.`;
         sampleRate: 44100,
         channels: 1,
       }).then(() => {
-        micBox.setContent('{center}{green-fg}Microphone Active{/green-fg}\n\n(Speaking logic handled by server){/center}');
-        screen.render();
+        // Create VU Meter
+        const vuMeter = new BrailleVUMeter(60, 30);
+        
+        // Update loop
+        const interval = addInterval(() => {
+          const levels = audioService.getAudioLevels();
+          const frame = vuMeter.update(levels.input);
+          
+          micBox.setContent(
+            `{center}{green-fg}Microphone Active{/green-fg}\n` +
+            `{cyan-fg}Input Level: ${Math.round(levels.input * 100)}%{/cyan-fg}\n\n` +
+            frame + 
+            `\n{center}(Speaking logic handled by server){/center}`
+          );
+          screen.render();
+        }, 100); // 10fps update
+
       }).catch((err: any) => {
         micBox.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
         screen.render();

@@ -8,7 +8,7 @@
  * - Username label
  */
 
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Video } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export interface VideoTileOptions {
@@ -62,7 +62,7 @@ function getBackgroundColor(username: string): string {
  */
 export class VideoTile {
   private container: any; // Using any since Box type doesn't expose runtime properties
-  private videoBox: any;
+  private videoBox: Video;
   private statusBar: any;
   private screen: Screen;
   private options: VideoTileOptions;
@@ -93,7 +93,7 @@ export class VideoTile {
     });
 
     // Video/avatar display area
-    this.videoBox = blessed.box({
+    this.videoBox = new Video({
       parent: this.container,
       left: 0,
       top: 0,
@@ -103,6 +103,7 @@ export class VideoTile {
         bg: options.hasVideo ? 'black' : getBackgroundColor(options.username),
       },
       tags: true,
+      controls: false, // Disable controls for tile view
     });
 
     // Render avatar or video placeholder
@@ -217,7 +218,7 @@ export class VideoTile {
     if (this.options.hasVideo) {
       this.hasFrame = true;
       this.videoError = null; // Clear error on frame
-      this.videoBox.setContent(frame);
+      this.videoBox.setFrame(frame);
       this.screen.render();
     }
   }
