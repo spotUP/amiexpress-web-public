@@ -2196,7 +2196,6 @@ console.log(
 
           // CRITICAL: Create JMP table at negative offsets for library function calls
           // When a door does JSR -42(A6), it jumps to base-42 which must have a JMP instruction
-          const codeStart = 0x20; // From HUNK analysis
           const baseAddr = loadedLib.baseAddress;
           const aedoorJmpTable: Array<{
             lvo: number;
@@ -2234,7 +2233,7 @@ console.log(
             )}:`
           );
           for (const func of aedoorJmpTable) {
-            const targetAddr = baseAddr + (func.fileOffset - codeStart);
+            const targetAddr = baseAddr + func.fileOffset;
             const jmpAddr = baseAddr + func.lvo; // Negative offset from base
 
             // Write JMP.L instruction (0x4EF9) followed by target address

@@ -19,39 +19,34 @@ function createPreloaderFrame(doorName: string, tick: number): string {
   const spinner = spinnerChars[tick % 4];
   const name = doorName.length > 40 ? doorName.substring(0, 37) + '...' : doorName;
   
-  // Center roughly (assuming 80 columns)
   const width = 60;
-  const padding = Math.floor((80 - width) / 2);
-  const leftPad = ' '.repeat(padding);
+  const startCol = Math.floor((80 - width) / 2);
+  const startRow = 10;
+
+  // Use absolute positioning for every line to ensure perfect alignment
+  const pos = (row: number, col: number) => `\x1b[${row};${col}H`;
   
-  const borderTop = `┌${'─'.repeat(width - 2)}┐`;
-  const borderBot = `└${'─'.repeat(width - 2)}┘`;
+  let out = ANSI.CLEAR_SCREEN;
+  
+  // Draw the box
+  out += `${pos(startRow, startCol)}${ANSI.CYAN}┌${'─'.repeat(width - 2)}┐`;
+  out += `${pos(startRow + 1, startCol)}│${' '.repeat(width - 2)}│`;
   
   const msgText = ` Loading ${name}... `;
   const msgPadding = width - 2 - msgText.length;
   const msgLeft = Math.floor(msgPadding / 2);
   const msgRight = msgPadding - msgLeft;
-  const msgLine = `│${' '.repeat(msgLeft)}${ANSI.WHITE}${msgText}${ANSI.CYAN}${' '.repeat(msgRight)}│`;
+  out += `${pos(startRow + 2, startCol)}│${' '.repeat(msgLeft)}${ANSI.WHITE}${msgText}${ANSI.CYAN}${' '.repeat(msgRight)}│`;
 
-  const spinPadding = width - 2 - 1; // 1 char for spinner
+  const spinPadding = width - 2 - 1;
   const spinLeft = Math.floor(spinPadding / 2);
   const spinRight = spinPadding - spinLeft;
-  const spinLine = `│${' '.repeat(spinLeft)}${ANSI.CYAN}${spinner}${ANSI.CYAN}${' '.repeat(spinRight)}│`;
-  
-  const emptyLine = `│${' '.repeat(width - 2)}│`;
-  
-  const vPad = '\n'.repeat(10); // Push down to center vertically
+  out += `${pos(startRow + 3, startCol)}│${' '.repeat(spinLeft)}${ANSI.CYAN}${spinner}${ANSI.CYAN}${' '.repeat(spinRight)}│`;
 
-  return [
-    ANSI.CLEAR_SCREEN,
-    vPad,
-    `${leftPad}${ANSI.CYAN}${borderTop}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${emptyLine}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${msgLine}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${spinLine}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${emptyLine}${ANSI.RESET}`,
-    `\n${leftPad}${ANSI.CYAN}${borderBot}${ANSI.RESET}`
-  ].join('');
+  out += `${pos(startRow + 4, startCol)}│${' '.repeat(width - 2)}│`;
+  out += `${pos(startRow + 5, startCol)}└${'─'.repeat(width - 2)}┘${ANSI.RESET}`;
+
+  return out;
 }
 
 export async function showPreloaderWhile<T>(

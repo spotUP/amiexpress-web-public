@@ -2470,11 +2470,11 @@ export class Element extends EventEmitter {
   /**
    * Start scrollbar drag operation
    */
-  private _startScrollbarDrag(mouseY: number): void {
+  private _startScrollbarDrag(event: MouseEvent): void {
     if (!this.screen) return;
 
     this._scrollbarDragging = true;
-    this._scrollbarDragStartY = mouseY;
+    this._scrollbarDragStartY = event.y;
     this._scrollbarDragStartBase = this.childBase;
 
     // Create mousemove handler

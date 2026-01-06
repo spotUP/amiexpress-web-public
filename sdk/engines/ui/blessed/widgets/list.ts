@@ -4,7 +4,7 @@
 
 import { Element } from '../core/element';
 import { parseTags, textWidth } from '../core/colors';
-import type { ListOptions, KeyEvent } from '../core/types';
+import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
 
 export class List extends Element {
   items: string[] = [];
@@ -829,7 +829,7 @@ export class List extends Element {
   }
 
   // Override onMouse to track which item is hovered
-  onMouse(event: any): boolean {
+  onMouse(event: MouseEvent): boolean {
     const handled = super.onMouse(event);
 
     if (event.action !== 'mousemove') return handled;

@@ -111,6 +111,7 @@ export class DoorLifecycleManager {
   private watchAutoUpper: number = 0;
   private lastA5OutOfRangeLogged: number = 0;
   private lastA4ZeroLogged = false;
+  private loggedAedoorPc = new Set<number>();
 
   constructor(
     emulator: MoiraEmulator,
@@ -477,6 +478,41 @@ console.log(`[DoorLifecycleManager] Call tracking enabled`);
       this.debugMonitor?.setLastPCs(this.lastPCs);
       this.debugMonitor?.checkPcProbes(pc, this.executionState.iterationCount);
       this.debugMonitor?.checkWatchedValues();
+        if (process.env.DEBUG_68K_NATIVE === '1') {
+          if (pc >= 0x200240 && pc <= 0x2002f0 && !this.loggedAedoorPc.has(pc)) {
+            this.loggedAedoorPc.add(pc);
+            const d0 = this.emulator.getRegister(0);
+            const d1 = this.emulator.getRegister(1);
+            const a0 = this.emulator.getRegister(8);
+            const a1 = this.emulator.getRegister(9);
+            const a4Now = this.emulator.getRegister(12);
+            const a5Now = this.emulator.getRegister(13);
+            const a6Now = this.emulator.getRegister(14);
+            const spNow = this.emulator.getRegister(15);
+            const stackWords: string[] = [];
+            for (let i = 0; i < 5; i++) {
+              try {
+                const word = this.emulator.readMemory32(spNow + i * 4);
+                stackWords.push(`SP+${i * 4}=0x${word.toString(16)}`);
+              } catch {
+                stackWords.push(`SP+${i * 4}=<err>`);
+              }
+            }
+console.log(
+              `[DoorLifecycleManager] AEDoor PC=0x${pc.toString(
+                16
+              )} iter=${this.executionState.iterationCount} d0=0x${d0.toString(
+                16
+              )} d1=0x${d1.toString(16)} a0=0x${a0.toString(
+                16
+              )} a1=0x${a1.toString(16)} a4=0x${a4Now.toString(
+                16
+              )} a5=0x${a5Now.toString(16)} a6=0x${a6Now.toString(
+                16
+              )} sp=0x${spNow.toString(16)} stack=[${stackWords.join(" ")}]`
+            );
+          }
+        }
         if (earlyTraceCount < 32) {
           const a4Now = this.emulator.getRegister(12);
           const a5Now = this.emulator.getRegister(13);
