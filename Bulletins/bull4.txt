@@ -20,5 +20,5 @@
 [33m14.[0m                                    [33m29.[0m                                   
 [33m15.[0m                                    [33m30.[0m                                   
 [34m===-===========================-======-===-===========================-======[0m
-[32mUploaded Bytes[33m: [0m     1 024 000 [32mDownloaded Bytes[33m: [0m       512 000 [32mMsgs [33m: [0m     0
+[32mUploaded Bytes[33m: [0m     1,024,000 [32mDownloaded Bytes[33m: [0m       512,000 [32mMsgs [33m: [0m     0
 [32mUploaded Files[33m: [0m            10 [32mDownloaded Files[33m: [0m             5 [32mUsers[33m: [0m     2

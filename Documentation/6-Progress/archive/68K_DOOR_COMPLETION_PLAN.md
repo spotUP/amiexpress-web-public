@@ -404,7 +404,7 @@ Before merging each phase:
 **Testing**:
 - `dev/scripts/test-all-68k-doors.sh` - Full door test suite
 - `dev/scripts/test-door-install.ts` - Single door test
-- `web/backend/src/scripts/run-amiga-door.ts` - Standalone runner
+- `scripts/run-amiga-door.ts` - Standalone runner
 
 ---
 

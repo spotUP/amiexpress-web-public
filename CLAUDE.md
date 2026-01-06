@@ -195,13 +195,7 @@ Default to desktop-like neo-blessed interfaces: windowed layouts, panels, menu b
 
 **DO NOT ask user to check** - use tools yourself and report findings.
 
-### 9. NO BACKGROUND PROCESSES
 
-**NEVER:** `run_in_background: true`, `&` for servers, start/restart servers, multiple server ops per session.
-
-**Why:** Zombies create persistent refs (100-200 tokens each) → thousands wasted.
-
-**Do:** Sync commands, ask user to run `./dev/scripts/start-servers.sh`, check servers (never restart), max 1 server op/session.
 
 ### 10. DISK-BASED CONFIGURATION
 

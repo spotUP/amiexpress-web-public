@@ -2,7 +2,7 @@
 **Deeper tutorials (BBS-CLI, manual test lists, Arexx phases) now live in `archive/`.**
 
 ## 1. Environment Setup
-- Install Node 18+, npm 10+, and `tsx` (or use `npx tsx`) to run the backend/door scripts (`npx tsx web/backend/src/scripts/run-amiga-door.ts ...`).
+- Install Node 18+, npm 10+, and `tsx` (or use `npx tsx`) to run the backend/door scripts (`npx tsx scripts/run-amiga-door.ts ...`).
 - Clone the repo, run `npm install` in `web/backend` and `web/frontend`, and copy `.env.example` to `.env`.
 - The backend uses TypeScript—compile with `npm run build` or run through `tsx` for development (debug with `DEBUG_XIM_OUTPUT=1`).
 

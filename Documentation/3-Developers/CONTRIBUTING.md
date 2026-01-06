@@ -8,7 +8,7 @@
 
 ## 2. Workflow
 1. Fork repo, create a branch naming the feature plus ticket (e.g., `doc/aquascan-summary`).
-2. Run `npm run lint` and `npm run test`. For door work, use `npx tsx web/backend/src/scripts/run-amiga-door.ts Doors/<Door>/...` to prove the run.
+2. Run `npm run lint` and `npm run test`. For door work, use `npx tsx scripts/run-amiga-door.ts Doors/<Door>/...` to prove the run.
 3. Draft a PR referencing `PR_DESCRIPTION.md` for required sections (Summary, Testing, Next steps) and cite relevant docs.
 
 ## 3. Review & Stories

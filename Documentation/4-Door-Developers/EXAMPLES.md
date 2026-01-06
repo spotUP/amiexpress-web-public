@@ -2,7 +2,7 @@
 **Example walkthroughs (AquaScan run logs, Who door flows, Bulls fixes) now live in `archive/`.**
 
 ## 1. AquaScan
-- Run via `npx tsx web/backend/src/scripts/run-amiga-door.ts Doors/AquaScan/AquaScan.000 1 "FR"` to reproduce the FR listing.
+- Run via `npx tsx scripts/run-amiga-door.ts Doors/AquaScan/AquaScan.000 1 "FR"` to reproduce the FR listing.
 - Camera line parsing now flags ASCII art lines and stores them in the continuation block so the main metadata line stays clean; refer to `dir-file.util.ts` for the detection logic.
 - When AquaScan prints ASCII logos, the updated door code pauses based on the user’s stored terminal height; the harness log shows the `press <RETURN>` prompt matching express.e.
 

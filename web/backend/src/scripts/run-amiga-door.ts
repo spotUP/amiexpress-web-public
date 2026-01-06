@@ -79,13 +79,14 @@ async function main(): Promise<void> {
     : path.join(process.cwd(), doorPathArg);
 
   const parsed = parseArgs(rest);
+  const doorArgs = [String(nodeId), ...parsed.args];
   const socket = new MockSocket();
 
   const amigaSession = new AmigaDoorSession(socket as any, {
     executablePath: resolvedDoorPath,
     doorType: parsed.doorType,
     timeout: parsed.timeout ?? 300,
-    args: parsed.args,
+    args: doorArgs,
     assigns: parsed.assigns,
     toolTypes: parsed.toolTypes,
     bbsSession: {

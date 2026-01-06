@@ -7,30 +7,30 @@
 ```bash
 # Basic test
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/YourDoor/YourDoor 1
 
 # With arguments
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/YourDoor/YourDoor 1 arg1 arg2 arg3
 
 # With stdout redirect
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
 AEDOOR_STDOUT=/tmp/output.txt \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/YourDoor/YourDoor 1
 
 # With higher loop limit
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
 AEDOOR_LOOP_LIMIT=1000000 \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/YourDoor/YourDoor 1
 
 # With verbose logging
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
 AEDOOR_DEBUG_LEVEL=verbose DOOR_TRACE_REGS=1 \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/YourDoor/YourDoor 1 2>&1 | tee /tmp/debug.log
 ```
 
@@ -161,7 +161,7 @@ grep "door=QuickNew" logs/door-68k.log | tail -50
 
 2. **Run the door**:
    ```bash
-   npx tsx web/backend/src/scripts/run-amiga-door.ts Doors/YourDoor/door 1 2>&1 | tee debug.log
+   npx tsx scripts/run-amiga-door.ts Doors/YourDoor/door 1 2>&1 | tee debug.log
    ```
 
 3. **Check for errors**:
@@ -214,7 +214,7 @@ See `DOOR_DEVELOPMENT.md` for TypeScript porting guide.
 **Want to add a simple 68K door?**
 
 1. Copy door binary to `Doors/YourDoor/`
-2. Test it: `BBS_DATA_DIR=$PWD AEDOOR_ROM=kickstart npx tsx web/backend/src/scripts/run-amiga-door.ts Doors/YourDoor/door 1`
+2. Test it: `BBS_DATA_DIR=$PWD AEDOOR_ROM=kickstart npx tsx scripts/run-amiga-door.ts Doors/YourDoor/door 1`
 3. If it works, add to batch file: `doors:yourdoor/door`
 4. Done!
 

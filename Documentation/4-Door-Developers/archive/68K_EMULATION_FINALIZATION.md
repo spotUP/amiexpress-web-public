@@ -195,7 +195,7 @@ doors:multitop/mtop doors:multitop/designs/mtopulbytes1.dsg bbs:bulletins/bull1.
 Test individual door:
 ```bash
 BBS_DATA_DIR=/path/to/bbs AEDOOR_ROM=kickstart \
-npx tsx web/backend/src/scripts/run-amiga-door.ts \
+npx tsx scripts/run-amiga-door.ts \
 Doors/QuickNew/QuickNew 1 \
 /path/to/bbs/Doors/QuickNew/QuickNew.Config1 7
 ```
