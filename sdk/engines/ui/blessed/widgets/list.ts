@@ -293,6 +293,21 @@ export class List extends Element {
       return true;
     }
 
+    // Left/Right - Page Up/Down navigation
+    if (key.name === 'left' || key.name === 'pageup') {
+      const jump = Math.min(10, this.selected);
+      this.select(this.selected - jump);
+      this.screen?.render();
+      return true;
+    }
+
+    if (key.name === 'right' || key.name === 'pagedown') {
+      const jump = Math.min(10, this.items.length - 1 - this.selected);
+      this.select(this.selected + jump);
+      this.screen?.render();
+      return true;
+    }
+
     // Home/End - jump to first/last item
     if (key.name === 'home' || (vi && key.name === 'g')) {
       this.select(0);
@@ -302,21 +317,6 @@ export class List extends Element {
 
     if (key.name === 'end' || (vi && key.name === 'G')) {
       this.select(this.items.length - 1);
-      this.screen?.render();
-      return true;
-    }
-
-    // Page Up/Down - jump by 10 items (or visible height if available)
-    if (key.name === 'pageup') {
-      const jump = Math.min(10, this.selected);
-      this.select(this.selected - jump);
-      this.screen?.render();
-      return true;
-    }
-
-    if (key.name === 'pagedown') {
-      const jump = Math.min(10, this.items.length - 1 - this.selected);
-      this.select(this.selected + jump);
       this.screen?.render();
       return true;
     }
