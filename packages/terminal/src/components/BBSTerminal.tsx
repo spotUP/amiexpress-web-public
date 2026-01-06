@@ -618,7 +618,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Movement keys (arrows, WASD, space) don't repeat - games should use key state tracking
     // Typing keys have initial delay before repeat for single character typing
     const KEY_REPEAT_DELAY = 250;  // Initial delay before repeat starts (ms) - allows single char typing
-    const KEY_REPEAT_RATE = 33;    // Interval between repeats (ms) - 30 keys/sec
+    const KEY_REPEAT_RATE = 100;    // Interval between repeats (ms) - 10 keys/sec (increased from 33ms to fix jumpy scrolling)
 
     // Keys that should NOT auto-repeat
     // NOTE: Arrow keys REMOVED to enable list navigation in neo-blessed UIs

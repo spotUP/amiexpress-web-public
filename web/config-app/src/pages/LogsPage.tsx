@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Search, Trash2, Download, Terminal, Filter, Info, ExternalLink } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -17,6 +17,13 @@ interface LogData {
   environment?: Environment;
 }
 
+interface DoorLogFile {
+  file: string;
+  label: string;
+  size: number;
+  modifiedAt: string | null;
+}
+
 export function LogsPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
@@ -25,15 +32,23 @@ export function LogsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [doorLog, setDoorLog] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['logs', logType, lineCount, searchTerm],
-    queryFn: () => apiClient.getLogs(logType, lineCount, searchTerm),
+    queryKey: ['logs', logType, lineCount, searchTerm, doorLog],
+    queryFn: () => apiClient.getLogs(logType, lineCount, searchTerm, logType === 'door68k' ? doorLog : undefined),
     refetchInterval: autoRefresh ? 3000 : false,
   });
 
+  const { data: doorLogsData } = useQuery({
+    queryKey: ['door-logs'],
+    queryFn: () => apiClient.getDoorLogFiles(),
+    enabled: logType === 'door68k',
+    refetchInterval: logType === 'door68k' && autoRefresh ? 5000 : false,
+  });
+
   const clearMutation = useMutation({
-    mutationFn: (type: string) => apiClient.clearLogs(type),
+    mutationFn: (params: { type: string; doorLog?: string }) => apiClient.clearLogs(params.type, params.doorLog),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['logs'] });
       showSuccess(`${logType} log cleared successfully`);
@@ -44,8 +59,29 @@ export function LogsPage() {
   });
 
   const logData = data?.data as LogData | undefined;
+  const doorLogs = (doorLogsData?.data?.files || []) as DoorLogFile[];
+
+  useEffect(() => {
+    if (logType !== 'door68k') {
+      return;
+    }
+    if (doorLogs.length === 0) {
+      if (doorLog) {
+        setDoorLog('');
+      }
+      return;
+    }
+    if (!doorLog || !doorLogs.some((log) => log.file === doorLog)) {
+      setDoorLog(doorLogs[0].file);
+    }
+  }, [logType, doorLogs, doorLog]);
 
   const handleClearLog = async () => {
+    if (logType === 'door68k' && !doorLog) {
+      showError('No 68K door log selected');
+      return;
+    }
+
     const confirmed = await confirm({
       title: 'Clear Log File?',
       message: `Are you sure you want to clear the ${logType} log file? This action cannot be undone.`,
@@ -55,7 +91,10 @@ export function LogsPage() {
     });
 
     if (confirmed) {
-      clearMutation.mutate(logType);
+      clearMutation.mutate({
+        type: logType,
+        doorLog: logType === 'door68k' ? doorLog : undefined
+      });
     }
   };
 
@@ -63,15 +102,18 @@ export function LogsPage() {
     setSearchTerm(searchInput);
   };
 
-const handleDownload = () => {
+  const handleDownload = () => {
     if (!logData?.lines) return;
 
     const content = logData.lines.reverse().join('\n');
+    const baseName = logType === 'door68k' && doorLog
+      ? doorLog.replace(/\.log$/, '')
+      : logType;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${logType}-${new Date().toISOString().slice(0, 10)}.log`;
+    a.download = `${baseName}-${new Date().toISOString().slice(0, 10)}.log`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -216,6 +258,28 @@ const handleDownload = () => {
             </select>
           </div>
 
+          {logType === 'door68k' && (
+            <div>
+              <label className="label">68K Door Log</label>
+              <select
+                value={doorLog}
+                onChange={(e) => setDoorLog(e.target.value)}
+                className="input-field w-full"
+                disabled={doorLogs.length === 0}
+              >
+                {doorLogs.length === 0 ? (
+                  <option value="">No 68K door logs found</option>
+                ) : (
+                  doorLogs.map((log) => (
+                    <option key={log.file} value={log.file}>
+                      {log.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
+
           {/* Line Count */}
           <div>
             <label className="label">Lines to Display</label>
@@ -305,6 +369,12 @@ const handleDownload = () => {
               <span className="text-bbs-muted">Log Type:</span>
               <span className="text-bbs-text font-semibold uppercase">{logType}</span>
             </div>
+            {logType === 'door68k' && doorLog && (
+              <div className="flex items-center space-x-2">
+                <span className="text-bbs-muted">Log File:</span>
+                <span className="text-bbs-text font-semibold">{doorLog}</span>
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <Filter size={16} className="text-bbs-accent" />
               <span className="text-bbs-muted">Total Lines:</span>

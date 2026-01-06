@@ -531,17 +531,26 @@ class ApiClient {
   }
 
   // Logs
-  async getLogs(type: string = 'backend', lines: number = 500, search: string = '') {
+  async getLogs(type: string = 'backend', lines: number = 500, search: string = '', doorLog?: string) {
     const params = new URLSearchParams();
     params.append('type', type);
     params.append('lines', lines.toString());
     if (search) params.append('search', search);
+    if (doorLog) params.append('doorLog', doorLog);
 
     return this.request<ApiResponse>(`${API_BASE}/config/logs?${params.toString()}`);
   }
 
-  async clearLogs(type: string = 'backend') {
-    return this.request<ApiResponse>(`${API_BASE}/config/logs?type=${type}`, {
+  async getDoorLogFiles() {
+    return this.request<ApiResponse>(`${API_BASE}/config/logs/door-68k`);
+  }
+
+  async clearLogs(type: string = 'backend', doorLog?: string) {
+    const params = new URLSearchParams();
+    params.append('type', type);
+    if (doorLog) params.append('doorLog', doorLog);
+
+    return this.request<ApiResponse>(`${API_BASE}/config/logs?${params.toString()}`, {
       method: 'DELETE',
     });
   }
