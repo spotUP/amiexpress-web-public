@@ -1,0 +1,19 @@
+{
+  "name": "@amiexpress/rip-browser",
+  "version": "1.0.0",
+  "description": "RIP Graphics Browser for AmiExpress-Web",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node index.ts",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
