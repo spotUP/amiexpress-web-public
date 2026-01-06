@@ -16,6 +16,6 @@
 
      [0m5D-MBS2.LHA   ACS-HACK.LHA  
 
-[44;33m  QuickNew V2.2 (Web)[36m Date : 01-06-26  [35m Time : 02:12:06  
+[44;33m  QuickNew V2.2 (Web)[36m Date : 01-06-26  [35m Time : 02:28:59  
 [0m
 ~SP.

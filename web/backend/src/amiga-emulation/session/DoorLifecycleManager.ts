@@ -110,6 +110,7 @@ export class DoorLifecycleManager {
   private watchAutoLower: number = 0;
   private watchAutoUpper: number = 0;
   private lastA5OutOfRangeLogged: number = 0;
+  private lastA4ZeroLogged = false;
 
   constructor(
     emulator: MoiraEmulator,
@@ -932,6 +933,18 @@ console.log(
           }
         })
         .join(",");
+      if (a4 === 0 && !this.lastA4ZeroLogged) {
+        this.lastA4ZeroLogged = true;
+console.error(
+          `[DoorLifecycleManager] CRITICAL: A4 became 0 pc=0x${pc.toString(
+            16
+          )} sp=0x${sp.toString(16)} a5=0x${a5.toString(
+            16
+          )} a6=0x${this.emulator.getRegister(14).toString(
+            16
+          )} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}]`
+        );
+      }
 console.log(
         `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(
           16
