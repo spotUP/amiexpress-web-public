@@ -258,6 +258,12 @@ export class List extends Element {
     (this as any)._lines = newLines;
     this.content = newLines.join('\n');
     (this as any)._contentDirty = false;
+
+    // Clamp scroll position after content update
+    const maxScroll = this.getScrollHeight();
+    if ((this as any).childBase > maxScroll) {
+      (this as any).childBase = maxScroll;
+    }
   }
 
   private _onKeypress(ch: any, key: KeyEvent): boolean {
@@ -827,17 +833,34 @@ export class List extends Element {
     const handled = super.onMouse(event);
 
     if (event.action !== 'mousemove') return handled;
+    
+    // Skip hover logic if we are currently dragging the scrollbar
+    if ((this as any)._scrollbarDragging) return handled;
 
     // Calculate which item the mouse is over
     const coords = this._getCoords();
     if (!coords) return handled;
 
-    // Get relative y position within the list content area
+    // Skip hover logic if mouse is over the scrollbar area (rightmost column)
     const border = this.options.border ? 1 : 0;
+    if (this.hasScrollbar() && event.x === coords.xl - border - 1) {
+      if (this._hoveredItem !== -1) {
+        this._hoveredItem = -1;
+        this._updateContent();
+        this.screen?.render();
+      }
+      return handled;
+    }
+
+    // Get relative y position within the list content area
     const relY = event.y - coords.yi - border;
 
-    if (relY < 0) {
-      this._hoveredItem = -1;
+    if (relY < 0 || relY >= this.iheight) {
+      if (this._hoveredItem !== -1) {
+        this._hoveredItem = -1;
+        this._updateContent();
+        this.screen?.render();
+      }
       return handled;
     }
 
@@ -851,6 +874,10 @@ export class List extends Element {
     if (itemIndex !== undefined && itemIndex !== this._hoveredItem) {
       this._hoveredItem = itemIndex;
       this._updateContent();  // Redraw with new hover state
+      this.screen?.render();
+    } else if (itemIndex === undefined && this._hoveredItem !== -1) {
+      this._hoveredItem = -1;
+      this._updateContent();
       this.screen?.render();
     }
 

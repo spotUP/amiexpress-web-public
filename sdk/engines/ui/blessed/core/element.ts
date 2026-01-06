@@ -59,7 +59,7 @@ export class Element extends EventEmitter {
   }
 
   // Scrolling
-  private childBase: number = 0;
+  protected childBase: number = 0;
   private childOffset: number = 0;
 
   // Mouse/Keyboard
@@ -79,7 +79,7 @@ export class Element extends EventEmitter {
   private _drag?: { x: number; y: number };
 
   // Scrollbar drag tracking
-  private _scrollbarDragging: boolean = false;
+  protected _scrollbarDragging: boolean = false;
   private _scrollbarDragStartY: number = 0;
   private _scrollbarDragStartBase: number = 0;
   private _scrollbarMouseMoveHandler?: (data: any) => void;
