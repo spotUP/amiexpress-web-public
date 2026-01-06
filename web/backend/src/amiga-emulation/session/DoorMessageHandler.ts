@@ -266,6 +266,12 @@ console.log("[DoorMessageHandler] Sending INIT/STAT startup messages for XIM doo
     // CRITICAL: Many XIM doors (AquaScan, JoinCnf, etc.) expect INIT/STAT messages BEFORE
     // sending JH_REGISTER. Without these, doors sit in tight polling loops waiting forever.
     // See express.e:3343-3355 for AEDoor protocol initialization.
+    if (this.execLibrary.isLibraryNative("AEDoor.library")) {
+console.log(
+        "[DoorMessageHandler] Skipping INIT/STAT (native AEDoor.library handles startup messages)"
+      );
+      return;
+    }
     this.sendInitAndStatusMessages();
   }
 
@@ -274,6 +280,12 @@ console.log("[DoorMessageHandler] Sending INIT/STAT startup messages for XIM doo
    * layout (Exec message header + command at offset 0x14/0x18).
    */
   sendInitAndStatusMessages(): void {
+    if (this.execLibrary.isLibraryNative("AEDoor.library")) {
+console.log(
+        "[DoorMessageHandler] Skipping INIT/STAT (native AEDoor.library handles startup messages)"
+      );
+      return;
+    }
     if (this.sentInitialMessage) {
       return;
     }
@@ -572,6 +584,12 @@ console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}`);
         // Wait 500ms - if no follow-up messages arrive, assume old-style and send INIT/STAT.
         this.receivedPostRegisterMessage = false;
         this.oldStyleDoorTimer = setTimeout(() => {
+          if (this.execLibrary.isLibraryNative("AEDoor.library")) {
+console.log(
+              "[DoorMessageHandler] Skipping INIT/STAT fallback (native AEDoor.library handles startup messages)"
+            );
+            return;
+          }
           if (!this.receivedPostRegisterMessage) {
 console.log(`[DoorMessageHandler] No post-register messages received - assuming old-style door`);
 console.log(`[DoorMessageHandler] Sending INIT/STAT messages for compatibility`);

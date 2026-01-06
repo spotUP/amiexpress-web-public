@@ -123,11 +123,8 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
         continue;
       }
 
-      // Remove leading junk commonly found in binary buffers before strings
-      let cleanLine = trimmed.replace(/^[^a-zA-Z0-9+(%#']+/g, '');
-      if (cleanLine.startsWith('+') || cleanLine.startsWith('#') || cleanLine.startsWith('%') || cleanLine.startsWith("'")) {
-        cleanLine = cleanLine.substring(1);
-      }
+      // Strip leading non-alphanumeric junk from binary buffers (e.g., *LOCATION, $LOCATION)
+      let cleanLine = trimmed.replace(/^[^A-Za-z0-9]+/g, '');
 
       const eqIdx = cleanLine.indexOf('=');
       if (eqIdx !== -1) {

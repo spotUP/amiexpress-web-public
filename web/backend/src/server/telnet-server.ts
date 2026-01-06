@@ -38,6 +38,7 @@ const TELOPT_STATUS = 5;      // Status
 const TELOPT_TIMING_MARK = 6; // Timing Mark
 const TELOPT_TTYPE = 24;      // Terminal Type (RFC 1091)
 const TELOPT_NAWS = 31;       // Negotiate About Window Size (RFC 1073)
+const TELOPT_LINEMODE = 34;   // Linemode (RFC 1184)
 
 // TTYPE subnegotiation commands
 const TTYPE_SEND = 1;         // Request terminal type
@@ -96,6 +97,10 @@ export class TelnetConnection extends EventEmitter {
    * Send WILL/DO commands for supported options
    */
   private initializeTelnet(): void {
+    // Request character-at-a-time mode (disable linemode)
+    this.sendCommand([IAC, DONT, TELOPT_LINEMODE]);
+    this.sendCommand([IAC, WONT, TELOPT_LINEMODE]);
+
     // Request client terminal type (RFC 1091)
     this.sendCommand([IAC, DO, TELOPT_TTYPE]);
 
@@ -126,6 +131,8 @@ export class TelnetConnection extends EventEmitter {
         case IACState.NORMAL:
           if (byte === IAC) {
             this.iacState = IACState.IAC_SEEN;
+          } else if (byte === 0) {
+            // Telnet clients often send CR NUL; ignore NUL padding
           } else {
             output.push(byte);
           }
@@ -420,6 +427,9 @@ console.log('[Telnet Server] Stopped');
   private handleConnection(socket: Socket): void {
     const remoteAddress = socket.remoteAddress || 'unknown';
 console.log(`[Telnet Server] New connection from ${remoteAddress}`);
+
+    // Reduce input latency (especially noticeable under modem emulation)
+    socket.setNoDelay(true);
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
 console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);

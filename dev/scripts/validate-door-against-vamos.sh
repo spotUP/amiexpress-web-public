@@ -38,7 +38,7 @@ echo ""
 echo "[EMULATOR] Running $DOOR_NAME..."
 EMU_OUT=$(mktemp)
 cd ~/Code/amiexpress-web
-BBS_DATA_DIR=~/Code/amiexpress-web AEDOOR_ROM=kickstart timeout 10 npx tsx web/backend/src/scripts/run-amiga-door.ts "$DOOR_PATH" 1 2>&1 | cat > "$EMU_OUT" || true
+BBS_DATA_DIR=~/Code/amiexpress-web AEDOOR_ROM=kickstart timeout 10 npx tsx scripts/run-amiga-door.ts "$DOOR_PATH" 1 2>&1 | cat > "$EMU_OUT" || true
 
 # Extract key info from emulator (use -a for text mode)
 EMU_CODE=$(grep -a "Segment 0: CODE at" "$EMU_OUT" | head -1 | sed 's/.*CODE at \(0x[0-9a-f]*\).*/\1/' || echo "unknown")

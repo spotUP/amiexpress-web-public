@@ -5,6 +5,8 @@
  * Uses the compiled backend (dist) so remember to rebuild after source changes.
  */
 
+require('../web/backend/node_modules/reflect-metadata');
+
 const path = require('path');
 const { EventEmitter } = require('events');
 const { AmigaDoorSession } = require('../web/backend/dist/amiga-emulation/AmigaDoorSession.js');

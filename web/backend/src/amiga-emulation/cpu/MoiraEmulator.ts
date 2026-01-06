@@ -934,6 +934,101 @@ console.log(
     }
   }
 
+  /**
+   * Set watchpoint range for memory writes
+   */
+  setWatchRange(start: number, end: number): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setWatchRange) {
+      this.cpu.setWatchRange(start, end);
+console.log(
+        `[MoiraEmulator] Watch range set: 0x${start.toString(
+          16
+        )}-0x${end.toString(16)}`
+      );
+    } else {
+console.warn("[MoiraEmulator] setWatchRange not available (rebuild WASM)");
+    }
+  }
+
+  /**
+   * Enable JSR/RTS call tracking
+   */
+  enableCallTracking(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.enableCallTracking) {
+      this.cpu.enableCallTracking(enabled);
+console.log(
+        `[MoiraEmulator] Call tracking: ${enabled ? "ON" : "OFF"}`
+      );
+    }
+  }
+
+  /**
+   * Check if call tracking is enabled
+   */
+  isCallTrackingEnabled(): boolean {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.isCallTrackingEnabled) {
+      return this.cpu.isCallTrackingEnabled();
+    }
+    return false;
+  }
+
+  getCallStackDepth(): number {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.getCallStackDepth) {
+      return this.cpu.getCallStackDepth();
+    }
+    return 0;
+  }
+
+  getCallStackEntry(index: number): number {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.getCallStackEntry) {
+      return this.cpu.getCallStackEntry(index);
+    }
+    return 0;
+  }
+
+  getCallSite(index: number): number {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.getCallSite) {
+      return this.cpu.getCallSite(index);
+    }
+    return 0;
+  }
+
+  dumpCallStack(): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.dumpCallStack) {
+      this.cpu.dumpCallStack();
+    }
+  }
+
+  clearCallStack(): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.clearCallStack) {
+      this.cpu.clearCallStack();
+    }
+  }
+
   cleanup(): void {
     if (this.cpu) {
       this.cpu.delete();

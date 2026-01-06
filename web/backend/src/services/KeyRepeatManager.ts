@@ -36,7 +36,7 @@ export class KeyRepeatManager {
     this.inputCallback = inputCallback;
     this.config = {
       initialDelay: config?.initialDelay ?? 250,  // 250ms delay allows single char typing
-      repeatInterval: config?.repeatInterval ?? 50,  // 20 keys/sec
+      repeatInterval: config?.repeatInterval ?? 100,  // 10 keys/sec
     };
   }
 

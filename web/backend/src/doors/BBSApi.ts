@@ -1213,5 +1213,7 @@ console.error('[BBSApi.deleteDoor] Error:', error);
  * Create BBS API instance for a door session
  */
 export function createBBSApi(socket: Socket, session: BBSSession): BBSApi {
-  return new BBSApi(socket, session);
+  const api = new BBSApi(socket, session);
+  console.log('[createBBSApi] Created BBSApi, has enableMouseEvents:', typeof api.enableMouseEvents);
+  return api;
 }

@@ -256,6 +256,9 @@ console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
     }
 
     // Write to JSON log
+    if (this.jsonEnabled) {
+      this.ensureJsonLogStream();
+    }
     if (this.jsonEnabled && this.logStream) {
       this.logStream.write(JSON.stringify(entry) + '\n');
     } else if (message.type !== 'LOG_START' && message.type !== 'LOG_END') {
@@ -266,6 +269,20 @@ console.log(`[XIMLogger] NOT writing to JSON: jsonEnabled=${this.jsonEnabled} lo
     // Write to console (human-readable)
     if (this.enabled || this.jsonEnabled) {
       this.logToConsole(entry);
+    }
+  }
+
+  private ensureJsonLogStream() {
+    if (!this.jsonEnabled) {
+      return;
+    }
+    const logMissing = !fs.existsSync(this.logFile);
+    if (!this.logStream || logMissing) {
+      if (this.logStream) {
+        this.logStream.end();
+        this.logStream = null;
+      }
+      this.initLogStream();
     }
   }
 

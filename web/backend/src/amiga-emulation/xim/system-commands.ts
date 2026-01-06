@@ -67,12 +67,13 @@ export class XIMSystemCommandsHandler {
 
     if (isInputRequest) {
       // This door uses XIM input commands - it's definitely an XIM door, not native
-      // Clear native flag to prevent injection
-      if (this.state.isNativeDoor) {
-        console.log(`[XIMSystem] Door sent XIM input request (cmd=${command}) - NOT a native door`);
-        this.state.isNativeDoor = false;
+      if (this.oldStyleDoorTimer) {
+        console.log(`[XIMSystem] Door sent XIM input request (cmd=${command}) - canceling native fallback`);
+        clearTimeout(this.oldStyleDoorTimer);
+        this.oldStyleDoorTimer = null;
       }
-      // Don't cancel timer for input requests - wait to see if data requests come
+      this.receivedPostRegisterMessage = true;
+      this.state.isNativeDoor = false;
       return;
     }
 

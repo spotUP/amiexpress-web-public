@@ -48,51 +48,62 @@ export class XIMMessageParser {
     const replyPort = this.emulator.readMemory32(
       msgAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET
     );
-    const command = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
-    const data = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET);
-    const nodeId = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_NODE_OFFSET);
-    const lineNumber = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_LINE_OFFSET);
-    const signal = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SIGNAL_OFFSET);
-    const task = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_TASK_OFFSET);
+    const layout = this.getMessageLayout(messageLength);
+    const offsets = this.getLayoutOffsets(layout);
+
+    const command = layout === 'short'
+      ? this.emulator.readMemory16(msgAddr + offsets.command)
+      : this.emulator.readMemory32(msgAddr + offsets.command);
+    const data = layout === 'short'
+      ? this.emulator.readMemory16(msgAddr + offsets.data)
+      : this.emulator.readMemory32(msgAddr + offsets.data);
+    const nodeId = layout === 'short'
+      ? this.emulator.readMemory16(msgAddr + offsets.node)
+      : this.emulator.readMemory32(msgAddr + offsets.node);
+    const lineNumber = layout === 'short'
+      ? this.emulator.readMemory16(msgAddr + offsets.line)
+      : this.emulator.readMemory32(msgAddr + offsets.line);
+    const signal = this.emulator.readMemory32(msgAddr + offsets.signal);
+    const task = this.emulator.readMemory32(msgAddr + offsets.task);
     const hasSemaphore = this.hasFieldLength(
       messageLength,
-      DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
+      offsets.semaphore,
       4
     );
     const hasFiller1 = this.hasFieldLength(
       messageLength,
-      DoorConstants.MESSAGE_FILLER1_OFFSET,
+      offsets.filler1,
       4
     );
     const hasFiller2 = this.hasFieldLength(
       messageLength,
-      DoorConstants.MESSAGE_FILLER2_OFFSET,
+      offsets.filler2,
       4
     );
     const hasStringPtr = this.hasFieldLength(
       messageLength,
-      DoorConstants.MESSAGE_STRING_PTR_OFFSET,
+      offsets.stringPtr,
       4
     );
     const hasFiller3 = this.hasFieldLength(
       messageLength,
-      DoorConstants.MESSAGE_FILLER3_OFFSET,
+      offsets.filler3,
       4
     );
     const semaphore = hasSemaphore
-      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_SEMAPHORE_OFFSET)
+      ? this.emulator.readMemory32(msgAddr + offsets.semaphore)
       : undefined;
     const filler1 = hasFiller1
-      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET)
+      ? this.emulator.readMemory32(msgAddr + offsets.filler1)
       : undefined;
     const filler2 = hasFiller2
-      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER2_OFFSET)
+      ? this.emulator.readMemory32(msgAddr + offsets.filler2)
       : undefined;
     const stringPtr = hasStringPtr
-      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_STRING_PTR_OFFSET)
+      ? this.emulator.readMemory32(msgAddr + offsets.stringPtr)
       : undefined;
     const filler3 = hasFiller3
-      ? this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER3_OFFSET)
+      ? this.emulator.readMemory32(msgAddr + offsets.filler3)
       : undefined;
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
@@ -102,9 +113,26 @@ export class XIMMessageParser {
       DoorConstants.MESSAGE_STRING_CAPACITY
     );
 
+    if (messageString.toLowerCase().startsWith('bbs:')) {
+      const rawData32 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET);
+      const rawCmd32 = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
+      const rawBytes: number[] = [];
+      const dumpBase = msgAddr + DoorConstants.MESSAGE_DATA_OFFSET;
+      for (let i = 0; i < 16; i++) {
+        rawBytes.push(this.emulator.readMemory(dumpBase + i) & 0xff);
+      }
+      const rawHex = rawBytes.map((b) => b.toString(16).padStart(2, '0')).join(' ');
+      const data16 = this.emulator.readMemory16(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET);
+      const cmd16 = this.emulator.readMemory16(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET);
+      const cmd16Alt = this.emulator.readMemory16(msgAddr + DoorConstants.MESSAGE_COMMAND_OFFSET - 2);
+console.log(`[XIMMessageParser] bbs: raw data=0x${rawData32.toString(16)} raw cmd=0x${rawCmd32.toString(16)} msgAddr=0x${msgAddr.toString(16)}`);
+console.log(`[XIMMessageParser] bbs: raw bytes @0x${dumpBase.toString(16)}: ${rawHex}`);
+console.log(`[XIMMessageParser] bbs: data16=${data16} cmd16@e0=${cmd16} cmd16@de=${cmd16Alt}`);
+    }
+
 console.log("[XIMMessageParser] Parsed jhMessage:");
 console.log(`  Address: 0x${msgAddr.toString(16)}`);
-console.log(`  Length: ${messageLength}`);
+console.log(`  Length: ${messageLength} (layout=${layout})`);
 console.log(`  Reply Port: 0x${replyPort.toString(16)}`);
 console.log(`  Command: ${command} (${this.getCommandName(command)})`);
 console.log(`  Data: ${data} (0x${data.toString(16)})`);
@@ -114,6 +142,20 @@ console.log(`  Semi: ${this.formatHex(semaphore)}`);
 console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
 console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
 console.log(`  String: "${messageString}"`);
+    if (layout === 'short') {
+      const dumpBase = msgAddr + offsets.data;
+      const raw: number[] = [];
+      for (let i = 0; i < 16; i++) {
+        raw.push(this.emulator.readMemory(dumpBase + i) & 0xff);
+      }
+      const rawHex = raw.map((b) => b.toString(16).padStart(2, '0')).join(' ');
+console.log(`  Raw @0x${dumpBase.toString(16)} (data..filler2): ${rawHex}`);
+      const data16 = this.emulator.readMemory16(msgAddr + offsets.data);
+      const cmd16 = this.emulator.readMemory16(msgAddr + offsets.command);
+      const node16 = this.emulator.readMemory16(msgAddr + offsets.node);
+      const line16 = this.emulator.readMemory16(msgAddr + offsets.line);
+console.log(`  Raw16 data=${data16} cmd=${cmd16} node=${node16} line=${line16}`);
+    }
 
     return {
       msgAddr,
@@ -194,66 +236,84 @@ console.log(`  String: "${messageString}"`);
    * Write reply data/result (msg->Data)
    */
   writeData(msgAddr: number, value: number): void {
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_DATA_OFFSET, value);
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    this.writeValue(msgAddr, offsets.data, value, layout === 'short' ? 2 : 4);
   }
 
   /**
    * Write Command (msg->Command)
    */
   writeCommand(msgAddr: number, value: number): void {
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_COMMAND_OFFSET, value);
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    this.writeValue(msgAddr, offsets.command, value, layout === 'short' ? 2 : 4);
   }
 
   /**
    * Write LineNum (msg->LineNum)
    */
   writeLineNumber(msgAddr: number, value: number): void {
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_LINE_OFFSET, value);
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    this.writeValue(msgAddr, offsets.line, value, layout === 'short' ? 2 : 4);
   }
 
   /**
    * Write NodeID (msg->NodeID)
    */
   writeNodeId(msgAddr: number, value: number): void {
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_NODE_OFFSET, value);
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    this.writeValue(msgAddr, offsets.node, value, layout === 'short' ? 2 : 4);
   }
 
   /**
    * Write semaphore/filler pointers
    */
   writeSemaphore(msgAddr: number, value: number): void {
-    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_SEMAPHORE_OFFSET, 4)) {
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    if (!this.hasField(msgAddr, offsets.semaphore, 4)) {
       return;
     }
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_SEMAPHORE_OFFSET, value);
+    this.writeValue(msgAddr, offsets.semaphore, value, 4);
   }
 
   writeFiller1(msgAddr: number, value: number): void {
-    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER1_OFFSET, 4)) {
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    if (!this.hasField(msgAddr, offsets.filler1, 4)) {
       return;
     }
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER1_OFFSET, value);
+    this.writeValue(msgAddr, offsets.filler1, value, 4);
   }
 
   writeFiller2(msgAddr: number, value: number): void {
-    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER2_OFFSET, 4)) {
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    if (!this.hasField(msgAddr, offsets.filler2, 4)) {
       return;
     }
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER2_OFFSET, value);
+    this.writeValue(msgAddr, offsets.filler2, value, 4);
   }
 
   writeFiller3(msgAddr: number, value: number): void {
-    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_FILLER3_OFFSET, 4)) {
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    if (!this.hasField(msgAddr, offsets.filler3, 4)) {
       return;
     }
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_FILLER3_OFFSET, value);
+    this.writeValue(msgAddr, offsets.filler3, value, 4);
   }
 
   writeStringPointer(msgAddr: number, value: number): boolean {
-    if (!this.hasField(msgAddr, DoorConstants.MESSAGE_STRING_PTR_OFFSET, 4)) {
+    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const offsets = this.getLayoutOffsets(layout);
+    if (!this.hasField(msgAddr, offsets.stringPtr, 4)) {
       return false;
     }
-    this.writeWithBias(msgAddr, DoorConstants.MESSAGE_STRING_PTR_OFFSET, value);
+    this.writeValue(msgAddr, offsets.stringPtr, value, 4);
     return true;
   }
 
@@ -552,7 +612,11 @@ console.log(`  String: "${messageString}"`);
    * Previous bug: writeData(0xdc) also wrote to 0xf0 (MESSAGE_TASK_OFFSET)
    * Result: Door crashed when processing reply with corrupted task pointer
    */
-  private writeWithBias(msgAddr: number, offset: number, value: number): void {
+  private writeValue(msgAddr: number, offset: number, value: number, size: number): void {
+    if (size === 2) {
+      this.emulator.writeMemory16(msgAddr + offset, value & 0xffff);
+      return;
+    }
     // Only write to canonical offset - no biased write for XIM messages
     this.emulator.writeMemory32(msgAddr + offset, value);
 
@@ -564,6 +628,47 @@ console.log(`  String: "${messageString}"`);
     return this.emulator.readMemory16(
       msgAddr + DoorConstants.MESSAGE_LENGTH_OFFSET
     );
+  }
+
+  private getMessageLayout(messageLength: number): 'short' | 'long' {
+    // jhMessage is size 0x100 with LONG fields (axcommon.e/AE docs).
+    // Only treat smaller, non-standard sizes as 16-bit "short" layouts.
+    if (messageLength && messageLength < 0x100) {
+      return 'short';
+    }
+    return 'long';
+  }
+
+  private getLayoutOffsets(layout: 'short' | 'long') {
+    if (layout === 'short') {
+      return {
+        data: 0xdc,
+        command: 0xde,
+        node: 0xe0,
+        line: 0xe2,
+        signal: 0xe4,
+        task: 0xe8,
+        semaphore: 0xec,
+        filler1: 0xf0,
+        filler2: 0xf4,
+        stringPtr: 0xf8,
+        filler3: 0xfc,
+      };
+    }
+
+    return {
+      data: DoorConstants.MESSAGE_DATA_OFFSET,
+      command: DoorConstants.MESSAGE_COMMAND_OFFSET,
+      node: DoorConstants.MESSAGE_NODE_OFFSET,
+      line: DoorConstants.MESSAGE_LINE_OFFSET,
+      signal: DoorConstants.MESSAGE_SIGNAL_OFFSET,
+      task: DoorConstants.MESSAGE_TASK_OFFSET,
+      semaphore: DoorConstants.MESSAGE_SEMAPHORE_OFFSET,
+      filler1: DoorConstants.MESSAGE_FILLER1_OFFSET,
+      filler2: DoorConstants.MESSAGE_FILLER2_OFFSET,
+      stringPtr: DoorConstants.MESSAGE_STRING_PTR_OFFSET,
+      filler3: DoorConstants.MESSAGE_FILLER3_OFFSET,
+    };
   }
 
   private hasField(msgAddr: number, offset: number, size: number): boolean {

@@ -137,8 +137,12 @@ class XIMDebugger {
   private async cleanSession() {
     // Clear old XIM debug log
     if (fs.existsSync(this.logFile)) {
-      const backup = `${this.logFile}.backup-${Date.now()}`;
-      fs.renameSync(this.logFile, backup);
+      try {
+        fs.truncateSync(this.logFile, 0);
+      } catch {
+        const backup = `${this.logFile}.backup-${Date.now()}`;
+        fs.renameSync(this.logFile, backup);
+      }
     }
 
     // Wait a moment for file system

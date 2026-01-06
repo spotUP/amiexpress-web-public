@@ -275,11 +275,9 @@ console.log(
       );
     }
 
-    // Reply with length (or -1 on carrier drop) and mirror into Command like the earlier working path
-    const lenVal = this.state.carrierDropped ? -1 : result.length;
-    this.messageParser.writeCommand(msg.msgAddr, lenVal);
-    this.messageParser.writeLineNumber(msg.msgAddr, 0);
-    this.reply(msg, lenVal);
+    // JH_LI/JH_PM reply: Data = 1 on success, -1 on timeout/carrier; String carries the input
+    const dataVal = this.state.carrierDropped ? -1 : 1;
+    this.reply(msg, dataVal);
 
     // Reset state
     this.waitingForLineInput = false;

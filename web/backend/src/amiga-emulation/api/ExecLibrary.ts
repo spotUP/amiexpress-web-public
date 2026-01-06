@@ -677,6 +677,7 @@ console.log(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
    */
   // Callback for when a library is opened (used to install traps)
   private onLibraryOpened: ((name: string, addr: number) => void) | null = null;
+  private nativeLibraryFlags = new Map<string, boolean>();
 
   /**
    * Set callback for when a library is opened
@@ -685,6 +686,23 @@ console.log(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
     callback: (name: string, addr: number) => void
   ): void {
     this.onLibraryOpened = callback;
+  }
+
+  isLibraryNative(name: string): boolean {
+    const lower = name.toLowerCase();
+    if (this.nativeLibraryFlags.has(name)) {
+      return this.nativeLibraryFlags.get(name) === true;
+    }
+    if (this.nativeLibraryFlags.has(lower)) {
+      return this.nativeLibraryFlags.get(lower) === true;
+    }
+    return false;
+  }
+
+  private setLibraryNativeFlag(name: string, isNative: boolean): void {
+    const lower = name.toLowerCase();
+    this.nativeLibraryFlags.set(name, isNative);
+    this.nativeLibraryFlags.set(lower, isNative);
   }
 
   /**
@@ -718,6 +736,7 @@ console.log(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
         allowTrapJump
       );
       if (romLibrary) {
+        this.setLibraryNativeFlag(name, true);
         return { success: true, address: romLibrary, isNative: true };
       }
       // NOTE: If hasPendingTrapJump(), the trap is scheduled but we continue to try
@@ -748,6 +767,7 @@ console.log(
         if (this.onLibraryOpened) {
           this.onLibraryOpened(name, existingCheck.address);
         }
+        this.setLibraryNativeFlag(name, true);
         return {
           success: true,
           address: existingCheck.address,
@@ -783,6 +803,7 @@ console.log(
             this.onLibraryOpened(name, realLibrary.baseAddress);
           }
 
+          this.setLibraryNativeFlag(name, true);
           return { success: true, address: existing.address, isNative: true };
         }
 
@@ -805,6 +826,7 @@ console.log(
           this.onLibraryOpened(name, realLibrary.baseAddress);
         }
 
+        this.setLibraryNativeFlag(name, true);
         return {
           success: true,
           address: realLibrary.baseAddress,
@@ -818,10 +840,12 @@ console.log(`[ExecLibrary] ⚠️ Real library not found, using stub`);
     // Fall back to stub library
     const stubAddr = this.openLibraryStub(name, minVersion);
     if (stubAddr !== 0) {
+      this.setLibraryNativeFlag(name, false);
       return { success: true, address: stubAddr, isNative: false };
     }
 
 console.log(`[ExecLibrary] ❌ Failed to open ${name}`);
+    this.setLibraryNativeFlag(name, false);
     return { success: false, address: 0, isNative: false };
   }
 

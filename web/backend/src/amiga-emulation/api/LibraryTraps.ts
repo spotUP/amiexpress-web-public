@@ -1141,6 +1141,25 @@ console.log(
     this.emulator.setRegister(15, sp + 4); // Pop return address from ORIGINAL stack
     const spAfter = this.emulator.getRegister(15);
 
+    if (process.env.AEDOOR_TRACE === "1" && vector.name === "PutMsg") {
+      const aedoorBase = this.execLibrary.getLibraryBase("aedoor.library");
+      const inAedoor =
+        aedoorBase !== 0 &&
+        returnAddr >= aedoorBase &&
+        returnAddr < aedoorBase + 0x1000;
+      if (inAedoor) {
+        const a0 = this.emulator.getRegister(8);
+        const a1 = this.emulator.getRegister(9);
+console.log(
+          `[AEDOOR_TRACE] PutMsg trap return=0x${returnAddr.toString(
+            16
+          )} a6=0x${a6.toString(16)} a0=0x${a0.toString(
+            16
+          )} a1=0x${a1.toString(16)} sp=0x${sp.toString(16)}`
+        );
+      }
+    }
+
     // STACK CORRUPTION DETECTION: Validate return address looks reasonable
     // Most door code is in range 0x1000-0x100000, return addresses outside suggest corruption
     const libName = this.getLibraryName(library);
@@ -1155,6 +1174,39 @@ console.log(
         const val = this.emulator.readMemory32(sp + i * 4);
         console.error(`    [SP+${i * 4}]: 0x${val.toString(16)}`);
       }
+    }
+
+    let lockTraceReturnAddr = 0;
+    if (libName === "dos.library" && vector.name === "Lock") {
+      const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library") || 0;
+      lockTraceReturnAddr = returnAddr;
+      const a4Before = this.emulator.getRegister(12);
+      const a5Before = this.emulator.getRegister(13);
+      let opcode = 0;
+      const bytes: number[] = [];
+      try {
+        const op0 = this.emulator.readMemory(returnAddr);
+        const op1 = this.emulator.readMemory(returnAddr + 1);
+        opcode = (op0 << 8) | op1;
+        for (let i = 0; i < 16; i++) {
+          bytes.push(this.emulator.readMemory(returnAddr + i));
+        }
+      } catch (err) {
+        console.error(`[LibraryTraps][LockTrace] Failed to read opcode at returnAddr=0x${returnAddr.toString(16)}: ${err}`);
+      }
+console.log(
+        `[LibraryTraps][LockTrace] sp=0x${sp.toString(16)} spAfter=0x${spAfter.toString(
+          16
+        )} returnAddr=0x${returnAddr.toString(
+          16
+        )} opcode=0x${opcode.toString(16)} a4=0x${a4Before.toString(
+          16
+        )} a5=0x${a5Before.toString(16)} a6=0x${a6.toString(
+          16
+        )} aedoorBase=0x${aedoorBase.toString(16)} bytes=${bytes
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(" ")}`
+      );
     }
 
     if (DEBUG_LIBRARY_TRAPS) {
@@ -1218,6 +1270,20 @@ console.log(`[LibraryTraps] Wait() BLOCKING - PC stays at trap 0x${pc.toString(1
 
     // CRITICAL: Check for SP corruption immediately after handler
     const spAfterHandler = this.emulator.getRegister(15);
+    if (lockTraceReturnAddr !== 0) {
+      const a4After = this.emulator.getRegister(12);
+      const a5After = this.emulator.getRegister(13);
+      const a6After = this.emulator.getRegister(14);
+console.log(
+        `[LibraryTraps][LockTrace] after handler sp=0x${spAfterHandler.toString(
+          16
+        )} returnAddr=0x${lockTraceReturnAddr.toString(
+          16
+        )} a4=0x${a4After.toString(16)} a5=0x${a5After.toString(
+          16
+        )} a6=0x${a6After.toString(16)}`
+      );
+    }
     if (spAfterHandler === 0xfffffffa || spAfterHandler < 0x1000) {
 console.error(`\n*** SP CORRUPTION DETECTED ***`);
 console.error(`  Function: ${vector.name}()`);

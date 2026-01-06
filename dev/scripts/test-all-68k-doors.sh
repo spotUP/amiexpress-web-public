@@ -48,7 +48,7 @@ test_door_with_timeout() {
     export AEDOOR_STDOUT="$output_file"
 
     # Run door with timeout
-    if timeout "$timeout_secs" npx tsx web/backend/src/scripts/run-amiga-door.ts "$door_path" 1 "${args[@]}" > "/tmp/door_test_${door_name}.log" 2>&1; then
+    if timeout "$timeout_secs" npx tsx scripts/run-amiga-door.ts "$door_path" 1 "${args[@]}" > "/tmp/door_test_${door_name}.log" 2>&1; then
         # Check if output was generated or door exited cleanly
         if [ -f "$output_file" ] || grep -q "Total iterations" "/tmp/door_test_${door_name}.log" 2>/dev/null; then
             echo -e "${GREEN}[OK]${NC} $door_name completed successfully"
@@ -97,7 +97,7 @@ test_door() {
     export AEDOOR_STDOUT="$output_file"
 
     # Run door with timeout
-    if timeout 10 npx tsx web/backend/src/scripts/run-amiga-door.ts "$door_path" 1 "${args[@]}" > "/tmp/door_test_${door_name}.log" 2>&1; then
+    if timeout 10 npx tsx scripts/run-amiga-door.ts "$door_path" 1 "${args[@]}" > "/tmp/door_test_${door_name}.log" 2>&1; then
         # Check if output was generated or door exited cleanly
         if [ -f "$output_file" ] || grep -q "Total iterations" "/tmp/door_test_${door_name}.log" 2>/dev/null; then
             echo -e "${GREEN}[OK]${NC} $door_name completed successfully"

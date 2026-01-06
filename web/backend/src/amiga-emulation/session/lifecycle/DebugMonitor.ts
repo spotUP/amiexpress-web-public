@@ -185,14 +185,39 @@ console.log(
     const a6 = this.emulator.getRegister(14);
     const isAllowed = allowedBases.includes(a6);
     if (a6 !== this.lastA6Logged && !isAllowed) {
+      const sp = this.emulator.getRegister(15);
+      const stackWords: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        try {
+          const word = this.emulator.readMemory32(sp + i * 4);
+          stackWords.push(`SP+${i * 4}=0x${word.toString(16)}`);
+        } catch {
+          stackWords.push(`SP+${i * 4}=<err>`);
+        }
+      }
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
 console.log(
         `[DebugMonitor] A6 change pc=0x${pc.toString(
           16
-        )} newA6=0x${a6.toString(16)} allowed=${isAllowed} lastPCs=[${lastPcTrace}]`
+        )} newA6=0x${a6.toString(16)} allowed=${isAllowed} sp=0x${sp.toString(
+          16
+        )} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}]`
       );
+      const cpu = this.emulator['cpu'];
+      if (process.env.DEBUG_68K_NATIVE === '1' && cpu?.nativeLoggedInstructions) {
+        const logCount = cpu.nativeLoggedInstructions() || 0;
+        if (logCount > 0) {
+          const start = Math.max(0, logCount - 20);
+console.log(`[DebugMonitor] A6 change: last ${Math.min(logCount, 20)} instructions:`);
+          for (let i = start; i < logCount; i++) {
+            const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
+            const disasm = cpu.nativeDisassemble?.(logPc) || '???';
+console.log(`[DebugMonitor]   0x${logPc.toString(16)}: ${disasm}`);
+          }
+        }
+      }
       this.lastA6Logged = a6;
     }
   }

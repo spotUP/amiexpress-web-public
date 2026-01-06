@@ -22,6 +22,7 @@ Options:
   --full | --all             Open BBS + Admin/Settings + SDK (default)
   --sdk-only                 Open SDK preview only; build SDK only
   --bbs-only                 Open BBS terminal only; build BBS only
+  --telnet-only              Backend only (telnet/ssh debug); skip frontends/preview/browser
   --no-watch                 Disable door file watcher (auto-restart)
   --help                     Show this help and exit
 
@@ -39,6 +40,7 @@ DEBUG_OUTPUT="false"
 OPEN_MODE="full"  # Default: Open all three tabs (BBS, Admin, SDK)
 WATCH_DOORS=true  # Default: Enable door file watcher (auto-restart on changes)
 QUICK_MODE=false  # Default: Full build (set true with --quick for fast debug startup)
+TELNET_ONLY=false # Default: Start everything unless telnet-only requested
 
 # Check all arguments
 for arg in "$@"; do
@@ -59,6 +61,10 @@ for arg in "$@"; do
       ;;
     --bbs-only)
       OPEN_MODE="bbs-only"
+      ;;
+    --telnet-only)
+      OPEN_MODE="telnet-only"
+      TELNET_ONLY=true
       ;;
     --no-watch)
       WATCH_DOORS=false
@@ -89,6 +95,9 @@ if [ "$OPEN_MODE" = "full" ]; then
 elif [ "$OPEN_MODE" = "sdk-only" ]; then
   printf "%b\n" "${CYAN}→ Will open SDK Preview only in browser${RESET}"
   printf "%b\n" "   ${WHITE}Use --full to open all three apps, or --bbs-only for BBS only${RESET}"
+elif [ "$OPEN_MODE" = "telnet-only" ]; then
+  printf "%b\n" "${CYAN}→ Telnet-only mode: backend only (no browser, no frontends)${RESET}"
+  printf "%b\n" "   ${WHITE}Use --full/--bbs-only/--sdk-only to open browser tabs${RESET}"
 else
   printf "%b\n" "${CYAN}→ Will open BBS terminal only (no Admin/SDK tabs)${RESET}"
   printf "%b\n" "   ${WHITE}Use --full to open all three apps, or --sdk-only for SDK only${RESET}"
@@ -241,124 +250,133 @@ check_and_install_deps() {
 # Check backend dependencies
 check_and_install_deps "$REPO_ROOT/web/backend" "Backend"
 
-# Check frontend dependencies
-check_and_install_deps "$REPO_ROOT/web/frontend" "Frontend"
-
-# Check config app dependencies
-check_and_install_deps "$REPO_ROOT/web/config-app" "Config App"
-
-# Check SDK dependencies and build
-if [ ! -d "$REPO_ROOT/sdk/node_modules" ]; then
-  printf "%b\n" "${CYAN}→ SDK: Installing dependencies (this may take a minute)...${RESET}"
-  (cd "$REPO_ROOT/sdk" && npm install --loglevel=error)
-  if [ $? -eq 0 ]; then
-    printf "%b\n" "   ${GREEN}[OK] SDK dependencies installed${RESET}"
-  else
-    printf "%b\n" "   ${RED}[ERROR] SDK dependency installation failed${RESET}"
-    printf "%b\n" "   ${WHITE}Try running: cd sdk && npm install${RESET}"
-    exit 1
-  fi
+if [ "$TELNET_ONLY" = true ]; then
+  printf "%b\n" "${YELLOW}→ Telnet-only: Skipping frontend/SDK dependencies and builds${RESET}"
 else
-  printf "%b\n" "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
-fi
+  # Check frontend dependencies
+  check_and_install_deps "$REPO_ROOT/web/frontend" "Frontend"
 
-# Check if SDK needs rebuild (smart caching)
-SDK_NEEDS_BUILD=false
-if [ ! -d "$REPO_ROOT/sdk/dist" ]; then
-  SDK_NEEDS_BUILD=true
-elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
-  SDK_NEEDS_BUILD=true
-fi
+  # Check config app dependencies
+  check_and_install_deps "$REPO_ROOT/web/config-app" "Config App"
 
-if [ "$SDK_NEEDS_BUILD" = true ]; then
-  printf "%b\n" "${CYAN}-> SDK: Building (source changed)...${RESET}"
-  (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
-  if [ $? -eq 0 ]; then
-    printf "%b\n" "   ${GREEN}[OK] SDK built successfully${RESET}"
-  else
-    printf "%b\n" "   ${RED}[ERROR] SDK build failed${RESET}"
-    printf "%b\n" "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
-    exit 1
-  fi
-else
-  printf "%b\n" "   ${GREEN}[OK] SDK up to date (skipped rebuild)${RESET}"
-fi
-
-# Build all SDK doors IN PARALLEL (CRITICAL - prevents stale code issues)
-printf "%b\n" "${CYAN}-> SDK Doors: Building all example/installed doors (parallel)...${RESET}"
-DOOR_PIDS=""
-DOOR_NAMES=""
-
-for door_dir in "$REPO_ROOT/sdk/doors"/*/ ; do
-  if [ -f "$door_dir/package.json" ]; then
-    door_name=$(basename "$door_dir")
-    # Only rebuild if source exists and is newer than dist
-    if [ -d "$door_dir/src" ]; then
-      # Skip if dist/index.js exists and is newer than all src files
-      if [ -f "$door_dir/dist/index.js" ]; then
-        NEWEST_SRC=$(find "$door_dir/src" -name "*.ts" -newer "$door_dir/dist/index.js" 2>/dev/null | head -1)
-        if [ -z "$NEWEST_SRC" ]; then
-          continue  # Skip - dist is up to date
-        fi
-      fi
-      # Build in background
-      (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1) &
-      DOOR_PIDS="$DOOR_PIDS $!"
-      DOOR_NAMES="$DOOR_NAMES $door_name"
+  # Check SDK dependencies and build
+  if [ ! -d "$REPO_ROOT/sdk/node_modules" ]; then
+    printf "%b\n" "${CYAN}→ SDK: Installing dependencies (this may take a minute)...${RESET}"
+    (cd "$REPO_ROOT/sdk" && npm install --loglevel=error)
+    if [ $? -eq 0 ]; then
+      printf "%b\n" "   ${GREEN}[OK] SDK dependencies installed${RESET}"
+    else
+      printf "%b\n" "   ${RED}[ERROR] SDK dependency installation failed${RESET}"
+      printf "%b\n" "   ${WHITE}Try running: cd sdk && npm install${RESET}"
+      exit 1
     fi
-  fi
-done
-
-# Wait for all door builds
-DOOR_COUNT=0
-DOOR_ERRORS=0
-for pid in $DOOR_PIDS; do
-  wait $pid
-  if [ $? -eq 0 ]; then
-    ((DOOR_COUNT++))
   else
-    ((DOOR_ERRORS++))
+    printf "%b\n" "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
   fi
-done
 
-if [ $DOOR_COUNT -gt 0 ] || [ $DOOR_ERRORS -gt 0 ]; then
-  printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT door(s)${RESET}${DOOR_ERRORS:+, ${YELLOW}$DOOR_ERRORS skipped${RESET}}"
-else
-  printf "%b\n" "   ${GREEN}[OK] All doors up to date (skipped rebuild)${RESET}"
-fi
+  # Check if SDK needs rebuild (smart caching)
+  SDK_NEEDS_BUILD=false
+  if [ ! -d "$REPO_ROOT/sdk/dist" ]; then
+    SDK_NEEDS_BUILD=true
+  elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
+    SDK_NEEDS_BUILD=true
+  fi
 
-# Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
-check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
-
-# Check if Terminal package needs rebuild (smart caching)
-TERM_NEEDS_BUILD=false
-if [ ! -d "$REPO_ROOT/packages/terminal/dist" ] || [ ! -f "$REPO_ROOT/packages/terminal/dist/index.js" ]; then
-  TERM_NEEDS_BUILD=true
-elif [ -n "$(find "$REPO_ROOT/packages/terminal/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/packages/terminal/dist/index.js" 2>/dev/null | head -1)" ]; then
-  TERM_NEEDS_BUILD=true
-fi
-
-if [ "$TERM_NEEDS_BUILD" = true ]; then
-  printf "%b\n" "${CYAN}-> Terminal Package: Building (source changed)...${RESET}"
-  (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error)
-  if [ $? -eq 0 ]; then
-    printf "%b\n" "   ${GREEN}[OK] Terminal Package built${RESET}"
+  if [ "$SDK_NEEDS_BUILD" = true ]; then
+    printf "%b\n" "${CYAN}-> SDK: Building (source changed)...${RESET}"
+    (cd "$REPO_ROOT/sdk" && npm run build --loglevel=error)
+    if [ $? -eq 0 ]; then
+      printf "%b\n" "   ${GREEN}[OK] SDK built successfully${RESET}"
+    else
+      printf "%b\n" "   ${RED}[ERROR] SDK build failed${RESET}"
+      printf "%b\n" "   ${WHITE}Try running: cd sdk && npm run build${RESET}"
+      exit 1
+    fi
   else
-    printf "%b\n" "   ${RED}[ERROR] Terminal Package build failed${RESET}"
-    exit 1
+    printf "%b\n" "   ${GREEN}[OK] SDK up to date (skipped rebuild)${RESET}"
   fi
-else
-  printf "%b\n" "   ${GREEN}[OK] Terminal Package up to date (skipped rebuild)${RESET}"
-fi
 
-# Check SDK Preview Frontend dependencies
-check_and_install_deps "$REPO_ROOT/sdk/tools/preview/frontend" "SDK Preview Frontend"
+  # Build all SDK doors IN PARALLEL (CRITICAL - prevents stale code issues)
+  printf "%b\n" "${CYAN}-> SDK Doors: Building all example/installed doors (parallel)...${RESET}"
+  DOOR_PIDS=""
+  DOOR_NAMES=""
+
+  for door_dir in "$REPO_ROOT/sdk/doors"/*/ ; do
+    if [ -f "$door_dir/package.json" ]; then
+      door_name=$(basename "$door_dir")
+      # Only rebuild if source exists and is newer than dist
+      if [ -d "$door_dir/src" ]; then
+        # Skip if dist/index.js exists and is newer than all src files
+        if [ -f "$door_dir/dist/index.js" ]; then
+          NEWEST_SRC=$(find "$door_dir/src" -name "*.ts" -newer "$door_dir/dist/index.js" 2>/dev/null | head -1)
+          if [ -z "$NEWEST_SRC" ]; then
+            continue  # Skip - dist is up to date
+          fi
+        fi
+        # Build in background
+        (cd "$door_dir" && npm run build --loglevel=error > /dev/null 2>&1) &
+        DOOR_PIDS="$DOOR_PIDS $!"
+        DOOR_NAMES="$DOOR_NAMES $door_name"
+      fi
+    fi
+  done
+
+  # Wait for all door builds
+  DOOR_COUNT=0
+  DOOR_ERRORS=0
+  for pid in $DOOR_PIDS; do
+    wait $pid
+    if [ $? -eq 0 ]; then
+      ((DOOR_COUNT++))
+    else
+      ((DOOR_ERRORS++))
+    fi
+  done
+
+  if [ $DOOR_COUNT -gt 0 ] || [ $DOOR_ERRORS -gt 0 ]; then
+    printf "%b\n" "   ${GREEN}[OK] Built $DOOR_COUNT door(s)${RESET}${DOOR_ERRORS:+, ${YELLOW}$DOOR_ERRORS skipped${RESET}}"
+  else
+    printf "%b\n" "   ${GREEN}[OK] All doors up to date (skipped rebuild)${RESET}"
+  fi
+
+  # Check and build @amiexpress/terminal package (required by SDK and BBS frontends)
+  check_and_install_deps "$REPO_ROOT/packages/terminal" "Terminal Package"
+
+  # Check if Terminal package needs rebuild (smart caching)
+  TERM_NEEDS_BUILD=false
+  if [ ! -d "$REPO_ROOT/packages/terminal/dist" ] || [ ! -f "$REPO_ROOT/packages/terminal/dist/index.js" ]; then
+    TERM_NEEDS_BUILD=true
+  elif [ -n "$(find "$REPO_ROOT/packages/terminal/src" -name "*.ts" -o -name "*.tsx" -newer "$REPO_ROOT/packages/terminal/dist/index.js" 2>/dev/null | head -1)" ]; then
+    TERM_NEEDS_BUILD=true
+  fi
+
+  if [ "$TERM_NEEDS_BUILD" = true ]; then
+    printf "%b\n" "${CYAN}-> Terminal Package: Building (source changed)...${RESET}"
+    (cd "$REPO_ROOT/packages/terminal" && npm run build --loglevel=error)
+    if [ $? -eq 0 ]; then
+      printf "%b\n" "   ${GREEN}[OK] Terminal Package built${RESET}"
+    else
+      printf "%b\n" "   ${RED}[ERROR] Terminal Package build failed${RESET}"
+      exit 1
+    fi
+  else
+    printf "%b\n" "   ${GREEN}[OK] Terminal Package up to date (skipped rebuild)${RESET}"
+  fi
+
+  # Check SDK Preview Frontend dependencies
+  check_and_install_deps "$REPO_ROOT/sdk/tools/preview/frontend" "SDK Preview Frontend"
+fi
 
 DO_BUILD_BBS=true
 DO_BUILD_ADMIN=true
 DO_BUILD_SDK=true
 
-if [ "$OPEN_MODE" = "bbs-only" ]; then
+if [ "$TELNET_ONLY" = true ]; then
+  DO_BUILD_BBS=false
+  DO_BUILD_ADMIN=false
+  DO_BUILD_SDK=false
+  printf "%b\n" "${CYAN}-> Telnet-only: Skipping frontend builds${RESET}"
+elif [ "$OPEN_MODE" = "bbs-only" ]; then
   DO_BUILD_ADMIN=false
   DO_BUILD_SDK=false
   printf "%b\n" "${CYAN}-> Building frontends (BBS-only mode)...${RESET}"
@@ -495,13 +513,18 @@ fi
 
 # Start SDK preview backend server in background (handles SDK door preview WebSocket API)
 printf "%b\n" "${GREEN}[STARTED]${RESET}"
-printf "%b" "   ${MAGENTA}[2/2]${RESET} Starting SDK preview backend... "
-# DEBUG_OUTPUT controls whether door-handling debug messages are shown
-# In normal mode, door output is clean without debug messages
-# In debug mode, all debug messages are shown
-(cd "$REPO_ROOT/sdk" && DEBUG_OUTPUT="$DEBUG_OUTPUT" node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
-PREVIEW_PID=$!
-printf "%b\n" "${GREEN}[STARTED]${RESET}"
+if [ "$TELNET_ONLY" = true ]; then
+  PREVIEW_PID=""
+  printf "%b\n" "   ${YELLOW}[SKIPPED]${RESET} SDK preview backend (telnet-only)"
+else
+  printf "%b" "   ${MAGENTA}[2/2]${RESET} Starting SDK preview backend... "
+  # DEBUG_OUTPUT controls whether door-handling debug messages are shown
+  # In normal mode, door output is clean without debug messages
+  # In debug mode, all debug messages are shown
+  (cd "$REPO_ROOT/sdk" && DEBUG_OUTPUT="$DEBUG_OUTPUT" node tools/preview/server.js 2>&1 | tee "$PREVIEW_LOG") &
+  PREVIEW_PID=$!
+  printf "%b\n" "${GREEN}[STARTED]${RESET}"
+fi
 
 # Wait for backend to be ready (check port 3001)
 echo ""
@@ -546,18 +569,23 @@ printf "%b\n" "${RESET}"
 printf "%b\n" "${CYAN}  UNIFIED DEPLOYMENT (All Frontends Served from Single Backend):${RESET}"
 printf "%b\n" "${CYAN}  ----------------------------------------------------------------${RESET}"
 echo ""
-printf "%b\n" "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
-printf "%b\n" "           ${CYAN}Main BBS Terminal Interface${RESET}"
-printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
-echo ""
-printf "%b\n" "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
-printf "%b\n" "           ${CYAN}Configuration Management Panel${RESET}"
-printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
-echo ""
-printf "%b\n" "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
-printf "%b\n" "           ${CYAN}Door Development Preview Tool${RESET}"
-printf "%b\n" "           ${YELLOW}(Backend API on port 8080)${RESET}"
-echo ""
+if [ "$TELNET_ONLY" = true ]; then
+  printf "%b\n" "${YELLOW}  Telnet-only mode: frontends not built/started${RESET}"
+  echo ""
+else
+  printf "%b\n" "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
+  printf "%b\n" "           ${CYAN}Main BBS Terminal Interface${RESET}"
+  printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
+  echo ""
+  printf "%b\n" "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
+  printf "%b\n" "           ${CYAN}Configuration Management Panel${RESET}"
+  printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
+  echo ""
+  printf "%b\n" "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
+  printf "%b\n" "           ${CYAN}Door Development Preview Tool${RESET}"
+  printf "%b\n" "           ${YELLOW}(Backend API on port 8080)${RESET}"
+  echo ""
+fi
 printf "%b\n" "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
 printf "%b\n" "           ${CYAN}Backend REST API Server${RESET}"
 printf "%b\n" "${WHITE}  [TELNET]${RESET} ${WHITE}telnet localhost ${TELNET_PORT:-64128}${RESET}"
@@ -571,8 +599,12 @@ printf "%b\n" "${WHITE}  Production URLs: ${CYAN}https://bbs.uprough.net/${RESET
 printf "%b\n" "                   ${CYAN}https://bbs.uprough.net/admin/${RESET}"
 printf "%b\n" "                   ${CYAN}https://bbs.uprough.net/sdk/${RESET}"
 echo ""
-printf "%b\n" "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
-printf "%b\n" "${WHITE}        No separate dev servers running for instant startup${RESET}"
+if [ "$TELNET_ONLY" = true ]; then
+  printf "%b\n" "${WHITE}  Note: Telnet-only skips frontend builds and preview backend${RESET}"
+else
+  printf "%b\n" "${WHITE}  Note: All frontends built and served as static files from backend${RESET}"
+  printf "%b\n" "${WHITE}        No separate dev servers running for instant startup${RESET}"
+fi
 echo ""
 printf "%b\n" "${RED}  Press Ctrl+C to stop all servers${RESET}"
 echo ""
@@ -587,7 +619,9 @@ BBS_URL="http://localhost:3001/"
 ADMIN_URL="http://localhost:3001/admin/"
 SDK_URL="http://localhost:3001/sdk/"
 
-if [ "$OPEN_MODE" = "full" ]; then
+if [ "$OPEN_MODE" = "telnet-only" ]; then
+  printf "%b\n" "${YELLOW}[LAUNCH]${RESET} Telnet-only mode: not opening browser tabs"
+elif [ "$OPEN_MODE" = "full" ]; then
   # Open all three tabs: BBS, Admin, SDK
   printf "%b\n" "${GREEN}[LAUNCH]${RESET} Opening BBS at ${CYAN}$BBS_URL${RESET}..."
   printf "%b\n" "${MAGENTA}[CONFIG]${RESET} Opening Admin/Settings at ${CYAN}$ADMIN_URL${RESET}..."

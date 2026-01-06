@@ -976,6 +976,11 @@ console.log(
       input = data.toString("utf-8");
     }
 
+    // Telnet clients may send CR NUL sequences; strip NUL padding
+    if (type === "telnet") {
+      input = input.replace(/\0/g, "");
+    }
+
     // Process through BBS command handler (same as Socket.IO)
     // Must use SAME routing logic as socket-handlers.ts:641-656
     if (connection.session) {

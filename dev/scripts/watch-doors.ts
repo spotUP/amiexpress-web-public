@@ -45,6 +45,7 @@ function startBackend() {
   backendProcess = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: path.join(PROJECT_ROOT, 'web/backend'),
     stdio: 'inherit',
+    env: { ...process.env },
   });
 
   backendProcess.on('exit', (code) => {

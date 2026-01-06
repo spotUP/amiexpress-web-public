@@ -1511,12 +1511,71 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
   // ===== Log Viewer =====
 
   /**
+   * GET /api/config/logs/door-68k
+   * List available 68K door log files
+   */
+  router.get('/logs/door-68k', async (req: Request, res: Response) => {
+    try {
+      const fsModule = await import('fs');
+      const fs = fsModule.promises;
+      const path = await import('path');
+
+      const projectRoot = path.resolve(__dirname, '../../../..');
+      const logsDir = path.join(projectRoot, 'logs');
+
+      let entries: string[] = [];
+      try {
+        entries = await fs.readdir(logsDir);
+      } catch {
+        return sendResponse(res, { files: [] });
+      }
+
+      const isDoorLog = (name: string) =>
+        name === 'door-68k.log' || /^door-68k-[A-Za-z0-9_.-]+\.log$/.test(name);
+
+      const files = await Promise.all(
+        entries.filter(isDoorLog).map(async (file) => {
+          const fullPath = path.join(logsDir, file);
+          let stats: import('fs').Stats | null = null;
+          try {
+            stats = await fs.stat(fullPath);
+          } catch {
+            stats = null;
+          }
+
+          const label = file === 'door-68k.log'
+            ? 'door-68k.log (legacy)'
+            : file.replace(/^door-68k-/, '').replace(/\.log$/, '');
+
+          return {
+            file,
+            label,
+            size: stats?.size ?? 0,
+            modifiedAt: stats?.mtime?.toISOString() ?? null
+          };
+        })
+      );
+
+      files.sort((a, b) => {
+        if (!a.modifiedAt && !b.modifiedAt) return 0;
+        if (!a.modifiedAt) return 1;
+        if (!b.modifiedAt) return -1;
+        return b.modifiedAt.localeCompare(a.modifiedAt);
+      });
+
+      sendResponse(res, { files });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * GET /api/config/logs
    * Get system logs
    */
   router.get('/logs', async (req: Request, res: Response) => {
     try {
-      const { type = 'backend', lines = '500', search = '' } = req.query;
+      const { type = 'backend', lines = '500', search = '', doorLog = '' } = req.query;
       const fsModule = await import('fs');
       const fs = fsModule.promises;
       const path = await import('path');
@@ -1534,7 +1593,16 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
           logFile = path.join(projectRoot, 'logs', 'backend.log');
           break;
         case 'door68k':
-          logFile = path.join(projectRoot, 'logs', 'door-68k.log');
+          if (typeof doorLog === 'string' && doorLog) {
+            const safeName = path.basename(doorLog);
+            const isDoorLog = safeName === 'door-68k.log' || /^door-68k-[A-Za-z0-9_.-]+\.log$/.test(safeName);
+            if (!isDoorLog) {
+              throw new Error(`Invalid door log name: ${safeName}`);
+            }
+            logFile = path.join(projectRoot, 'logs', safeName);
+          } else {
+            logFile = path.join(projectRoot, 'logs', 'door-68k.log');
+          }
           break;
         case 'frontend':
           logFile = path.join(projectRoot, 'logs', 'frontend.log');
@@ -1657,7 +1725,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
    */
   router.delete('/logs', async (req: any, res: Response) => {
     try {
-      const { type = 'backend' } = req.query;
+      const { type = 'backend', doorLog = '' } = req.query;
       const fs = await import('fs').then(m => m.promises);
       const path = await import('path');
 
@@ -1670,7 +1738,16 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
           logFile = path.join(projectRoot, 'logs', 'backend.log');
           break;
         case 'door68k':
-          logFile = path.join(projectRoot, 'logs', 'door-68k.log');
+          if (typeof doorLog === 'string' && doorLog) {
+            const safeName = path.basename(doorLog);
+            const isDoorLog = safeName === 'door-68k.log' || /^door-68k-[A-Za-z0-9_.-]+\.log$/.test(safeName);
+            if (!isDoorLog) {
+              throw new Error(`Invalid door log name: ${safeName}`);
+            }
+            logFile = path.join(projectRoot, 'logs', safeName);
+          } else {
+            logFile = path.join(projectRoot, 'logs', 'door-68k.log');
+          }
           break;
         case 'frontend':
           logFile = path.join(projectRoot, 'logs', 'frontend.log');

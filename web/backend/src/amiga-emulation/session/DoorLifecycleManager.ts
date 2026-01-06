@@ -50,6 +50,7 @@ export interface ExecutionState {
   gapJumpLogged: boolean;
   stuckLoopCount: number;
   lastJumpSize: number;
+  lastAedoorTracePc: number;
 }
 
 export interface LifecycleConfig {
@@ -106,6 +107,9 @@ export class DoorLifecycleManager {
   private pcProbeMaxHits: number = 1;
   private spinLoopSleepMs: number = 1;
   private lastRomJumpLogIteration: number = -1000000;
+  private watchAutoLower: number = 0;
+  private watchAutoUpper: number = 0;
+  private lastA5OutOfRangeLogged: number = 0;
 
   constructor(
     emulator: MoiraEmulator,
@@ -245,6 +249,7 @@ console.log(
       gapJumpLogged: false,
       stuckLoopCount: 0,
       lastJumpSize: 0,
+      lastAedoorTracePc: -1,
     };
   }
 
@@ -397,6 +402,58 @@ console.log(`[DoorLifecycleManager] Fixed A6 register to 0x${expectedExecBase.to
         }
       }
 
+      const watchRangeEnv = process.env.DOOR_WATCH_RANGE;
+      if (watchRangeEnv) {
+console.log(`[DoorLifecycleManager] DOOR_WATCH_RANGE=${watchRangeEnv}`);
+console.log(
+          `[DoorLifecycleManager] Watch range support: setWatchRange=${
+            typeof this.emulator.setWatchRange
+          } setDebugWatchpoints=${typeof this.emulator.setDebugWatchpoints}`
+        );
+      }
+      if (
+        watchRangeEnv &&
+        this.emulator.setWatchRange &&
+        this.emulator.setDebugWatchpoints
+      ) {
+        const parts = watchRangeEnv.split(/[:\-]/).map((part) => part.trim());
+        if (parts.length === 2) {
+          const start = Number(parts[0]);
+          const end = Number(parts[1]);
+          if (!Number.isNaN(start) && !Number.isNaN(end) && start > 0 && end >= start) {
+            this.emulator.setWatchRange(start, end);
+            this.emulator.setDebugWatchpoints(true);
+console.log(
+              `[DoorLifecycleManager] Watch range enabled: 0x${start.toString(
+                16
+              )}-0x${end.toString(16)}`
+            );
+          } else {
+console.error(
+              `[DoorLifecycleManager] Invalid DOOR_WATCH_RANGE="${watchRangeEnv}"`
+            );
+          }
+        } else {
+console.error(
+            `[DoorLifecycleManager] Invalid DOOR_WATCH_RANGE="${watchRangeEnv}"`
+          );
+        }
+      }
+
+      const callTrackingEnv = process.env.DOOR_CALL_TRACKING;
+      if (callTrackingEnv) {
+console.log(`[DoorLifecycleManager] DOOR_CALL_TRACKING=${callTrackingEnv}`);
+console.log(
+          `[DoorLifecycleManager] Call tracking support: enableCallTracking=${
+            typeof this.emulator.enableCallTracking
+          } isCallTrackingEnabled=${typeof this.emulator.isCallTrackingEnabled}`
+        );
+      }
+      if (callTrackingEnv === "1" && this.emulator.enableCallTracking) {
+        this.emulator.enableCallTracking(true);
+console.log(`[DoorLifecycleManager] Call tracking enabled`);
+      }
+
       let prevA4 = this.emulator.getRegister(12);
       let prevA5 = this.emulator.getRegister(13);
       let earlyTraceCount = 0;
@@ -430,6 +487,47 @@ console.log(
                   16
                 )} A4=0x${a4Now.toString(16)} A5=0x${a5Now.toString(16)}`
               );
+            }
+            if (process.env.DEBUG_68K_NATIVE === '1') {
+              const execLib = this.libraryManager?.execLibrary;
+              const stackLower = execLib?.getStackLower?.() || 0;
+              const stackUpper = execLib?.getStackUpper?.() || 0;
+              if (
+                stackLower !== 0 &&
+                stackUpper !== 0 &&
+                (a5Now < stackLower || a5Now > stackUpper) &&
+                a5Now !== this.lastA5OutOfRangeLogged
+              ) {
+                this.lastA5OutOfRangeLogged = a5Now;
+                const cpu = this.emulator['cpu'];
+                if (!cpu) {
+                  // Native debugger not available; skip instruction dump.
+                }
+console.log(
+                  `[DoorLifecycleManager] A5 out of stack range in early trace: A5=0x${a5Now.toString(
+                    16
+                  )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
+                    16
+                  )}] PC=0x${pc.toString(16)}`
+                );
+                const logCount = cpu ? cpu.nativeLoggedInstructions?.() || 0 : 0;
+                if (cpu && logCount > 0) {
+console.log(
+                    `[DoorLifecycleManager] Last ${Math.min(
+                      logCount,
+                      20
+                    )} native instructions before A5 change:`
+                  );
+                  const start = Math.max(0, logCount - 20);
+                  for (let i = start; i < logCount; i++) {
+                    const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
+                    const disasm = cpu.nativeDisassemble?.(logPc) || '???';
+console.log(
+                      `[DoorLifecycleManager]   0x${logPc.toString(16)}: ${disasm}`
+                    );
+                  }
+                }
+              }
             }
             prevA4 = a4Now;
             prevA5 = a5Now;
@@ -873,6 +971,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
         this.terminate();
         return true;
       }
+      if (this.emulator.isCallTrackingEnabled?.() && this.emulator.dumpCallStack) {
+        this.emulator.dumpCallStack();
+      }
       // Otherwise just log warning but continue (legitimate high-memory code)
     }
 
@@ -973,6 +1074,44 @@ console.log(
             16
           )}`
         );
+      }
+      if (process.env.DEBUG_68K_NATIVE === '1') {
+        const execLib = this.libraryManager?.execLibrary;
+        const stackLower = execLib?.getStackLower?.() || 0;
+        const stackUpper = execLib?.getStackUpper?.() || 0;
+        if (
+          stackLower !== 0 &&
+          stackUpper !== 0 &&
+          (a5 < stackLower || a5 > stackUpper) &&
+          a5 !== this.lastA5OutOfRangeLogged
+        ) {
+          this.lastA5OutOfRangeLogged = a5;
+          const cpu = this.emulator['cpu'];
+console.log(
+            `[DoorLifecycleManager] A5 out of stack range: A5=0x${a5.toString(
+              16
+            )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
+              16
+            )}] PC=0x${pc.toString(16)}`
+          );
+          const logCount = cpu ? cpu.nativeLoggedInstructions?.() || 0 : 0;
+          if (cpu && logCount > 0) {
+console.log(
+              `[DoorLifecycleManager] Last ${Math.min(
+                logCount,
+                20
+              )} native instructions before A5 change:`
+            );
+            const start = Math.max(0, logCount - 20);
+            for (let i = start; i < logCount; i++) {
+              const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
+              const disasm = cpu.nativeDisassemble?.(logPc) || '???';
+console.log(
+                `[DoorLifecycleManager]   0x${logPc.toString(16)}: ${disasm}`
+              );
+            }
+          }
+        }
       }
       this.executionState.lastSignificantPC = a4;
       this.executionState.lastInterceptedTrap = a5;
@@ -1268,6 +1407,64 @@ console.error(`  Iteration: ${iteration}`);
 
     // CRITICAL: Track SP before instruction to detect corruption
     const spBefore = this.emulator.getRegister(15);
+
+    if (process.env.DOOR_WATCH_AUTO === "1") {
+      const watchRadius = 0x80;
+      const lower = (spBefore - watchRadius) >>> 0;
+      const upper = (spBefore + watchRadius) >>> 0;
+      if (
+        this.watchAutoLower === 0 ||
+        spBefore < this.watchAutoLower ||
+        spBefore > this.watchAutoUpper
+      ) {
+        this.watchAutoLower = lower;
+        this.watchAutoUpper = upper;
+        this.emulator.setWatchRange(lower, upper);
+console.log(
+          `[DoorLifecycleManager] Auto watch range set around SP=0x${spBefore.toString(
+            16
+          )} -> 0x${lower.toString(16)}-0x${upper.toString(16)}`
+        );
+      }
+    }
+
+    if (process.env.AEDOOR_TRACE === "1") {
+      const aedoorBase =
+        this.libraryManager.execLibrary?.getLibraryBase("aedoor.library") ?? 0;
+      if (aedoorBase) {
+        const offset = (pc - aedoorBase) | 0;
+        if (
+          offset === 0x2d2 ||
+          offset === 0x2d6 ||
+          offset === 0x2ec ||
+          offset === 0x2f2 ||
+          offset === 0x304 ||
+          offset === 0x308
+        ) {
+          if (this.executionState.lastAedoorTracePc !== pc) {
+            const d0 = this.emulator.getRegister(0);
+            const d1 = this.emulator.getRegister(1);
+            const a0 = this.emulator.getRegister(8);
+            const a1 = this.emulator.getRegister(9);
+            const a4 = this.emulator.getRegister(12);
+            const a6 = this.emulator.getRegister(14);
+            const a7 = spBefore;
+console.log(
+              `[AEDOOR_TRACE] pc=0x${pc.toString(16)} off=0x${offset.toString(
+                16
+              )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
+                16
+              )} a0=0x${a0.toString(16)} a1=0x${a1.toString(
+                16
+              )} a4=0x${a4.toString(16)} a6=0x${a6.toString(
+                16
+              )} sp=0x${a7.toString(16)}`
+            );
+            this.executionState.lastAedoorTracePc = pc;
+          }
+        }
+      }
+    }
 
     // ROM routines expect A6 to hold ExecBase; protect against it being cleared.
     const execBase = this.libraryManager.execLibrary?.getExecBaseAddress() ?? 0;
