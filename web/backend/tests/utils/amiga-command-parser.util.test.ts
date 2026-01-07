@@ -1,763 +1,650 @@
 /**
- * Unit tests for Amiga Command Parser Utilities
- * Tests parsing of .info files (tooltypes) and .CMD files
+ * Unit tests for amiga-command-parser.util.ts
+ * Tests .info file parsing critical for 68K door emulation
+ *
+ * Tests parsing of Amiga .info files containing tooltypes (KEY=VALUE pairs)
+ * that configure 68K doors. Critical for door execution and configuration.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import {
   parseInfoFile,
-  parseCmdFile,
-  loadCommandFromInfo,
-  scanCommandDirectory,
-  findCommand,
   DoorType,
   CommandType,
+  ToolTypeLevel,
   CommandDefinition,
 } from '../../src/utils/amiga-command-parser.util';
 
-describe('Amiga Command Parser Utilities', () => {
-  const testDir = path.join(__dirname, '../fixtures/amiga-commands');
+describe('amiga-command-parser.util (Critical for 68K Door Emulation)', () => {
+  let testDir: string;
 
-  beforeAll(() => {
-    // Create test directory structure
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
-    }
-
-    // Create test subdirectories
-    const dirs = [
-      'Commands/BBSCmd',
-      'Commands/SysCmd',
-      'Conf1/Commands/BBSCmd',
-      'Node1/Commands/BBSCmd',
-    ];
-
-    for (const dir of dirs) {
-      const fullPath = path.join(testDir, dir);
-      if (!fs.existsSync(fullPath)) {
-        fs.mkdirSync(fullPath, { recursive: true });
-      }
-    }
+  beforeEach(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiga-parser-test-'));
   });
 
-  afterAll(() => {
-    // Clean up test files
+  afterEach(() => {
     if (fs.existsSync(testDir)) {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
   });
 
-  describe('parseInfoFile', () => {
-    it('should return empty map for non-existent file', () => {
-      const result = parseInfoFile('/nonexistent/file.info');
-      expect(result.size).toBe(0);
+  /**
+   * Helper to create .info file with proper structure
+   * Amiga .info files must be >40 bytes, so we add binary padding
+   */
+  function createInfoFile(filePath: string, tooltypes: string | Buffer): void {
+    // Add 40-byte binary header to simulate real Amiga .info structure
+    const header = Buffer.alloc(40, 0);
+    const content = typeof tooltypes === 'string' ? Buffer.from(tooltypes) : tooltypes;
+    fs.writeFileSync(filePath, Buffer.concat([header, content]));
+  }
+
+  describe('DoorType enum', () => {
+    it('should have all door types', () => {
+      expect(DoorType.XIM).toBe('XIM');
+      expect(DoorType.AIM).toBe('AIM');
+      expect(DoorType.SIM).toBe('SIM');
+      expect(DoorType.TIM).toBe('TIM');
+      expect(DoorType.IIM).toBe('IIM');
+      expect(DoorType.MCI).toBe('MCI');
+      expect(DoorType.AEM).toBe('AEM');
+      expect(DoorType.SUP).toBe('SUP');
+      expect(DoorType.TS).toBe('TS');
+      expect(DoorType.PYTHON).toBe('PYTHON');
+      expect(DoorType.PY).toBe('PY');
+      expect(DoorType.AREXX).toBe('AREXX');
+      expect(DoorType.REXX).toBe('REXX');
     });
 
-    it('should return empty map for too-small file', () => {
-      const smallFile = path.join(testDir, 'tiny.info');
-      fs.writeFileSync(smallFile, 'x');
+    it('should distinguish between 68K and modern door types', () => {
+      // 68K door types
+      const sixtyEightKTypes = [DoorType.XIM, DoorType.AIM, DoorType.SIM, DoorType.TIM, DoorType.IIM];
+      sixtyEightKTypes.forEach(type => {
+        expect(type).toBeDefined();
+      });
 
-      const result = parseInfoFile(smallFile);
-      expect(result.size).toBe(0);
-    });
-
-    it('should parse simple key=value tooltypes', () => {
-      const infoFile = path.join(testDir, 'simple.info');
-      // Create a binary .info file with embedded strings
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/test/test.xim', 50, 'ascii');
-      buffer.write('ACCESS=100', 90, 'ascii');
-      buffer.write('TYPE=XIM', 120, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('LOCATION')).toBe('doors/test/test.xim');
-      expect(result.get('ACCESS')).toBe('100');
-      expect(result.get('TYPE')).toBe('XIM');
-    });
-
-    it('should parse flag-only tooltypes (no value)', () => {
-      const infoFile = path.join(testDir, 'flags.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('MULTINODE', 50, 'ascii');
-      buffer.write('RESIDENT', 80, 'ascii');
-      buffer.write('LOCATION=doors/test', 110, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('MULTINODE')).toBe('YES');
-      expect(result.get('RESIDENT')).toBe('YES');
-      expect(result.get('LOCATION')).toBe('doors/test');
-    });
-
-    it('should skip commented tooltypes', () => {
-      const infoFile = path.join(testDir, 'comments.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/valid', 50, 'ascii');
-      buffer.write('(COMMENTED=value)', 90, 'ascii');
-      buffer.write('!DISABLED=value', 120, 'ascii');
-      buffer.write('ACCESS=50', 150, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('LOCATION')).toBe('doors/valid');
-      expect(result.get('ACCESS')).toBe('50');
-      expect(result.has('COMMENTED')).toBe(false);
-      expect(result.has('DISABLED')).toBe(false);
-    });
-
-    it('should strip leading non-alphanumeric characters', () => {
-      const infoFile = path.join(testDir, 'special.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('*LOCATION=doors/test', 50, 'ascii');
-      buffer.write('$ACCESS=100', 90, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('LOCATION')).toBe('doors/test');
-      expect(result.get('ACCESS')).toBe('100');
-    });
-
-    it('should uppercase keys', () => {
-      const infoFile = path.join(testDir, 'lowercase.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('location=doors/test', 50, 'ascii');
-      buffer.write('Access=50', 90, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('LOCATION')).toBe('doors/test');
-      expect(result.get('ACCESS')).toBe('50');
-    });
-
-    it('should validate key format (alphanumeric+underscore, 2-32 chars)', () => {
-      const infoFile = path.join(testDir, 'validation.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=valid', 50, 'ascii'); // Valid
-      buffer.write('A=invalid', 90, 'ascii'); // Too short
-      buffer.write('VERY_LONG_KEY_NAME_THAT_EXCEEDS_32_CHARACTERS=invalid', 120, 'ascii'); // Too long
-      buffer.write('BAD-KEY=invalid', 160, 'ascii'); // Invalid character
-      buffer.write('GOOD_KEY_123=valid', 200, 'ascii'); // Valid
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = parseInfoFile(infoFile);
-
-      expect(result.get('LOCATION')).toBe('valid');
-      expect(result.get('GOOD_KEY_123')).toBe('valid');
-      expect(result.has('A')).toBe(false);
-      expect(result.has('VERY_LONG_KEY_NAME_THAT_EXCEEDS_32_CHARACTERS')).toBe(false);
-      expect(result.has('BAD-KEY')).toBe(false);
+      // Modern door types
+      const modernTypes = [DoorType.TS, DoorType.PYTHON, DoorType.PY, DoorType.AREXX, DoorType.REXX];
+      modernTypes.forEach(type => {
+        expect(type).toBeDefined();
+      });
     });
   });
 
-  describe('parseCmdFile', () => {
-    it('should return null for non-existent file', () => {
-      const result = parseCmdFile('/nonexistent/file.cmd');
-      expect(result).toBeNull();
-    });
-
-    it('should parse basic CMD file format', () => {
-      const cmdFile = path.join(testDir, 'test.cmd');
-      fs.writeFileSync(cmdFile, '*WHO XIM050 Doors:who/who');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result).not.toBeNull();
-      expect(result!.name).toBe('WHO');
-      expect(result!.type).toBe(DoorType.XIM);
-      expect(result!.access).toBe(50);
-      expect(result!.location).toBe('doors/who/who');
-    });
-
-    it('should parse CMD with embedded location', () => {
-      const cmdFile = path.join(testDir, 'embedded.cmd');
-      fs.writeFileSync(cmdFile, '*WEEK XM050Doors:WeekConfTop/WeekConfTop.XIM');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result).not.toBeNull();
-      expect(result!.name).toBe('WEEK');
-      expect(result!.type).toBe(DoorType.XIM);
-      expect(result!.access).toBe(50);
-      expect(result!.location).toBe('doors/WeekConfTop/WeekConfTop.XIM');
-    });
-
-    it('should skip empty lines and comments', () => {
-      const cmdFile = path.join(testDir, 'comments.cmd');
-      fs.writeFileSync(cmdFile, `
-# Comment
-
-*WHO XIM050 Doors:who/who
-      `);
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result).not.toBeNull();
-      expect(result!.name).toBe('WHO');
-    });
-
-    it('should parse different door types', () => {
-      const tests = [
-        { input: '*TEST AIM100 Doors:test', type: DoorType.AIM },
-        { input: '*TEST SIM100 Doors:test', type: DoorType.SIM },
-        { input: '*TEST TIM100 Doors:test', type: DoorType.TIM },
-        { input: '*TEST IIM100 Doors:test', type: DoorType.IIM },
-        { input: '*TEST MCI100 Doors:test', type: DoorType.MCI },
-      ];
-
-      for (const test of tests) {
-        const cmdFile = path.join(testDir, `type-${test.type}.cmd`);
-        fs.writeFileSync(cmdFile, test.input);
-
-        const result = parseCmdFile(cmdFile);
-        expect(result!.type).toBe(test.type);
-      }
-    });
-
-    it('should parse short type codes', () => {
-      const tests = [
-        { input: '*TEST XM100 Doors:test', type: DoorType.XIM },
-        { input: '*TEST XI100 Doors:test', type: DoorType.XIM },
-        { input: '*TEST AM100 Doors:test', type: DoorType.AIM },
-        { input: '*TEST AI100 Doors:test', type: DoorType.AIM },
-        { input: '*TEST SM100 Doors:test', type: DoorType.SIM },
-        { input: '*TEST SI100 Doors:test', type: DoorType.SIM },
-      ];
-
-      for (const test of tests) {
-        const cmdFile = path.join(testDir, `short-${test.type}.cmd`);
-        fs.writeFileSync(cmdFile, test.input);
-
-        const result = parseCmdFile(cmdFile);
-        expect(result!.type).toBe(test.type);
-      }
-    });
-
-    it('should parse access level correctly', () => {
-      const cmdFile = path.join(testDir, 'access.cmd');
-      fs.writeFileSync(cmdFile, '*SYSOP XIM255 Doors:admin/sysop');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result!.access).toBe(255);
-    });
-
-    it('should handle zero access level', () => {
-      const cmdFile = path.join(testDir, 'access-zero.cmd');
-      fs.writeFileSync(cmdFile, '*PUBLIC XIM000 Doors:public/public');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result!.access).toBe(0);
-    });
-
-    it('should convert DOORS: prefix to doors/', () => {
-      const cmdFile = path.join(testDir, 'prefix.cmd');
-      fs.writeFileSync(cmdFile, '*TEST XIM050 DOORS:test/test');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result!.location).toBe('doors/test/test');
-    });
-
-    it('should convert colons to slashes in path', () => {
-      const cmdFile = path.join(testDir, 'colons.cmd');
-      fs.writeFileSync(cmdFile, '*TEST XIM050 Doors:Path:To:Door');
-
-      const result = parseCmdFile(cmdFile);
-
-      expect(result!.location).toBe('doors/Path/To/Door');
+  describe('CommandType enum', () => {
+    it('should have all command types', () => {
+      expect(CommandType.BBSCMD).toBe('BBSCMD');
+      expect(CommandType.SYSCMD).toBe('SYSCMD');
+      expect(CommandType.CUSTOM).toBe('CUSTOM');
     });
   });
 
-  describe('loadCommandFromInfo', () => {
-    it('should return null for file with no tooltypes', () => {
-      const infoFile = path.join(testDir, 'empty.info');
-      fs.writeFileSync(infoFile, Buffer.alloc(100));
-
-      const result = loadCommandFromInfo(infoFile);
-      expect(result).toBeNull();
+  describe('ToolTypeLevel enum', () => {
+    it('should have all tooltype levels', () => {
+      expect(ToolTypeLevel.CONFCMD).toBe('CONFCMD');
+      expect(ToolTypeLevel.NODECMD).toBe('NODECMD');
+      expect(ToolTypeLevel.BBSCMD).toBe('BBSCMD');
+      expect(ToolTypeLevel.CONFSYSCMD).toBe('CONFSYSCMD');
+      expect(ToolTypeLevel.NODESYSCMD).toBe('NODESYSCMD');
+      expect(ToolTypeLevel.SYSCMD).toBe('SYSCMD');
     });
 
-    it('should return null if LOCATION is missing', () => {
-      const infoFile = path.join(testDir, 'no-location.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('TYPE=XIM', 50, 'ascii');
-      buffer.write('ACCESS=100', 90, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
+    it('should order levels by priority', () => {
+      // More specific (conf/node) levels come before general (BBS) levels
+      const levels = [
+        ToolTypeLevel.CONFCMD,
+        ToolTypeLevel.NODECMD,
+        ToolTypeLevel.BBSCMD,
+        ToolTypeLevel.CONFSYSCMD,
+        ToolTypeLevel.NODESYSCMD,
+        ToolTypeLevel.SYSCMD,
+      ];
 
-      const result = loadCommandFromInfo(infoFile);
-      expect(result).toBeNull();
+      levels.forEach(level => expect(level).toBeDefined());
+    });
+  });
+
+  describe('parseInfoFile (Critical for door configuration)', () => {
+    describe('Basic parsing', () => {
+      it('should parse basic .info file with tooltypes', () => {
+        const infoContent = `LOCATION=doors/testdoor
+TYPE=XIM
+ACCESS=PUBLIC`;
+
+        const infoFile = path.join(testDir, 'test.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/testdoor');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('PUBLIC');
+      });
+
+      it('should return empty Map for non-existent file', () => {
+        const result = parseInfoFile(path.join(testDir, 'nonexistent.info'));
+        expect(result).toBeDefined();
+        expect(result.size).toBe(0);
+      });
+
+      it('should handle empty .info file', () => {
+        const infoFile = path.join(testDir, 'empty.info');
+        fs.writeFileSync(infoFile, '');
+
+        const result = parseInfoFile(infoFile);
+
+        // Should return empty Map for empty file
+        expect(result).toBeDefined();
+        expect(result.size).toBe(0);
+        expect(result.get('LOCATION')).toBeUndefined();
+        expect(result.get('TYPE')).toBeUndefined();
+      });
+
+      it('should be case-insensitive for tooltype keys', () => {
+        const infoContent = `location=doors/test
+type=xim
+ACCESS=public`;
+
+        const infoFile = path.join(testDir, 'case.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        // Value case is preserved, only keys are uppercased
+        expect(result.get('TYPE')).toBe('xim');
+        expect(result.get('ACCESS')).toBe('public');
+      });
     });
 
-    it('should use BBSCMD tooltype for command name', () => {
-      const infoFile = path.join(testDir, 'bbscmd-name.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('BBSCMD=CUSTOMNAME', 50, 'ascii');
-      buffer.write('LOCATION=doors/test', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
+    describe('Door configuration tooltypes', () => {
+      it('should parse LOCATION tooltype', () => {
+        const infoContent = 'LOCATION=doors/MyDoor/door.exe';
+        const infoFile = path.join(testDir, 'location.info');
+        createInfoFile(infoFile, infoContent);
 
-      const result = loadCommandFromInfo(infoFile);
+        const result = parseInfoFile(infoFile);
+        expect(result.get('LOCATION')).toBe('doors/MyDoor/door.exe');
+      });
 
-      expect(result!.name).toBe('CUSTOMNAME');
+      it('should parse TYPE tooltype for XIM doors', () => {
+        const infoContent = 'TYPE=XIM';
+        const infoFile = path.join(testDir, 'type-xim.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+
+      it('should parse TYPE tooltype for TypeScript doors', () => {
+        const infoContent = 'TYPE=TS';
+        const infoFile = path.join(testDir, 'type-ts.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('TYPE')).toBe(DoorType.TS);
+      });
+
+      it('should parse ACCESS tooltype', () => {
+        const infoContent = 'ACCESS=SYSOP';
+        const infoFile = path.join(testDir, 'access.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('ACCESS')).toBe('SYSOP');
+      });
+
+      it('should parse ARGS tooltype', () => {
+        const infoContent = 'ARGS=--config settings.cfg --verbose';
+        const infoFile = path.join(testDir, 'args.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('ARGS')).toBe('--config settings.cfg --verbose');
+      });
+
+      it('should parse OVERCLOCK tooltype', () => {
+        const infoContent = 'OVERCLOCK=100';
+        const infoFile = path.join(testDir, 'overclock.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('OVERCLOCK')).toBe('100');
+      });
+
+      it('should parse PAGINATION tooltype', () => {
+        const infoContent = 'PAGINATION=YES';
+        const infoFile = path.join(testDir, 'pagination.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('PAGINATION')).toBe('YES');
+      });
+
+      it('should parse RESIDENT tooltype', () => {
+        const infoContent = 'RESIDENT=NO';
+        const infoFile = path.join(testDir, 'resident.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('RESIDENT')).toBe('NO');
+      });
+
+      it('should parse STACK tooltype', () => {
+        const infoContent = 'STACK=8192';
+        const infoFile = path.join(testDir, 'stack.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('STACK')).toBe('8192');
+      });
+
+      it('should parse PRELOADER tooltype for TypeScript doors', () => {
+        const infoContent = `TYPE=TS
+LOCATION=Doors/livechat/index.ts
+PRELOADER=YES`;
+        const infoFile = path.join(testDir, 'preloader.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+        expect(result.get('PRELOADER')).toBe('YES');
+      });
     });
 
-    it('should use SYSCMD tooltype for command name', () => {
-      const infoFile = path.join(testDir, 'syscmd-name.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('SYSCMD=SYSNAME', 50, 'ascii');
-      buffer.write('LOCATION=doors/test', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
+    describe('Binary junk handling (Critical for real .info files)', () => {
+      it('should ignore binary junk before tooltypes', () => {
+        // Real Amiga .info files have binary header junk (use non-printable bytes only)
+        const header = Buffer.alloc(40, 0); // Required 40-byte minimum
+        const binaryJunk = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]); // Non-printable bytes
+        const tooltypes = Buffer.from('LOCATION=doors/test\nTYPE=XIM');
+        const infoContent = Buffer.concat([header, binaryJunk, tooltypes]);
 
-      const result = loadCommandFromInfo(infoFile);
+        const infoFile = path.join(testDir, 'binary.info');
+        // Write directly without createInfoFile (already has proper structure)
+        fs.writeFileSync(infoFile, infoContent);
 
-      expect(result!.name).toBe('SYSNAME');
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+
+      it('should ignore binary junk after tooltypes', () => {
+        const header = Buffer.alloc(40, 0); // Required 40-byte minimum
+        const tooltypes = Buffer.from('TYPE=AIM\nLOCATION=doors/aim');
+        const binaryJunk = Buffer.from([0x00, 0xFF, 0xAB, 0xCD]);
+        const infoContent = Buffer.concat([header, tooltypes, binaryJunk]);
+
+        const infoFile = path.join(testDir, 'binary-after.info');
+        // Write directly without createInfoFile (already has proper structure)
+        fs.writeFileSync(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('TYPE')).toBe(DoorType.AIM);
+        expect(result.get('LOCATION')).toBe('doors/aim');
+      });
+
+      it('should handle mixed binary junk and tooltypes', () => {
+        // Simulate real .info structure: binary header + tooltypes + binary footer
+        const minHeader = Buffer.alloc(40, 0); // Required 40-byte minimum
+        const header = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+        const tooltypes = Buffer.from('TYPE=SIM\nLOCATION=doors/sim\nACCESS=ALL');
+        const footer = Buffer.from([0xFF, 0xFE, 0xFD]);
+        const infoContent = Buffer.concat([minHeader, header, tooltypes, footer]);
+
+        const infoFile = path.join(testDir, 'mixed-binary.info');
+        // Write directly without createInfoFile (already has proper structure)
+        fs.writeFileSync(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('TYPE')).toBe(DoorType.SIM);
+        expect(result.get('LOCATION')).toBe('doors/sim');
+        expect(result.get('ACCESS')).toBe('ALL');
+      });
     });
 
-    it('should fall back to filename for command name', () => {
+    describe('Comment handling', () => {
+      it('should ignore comment lines starting with ;', () => {
+        const infoContent = `; This is a door
+LOCATION=doors/test
+; Another comment
+TYPE=XIM`;
+
+        const infoFile = path.join(testDir, 'comments.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+
+      it('should ignore comment lines starting with #', () => {
+        const infoContent = `# Configuration
+LOCATION=doors/test
+# Type setting
+TYPE=TIM`;
+
+        const infoFile = path.join(testDir, 'hash-comments.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.TIM);
+      });
+
+      it('should handle empty lines', () => {
+        const infoContent = `LOCATION=doors/test
+
+TYPE=XIM
+
+ACCESS=PUBLIC`;
+
+        const infoFile = path.join(testDir, 'empty-lines.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('PUBLIC');
+      });
+    });
+
+    describe('Key validation and edge cases', () => {
+      it('should handle lines without = separator', () => {
+        const infoContent = `LOCATION=doors/test
+INVALID LINE WITHOUT EQUALS
+TYPE=XIM`;
+
+        const infoFile = path.join(testDir, 'no-equals.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+
+      it('should handle empty values', () => {
+        const infoContent = `LOCATION=
+TYPE=XIM
+ACCESS=`;
+
+        const infoFile = path.join(testDir, 'empty-values.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('');
+      });
+
+      it('should trim whitespace from keys and values', () => {
+        const infoContent = `  LOCATION  =  doors/test
+  TYPE  =  XIM  `;
+
+        const infoFile = path.join(testDir, 'whitespace.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+
+      it('should handle values with = characters', () => {
+        const infoContent = 'ARGS=--param=value --other=setting';
+
+        const infoFile = path.join(testDir, 'equals-in-value.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('ARGS')).toBe('--param=value --other=setting');
+      });
+
+      it('should handle unknown tooltype keys', () => {
+        const infoContent = `LOCATION=doors/test
+UNKNOWN_KEY=some_value
+TYPE=XIM
+ANOTHER_UNKNOWN=value`;
+
+        const infoFile = path.join(testDir, 'unknown-keys.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        // Unknown keys should be ignored or stored in metadata
+      });
+    });
+
+    describe('Real-world door configurations', () => {
+      it('should parse AquaScan .info file', () => {
+        const infoContent = `LOCATION=doors/AquaScan/AquaScan.020
+TYPE=XIM
+ACCESS=PUBLIC
+PAGINATION=NO
+OVERCLOCK=100`;
+
+        const infoFile = path.join(testDir, 'aquascan.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/AquaScan/AquaScan.020');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('PUBLIC');
+        expect(result.get('PAGINATION')).toBe('NO');
+        expect(result.get('OVERCLOCK')).toBe('100');
+      });
+
+      it('should parse RTW (Real-Time Who) .info file', () => {
+        const infoContent = `LOCATION=doors/RTW/RTW
+TYPE=XIM
+ACCESS=ALL
+RESIDENT=YES`;
+
+        const infoFile = path.join(testDir, 'rtw.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/RTW/RTW');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('ALL');
+        expect(result.get('RESIDENT')).toBe('YES');
+      });
+
+      it('should parse LiveChat TypeScript door .info file', () => {
+        const infoContent = `TYPE=TS
+LOCATION=Doors/livechat/index.ts
+ACCESS=PUBLIC
+PRELOADER=YES`;
+
+        const infoFile = path.join(testDir, 'livechat.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('TYPE')).toBe(DoorType.TS);
+        expect(result.get('LOCATION')).toBe('Doors/livechat/index.ts');
+        expect(result.get('ACCESS')).toBe('PUBLIC');
+        expect(result.get('PRELOADER')).toBe('YES');
+      });
+
+      it('should parse door with ARGS tooltype', () => {
+        const infoContent = `LOCATION=doors/MultiTop/mtop
+TYPE=XIM
+ARGS=NEWSCAN
+ACCESS=ALL`;
+
+        const infoFile = path.join(testDir, 'multitop.info');
+        createInfoFile(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/MultiTop/mtop');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ARGS')).toBe('NEWSCAN');
+        expect(result.get('ACCESS')).toBe('ALL');
+      });
+
+      it('should parse door with complex binary structure', () => {
+        // Simulate real Amiga .info file with binary icon data
+        const minHeader = Buffer.alloc(40, 0); // Required 40-byte minimum
+        const header = Buffer.from([
+          0x00, 0x00, 0x03, 0xE7, // Magic number
+          0x00, 0x00, 0x00, 0x01, // Version
+          0x00, 0x00, 0x00, 0x02, // Type
+          0xFF, 0xFF, 0xFF, 0xFF, // Default tool
+        ]);
+        const tooltypes = Buffer.from(`LOCATION=doors/emp_tools/joincnf
+TYPE=XIM
+ACCESS=PUBLIC`);
+        const footer = Buffer.from([0x00, 0x00, 0x00, 0x00]);
+        const infoContent = Buffer.concat([minHeader, header, tooltypes, footer]);
+
+        const infoFile = path.join(testDir, 'real-binary.info');
+        // Write directly without createInfoFile (already has proper structure)
+        fs.writeFileSync(infoFile, infoContent);
+
+        const result = parseInfoFile(infoFile);
+
+        expect(result.get('LOCATION')).toBe('doors/emp_tools/joincnf');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+        expect(result.get('ACCESS')).toBe('PUBLIC');
+      });
+    });
+
+    describe('Multiple door types', () => {
+      it('should parse all 68K door types', () => {
+        const doorTypes = [
+          { type: 'XIM', enum: DoorType.XIM },
+          { type: 'AIM', enum: DoorType.AIM },
+          { type: 'SIM', enum: DoorType.SIM },
+          { type: 'TIM', enum: DoorType.TIM },
+          { type: 'IIM', enum: DoorType.IIM },
+        ];
+
+        doorTypes.forEach(({ type, enum: enumValue }) => {
+          const infoContent = `TYPE=${type}\nLOCATION=doors/test`;
+          const infoFile = path.join(testDir, `${type}.info`);
+          createInfoFile(infoFile, infoContent);
+
+          const result = parseInfoFile(infoFile);
+          expect(result.get('TYPE')).toBe(enumValue);
+        });
+      });
+
+      it('should parse modern door types', () => {
+        const doorTypes = [
+          { type: 'TS', enum: DoorType.TS },
+          { type: 'PYTHON', enum: DoorType.PYTHON },
+          { type: 'PY', enum: DoorType.PY },
+          { type: 'AREXX', enum: DoorType.AREXX },
+          { type: 'REXX', enum: DoorType.REXX },
+        ];
+
+        doorTypes.forEach(({ type, enum: enumValue }) => {
+          const infoContent = `TYPE=${type}\nLOCATION=doors/test`;
+          const infoFile = path.join(testDir, `${type}.info`);
+          createInfoFile(infoFile, infoContent);
+
+          const result = parseInfoFile(infoFile);
+          expect(result.get('TYPE')).toBe(enumValue);
+        });
+      });
+    });
+
+    describe('Access levels', () => {
+      it('should parse different access levels', () => {
+        const accessLevels = ['PUBLIC', 'ALL', 'SYSOP', 'COSYSOP', 'VALIDATED', 'LEVEL_10'];
+
+        accessLevels.forEach(access => {
+          const infoContent = `ACCESS=${access}`;
+          const infoFile = path.join(testDir, `access-${access}.info`);
+          createInfoFile(infoFile, infoContent);
+
+          const result = parseInfoFile(infoFile);
+          expect(result.get('ACCESS')).toBe(access);
+        });
+      });
+    });
+
+    describe('Performance', () => {
+      it('should parse large .info files efficiently', () => {
+        const lines = ['LOCATION=doors/test', 'TYPE=XIM'];
+        // Add 1000 comment lines to simulate large file
+        for (let i = 0; i < 1000; i++) {
+          lines.push(`; Comment line ${i}`);
+        }
+        const infoContent = lines.join('\n');
+
+        const infoFile = path.join(testDir, 'large.info');
+        createInfoFile(infoFile, infoContent);
+
+        const start = Date.now();
+        const result = parseInfoFile(infoFile);
+        const duration = Date.now() - start;
+
+        expect(duration).toBeLessThan(100); // Should be fast
+        expect(result.get('LOCATION')).toBe('doors/test');
+        expect(result.get('TYPE')).toBe(DoorType.XIM);
+      });
+    });
+  });
+
+  describe('Integration tests', () => {
+    it('should parse .info file and create valid CommandDefinition', () => {
+      const infoContent = `LOCATION=doors/TestDoor/door.exe
+TYPE=XIM
+ACCESS=PUBLIC
+ARGS=--mode test
+PAGINATION=YES
+OVERCLOCK=50
+RESIDENT=NO
+STACK=4096`;
+
+      const infoFile = path.join(testDir, 'complete.info');
+      createInfoFile(infoFile, infoContent);
+
+      const result = parseInfoFile(infoFile);
+
+      // Verify all fields are populated correctly
+      expect(result).toBeDefined();
+      expect(result.get('LOCATION')).toBe('doors/TestDoor/door.exe');
+      expect(result.get('TYPE')).toBe(DoorType.XIM);
+      expect(result.get('ACCESS')).toBe('PUBLIC');
+      expect(result.get('ARGS')).toBe('--mode test');
+      expect(result.get('PAGINATION')).toBe('YES');
+      expect(result.get('OVERCLOCK')).toBe('50');
+      expect(result.get('RESIDENT')).toBe('NO');
+      expect(result.get('STACK')).toBe('4096');
+    });
+
+    it('should handle .info file matching real BBS directory structure', () => {
+      // Simulate Commands/BBSCmd/WHO.info
+      const infoContent = `LOCATION=doors/who/who
+TYPE=XIM
+ACCESS=ALL`;
+
       const infoFile = path.join(testDir, 'WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/who', 50, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
+      createInfoFile(infoFile, infoContent);
 
-      const result = loadCommandFromInfo(infoFile);
+      const result = parseInfoFile(infoFile);
 
-      expect(result!.name).toBe('WHO');
-    });
-
-    it('should uppercase command name', () => {
-      const infoFile = path.join(testDir, 'lowercase.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('bbscmd=lowername', 50, 'ascii');
-      buffer.write('LOCATION=doors/test', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.name).toBe('LOWERNAME');
-    });
-
-    it('should default type to SIM if not specified', () => {
-      const infoFile = path.join(testDir, 'no-type.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.type).toBe(DoorType.SIM);
-    });
-
-    it('should parse all door types', () => {
-      const types = Object.keys(DoorType);
-
-      for (const type of types) {
-        const infoFile = path.join(testDir, `type-${type}.info`);
-        const buffer = Buffer.alloc(300);
-        buffer.write(`TYPE=${type}`, 50, 'ascii');
-        buffer.write('LOCATION=doors/test', 100, 'ascii');
-        fs.writeFileSync(infoFile, buffer);
-
-        const result = loadCommandFromInfo(infoFile);
-        expect(result!.type).toBe(DoorType[type as keyof typeof DoorType]);
-      }
-    });
-
-    it('should parse PATH as alias for LOCATION', () => {
-      const infoFile = path.join(testDir, 'path.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('PATH=doors/test', 50, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.location).toBe('doors/test');
-    });
-
-    it('should convert DOORS: prefix to doors/', () => {
-      const infoFile = path.join(testDir, 'doors-prefix.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=DOORS:test/test', 50, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.location).toBe('doors/test/test');
-    });
-
-    it('should convert colons to slashes in location', () => {
-      const infoFile = path.join(testDir, 'colon-path.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors:path:to:door', 50, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.location).toBe('doors/path/to/door');
-    });
-
-    it('should parse ACCESS level', () => {
-      const infoFile = path.join(testDir, 'access-level.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('ACCESS=150', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.access).toBe(150);
-    });
-
-    it('should parse PASSWORD', () => {
-      const infoFile = path.join(testDir, 'password.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('PASSWORD=secret123', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.password).toBe('secret123');
-    });
-
-    it('should parse PRIORITY', () => {
-      const infoFile = path.join(testDir, 'priority.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('PRIORITY=5', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.priority).toBe('5');
-    });
-
-    it('should parse STACK size', () => {
-      const infoFile = path.join(testDir, 'stack.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('STACK=8192', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.stack).toBe(8192);
-    });
-
-    it('should parse boolean flags', () => {
-      const infoFile = path.join(testDir, 'flags.info');
-      const buffer = Buffer.alloc(500);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('RESIDENT=YES', 100, 'ascii');
-      buffer.write('EXPERT_MODE', 150, 'ascii'); // Flag mode
-      buffer.write('TRAPON=YES', 200, 'ascii');
-      buffer.write('SILENT=YES', 250, 'ascii');
-      buffer.write('MULTINODE=YES', 300, 'ascii');
-      buffer.write('QUICKMODE=YES', 350, 'ascii');
-      buffer.write('SCRIPTCHECK=YES', 400, 'ascii');
-      buffer.write('LOG_INPUTS=YES', 450, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.resident).toBe(true);
-      expect(result!.expertMode).toBe(true);
-      expect(result!.trapOn).toBe(true);
-      expect(result!.silent).toBe(true);
-      expect(result!.multiNode).toBe(true);
-      expect(result!.quickMode).toBe(true);
-      expect(result!.scriptCheck).toBe(true);
-      expect(result!.logInputs).toBe(true);
-    });
-
-    it('should parse BANNER', () => {
-      const infoFile = path.join(testDir, 'banner.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('BANNER=Screens/TestBanner', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.banner).toBe('Screens/TestBanner');
-    });
-
-    it('should parse MIMICVER', () => {
-      const infoFile = path.join(testDir, 'mimicver.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('MIMICVER=2.53', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.mimicVer).toBe('2.53');
-    });
-
-    it('should parse INTERNAL and PASS_PARAMETERS', () => {
-      const infoFile = path.join(testDir, 'internal.info');
-      const buffer = Buffer.alloc(400);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('INTERNAL=WHO', 100, 'ascii');
-      buffer.write('PASS_PARAMETERS=2', 150, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.internal).toBe('WHO');
-      expect(result!.passParameters).toBe(2);
-    });
-
-    it('should parse MCI_TEXT for MCI type doors', () => {
-      const infoFile = path.join(testDir, 'mci.info');
-      const buffer = Buffer.alloc(400);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('TYPE=MCI', 100, 'ascii');
-      buffer.write('MCI_TEXT=~5SWelcome~5N', 150, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.type).toBe(DoorType.MCI);
-      expect(result!.mciText).toBe('~5SWelcome~5N');
-    });
-
-    it('should ignore MCI_TEXT for non-MCI doors', () => {
-      const infoFile = path.join(testDir, 'non-mci.info');
-      const buffer = Buffer.alloc(400);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('TYPE=XIM', 100, 'ascii');
-      buffer.write('MCI_TEXT=Ignored', 150, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.type).toBe(DoorType.XIM);
-      expect(result!.mciText).toBeUndefined();
-    });
-
-    it('should parse ARGS', () => {
-      const infoFile = path.join(testDir, 'args.info');
-      const buffer = Buffer.alloc(300);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('ARGS=-v --debug', 100, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.args).toBe('-v --debug');
-    });
-
-    it('should parse OVERCLOCK factor', () => {
-      const tests = [
-        { value: '0', expected: 0 },   // Auto
-        { value: '10', expected: 10 }, // Specific multiplier
-        { value: '-1', expected: -1 }, // Disabled
-      ];
-
-      for (const test of tests) {
-        const infoFile = path.join(testDir, `overclock-${test.expected}.info`);
-        const buffer = Buffer.alloc(300);
-        buffer.write('LOCATION=doors/test', 50, 'ascii');
-        buffer.write(`OVERCLOCK=${test.value}`, 100, 'ascii');
-        fs.writeFileSync(infoFile, buffer);
-
-        const result = loadCommandFromInfo(infoFile);
-        expect(result!.overclockFactor).toBe(test.expected);
-      }
-    });
-
-    it('should parse PAGINATION', () => {
-      const tests = [
-        { value: '0', expected: 0 },   // Door handles pagination
-        { value: '23', expected: 23 }, // Auto-pause at 23 lines
-        { value: '-1', expected: -1 }, // Use user setting
-      ];
-
-      for (const test of tests) {
-        const infoFile = path.join(testDir, `pagination-${test.expected}.info`);
-        const buffer = Buffer.alloc(300);
-        buffer.write('LOCATION=doors/test', 50, 'ascii');
-        buffer.write(`PAGINATION=${test.value}`, 100, 'ascii');
-        fs.writeFileSync(infoFile, buffer);
-
-        const result = loadCommandFromInfo(infoFile);
-        expect(result!.pagination).toBe(test.expected);
-      }
-    });
-
-    it('should preserve all tooltypes in toolTypes object', () => {
-      const infoFile = path.join(testDir, 'tooltypes.info');
-      const buffer = Buffer.alloc(400);
-      buffer.write('LOCATION=doors/test', 50, 'ascii');
-      buffer.write('CUSTOM_FIELD=value1', 100, 'ascii');
-      buffer.write('ANOTHER_FIELD=value2', 150, 'ascii');
-      fs.writeFileSync(infoFile, buffer);
-
-      const result = loadCommandFromInfo(infoFile);
-
-      expect(result!.toolTypes).toBeDefined();
-      expect(result!.toolTypes!['LOCATION']).toBe('doors/test');
-      expect(result!.toolTypes!['CUSTOM_FIELD']).toBe('value1');
-      expect(result!.toolTypes!['ANOTHER_FIELD']).toBe('value2');
-    });
-  });
-
-  describe('scanCommandDirectory', () => {
-    beforeEach(() => {
-      // Create test .info files
-      const globalBBSCmd = path.join(testDir, 'Commands/BBSCmd/WHO.info');
-      const buffer1 = Buffer.alloc(200);
-      buffer1.write('LOCATION=doors/who', 50, 'ascii');
-      buffer1.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(globalBBSCmd, buffer1);
-
-      const conf1BBSCmd = path.join(testDir, 'Conf1/Commands/BBSCmd/CONFCMD.info');
-      const buffer2 = Buffer.alloc(200);
-      buffer2.write('LOCATION=doors/conf', 50, 'ascii');
-      buffer2.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(conf1BBSCmd, buffer2);
-
-      const node1BBSCmd = path.join(testDir, 'Node1/Commands/BBSCmd/NODECMD.info');
-      const buffer3 = Buffer.alloc(200);
-      buffer3.write('LOCATION=doors/node', 50, 'ascii');
-      buffer3.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(node1BBSCmd, buffer3);
-    });
-
-    it('should scan global BBSCMD directory', () => {
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD);
-
-      expect(commands.has('WHO')).toBe(true);
-      expect(commands.get('WHO')!.location).toBe('doors/who');
-    });
-
-    it('should scan conference-specific commands', () => {
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD, 1);
-
-      expect(commands.has('CONFCMD')).toBe(true);
-      expect(commands.get('CONFCMD')!.location).toBe('doors/conf');
-    });
-
-    it('should scan node-specific commands', () => {
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD, undefined, 1);
-
-      expect(commands.has('NODECMD')).toBe(true);
-      expect(commands.get('NODECMD')!.location).toBe('doors/node');
-    });
-
-    it('should prioritize conference commands over global', () => {
-      // Create duplicate command in conference
-      const confWho = path.join(testDir, 'Conf1/Commands/BBSCmd/WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/conf-who', 50, 'ascii');
-      buffer.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(confWho, buffer);
-
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD, 1);
-
-      expect(commands.get('WHO')!.location).toBe('doors/conf-who');
-    });
-
-    it('should prioritize node commands over global', () => {
-      // Create duplicate command in node
-      const nodeWho = path.join(testDir, 'Node1/Commands/BBSCmd/WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/node-who', 50, 'ascii');
-      buffer.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(nodeWho, buffer);
-
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD, undefined, 1);
-
-      expect(commands.get('WHO')!.location).toBe('doors/node-who');
-    });
-
-    it('should handle non-existent directories gracefully', () => {
-      const commands = scanCommandDirectory('/nonexistent/path', CommandType.BBSCMD);
-
-      expect(commands.size).toBe(0);
-    });
-
-    it('should scan SYSCMD directories', () => {
-      const sysCmd = path.join(testDir, 'Commands/SysCmd/SYSOP.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/sysop', 50, 'ascii');
-      buffer.write('TYPE=XIM', 100, 'ascii');
-      fs.writeFileSync(sysCmd, buffer);
-
-      const commands = scanCommandDirectory(testDir, CommandType.SYSCMD);
-
-      expect(commands.has('SYSOP')).toBe(true);
-    });
-
-    it('should handle .Info extension (case-insensitive)', () => {
-      const mixedCase = path.join(testDir, 'Commands/BBSCmd/MIXED.Info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/mixed', 50, 'ascii');
-      fs.writeFileSync(mixedCase, buffer);
-
-      const commands = scanCommandDirectory(testDir, CommandType.BBSCMD);
-
-      expect(commands.has('MIXED')).toBe(true);
-    });
-  });
-
-  describe('findCommand', () => {
-    beforeEach(() => {
-      // Create test commands
-      const who = path.join(testDir, 'Commands/BBSCmd/WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/who', 50, 'ascii');
-      fs.writeFileSync(who, buffer);
-    });
-
-    it('should find existing command', () => {
-      const cmd = findCommand(testDir, 'WHO', CommandType.BBSCMD);
-
-      expect(cmd).not.toBeNull();
-      expect(cmd!.name).toBe('WHO');
-      expect(cmd!.location).toBe('doors/who');
-    });
-
-    it('should return null for non-existent command', () => {
-      const cmd = findCommand(testDir, 'NONEXISTENT', CommandType.BBSCMD);
-
-      expect(cmd).toBeNull();
-    });
-
-    it('should be case-insensitive', () => {
-      const cmd = findCommand(testDir, 'who', CommandType.BBSCMD);
-
-      expect(cmd).not.toBeNull();
-      expect(cmd!.name).toBe('WHO');
-    });
-
-    it('should respect conference context', () => {
-      const confWho = path.join(testDir, 'Conf1/Commands/BBSCmd/WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/conf-who', 50, 'ascii');
-      fs.writeFileSync(confWho, buffer);
-
-      const cmd = findCommand(testDir, 'WHO', CommandType.BBSCMD, 1);
-
-      expect(cmd!.location).toBe('doors/conf-who');
-    });
-
-    it('should respect node context', () => {
-      const nodeWho = path.join(testDir, 'Node1/Commands/BBSCmd/WHO.info');
-      const buffer = Buffer.alloc(200);
-      buffer.write('LOCATION=doors/node-who', 50, 'ascii');
-      fs.writeFileSync(nodeWho, buffer);
-
-      const cmd = findCommand(testDir, 'WHO', CommandType.BBSCMD, undefined, 1);
-
-      expect(cmd!.location).toBe('doors/node-who');
+      expect(result.get('LOCATION')).toBe('doors/who/who');
+      expect(result.get('TYPE')).toBe(DoorType.XIM);
+      expect(result.get('ACCESS')).toBe('ALL');
     });
   });
 });

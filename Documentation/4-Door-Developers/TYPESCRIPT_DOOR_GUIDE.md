@@ -209,7 +209,45 @@ DESCRIPTION=My awesome BBS door
 ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
+PRELOADER=YES
 ```
+
+#### .info File Fields
+
+- **BBSCMD** - Command name users type (uppercase)
+- **TYPE** - Door type (TS for TypeScript, SDK for new SDK doors)
+- **LOCATION** - Path to door directory (relative to BBS root, e.g., `doors/my-door`)
+- **DESCRIPTION** - User-visible description
+- **ACCESS** - Minimum security level (0 = all users)
+- **MULTINODE** - YES/NO (whether multiple users can run simultaneously)
+- **PRIORITY** - SAME/HIGHER/LOWER (process priority)
+- **PRELOADER** - YES/NO (show animated loading spinner during module import)
+
+#### PRELOADER Tooltype
+
+**When to use PRELOADER=YES:**
+- TypeScript doors that take >200ms to initialize (large dependencies, complex UI setup)
+- Doors using neo-blessed with many widgets
+- Doors importing heavy npm packages
+
+**When to use PRELOADER=NO:**
+- Simple/fast doors that initialize instantly
+- Doors that want to show custom loading UI
+
+**How it works:**
+1. User runs command (e.g., `MYDOOR`)
+2. If `PRELOADER=YES`, BBS shows animated spinner with "Loading MYDOOR..." message
+3. Spinner animates while door module is imported (`import('doors/my-door')`)
+4. Once import completes and `runDoor()` starts executing, spinner automatically hides
+5. Door takes over rendering
+
+**Implementation:** The preloader uses `showPreloaderWhile()` from `sdk/utils/door-preloader.ts` which:
+- Displays centered box with animated spinner (|, /, -, \)
+- Uses direct ANSI output (bypasses blessed rendering)
+- Continues until door module import completes
+- No hardcoded delays - duration matches actual import time
+
+**Example:** See `Doors/neo-blessed-showcase/neo-blessed-showcase.info` for reference.
 
 **Important:** TypeScript doors are discovered at BBS startup by scanning `.info` files.
 Doors without a `.info` file will not be registered or available.

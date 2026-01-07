@@ -383,6 +383,8 @@ npm test; npm run create-door
 
 **New doors:** ALWAYS use `npm run create-door`, NEVER create in `web/backend/src/doors/`.
 
+**TypeScript door .info files:** Add `PRELOADER=YES` to show animated loading spinner during module import. The preloader handles timing automatically - no hardcoded delays in door code. See `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` section on PRELOADER tooltype.
+
 ### Testing
 - All commands: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts`
 - Quick: `./dev/scripts/test-all-commands-quick.sh`
