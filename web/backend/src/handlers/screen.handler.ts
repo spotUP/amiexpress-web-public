@@ -23,6 +23,7 @@ import { sequentialFileManager, formatNumberedFilename } from '../services/Seque
 import { HIDE_CURSOR, SHOW_CURSOR } from '../utils/ansi-output.util';
 import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/amigafs';
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
+import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';

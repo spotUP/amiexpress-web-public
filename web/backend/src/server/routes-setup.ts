@@ -11,6 +11,7 @@
  */
 
 import { Request, Response, NextFunction, Application } from 'express';
+import { Server as SocketIOServer } from 'socket.io';
 import { join } from 'path';
 import multer from 'multer';
 import * as fs from 'fs';
@@ -28,6 +29,7 @@ import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
 import { createGlobalWallRouter } from '../api/globalwall-routes';
 import { createStatisticsRouter } from '../api/statistics-routes';
+import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
@@ -77,8 +79,10 @@ const upload = multer({
 
 /**
  * Register all HTTP routes on the Express app
+ * @param app - Express application instance
+ * @param io - Socket.IO server instance (for real-time features)
  */
-export function registerHttpRoutes(app: Application): void {
+export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // Development: Disable caching to prevent stale session issues
   if (process.env.NODE_ENV !== 'production') {
     app.use((req: Request, res: Response, next: NextFunction) => {
@@ -141,6 +145,10 @@ export function registerHttpRoutes(app: Application): void {
   // ===== Statistics API - Sysop-only Routes =====
   const statisticsRouter = createStatisticsRouter(db);
   app.use('/api/stats', authenticateToken(db), requireSysop(), statisticsRouter);
+
+  // ===== Node Control API - Sysop-only Routes (Real-time SV_* commands) =====
+  const nodeControlRouter = createNodeControlRouter(io);
+  app.use('/api/nodes', authenticateToken(db), requireSysop(), nodeControlRouter);
 
   // ===== Static File Serving for Unified Deployment =====
   // Note: Using process.cwd() instead of __dirname for tsx compatibility

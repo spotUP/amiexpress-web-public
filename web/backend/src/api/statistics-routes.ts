@@ -10,7 +10,7 @@
  * - GET /api/stats/session - Current session statistics
  */
 
-import express from 'express';
+import express, { Request, Response } from 'express';
 import type { Database } from '../database';
 import { getSystemTime } from '../utils/date-time.util';
 
@@ -21,12 +21,12 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
    * Get last N callers (login activity)
    * Query params: limit (default: 20)
    */
-  router.get('/last-callers', async (req, res) => {
+  router.get('/last-callers', async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
       // Query caller_activity table for login events
-      const callers = database.db.prepare(`
+      const result = await database.query(`
         SELECT
           ca.id,
           ca.node_id,
@@ -42,7 +42,8 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
         WHERE ca.action IN ('login', 'logout', 'connect')
         ORDER BY ca.timestamp DESC
         LIMIT ?
-      `).all(limit);
+      `, [limit]);
+      const callers = result.rows;
 
       // Format timestamps
       const formatted = callers.map((c: any) => ({
@@ -76,14 +77,14 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
    * Get last N downloads
    * Query params: limit (default: 20)
    */
-  router.get('/last-downloads', async (req, res) => {
+  router.get('/last-downloads', async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
       // Query file_entries for recently downloaded files
       // We need to track download events - this requires adding download_history table
       // For now, get most downloaded files
-      const downloads = database.db.prepare(`
+      const result = await database.query(`
         SELECT
           fe.id,
           fe.filename,
@@ -99,7 +100,8 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
         WHERE fe.downloads > 0
         ORDER BY fe.id DESC
         LIMIT ?
-      `).all(limit);
+      `, [limit]);
+      const downloads = result.rows;
 
       const formatted = downloads.map((d: any) => ({
         id: d.id,
@@ -132,12 +134,12 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
    * Get last N uploads
    * Query params: limit (default: 20)
    */
-  router.get('/last-uploads', async (req, res) => {
+  router.get('/last-uploads', async (req: Request, res: Response) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
       // Query file_entries for recently uploaded files
-      const uploads = database.db.prepare(`
+      const result = await database.query(`
         SELECT
           fe.id,
           fe.filename,
@@ -152,7 +154,8 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
         LEFT JOIN file_areas fa ON fe.areaid = fa.id
         ORDER BY fe.uploaddate DESC
         LIMIT ?
-      `).all(limit);
+      `, [limit]);
+      const uploads = result.rows;
 
       const formatted = uploads.map((u: any) => ({
         id: u.id,
@@ -184,42 +187,50 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
   /**
    * Get system statistics (all-time and today)
    */
-  router.get('/system', async (req, res) => {
+  router.get('/system', async (req: Request, res: Response) => {
     try {
       // Get total users
-      const totalUsers = database.db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+      const totalUsersResult = await database.query('SELECT COUNT(*) as count FROM users');
+      const totalUsers = totalUsersResult.rows[0] as { count: number };
 
       // Get total messages
-      const totalMessages = database.db.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number };
+      const totalMessagesResult = await database.query('SELECT COUNT(*) as count FROM messages');
+      const totalMessages = totalMessagesResult.rows[0] as { count: number };
 
       // Get total files
-      const totalFiles = database.db.prepare('SELECT COUNT(*) as count FROM file_entries').get() as { count: number };
+      const totalFilesResult = await database.query('SELECT COUNT(*) as count FROM file_entries');
+      const totalFiles = totalFilesResult.rows[0] as { count: number };
 
       // Get total file bytes
-      const totalBytes = database.db.prepare('SELECT SUM(size) as total FROM file_entries').get() as { total: number };
+      const totalBytesResult = await database.query('SELECT SUM(size) as total FROM file_entries');
+      const totalBytes = totalBytesResult.rows[0] as { total: number };
 
       // Get total downloads
-      const totalDownloads = database.db.prepare('SELECT SUM(downloads) as total FROM file_entries').get() as { total: number };
+      const totalDownloadsResult = await database.query('SELECT SUM(downloads) as total FROM file_entries');
+      const totalDownloads = totalDownloadsResult.rows[0] as { total: number };
 
       // Get calls today (from caller_activity)
       const today = getSystemTime().toISOString().split('T')[0];
       const todayTimestamp = Math.floor(new Date(today).getTime() / 1000);
 
-      const callsToday = database.db.prepare(`
+      const callsTodayResult = await database.query(`
         SELECT COUNT(*) as count
         FROM caller_activity
         WHERE action = 'login' AND timestamp >= ?
-      `).get(todayTimestamp) as { count: number };
+      `, [todayTimestamp]);
+      const callsToday = callsTodayResult.rows[0] as { count: number };
 
       // Get total calls all-time
-      const totalCalls = database.db.prepare(`
+      const totalCallsResult = await database.query(`
         SELECT COUNT(*) as count
         FROM caller_activity
         WHERE action = 'login'
-      `).get() as { count: number };
+      `);
+      const totalCalls = totalCallsResult.rows[0] as { count: number };
 
       // Get active users count
-      const activeUsers = database.db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number };
+      const activeUsersResult = await database.query('SELECT COUNT(*) as count FROM sessions');
+      const activeUsers = activeUsersResult.rows[0] as { count: number };
 
       res.json({
         success: true,
@@ -252,18 +263,20 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
   /**
    * Get current session statistics
    */
-  router.get('/session', async (req, res) => {
+  router.get('/session', async (req: Request, res: Response) => {
     try {
       // Get start time of oldest active session (session start time)
-      const sessionStart = database.db.prepare(`
+      const sessionStartResult = await database.query(`
         SELECT MIN(lastactivity) as start FROM sessions
-      `).get() as { start: number };
+      `);
+      const sessionStart = sessionStartResult.rows[0] as { start: number };
 
       // Get active sessions
-      const activeSessions = database.db.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number };
+      const activeSessionsResult = await database.query('SELECT COUNT(*) as count FROM sessions');
+      const activeSessions = activeSessionsResult.rows[0] as { count: number };
 
       // Get active users with details
-      const activeUsers = database.db.prepare(`
+      const activeUsersResult = await database.query(`
         SELECT
           s.id,
           s.userid,
@@ -275,7 +288,8 @@ export function createStatisticsRouter(database: Database): ReturnType<typeof ex
         FROM sessions s
         LEFT JOIN users u ON s.userid = u.id
         ORDER BY s.lastactivity DESC
-      `).all();
+      `);
+      const activeUsers = activeUsersResult.rows;
 
       // Calculate session uptime
       const sessionStartTime = sessionStart?.start || Math.floor(Date.now() / 1000);

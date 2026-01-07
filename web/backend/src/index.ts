@@ -1445,7 +1445,7 @@ console.log(
     }
 
     // Register HTTP routes (auth, sessions, config, upload, download, etc.)
-    registerHttpRoutes(app);
+    registerHttpRoutes(app, io);
 console.log("[OK] HTTP routes registered");
 console.log("[OK] Database initialization complete");
 

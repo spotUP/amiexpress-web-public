@@ -227,8 +227,8 @@ import { initializeSecurity } from '../utils/security.util';
 // Dependencies (injected)
 
 // Import getters from dependency-injection module (eliminates duplicate variables)
-import {
 import { getSystemTime } from '../utils/date-time.util';
+import {
   getDatabase,
   getConfig,
   getConferences,

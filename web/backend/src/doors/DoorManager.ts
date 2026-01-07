@@ -34,8 +34,8 @@ import {
   InfoFile,
   Tooltype
 } from '../utils/info-file.util';
-import {
 import { getSystemTime } from '../utils/date-time.util';
+import {
   InfoEditorState,
   findInfoFile,
   openInfoFile,

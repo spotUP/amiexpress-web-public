@@ -13,6 +13,7 @@ import { ExecLibrary } from '../api/ExecLibrary';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
+import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 
 export class XIMDataQueryHandler {
