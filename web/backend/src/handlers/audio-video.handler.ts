@@ -7,6 +7,7 @@
 
 import type { Socket, Server as SocketIOServer } from 'socket.io';
 import type { BBSSession } from '../index';
+import { rgbToHsv } from '../utils/image-to-ascii.util';
 
 // Global cache for temporal smoothing (stabilizes flickering pixels)
 const lumaCache = new Map<string, Float32Array>();
@@ -241,8 +242,8 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
 
   // Handle raw video data and convert to ASCII art
   // Inspired by Python/Pillow ASCII art techniques with calibrated characters
-  // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based)
-  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii', data: ArrayBuffer }) => {
+  // Modes: 'braille' (8x resolution), 'superres'/'halfblock' (4x rich mode with 10-level shading), 'ascii' (character-based), 'hsv' (16-color HSV-based)
+  socket.on('video:data', (data: { width: number, height: number, colored?: boolean, mode?: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv', data: ArrayBuffer }) => {
     const session = sessions.get(socket.id);
 
     const { width, height, colored, mode = 'halfblock', data: buffer } = data;
@@ -758,6 +759,139 @@ console.log(`[Video] User ${session.user?.username} stopped video stream: ${data
           lastFg = '';
         }
         if (y + 2 < height) asciiFrame += '\n';
+      }
+    } else if (mode === 'hsv') {
+      // ========== HSV MODE (16-COLOR RETRO ASCII) ==========
+      // 1:1 port of ascii-view algorithm by [original author]
+      // Key insight: ASCII character controls perceived brightness, color is always full brightness
+      // Character from VALUE_CHARS encodes luminance, ANSI color encodes hue
+
+      // ASCII characters ordered by visual density (brightness) - from ascii-view
+      const VALUE_CHARS = ' .-=+*x#$&X@';
+      const N_VALUES = VALUE_CHARS.length;
+
+      // Edge detection characters based on Sobel angle
+      const getSobelAngleChar = (angle: number): string => {
+        if ((angle >= 22.5 && angle <= 67.5) || (angle >= -157.5 && angle <= -112.5))
+          return '\\';
+        else if ((angle >= 67.5 && angle <= 112.5) || (angle >= -112.5 && angle <= -67.5))
+          return '_';
+        else if ((angle >= 112.5 && angle <= 157.5) || (angle >= -67.5 && angle <= -22.5))
+          return '/';
+        else
+          return '|';
+      };
+
+      // Map quantized HSV to 16-color ANSI palette (retro mode)
+      // Smart color mapping with skin-tone detection for realistic faces
+      const getRetroColor = (hsv: { hue: number; saturation: number; value: number }): string => {
+        // Very low saturation = pure grayscale
+        if (hsv.saturation < 0.15) {
+          if (hsv.value < 0.2) return 'black';
+          if (hsv.value < 0.4) return 'lightblack';
+          if (hsv.value < 0.7) return 'white';
+          return 'lightwhite';
+        }
+
+        // Skin tone detection: hue 0-50° (red-orange-yellow range) with moderate saturation
+        const isSkinToneHue = hsv.hue <= 50 || hsv.hue >= 340; // Red-orange-yellow range
+        const isModerateSaturation = hsv.saturation >= 0.15 && hsv.saturation < 0.55;
+
+        if (isSkinToneHue && isModerateSaturation) {
+          // Skin tones: use warm colors based on brightness
+          if (hsv.value < 0.3) return 'red';           // Dark skin / shadows
+          if (hsv.value < 0.5) return 'yellow';        // Medium skin
+          if (hsv.value < 0.7) return 'lightyellow';   // Light skin
+          return 'lightwhite';                          // Highlights
+        }
+
+        // High saturation = vivid colors (clothing, objects, etc.)
+        const hueIndex = Math.round(hsv.hue / 60) % 6;
+        const HUE_COLORS_DARK = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+        const HUE_COLORS_LIGHT = ['lightred', 'lightyellow', 'lightgreen', 'lightcyan', 'lightblue', 'lightmagenta'];
+
+        return hsv.value >= 0.5 ? HUE_COLORS_LIGHT[hueIndex] : HUE_COLORS_DARK[hueIndex];
+      };
+
+      // Build grayscale map for edge detection
+      const grayscaleMap = new Float32Array(width * height);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const [r, g, b] = getPixel(x, y);
+          // Standard luminance formula (normalized 0-1)
+          grayscaleMap[y * width + x] = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        }
+      }
+
+      // Apply Sobel edge detection
+      const sobelX = new Float32Array(width * height);
+      const sobelY = new Float32Array(width * height);
+      const Gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
+      const Gy = [[1, 2, 1], [0, 0, 0], [-1, -2, -1]];
+
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          let gx = 0, gy = 0;
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const idx = (y + ky) * width + (x + kx);
+              const luma = grayscaleMap[idx];
+              gx += luma * Gx[ky + 1][kx + 1];
+              gy += luma * Gy[ky + 1][kx + 1];
+            }
+          }
+          sobelX[y * width + x] = gx;
+          sobelY[y * width + x] = gy;
+        }
+      }
+
+      // Edge threshold (from ascii-view: values < 4.0 enable edge detection)
+      const edgeThreshold = 1.5; // Moderate edge detection
+
+      // Process each pixel
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const [r, g, b] = getPixel(x, y);
+
+          // Convert to HSV
+          const hsv = rgbToHsv(r, g, b);
+
+          // Calculate grayscale from HSV value (value^2 for better contrast)
+          const grayscale = hsv.value * hsv.value;
+
+          // Select ASCII character based on grayscale
+          let charIndex = Math.floor(grayscale * N_VALUES);
+          if (charIndex >= N_VALUES) charIndex = N_VALUES - 1;
+          if (charIndex < 0) charIndex = 0;
+          let char = VALUE_CHARS[charIndex];
+
+          // Check for edge - replace char with edge character if strong edge detected
+          const sx = sobelX[idx];
+          const sy = sobelY[idx];
+          const sobelMagnitude2 = sx * sx + sy * sy;
+          if (sobelMagnitude2 >= edgeThreshold * edgeThreshold) {
+            const sobelAngle = Math.atan2(sy, sx) * (180 / Math.PI);
+            char = getSobelAngleChar(sobelAngle);
+          }
+
+          // Get retro color (quantized hue, binary saturation, always full brightness)
+          const colorName = getRetroColor(hsv);
+
+          if (colorName !== lastFg) {
+            if (lastFg) asciiFrame += '{/}';
+            asciiFrame += `{${colorName}-fg}`;
+            lastFg = colorName;
+          }
+
+          asciiFrame += char;
+        }
+
+        if (lastFg) {
+          asciiFrame += '{/}';
+          lastFg = '';
+        }
+        if (y < height - 1) asciiFrame += '\n';
       }
     } else {
       // ========== ASCII CHARACTER MODE (WORLD-CLASS ENHANCED) ==========

@@ -64,7 +64,7 @@ export function parseIFFFile(filePath: string): IFFFile {
 
   let offset = 0;
 
-  while (offset < buffer.length - 8) {
+  while (offset <= buffer.length - 8) {
     // Read chunk header
     const id = buffer.toString('ascii', offset, offset + 4);
     const size = readBE32(buffer, offset + 4);
