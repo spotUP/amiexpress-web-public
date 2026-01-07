@@ -183,7 +183,8 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
         let location = parts.slice(2).join(' ');
 
         // Check if location is embedded in typeAndAccess
-        const locationMatch = typeAndAccess.match(/^([A-Z]{2,3})(\d*)(.+)$/);
+        // Only match if there's a path-like string (starts with letter or colon)
+        const locationMatch = typeAndAccess.match(/^([A-Z]{2,3})(\d+)([A-Za-z:].+)$/);
         if (locationMatch && locationMatch[3]) {
           location = locationMatch[3];
         }
@@ -280,7 +281,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   // Build command definition - use case-insensitive replacement for DOORS: prefix
   const normalizedLocation = locationKey
     .replace(/^doors:/i, 'doors/')
-    .replace(':', '/');
+    .replace(/:/g, '/');
 
   const cmd: CommandDefinition = {
     name,
@@ -440,7 +441,8 @@ export function scanCommandDirectory(
         if (cmd) {
           const existing = commands.get(cmd.name);
 
-          if (!existing || cmd.type) {
+          // First one wins (conference/node commands have higher priority than global)
+          if (!existing) {
             commands.set(cmd.name, cmd);
           }
         }
