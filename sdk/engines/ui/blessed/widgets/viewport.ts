@@ -25,15 +25,11 @@ export class Viewport extends Box {
       ...boxOptions,
       scrollable: true,
       alwaysScroll: alwaysScroll !== false,
+      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
       scrollbar: options.scrollbar !== undefined ? options.scrollbar : {
-        ch: '█',
-        track: {
-          ch: '│',
-        },
-        style: {
-          fg: scrollbarFg || 'white',
-          bg: scrollbarBg || 'blue',
-        },
+        ch: ' ',
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: scrollbarBg || 'cyan' },
       },
     });
 

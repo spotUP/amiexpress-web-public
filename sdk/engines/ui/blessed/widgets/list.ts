@@ -22,13 +22,14 @@ export class List extends Element {
 
   constructor(options: ListOptions = {}) {
     // Build scrollbar config: merge user options with defaults
+    // Use space with background colors for Amiga compatibility (no special chars needed)
     let scrollbarConfig: any = undefined;
     if ((options.scrollbar as any) !== false) {
       const userScrollbar = typeof options.scrollbar === 'object' ? options.scrollbar : {};
       scrollbarConfig = {
-        ch: userScrollbar.ch || '█',
-        track: userScrollbar.track || { ch: '│' },
-        style: userScrollbar.style || options.style,
+        ch: userScrollbar.ch || ' ',  // Space with bg color (Amiga-safe)
+        track: userScrollbar.track || { ch: ' ', style: { bg: 'black' } },  // Space with dark bg for track
+        style: userScrollbar.style || { bg: 'cyan' },  // Cyan background for thumb
         ...userScrollbar,  // Spread user options to preserve any extra properties
       };
     }
@@ -137,6 +138,9 @@ export class List extends Element {
   private _updateContent(): void {
     const lines = (this as any)._lines as string[] | undefined;
 
+    // Get width for padding lines (prevents ghost characters from old selection)
+    const padWidth = this.getItemWrapWidth();
+
     // Fast path: if we already have lines and just need to update selection markers
     // Opt #3: Extended to support wrapped items (70-80% faster for selection changes)
     if (lines &&
@@ -153,8 +157,9 @@ export class List extends Element {
           // Parse tags to ANSI codes (since we're setting _lines directly)
           const oldParsed = this.options.tags !== false ? parseTags(this.items[oldIdx]) : this.items[oldIdx];
           const newParsed = this.options.tags !== false ? parseTags(this.items[newIdx]) : this.items[newIdx];
-          lines[oldIdx] = '  ' + oldParsed;
-          lines[newIdx] = '> ' + newParsed;
+          // Pad lines to full width to clear old selection background
+          lines[oldIdx] = this._padLine('  ' + oldParsed, padWidth);
+          lines[newIdx] = this._padLine('> ' + newParsed, padWidth);
           return;
         }
       } else {
@@ -178,10 +183,11 @@ export class List extends Element {
 
     this.items.forEach((item, index) => {
       const isSelected = index === this.selected;
-      const isHovered = index === this._hoveredItem && !isSelected;
-      
-      // Clearer selection markers: » for focused, > for unfocused selection
-      const marker = isSelected ? (this.focused ? '» ' : '> ') : '  ';
+      // Only show hover highlight when list is NOT focused (prevents confusing dual-selection look)
+      const isHovered = index === this._hoveredItem && !isSelected && !this.focused;
+
+      // Clearer selection markers: >> for focused, > for unfocused selection (ASCII-safe)
+      const marker = isSelected ? (this.focused ? '>>' : '> ') : '  ';
       const start = newLines.length;
 
       // Get item styles
@@ -244,7 +250,8 @@ export class List extends Element {
         // Simple case: one line per item
         // Parse tags to ANSI codes (since we're setting _lines directly, bypassing parseContent)
         const parsed = this.options.tags !== false ? parseTags(itemText) : itemText;
-        newLines.push(marker + parsed);
+        // Pad line to full width to prevent ghost characters from old selection
+        newLines.push(this._padLine(marker + parsed, padWidth));
         this.lineToItem.push(index);
       }
 
@@ -741,6 +748,18 @@ export class List extends Element {
     }
     this.emit('action');
     this.emit('cancel');
+  }
+
+  /**
+   * Pad a line with spaces to fill the full width.
+   * This prevents ghost characters from old selection when content changes.
+   */
+  private _padLine(line: string, width: number): string {
+    const visibleWidth = textWidth(line);
+    if (visibleWidth < width) {
+      return line + ' '.repeat(width - visibleWidth);
+    }
+    return line;
   }
 
   private getItemWrapWidth(): number {

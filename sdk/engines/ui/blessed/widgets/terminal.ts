@@ -43,7 +43,8 @@ export class Terminal extends Box {
     });
 
     this.scrollback = options.scrollback || 1000;
-    this.cursor = options.cursor || '█';
+    // Amiga-safe cursor: underscore instead of Unicode block
+    this.cursor = options.cursor || '_';
     this.cursorBlink = options.cursorBlink !== false;
 
     this.enableInput();

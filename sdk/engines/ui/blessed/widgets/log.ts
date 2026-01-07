@@ -10,17 +10,21 @@ export class Log extends Element {
   private scrollOnInput: boolean = false;
 
   constructor(options: LogOptions = {}) {
-    // Build scrollbar config - preserve user's settings if provided, otherwise use defaults
+    // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
     let scrollbarConfig: any;
     if (options.scrollbar && typeof options.scrollbar === 'object') {
-      // User provided scrollbar config
+      // User provided scrollbar config - merge with Amiga-safe defaults
       scrollbarConfig = {
-        ch: options.scrollbar.ch || '█'
+        ch: options.scrollbar.ch || ' ',
+        track: options.scrollbar.track || { ch: ' ', style: { bg: 'black' } },
+        style: options.scrollbar.style || { bg: 'cyan' },
       };
     } else {
-      // No scrollbar config provided - use defaults
+      // No scrollbar config provided - use Amiga-safe defaults
       scrollbarConfig = {
-        ch: '█'
+        ch: ' ',
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'cyan' },
       };
     }
 

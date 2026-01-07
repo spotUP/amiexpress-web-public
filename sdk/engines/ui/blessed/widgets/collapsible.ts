@@ -31,7 +31,8 @@ export class Collapsible extends Box {
       left: 0,
       right: 0,
       height: 1,
-      content: ` ${this.isExpanded ? '▼' : '▶'} ${options.label} `,
+      // Amiga-safe arrows: use v/> instead of Unicode triangles
+      content: ` ${this.isExpanded ? 'v' : '>'} ${options.label} `,
       padding: 0,
       align: 'left',
       style: this.headerStyle,
@@ -80,7 +81,7 @@ export class Collapsible extends Box {
     if (this.isExpanded) return;
     this.isExpanded = true;
     this.container.show();
-    this.header.setContent(this.header.content.replace('▶', '▼'));
+    this.header.setContent(this.header.content.replace('>', 'v'));
     this.height = this.originalHeight;
     this.emit('expand');
     this.screen?.render();
@@ -93,7 +94,7 @@ export class Collapsible extends Box {
     if (!this.isExpanded) return;
     this.isExpanded = false;
     this.container.hide();
-    this.header.setContent(this.header.content.replace('▼', '▶'));
+    this.header.setContent(this.header.content.replace('v', '>'));
     this.height = 1;
     this.emit('collapse');
     this.screen?.render();

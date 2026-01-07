@@ -51,7 +51,8 @@ export class Accordion extends Box {
       left: 0,
       right: 0,
       height: 1,
-      content: ` ${expanded ? '▼' : '▶'} ${label} `,
+      // Amiga-safe arrows: use v/> instead of Unicode triangles
+      content: ` ${expanded ? 'v' : '>'} ${label} `,
       padding: 0,
       align: 'left',
       style: expanded ? this.expandedStyle : this.headerStyle,
@@ -125,7 +126,7 @@ export class Accordion extends Box {
 
     item.expanded = true;
     item.content.show();
-    item.header.setContent(item.header.content.replace('▶', '▼'));
+    item.header.setContent(item.header.content.replace('>', 'v'));
     item.header.setStyle(this.expandedStyle);
 
     this.relayout();
@@ -141,7 +142,7 @@ export class Accordion extends Box {
 
     item.expanded = false;
     item.content.hide();
-    item.header.setContent(item.header.content.replace('▼', '▶'));
+    item.header.setContent(item.header.content.replace('v', '>'));
     item.header.setStyle(this.headerStyle);
 
     if (shouldRelayout) {

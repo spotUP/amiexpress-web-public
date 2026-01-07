@@ -8,18 +8,22 @@ import type { ProgressBarOptions } from '../core/types';
 export class ProgressBar extends Element {
   private filled: number = 0;
   private orientation: 'horizontal' | 'vertical' = 'horizontal';
-  private ch: string = '█';
+  // Use space character - style.bg provides the fill color (Amiga-safe, no Unicode needed)
+  private ch: string = ' ';
   private pch: string = ' ';
 
   constructor(options: ProgressBarOptions = {}) {
     super({
       border: 'line',
+      // Default style: cyan fill on black background for visibility
+      style: { bg: 'black', fg: 'cyan' },
       ...options,
     });
 
     this.filled = options.filled || options.value || 0;
     this.orientation = options.orientation || 'horizontal';
-    this.ch = options.ch || '█';
+    // Space character with background color for Amiga compatibility
+    this.ch = options.ch || ' ';
     this.pch = options.pch || ' ';
 
     this._updateContent();
@@ -40,10 +44,15 @@ export class ProgressBar extends Element {
     const width = pos.xl - pos.xi - border * 2 - padLeft - padRight;
     const height = pos.yl - pos.yi - border * 2 - padTop - padBottom;
 
+    // Get fill color from style (default cyan)
+    const fillBg = (this.options.style as any)?.fg || 'cyan';
+
     if (this.orientation === 'horizontal') {
       const filledWidth = Math.floor((width * this.filled) / 100);
-      const bar = this.ch.repeat(filledWidth) + this.pch.repeat(width - filledWidth);
-      this.setContent(bar);
+      // Use blessed tags for filled portion with background color (Amiga-safe)
+      const filledPart = filledWidth > 0 ? `{${fillBg}-bg}${this.ch.repeat(filledWidth)}{/${fillBg}-bg}` : '';
+      const emptyPart = this.pch.repeat(width - filledWidth);
+      this.setContent(filledPart + emptyPart);
     } else {
       const filledHeight = Math.floor((height * this.filled) / 100);
       const lines: string[] = [];
@@ -52,7 +61,8 @@ export class ProgressBar extends Element {
         if (i < height - filledHeight) {
           lines.push(this.pch.repeat(width));
         } else {
-          lines.push(this.ch.repeat(width));
+          // Use blessed tags for filled portion with background color
+          lines.push(`{${fillBg}-bg}${this.ch.repeat(width)}{/${fillBg}-bg}`);
         }
       }
 

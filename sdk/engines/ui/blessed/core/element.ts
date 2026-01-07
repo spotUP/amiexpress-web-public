@@ -1543,6 +1543,12 @@ export class Element extends EventEmitter {
     if (this.destroyed) return;
 
     if (!this.hidden) {
+      // Clear the element's region BEFORE hiding to prevent visual artifacts
+      const pos = this._getCoords();
+      if (this.screen && pos) {
+        this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
+      }
+
       this.hidden = true;
       this.visible = false;
       this.blur();
@@ -2072,9 +2078,10 @@ export class Element extends EventEmitter {
     }
 
     // Check if mouse is over border
-    const border = this.hasBorder() ? 1 : 0;
-    const overBorder = event.x === coords.xi || event.x === coords.xl - 1 ||
-                       event.y === coords.yi || event.y === coords.yl - 1;
+    const overBorder = this.hasBorder() && (
+      event.x === coords.xi || event.x === coords.xl - 1 ||
+      event.y === coords.yi || event.y === coords.yl - 1
+    );
 
     if (overBorder !== this._overBorder) {
       this._overBorder = overBorder;
@@ -2362,15 +2369,10 @@ export class Element extends EventEmitter {
       labelX = pos.xl - labelWidth - 2;
     }
 
-    // Parse tags to ANSI codes if tags are enabled
-    const parsedLabel = this.options.tags !== false ? parseTags(labelText) : labelText;
-
-    // Render label on top border using direct output with ANSI codes
-    if (this.screen && (this.screen as any).program) {
-      const program = (this.screen as any).program;
-      // Position cursor and write the parsed label with ANSI codes
-      program.write(`\x1b[${pos.yi + 1};${labelX + 1}H${parsedLabel}\x1b[0m`);
-    }
+    // NOTE: Label rendering is now handled by Screen._renderBorder() which writes to the buffer.
+    // The previous program.write() here caused duplicate labels by writing directly to terminal
+    // AFTER the buffer was already output. Removed to fix the "Demo Area" duplicate bug.
+    // The label is already rendered to the buffer at this point via renderBorder() -> fillRegion().
   }
 
   // ============================================================================
@@ -2541,18 +2543,19 @@ export class Element extends EventEmitter {
 
     const scrollbarOptions = this.options.scrollbar as any;
 
-    // Get track style - use track.style if provided, otherwise dim/subtle style
-    const trackStyleObj = scrollbarOptions?.track?.style || { fg: 'gray', bg: 'black' };
+    // Get track style - use track.style if provided, otherwise dark background
+    // Using space with bg color for Amiga compatibility (no Unicode chars needed)
+    const trackStyleObj = scrollbarOptions?.track?.style || { fg: 'black', bg: 'black' };
     const trackAttr = this.sattr(trackStyleObj);
 
     // Get thumb style - use scrollbar.style for the thumb (the draggable part)
-    // This is what the user typically wants to customize
-    let thumbStyleObj = scrollbarOptions?.style || { fg: 'white', bg: 'black', inverse: true };
+    // Default: cyan background for visibility (Amiga-safe, no Unicode needed)
+    let thumbStyleObj = scrollbarOptions?.style || { fg: 'cyan', bg: 'cyan' };
 
     // Apply hover style to scrollbar thumb if mouse is over it
     if (this._scrollbarHovered) {
-      // Use high-contrast yellow for hover feedback
-      thumbStyleObj = { ...thumbStyleObj, fg: 'yellow', bold: true, inverse: false };
+      // Use high-contrast yellow background for hover feedback (Amiga-safe)
+      thumbStyleObj = { ...thumbStyleObj, fg: 'yellow', bg: 'yellow', bold: true };
     }
 
     const thumbAttr = this.sattr(thumbStyleObj);
@@ -2573,12 +2576,14 @@ export class Element extends EventEmitter {
     // If no content or view, don't render scrollbar
     if (contentHeight <= 0 || viewHeight <= 0) return;
 
+    // Default to space character with background colors for Amiga compatibility
+    // The style attributes (trackAttr/thumbAttr) handle the colors via bg property
     const trackChar = typeof scrollbarOptions?.track === 'string'
       ? scrollbarOptions.track
-      : scrollbarOptions?.track?.ch || '│';
+      : scrollbarOptions?.track?.ch || ' ';  // Space with bg color (Amiga-safe)
     const thumbChar = typeof scrollbarOptions?.thumb === 'string'
       ? scrollbarOptions.thumb
-      : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || '█';
+      : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || ' ';  // Space with bg color (Amiga-safe)
 
     // Only render scrollbar (track + thumb) if content overflows
     if (contentHeight > viewHeight) {
@@ -3350,6 +3355,12 @@ export class Element extends EventEmitter {
 
   destroy(): void {
     if (this.destroyed) return;
+
+    // Clear the element's region BEFORE destroying to prevent visual artifacts
+    const pos = this._getCoords();
+    if (this.screen && pos) {
+      this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
+    }
 
     // End any active scrollbar drag
     this._endScrollbarDrag();

@@ -84,7 +84,7 @@ export class Screen extends Element {
   constructor(options: ScreenOptions & { output?: (data: string) => void; responsive?: boolean } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
-    // - Height: User-configurable, max 25 rows
+    // - Height: 24 rows (classic BBS standard)
     // In responsive mode, use provided dimensions or defaults
     const bbsWidth = options.responsive ? (options.width || 80) : 80;
     const bbsHeight = options.responsive
@@ -720,8 +720,11 @@ export class Screen extends Element {
     // causing elements to use terminal's default background (not always black).
     // BBS doors expect black background by default.
     const dattr = ((0 << 18) | (0x1ff << 9)) | 0; // fg=0x1ff (default), bg=0 (black)
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
+    // Use buffer dimensions, not screen dimensions, to avoid race condition during resize
+    const bufHeight = this.buffer.length;
+    const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
+    for (let y = 0; y < bufHeight; y++) {
+      for (let x = 0; x < bufWidth; x++) {
         this.buffer[y][x] = [dattr, ' '];
       }
     }
@@ -1222,18 +1225,22 @@ export class Screen extends Element {
     let minX = this._dirtyMinX;
     let maxX = this._dirtyMaxX;
 
+    // Use actual buffer dimensions to avoid race condition during resize
+    const bufHeight = this.buffer.length;
+    const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
+
     if (minY > maxY || minX > maxX) {
-      // Invalid region, diff entire screen
+      // Invalid region, diff entire buffer
       minY = 0;
-      maxY = this.height - 1;
+      maxY = bufHeight - 1;
       minX = 0;
-      maxX = this.width - 1;
+      maxX = bufWidth - 1;
     } else {
-      // Clamp to screen bounds
-      minY = Math.max(0, Math.min(minY, this.height - 1));
-      maxY = Math.max(0, Math.min(maxY, this.height - 1));
-      minX = Math.max(0, Math.min(minX, this.width - 1));
-      maxX = Math.max(0, Math.min(maxX, this.width - 1));
+      // Clamp to buffer bounds (not screen bounds to avoid race condition)
+      minY = Math.max(0, Math.min(minY, bufHeight - 1));
+      maxY = Math.max(0, Math.min(maxY, bufHeight - 1));
+      minX = Math.max(0, Math.min(minX, bufWidth - 1));
+      maxX = Math.max(0, Math.min(maxX, bufWidth - 1));
     }
 
     for (let y = minY; y <= maxY; y++) {
@@ -1244,13 +1251,9 @@ export class Screen extends Element {
         if (attr !== lastAttrCell || ch !== lastCh) {
           // Position cursor if needed
           if (x !== lastX + 1 || y !== lastY) {
-            // BBS Optimization: If moving to the start of the next line,
-            // use literal \r\n which is universally supported and forces separation.
-            if (y === lastY + 1 && x === 0) {
-              parts.push('\r\n');
-            } else {
-              parts.push(cursor.pos(x, y));
-            }
+            // ALWAYS use explicit cursor positioning to prevent drift
+            // The \r\n optimization was causing rendering corruption on hover
+            parts.push(cursor.pos(x, y));
           }
 
           // Change attributes if needed

@@ -530,13 +530,11 @@ export class Textarea extends Element {
       alwaysScroll: true,
       mouse: true,
       ...options,
-      // Add scrollbar by default (unless explicitly disabled)
+      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
       scrollbar: options.scrollbar === undefined || options.scrollbar ? {
-        ch: '█',
-        track: {
-          ch: '│',
-        },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+        ch: ' ',
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || { bg: 'cyan' },
       } : undefined,
     });
 

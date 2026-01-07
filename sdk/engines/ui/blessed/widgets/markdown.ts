@@ -31,13 +31,11 @@ export class Markdown extends Box {
   constructor(options: MarkdownOptions = {}) {
     super({
       ...options,
-      // Add scrollbar by default for scrollable markdown (unless explicitly disabled)
+      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
       scrollbar: options.scrollable && (options.scrollbar === undefined || options.scrollbar) ? {
-        ch: '█',
-        track: {
-          ch: '│',
-        },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || options.style,
+        ch: ' ',
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || { bg: 'cyan' },
       } : options.scrollbar,
     });
 
@@ -82,16 +80,17 @@ export class Markdown extends Box {
     result = result.replace(/\[(.+?)\]\((.+?)\)/g, '{blue-fg}{underline}$1{/underline}{/blue-fg}');
 
     // Lists
-    result = result.replace(/^\* (.+)$/gm, '  • $1');
-    result = result.replace(/^- (.+)$/gm, '  • $1');
-    result = result.replace(/^\+ (.+)$/gm, '  • $1');
+    // Amiga-safe bullets: use * instead of Unicode bullet
+    result = result.replace(/^\* (.+)$/gm, '  * $1');
+    result = result.replace(/^- (.+)$/gm, '  * $1');
+    result = result.replace(/^\+ (.+)$/gm, '  * $1');
 
-    // Blockquotes
-    result = result.replace(/^> (.+)$/gm, '{gray-fg}│ $1{/gray-fg}');
+    // Blockquotes - use | for Amiga compatibility (box-drawing │ converted by ACS anyway)
+    result = result.replace(/^> (.+)$/gm, '{gray-fg}| $1{/gray-fg}');
 
-    // Horizontal rules
-    result = result.replace(/^---$/gm, '─'.repeat(40));
-    result = result.replace(/^\*\*\*$/gm, '─'.repeat(40));
+    // Horizontal rules - use dashes for Amiga compatibility
+    result = result.replace(/^---$/gm, '-'.repeat(40));
+    result = result.replace(/^\*\*\*$/gm, '-'.repeat(40));
 
     return result;
   }
