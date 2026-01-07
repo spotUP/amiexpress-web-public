@@ -23,6 +23,7 @@ import { BatchEditorPage } from './pages/BatchEditorPage';
 import { SessionLogsPage } from './pages/SessionLogsPage';
 import { HealthCheckPage } from './pages/HealthCheckPage';
 import { StatisticsPage } from './pages/StatisticsPage';
+import { NodeControlPage } from './pages/NodeControlPage';
 import { OperatorChatPage } from './pages/OperatorChatPage';
 import { OperatorChatSettingsPage } from './pages/OperatorChatSettingsPage';
 import { AmiXnetPage } from './pages/AmiXnetPage';
@@ -70,6 +71,7 @@ function App() {
         <Route path="system" element={<SystemConfigPage />} />
         <Route path="health" element={<HealthCheckPage />} />
         <Route path="statistics" element={<StatisticsPage />} />
+        <Route path="node-control" element={<NodeControlPage />} />
         <Route path="nodes" element={<NodesPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="conferences" element={<ConferencesPage />} />
