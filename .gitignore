@@ -300,3 +300,12 @@ a.out
 # Bulletins/bull*.txt
 bbsConfig.info.txt
 Node[0-9]*/
+
+# Runtime BBS data
+User.data
+User.keys
+node*.user
+Bulletins/bull*.txt
+Screens/quicknew*.txt
+handoff.md
+Env/

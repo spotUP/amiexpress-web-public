@@ -26,6 +26,8 @@ export class MediaHandler {
   private audioBuffers: Map<string, AudioBufferSourceNode[]> = new Map();
   private volume: number = 1.0;
   private isMuted: boolean = false;
+  private analyserNode: AnalyserNode | null = null;
+  private audioLevelInterval: any = null;
 
   constructor(socket: Socket) {
     this.socket = socket;
@@ -106,7 +108,42 @@ export class MediaHandler {
 
       // Collect data in 100ms chunks for low latency
       this.mediaRecorder.start(100);
-      console.log('[MediaHandler] Microphone capture started');
+
+      // Set up audio level analysis for VU meters
+      // This uses AnalyserNode to get real-time audio levels from the raw stream
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      this.analyserNode = this.audioContext.createAnalyser();
+      this.analyserNode.fftSize = 2048;
+      this.analyserNode.smoothingTimeConstant = 0.3;
+      source.connect(this.analyserNode);
+
+      // Calculate and emit audio levels every 50ms for smooth VU meter
+      const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+      this.audioLevelInterval = setInterval(() => {
+        if (!this.analyserNode) return;
+
+        this.analyserNode.getByteTimeDomainData(dataArray);
+
+        // Calculate RMS from time-domain data
+        let sumSq = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const normalized = (dataArray[i] - 128) / 128.0; // Convert to -1.0 to 1.0
+          sumSq += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSq / dataArray.length);
+
+        // Emit audio levels for VU meter (boost sensitivity)
+        this.socket.emit('audio:levels', {
+          input: Math.min(1.0, rms * 5.0),
+          output: 0
+        });
+      }, 50);
+
+      console.log('[MediaHandler] Microphone capture started with audio level monitoring');
 
     } catch (err) {
       console.error('[MediaHandler] Failed to start microphone:', err);
@@ -118,6 +155,14 @@ export class MediaHandler {
    * Stop capturing audio
    */
   stopMicrophone(): void {
+    if (this.audioLevelInterval) {
+      clearInterval(this.audioLevelInterval);
+      this.audioLevelInterval = null;
+    }
+    if (this.analyserNode) {
+      this.analyserNode.disconnect();
+      this.analyserNode = null;
+    }
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop();
     }

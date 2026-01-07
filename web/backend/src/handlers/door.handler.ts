@@ -1500,10 +1500,10 @@ console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}
     const importPath = `file://${resolvedDoorPath}`;
 console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
-    // Show animated preloader if PRELOADER tooltype is set
+    // Show animated preloader if PRELOADER or SHOWPRELOADER tooltype is set
     // Only show for doors that explicitly enable it (avoids delay for simple doors)
-    const showPreloader = door.toolTypes?.PRELOADER?.toUpperCase() === 'YES' ||
-                         door.toolTypes?.PRELOADER === '1';
+    const preloaderValue = door.toolTypes?.PRELOADER || door.toolTypes?.SHOWPRELOADER;
+    const showPreloader = preloaderValue?.toUpperCase() === 'YES' || preloaderValue === '1';
 
     let doorModule: any;
     if (showPreloader) {

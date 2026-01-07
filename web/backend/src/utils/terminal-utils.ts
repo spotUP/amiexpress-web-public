@@ -76,8 +76,8 @@ export function buildTerminalBuffer(
  * Shared terminal settings for consistent appearance and behavior
  */
 export const XTERM_CONFIG = {
-  /** Default BBS font family */
-  fontFamily: 'mosoul, "Courier New", monospace',
+  /** Default BBS font family - includes Unicode symbol fonts for braille/special chars */
+  fontFamily: 'mosoul, "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Courier New", monospace',
 
   /** Default font size */
   fontSize: 16,

@@ -14,9 +14,9 @@ import '@xterm/xterm/css/xterm.css';
 import './chat.css';
 
 const XTERM_CONFIG = {
-  fontFamily: 'mosoul, "Courier New", monospace',
+  fontFamily: 'mosoul, "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Courier New", monospace',
   fontSize: 16,
-  lineHeight: 1.2,
+  lineHeight: 1.0,  // Perfect for ANSI art/box-drawing (bitmap font requires gapless lines)
   theme: {
     background: '#000000',
     foreground: '#aaaaaa',
@@ -216,9 +216,12 @@ export default function ChatTerminal() {
 
     // Terminal mode switching: 'fixed' = 80 cols, 'wide' = responsive
     socket.on('terminal-mode', (mode: 'fixed' | 'wide') => {
-      console.log(`[ChatTerminal] Mode switched to: ${mode}`);
+      console.log(`[ChatTerminal] *** TERMINAL MODE SWITCH *** Mode: ${mode}`);
+      console.log(`[ChatTerminal] Container size before: ${terminalRef.current?.clientWidth}x${terminalRef.current?.clientHeight}px`);
+      console.log(`[ChatTerminal] Terminal size before: ${term.cols}x${term.rows}`);
       terminalMode = mode;
       fitTerminal(); // Re-fit with new mode
+      console.log(`[ChatTerminal] Terminal size after: ${term.cols}x${term.rows}`);
     });
 
     // Send ALL input to backend - door handles everything (including login via blessed modal)

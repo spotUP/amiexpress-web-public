@@ -241,12 +241,17 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
         }
 
         console.log(`[Room Auto-Create] Creating new room: ${sanitizedName}`);
-        const roomId = await db.createChatRoom({
-          name: sanitizedName,
-          description: `Auto-created room: ${sanitizedName}`,
-          isPrivate: false,
-          maxMembers: 100,
-          createdBy: session.user.id
+        const roomId = generateRoomId();
+        await db.createChatRoom({
+          roomId: roomId,
+          roomName: sanitizedName,
+          topic: `Auto-created room: ${sanitizedName}`,
+          createdBy: session.user.id,
+          createdByUsername: session.user.username,
+          isPublic: true,
+          maxUsers: 100,
+          isPersistent: true,
+          password: null
         });
 
         room = await db.getChatRoom(roomId);

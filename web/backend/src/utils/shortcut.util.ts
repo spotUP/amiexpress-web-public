@@ -16,12 +16,12 @@ export class ShortcutMap {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split(/\r?\n/);
     for (const line of lines) {
-      if (!line) continue;
       const trimmed = line.trim();
+      if (!trimmed) continue;  // Skip empty lines after trimming
       const sep = trimmed.indexOf('=');
       if (sep >= 0) {
-        const key = trimmed.substring(0, sep).toUpperCase();
-        const value = trimmed.substring(sep + 1);
+        const key = trimmed.substring(0, sep).trim().toUpperCase();
+        const value = trimmed.substring(sep + 1).trim();
         this.map.set(key, value);
       } else {
         this.map.set(trimmed.toUpperCase(), trimmed);

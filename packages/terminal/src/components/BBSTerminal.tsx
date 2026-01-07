@@ -2,6 +2,7 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback,
 import * as SDKClient from '@amiexpress/bbs-door-sdk/client';
 import { Terminal } from '@xterm/xterm';
 import { CanvasAddon } from '@xterm/addon-canvas';
+import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
@@ -116,6 +117,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
+  const ripModeRef = useRef<boolean>(false);
+
+  // Terminal mode: 'fixed' = 80 cols (centered, max-width), 'wide' = fullscreen responsive
+  const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
 
   // Web transparency overlays (CSS-based, for web connections only)
   // Position info (x, y, width, height) is in terminal cells, converted to pixels during render
@@ -424,7 +429,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Initialize xterm.js terminal for BBS connection (fixed 80x24 for BBS compatibility)
+    // Initialize xterm.js terminal for BBS connection
+    // Start with standard BBS size (80x25), FitAddon will adjust based on mode
     const term = new Terminal({
       fontFamily: XTERM_CONFIG.fontFamily,
       fontSize: fontSize,
@@ -435,7 +441,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       cursorBlink: true,
       cursorStyle: 'block',
       cols: 80,
-      rows: 24, // Standard BBS screen height
+      rows: 25,
     });
 
     term.open(terminalRef.current);
@@ -477,6 +483,111 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Load canvas addon for better performance
     const canvasAddon = new CanvasAddon();
     term.loadAddon(canvasAddon);
+
+    // Load fit addon for responsive sizing
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+
+    // Terminal mode: 'fixed' = 80 cols (for ANSI art), 'wide' = responsive width
+    // Default to 'fixed' for BBS compatibility
+    let terminalMode: 'fixed' | 'wide' = 'fixed';
+
+    // Fit terminal to container, respecting mode
+    const fitTerminal = () => {
+      // In fixed mode, DON'T resize - stay at 80x25
+      if (terminalMode === 'fixed') {
+        console.log(`[BBSTerminal] Fixed mode - ignoring resize, staying at 80x25`);
+        return;
+      }
+
+      // Wide mode - fit to container
+      const container = terminalRef.current;
+      if (container) {
+        console.log(`[BBSTerminal] Container size: ${container.clientWidth}x${container.clientHeight}px`);
+      }
+
+      const preFitCols = term.cols;
+      const preFitRows = term.rows;
+
+      // Perform the fit
+      fitAddon.fit();
+
+      const { cols, rows } = term;
+      console.log(`[BBSTerminal] FitAddon: ${preFitCols}x${preFitRows} -> ${cols}x${rows} (wide mode)`);
+
+      // Sanity check: ignore unreasonably small sizes (container likely still resizing)
+      // Wide mode should give us at least 100+ columns for fullscreen
+      if (cols < 40) {
+        console.log(`[BBSTerminal] IGNORING resize to ${cols}x${rows} - too small, container likely transitioning`);
+        term.resize(preFitCols, preFitRows); // Restore previous size
+        return;
+      }
+
+      console.log(`[BBSTerminal] Final size: ${cols}x${rows} (mode: ${terminalMode})`);
+
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('terminal-size', { cols, rows });
+        console.log(`[BBSTerminal] Emitted terminal-size event`);
+      }
+    };
+
+    // DON'T auto-fit on mount - terminal starts at 80x25 (fixed mode)
+    // Only resize when:
+    // 1. Door calls enableWideMode() (terminal-mode event)
+    // 2. User resizes browser window (handled by resize listeners below)
+    // 3. Server sends terminal-resize event
+
+    // Throttled resize handler for live resizing
+    let resizeThrottleTimer: number | null = null;
+    let resizeTrailingTimer: number | null = null;
+    let lastResizeTime = 0;
+    const THROTTLE_MS = 16; // ~60fps
+
+    const throttledFitTerminal = () => {
+      const now = Date.now();
+
+      // Clear any pending trailing call
+      if (resizeTrailingTimer) {
+        clearTimeout(resizeTrailingTimer);
+        resizeTrailingTimer = null;
+      }
+
+      // If enough time has passed, fire immediately
+      if (now - lastResizeTime >= THROTTLE_MS) {
+        lastResizeTime = now;
+        fitTerminal();
+      } else if (!resizeThrottleTimer) {
+        // Otherwise, schedule a throttled call
+        resizeThrottleTimer = window.setTimeout(() => {
+          resizeThrottleTimer = null;
+          lastResizeTime = Date.now();
+          fitTerminal();
+        }, THROTTLE_MS - (now - lastResizeTime));
+      }
+
+      // Always schedule a trailing call to catch the final size
+      resizeTrailingTimer = window.setTimeout(() => {
+        resizeTrailingTimer = null;
+        fitTerminal();
+      }, 100);
+    };
+
+    // Handle window resize
+    const handleResize = () => {
+      throttledFitTerminal();
+    };
+    window.addEventListener('resize', handleResize);
+    console.log('[BBSTerminal] Window resize listener attached');
+
+    // Also use ResizeObserver for more reliable container size detection
+    let resizeObserver: ResizeObserver | null = null;
+    if (terminalRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        throttledFitTerminal();
+      });
+      resizeObserver.observe(terminalRef.current);
+      console.log('[BBSTerminal] ResizeObserver attached');
+    }
 
     // Custom key event handler - intercepts keys before xterm processes them
     // This is critical for game mode because xterm normally intercepts all keys
@@ -798,6 +909,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         socket.emit('login', { username: newUserPromptUsername.current, password: password.current });
         loginState.current = 'logging-in';
       }
+
+      // Send initial terminal size to backend (80x25 in fixed mode)
+      const { cols, rows } = term;
+      socket.emit('terminal-size', { cols, rows });
+      console.log(`[Terminal] Sent initial size: ${cols}x${rows}`);
+
       onConnect?.();
       term.focus();
     });
@@ -1084,34 +1201,28 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
-      if (onAnsiOutput) {
-        onAnsiOutput(data);
+      // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
+      if (data.includes('[1!') || data.includes('!|')) {
+        console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
       }
+
+      // 1. First, combine with buffers for any OSC sequences from previous chunks
       const overlayPrefix = '\x1b]9999;overlay;';
       let overlayPayload = overlayBufferRef.current + data;
       overlayBufferRef.current = '';
 
-      // Debug: Check if data contains OSC 9999 sequence
-      if (overlayPayload.includes('9999') || overlayPayload.includes('overlay')) {
-        console.log('[Overlay] Raw data contains potential overlay command, length:', overlayPayload.length);
-        console.log('[Overlay] Raw data hex:', Array.from(overlayPayload.slice(0, 100)).map(c => c.charCodeAt(0).toString(16)).join(' '));
-      }
-
       // Check for web transparency overlay OSC sequences
-      // Format: ESC ] 9999 ; overlay ; <json> BEL
       const overlayRegex = /\x1b\]9999;overlay;({[^}]*})\x07/g;
       let overlayMatch;
       while ((overlayMatch = overlayRegex.exec(overlayPayload)) !== null) {
         try {
           const overlayData = JSON.parse(overlayMatch[1]);
-          console.log('[Overlay] Parsed overlay command:', overlayData);
           setOverlays(prev => {
             const next = new Map(prev);
             if (overlayData.show) {
               next.set(overlayData.id, {
                 opacity: overlayData.opacity || 0.5,
                 show: true,
-                // Position info for positioned overlays (in terminal cells)
                 x: overlayData.x,
                 y: overlayData.y,
                 width: overlayData.width,
@@ -1120,18 +1231,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             } else {
               next.delete(overlayData.id);
             }
-            console.log('[Overlay] Updated overlays map, size:', next.size, 'data:', overlayData);
             return next;
           });
         } catch (e) {
-          console.error('[Overlay] Failed to parse overlay data:', e, 'Match:', overlayMatch[1]);
+          console.error('[Overlay] Failed to parse overlay data:', e);
         }
       }
-
-      // Strip overlay sequences from output (they shouldn't display as text)
       overlayPayload = overlayPayload.replace(overlayRegex, '');
 
-      // Preserve any incomplete overlay sequence for the next chunk
+      // Preserve any incomplete overlay sequence
       const incompleteIndex = overlayPayload.lastIndexOf(overlayPrefix);
       if (incompleteIndex !== -1 && overlayPayload.indexOf('\x07', incompleteIndex) === -1) {
         overlayBufferRef.current = overlayPayload.slice(incompleteIndex);
@@ -1144,11 +1252,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       let sfxPayload = sfxBufferRef.current + data;
       sfxBufferRef.current = '';
 
-      // SFX commands are parsed but not executed client-side
-      // Audio playback now handled via MediaHandler and audio:play-sfx socket events from server
       const sfxRegex = /\x1b\]9999;sfx;({[^}]*})\x07/g;
-
-      // Strip SFX commands from output without executing them
       sfxPayload = sfxPayload.replace(sfxRegex, '');
       const sfxIncompleteIndex = sfxPayload.lastIndexOf(sfxPrefix);
       if (sfxIncompleteIndex !== -1 && sfxPayload.indexOf('\x07', sfxIncompleteIndex) === -1) {
@@ -1158,36 +1262,54 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       data = sfxPayload;
 
-      // Check for RIP mode escape codes (express.e:25679-25683)
-      // [1! = Enter RIP pixel/graphics mode
-      // [2! = Return to RIP text mode
-      if (data.includes('\x1b[1!')) {
-        console.log('[RIP] Entering RIP graphics mode');
-        setRipMode(true);
-        // Strip the escape code and continue processing
-        data = data.replace(/\x1b\[1!/g, '');
-      }
-      if (data.includes('\x1b[2!')) {
-        console.log('[RIP] Exiting RIP graphics mode');
-        setRipMode(false);
-        // Strip the escape code and continue processing
-        data = data.replace(/\x1b\[2!/g, '');
-      }
+      // 2. RIP mode detection
+      if (data.includes('\x1b[1!') || data.includes('\u001b[1!')) {
+        const parts = data.split(/\x1b\[1!|\u001b\[1!/);
+        const textBefore = parts[0];
+        if (textBefore) {
+          if (modemEmulatorRef.current) modemEmulatorRef.current.write(textBefore);
+          else term.write(textBefore);
+        }
 
-      const currentFont = term.options.fontFamily;
-      if (currentFont && currentFont.includes('PetMe64')) {
-        if (data.includes('\x1b[2J') || data.includes('\x1b[H\x1b[2J') || data.includes('\x1b[0m\x1b[2J')) {
-          term.options.fontFamily = normalFont.current;
-          console.log('[ANSI] Screen clear detected, restored font from PetMe64 to', normalFont.current);
+        console.log('[RIP] Entering RIP graphics mode');
+        ripModeRef.current = true;
+        setRipMode(true);
+        ripBuffer.current = '';
+        
+        const ripContent = parts.slice(1).join('\x1b[1!');
+        if (ripContent) {
+          if (ripContent.includes('\x1b[2!') || ripContent.includes('\u001b[2!')) {
+            const ripParts = ripContent.split(/\x1b\[2!|\u001b\[2!/);
+            ripBuffer.current += ripParts[0];
+            console.log('[RIP] Exiting RIP graphics mode (within same chunk)');
+            ripModeRef.current = false;
+            setRipMode(false);
+            data = ripParts[1] || '';
+          } else {
+            ripBuffer.current += ripContent;
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+      
+      if (ripModeRef.current) {
+        if (data.includes('\x1b[2!') || data.includes('\u001b[2!')) {
+          const parts = data.split(/\x1b\[2!|\u001b\[2!/);
+          ripBuffer.current += parts[0];
+          console.log('[RIP] Exiting RIP graphics mode');
+          ripModeRef.current = false;
+          setRipMode(false);
+          data = parts[1] || '';
+          if (!data) return;
+        } else {
+          ripBuffer.current += data;
+          return;
         }
       }
 
-      // If in RIP mode, buffer RIP commands for processing
-      if (ripMode && data.includes('!|')) {
-        ripBuffer.current += data;
-        // Process RIP commands in buffer (basic implementation - full parsing in RIPRenderer)
-        console.log('[RIP] Buffered RIP content, length:', ripBuffer.current.length);
-      }
+      const currentFont = term.options.fontFamily;
 
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
@@ -1237,6 +1359,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
         term.options.fontFamily = 'PetMe64, "Courier New", monospace';
         console.log('[PETSCII] Terminal resized to 40x25, switched to PetMe64 font');
+      }
+    });
+
+    // Terminal mode switching: 'fixed' = 80 cols, 'wide' = responsive
+    socket.on('terminal-mode', (mode: 'fixed' | 'wide') => {
+      console.log(`[BBSTerminal] *** TERMINAL MODE SWITCH *** Mode: ${mode}`);
+      console.log(`[BBSTerminal] Container size before: ${terminalRef.current?.clientWidth}x${terminalRef.current?.clientHeight}px`);
+      console.log(`[BBSTerminal] Terminal size before: ${term.cols}x${term.rows}`);
+
+      // Update both local variable and state (state triggers re-render to update container CSS)
+      terminalMode = mode;
+      setTerminalMode(mode);
+
+      if (mode === 'fixed') {
+        // Switching to fixed mode - resize to 80x25 immediately
+        term.resize(80, 25);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('terminal-size', { cols: 80, rows: 25 });
+        }
+        console.log(`[BBSTerminal] Switched to fixed mode: 80x25`);
+        console.log(`[BBSTerminal] Terminal size after: ${term.cols}x${term.rows}`);
+      } else {
+        // Switching to wide mode - wait for browser to resize container
+        // Use longer delay (500ms) to ensure container finishes resizing
+        console.log(`[BBSTerminal] Switched to wide mode - waiting 500ms for container resize...`);
+        setTimeout(() => {
+          console.log(`[BBSTerminal] Container size after delay: ${terminalRef.current?.clientWidth}x${terminalRef.current?.clientHeight}px`);
+          fitTerminal();
+          console.log(`[BBSTerminal] Terminal size after: ${term.cols}x${term.rows}`);
+        }, 500);
       }
     });
 
@@ -1715,6 +1867,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           element.removeEventListener('wheel', handler);
         }
       }
+      // Clean up resize handlers
+      window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      // Clear resize throttle timers
+      if (resizeThrottleTimer) {
+        clearTimeout(resizeThrottleTimer);
+      }
+      if (resizeTrailingTimer) {
+        clearTimeout(resizeTrailingTimer);
+      }
       if (transferTimeout.current) {
         clearTimeout(transferTimeout.current);
         transferTimeout.current = null;
@@ -1893,10 +2057,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   return (
     <div
-      className={`min-h-screen w-full flex items-center justify-center ${className}`}
+      className={`min-h-screen w-full ${terminalMode === 'fixed' ? 'flex items-center justify-center' : ''} ${className}`}
       style={{
         backgroundColor: '#000000',
-        position: 'relative',
+        overflow: 'hidden', // Prevent scrollbars
+        height: '100vh', // Explicit height for flex centering
+        // In wide mode: use absolute positioning to break out of parent flex centering
+        // In fixed mode: relative positioning for normal layout
+        position: terminalMode === 'wide' ? 'absolute' : 'relative',
+        ...(terminalMode === 'wide' && {
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 1000,
+        }),
       }}
     >
       <div
@@ -1914,7 +2089,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           position: 'relative',
           outline: 'none',
           width: '100%',
-          maxWidth: '960px',
+          // In fixed mode: auto height for centering, max-width constraint
+          // In wide mode: 100% height to fill screen
+          ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
         }}
       />
       {/* Web Transparency Overlays - CSS-based overlays for web connections */}

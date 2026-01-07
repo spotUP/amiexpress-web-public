@@ -165,6 +165,13 @@ body {
   -moz-user-select: none !important;
   -ms-user-select: none !important;
   user-select: none !important;
+  /* Hide scrollbar but keep scrollback functionality */
+  scrollbar-width: none !important;  /* Firefox */
+  -ms-overflow-style: none !important;  /* IE/Edge */
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+  display: none !important;  /* Chrome/Safari/Opera */
 }
 
 .xterm .xterm-rows .xterm-row {

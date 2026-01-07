@@ -11,7 +11,7 @@ export class PermissionsUtil {
    * Requires security level 100 or higher (sysop)
    */
   static canDeleteFiles(user: any): boolean {
-    return user && user.secLevel >= 100;
+    return !!(user && user.secLevel >= 100);
   }
 
   /**
@@ -19,7 +19,7 @@ export class PermissionsUtil {
    * Requires security level 100 or higher (sysop)
    */
   static canMoveFiles(user: any): boolean {
-    return user && user.secLevel >= 100;
+    return !!(user && user.secLevel >= 100);
   }
 
   /**
@@ -27,7 +27,7 @@ export class PermissionsUtil {
    * Requires security level 100 or higher (sysop)
    */
   static canAccessFileMaintenance(user: any): boolean {
-    return user && user.secLevel >= 100;
+    return !!(user && user.secLevel >= 100);
   }
 
   /**
@@ -35,7 +35,7 @@ export class PermissionsUtil {
    * Requires security level 100 or higher (sysop)
    */
   static canEditFileDescriptions(user: any): boolean {
-    return user && user.secLevel >= 100;
+    return !!(user && user.secLevel >= 100);
   }
 
   /**
@@ -43,7 +43,7 @@ export class PermissionsUtil {
    * Requires security level 10 or higher
    */
   static canPostMessages(user: any): boolean {
-    return user && user.secLevel >= 10;
+    return !!(user && user.secLevel >= 10);
   }
 
   /**
@@ -63,7 +63,7 @@ export class PermissionsUtil {
    * Requires security level 255 (full sysop)
    */
   static isSysop(user: any): boolean {
-    return user && user.secLevel >= 255;
+    return !!(user && user.secLevel >= 255);
   }
 
   /**
@@ -71,14 +71,14 @@ export class PermissionsUtil {
    * Requires security level 100 or higher
    */
   static isCoSysop(user: any): boolean {
-    return user && user.secLevel >= 100;
+    return !!(user && user.secLevel >= 100);
   }
 
   /**
    * Check if user has specific security level
    */
   static hasSecurityLevel(user: any, requiredLevel: number): boolean {
-    return user && user.secLevel >= requiredLevel;
+    return !!(user && user.secLevel >= requiredLevel);
   }
 
   /**
@@ -86,7 +86,7 @@ export class PermissionsUtil {
    * Requires security level 10 or higher
    */
   static canUploadFiles(user: any): boolean {
-    return user && user.secLevel >= 10;
+    return !!(user && user.secLevel >= 10);
   }
 
   /**
@@ -102,7 +102,7 @@ export class PermissionsUtil {
    * Requires security level 10 or higher
    */
   static canAccessDoors(user: any): boolean {
-    return user && user.secLevel >= 10;
+    return !!(user && user.secLevel >= 10);
   }
 
   /**
