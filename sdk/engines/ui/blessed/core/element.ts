@@ -15,6 +15,9 @@ import type {
   MouseEvent,
 } from './types';
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+
 export class Element extends EventEmitter {
   options: ElementOptions;
   parent: Element | null = null;
@@ -1025,7 +1028,7 @@ export class Element extends EventEmitter {
         const ch = line[i];
 
         // Start of ANSI escape
-        if (ch === '\x1b') {
+        if (ch === ESC) {
           inAnsi = true;
           ansiBuffer = ch;
           continue;
@@ -1519,7 +1522,7 @@ export class Element extends EventEmitter {
       width: pos.width,
       height: pos.height,
     });
-    const osc = `\x1b]9999;overlay;${data}\x07`;
+    const osc = ESC + `]9999;overlay;${data}` + String.fromCharCode(7);
     this.screen.program?.write(osc);
   }
 
@@ -2797,7 +2800,7 @@ export class Element extends EventEmitter {
         const ch = line[i];
 
         // Handle ANSI escape sequences
-        if (ch === '\x1b') {
+        if (ch === ESC) {
           inAnsi = true;
           ansiBuffer = ch;
           continue;

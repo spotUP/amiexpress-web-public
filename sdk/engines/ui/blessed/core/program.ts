@@ -9,6 +9,9 @@ import { EventEmitter } from './events';
 import { cursor, attrs, fg, bg } from './colors';
 import type { KeyEvent, MouseEvent } from './types';
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+
 export interface ProgramOptions {
   input?: any;
   output?: (data: string) => void;
@@ -208,7 +211,7 @@ export class Program extends EventEmitter {
    */
   cha(col: number): void {
     this.x = col;
-    this.write(`\x1b[${col + 1}G`);
+    this.write(ESC + `\[${col + 1}G`);
   }
 
   /**
@@ -219,7 +222,7 @@ export class Program extends EventEmitter {
     if (n === 1) {
       this.write(cursor.up());
     } else {
-      this.write(`\x1b[${n}A`);
+      this.write(ESC + `\[${n}A`);
     }
   }
 
@@ -231,7 +234,7 @@ export class Program extends EventEmitter {
     if (n === 1) {
       this.write(cursor.down());
     } else {
-      this.write(`\x1b[${n}B`);
+      this.write(ESC + `\[${n}B`);
     }
   }
 
@@ -240,7 +243,7 @@ export class Program extends EventEmitter {
    */
   cuf(n: number = 1): void {
     this.x = Math.min(this.cols - 1, this.x + n);
-    this.write(`\x1b[${n}C`);
+    this.write(ESC + `\[${n}C`);
   }
 
   /**
@@ -248,21 +251,21 @@ export class Program extends EventEmitter {
    */
   cub(n: number = 1): void {
     this.x = Math.max(0, this.x - n);
-    this.write(`\x1b[${n}D`);
+    this.write(ESC + `\[${n}D`);
   }
 
   /**
    * Save cursor position
    */
   sc(): void {
-    this.write('\x1b[s');
+    this.write(ESC + '[s');
   }
 
   /**
    * Restore cursor position
    */
   rc(): void {
-    this.write('\x1b[u');
+    this.write(ESC + '[u');
   }
 
   /**
@@ -280,7 +283,7 @@ export class Program extends EventEmitter {
       code = blink ? 5 : 6;
     }
 
-    this.write(`\x1b[${code} q`);
+    this.write(ESC + `\[${code} q`);
   }
 
   /**
@@ -288,7 +291,7 @@ export class Program extends EventEmitter {
    */
   cursorReset(): void {
     this._cursorShape = null;
-    this.write('\x1b[0 q');
+    this.write(ESC + '[0 q');
   }
 
   // ============================================================================
@@ -299,7 +302,7 @@ export class Program extends EventEmitter {
    * Clear screen
    */
   clear(): void {
-    this.write('\x1b[2J');
+    this.write(ESC + '[2J');
     this.cup(0, 0);
   }
 
@@ -308,11 +311,11 @@ export class Program extends EventEmitter {
    */
   ed(param?: string): void {
     if (param === 'above') {
-      this.write('\x1b[1J');
+      this.write(ESC + '[1J');
     } else if (param === 'all') {
-      this.write('\x1b[2J');
+      this.write(ESC + '[2J');
     } else {
-      this.write('\x1b[J');
+      this.write(ESC + '[J');
     }
   }
 
@@ -321,11 +324,11 @@ export class Program extends EventEmitter {
    */
   el(param?: string): void {
     if (param === 'left') {
-      this.write('\x1b[1K');
+      this.write(ESC + '[1K');
     } else if (param === 'all') {
-      this.write('\x1b[2K');
+      this.write(ESC + '[2K');
     } else {
-      this.write('\x1b[K');
+      this.write(ESC + '[K');
     }
   }
 
@@ -333,63 +336,63 @@ export class Program extends EventEmitter {
    * Erase characters
    */
   ech(n: number = 1): void {
-    this.write(`\x1b[${n}X`);
+    this.write(ESC + `\[${n}X`);
   }
 
   /**
    * Insert lines
    */
   il(n: number = 1): void {
-    this.write(`\x1b[${n}L`);
+    this.write(ESC + `\[${n}L`);
   }
 
   /**
    * Delete lines
    */
   dl(n: number = 1): void {
-    this.write(`\x1b[${n}M`);
+    this.write(ESC + `\[${n}M`);
   }
 
   /**
    * Insert characters
    */
   ich(n: number = 1): void {
-    this.write(`\x1b[${n}@`);
+    this.write(ESC + `\[${n}@`);
   }
 
   /**
    * Delete characters
    */
   dch(n: number = 1): void {
-    this.write(`\x1b[${n}P`);
+    this.write(ESC + `\[${n}P`);
   }
 
   /**
    * Set scroll region
    */
   csr(top: number, bottom: number): void {
-    this.write(`\x1b[${top + 1};${bottom + 1}r`);
+    this.write(ESC + `\[${top + 1};${bottom + 1}r`);
   }
 
   /**
    * Reset scroll region
    */
   resetCursor(): void {
-    this.write('\x1b[r');
+    this.write(ESC + '[r');
   }
 
   /**
    * Scroll up
    */
   su(n: number = 1): void {
-    this.write(`\x1b[${n}S`);
+    this.write(ESC + `\[${n}S`);
   }
 
   /**
    * Scroll down
    */
   sd(n: number = 1): void {
-    this.write(`\x1b[${n}T`);
+    this.write(ESC + `\[${n}T`);
   }
 
   // ============================================================================
@@ -441,7 +444,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2809-2813
    */
   cnl(param: number = 1): void {
-    this.write(`\x1b[${param || ''}E`);
+    this.write(ESC + `\[${param || ''}E`);
   }
 
   cursorNextLine(param: number = 1): void {
@@ -453,7 +456,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2819-2823
    */
   cpl(param: number = 1): void {
-    this.write(`\x1b[${param || ''}F`);
+    this.write(ESC + `\[${param || ''}F`);
   }
 
   cursorPrecedingLine(param: number = 1): void {
@@ -467,7 +470,7 @@ export class Program extends EventEmitter {
   cursorCharAbsolute(param: number = 0): void {
     // Note: our implementation doesn't track x/y coordinates like neo-blessed
     // Just send the ANSI code
-    this.write(`\x1b[${param + 1}G`);
+    this.write(ESC + `\[${param + 1}G`);
   }
 
   /**
@@ -475,7 +478,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2876-2884
    */
   hpa(param: number = 0): void {
-    this.write(`\x1b[${param || ''}${'`'}`);
+    this.write(ESC + `\[${param || ''}${'`'}`);
   }
 
   charPosAbsolute(param: number = 0): void {
@@ -487,7 +490,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2890-2897
    */
   hpr(param: number = 1): void {
-    this.write(`\x1b[${param || ''}a`);
+    this.write(ESC + `\[${param || ''}a`);
   }
 
   /**
@@ -502,7 +505,7 @@ export class Program extends EventEmitter {
     if (key) return this.lsaveCursor(key);
     // For browser implementation, just send ANSI code
     // Note: neo-blessed tracks this.x/this.y but we don't have those
-    this.write('\x1b7');
+    this.write(ESC + '7');
   }
 
   /**
@@ -511,7 +514,7 @@ export class Program extends EventEmitter {
    */
   restoreCursor(key?: string, hide?: boolean): void {
     if (key) return this.lrestoreCursor(key, hide);
-    this.write('\x1b8');
+    this.write(ESC + '8');
   }
 
   /**
@@ -549,7 +552,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2057-2059
    */
   lineHeight(): void {
-    this.write('\x1b#');
+    this.write(ESC + '#');
   }
 
   /**
@@ -557,7 +560,7 @@ export class Program extends EventEmitter {
    * EXACT from neo-blessed program.js lines 2004-2006
    */
   tabSet(): void {
-    this.write('\x1bH');
+    this.write(ESC + 'H');
   }
 
   /**
@@ -566,11 +569,11 @@ export class Program extends EventEmitter {
    */
   resetColors(param?: string | number): void {
     if (param === 'fg') {
-      this.write('\x1b]110\x07');
+      this.write(ESC + ']110' + String.fromCharCode(7));
     } else if (param === 'bg') {
-      this.write('\x1b]111\x07');
+      this.write(ESC + ']111' + String.fromCharCode(7));
     } else {
-      this.write('\x1b]112\x07');
+      this.write(ESC + ']112' + String.fromCharCode(7));
     }
   }
 
@@ -597,7 +600,7 @@ export class Program extends EventEmitter {
    */
   sm(...params: (string | number)[]): void {
     const param = params.join(';');
-    this.write(`\x1b[${param || ''}h`);
+    this.write(ESC + `\[${param || ''}h`);
   }
 
   /**
@@ -625,7 +628,7 @@ export class Program extends EventEmitter {
    */
   rm(...params: (string | number)[]): void {
     const param = params.join(';');
-    this.write(`\x1b[${param || ''}l`);
+    this.write(ESC + `\[${param || ''}l`);
   }
 
   /**
@@ -729,7 +732,7 @@ export class Program extends EventEmitter {
         break;
     }
 
-    this.write(`\x1b${levelChar}${charsetCode}`);
+    this.write(ESC + `${levelChar}${charsetCode}`);
   }
 
   /**
@@ -774,7 +777,7 @@ export class Program extends EventEmitter {
         code = 'n';
     }
 
-    this.write(`\x1b${code}`);
+    this.write(ESC + `${code}`);
   }
 
   // ============================================================================
@@ -791,8 +794,8 @@ export class Program extends EventEmitter {
    */
   dsr(param: string | number = 0, callback?: (err?: Error, data?: any) => void, dec?: boolean): void {
     const code = dec
-      ? `\x1b[?${param}n`
-      : `\x1b[${param}n`;
+      ? ESC + `\[?${param}n`
+      : ESC + `\[${param}n`;
 
     this.write(code);
 
@@ -833,7 +836,7 @@ export class Program extends EventEmitter {
    * - Pc = ROM cartridge number (usually 0)
    */
   da(param: string | number = '', callback?: (err?: Error, data?: any) => void): void {
-    this.write(`\x1b[${param}c`);
+    this.write(ESC + `\[${param}c`);
 
     if (callback) {
       // Response parsing deferred for browser environment
@@ -911,7 +914,7 @@ export class Program extends EventEmitter {
     if (!Array.isArray(params)) {
       params = [params];
     }
-    this.write(`\x1b[${params.join(';')}m`);
+    this.write(ESC + `\[${params.join(';')}m`);
   }
 
   /**
@@ -943,7 +946,7 @@ export class Program extends EventEmitter {
    */
   ul(enable: boolean = true): void {
     this._attr.underline = enable;
-    this.write(enable ? attrs.underline : '\x1b[24m');
+    this.write(enable ? attrs.underline : ESC + '[24m');
   }
 
   /**
@@ -951,7 +954,7 @@ export class Program extends EventEmitter {
    */
   blink(enable: boolean = true): void {
     this._attr.blink = enable;
-    this.write(enable ? attrs.blink : '\x1b[25m');
+    this.write(enable ? attrs.blink : ESC + '[25m');
   }
 
   /**
@@ -959,7 +962,7 @@ export class Program extends EventEmitter {
    */
   inverse(enable: boolean = true): void {
     this._attr.inverse = enable;
-    this.write(enable ? attrs.inverse : '\x1b[27m');
+    this.write(enable ? attrs.inverse : ESC + '[27m');
   }
 
   /**
@@ -967,7 +970,7 @@ export class Program extends EventEmitter {
    */
   invisible(enable: boolean = true): void {
     this._attr.invisible = enable;
-    this.write(enable ? attrs.invisible : '\x1b[28m');
+    this.write(enable ? attrs.invisible : ESC + '[28m');
   }
 
   /**
@@ -990,7 +993,7 @@ export class Program extends EventEmitter {
    * Normal (no bold, no dim)
    */
   normal(): void {
-    this.write('\x1b[22m');
+    this.write(ESC + '[22m');
   }
 
   // ============================================================================
@@ -1001,14 +1004,14 @@ export class Program extends EventEmitter {
    * Use alternate screen buffer
    */
   alternateBuffer(): void {
-    this.write('\x1b[?1049h');
+    this.write(ESC + '[?1049h');
   }
 
   /**
    * Use normal screen buffer
    */
   normalBuffer(): void {
-    this.write('\x1b[?1049l');
+    this.write(ESC + '[?1049l');
   }
 
   /**
@@ -1037,14 +1040,14 @@ export class Program extends EventEmitter {
     this._mouseEnabled = true;
 
     // Enable mouse button tracking
-    this.write('\x1b[?1000h');
+    this.write(ESC + '[?1000h');
 
     // Enable any-event mouse tracking (hover without button press)
     // 1002h = motion only with button held, 1003h = all motion
-    this.write('\x1b[?1003h');
+    this.write(ESC + '[?1003h');
 
     // Enable SGR mouse mode (better encoding)
-    this.write('\x1b[?1006h');
+    this.write(ESC + '[?1006h');
   }
 
   /**
@@ -1054,9 +1057,9 @@ export class Program extends EventEmitter {
     if (!this._mouseEnabled) return;
     this._mouseEnabled = false;
 
-    this.write('\x1b[?1006l');
-    this.write('\x1b[?1003l');
-    this.write('\x1b[?1000l');
+    this.write(ESC + '[?1006l');
+    this.write(ESC + '[?1003l');
+    this.write(ESC + '[?1000l');
   }
 
   /**
@@ -1080,14 +1083,16 @@ export class Program extends EventEmitter {
    * Parse mouse event from input
    */
   private parseMouseEvent(buf: string): MouseEvent | null {
-    // Try SGR mouse format first: \x1b[<b;x;yM or \x1b[<b;x;ym
-    const sgrMatch = buf.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+    // Try SGR mouse format first: ESC[<b;x;yM or ESC[<b;x;ym
+    const sgrRegex = new RegExp(ESC + '\\[<(\\d+);(\\d+);(\\d+)([Mm])');
+    const sgrMatch = buf.match(sgrRegex);
     if (sgrMatch) {
       return this.parseSGRMouse(sgrMatch);
     }
 
-    // Try X10 mouse format: \x1b[Mcbxcy (3 encoded bytes)
-    const x10Match = buf.match(/\x1b\[M(.)(.)(.)/);
+    // Try X10 mouse format: ESC[Mcbxcy (3 encoded bytes)
+    const x10Regex = new RegExp(ESC + '\\[M(.)(.)(.)');
+    const x10Match = buf.match(x10Regex);
     if (x10Match) {
       return this.parseX10Mouse(x10Match);
     }
@@ -1240,7 +1245,7 @@ export class Program extends EventEmitter {
       key.full = 'backspace';
       return key;
     }
-    if (buf === '\x1b') {
+    if (buf === ESC) {
       key.name = 'escape';
       key.full = 'escape';
       return key;
@@ -1285,7 +1290,7 @@ export class Program extends EventEmitter {
     }
 
     // Escape sequences
-    if (buf[0] === '\x1b') {
+    if (buf[0] === ESC) {
       // Meta + character
       if (buf.length === 2) {
         key.meta = true;
@@ -1317,7 +1322,8 @@ export class Program extends EventEmitter {
 
       // CSI sequences
       if (buf[1] === '[') {
-        const match = buf.match(/^\x1b\[([0-9;]+)?([A-Za-z~])/);
+        const csiRegex = new RegExp('^' + ESC + '\\[([0-9;]+)?([A-Za-z~])');
+        const match = buf.match(csiRegex);
         if (match) {
           const params = match[1] ? match[1].split(';').map(Number) : [];
           const final = match[2];
@@ -1431,9 +1437,10 @@ export class Program extends EventEmitter {
         }
       }
 
-      // 2. Check for mouse events (SGR: \x1b[< or X10: \x1b[M)
-      // SGR Mouse: \x1b[<b;x;yM or \x1b[<b;x;ym
-      const sgrMatch = this._inputBuffer.match(/^\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+      // 2. Check for mouse events (SGR: ESC[< or X10: ESC[M)
+      // SGR Mouse: ESC[<b;x;yM or ESC[<b;x;ym
+      const sgrMouseRegex = new RegExp('^' + ESC + '\\[<(\\d+);(\\d+);(\\d+)([Mm])');
+      const sgrMatch = this._inputBuffer.match(sgrMouseRegex);
       if (sgrMatch) {
         if (this._mouseEnabled) {
           const mouseEvent = this.parseSGRMouse(sgrMatch);
@@ -1448,10 +1455,11 @@ export class Program extends EventEmitter {
         continue;
       }
 
-      // X10 Mouse: \x1b[Mcbxcy (3 encoded bytes after \x1b[M)
-      if (this._inputBuffer.startsWith('\x1b[M')) {
+      // X10 Mouse: ESC[Mcbxcy (3 encoded bytes after ESC[M)
+      if (this._inputBuffer.startsWith(ESC + '[M')) {
         if (this._inputBuffer.length >= 6) {
-          const x10Match = this._inputBuffer.match(/^\x1b\[M(.)(.)(.)/);
+          const x10MouseRegex = new RegExp('^' + ESC + '\\[M(.)(.)(.)');
+          const x10Match = this._inputBuffer.match(x10MouseRegex);
           if (x10Match && this._mouseEnabled) {
             const mouseEvent = this.parseX10Mouse(x10Match);
             this._lastMouseEvent = mouseEvent;
@@ -1471,7 +1479,8 @@ export class Program extends EventEmitter {
 
       // 3. Parse key/escape sequences
       // Long sequences first
-      const keyMatch = this._inputBuffer.match(/^(\x1b\[([0-9;]+)?([A-Za-z~])|\x1bO[PQRSABCDHF]|\x1b[a-zA-Z0-9])/);
+      const keyRegex = new RegExp('^(' + ESC + '\\[([0-9;]+)?([A-Za-z~])|' + ESC + 'O[PQRSABCDHF]|' + ESC + '[a-zA-Z0-9])');
+      const keyMatch = this._inputBuffer.match(keyRegex);
       if (keyMatch) {
         const key = this.parseKey(keyMatch[0]);
         if (key) {
@@ -1484,13 +1493,13 @@ export class Program extends EventEmitter {
 
       // Special single bytes
       const singleByte = this._inputBuffer[0];
-      if (singleByte === '\r' || singleByte === '\n' || singleByte === '\t' || 
-          singleByte === '\x1b' || singleByte === '\x7f' || singleByte === '\x08' ||
+      if (singleByte === '\r' || singleByte === '\n' || singleByte === '\t' ||
+          singleByte === ESC || singleByte === '\x7f' || singleByte === '\x08' ||
           (singleByte.charCodeAt(0) >= 1 && singleByte.charCodeAt(0) <= 26) ||
           (singleByte.charCodeAt(0) >= 32 && singleByte.charCodeAt(0) <= 126)) {
-        
-        // Handle \x1b as potential start of sequence (if not followed by anything, it's Esc)
-        if (singleByte === '\x1b' && this._inputBuffer.length === 1) {
+
+        // Handle ESC as potential start of sequence (if not followed by anything, it's Esc)
+        if (singleByte === ESC && this._inputBuffer.length === 1) {
           // Wait to see if more comes
           // But after a short timeout we should treat it as Esc
           // For now, let's just break and wait
@@ -1575,7 +1584,7 @@ export class Program extends EventEmitter {
    * Set terminal title
    */
   setTitle(title: string): void {
-    this.write(`\x1b]0;${title}\x07`);
+    this.write(ESC + `]0;${title}` + String.fromCharCode(7));
   }
 
   // ============================================================================

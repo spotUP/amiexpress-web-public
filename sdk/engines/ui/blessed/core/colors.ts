@@ -535,8 +535,9 @@ Object.keys(ccolorsMap).forEach(function(name) {
 // ADDITIONAL ANSI UTILITIES (not from neo-blessed, but needed for our use)
 // ============================================================================
 
-const ESC = '\x1b';
-const CSI = `${ESC}[`;
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+const CSI = ESC + '[';
 
 // Special value for transparent
 export const TRANSPARENT = -1;
@@ -937,8 +938,8 @@ export function parseTags(text: string): string {
   return result;
 }
 
-// Strip ANSI codes
-const ansiRegex = /\x1b\[[0-9;]*m/g;
+// Strip ANSI codes - use RegExp constructor to survive Terser
+const ansiRegex = new RegExp(ESC + '\\[[0-9;]*m', 'g');
 
 // Opt #11: Memoization cache for stripAnsi (70-80% faster for static content)
 const _stripAnsiCache = new Map<string, string>();

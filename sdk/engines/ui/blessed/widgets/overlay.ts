@@ -8,6 +8,9 @@
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+
 export interface OverlayOptions extends ElementOptions {
   opacity?: number;
 }
@@ -119,7 +122,7 @@ export class Overlay extends Box {
       width: pos.width,
       height: pos.height,
     });
-    const osc = `\x1b]9999;overlay;${data}\x07`;
+    const osc = ESC + `]9999;overlay;${data}` + String.fromCharCode(7);
     // Use OSC (Operating System Command) format that won't display as text
     // Write directly through the screen's program which handles output
     this.screen.program.write(osc);

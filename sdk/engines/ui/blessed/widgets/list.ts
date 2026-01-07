@@ -6,6 +6,9 @@ import { Element } from '../core/element';
 import { parseTags, textWidth } from '../core/colors';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+
 export class List extends Element {
   items: string[] = [];
   selected: number = 0;
@@ -355,7 +358,9 @@ export class List extends Element {
       for (let i = 0; i < this.items.length; i++) {
         const index = (startIndex + i) % this.items.length;
         const item = this.items[index];
-        const plainItem = parseTags(item).replace(/\x1b\[[0-9;]*m/g, ''); // Strip tags and ANSI
+        // Use RegExp constructor so ESC survives Terser minification
+        const ansiRegex = new RegExp(ESC + '\\[[0-9;]*m', 'g');
+        const plainItem = parseTags(item).replace(ansiRegex, ''); // Strip tags and ANSI
 
         if (plainItem.toLowerCase().startsWith(searchChar)) {
           this.select(index);
@@ -812,7 +817,7 @@ export class List extends Element {
       for (let i = 0; i < line.length; i += 1) {
         const ch = line[i];
 
-        if (ch === '\x1b') {
+        if (ch === ESC) {
           inAnsi = true;
           ansiBuffer = ch;
           continue;

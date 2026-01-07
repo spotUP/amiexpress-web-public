@@ -9,6 +9,10 @@ import { KeyBindings } from './keybindings';
 import { ResponsiveLayoutManager, type ResponsiveConfig } from './responsive-layout';
 import type { ScreenOptions, KeyEvent, MouseEvent } from './types';
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+// Terser strips literal \x1b from string constants
+const ESC = String.fromCharCode(27);
+
 export class Screen extends Element {
   private _width: number;
   private _height: number;
@@ -461,6 +465,8 @@ export class Screen extends Element {
     for (let y = 0; y < this.height; y++) {
       if (!this.lastBuffer[y]) continue;
       for (let x = 0; x < this.width; x++) {
+        // Guard: check cell exists
+        if (!this.lastBuffer[y][x]) continue;
         this.lastBuffer[y][x] = [-1, '\x00'];
       }
     }
@@ -527,10 +533,12 @@ export class Screen extends Element {
 
   clearRegion(xi: number, xl: number, yi: number, yl: number): void {
     for (let y = yi; y < yl; y++) {
-      if (y < 0 || y >= this.height) continue;
+      // Guard: check both height bounds AND actual buffer row existence
+      if (y < 0 || y >= this.height || !this.buffer[y]) continue;
 
       for (let x = xi; x < xl; x++) {
-        if (x < 0 || x >= this.width) continue;
+        // Guard: check both width bounds AND actual buffer cell existence
+        if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
 
         this.buffer[y][x] = [0x000, ' '];
       }
@@ -545,10 +553,12 @@ export class Screen extends Element {
     const isTransparentBg = bgColor === 0x1ff;
 
     for (let y = yi; y < yl; y++) {
-      if (y < 0 || y >= this.height) continue;
+      // Guard: check both height bounds AND actual buffer row existence
+      if (y < 0 || y >= this.height || !this.buffer[y]) continue;
 
       for (let x = xi; x < xl; x++) {
-        if (x < 0 || x >= this.width) continue;
+        // Guard: check both width bounds AND actual buffer cell existence
+        if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
 
         if (isTransparentBg) {
           // For transparent background with space character, skip entirely
@@ -652,7 +662,7 @@ export class Screen extends Element {
     // Remove trailing semicolon
     if (out[out.length - 1] === ';') out = out.slice(0, -1);
 
-    return '\x1b[' + out + 'm';
+    return ESC + '[' + out + 'm';
   }
 
   /**
@@ -706,9 +716,9 @@ export class Screen extends Element {
     if (!(this as any)._hasRendered) {
       (this as any)._hasRendered = true;
       // Reset all attributes and clear screen
-      this.write('\x1b[0m');  // Reset all attributes
-      this.write('\x1b[2J');  // Clear screen
-      this.write('\x1b[H');   // Move cursor to home
+      this.write(ESC + '[0m');  // Reset all attributes
+      this.write(ESC + '[2J');  // Clear screen
+      this.write(ESC + '[H');   // Move cursor to home
     }
 
     // Mark entire screen as dirty since we're clearing the entire buffer
@@ -877,9 +887,9 @@ export class Screen extends Element {
       // Keep underlying characters visible, only blend the color attributes
       // EXACT from neo-blessed element.js line 1945: colors.blend(attr, lines[y][x][0])
       for (let y = startY; y < maxY; y++) {
-        if (y < 0 || y >= this.height) continue;
+        if (y < 0 || y >= this.height || !this.buffer[y]) continue;
         for (let x = startX; x < bbsMaxX; x++) {
-          if (x < 0 || x >= this.width) continue;
+          if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
           const existingAttr = this.buffer[y][x][0];
           const existingChar = this.buffer[y][x][1];
           // Two arguments = transparency mode (blends at 50% alpha by default)
@@ -890,9 +900,9 @@ export class Screen extends Element {
     } else if (!isTransparentBg) {
       // Normal fill - overwrite buffer
       for (let y = startY; y < maxY; y++) {
-        if (y < 0 || y >= this.height) continue;
+        if (y < 0 || y >= this.height || !this.buffer[y]) continue;
         for (let x = startX; x < bbsMaxX; x++) {
-          if (x < 0 || x >= this.width) continue;
+          if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
           this.buffer[y][x] = [baseAttr, fillChar];
         }
       }
@@ -902,7 +912,8 @@ export class Screen extends Element {
     // Render lines
     for (let i = 0; i < lines.length; i++) {
       const y = startY + i;
-      if (y < 0 || y >= this.height || y >= maxY) continue;
+      // Guard: check both this.height AND actual buffer existence to prevent crashes during resize
+      if (y < 0 || y >= this.height || y >= maxY || !this.buffer[y]) continue;
 
       const line = lines[i];
 
@@ -913,7 +924,7 @@ export class Screen extends Element {
 
       while (idx < line.length && x < bbsMaxX) {
         // Check for ANSI escape sequence
-        if (line[idx] === '\x1b' && line[idx + 1] === '[') {
+        if (line[idx] === ESC && line[idx + 1] === '[') {
           // Parse ANSI sequence
           let end = idx + 2;
           while (end < line.length && !/[mK]/.test(line[end])) {
@@ -932,7 +943,8 @@ export class Screen extends Element {
         }
 
         // Regular character - write to buffer
-        if (x >= 0 && x < this.width) {
+        // Guard: check both width bounds AND actual buffer cell existence
+        if (x >= 0 && x < this.width && this.buffer[y] && this.buffer[y][x]) {
           if (isBlendTransparent) {
             // Blend text color with existing content
             // EXACT from neo-blessed element.js line 2076: colors.blend(attr, lines[y][x][0])
@@ -1072,9 +1084,10 @@ export class Screen extends Element {
     const labelAttr = this.styleToAttr(labelStyle);
 
     // Top border
-    if (pos.yi >= 0 && pos.yi < this.height) {
+    // Guard: check both height bounds AND actual buffer row existence
+    if (pos.yi >= 0 && pos.yi < this.height && this.buffer[pos.yi]) {
       for (let x = pos.xi; x < pos.xl; x++) {
-        if (x < 0 || x >= this.width) continue;
+        if (x < 0 || x >= this.width || !this.buffer[pos.yi][x]) continue;
 
         let ch = chars.h;
         if (x === pos.xi) ch = chars.tl;
@@ -1085,27 +1098,30 @@ export class Screen extends Element {
     }
 
     // Bottom border
-    if (pos.yl - 1 >= 0 && pos.yl - 1 < this.height) {
+    const bottomY = pos.yl - 1;
+    // Guard: check both height bounds AND actual buffer row existence
+    if (bottomY >= 0 && bottomY < this.height && this.buffer[bottomY]) {
       for (let x = pos.xi; x < pos.xl; x++) {
-        if (x < 0 || x >= this.width) continue;
+        if (x < 0 || x >= this.width || !this.buffer[bottomY][x]) continue;
 
         let ch = chars.h;
         if (x === pos.xi) ch = chars.bl;
         else if (x === pos.xl - 1) ch = chars.br;
 
-        this.buffer[pos.yl - 1][x] = [attr, ch];
+        this.buffer[bottomY][x] = [attr, ch];
       }
     }
 
     // Left and right borders
     for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-      if (y < 0 || y >= this.height) continue;
+      // Guard: check both height bounds AND actual buffer row existence
+      if (y < 0 || y >= this.height || !this.buffer[y]) continue;
 
-      if (pos.xi >= 0 && pos.xi < this.width) {
+      if (pos.xi >= 0 && pos.xi < this.width && this.buffer[y][pos.xi]) {
         this.buffer[y][pos.xi] = [attr, chars.v];
       }
 
-      if (pos.xl - 1 >= 0 && pos.xl - 1 < this.width) {
+      if (pos.xl - 1 >= 0 && pos.xl - 1 < this.width && this.buffer[y][pos.xl - 1]) {
         this.buffer[y][pos.xl - 1] = [attr, chars.v];
       }
     }
@@ -1119,7 +1135,8 @@ export class Screen extends Element {
         const labelText = ` ${rawLabel} `;
         let x = pos.xi + 2;
         for (let i = 0; i < labelText.length && x < pos.xl - 1; i += 1, x += 1) {
-          if (x >= 0 && x < this.width) {
+          // Guard: check buffer existence
+          if (x >= 0 && x < this.width && this.buffer[pos.yi] && this.buffer[pos.yi][x]) {
             this.buffer[pos.yi][x] = [labelAttr, labelText[i]];
           }
         }
@@ -1129,7 +1146,11 @@ export class Screen extends Element {
 
   private _dockBorders(): void {
     for (let y = 0; y < this.height; y++) {
+      // Guard: check buffer row exists
+      if (!this.buffer[y]) continue;
       for (let x = 0; x < this.width; x++) {
+        // Guard: check buffer cell exists
+        if (!this.buffer[y][x]) continue;
         const ch = this.buffer[y][x][1];
         if (!ANGLES[ch]) continue;
         this.buffer[y][x][1] = this._getAngle(this.buffer, x, y, ch);
@@ -1139,6 +1160,9 @@ export class Screen extends Element {
 
   private _renderAsciiLabel(pos: any, label: string, labelAttr: number, borderAttr: number): void {
     if (!label) return;
+    // Guard: check buffer row exists
+    if (!this.buffer[pos.yi]) return;
+
     const text = `[ ${label} ]`;
     const maxWidth = Math.max(0, pos.xl - pos.xi - 2);
     const truncated = text.length > maxWidth ? text.slice(0, maxWidth) : text;
@@ -1148,20 +1172,23 @@ export class Screen extends Element {
 
     for (let i = 0; i < truncated.length && start + i < pos.xl - 1; i += 1) {
       const x = start + i;
-      if (x >= 0 && x < this.width) {
+      // Guard: check buffer cell exists
+      if (x >= 0 && x < this.width && this.buffer[pos.yi][x]) {
         this.buffer[pos.yi][x] = [labelAttr, truncated[i]];
       }
     }
 
     for (let x = pos.xi + 1; x < start && x < this.width; x += 1) {
-      if (x >= 0) {
+      // Guard: check buffer cell exists
+      if (x >= 0 && this.buffer[pos.yi][x]) {
         this.buffer[pos.yi][x] = [borderAttr, '-'];
       }
     }
 
     const end = start + truncated.length;
     for (let x = end; x < pos.xl - 1 && x < this.width; x += 1) {
-      if (x >= 0) {
+      // Guard: check buffer cell exists
+      if (x >= 0 && this.buffer[pos.yi][x]) {
         this.buffer[pos.yi][x] = [borderAttr, '-'];
       }
     }
@@ -1244,7 +1271,11 @@ export class Screen extends Element {
     }
 
     for (let y = minY; y <= maxY; y++) {
+      // Guard: check buffer row exists
+      if (!this.buffer[y] || !this.lastBuffer[y]) continue;
       for (let x = minX; x <= maxX; x++) {
+        // Guard: check buffer cells exist
+        if (!this.buffer[y][x] || !this.lastBuffer[y][x]) continue;
         const [attr, ch] = this.buffer[y][x];
         const [lastAttrCell, lastCh] = this.lastBuffer[y][x];
 
@@ -1785,7 +1816,7 @@ export class Screen extends Element {
 
   setTitle(title: string): void {
     this.title = title;
-    this.write(`\x1b]0;${title}\x07`);
+    this.write(ESC + `]0;${title}` + String.fromCharCode(7));
   }
 
   // ============================================================================
@@ -2041,7 +2072,7 @@ export class Screen extends Element {
     // The old content rendered at larger width gets incorrectly wrapped otherwise
     if (wasShrinking) {
       // Clear entire screen and move cursor to home
-      this.program.write('\x1b[2J\x1b[H');
+      this.program.write(ESC + '[2J' + ESC + '[H');
     }
 
     // Reallocate buffers for new size
@@ -2099,7 +2130,9 @@ export class Screen extends Element {
   }
 
   private _stripAnsi(str: string): string {
-    return str.replace(/\x1b\[[0-9;]*m/g, '');
+    // Use RegExp constructor to avoid Terser stripping ESC in regex literal
+    const ansiRegex = new RegExp(ESC + '\\[[0-9;]*m', 'g');
+    return str.replace(ansiRegex, '');
   }
 
   /**

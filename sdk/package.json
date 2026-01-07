@@ -105,7 +105,7 @@
     }
   },
   "scripts": {
-    "build": "npm run build:cjs && npm run build:esm && npm run copy-assets && npm run minify",
+    "build": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:dev": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:cjs": "tsc",
     "build:esm": "tsc -p tsconfig.client.json",
