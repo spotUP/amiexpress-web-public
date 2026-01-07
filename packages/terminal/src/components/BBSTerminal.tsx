@@ -863,9 +863,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       try {
         const { options } = data;
         await mediaHandler.startVideo(options?.width, options?.height, options?.fps, options?.mode);
-        callback({ success: true, streamId: `video-${socket.id}` });
+        if (typeof callback === 'function') callback({ success: true, streamId: `video-${socket.id}` });
       } catch (err: any) {
-        callback({ success: false, error: err.message });
+        console.error('[MediaHandler] video:start-stream error:', err);
+        if (typeof callback === 'function') callback({ success: false, error: err.message });
       }
     });
 

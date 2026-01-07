@@ -229,6 +229,56 @@ console.log('[DoorSocket] Intercepting chat:keystroke-clear:', data);
       return wrappedSocket;
     }
 
+    // Intercept video:start-stream - doors calling this need server-side handling
+    if (event === 'video:start-stream') {
+      const data = args[0] || {};
+      const callback = typeof args[1] === 'function' ? args[1] : undefined;
+console.log('[DoorSocket] Intercepting video:start-stream:', data);
+
+      const streamId = `video-${socket.id}`;
+      const roomId = session.currentVoiceChannelId || session.currentRoomId;
+console.log(`[DoorSocket][Video] User ${session.user?.username} starting video stream: ${streamId}${roomId ? ` in room ${roomId}` : ' (standalone)'}`);
+
+      // Notify the client (frontend) to actually start capturing from the camera
+      socket.emit('video:start-stream', { source: data.source, options: data.options, streamId });
+
+      // Notify others in the room if in one
+      if (roomId) {
+        const voiceRoomId = `voice:${roomId}`;
+        socket.to(voiceRoomId).emit('video:stream-started', {
+          userId: session.user?.id,
+          username: session.user?.username,
+          streamId,
+          options: data.options
+        });
+      }
+
+      callback?.({ success: true, streamId });
+      return wrappedSocket;
+    }
+
+    // Intercept video:stop-stream
+    if (event === 'video:stop-stream') {
+      const data = args[0] || {};
+      const callback = typeof args[1] === 'function' ? args[1] : undefined;
+console.log('[DoorSocket] Intercepting video:stop-stream:', data);
+
+      // CRITICAL: Tell frontend to actually stop capturing video
+      socket.emit('video:stop-stream', { streamId: data.streamId });
+
+      const roomId = session.currentVoiceChannelId || session.currentRoomId;
+      if (roomId) {
+        const voiceRoomId = `voice:${roomId}`;
+        socket.to(voiceRoomId).emit('video:stream-stopped', {
+          userId: session.user?.id,
+          streamId: data.streamId
+        });
+      }
+console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video stream: ${data.streamId}`);
+      callback?.({ success: true });
+      return wrappedSocket;
+    }
+
     // Pass through all other events to the real socket
     return socket.emit(event, ...args);
   };

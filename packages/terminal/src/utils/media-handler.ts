@@ -183,17 +183,32 @@ export class MediaHandler {
    */
   async startVideo(width: number = 80, height: number = 24, fps: number = 10, mode: 'halfblock' | 'ascii' = 'halfblock'): Promise<void> {
     try {
+      // CRITICAL: Stop any existing video capture first to prevent duplicate intervals
+      if (this.videoCaptureInterval) {
+        console.log('[MediaHandler] Stopping existing video capture before starting new one');
+        clearInterval(this.videoCaptureInterval);
+        this.videoCaptureInterval = null;
+      }
+
+      // Clean up old video element
+      if (this.videoElement) {
+        this.videoElement.pause();
+        this.videoElement.srcObject = null;
+        this.videoElement = null;
+      }
+
       if (!this.mediaStream) {
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 },
           audio: false
         });
-      } else {
-        // Add video track to existing stream
+      } else if (this.mediaStream.getVideoTracks().length === 0) {
+        // Only add video track if we don't already have one
         const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const videoTrack = videoStream.getVideoTracks()[0];
         this.mediaStream.addTrack(videoTrack);
       }
+      // If we already have video tracks, just reuse the existing stream
 
       this.videoElement = document.createElement('video');
       this.videoElement.srcObject = this.mediaStream;

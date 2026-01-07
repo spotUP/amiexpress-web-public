@@ -2473,7 +2473,7 @@ End of sample markdown.`;
 
     const videoService = (session as any).video;
     let activeStreamId: string | null = null;
-    let currentMode: 'braille' | 'superres' | 'halfblock' | 'ascii' = 'braille'; // Default to braille (highest quality)
+    let currentMode: 'braille' | 'superres' | 'halfblock' | 'ascii' | 'hsv' = 'braille'; // Default to braille (highest quality)
     let isFullscreen = false;
     let isSwitchingStream = false; // Prevent rendering during stream transitions
     let streamSwitchInProgress = false; // Prevent concurrent startVideoStream calls
@@ -2492,7 +2492,8 @@ End of sample markdown.`;
         { name: 'Braille', key: '1', mode: 'braille', color: 'lightmagenta', desc: '8x' },
         { name: 'Rich', key: '2', mode: 'superres', color: 'lightgreen', desc: '4x+10' },
         { name: 'Rich', key: '3', mode: 'halfblock', color: 'cyan', desc: '4x+10' },
-        { name: 'ASCII', key: '4', mode: 'ascii', color: 'lightblue', desc: '1x' }
+        { name: 'ASCII', key: '4', mode: 'ascii', color: 'lightblue', desc: '1x' },
+        { name: 'HSV', key: '5', mode: 'hsv', color: 'lightyellow', desc: '16c' }
       ];
 
       let line1 = '{yellow-fg}Mode:{/} ';
@@ -2540,8 +2541,11 @@ End of sample markdown.`;
             fullscreenBox.width = w;
             fullscreenBox.height = h;
 
-            // Clear blessed's internal position cache to force recalculation
-            (fullscreenBox as any)._lpos = null;
+            // Clear ALL blessed internal caches to force recalculation
+            // This prevents alternating frame sizes due to stale cached positions
+            (fullscreenBox as any).lpos = null;           // Last rendered position
+            (fullscreenBox as any)._coordsCache = null;   // Coordinates cache
+            (fullscreenBox as any)._coordsCacheValid = false;  // Cache validity flag
 
             fullscreenBox.setContent(frame);
             fullscreenBox.setFront();  // Ensure it stays on top
@@ -2622,7 +2626,8 @@ End of sample markdown.`;
       screen.render();
 
       try {
-        const streamId = await videoService.startStream(
+        // Add timeout to prevent indefinite hang
+        const startPromise = videoService.startStream(
           { type: 'webcam' },
           {
             width: videoWidth,
@@ -2632,6 +2637,12 @@ End of sample markdown.`;
             mode: requestedMode,
           }
         );
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Stream start timeout (5s)')), 5000);
+        });
+
+        const streamId = await Promise.race([startPromise, timeoutPromise]);
 
         // Allow rendering IMMEDIATELY so first frame isn't dropped
         isSwitchingStream = false;
@@ -2916,6 +2927,12 @@ End of sample markdown.`;
 
     screen.key(['4'], () => {
       currentMode = 'ascii';
+      updateButtonBar();
+      startVideoStream();
+    });
+
+    screen.key(['5'], () => {
+      currentMode = 'hsv';
       updateButtonBar();
       startVideoStream();
     });
