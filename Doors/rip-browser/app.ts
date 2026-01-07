@@ -14,16 +14,21 @@ export async function execute(session: any) {
   console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
   console.log(`[RIP Browser] Working directory: ${process.cwd()}`);
 
+  // Check if terminal supports Unicode (web terminals do, telnet/Amiga don't)
+  const unicodeCapable = bbsSession?.unicodeCapable ?? true; // Default true for web
+
   // Initialize screen
   const screen = blessed.screen({
     smartCSR: true,
-    fullUnicode: false, // CRITICAL: Use ACS codes, not Unicode - prevents UTF-8 corruption
-    terminal: 'xterm', // Standard xterm for ACS box-drawing support
+    fullUnicode: unicodeCapable,
+    terminal: 'xterm',
     title: 'RIP Graphics Browser',
     width: 80,
     height: 24,
     output: (data: string) => {
-      socket.emit('ansi-output', convertUnicodeBoxToACS(data));
+      // Only apply ACS conversion for non-Unicode terminals (Amiga/telnet)
+      const output = unicodeCapable ? data : convertUnicodeBoxToACS(data);
+      socket.emit('ansi-output', output);
     }
   });
 
@@ -61,7 +66,7 @@ export async function execute(session: any) {
     height: 3,
     content: '{center}{yellow-fg}RIP Graphics Browser{/yellow-fg}{/center}\n{center}Use arrows to browse, ENTER to view, Q to quit{/center}',
     tags: true,
-    border: { type: 'line' },
+    border: { type: 'ascii' },  // Use ASCII borders to avoid Unicode issues
     style: {
       border: { fg: 'cyan' }
     }
@@ -101,7 +106,7 @@ export async function execute(session: any) {
     height: 3,
     content: '{yellow-fg}Arrows:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} View  {yellow-fg}F5:{/yellow-fg} Force View  {yellow-fg}Q:{/yellow-fg} Quit',
     tags: true,
-    border: { type: 'line' },
+    border: { type: 'ascii' },  // Use ASCII borders to avoid Unicode issues
     style: {
       border: { fg: 'cyan' }
     }
