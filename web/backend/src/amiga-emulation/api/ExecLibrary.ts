@@ -227,29 +227,19 @@ export class ExecLibrary {
     });
 
     // Create current task (the door itself)
-    // Task is at 0x090000 - after ExecBase (0x080000) but before library stubs (0x0B0000+)
-    const taskMsgPortAddr = 0x09005c; // Process msg port at task + 0x5C
+    // Will be allocated dynamically after door segments are loaded
+    // to avoid overlapping with door's BSS/DATA segments
     this.currentTask = {
-      address: 0x090000, // Task/Process structure at 576KB
+      address: 0, // Will be set by allocateDoorTask()
       name: "Door Task",
-      node: 0x090000,
-      sigRecvd: 0, // No signals received yet
-      sigWait: 0, // Not waiting for signals (0 = TS_READY)
-      state: 0, // TS_READY
-      msgPort: taskMsgPortAddr, // Message port for Process structure
-      isWaiting: false, // Not blocked in Wait()
+      node: 0,
+      sigRecvd: 0,
+      sigWait: 0,
+      state: 0,
+      msgPort: 0, // Will be set by allocateDoorTask()
+      isWaiting: false,
     };
-    this.execBase.thisTask = this.currentTask.address;
-
-    // Register the task's message port
-    this.messagePorts.set(taskMsgPortAddr, {
-      address: taskMsgPortAddr,
-      name: "Door Task Port",
-      messages: [],
-      sigBit: 0,
-      sigTask: this.currentTask.address,
-      signaled: false,
-    });
+    this.execBase.thisTask = 0; // Will be set by allocateDoorTask()
 
 console.log("[ExecLibrary] Initialized");
 console.log(
@@ -294,6 +284,48 @@ console.log(
 
   getStackLower(): number {
     return this.currentStackLower;
+  }
+
+  /**
+   * Allocate door Task structure dynamically after door segments.
+   * CRITICAL: Must be called AFTER door segments are loaded to avoid overlap.
+   *
+   * @param doorSegmentEnd - End address of door's highest segment (CODE/BSS/DATA)
+   */
+  allocateDoorTask(doorSegmentEnd: number): void {
+    // Allocate Task structure after door segments with 4KB padding for safety
+    // Align to 256-byte boundary for structure alignment
+    const taskAddr = ((doorSegmentEnd + 0x1000 + 0xFF) & ~0xFF) >>> 0;
+    const taskMsgPortAddr = (taskAddr + 0x5C) >>> 0; // Process msg port at task + 0x5C
+
+    this.currentTask.address = taskAddr;
+    this.currentTask.node = taskAddr;
+    this.currentTask.msgPort = taskMsgPortAddr;
+    this.execBase.thisTask = taskAddr;
+
+    // Register the task's message port
+    this.messagePorts.set(taskMsgPortAddr, {
+      address: taskMsgPortAddr,
+      name: "Door Task Port",
+      messages: [],
+      sigBit: 0,
+      sigTask: taskAddr,
+      signaled: false,
+    });
+
+    // Write ExecBase.thisTask to memory
+    this.emulator.writeMemory32(this.execBase.address + 276, taskAddr);
+
+    // Write the Task/Process structure to memory
+    this.writeTaskToMemory(this.currentTask);
+
+console.log(
+      `[ExecLibrary] *** DYNAMIC TASK ALLOCATION ***\n` +
+      `  Door segments end at: 0x${doorSegmentEnd.toString(16)}\n` +
+      `  Task structure allocated at: 0x${taskAddr.toString(16)}\n` +
+      `  Task message port at: 0x${taskMsgPortAddr.toString(16)}\n` +
+      `  ExecBase.thisTask updated to: 0x${taskAddr.toString(16)}`
+    );
   }
 
   /**
@@ -456,8 +488,8 @@ console.log(
     // Write ExecBase structure to memory
     this.writeExecBaseToMemory();
 
-    // Write current task structure
-    this.writeTaskToMemory(this.currentTask);
+    // NOTE: Task structure will be written by allocateDoorTask() after door segments load
+    // This avoids overlapping with door's BSS/DATA segments
 
 console.log("[ExecLibrary] ExecBase initialized successfully");
   }
@@ -660,12 +692,25 @@ console.log(
     this.emulator.writeMemory(msgPortAddr + 0x20, 5); // lh_Type = NT_MESSAGE
     this.emulator.writeMemory(msgPortAddr + 0x21, 0); // l_pad
 
+    // CRITICAL: Write Process structure fields beyond Task
+    // pr_CLI at offset 0xAC - MUST be 0 for BBS doors (non-zero = CLI/shell)
+    // Doors check this field to detect if they're running from shell vs BBS
+    this.emulator.writeMemory32(addr + 0xac, 0); // pr_CLI = NULL (not a CLI process)
+
+    // Other Process fields that should be zero for a BBS door
+    this.emulator.writeMemory32(addr + 0x98, 0); // pr_CurrentDir = NULL
+    this.emulator.writeMemory32(addr + 0xb0, 0); // pr_ConsoleTask = NULL
+    this.emulator.writeMemory32(addr + 0xb4, 0); // pr_FileSystemTask = NULL
+    this.emulator.writeMemory32(addr + 0xb8, 0); // pr_CIS = NULL (no CLI input stream)
+    this.emulator.writeMemory32(addr + 0xbc, 0); // pr_COS = NULL (no CLI output stream)
+
 console.log(
       `[ExecLibrary] Task/Process structure written to 0x${task.address.toString(
         16
       )}`
     );
 console.log(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
+console.log(`[ExecLibrary]   pr_CLI at 0x${(addr + 0xac).toString(16)} = 0 (BBS door, not CLI)`);
   }
 
   /**
@@ -2776,14 +2821,18 @@ console.log(
   }
 
   private autoRegisterPort(portAddr: number): MessagePort | null {
+console.log(`[ExecLibrary][autoRegisterPort] Called for port=0x${portAddr.toString(16)}`);
     if (portAddr === 0) {
       return null;
     }
 
     const existing = this.messagePorts.get(portAddr);
     if (existing) {
+console.log(`[ExecLibrary][autoRegisterPort] Port already exists, returning existing`);
       return existing;
     }
+console.log(`[ExecLibrary][autoRegisterPort] Port not found, registering new port...`);
+
 
     try {
       const namePtr = this.emulator.readMemory32(portAddr + 10);
@@ -2802,7 +2851,13 @@ console.log(
       this.emulator.writeMemory(portAddr + 8, 4); // ln_Type = NT_MSGPORT
       this.emulator.writeMemory(portAddr + 9, 0); // ln_Pri
       this.emulator.writeMemory32(portAddr + 10, namePtr); // ln_Name
-      this.emulator.writeMemory(portAddr + 14, 0x02); // mp_Flags = PA_SIGNAL
+
+      // CRITICAL FIX 2026-01-07: ALWAYS set PA_SIGNAL for ALL ports
+      // Read existing flags and ensure PA_SIGNAL is set
+      const PA_SIGNAL = 0x02;
+      const existingFlags = this.emulator.readMemory(portAddr + 14);
+      this.emulator.writeMemory(portAddr + 14, existingFlags | PA_SIGNAL);
+console.log(`[ExecLibrary][autoRegisterPort] Set PA_SIGNAL for port "${name}": 0x${existingFlags.toString(16)} -> 0x${(existingFlags | PA_SIGNAL).toString(16)}`);
 
       // Read the signal bit the door already set - DON'T allocate a new one!
       // The door's CreatePort() already called AllocSignal() and set mp_SigBit.
@@ -2833,7 +2888,8 @@ console.log(
       const nameLower = name.toLowerCase();
       const isDoorReplyPort =
         nameLower.startsWith("doorreplyport") ||
-        nameLower.startsWith("aedoorrp");
+        nameLower.startsWith("aedoorrp") ||
+        nameLower.startsWith("aeserver");
       if (isDoorReplyPort && sigTask !== this.currentTask.address) {
 console.log(
           `[ExecLibrary]   FIXING door reply port sigTask: 0x${sigTask.toString(
@@ -4294,7 +4350,9 @@ console.log(
     // Without this fix, the door never wakes up from Wait() after ReplyMsg.
     const nameLower = name.toLowerCase();
     const isDoorReplyPort =
-      nameLower.startsWith("doorreplyport") || nameLower.startsWith("aedoorrp");
+      nameLower.startsWith("doorreplyport") ||
+      nameLower.startsWith("aedoorrp") ||
+      nameLower.startsWith("aeserver");
     if (isDoorReplyPort) {
       // Fix sigTask if needed
       if (sigTask !== this.currentTask.address) {
@@ -4307,20 +4365,21 @@ console.log(
         // Also fix in memory so native code sees the correct value
         this.emulator.writeMemory32(portAddr + 16, sigTask);
       }
+    }
 
-      // CRITICAL FIX: Ensure PA_SIGNAL flag is set for door reply ports
-      // Without this flag, putMsg won't signal the door when replies arrive.
-      // The native AEDoor.library may create ports without PA_SIGNAL.
-      const PA_SIGNAL = 0x02;
-      const currentFlags = this.emulator.readMemory(portAddr + 14);
-      if ((currentFlags & PA_SIGNAL) === 0) {
+    // CRITICAL FIX 2026-01-07: ALWAYS ensure PA_SIGNAL flag is set for ALL message ports.
+    // Without this flag, putMsg won't signal the waiting task when messages arrive.
+    // Native 68K code may create ports without PA_SIGNAL, causing doors to hang in Wait().
+    // This applies to all ports (AEServer.*, DoorReplyPort*, etc.), not just specific ones.
+    const PA_SIGNAL = 0x02;
+    const currentFlags = this.emulator.readMemory(portAddr + 14);
+    if ((currentFlags & PA_SIGNAL) === 0) {
 console.log(
-          `[ExecLibrary]   FIXING door reply port flags: adding PA_SIGNAL (0x${currentFlags.toString(
-            16
-          )} -> 0x${(currentFlags | PA_SIGNAL).toString(16)})`
-        );
-        this.emulator.writeMemory(portAddr + 14, currentFlags | PA_SIGNAL);
-      }
+        `[ExecLibrary]   FIXING port "${name}" flags: adding PA_SIGNAL (0x${currentFlags.toString(
+          16
+        )} -> 0x${(currentFlags | PA_SIGNAL).toString(16)})`
+      );
+      this.emulator.writeMemory(portAddr + 14, currentFlags | PA_SIGNAL);
     }
 
 console.log(
@@ -4914,25 +4973,64 @@ console.log(
     port.messages.push(msgAddr);
     port.signaled = true;
 
-    // CRITICAL: Write message to memory structure so door can see it!
-    // MsgPort.mp_MsgList.lh_Head is at offset 20
-    const listHeadOffset = 20;
-    this.emulator.writeMemory32(portAddr + listHeadOffset, msgAddr);
+    // CRITICAL FIX 2026-01-07: Use proper Exec list operations instead of overwriting lh_Head!
+    // MsgPort.mp_MsgList is a doubly-linked list starting at offset 20
+    // We MUST use addHead() to properly link the message into the list
+    // Bug was: directly writing to lh_Head broke the linked list, causing native code
+    // to see the same message repeatedly after GetMsg removed it
+    const msgListAddr = portAddr + 20; // mp_MsgList offset
+    this.addHead(msgListAddr, msgAddr);
 
-console.log(`[ExecLibrary]   ✓ Message queued to port memory structure`);
-console.log(
-      `[ExecLibrary]   ✓ Wrote message address 0x${msgAddr.toString(
-        16
-      )} to port+20 (mp_MsgList.lh_Head)`
-    );
+console.log(`[ExecLibrary]   ✓ Message added to port list via AddHead()`);
 console.log(
       `[ExecLibrary]   Port now has ${port.messages.length} message(s) in queue`
     );
 
     // *** CRITICAL: Signal the port's task (if PA_SIGNAL flag set) ***
     // This is the missing piece! The door is waiting for this signal.
-    const mp_Flags = this.emulator.readMemory(portAddr + 14);
     const PA_SIGNAL = 0x02;
+    let mp_Flags = this.emulator.readMemory(portAddr + 14);
+
+    // CRITICAL FIX 2026-01-07: If this port was created via createLightweightPort
+    // (mp_Flags=0, no PA_SIGNAL), but it's being used as a reply port, upgrade it!
+    // Door reply ports MUST have PA_SIGNAL or the door stays stuck in Wait().
+    if ((mp_Flags & PA_SIGNAL) === 0) {
+      // This port has no PA_SIGNAL - check if it needs it
+      const needsSignaling = port.sigTask !== 0 || suppressDoorCallback;
+      if (needsSignaling) {
+console.log(
+          `[ExecLibrary]   UPGRADING lightweight port "${port.name}" to signaling port`
+        );
+        mp_Flags = mp_Flags | PA_SIGNAL;
+        this.emulator.writeMemory(portAddr + 14, mp_Flags);
+
+        // Also ensure sigTask and sigBit are set
+        if (port.sigTask === 0) {
+          port.sigTask = this.currentTask.address;
+          this.emulator.writeMemory32(portAddr + 16, port.sigTask);
+        }
+
+        // CRITICAL FIX 2026-01-07: READ the existing sigBit from port memory!
+        // The native 68K code already called AllocSignal() and wrote it to mp_SigBit.
+        // If we allocate a NEW bit, Wait() will be waiting for the old bit but
+        // Signal() will signal the new bit - they won't match and door hangs!
+        const existingSigBit = this.emulator.readMemory(portAddr + 15);
+        if (existingSigBit > 0 && existingSigBit <= 31) {
+          // Port already has a valid signal bit - use it!
+          port.sigBit = existingSigBit;
+console.log(
+            `[ExecLibrary]   Using existing sigBit ${existingSigBit} from port structure`
+          );
+        } else if (port.sigBit === 0) {
+          // No valid signal bit - allocate one
+          port.sigBit = this.AllocSignal(-1);
+          if (port.sigBit < 0 || port.sigBit > 31) {
+            port.sigBit = 1;
+          }
+          this.emulator.writeMemory(portAddr + 15, port.sigBit);
+        }
+      }
+    }
 
     if (mp_Flags & PA_SIGNAL) {
 console.log(`[ExecLibrary]   Port has PA_SIGNAL flag - signaling task`);
@@ -5056,10 +5154,19 @@ console.log(
       return 0;
     }
 
-    // Dequeue first message (normal behavior)
-    const msgAddr = port.messages.shift()!;
+    // CRITICAL FIX 2026-01-07: Remove message from BOTH JavaScript array AND memory list!
+    // We added via addHead() which updated memory, now we must remove from memory too
+    const msgListAddr = portAddr + 20; // mp_MsgList offset
+    const msgAddr = this.remHead(msgListAddr); // Remove from memory list
+
+    // Also remove from JavaScript array for consistency
+    const arrayIndex = port.messages.indexOf(msgAddr);
+    if (arrayIndex !== -1) {
+      port.messages.splice(arrayIndex, 1);
+    }
+
 console.log(
-      `[ExecLibrary]   Returning message at 0x${msgAddr.toString(16)}, ${
+      `[ExecLibrary]   Returned message 0x${msgAddr.toString(16)} via remHead(), ${
         port.messages.length
       } remaining`
     );

@@ -332,7 +332,7 @@ console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as de
   /**
    * Load parsed hunks into emulator memory.
    */
-  load(emulator: MoiraEmulator, hunkFile: HunkFile): void {
+  load(emulator: MoiraEmulator, hunkFile: HunkFile, fileName?: string): void {
     // Write segments with DOS LoadSeg header format:
     // [size in longwords][BPTR to next segment], then data
     for (let i = 0; i < hunkFile.segments.length; i++) {
@@ -350,13 +350,46 @@ console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as de
       }
     }
 
-    this.applyRelocations(emulator, hunkFile);
+    this.applyRelocations(emulator, hunkFile, fileName);
   }
 
   /**
    * Apply all relocations to loaded segments.
    */
-  private applyRelocations(emulator: MoiraEmulator, hunkFile: HunkFile): void {
+  private applyRelocations(emulator: MoiraEmulator, hunkFile: HunkFile, fileName?: string): void {
+    // FIRST: Apply synthetic relocations for known malformed binaries
+    // Do this BEFORE normal relocations so we can see the unrelocated values
+    if (fileName && (fileName.toLowerCase().includes('joincnf'))) {
+      const codeSegment = hunkFile.segments[0];
+      const bssSegment = hunkFile.segments[1];
+
+      if (codeSegment && bssSegment) {
+        // LEA.L $0FE0, A3 is at segment offset 0x12
+        // The 32-bit address operand starts at offset 0x14
+        const patchOffset = 0x14;
+        const patchAddress = codeSegment.address + patchOffset;
+        const beforeValue = emulator.readMemory32(patchAddress);
+        const correctValue = (bssSegment.address + 0xFE0) >>> 0;
+
+console.log(
+          `[HunkLoader] *** SYNTHETIC RELOCATION (BEFORE normal relocations) ***\n` +
+          `  Binary: ${fileName}\n` +
+          `  Issue: Missing BSS relocation at segment offset 0x${patchOffset.toString(16)}\n` +
+          `  LEA.L instruction at offset 0x12, operand at 0x14\n` +
+          `  Patching address 0x${patchAddress.toString(16)}\n` +
+          `  Before: 0x${beforeValue.toString(16)}\n` +
+          `  After:  0x${correctValue.toString(16)} (BSS+0xFE0)\n` +
+          `  BSS segment: 0x${bssSegment.address.toString(16)}`
+        );
+
+        emulator.writeMemory32(patchAddress, correctValue);
+
+        // Verify
+        const verify = emulator.readMemory32(patchAddress);
+console.log(`[HunkLoader] ✓ Patch verified: 0x${verify.toString(16)}`);
+      }
+    }
+
     let totalRelocs = 0;
     for (const relocs of hunkFile.relocations.values()) {
       totalRelocs += relocs.length;
@@ -564,7 +597,7 @@ console.log(
     memFlags: number[]
   ): { headerAddress: number; dataAddress: number; bptr: number }[] {
     const addresses: { headerAddress: number; dataAddress: number; bptr: number }[] = [];
-    let currentAddress = 0x1000; // Start after exception vectors
+    let currentAddress = 0x2000; // Start at 8KB - closer to vamos (which uses ~0x2104)
 
     for (let i = 0; i < segmentSizes.length; i++) {
       const sizeBytes = segmentSizes[i] * 4;

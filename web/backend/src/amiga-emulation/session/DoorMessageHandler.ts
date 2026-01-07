@@ -266,12 +266,8 @@ console.log("[DoorMessageHandler] Sending INIT/STAT startup messages for XIM doo
     // CRITICAL: Many XIM doors (AquaScan, JoinCnf, etc.) expect INIT/STAT messages BEFORE
     // sending JH_REGISTER. Without these, doors sit in tight polling loops waiting forever.
     // See express.e:3343-3355 for AEDoor protocol initialization.
-    if (this.execLibrary.isLibraryNative("AEDoor.library")) {
-console.log(
-        "[DoorMessageHandler] Skipping INIT/STAT (native AEDoor.library handles startup messages)"
-      );
-      return;
-    }
+    // NOTE: Native AEDoor.library does NOT automatically send INIT/STAT - we must send them
+    // from the emulator regardless of whether we're using native library or not.
     this.sendInitAndStatusMessages();
   }
 
@@ -280,12 +276,8 @@ console.log(
    * layout (Exec message header + command at offset 0x14/0x18).
    */
   sendInitAndStatusMessages(): void {
-    if (this.execLibrary.isLibraryNative("AEDoor.library")) {
-console.log(
-        "[DoorMessageHandler] Skipping INIT/STAT (native AEDoor.library handles startup messages)"
-      );
-      return;
-    }
+    // NOTE: Native AEDoor.library does NOT automatically send INIT/STAT messages.
+    // We must send them from the emulator regardless of native vs trapped library.
     if (this.sentInitialMessage) {
       return;
     }
@@ -595,12 +587,8 @@ console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}, activeD
         // Wait 500ms - if no follow-up messages arrive, assume old-style and send INIT/STAT.
         this.receivedPostRegisterMessage = false;
         this.oldStyleDoorTimer = setTimeout(() => {
-          if (this.execLibrary.isLibraryNative("AEDoor.library")) {
-console.log(
-              "[DoorMessageHandler] Skipping INIT/STAT fallback (native AEDoor.library handles startup messages)"
-            );
-            return;
-          }
+          // NOTE: Native AEDoor.library does NOT automatically send INIT/STAT.
+          // Check if this is an old-style door that needs INIT/STAT fallback.
           if (!this.receivedPostRegisterMessage) {
 console.log(`[DoorMessageHandler] No post-register messages received - assuming old-style door`);
 console.log(`[DoorMessageHandler] Sending INIT/STAT messages for compatibility`);
