@@ -122,6 +122,8 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
 
   /**
    * Send data with modem-speed throttling
+   * CRITICAL: Must slice at CHARACTER boundaries, not byte boundaries,
+   * to avoid corrupting multi-byte UTF-8 characters like box-drawing (3 bytes each)
    */
   private async sendThrottled(payload: string): Promise<void> {
     if (!this.enabled || this.bytesPerSecond <= 0) {
@@ -133,7 +135,6 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
     const tokens = this.tokenizeAnsi(payload);
 
     for (const tok of tokens) {
-      const buf = Buffer.from(tok, 'utf-8');
       const isEscape = tok.startsWith('\x1b');
 
       if (isEscape) {
@@ -143,8 +144,11 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
       }
 
       // Send visible characters with throttling
-      let offset = 0;
-      while (offset < buf.length) {
+      // Use Array.from to properly split by Unicode code points (not bytes!)
+      const chars = Array.from(tok);
+      let charOffset = 0;
+
+      while (charOffset < chars.length) {
         const now = process.hrtime.bigint();
         const elapsedMs = Number(now - this.startTime) / 1_000_000;
         const allowedBytes = Math.floor(this.bytesPerSecond * (elapsedMs / 1000));
@@ -156,12 +160,33 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
           continue;
         }
 
-        // Send a chunk (up to available budget, max 64 chars at a time for smoother output)
-        const chunkSize = Math.min(available, buf.length - offset, 64);
-        const chunk = buf.slice(offset, offset + chunkSize).toString('utf-8');
+        // Calculate how many characters we can send based on byte budget
+        // Each character may be 1-4 bytes in UTF-8
+        let chunkChars = 0;
+        let chunkBytes = 0;
+        const maxChars = Math.min(64, chars.length - charOffset); // Max 64 chars at a time
+
+        while (chunkChars < maxChars && chunkBytes < available) {
+          const char = chars[charOffset + chunkChars];
+          const charBytes = Buffer.byteLength(char, 'utf-8');
+          if (chunkBytes + charBytes > available && chunkChars > 0) {
+            break; // Would exceed budget, stop here
+          }
+          chunkChars++;
+          chunkBytes += charBytes;
+        }
+
+        if (chunkChars === 0) {
+          // Not enough budget for even one character, wait
+          await this.sleep(5);
+          continue;
+        }
+
+        // Send the chunk (proper character boundaries preserved)
+        const chunk = chars.slice(charOffset, charOffset + chunkChars).join('');
         this.directEmit('ansi-output', chunk);
-        offset += chunkSize;
-        this.bytesSent += chunkSize;
+        charOffset += chunkChars;
+        this.bytesSent += chunkBytes;
       }
     }
   }

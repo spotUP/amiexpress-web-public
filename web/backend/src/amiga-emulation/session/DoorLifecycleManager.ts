@@ -54,6 +54,8 @@ export interface ExecutionState {
   stuckLoopCount: number;
   lastJumpSize: number;
   lastAedoorTracePc: number;
+  lastJumpSizes: number[];
+  sameJumpCount: number;
 }
 
 export interface LifecycleConfig {
@@ -256,6 +258,8 @@ console.log(
       stuckLoopCount: 0,
       lastJumpSize: 0,
       lastAedoorTracePc: -1,
+      lastJumpSizes: [],
+      sameJumpCount: 0,
     };
   }
 
@@ -779,13 +783,41 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
                            (pcAfterBatch % 2 !== 0) ||
                            (pcAfterBatch > 0x400 && pcAfterBatch < 0x1000);
 
-        // Skip stuck detection if:
+        // Detect stuck loops by tracking repeated identical jump patterns
+        // If we see the SAME jump size 5+ times in a row, it's a stuck loop
+        // Example: PC jumps by +0x9c40 repeatedly: 0xc023da -> 0xc0c01a -> 0xc15c5a -> ...
+        if (Math.abs(jumpSize) > 0x1000) { // Only track large jumps (small jumps are normal iteration)
+          if (this.executionState.lastJumpSizes.length > 0 &&
+              this.executionState.lastJumpSizes.every(js => js === jumpSize)) {
+            this.executionState.sameJumpCount++;
+          } else {
+            this.executionState.sameJumpCount = 1;
+          }
+
+          // Keep last 3 jump sizes for pattern detection
+          this.executionState.lastJumpSizes.push(jumpSize);
+          if (this.executionState.lastJumpSizes.length > 3) {
+            this.executionState.lastJumpSizes.shift();
+          }
+
+          // If we see the same jump 5 times, it's a stuck loop (unless waiting for input)
+          if (this.executionState.sameJumpCount >= 5 && !isWaitingForXIMInput && !isInWaitLoop) {
+            console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: Same jump pattern ${this.executionState.sameJumpCount} times`);
+            console.error(`  Jump size: +0x${jumpSize.toString(16)} (${jumpSize})`);
+            console.error(`  PC sequence: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}`);
+            console.error(`  Last ${this.executionState.lastJumpSizes.length} jumps: ${this.executionState.lastJumpSizes.map(j => `+0x${j.toString(16)}`).join(', ')}`);
+            this.terminate();
+            return;
+          }
+        }
+
+        // Skip invalid PC detection if:
         // 1. Emulator is paused or task is waiting (isInWaitLoop)
         // 2. PC is in any valid region (code, library, or chip RAM)
         // 3. XIM door waiting for user input (polling GetMsg for our reply)
         const skipStuckDetection = isInWaitLoop || !isPCInvalid || isWaitingForXIMInput;
 
-        // Only detect stuck loops for truly invalid PC addresses
+        // Only detect invalid PC addresses (not stuck loops, those are handled above)
         if (isPCInvalid && !skipStuckDetection) {
 console.error(`[DoorLifecycleManager] Invalid PC detected: 0x${pcAfterBatch.toString(16)}`);
 console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}, code region: [0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`);
@@ -1827,6 +1859,12 @@ console.log(`[DoorLifecycleManager] XIM polling: Parsed message command=${msg.co
             // Handle the message (this will route output to socket)
             await this.ximProtocol.handleMessage(msg);
             // Note: Reply is sent via ReplyMsg to door's reply port
+
+            // Check if door requested shutdown (JH_SHUTDOWN)
+            if (this.ximProtocol.isShuttingDown()) {
+console.log(`[DoorLifecycleManager] XIM polling: Door shutdown detected, stopping execution loop`);
+              this.executionState.isRunning = false;
+            }
           } else {
 console.log(`[DoorLifecycleManager] XIM polling: Failed to parse message`);
           }

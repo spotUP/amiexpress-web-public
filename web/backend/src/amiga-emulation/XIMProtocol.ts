@@ -1342,6 +1342,13 @@ console.log(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" return
   }
 
   /**
+   * Check if the door has requested shutdown via JH_SHUTDOWN
+   */
+  isShuttingDown(): boolean {
+    return this.state.shuttingDown;
+  }
+
+  /**
    * Pre-load command's .info file and write DiskObject tooltype pointer to memory
    * This mimics what real AmiExpress does when launching doors
    * Doors like AquaScan expect the tooltype array pointer to be at a known memory location

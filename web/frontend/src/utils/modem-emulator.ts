@@ -10,6 +10,10 @@
 
 import { Terminal } from 'xterm';
 
+// Use String.fromCharCode(27) for ESC to survive Terser/Vite minification
+// Terser strips literal \x1b from string constants during minification
+const ESC = String.fromCharCode(27);
+
 export interface ModemEmulatorOptions {
   bps: number; // Bits per second (1200, 2400, 9600, etc.)
 }
@@ -133,7 +137,7 @@ export class ModemEmulator {
     const tokens = this.tokenizeAnsi(payload);
 
     for (const tok of tokens) {
-      const isEscape = tok.startsWith('\x1b');
+      const isEscape = tok.startsWith(ESC);
 
       if (isEscape) {
         // Send ANSI escape sequences immediately (they're control codes)
@@ -170,7 +174,8 @@ export class ModemEmulator {
    */
   private tokenizeAnsi(payload: string): string[] {
     const tokens: string[] = [];
-    const ansiRegex = /\x1b\[[0-9;?]*[A-Za-z]/g;
+    // Use ESC constant in regex to survive minification (same issue as string literals)
+    const ansiRegex = new RegExp(ESC + '\\[[0-9;?]*[A-Za-z]', 'g');
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
