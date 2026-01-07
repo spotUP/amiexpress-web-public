@@ -4,14 +4,18 @@
  * Uses simplified ANSI output to match LiveChat's cleaner style.
  */
 
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+// Terser strips literal \x1b from string constants
+const ESC = String.fromCharCode(27);
+
 const ANSI = {
-  CLEAR_SCREEN: '\x1b[2J\x1b[H',
-  HIDE_CURSOR: '\x1b[?25l',
-  SHOW_CURSOR: '\x1b[?25h',
-  CYAN: '\x1b[36m',
-  YELLOW: '\x1b[33m',
-  WHITE: '\x1b[37m',
-  RESET: '\x1b[0m',
+  CLEAR_SCREEN: ESC + '[2J' + ESC + '[H',
+  HIDE_CURSOR: ESC + '[?25l',
+  SHOW_CURSOR: ESC + '[?25h',
+  CYAN: ESC + '[36m',
+  YELLOW: ESC + '[33m',
+  WHITE: ESC + '[37m',
+  RESET: ESC + '[0m',
 };
 
 function createPreloaderFrame(doorName: string, tick: number): string {
@@ -20,32 +24,32 @@ function createPreloaderFrame(doorName: string, tick: number): string {
   const name = doorName.length > 40 ? doorName.substring(0, 37) + '...' : doorName;
   
   const width = 60;
-  const startCol = Math.floor((80 - width) / 2);
-  const startRow = 10;
+  const startCol = Math.floor((80 - width) / 2) + 1; // 1-indexed for ANSI
+  const startRow = 8;
 
   // Use absolute positioning for every line to ensure perfect alignment
-  const pos = (row: number, col: number) => `\x1b[${row};${col}H`;
+  // ESC[row;colH
+  const pos = (r: number, c: number) => ESC + `[${r};${c}H`;
+
+  let out = ANSI.CLEAR_SCREEN; // Clear screen and home
   
-  let out = ANSI.CLEAR_SCREEN;
-  
-  // Draw the box
+  // Draw the box using absolute positions
   out += `${pos(startRow, startCol)}${ANSI.CYAN}┌${'─'.repeat(width - 2)}┐`;
   out += `${pos(startRow + 1, startCol)}│${' '.repeat(width - 2)}│`;
-  
-  const msgText = ` Loading ${name}... `;
-  const msgPadding = width - 2 - msgText.length;
-  const msgLeft = Math.floor(msgPadding / 2);
-  const msgRight = msgPadding - msgLeft;
-  out += `${pos(startRow + 2, startCol)}│${' '.repeat(msgLeft)}${ANSI.WHITE}${msgText}${ANSI.CYAN}${' '.repeat(msgRight)}│`;
-
-  const spinPadding = width - 2 - 1;
-  const spinLeft = Math.floor(spinPadding / 2);
-  const spinRight = spinPadding - spinLeft;
-  out += `${pos(startRow + 3, startCol)}│${' '.repeat(spinLeft)}${ANSI.CYAN}${spinner}${ANSI.CYAN}${' '.repeat(spinRight)}│`;
-
+  out += `${pos(startRow + 2, startCol)}│${' '.repeat(width - 2)}│`;
+  out += `${pos(startRow + 3, startCol)}│${' '.repeat(width - 2)}│`;
   out += `${pos(startRow + 4, startCol)}│${' '.repeat(width - 2)}│`;
-  out += `${pos(startRow + 5, startCol)}└${'─'.repeat(width - 2)}┘${ANSI.RESET}`;
+  out += `${pos(startRow + 5, startCol)}└${'─'.repeat(width - 2)}┘`;
 
+  // Draw content inside the box
+  const msgText = `Loading ${name}...`;
+  const msgCol = startCol + Math.floor((width - msgText.length) / 2);
+  out += `${pos(startRow + 2, msgCol)}${ANSI.WHITE}${msgText}`;
+
+  const spinCol = startCol + Math.floor(width / 2);
+  out += `${pos(startRow + 3, spinCol)}${ANSI.YELLOW}${spinner}`;
+
+  out += ANSI.RESET;
   return out;
 }
 

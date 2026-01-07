@@ -96,6 +96,8 @@ export interface SessionConnectionOptions {
   connectionBaud?: number;
   screenWidth?: number;
   screenHeight?: number;
+  /** Whether terminal supports Unicode (auto-detected from TTYPE for telnet/SSH) */
+  unicodeCapable?: boolean;
 }
 
 /**
@@ -163,7 +165,10 @@ export function createSession(nodeId: number, options: SessionConnectionOptions 
     screenWidth: options.screenWidth || 80,
     screenHeight: options.screenHeight || 24,
     modemEmulationEnabled: false,
-    modemBps: 0
+    modemBps: 0,
+    // Unicode capability - web always supports Unicode, telnet/SSH detected via TTYPE
+    // Default to true for web, undefined for telnet/SSH (will be set after TTYPE negotiation)
+    unicodeCapable: options.unicodeCapable ?? (options.connectionType === 'web' ? true : undefined)
   };
 }
 

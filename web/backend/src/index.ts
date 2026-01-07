@@ -291,6 +291,8 @@ export interface BBSSession {
   inputBuffer: string; // Buffer for line-based input (like login system)
   maskInput?: boolean; // When true, echo '*' instead of typed characters (password prompts)
   connectionType?: "web" | "telnet" | "ssh";
+  /** Whether terminal supports Unicode (detected via TTYPE for telnet/SSH, always true for web) */
+  unicodeCapable?: boolean;
   remoteAddress?: string;
   connectionHostname?: string;
   connectionPort?: number;

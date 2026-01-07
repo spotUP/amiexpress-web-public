@@ -183,6 +183,31 @@ export class BBSApi {
   }
 
   /**
+   * Get connection type (web, telnet, or ssh)
+   * Used by SDK helpers to determine if Unicode conversion is needed
+   */
+  get connectionType(): 'web' | 'telnet' | 'ssh' {
+    return (this.session as any)?.connectionType || 'web';
+  }
+
+  /**
+   * Check if terminal supports Unicode
+   * - Web terminals: Always true (xterm.js supports Unicode)
+   * - Telnet/SSH: Detected via TTYPE negotiation
+   *   - Modern terminals (xterm, PuTTY, iTerm): true
+   *   - Amiga terminals (Term, NComm): false
+   *   - Unknown: defaults to false for safety
+   */
+  get unicodeCapable(): boolean {
+    // Web always supports Unicode
+    if (this.connectionType === 'web') {
+      return true;
+    }
+    // For telnet/SSH, check detected capability (defaults to false if unknown)
+    return (this.session as any)?.unicodeCapable === true;
+  }
+
+  /**
    * Write PETSCII content to terminal
    * Emits 'petscii-output' event which triggers PetMe64 font on frontend
    * For real C64 terminals, this is converted to raw PETSCII bytes

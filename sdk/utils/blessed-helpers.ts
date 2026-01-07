@@ -540,6 +540,273 @@ export function sanitizeContent(content: string): string {
  * const screen = createScreen(bbs, { title: 'My Door' });
  * // Or without bbs: const screen = createScreen({ title: 'Test', output: bbs.write });
  */
+
+/**
+ * Unicode box-drawing to VT100 ACS (Alternate Character Set) mapping.
+ * ACS uses single-byte ASCII chars with ESC(0 prefix, avoiding UTF-8 corruption.
+ * xterm.js interprets these natively as box-drawing characters.
+ */
+const UNICODE_TO_ACS: Record<string, string> = {
+  // Light box drawing
+  '─': 'q', '│': 'x',
+  '┌': 'l', '┐': 'k', '└': 'm', '┘': 'j',
+  '├': 't', '┤': 'u', '┬': 'w', '┴': 'v', '┼': 'n',
+  // Heavy box drawing (map to light equivalents)
+  '━': 'q', '┃': 'x',
+  '┏': 'l', '┓': 'k', '┗': 'm', '┛': 'j',
+  '┣': 't', '┫': 'u', '┳': 'w', '┻': 'v', '╋': 'n',
+  // Double box drawing (map to light equivalents)
+  '═': 'q', '║': 'x',
+  '╔': 'l', '╗': 'k', '╚': 'm', '╝': 'j',
+  '╠': 't', '╣': 'u', '╦': 'w', '╩': 'v', '╬': 'n',
+  // Mixed corners (map to light)
+  '╒': 'l', '╓': 'l', '╕': 'k', '╖': 'k',
+  '╘': 'm', '╙': 'm', '╛': 'j', '╜': 'j',
+  '╞': 't', '╟': 't', '╡': 'u', '╢': 'u',
+  '╤': 'w', '╥': 'w', '╧': 'v', '╨': 'v', '╪': 'n', '╫': 'n',
+};
+
+// Use String.fromCharCode(27) for ESC to survive minification
+// Terser strips literal \x1b from strings
+const ESC = String.fromCharCode(27);
+const ACS_ENTER = ESC + '(0';
+const ACS_EXIT = ESC + '(B';
+
+/**
+ * Converts Unicode box-drawing characters to VT100 ACS escape sequences.
+ * This prevents UTF-8 corruption when multi-byte sequences are split by
+ * the modem emulator or interpreted as Windows-1252.
+ *
+ * Input: "┌─────┐"
+ * Output: "\x1b(0lqqqqqk\x1b(B"
+ */
+export function convertUnicodeBoxToACS(str: string): string {
+  let result = '';
+  let inACS = false;
+
+  for (const char of str) {
+    const acsChar = UNICODE_TO_ACS[char];
+    if (acsChar) {
+      if (!inACS) {
+        result += ACS_ENTER;
+        inACS = true;
+      }
+      result += acsChar;
+    } else {
+      if (inACS) {
+        result += ACS_EXIT;
+        inACS = false;
+      }
+      result += char;
+    }
+  }
+
+  // Close ACS mode if still active
+  if (inACS) {
+    result += ACS_EXIT;
+  }
+
+  return result;
+}
+
+// =============================================================================
+// AMIGA COMPATIBILITY MODE
+// =============================================================================
+// When enabled, replaces Unicode characters with ANSI background colors or ASCII.
+// This ensures compatibility with Amiga terminals and telnet clients that don't
+// support Unicode. Box-drawing is always converted to VT100 ACS (above).
+
+/**
+ * Compatibility mode configuration
+ */
+export interface CompatibilityConfig {
+  /** Enable Amiga/telnet compatibility mode (default: true for BBS) */
+  enabled: boolean;
+  /** Keep braille characters for modern features like webcam (default: true) */
+  keepBraille: boolean;
+  /** Keep sparkline characters for charts (default: false in compat mode) */
+  keepSparklines: boolean;
+}
+
+// Global compatibility mode state (can be changed at runtime)
+let compatConfig: CompatibilityConfig = {
+  enabled: true,      // Default ON for BBS compatibility
+  keepBraille: true,  // Keep braille for webcam demo
+  keepSparklines: false,
+};
+
+/**
+ * Set compatibility mode configuration
+ */
+export function setCompatibilityMode(config: Partial<CompatibilityConfig>): void {
+  compatConfig = { ...compatConfig, ...config };
+}
+
+/**
+ * Get current compatibility mode configuration
+ */
+export function getCompatibilityMode(): CompatibilityConfig {
+  return { ...compatConfig };
+}
+
+/**
+ * Unicode characters that need ANSI background color fallbacks.
+ * Maps to: [fallbackChar, fgColor, bgColor] or just [fallbackChar] for simple replacement
+ * When bgColor is specified, we use a space with that background color.
+ */
+const UNICODE_TO_ANSI_FALLBACK: Record<string, [string, string?, string?]> = {
+  // Block fill characters -> space with background color
+  '█': [' ', undefined, 'white'],   // Full block -> white bg
+  '▓': [' ', undefined, 'gray'],    // Dark shade -> gray bg
+  '▒': [' ', undefined, 'gray'],    // Medium shade -> gray bg
+  '░': [' ', undefined, 'black'],   // Light shade -> dark bg
+  '▄': [' ', undefined, 'white'],   // Lower half -> white bg
+  '▀': [' ', undefined, 'white'],   // Upper half -> white bg
+
+  // Arrows and markers -> ASCII equivalents
+  '▶': ['>'],
+  '◀': ['<'],
+  '▲': ['^'],
+  '▼': ['v'],
+  '►': ['>'],
+  '◄': ['<'],
+  '●': ['*'],
+  '○': ['o'],
+  '◆': ['*'],
+  '◇': ['o'],
+  '■': ['#'],
+  '□': ['o'],
+  '▪': ['*'],
+  '▫': ['.'],
+  '»': ['>>'],
+  '«': ['<<'],
+  '•': ['*'],
+  '·': ['.'],
+  '…': ['...'],
+  '→': ['->'],
+  '←': ['<-'],
+  '↑': ['^'],
+  '↓': ['v'],
+  '✓': ['[OK]'],
+  '✗': ['[X]'],
+  '✔': ['[OK]'],
+  '✘': ['[X]'],
+};
+
+/**
+ * Sparkline characters (vertical bar graph)
+ * Maps to ASCII representation using = and space
+ */
+const SPARKLINE_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+const SPARKLINE_ASCII = ['_', '.', '-', '=', '=', '#', '#', '#'];
+
+/**
+ * Braille pattern block (U+2800-U+28FF) - kept for modern features
+ */
+function isBrailleChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= 0x2800 && code <= 0x28FF;
+}
+
+/**
+ * Check if character is a sparkline character
+ */
+function isSparklineChar(char: string): boolean {
+  return SPARKLINE_CHARS.includes(char);
+}
+
+/**
+ * Convert Unicode characters to Amiga-compatible equivalents.
+ * Uses ANSI background colors for block characters.
+ *
+ * @param str - Input string with potential Unicode characters
+ * @param inheritBg - Background color to inherit for fills (optional)
+ * @returns Converted string safe for Amiga/telnet
+ */
+export function convertToAmigaCompat(str: string, inheritBg?: string): string {
+  if (!compatConfig.enabled) {
+    return str;
+  }
+
+  let result = '';
+
+  for (const char of str) {
+    // Keep braille if configured
+    if (compatConfig.keepBraille && isBrailleChar(char)) {
+      result += char;
+      continue;
+    }
+
+    // Handle sparklines
+    if (isSparklineChar(char)) {
+      if (compatConfig.keepSparklines) {
+        result += char;
+      } else {
+        const idx = SPARKLINE_CHARS.indexOf(char);
+        result += SPARKLINE_ASCII[idx] || char;
+      }
+      continue;
+    }
+
+    // Check for fallback mapping
+    const fallback = UNICODE_TO_ANSI_FALLBACK[char];
+    if (fallback) {
+      const [fallbackChar, _fg, bg] = fallback;
+      if (bg) {
+        // Use ANSI background color: ESC[4Xm where X is color code
+        const bgCode = getAnsiColorCode(bg, true);
+        const resetCode = ESC + '[0m';
+        result += `${bgCode}${fallbackChar}${resetCode}`;
+      } else {
+        result += fallbackChar;
+      }
+      continue;
+    }
+
+    // Pass through other characters unchanged
+    result += char;
+  }
+
+  return result;
+}
+
+/**
+ * Get ANSI escape code for a color name
+ */
+function getAnsiColorCode(color: string, isBackground: boolean): string {
+  const base = isBackground ? 40 : 30;
+  const colorMap: Record<string, number> = {
+    'black': 0,
+    'red': 1,
+    'green': 2,
+    'yellow': 3,
+    'blue': 4,
+    'magenta': 5,
+    'cyan': 6,
+    'white': 7,
+    'gray': 0,  // Use black for gray in simple mode
+    'grey': 0,
+  };
+  const code = colorMap[color.toLowerCase()] ?? 7;
+  return ESC + `[${base + code}m`;
+}
+
+/**
+ * Combined conversion: Box-drawing to ACS + Unicode to Amiga-compat
+ * This is the main function used by createScreen output handler.
+ */
+export function convertForAmiga(str: string): string {
+  // First convert box-drawing to VT100 ACS (always done)
+  let result = convertUnicodeBoxToACS(str);
+
+  // Then convert other Unicode if compatibility mode enabled
+  if (compatConfig.enabled) {
+    result = convertToAmigaCompat(result);
+  }
+
+  return result;
+}
+
 export function createScreen(
   bbsOrOptions?: any,
   optionsIfBbs?: Partial<ScreenOptions>
@@ -550,20 +817,36 @@ export function createScreen(
   const options = isBbsFirst ? optionsIfBbs : bbsOrOptions;
 
   // Get initial terminal size from BBS if available
-  const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 24 };
+  const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 25 };
 
   // Enable responsive mode if terminal is wider than 80 or options.responsive is true
   const responsive = options?.responsive || termSize.width > 80;
 
+  // Check Unicode capability - use Amiga conversion only for non-Unicode terminals
+  // Web terminals always support Unicode (xterm.js)
+  // Telnet/SSH: detected via TTYPE negotiation (modern terminals like xterm, PuTTY get Unicode)
+  const unicodeCapable = bbs?.unicodeCapable ?? (bbs?.connectionType === 'web' || !bbs);
+  const needsAmigaConversion = !unicodeCapable;
+
+  console.log(`[createScreen] connectionType=${bbs?.connectionType}, unicodeCapable=${unicodeCapable}, needsAmigaConversion=${needsAmigaConversion}`);
+
+  // Create output function based on Unicode capability
+  const outputFn = bbs
+    ? needsAmigaConversion
+      ? (data: string) => bbs.write(convertForAmiga(data))
+      : (data: string) => bbs.write(data)
+    : options?.output;
+
   const screen = blessed.screen({
-    smartCSR: true,
-    dockBorders: true,
-    fullUnicode: true,
+    smartCSR: false, // Disabled to prevent jumping/flickering in high-frequency TUI apps
+    dockBorders: false, // Disabled for more stable layout rendering
+    fullUnicode: unicodeCapable, // Unicode for capable terminals, ACS for Amiga/legacy
+    terminal: 'xterm',
     tags: true,
     width: termSize.width,
     height: termSize.height,
     responsive,
-    output: bbs ? (data: string) => bbs.write(data) : options?.output,
+    output: outputFn,
     style: {
       fg: 'white',
       bg: 'black'
@@ -576,17 +859,24 @@ export function createScreen(
 
   // Auto-join default room 'lobby' if not in a room yet
   // This is required for real-time media (webcam, audio) to function
+  // NOTE: Only auto-join if user is authenticated (has a session with user object)
   if (bbs && typeof bbs.getCurrentRoomId === 'function' && !bbs.getCurrentRoomId()) {
-    console.log('[createScreen] Not in a room, auto-joining "lobby" for media services...');
-    bbs.joinRoom('lobby').then((result: any) => {
-      if (result.success) {
-        console.log('[createScreen] Successfully joined "lobby"');
-      } else {
-        console.warn(`[createScreen] Failed to auto-join "lobby": ${result.error}`);
-      }
-    }).catch((err: any) => {
-      console.error(`[createScreen] Error auto-joining "lobby": ${err.message}`);
-    });
+    // Check if user is authenticated before attempting to join
+    const hasUser = bbs.getUser?.() || bbs.user;
+    if (hasUser) {
+      console.log('[createScreen] Not in a room, auto-joining "lobby" for media services...');
+      bbs.joinRoom('lobby').then((result: any) => {
+        if (result.success) {
+          console.log('[createScreen] Successfully joined "lobby"');
+        } else {
+          console.warn(`[createScreen] Failed to auto-join "lobby": ${result.error}`);
+        }
+      }).catch((err: any) => {
+        console.error(`[createScreen] Error auto-joining "lobby": ${err.message}`);
+      });
+    } else {
+      console.log('[createScreen] User not authenticated yet, skipping auto-join');
+    }
   }
 
   // Listen for resize events from backend if bbs is provided
@@ -595,6 +885,13 @@ export function createScreen(
     bbs.on('screen:resize', (size: { cols: number; rows: number }) => {
       console.log(`[createScreen] Received screen:resize event: ${size.cols}x${size.rows}`);
       console.log(`[createScreen] Current screen size: ${screen.width}x${screen.height}`);
+
+      // CRITICAL: Immediately update dimensions to prevent rendering at wrong size
+      // This prevents blessed from outputting cursor positions beyond terminal width
+      (screen as any).width = size.cols;
+      (screen as any).height = size.rows;
+      console.log(`[createScreen] Force-updated dimensions: ${screen.width}x${screen.height}`);
+
       console.log(`[createScreen] screen.resize is: ${typeof screen.resize}`);
       if (typeof screen.resize === 'function') {
         screen.resize(size.cols, size.rows);
@@ -625,7 +922,8 @@ export function setupInputHandler(session: any, screen: Screen, onF1Help?: () =>
 
   session.bbsSession.doorInputHandler = (data: string) => {
     // Check for F1 key (help)
-    if (onF1Help && (data === '\x1bOP' || data === '\x1b[11~')) {
+    // Use ESC constant to survive minification
+    if (onF1Help && (data === ESC + 'OP' || data === ESC + '[11~')) {
       onF1Help();
       return;
     }
@@ -679,7 +977,7 @@ export function createCleanupHandler(
 
     // Show exit message
     if (options?.exitMessage) {
-      bbs.write('\x1b[2J\x1b[H');
+      bbs.write(ESC + '[2J' + ESC + '[H');
       bbs.writeLine(options.exitMessage);
     }
   };
