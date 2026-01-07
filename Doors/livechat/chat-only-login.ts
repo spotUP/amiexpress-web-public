@@ -53,9 +53,8 @@ export async function runChatOnlyLogin(session: any): Promise<boolean> {
     // Note: inDoorManager flag is set in index.ts runDoor()
     bbsSession.doorInputHandler = (data: string) => {
       if (screen.program) {
-        // Call _handleData to parse input and emit keypress events
-        // Don't use emit('data') - that just emits raw data without parsing
-        screen.program._handleData(data);
+        // Use proper emit API (not private _handleData) to prevent double processing
+        screen.program.emit('data', data);
       }
       return true;
     };

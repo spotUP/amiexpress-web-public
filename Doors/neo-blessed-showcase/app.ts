@@ -67,7 +67,6 @@ import blessed, {
   Panel
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { BrailleVUMeter } from '@amiexpress/bbs-door-sdk/engines/graphics/braille-graphics';
-import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import {
   AutocompleteManager,
   AutocompleteDialog,
@@ -116,14 +115,18 @@ export async function createApp(session: DoorSession) {
 
   // ========== CREATE SCREEN ==========
   // Use SDK helper for consistent styling and BBS compatibility
+  // NOTE: responsive mode enabled, but wide mode toggled dynamically in fullscreen
   const screen = createScreen(bbs, {
     title: `Neo-Blessed Showcase ${BUILD_VERSION}`,
+    responsive: true,  // Enable responsive mode for dynamic browser window sizing
+    smartCSR: false,   // CRITICAL: Disable smart scroll-region optimization to prevent upward scrolling in video
+    fastCSR: false,    // Disable fast CSR as well - forces full redraws instead of scroll optimizations
   });
 
   if (session.bbsSession) {
     session.bbsSession.inDoorManager = true;
     session.bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }
@@ -144,22 +147,9 @@ export async function createApp(session: DoorSession) {
     console.log('[neo-blessed-showcase] WARNING: bbs.enableMouseEvents NOT available!');
   }
 
-  // ========== LOADING SCREEN ==========
-  const loader = new DoorLoader(screen, {
-    overlay: true,
-    overlayOpacity: 0.6,
-    barColor: 'cyan',
-  });
-
-  // Show loader while building UI
-  loader.show('Initializing Neo-Blessed Showcase...');
-  screen.render();
-
-  // Simulate loading progress (UI creation is fast but show user something)
-  await loader.delay(200);
-  loader.update(20, 'Creating main layout...');
-
   // ========== MAIN LAYOUT ==========
+  // Note: Preloader is handled by door-preloader.ts (PRELOADER=YES in .info file)
+  // The animated spinner shows during module import, then this createApp() runs
   const headerBar = blessed.box({
     parent: screen,
     top: 0,
@@ -169,11 +159,6 @@ export async function createApp(session: DoorSession) {
     tags: true,
     style: { fg: 'white', bg: 'blue' },
     content: ` Neo-Blessed Showcase ${BUILD_VERSION} | Q:Quit Tab:Nav Enter:Select `,
-  });
-
-  // Track last key for debugging
-  screen.on('keypress', (ch, key) => {
-    setStatus(`Last Key: ${key.full || key.name} | Mouse: ${screen.program.options.terminal === 'xterm' ? 'XTerm' : 'ANSI'}`);
   });
 
   const menuBox = blessed.box({
@@ -199,15 +184,9 @@ export async function createApp(session: DoorSession) {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
-      ch: '█',  // Solid block for thumb (more visible)
-      track: {
-        ch: '│',  // Thin vertical line for track
-        bg: 'black'
-      },
-      style: {
-        fg: 'cyan',  // Cyan scrollbar thumb
-        bg: 'black'  // Black background (changed from cyan)
-      }
+      ch: ' ',  // Space with bg color for Amiga compatibility
+      track: { ch: ' ', style: { bg: 'black' } },
+      style: { bg: 'cyan' }  // Cyan background for thumb
     } as any,
     style: { fg: 'white', selected: { fg: 'black', bg: 'cyan' } } as any,
     items: [
@@ -277,14 +256,22 @@ export async function createApp(session: DoorSession) {
     content: ` User: ${username} | Select a category | F12: Toggle Mouse `,
   });
 
-  loader.update(40, 'Loading widget demos...');
-  await loader.delay(150);
-
   // ========== HELPERS ==========
   function clearDemo() {
-    intervals.forEach(i => clearInterval(i));
+    // Show cursor if it was hidden
+    if (screen.program) screen.program.showCursor();
+
+    // Stop any active video streams
+    const videoService = (session as any).video;
+    if (videoService) {
+      videoService.getStreams().then((streams: string[]) => {
+        streams.forEach(id => videoService.stopStream(id));
+      });
+    }
+
+    intervals.forEach(clearInterval);
     intervals.length = 0;
-    timeouts.forEach(t => clearTimeout(t));
+    timeouts.forEach(clearTimeout);
     timeouts.length = 0;
     const children = [...demoBox.children];
     for (const child of children) child.detach();
@@ -372,9 +359,9 @@ export async function createApp(session: DoorSession) {
       keys: true,
       vi: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'green' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'green' }
       },
       style: { fg: 'white', border: { fg: 'green' } },
     });
@@ -395,9 +382,9 @@ export async function createApp(session: DoorSession) {
       vi: true,
       alwaysScroll: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'blue' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'blue' }
       },
       style: { fg: 'white', border: { fg: 'blue' } },
       content: Array.from({ length: 15 }, (_, i) => `Line ${i + 1}: Scrollable text content`).join('\n'),
@@ -721,9 +708,9 @@ export async function createApp(session: DoorSession) {
       tags: true, scrollable: true, mouse: true,
       keys: true, vi: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'green' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'green' }
       },
       style: { fg: 'white', border: { fg: 'green' } },
     });
@@ -1159,9 +1146,9 @@ export async function createApp(session: DoorSession) {
       scrollable: true,
       alwaysScroll: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'cyan' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'cyan' }
       },
       style: { fg: 'white', border: { fg: 'cyan' } },
     });
@@ -1707,9 +1694,9 @@ End of sample markdown.`;
       vi: true,
       mouse: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'cyan' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'cyan' }
       },
       style: { fg: 'white', border: { fg: 'cyan' } },
     } as any);
@@ -1913,9 +1900,9 @@ End of sample markdown.`;
       vi: true,
       style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'magenta' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'magenta' }
       },
     });
 
@@ -1953,9 +1940,9 @@ End of sample markdown.`;
       style: { fg: 'white', bg: 'black', border: { fg: 'green' }, selected: { fg: 'black', bg: 'green' } },
       items: Array.from({ length: 30 }, (_, i) => `Item ${i + 1} (scroll stops at 10)`),
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'green' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'green' }
       },
     } as any);
     addResult('baseLimit', 'pass', 'Scroll limit works');
@@ -2075,9 +2062,9 @@ End of sample markdown.`;
         'Item 8',
       ],
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'cyan' },
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'cyan' },
       },
     });
 
@@ -2484,117 +2471,366 @@ End of sample markdown.`;
       tags: true,
     });
 
-    blessed.box({
-      parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
-      tags: true,
-      content: '{yellow-fg}Webcam Demo:{/}\n' +
-        'Requests camera access and streams ASCII-converted video.\n' +
-        '{gray-fg}(Requires "video" service in door session){/}',
-    });
-
     const videoService = (session as any).video;
     let activeStreamId: string | null = null;
-    let currentMode: 'halfblock' | 'ascii' = 'halfblock';
+    let currentMode: 'braille' | 'superres' | 'halfblock' | 'ascii' = 'braille'; // Default to braille (highest quality)
+    let isFullscreen = false;
+    let isSwitchingStream = false; // Prevent rendering during stream transitions
+    let streamSwitchInProgress = false; // Prevent concurrent startVideoStream calls
+
+    // Compact inline button bar
+    const buttonBar = blessed.box({
+      parent: demoBox,
+      bottom: 0, left: 0, right: 0, height: 3,
+      tags: true,
+      mouse: true,
+      style: { fg: 'white', bg: 'black' }
+    });
+
+    const updateButtonBar = () => {
+      const modes = [
+        { name: 'Braille', key: '1', mode: 'braille', color: 'lightmagenta', desc: '8x' },
+        { name: 'Rich', key: '2', mode: 'superres', color: 'lightgreen', desc: '4x+10' },
+        { name: 'Rich', key: '3', mode: 'halfblock', color: 'cyan', desc: '4x+10' },
+        { name: 'ASCII', key: '4', mode: 'ascii', color: 'lightblue', desc: '1x' }
+      ];
+
+      let line1 = '{yellow-fg}Mode:{/} ';
+      let line2 = '{gray-fg}Keys:{/} ';
+
+      for (const m of modes) {
+        const isActive = currentMode === m.mode;
+        if (isActive) {
+          line1 += `{black-fg}{${m.color}-bg} ${m.name} {/} `;
+          line2 += `{${m.color}-fg}[${m.key}]${m.desc}{/} `;
+        } else {
+          line1 += `{${m.color}-fg}${m.name}{/} `;
+          line2 += `{gray-fg}[${m.key}]${m.desc}{/} `;
+        }
+      }
+
+      line1 += '  {magenta-fg}Fullscreen{/} {red-fg}Stop{/}';
+      line2 += '   {gray-fg}[F]ull   [S]top{/}';
+
+      buttonBar.setContent(line1 + '\n' + line2);
+      screen.render();
+    };
+
+    updateButtonBar();
 
     console.log('[Webcam Demo] videoService exists:', !!videoService);
 
-    // Function to start video with current mode
-    const startVideoStream = () => {
+    // Register SINGLE onFrame handler that uses current mode/fullscreen state
+    if (videoService) {
+      let isRendering = false;
+
+      videoService.onFrame((frame: string) => {
+        // Only render if we're in webcam demo, not switching streams, and not already rendering
+        if (currentDemo === 'webcam' && !isRendering && !isSwitchingStream) {
+          isRendering = true;
+          if (isFullscreen) {
+            fullscreenBox.setContent(frame);
+          } else {
+            webcamBox.setContent(frame);
+          }
+          screen.render();
+          isRendering = false;
+        }
+      });
+    }
+
+    const startVideoStream = async () => {
       if (!videoService) return;
 
-      // Stop existing stream first
+      // CRITICAL: Prevent concurrent executions - only ONE stream switch at a time
+      if (streamSwitchInProgress) {
+        console.log('[Webcam] Stream switch already in progress, ignoring request');
+        return;
+      }
+      streamSwitchInProgress = true;
+
+      // Capture mode NOW to avoid race conditions if user presses buttons during transition
+      const requestedMode = currentMode;
+      const requestedFullscreen = isFullscreen;
+
+      // Block rendering during stream transition
+      isSwitchingStream = true;
+
+      // Stop existing stream first and WAIT for cleanup
       if (activeStreamId) {
-        videoService.stopStream(activeStreamId);
+        try {
+          await videoService.stopStream(activeStreamId);
+        } catch (err) {
+          // Ignore errors from stopping
+        }
         activeStreamId = null;
+
+        // Wait for frame pipeline to clear (important!)
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
 
-      // Calculate available size inside webcamBox (account for borders)
-      const availWidth = (typeof demoBox.width === 'number' ? demoBox.width : 78) - 4;
-      const availHeight = (typeof demoBox.height === 'number' ? demoBox.height : 20) - 8;
-      const videoWidth = Math.min(76, availWidth);
-      // Half-block uses 2 pixel rows per terminal row, ASCII uses 1:1
-      const videoHeight = currentMode === 'halfblock'
-        ? Math.min(32, availHeight * 2)
-        : Math.min(16, availHeight);
+      // Hide cursor globally during webcam demo to prevent flickering artifacts
+      if (screen.program) screen.program.hideCursor();
 
-      webcamBox.setContent(`{center}Starting ${currentMode} mode...{/center}`);
+      // Calculate available size
+      // For fullscreen, use fullscreenBox dimensions which are set from screen size after enableWideMode
+      const availWidth = requestedFullscreen
+        ? (typeof fullscreenBox.width === 'number' ? fullscreenBox.width : (typeof screen.width === 'number' ? screen.width : 80))
+        : (typeof demoBox.width === 'number' ? demoBox.width : 78) - 4;  // Demo box minus borders
+      const availHeight = requestedFullscreen
+        ? (typeof fullscreenBox.height === 'number' ? fullscreenBox.height : (typeof screen.height === 'number' ? screen.height : 24))
+        : (typeof demoBox.height === 'number' ? demoBox.height : 20) - 8;  // Demo box minus borders
+
+      console.log(`[Video] Mode: ${requestedMode}, Fullscreen: ${requestedFullscreen}`);
+      console.log(`[Video] Screen: ${screen.width}x${screen.height}, Avail: ${availWidth}x${availHeight}`);
+
+      // Braille mode: 2x4 pixels = 1 char (8x resolution)
+      // Rich mode (superres/halfblock): 2x2 pixels = 1 char (4x resolution with 10-level shading)
+      // ASCII mode: 1x1 pixel = 1 char (1x resolution)
+      const videoWidth = requestedMode === 'braille' ? availWidth * 2 :
+                         requestedMode === 'superres' ? availWidth * 2 :
+                         requestedMode === 'halfblock' ? availWidth * 2 :
+                         availWidth;
+      const videoHeight = requestedMode === 'braille' ? availHeight * 4 :
+                          requestedMode === 'superres' ? availHeight * 2 :
+                          requestedMode === 'halfblock' ? availHeight * 2 :
+                          availHeight;
+
+      console.log(`[Video] Requesting stream: ${videoWidth}x${videoHeight} pixels`);
+
+      // Clear display to prevent old frames from lingering
+      if (requestedFullscreen) {
+        fullscreenBox.setContent(`{center}Starting ${requestedMode} mode...{/center}`);
+      } else {
+        webcamBox.setContent(`{center}Starting ${requestedMode} mode...{/center}`);
+      }
       screen.render();
 
-      videoService.startStream(
-        { type: 'webcam' },
-        {
-          width: videoWidth,
-          height: videoHeight,
-          fps: 10,
-          colored: true,
-          mode: currentMode,
-        }
-      ).then((streamId: string) => {
-        console.log('[Webcam Demo] startStream resolved with streamId:', streamId);
-        activeStreamId = streamId;
-        videoService.onFrame((frame: string) => {
-          if (currentDemo === 'webcam') {
-            webcamBox.setContent(frame);
-            screen.render();
+      try {
+        const streamId = await videoService.startStream(
+          { type: 'webcam' },
+          {
+            width: videoWidth,
+            height: videoHeight,
+            fps: requestedFullscreen ? 12 : 10, // Slightly slower FPS for stability
+            colored: true,
+            mode: requestedMode,
           }
-        });
-      }).catch((err: any) => {
-        console.log('[Webcam Demo] startStream error:', err.message);
+        );
+
+        // Allow rendering IMMEDIATELY so first frame isn't dropped
+        isSwitchingStream = false;
+        activeStreamId = streamId;
+        streamSwitchInProgress = false; // Release mutex
+
+        // If user pressed more buttons during transition, switch to the latest mode
+        if (currentMode !== requestedMode || isFullscreen !== requestedFullscreen) {
+          console.log('[Webcam] Mode changed during switch, triggering another transition');
+          setTimeout(() => startVideoStream(), 50); // Small delay to prevent tight loop
+        }
+      } catch (err: any) {
+        isSwitchingStream = false; // Re-enable on error too
+        streamSwitchInProgress = false; // Release mutex
+        if (screen.program) screen.program.showCursor();
         webcamBox.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
         screen.render();
-      });
+      }
     };
 
-    // Mode selection buttons
-    const halfblockBtn = blessed.button({
-      parent: demoBox,
-      bottom: 1, left: 2, width: 14, height: 3,
-      content: ' HalfBlock ',
-      border: { type: 'line' },
-      mouse: true,
-      style: { fg: 'black', bg: 'lightgreen' },
+    // Create a special box for fullscreen that covers the entire screen
+    // CRITICAL: scrollable=false + screen-level smartCSR=false prevents upward scrolling
+    // CRITICAL: Use numeric dimensions (not percentages) to prevent stale calculations during resize
+    const fullscreenBox = blessed.box({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: screen.width || 80,   // Numeric width - prevents stale percentage calculations
+      height: screen.height || 25, // Numeric height - prevents stale percentage calculations
+      hidden: true,
+      tags: true,
+      wrap: false,
+      scrollable: false,        // No scrolling
+      alwaysScroll: false,      // Never scroll
+      keys: false,              // Disable key handling that might trigger scrolls
+      mouse: false,             // Disable mouse events
+      style: { bg: 'black' },
     });
 
-    const asciiBtn = blessed.button({
-      parent: demoBox,
-      bottom: 1, left: 18, width: 10, height: 3,
-      content: ' ASCII ',
-      border: { type: 'line' },
-      mouse: true,
-      style: { fg: 'white', bg: 'blue' },
+    const toggleFullscreen = async () => {
+      isFullscreen = !isFullscreen;
+
+      if (isFullscreen) {
+        // Hide all UI elements for true fullscreen
+        headerBar.hide();
+        menuBox.hide();
+        demoBox.hide();
+        statusBar.hide();
+
+        // Clear the entire screen before going fullscreen
+        screen.clearRegion(0, screen.width, 0, screen.height);
+        screen.render();
+
+        // Enable wide mode and wait for resize event
+        console.log(`[Fullscreen] Enabling wide mode...`);
+        console.log(`[Fullscreen] Screen before enableWideMode: ${screen.width}x${screen.height}`);
+
+        // Create a promise that resolves on resize or timeout
+        const resizePromise = new Promise<void>((resolve) => {
+          let resolved = false;
+          const onResize = () => {
+            if (!resolved) {
+              resolved = true;
+              screen.removeListener('resize', onResize);
+              resolve();
+            }
+          };
+          screen.on('resize', onResize);
+          // Timeout fallback in case resize doesn't fire
+          setTimeout(() => {
+            if (!resolved) {
+              resolved = true;
+              screen.removeListener('resize', onResize);
+              resolve();
+            }
+          }, 800);
+        });
+
+        bbs.enableWideMode?.();
+        await resizePromise;
+
+        // CRITICAL: Update fullscreen box to ACTUAL screen dimensions (not percentages)
+        const w = screen.width || 80;
+        const h = screen.height || 24;
+        console.log(`[Fullscreen] Screen after resize: ${w}x${h}`);
+
+        fullscreenBox.width = w;
+        fullscreenBox.height = h;
+        fullscreenBox.show();
+        fullscreenBox.setFront();
+        fullscreenBox.setContent('');
+        screen.render();
+
+        console.log(`[Fullscreen] Starting video stream in fullscreen mode...`);
+
+        // startVideoStream will handle stopping old stream and starting new one
+        await startVideoStream();
+      } else {
+        // Disable wide mode to return to 80x24
+        console.log(`[Normal] Disabling wide mode...`);
+        console.log(`[Normal] Screen before disableWideMode: ${screen.width}x${screen.height}`);
+        bbs.disableWideMode?.();
+
+        // Wait for terminal to resize back to 80x24
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (screen.program) screen.program.showCursor();
+        fullscreenBox.hide();
+
+        // Restore all UI elements
+        headerBar.show();
+        menuBox.show();
+        demoBox.show();
+        statusBar.show();
+        screen.render();
+
+        console.log(`[Normal] Screen after 300ms delay: ${screen.width}x${screen.height}`);
+        console.log(`[Normal] Starting video stream in normal mode...`);
+
+        // startVideoStream will handle stopping old stream and starting new one
+        await startVideoStream();
+      }
+    };
+
+    // Keyboard handlers for mode switching
+    screen.key(['1'], () => {
+      currentMode = 'braille';
+      updateButtonBar();
+      startVideoStream();
     });
 
-    halfblockBtn.on('press', () => {
+    screen.key(['2'], () => {
+      currentMode = 'superres';
+      updateButtonBar();
+      startVideoStream();
+    });
+
+    screen.key(['3'], () => {
       currentMode = 'halfblock';
-      halfblockBtn.style.bg = 'lightgreen';
-      asciiBtn.style.bg = 'blue';
-      screen.render();
+      updateButtonBar();
       startVideoStream();
     });
 
-    asciiBtn.on('press', () => {
+    screen.key(['4'], () => {
       currentMode = 'ascii';
-      asciiBtn.style.bg = 'lightgreen';
-      halfblockBtn.style.bg = 'blue';
-      screen.render();
+      updateButtonBar();
       startVideoStream();
     });
 
-    const stopBtn = blessed.button({
-      parent: demoBox,
-      bottom: 1, right: 2, width: 10, height: 3,
-      content: ' Stop ',
-      border: { type: 'line' },
-      mouse: true,
-      style: { fg: 'white', bg: 'red' },
+    screen.key(['f', 'F'], () => {
+      // Don't await - fire and forget to prevent blocking the key handler
+      toggleFullscreen().then(() => {
+        updateButtonBar();
+        screen.render();
+      }).catch((err) => {
+        console.error('[Fullscreen] Error:', err);
+        webcamBox.setContent(`{red-fg}Fullscreen error: ${err?.message || err}{/}`);
+        screen.render();
+      });
     });
 
-    stopBtn.on('press', () => {
+    screen.key(['s', 'S'], () => {
       if (videoService && activeStreamId) {
         videoService.stopStream(activeStreamId);
         activeStreamId = null;
-        webcamBox.setContent('{center}Stream stopped.{/center}');
+        webcamBox.setContent('{center}Stream stopped. Press 1-4 to restart.{/center}');
         screen.render();
+      }
+    });
+
+    // ESC to exit fullscreen AND stop video (return to menu)
+    screen.key(['escape', 'q'], async () => {
+      if (isFullscreen) {
+        // Stop the video stream completely
+        if (videoService && activeStreamId) {
+          try {
+            await videoService.stopStream(activeStreamId);
+            activeStreamId = null;
+          } catch (err) {
+            // Ignore errors from stopping
+          }
+        }
+
+        // Exit fullscreen mode
+        isFullscreen = false;
+        fullscreenBox.hide();
+        bbs.disableWideMode?.();
+
+        // Wait for terminal to resize back to 80x25
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Return to demo selection menu
+        demoBox.hide();
+        menuList.show();
+        menuList.focus();
+        screen.render();
+      }
+    });
+
+    // Resize handler - update fullscreen box and restart stream
+    screen.on('resize', () => {
+      if (currentDemo === 'webcam' && isFullscreen) {
+        // Update fullscreen box to new screen dimensions
+        const w = screen.width || 80;
+        const h = screen.height || 25;
+        console.log(`[Resize] Screen resized to: ${w}x${h}`);
+        fullscreenBox.width = w;
+        fullscreenBox.height = h;
+        console.log(`[Resize] Fullscreen box updated to: ${fullscreenBox.width}x${fullscreenBox.height}`);
+
+        // Restart stream with new dimensions
+        if (activeStreamId) {
+          startVideoStream();
+        }
       }
     });
 
@@ -2637,6 +2873,7 @@ End of sample markdown.`;
       audioService.startStreaming({
         sampleRate: 44100,
         channels: 1,
+        testMode: true,  // Enable standalone mic testing without voice channel
       }).then(() => {
         // Create VU Meter
         const vuMeter = new BrailleVUMeter(60, 30);
@@ -2645,12 +2882,18 @@ End of sample markdown.`;
         const interval = addInterval(() => {
           const levels = audioService.getAudioLevels();
           const frame = vuMeter.update(levels.input);
-          
+
+          // Manually center text (box width is ~60 chars)
+          const centerText = (text: string, width: number = 60) => {
+            const padding = Math.max(0, Math.floor((width - text.length) / 2));
+            return ' '.repeat(padding) + text;
+          };
+
           micBox.setContent(
-            `{center}{green-fg}Microphone Active{/green-fg}\n` +
-            `{cyan-fg}Input Level: ${Math.round(levels.input * 100)}%{/cyan-fg}\n\n` +
-            frame + 
-            `\n{center}(Speaking logic handled by server){/center}`
+            centerText('{green-fg}Microphone Active{/green-fg}', 60) + '\n' +
+            centerText(`{cyan-fg}Input Level: ${Math.round(levels.input * 100)}%{/cyan-fg}`, 60) + '\n\n' +
+            frame + '\n\n' +
+            centerText('{gray-fg}(Speaking logic handled by server){/gray-fg}', 60)
           );
           screen.render();
         }, 100); // 10fps update
@@ -2901,9 +3144,9 @@ End of sample markdown.`;
       tags: true, scrollable: true, mouse: true,
       keys: true, vi: true, alwaysScroll: true,
       scrollbar: {
-        ch: '█',
-        track: { ch: '│' },
-        style: { fg: 'cyan' }
+        ch: ' ',  // Space with bg color for Amiga compatibility
+        track: { ch: ' ', style: { bg: 'black' } },
+        style: { bg: 'cyan' }
       },
       content,
       style: { fg: 'white' },
@@ -2911,9 +3154,6 @@ End of sample markdown.`;
 
     screen.render();
   }
-
-  loader.update(80, 'Setting up event handlers...');
-  await loader.delay(100);
 
   // ========== MENU HANDLING ==========
   menuList.on('select', (_: any, index: number) => {
@@ -2971,20 +3211,12 @@ End of sample markdown.`;
     timeouts.length = 0;
     screen.disableMouse();
     if (session.bbsSession) delete session.bbsSession.doorInputHandler;
-    loader.destroy();  // Clean up loader
     screen.destroy();
     if (bbs) {
       bbs.write('\x1b[2J\x1b[H');
       bbs.writeLine('\x1b[33mThanks for testing Neo-Blessed Showcase!\x1b[0m');
     }
   }
-
-  loader.update(95, 'Finalizing...');
-  await loader.delay(100);
-  loader.update(100, 'Ready!');
-  await loader.delay(500);
-  loader.hide();
-  loader.destroy();
 
   // ========== MAIN ==========
   return {

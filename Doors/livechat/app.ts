@@ -188,7 +188,7 @@ export async function createApp(session: DoorSession) {
         if (showHelpFn) showHelpFn();
         return true;
       }
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }
@@ -1648,7 +1648,8 @@ export async function createApp(session: DoorSession) {
     showConfirm  // Pass showConfirm for quit confirmation
   );
 
-  inputBox.on('submit', createSubmitHandler(
+  // Wrap async handler to satisfy blessed's sync event handler type requirement
+  const asyncSubmitHandler = createSubmitHandler(
     socket,
     state,
     registry,
@@ -1692,7 +1693,8 @@ export async function createApp(session: DoorSession) {
       chatLog.setContent('');
       screen.render();
     }
-  ));
+  );
+  inputBox.on('submit', (value: string) => { asyncSubmitHandler(value); });
 
   // Live typing indicator and command autocomplete
   inputBox.on('keypress', (ch: string, key: any) => {

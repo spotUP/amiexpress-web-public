@@ -111,6 +111,8 @@ export class GrandmasterApp {
       dockBorders: true,
       title: 'GRANDMASTER',
       fullUnicode: false,
+      smartCSR: false,  // Disable smart scroll-region optimization - prevents layout corruption
+      fastCSR: false,   // Disable fast CSR - forces full redraws for stable rendering
       output: (data: string) => this.session.bbs.write(data),
     });
 
@@ -119,7 +121,7 @@ export class GrandmasterApp {
     if (this.session.bbsSession) {
       this.session.bbsSession.doorInputHandler = (data: string) => {
         console.log('[GRANDMASTER] doorInputHandler called with:', JSON.stringify(data));
-        screen._handleData(data);
+        screen.program.emit('data', data);
       };
       console.log('[GRANDMASTER] doorInputHandler set successfully');
     } else {

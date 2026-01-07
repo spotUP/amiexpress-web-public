@@ -256,7 +256,7 @@ class CardLobbyApp {
             // Fall through to normal input handling.
           }
         }
-        this.screen._handleData(data);
+        this.screen.program.emit('data', data);
       };
       this.session.bbsSession.doorReconnectHandler = () => {
         this.screen.clear();

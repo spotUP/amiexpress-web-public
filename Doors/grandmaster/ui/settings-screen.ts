@@ -73,10 +73,11 @@ export class SettingsScreen {
         this.screen.render();
       });
 
-      // Handle item selection
-      menu.on('select', async (_item: any, index: number) => {
-        await this.handleSelection(index, menu);
-        this.screen.render();
+      // Handle item selection - wrap async handler for blessed's sync event requirement
+      menu.on('select', (_item: any, index: number) => {
+        this.handleSelection(index, menu).then(() => {
+          this.screen.render();
+        });
       });
 
       // Handle quit key

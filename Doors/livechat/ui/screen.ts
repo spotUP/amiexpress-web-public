@@ -9,6 +9,8 @@ export function createScreen(bbs: any): Screen {
   const screen = createScreenHelper(bbs, {
     title: 'LiveChat v3.2',
     responsive: true,
+    smartCSR: false,  // Disable smart scroll-region optimization - prevents layout corruption during drag/resize
+    fastCSR: false,   // Disable fast CSR - forces full redraws for stable dockable panel rendering
   });
 
   screen.enableMouse();

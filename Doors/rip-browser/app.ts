@@ -1,7 +1,8 @@
 import {
   blessed,
   UIHelpers,
-  AnsiColor
+  AnsiColor,
+  convertUnicodeBoxToACS
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,15 +12,18 @@ const RIP_DIR = '~/Code/amiexpress-web/RIPgraphics';
 export async function execute(session: any) {
   const { socket, bbsSession, user, params } = session;
   console.log(`[RIP Browser] Starting for user: ${user?.username || 'unknown'}`);
+  console.log(`[RIP Browser] Working directory: ${process.cwd()}`);
 
   // Initialize screen
   const screen = blessed.screen({
     smartCSR: true,
+    fullUnicode: false, // CRITICAL: Use ACS codes, not Unicode - prevents UTF-8 corruption
+    terminal: 'xterm', // Standard xterm for ACS box-drawing support
     title: 'RIP Graphics Browser',
     width: 80,
     height: 24,
     output: (data: string) => {
-      socket.emit('ansi-output', data);
+      socket.emit('ansi-output', convertUnicodeBoxToACS(data));
     }
   });
 
@@ -31,7 +35,7 @@ export async function execute(session: any) {
   // Connect input
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }
@@ -95,7 +99,8 @@ export async function execute(session: any) {
     left: 0,
     width: '100%',
     height: 3,
-    content: ' Selected: None ',
+    content: '{yellow-fg}Arrows:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} View  {yellow-fg}F5:{/yellow-fg} Force View  {yellow-fg}Q:{/yellow-fg} Quit',
+    tags: true,
     border: { type: 'line' },
     style: {
       border: { fg: 'cyan' }
@@ -104,24 +109,39 @@ export async function execute(session: any) {
 
   // ========== FILE LOADING ========== 
 
-  const loadFiles = () => {
+  const loadFiles = async () => {
+    console.log(`[RIP Browser] Scanning directory: ${RIP_DIR}`);
     try {
       if (!fs.existsSync(RIP_DIR)) {
-        list.addItem('Error: RIPgraphics directory not found');
+        console.error(`[RIP Browser] Directory not found: ${RIP_DIR}`);
+        list.setItems(['Error: RIPgraphics directory not found']);
+        screen.render();
         return;
       }
 
-      const files = fs.readdirSync(RIP_DIR)
+      const allFiles = fs.readdirSync(RIP_DIR);
+      console.log(`[RIP Browser] Found ${allFiles.length} total files in directory`);
+
+      const ripFiles = allFiles
         .filter(f => f.toLowerCase().endsWith('.rip'))
         .sort();
 
-      if (files.length === 0) {
-        list.addItem('No .RIP files found');
+      console.log(`[RIP Browser] Found ${ripFiles.length} .RIP files`);
+
+      if (ripFiles.length === 0) {
+        list.setItems(['No .RIP files found']);
       } else {
-        files.forEach(f => list.addItem(f));
+        list.setItems(ripFiles);
       }
+      
+      // Ensure the first item is selected and UI is refreshed
+      list.select(0);
+      screen.render();
+      console.log('[RIP Browser] File list updated and rendered');
     } catch (err: any) {
-      list.addItem(`Error: ${err.message}`);
+      console.error(`[RIP Browser] Error loading files: ${err.message}`);
+      list.setItems([`Error: ${err.message}`]);
+      screen.render();
     }
   };
 
@@ -132,44 +152,21 @@ export async function execute(session: any) {
       const filePath = path.join(RIP_DIR, filename);
       const content = fs.readFileSync(filePath, 'utf8');
 
-      // 1. Enter RIP mode
-      socket.emit('ansi-output', '\x1b[1!');
+      // 1. Enter RIP mode AND send content in one go
+      // We do NOT call screen.render() here because it would send ANSI text 
+      // that the terminal would try to interpret as RIP commands.
+      socket.emit('ansi-output', '\x1b[1!' + content);
       
-      // 2. Send RIP content
-      // We send it in chunks to avoid overwhelming the socket if it's large
-      socket.emit('ansi-output', content);
-      
-      // 3. Keep the display up until user presses a key
-      // We use a temporary transparent overlay or just listen for any key
-      const overlay = blessed.box({
-        parent: screen,
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        content: '{center}{inverse} PRESS ANY KEY TO RETURN TO BROWSER {/inverse}{/center}',
-        tags: true,
-        style: {
-          bg: 'transparent',
-          fg: 'white'
-        }
-      });
-      
-      screen.append(overlay);
-      screen.render();
-
+      // 2. Wait for any keypress to return
+      // The RIP graphics are an overlay on the client, so the user just needs to press a key
       await new Promise<void>(resolve => {
-        const handler = () => {
-          screen.remove(overlay);
-          resolve();
-        };
-        screen.once('keypress', handler);
+        screen.once('keypress', () => resolve());
       });
 
-      // 4. Exit RIP mode
+      // 3. Exit RIP mode
       socket.emit('ansi-output', '\x1b[2!');
       
-      // 5. Force a full redraw of the browser UI
+      // 4. Force a full redraw of the browser UI now that we are back in text mode
       screen.render();
     } catch (err: any) {
       footer.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
@@ -197,6 +194,17 @@ export async function execute(session: any) {
     }
   });
 
+  screen.key(['f5'], () => {
+    const item = list.getItem(list.selected);
+    const filename = (typeof item === 'string' ? item : (item as any)?.content || '').trim();
+    if (filename.toLowerCase().endsWith('.rip')) {
+      console.log(`[RIP Browser] Force View triggered for: ${filename}`);
+      // Manually notify terminal to enter RIP mode via dedicated event
+      socket.emit('rip-mode', { enabled: true });
+      viewRip(filename);
+    }
+  });
+
   screen.key(['q', 'C-c', 'escape'], () => {
     screen.destroy();
     if (session.close) {
@@ -206,10 +214,13 @@ export async function execute(session: any) {
 
   // ========== INITIALIZATION ========== 
 
-  loadFiles();
-  list.focus();
-  console.log('[RIP Browser] Initial layout complete, rendering...');
-  screen.render();
+  // Use a slight delay to ensure screen dimensions are ready before loading
+  setTimeout(() => {
+    loadFiles();
+    list.focus();
+    console.log('[RIP Browser] Initial layout complete, rendering...');
+    screen.render();
+  }, 100);
 
   // Return promise that resolves when screen is destroyed
   return new Promise<void>((resolve) => {

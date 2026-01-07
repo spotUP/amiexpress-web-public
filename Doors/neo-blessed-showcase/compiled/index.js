@@ -21,7 +21,7 @@ door.onStart(async (ctx) => {
         socket: ctx.socket,
         user: ctx.user,
         bbsSession: ctx.bbsSession,
-        bbs: ctx.output,
+        bbs: ctx.bbs,
         video: ctx.video,
         audio: ctx.audio,
         params: [],

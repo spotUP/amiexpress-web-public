@@ -355,7 +355,8 @@ function createUi(session: DoorSession): ParticipantUi {
 
   // Use createScreen helper with responsive mode
   const screen = createScreen({
-    smartCSR: true,
+    smartCSR: false,  // FIXED: Was true - caused scroll artifacts and layout corruption
+    fastCSR: false,   // Disable fast CSR - forces full redraws for stable rendering
     dockBorders: false,
     fullUnicode: false,
     title: 'Scrollwars',
@@ -365,7 +366,7 @@ function createUi(session: DoorSession): ParticipantUi {
 
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }

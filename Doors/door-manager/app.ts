@@ -140,7 +140,7 @@ export async function createApp(session: DoorSession) {
   // Connect input
   if (session.bbsSession) {
     session.bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }
@@ -371,7 +371,7 @@ export async function createApp(session: DoorSession) {
   };
 
   // Handle door selection (Enter key)
-  doorList.on('select', async (item: any, index: number) => {
+  doorList.on('select', (item: any, index: number) => {
     const selectedDoor = doors[index];
 
     // Show door management menu with refresh callback
@@ -530,7 +530,7 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
     screen.render();
   };
 
-  menuList.on('select', async (item: any, index: number) => {
+  menuList.on('select', (item: any, index: number) => {
     screen.unkey(['escape'], escHandler);
     menuBox.destroy();
     screen.render();

@@ -85,7 +85,7 @@ export async function createApp(session: DoorSession) {
   // Connect input from BBS to screen
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }

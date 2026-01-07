@@ -231,7 +231,7 @@ class ANSIEditor {
     if (!this.running) return;
 
     // 1. Feed to UIEngine for modals/blessed widgets
-    this.ui.getScreen().program._handleData(key.raw);
+    this.ui.getScreen().program.emit('data', key.raw);
     
     // 2. Handle canvas drawing if no modal is active
     const focused = this.ui.getScreen().getFocused();

@@ -51,7 +51,7 @@ door.onStart(async (ctx: DoorContext) => {
   const bbsSession = (ctx as any).bbsSession;
   if (bbsSession) {
     bbsSession.doorInputHandler = (data: string) => {
-      (screen as any)._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }

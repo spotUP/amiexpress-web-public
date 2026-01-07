@@ -215,7 +215,7 @@ export async function createApp(session: DoorSession) {
   // Connect input
   if (session.bbsSession) {
     session.bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
+      screen.program.emit('data', data);
       return true;
     };
   }
@@ -472,11 +472,14 @@ export async function createApp(session: DoorSession) {
   }
 
   // Handle selection
-  mainList.on('select', async (item: any, index: number) => {
+  mainList.on('select', (item: any, index: number) => {
     if (viewMode === 'categories') {
       handleCategorySelect(index);
     } else {
-      await handleDoorSelect(index);
+      // Fire-and-forget async operation (EventHandler can't be async)
+      handleDoorSelect(index).catch((err) => {
+        console.error('[doors-menu] Error handling door select:', err);
+      });
     }
   });
 
