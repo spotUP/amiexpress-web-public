@@ -1,1 +1,48 @@
-export function bresenham(o,t,a,r,h){const n=[];o=Math.floor(o),t=Math.floor(t),a=Math.floor(a),r=Math.floor(r);const s=Math.abs(a-o),f=Math.abs(r-t),M=o<a?1:-1,e=t<r?1:-1;let l=s-f,c=o,b=t;for(;n.push({x:c,y:b}),h&&h(c,b),c!==a||b!==r;){const o=2*l;o>-f&&(l-=f,c+=M),o<s&&(l+=s,b+=e)}return n}
+/**
+ * Bresenham's Line Algorithm
+ *
+ * Efficient line drawing algorithm for rasterizing lines
+ * Used by drawille-canvas for drawing lines between points
+ */
+/**
+ * Generate points along a line from (x0, y0) to (x1, y1)
+ * @param x0 Start X coordinate
+ * @param y0 Start Y coordinate
+ * @param x1 End X coordinate
+ * @param y1 End Y coordinate
+ * @param fn Optional callback function called for each point
+ * @returns Array of points along the line
+ */
+export function bresenham(x0, y0, x1, y1, fn) {
+    const points = [];
+    x0 = Math.floor(x0);
+    y0 = Math.floor(y0);
+    x1 = Math.floor(x1);
+    y1 = Math.floor(y1);
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let x = x0;
+    let y = y0;
+    while (true) {
+        points.push({ x, y });
+        if (fn) {
+            fn(x, y);
+        }
+        if (x === x1 && y === y1) {
+            break;
+        }
+        const e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+    return points;
+}

@@ -1,1 +1,227 @@
-export class UsernameProvider{constructor(e=[]){this.trigger="@",this.usernames=e}shouldTrigger(e){return e.currentLine.substring(0,e.cursorPosition).includes("@")}async getSuggestions(e){const t=e.currentLine.substring(0,e.cursorPosition),r=t.lastIndexOf("@");if(-1===r)return[];const s=t.substring(r+1).toLowerCase();return this.usernames.filter(e=>e.toLowerCase().startsWith(s)).map(e=>({label:`@${e}`,insertText:e.substring(s.length),detail:"Username",kind:"user",sortText:e.toLowerCase()}))}setUsernames(e){this.usernames=e}}export class BBSCodeProvider{constructor(){this.tags=[{tag:"bold",desc:"Bold text"},{tag:"italic",desc:"Italic text"},{tag:"underline",desc:"Underlined text"},{tag:"color",desc:"Colored text (e.g., [color=red])"},{tag:"center",desc:"Centered text"},{tag:"quote",desc:"Quote block"},{tag:"code",desc:"Code block"},{tag:"url",desc:"URL link (e.g., [url=http://...])"},{tag:"img",desc:"Image (e.g., [img]url[/img])"},{tag:"size",desc:"Font size (e.g., [size=12])"}],this.trigger="["}shouldTrigger(e){const t=e.currentLine.substring(0,e.cursorPosition);return t.includes("[")&&!t.endsWith("]")}async getSuggestions(e){const t=e.currentLine.substring(0,e.cursorPosition),r=t.lastIndexOf("[");if(-1===r)return[];const s=t.substring(r+1).toLowerCase();return this.tags.filter(({tag:e})=>e.startsWith(s)).map(({tag:e,desc:t})=>({label:`[${e}]`,insertText:`${e.substring(s.length)}]`,detail:t,kind:"keyword",sortText:e}))}}export class WordProvider{constructor(){this.minWordLength=3,this.maxSuggestions=10}shouldTrigger(e){const t=e.currentLine.substring(0,e.cursorPosition).match(/\b(\w+)$/);return!!t&&t[1].length>=this.minWordLength}async getSuggestions(e){const t=e.currentLine.substring(0,e.cursorPosition).match(/\b(\w+)$/);if(!t)return[];const r=t[1].toLowerCase(),s=new Set;return e.documentContent.forEach((t,o)=>{if(o===e.lineNumber)return;(t.match(/\b\w+\b/g)||[]).forEach(e=>{e.toLowerCase().startsWith(r)&&e.length>r.length&&s.add(e)})}),Array.from(s).slice(0,this.maxSuggestions).map(e=>({label:e,insertText:e.substring(r.length),detail:"From document",kind:"text",sortText:e.toLowerCase()}))}}export class TemplateProvider{constructor(e={}){this.templates=e}async getSuggestions(e){const t=e.currentLine.substring(0,e.cursorPosition).match(/\b(\w+)$/);if(!t)return[];const r=t[1].toLowerCase();return Object.entries(this.templates).filter(([e])=>e.toLowerCase().startsWith(r)).map(([e,t])=>({label:e,insertText:t.substring(r.length),detail:"Template",kind:"keyword",sortText:e.toLowerCase()}))}}export class AutocompleteManager{constructor(e=[]){this.providers=[],this.enabled=!0,this.providers=e}addProvider(e){this.providers.push(e)}removeProvider(e){const t=this.providers.indexOf(e);t>-1&&this.providers.splice(t,1)}setEnabled(e){this.enabled=e}shouldTrigger(e){return!!this.enabled&&this.providers.some(t=>t.shouldTrigger?.(e)??!0)}async getSuggestions(e){if(!this.enabled)return[];const t=[];for(const r of this.providers)if(!r.shouldTrigger||r.shouldTrigger(e))try{const s=await r.getSuggestions(e);t.push(...s)}catch(e){console.error("Autocomplete provider error:",e)}return t.sort((e,t)=>{const r=e.sortText||e.label,s=t.sortText||t.label;return r.localeCompare(s)})}static createDefault(e={}){const t=[new WordProvider,new BBSCodeProvider];return e.usernames&&e.usernames.length>0&&t.push(new UsernameProvider(e.usernames)),e.templates&&t.push(new TemplateProvider(e.templates)),new AutocompleteManager(t)}}
+/**
+ * Autocomplete Manager
+ * Manages autocomplete providers and suggestion generation
+ */
+/**
+ * Built-in autocomplete providers
+ */
+/**
+ * Username provider - suggests @username completions
+ */
+export class UsernameProvider {
+    constructor(usernames = []) {
+        this.trigger = '@';
+        this.usernames = usernames;
+    }
+    shouldTrigger(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        return beforeCursor.includes('@');
+    }
+    async getSuggestions(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        const atIndex = beforeCursor.lastIndexOf('@');
+        if (atIndex === -1)
+            return [];
+        const query = beforeCursor.substring(atIndex + 1).toLowerCase();
+        return this.usernames
+            .filter(name => name.toLowerCase().startsWith(query))
+            .map(name => ({
+            label: `@${name}`,
+            insertText: name.substring(query.length),
+            detail: 'Username',
+            kind: 'user',
+            sortText: name.toLowerCase(),
+        }));
+    }
+    setUsernames(usernames) {
+        this.usernames = usernames;
+    }
+}
+/**
+ * BBSCode provider - suggests BBSCode tags
+ */
+export class BBSCodeProvider {
+    constructor() {
+        this.tags = [
+            { tag: 'bold', desc: 'Bold text' },
+            { tag: 'italic', desc: 'Italic text' },
+            { tag: 'underline', desc: 'Underlined text' },
+            { tag: 'color', desc: 'Colored text (e.g., [color=red])' },
+            { tag: 'center', desc: 'Centered text' },
+            { tag: 'quote', desc: 'Quote block' },
+            { tag: 'code', desc: 'Code block' },
+            { tag: 'url', desc: 'URL link (e.g., [url=http://...])' },
+            { tag: 'img', desc: 'Image (e.g., [img]url[/img])' },
+            { tag: 'size', desc: 'Font size (e.g., [size=12])' },
+        ];
+        this.trigger = '[';
+    }
+    shouldTrigger(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        return beforeCursor.includes('[') && !beforeCursor.endsWith(']');
+    }
+    async getSuggestions(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        const bracketIndex = beforeCursor.lastIndexOf('[');
+        if (bracketIndex === -1)
+            return [];
+        const query = beforeCursor.substring(bracketIndex + 1).toLowerCase();
+        return this.tags
+            .filter(({ tag }) => tag.startsWith(query))
+            .map(({ tag, desc }) => ({
+            label: `[${tag}]`,
+            insertText: `${tag.substring(query.length)}]`,
+            detail: desc,
+            kind: 'keyword',
+            sortText: tag,
+        }));
+    }
+}
+/**
+ * Word provider - suggests words from document
+ */
+export class WordProvider {
+    constructor() {
+        this.minWordLength = 3;
+        this.maxSuggestions = 10;
+    }
+    shouldTrigger(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        const match = beforeCursor.match(/\b(\w+)$/);
+        return match ? match[1].length >= this.minWordLength : false;
+    }
+    async getSuggestions(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        const match = beforeCursor.match(/\b(\w+)$/);
+        if (!match)
+            return [];
+        const prefix = match[1].toLowerCase();
+        const words = new Set();
+        // Extract all words from document
+        context.documentContent.forEach((line, idx) => {
+            // Skip current line to avoid duplicating partial word
+            if (idx === context.lineNumber)
+                return;
+            const lineWords = line.match(/\b\w+\b/g) || [];
+            lineWords.forEach(word => {
+                if (word.toLowerCase().startsWith(prefix) && word.length > prefix.length) {
+                    words.add(word);
+                }
+            });
+        });
+        return Array.from(words)
+            .slice(0, this.maxSuggestions)
+            .map(word => ({
+            label: word,
+            insertText: word.substring(prefix.length),
+            detail: 'From document',
+            kind: 'text',
+            sortText: word.toLowerCase(),
+        }));
+    }
+}
+/**
+ * Template provider - suggests boilerplate templates
+ */
+export class TemplateProvider {
+    constructor(templates = {}) {
+        this.templates = templates;
+    }
+    async getSuggestions(context) {
+        const beforeCursor = context.currentLine.substring(0, context.cursorPosition);
+        const match = beforeCursor.match(/\b(\w+)$/);
+        if (!match)
+            return [];
+        const query = match[1].toLowerCase();
+        return Object.entries(this.templates)
+            .filter(([name]) => name.toLowerCase().startsWith(query))
+            .map(([name, content]) => ({
+            label: name,
+            insertText: content.substring(query.length),
+            detail: 'Template',
+            kind: 'keyword',
+            sortText: name.toLowerCase(),
+        }));
+    }
+}
+/**
+ * AutocompleteManager - coordinates multiple providers
+ */
+export class AutocompleteManager {
+    constructor(providers = []) {
+        this.providers = [];
+        this.enabled = true;
+        this.providers = providers;
+    }
+    /**
+     * Add a provider
+     */
+    addProvider(provider) {
+        this.providers.push(provider);
+    }
+    /**
+     * Remove a provider
+     */
+    removeProvider(provider) {
+        const index = this.providers.indexOf(provider);
+        if (index > -1) {
+            this.providers.splice(index, 1);
+        }
+    }
+    /**
+     * Enable/disable autocomplete
+     */
+    setEnabled(enabled) {
+        this.enabled = enabled;
+    }
+    /**
+     * Check if autocomplete should trigger
+     */
+    shouldTrigger(context) {
+        if (!this.enabled)
+            return false;
+        return this.providers.some(p => p.shouldTrigger?.(context) ?? true);
+    }
+    /**
+     * Get suggestions from all providers
+     */
+    async getSuggestions(context) {
+        if (!this.enabled)
+            return [];
+        const allSuggestions = [];
+        for (const provider of this.providers) {
+            if (provider.shouldTrigger && !provider.shouldTrigger(context)) {
+                continue;
+            }
+            try {
+                const suggestions = await provider.getSuggestions(context);
+                allSuggestions.push(...suggestions);
+            }
+            catch (error) {
+                console.error('Autocomplete provider error:', error);
+            }
+        }
+        // Sort by sortText or label
+        return allSuggestions.sort((a, b) => {
+            const aSort = a.sortText || a.label;
+            const bSort = b.sortText || b.label;
+            return aSort.localeCompare(bSort);
+        });
+    }
+    /**
+     * Create default manager with built-in providers
+     */
+    static createDefault(options = {}) {
+        const providers = [
+            new WordProvider(),
+            new BBSCodeProvider(),
+        ];
+        if (options.usernames && options.usernames.length > 0) {
+            providers.push(new UsernameProvider(options.usernames));
+        }
+        if (options.templates) {
+            providers.push(new TemplateProvider(options.templates));
+        }
+        return new AutocompleteManager(providers);
+    }
+}

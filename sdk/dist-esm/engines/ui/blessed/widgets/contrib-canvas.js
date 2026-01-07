@@ -1,1 +1,97 @@
-import{Box}from"./box";import{Canvas as InnerCanvas}from"../utils/contrib-utils/drawille-canvas";export class ContribCanvas extends Box{constructor(t={}){super(t),this.options=t;const s=()=>{this.ctx||(this.calcSize(),this._canvas=new InnerCanvas(this.canvasSize.width,this.canvasSize.height),this.ctx=this._canvas.getContext(),this.options.data&&this.setData(this.options.data))};this.screen&&s(),this.on("attach",s)}calcSize(){let t=2*Math.max(8,this.width)-12,s=4*Math.max(4,this.height);t=Math.max(4,t),s=Math.max(4,s),t=2*Math.floor(t/2),s=4*Math.floor(s/4),this.canvasSize={width:t,height:s}}clear(){this.ctx&&this.ctx.clearRect(0,0,this.canvasSize.width,this.canvasSize.height)}setData(t){}syncContent(){if(this.ctx){const t=this.ctx._canvas.frame();super.setContent(t)}}render(){return this.ctx?(this.syncContent(),super.render()):super.render()}get type(){return"canvas"}}export function contribCanvas(t={}){return new ContribCanvas(t)}
+/**
+ * Canvas Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/canvas.js
+ * Provides a canvas widget with Braille-based drawing
+ */
+import { Box } from './box';
+import { Canvas as InnerCanvas } from '../utils/contrib-utils/drawille-canvas';
+/**
+ * Canvas Widget
+ * Box with Braille-based drawing canvas
+ */
+export class ContribCanvas extends Box {
+    constructor(options = {}) {
+        super(options);
+        this.options = options;
+        // Initialize canvas context when attached
+        const initCanvas = () => {
+            if (this.ctx)
+                return; // Already initialized
+            this.calcSize();
+            this._canvas = new InnerCanvas(this.canvasSize.width, this.canvasSize.height);
+            this.ctx = this._canvas.getContext();
+            if (this.options.data) {
+                this.setData(this.options.data);
+            }
+        };
+        // If already attached (parent was specified in options), initialize now
+        if (this.screen) {
+            initCanvas();
+        }
+        // Also listen for future attach events
+        this.on('attach', initCanvas);
+    }
+    /**
+     * Calculate canvas size based on widget dimensions
+     * Braille characters are 2x4 pixels, so we multiply accordingly
+     * Width must be multiple of 2, height must be multiple of 4
+     */
+    calcSize() {
+        // Get widget dimensions, ensuring minimum sizes
+        const widgetWidth = Math.max(8, this.width);
+        const widgetHeight = Math.max(4, this.height);
+        // Calculate canvas size
+        let width = widgetWidth * 2 - 12;
+        let height = widgetHeight * 4;
+        // Ensure minimum canvas size
+        width = Math.max(4, width);
+        height = Math.max(4, height);
+        // Round to required multiples (width: 2, height: 4)
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+    }
+    /**
+     * Clear the canvas
+     */
+    clear() {
+        if (this.ctx) {
+            this.ctx.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
+        }
+    }
+    /**
+     * Set data (override in subclasses)
+     */
+    setData(data) {
+        // Override in subclasses
+    }
+    /**
+     * Sync canvas content to element content
+     * Call this after drawing operations to make content visible
+     */
+    syncContent() {
+        if (this.ctx) {
+            const frame = this.ctx._canvas.frame();
+            super.setContent(frame);
+        }
+    }
+    /**
+     * Render the canvas
+     */
+    render() {
+        if (!this.ctx)
+            return super.render();
+        this.syncContent();
+        return super.render();
+    }
+    get type() {
+        return 'canvas';
+    }
+}
+/**
+ * Factory function
+ */
+export function contribCanvas(options = {}) {
+    return new ContribCanvas(options);
+}

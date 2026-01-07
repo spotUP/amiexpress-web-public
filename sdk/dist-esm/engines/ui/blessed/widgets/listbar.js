@@ -1,1 +1,234 @@
-import{Box}from"./box";import{Button}from"./button";export class Listbar extends Box{constructor(t={}){const e=t.style||{},s=e.item||{},i=e.selected||{},n=s.fg??e.fg??"gray",h=s.bg??e.bg??"blue",c={fg:n,bg:h,...s},l={fg:i.fg??"white",bg:i.bg??"blue",...i};if(super({...t,height:t.height||1,clickable:!0,focusable:!0,style:{fg:n,bg:h,...e}}),this.items=new Map,this.selectedIndex=0,this.itemKeys=[],this.inactiveStyle=c,this.activeStyle=l,this.itemPadding=Math.max(0,t.itemPadding??1),this.itemGap=Math.max(0,t.itemGap??2),this.enableMouse(),this.enableKeys(),t.items)this.setItems(t.items);else if(t.commands){const e={};for(const[s,i]of Object.entries(t.commands))e[s]={text:s,callback:i.callback};this.setItems(e)}this.on("keypress",this._onKeypress.bind(this))}_onKeypress(t,e){return!!this.focused&&("left"===e.name||"h"===e.name?(this.selectPrevious(),this.screen?.render(),!0):"right"===e.name||"l"===e.name?(this.selectNext(),this.screen?.render(),!0):("enter"===e.name||"space"===e.name)&&(this.selectCurrent(),this.screen?.render(),!0))}setItems(t){this.clearItems();let e=0;this.itemKeys=Object.keys(t);for(const[s,i]of Object.entries(t)){const t=i.text||s,n=this.itemPadding,h=n>0?`${" ".repeat(n)}${t}${" ".repeat(n)}`:t,c=new Button({parent:this,top:0,left:e,width:h.length,height:1,content:h,padding:0,align:"center",border:void 0,style:{fg:this.inactiveStyle.fg,bg:this.inactiveStyle.bg,focus:this.activeStyle,hover:this.activeStyle}});if(c.on("press",()=>{i.callback&&i.callback(),this.emit("action",s,i)}),i.keys)for(const t of i.keys)this.key([t],()=>{i.callback&&i.callback(),this.emit("action",s,i)});this.items.set(s,{button:c,item:i}),e+=h.length+this.itemGap}this.itemKeys.length>0&&this.selectItem(0)}clearItems(){for(const[,{button:t}]of this.items)t.destroy();this.items.clear(),this.itemKeys=[],this.selectedIndex=0}selectItem(t){if(t<0||t>=this.itemKeys.length)return;this.selectedIndex=t;const e=this.itemKeys[t],s=this.items.get(e);s&&(this.applySelectionStyles(),s.button.focus(),this.emit("select",e,s.item))}selectPrevious(){const t=(this.selectedIndex-1+this.itemKeys.length)%this.itemKeys.length;this.selectItem(t)}selectNext(){const t=(this.selectedIndex+1)%this.itemKeys.length;this.selectItem(t)}selectCurrent(){const t=this.itemKeys[this.selectedIndex],e=this.items.get(t);e&&e.item.callback&&(e.item.callback(),this.emit("action",t,e.item))}addItem(t,e){const s={};for(const[t,{item:e}]of this.items)s[t]=e;s[t]=e,this.setItems(s)}removeItem(t){const e=this.items.get(t);if(e){e.button.destroy(),this.items.delete(t);const s={};for(const[t,{item:e}]of this.items)s[t]=e;this.setItems(s)}}getItem(t){return this.items.get(t)?.item}getItemKeys(){return[...this.itemKeys]}applySelectionStyles(){this.itemKeys.forEach((t,e)=>{const s=this.items.get(t);if(!s)return;const i=e===this.selectedIndex?this.activeStyle:this.inactiveStyle;s.button.setStyle(i)})}}
+/**
+ * Listbar - Horizontal menu bar widget
+ */
+import { Box } from './box';
+import { Button } from './button';
+export class Listbar extends Box {
+    constructor(options = {}) {
+        const style = options.style || {};
+        const itemStyle = style.item || {};
+        const selectedStyle = style.selected || {};
+        const baseFg = itemStyle.fg ?? style.fg ?? 'gray';
+        const baseBg = itemStyle.bg ?? style.bg ?? 'blue';
+        const inactiveStyle = {
+            fg: baseFg,
+            bg: baseBg,
+            ...itemStyle,
+        };
+        const activeStyle = {
+            fg: selectedStyle.fg ?? 'white',
+            bg: selectedStyle.bg ?? 'blue',
+            ...selectedStyle,
+        };
+        super({
+            ...options,
+            height: options.height || 1,
+            clickable: true,
+            focusable: true,
+            style: {
+                fg: baseFg,
+                bg: baseBg,
+                ...style,
+            },
+        });
+        this.items = new Map();
+        this.selectedIndex = 0;
+        this.itemKeys = [];
+        this.inactiveStyle = inactiveStyle;
+        this.activeStyle = activeStyle;
+        this.itemPadding = Math.max(0, options.itemPadding ?? 1);
+        this.itemGap = Math.max(0, options.itemGap ?? 2);
+        this.enableMouse();
+        this.enableKeys();
+        // Add items - support both 'items' and 'commands' (blessed-contrib compatibility)
+        if (options.items) {
+            this.setItems(options.items);
+        }
+        else if (options.commands) {
+            // Convert commands format to items format
+            const items = {};
+            for (const [key, cmd] of Object.entries(options.commands)) {
+                items[key] = {
+                    text: key,
+                    callback: cmd.callback,
+                };
+            }
+            this.setItems(items);
+        }
+        // Setup navigation keys
+        this.on('keypress', this._onKeypress.bind(this));
+    }
+    _onKeypress(ch, key) {
+        if (!this.focused)
+            return false;
+        if (key.name === 'left' || key.name === 'h') {
+            this.selectPrevious();
+            this.screen?.render();
+            return true;
+        }
+        if (key.name === 'right' || key.name === 'l') {
+            this.selectNext();
+            this.screen?.render();
+            return true;
+        }
+        if (key.name === 'enter' || key.name === 'space') {
+            this.selectCurrent();
+            this.screen?.render();
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Set listbar items
+     */
+    setItems(items) {
+        // Clear existing items
+        this.clearItems();
+        let offset = 0;
+        this.itemKeys = Object.keys(items);
+        for (const [key, item] of Object.entries(items)) {
+            const text = item.text || key;
+            const pad = this.itemPadding;
+            const buttonText = pad > 0 ? `${' '.repeat(pad)}${text}${' '.repeat(pad)}` : text;
+            const button = new Button({
+                parent: this,
+                top: 0,
+                left: offset,
+                width: buttonText.length,
+                height: 1,
+                content: buttonText,
+                padding: 0,
+                align: 'center',
+                border: undefined, // No border for tab buttons
+                style: {
+                    fg: this.inactiveStyle.fg,
+                    bg: this.inactiveStyle.bg,
+                    focus: this.activeStyle,
+                    hover: this.activeStyle,
+                },
+            });
+            button.on('press', () => {
+                if (item.callback) {
+                    item.callback();
+                }
+                this.emit('action', key, item);
+            });
+            // Register item keys
+            if (item.keys) {
+                for (const k of item.keys) {
+                    this.key([k], () => {
+                        if (item.callback) {
+                            item.callback();
+                        }
+                        this.emit('action', key, item);
+                    });
+                }
+            }
+            this.items.set(key, { button, item });
+            offset += buttonText.length + this.itemGap;
+        }
+        // Focus first item
+        if (this.itemKeys.length > 0) {
+            this.selectItem(0);
+        }
+    }
+    /**
+     * Clear all items
+     */
+    clearItems() {
+        for (const [, { button }] of this.items) {
+            button.destroy();
+        }
+        this.items.clear();
+        this.itemKeys = [];
+        this.selectedIndex = 0;
+    }
+    /**
+     * Select item by index
+     */
+    selectItem(index) {
+        if (index < 0 || index >= this.itemKeys.length)
+            return;
+        this.selectedIndex = index;
+        const key = this.itemKeys[index];
+        const item = this.items.get(key);
+        if (item) {
+            this.applySelectionStyles();
+            item.button.focus();
+            this.emit('select', key, item.item);
+        }
+    }
+    /**
+     * Select previous item
+     */
+    selectPrevious() {
+        const newIndex = (this.selectedIndex - 1 + this.itemKeys.length) % this.itemKeys.length;
+        this.selectItem(newIndex);
+    }
+    /**
+     * Select next item
+     */
+    selectNext() {
+        const newIndex = (this.selectedIndex + 1) % this.itemKeys.length;
+        this.selectItem(newIndex);
+    }
+    /**
+     * Select current item (trigger action)
+     */
+    selectCurrent() {
+        const key = this.itemKeys[this.selectedIndex];
+        const item = this.items.get(key);
+        if (item && item.item.callback) {
+            item.item.callback();
+            this.emit('action', key, item.item);
+        }
+    }
+    /**
+     * Add a single item
+     */
+    addItem(key, item) {
+        const currentItems = {};
+        for (const [k, { item: i }] of this.items) {
+            currentItems[k] = i;
+        }
+        currentItems[key] = item;
+        this.setItems(currentItems);
+    }
+    /**
+     * Remove an item
+     */
+    removeItem(key) {
+        const item = this.items.get(key);
+        if (item) {
+            item.button.destroy();
+            this.items.delete(key);
+            // Rebuild listbar
+            const currentItems = {};
+            for (const [k, { item: i }] of this.items) {
+                currentItems[k] = i;
+            }
+            this.setItems(currentItems);
+        }
+    }
+    /**
+     * Get item by key
+     */
+    getItem(key) {
+        return this.items.get(key)?.item;
+    }
+    /**
+     * Get all item keys
+     */
+    getItemKeys() {
+        return [...this.itemKeys];
+    }
+    applySelectionStyles() {
+        this.itemKeys.forEach((key, index) => {
+            const entry = this.items.get(key);
+            if (!entry)
+                return;
+            const style = index === this.selectedIndex ? this.activeStyle : this.inactiveStyle;
+            entry.button.setStyle(style);
+        });
+    }
+}

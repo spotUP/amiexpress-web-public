@@ -1,1 +1,128 @@
-import{ContribCanvas as Canvas}from"./contrib-canvas";export class GaugeList extends Canvas{constructor(t={}){super(t),this._pendingGauges=null,this.options.stroke=this.options.stroke||"magenta",this.options.fill=this.options.fill||"white",this.options.showLabel=!1!==this.options.showLabel,this.options.gaugeSpacing=this.options.gaugeSpacing||0,this.options.gaugeHeight=this.options.gaugeHeight||1;const e=()=>{this._pendingGauges?(this._renderGauges(this._pendingGauges),this._pendingGauges=null):this.options.gauges&&(this.gauges=this.options.gauges,this._renderGauges(this.gauges))};this.screen&&this.ctx&&e(),this.on("attach",e)}calcSize(){let t=Math.max(8,this.width)-2,e=Math.max(4,this.height);t=Math.max(4,t),e=Math.max(4,e),t=2*Math.floor(t/2),e=4*Math.floor(e/4),this.canvasSize={width:t,height:e}}get type(){return"gauge"}setData(){}setGauges(t){this.ctx?this._renderGauges(t):this._pendingGauges=t}_renderGauges(t){if(!this.ctx)return;this.ctx.clearRect(0,0,this.canvasSize.width,this.canvasSize.height);for(let e=0;e<t.length;e++)this.setSingleGauge(t[e],e);this.syncContent()}setSingleGauge(t,e){const s=["green","magenta","cyan","red","blue"],i=t.stack,n=this.ctx;let a=3,o=5;n.strokeStyle="normal",n.fillStyle="white",n.fillText(e.toString(),0,e*(this.options.gaugeHeight+this.options.gaugeSpacing));for(let g=0;g<i.length;g++){const h=i[g];let l;l="object"==typeof h?h.percent:h,n.strokeStyle=("object"==typeof h?h.stroke:void 0)||s[g%s.length],n.fillStyle=this.options.fill,o=5;const r=l/100*(this.canvasSize.width-5);n.fillRect(a,e*(this.options.gaugeHeight+this.options.gaugeSpacing),r,this.options.gaugeHeight-1),o=r/2-1;const u=a+o;a+r<u&&(n.strokeStyle="normal"),t.showLabel&&n.fillText(l+"%",u,3),a+=r}}getOptionsPrototype(){return{gauges:[{showLabel:!0,stack:[{percent:10,stroke:"green"}]}]}}}export function gaugeList(t={}){return new GaugeList(t)}
+/**
+ * Gauge List Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/gauge-list.js
+ * Multiple gauges displayed in a vertical list
+ */
+import { ContribCanvas as Canvas } from './contrib-canvas';
+/**
+ * Gauge List Widget
+ * Displays multiple progress gauges in a vertical list
+ */
+export class GaugeList extends Canvas {
+    constructor(options = {}) {
+        super(options);
+        this._pendingGauges = null;
+        this.options.stroke = this.options.stroke || 'magenta';
+        this.options.fill = this.options.fill || 'white';
+        this.options.showLabel = this.options.showLabel !== false;
+        this.options.gaugeSpacing = this.options.gaugeSpacing || 0;
+        this.options.gaugeHeight = this.options.gaugeHeight || 1;
+        // Apply pending gauges or initial gauges once attached
+        const applyData = () => {
+            if (this._pendingGauges) {
+                this._renderGauges(this._pendingGauges);
+                this._pendingGauges = null;
+            }
+            else if (this.options.gauges) {
+                this.gauges = this.options.gauges;
+                this._renderGauges(this.gauges);
+            }
+        };
+        // If already attached (parent was specified in options), apply data now
+        if (this.screen && this.ctx) {
+            applyData();
+        }
+        // Also listen for future attach events
+        this.on('attach', applyData);
+    }
+    calcSize() {
+        // Get widget dimensions, ensuring minimum sizes
+        const widgetWidth = Math.max(8, this.width);
+        const widgetHeight = Math.max(4, this.height);
+        // Calculate canvas size
+        let width = widgetWidth - 2;
+        let height = widgetHeight;
+        // Ensure minimum canvas size
+        width = Math.max(4, width);
+        height = Math.max(4, height);
+        // Round to required multiples (width: 2, height: 4)
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+    }
+    get type() {
+        return 'gauge';
+    }
+    setData() {
+        // Empty implementation as in original
+    }
+    setGauges(gauges) {
+        if (!this.ctx) {
+            this._pendingGauges = gauges;
+            return;
+        }
+        this._renderGauges(gauges);
+    }
+    _renderGauges(gauges) {
+        if (!this.ctx)
+            return;
+        const c = this.ctx;
+        c.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
+        for (let i = 0; i < gauges.length; i++) {
+            this.setSingleGauge(gauges[i], i);
+        }
+        // Sync canvas content to element
+        this.syncContent();
+    }
+    setSingleGauge(gauge, offset) {
+        const colors = ['green', 'magenta', 'cyan', 'red', 'blue'];
+        const stack = gauge.stack;
+        const c = this.ctx;
+        let leftStart = 3;
+        let textLeft = 5;
+        c.strokeStyle = 'normal';
+        c.fillStyle = 'white';
+        c.fillText(offset.toString(), 0, offset * (this.options.gaugeHeight + this.options.gaugeSpacing));
+        for (let i = 0; i < stack.length; i++) {
+            const currentStack = stack[i];
+            let percent;
+            if (typeof currentStack === 'object') {
+                percent = currentStack.percent;
+            }
+            else {
+                percent = currentStack;
+            }
+            c.strokeStyle =
+                (typeof currentStack === 'object' ? currentStack.stroke : undefined) ||
+                    colors[i % colors.length];
+            c.fillStyle = this.options.fill;
+            textLeft = 5;
+            const width = (percent / 100) * (this.canvasSize.width - 5);
+            c.fillRect(leftStart, offset * (this.options.gaugeHeight + this.options.gaugeSpacing), width, this.options.gaugeHeight - 1);
+            textLeft = width / 2 - 1;
+            const textX = leftStart + textLeft;
+            if (leftStart + width < textX) {
+                c.strokeStyle = 'normal';
+            }
+            if (gauge.showLabel) {
+                c.fillText(percent + '%', textX, 3);
+            }
+            leftStart += width;
+        }
+    }
+    getOptionsPrototype() {
+        return {
+            gauges: [{
+                    showLabel: true,
+                    stack: [{ percent: 10, stroke: 'green' }]
+                }]
+        };
+    }
+}
+/**
+ * Factory function
+ */
+export function gaugeList(options = {}) {
+    return new GaugeList(options);
+}

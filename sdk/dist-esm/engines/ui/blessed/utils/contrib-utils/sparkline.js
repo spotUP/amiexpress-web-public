@@ -1,1 +1,42 @@
-const ticks=["▁","▂","▃","▄","▅","▆","▇","█"];export function sparkline(t,n){if(!t||0===t.length)return"";const i=t.filter(t=>"number"==typeof t&&!isNaN(t));if(0===i.length)return"";const e=void 0!==n?.min?n.min:Math.min(...i),r=void 0!==n?.max?n.max:Math.max(...i);if(e===r)return ticks[0].repeat(i.length);const o=r-e;return i.map(t=>{const n=(t-e)/o,i=Math.min(Math.floor(n*ticks.length),ticks.length-1);return ticks[i]}).join("")}
+/**
+ * Sparkline Generator
+ *
+ * Port of sparkline npm package functionality
+ * Generates sparkline characters (▁▂▃▄▅▆▇█) from number arrays
+ */
+/**
+ * Sparkline characters (8 levels)
+ */
+const ticks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+/**
+ * Generate sparkline from array of numbers
+ * @param numbers Array of numbers to visualize
+ * @param options Options (min, max)
+ * @returns Sparkline string
+ */
+export function sparkline(numbers, options) {
+    if (!numbers || numbers.length === 0) {
+        return '';
+    }
+    // Filter out non-numeric values
+    const validNumbers = numbers.filter((n) => typeof n === 'number' && !isNaN(n));
+    if (validNumbers.length === 0) {
+        return '';
+    }
+    // Get min/max
+    const min = options?.min !== undefined ? options.min : Math.min(...validNumbers);
+    const max = options?.max !== undefined ? options.max : Math.max(...validNumbers);
+    // Handle case where all values are the same
+    if (min === max) {
+        return ticks[0].repeat(validNumbers.length);
+    }
+    const range = max - min;
+    // Map each number to a sparkline character
+    return validNumbers
+        .map((n) => {
+        const normalized = (n - min) / range;
+        const index = Math.min(Math.floor(normalized * ticks.length), ticks.length - 1);
+        return ticks[index];
+    })
+        .join('');
+}

@@ -1,1 +1,221 @@
-import{ContribCanvas as Canvas}from"./contrib-canvas";import{Box}from"./box";import*as utils from"../utils/contrib-utils/utils";export class StackedBar extends Canvas{constructor(t={}){super(t),this._pendingData=null;this.options.barWidth=this.options.barWidth||6,this.options.barSpacing=this.options.barSpacing||9,this.options.barBgColor=this.options.barBgColor||["green","magenta","cyan","red","blue","yellow","white"],this.options.barSpacing-this.options.barWidth<3&&(this.options.barSpacing=this.options.barWidth+3),this.options.xOffset=null==this.options.xOffset?5:this.options.xOffset,!1===this.options.showText?this.options.showText=!1:this.options.showText=!0,this.options.legend=this.options.legend||{},!1===this.options.showLegend?this.options.showLegend=!1:this.options.showLegend=!0;const s=()=>{this._pendingData?(this._renderData(this._pendingData),this._pendingData=null):this.options.data&&this._renderData(this.options.data)};this.screen&&this.ctx&&s(),this.on("attach",s)}calcSize(){let t=2*(Math.max(8,this.width)-2),s=4*Math.max(4,this.height);t=Math.max(16,t),s=Math.max(16,s),t=2*Math.floor(t/2),s=4*Math.floor(s/4),this.canvasSize={width:t,height:s}}getSummedBars(t){const s=[];return t.forEach(function(t){const i=t.reduce(function(t,s){return t+s},0);s.push(i)}),s}setData(t){this.ctx?this._renderData(t):this._pendingData=t}_renderData(t){if(!this.ctx)return;this.clear();const s=this.getSummedBars(t.data);let i=Math.max(...s);this.options.maxValue&&(i=Math.max(i,this.options.maxValue));let o=this.options.xOffset;for(let e=0;e<t.data.length;e++)this.renderBar(o,t.data[e],s[e],i,t.barCategory[e]),o+=this.options.barSpacing;this.addLegend(t,o),this.syncContent()}renderBar(t,s,i,o,e){const n=(this.options.border?2:0)+(this.options.showText?1:0),a=this.ctx;if(a.strokeStyle="normal",a.fillStyle="white",this.options.labelColor&&(a.fillStyle=this.options.labelColor),this.options.showText&&a.fillText(e,t+1,this.canvasSize.height-n),i<0)return;const h=this.canvasSize.height-2-n,r=Math.round(h*(i/o));let l=h+2,d=r;for(let o=0;o<s.length;o++){const e=this.renderBarSection(t,l,s[o],i,r,d,this.options.barBgColor[o]);l-=e,d-=e}}renderBarSection(t,s,i,o,e,n,a){const h=this.ctx,r=e<=0?0:Math.min(n,Math.round(e*(i/o)));if(h.strokeStyle=a,r>0){const o=s-r,e=Math.max(0,r-1);if(h.fillRect(t,o,this.options.barWidth,e),h.fillStyle="white",this.options.barFgColor&&(h.fillStyle=this.options.barFgColor),this.options.showText){const s=String(utils.abbreviateNumber(i));h.fillText(s,Math.floor(t+this.options.barWidth/2+s.length/2),o+Math.round(e/2))}}return r}addLegend(t,s){const i=this;if(!this.options.showLegend)return;this.legend&&i.remove(this.legend);const o=this.options.legend.width||15;this.legend=new Box({height:t.stackedCategory.length+2,top:1,width:o,left:s,content:"",tags:!0,border:{type:"line",fg:"black"},style:{fg:"green"},screen:i.screen});let e="";const n=o-2;for(let s=0;s<t.stackedCategory.length;s++){const i=utils.getColorCode(this.options.barBgColor[s]);e+="{"+i+"-fg}"+t.stackedCategory[s].substring(0,n)+"{/"+i+"-fg}\r\n"}this.legend.setContent(e),i.append(this.legend)}getOptionsPrototype(){return{barWidth:1,barSpacing:1,xOffset:1,maxValue:1,barBgColor:["s"],data:{barCategory:["s"],stackedCategory:["s"],data:[[1]]}}}get type(){return"bar"}}export function stackedBar(t={}){return new StackedBar(t)}
+/**
+ * Stacked Bar Chart Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/charts/stacked-bar.js
+ * Vertical stacked bar chart with legend
+ */
+import { ContribCanvas as Canvas } from './contrib-canvas';
+import { Box } from './box';
+import * as utils from '../utils/contrib-utils/utils';
+/**
+ * Stacked Bar Chart Widget
+ * Displays vertical stacked bars with legend
+ */
+export class StackedBar extends Canvas {
+    constructor(options = {}) {
+        super(options);
+        this._pendingData = null;
+        const self = this; // Cast to access base properties like screen, on, append, remove
+        this.options.barWidth = this.options.barWidth || 6;
+        this.options.barSpacing = this.options.barSpacing || 9;
+        this.options.barBgColor = this.options.barBgColor || [
+            'green', 'magenta', 'cyan', 'red', 'blue', 'yellow', 'white'
+        ];
+        if (this.options.barSpacing - this.options.barWidth < 3) {
+            this.options.barSpacing = this.options.barWidth + 3;
+        }
+        this.options.xOffset = this.options.xOffset == null ? 5 : this.options.xOffset;
+        if (this.options.showText === false) {
+            this.options.showText = false;
+        }
+        else {
+            this.options.showText = true;
+        }
+        this.options.legend = this.options.legend || {};
+        if (this.options.showLegend === false) {
+            this.options.showLegend = false;
+        }
+        else {
+            this.options.showLegend = true;
+        }
+        // Apply pending data or initial data once attached
+        const applyData = () => {
+            if (this._pendingData) {
+                this._renderData(this._pendingData);
+                this._pendingData = null;
+            }
+            else if (this.options.data) {
+                this._renderData(this.options.data);
+            }
+        };
+        // If already attached (parent was specified in options), apply data now
+        if (self.screen && this.ctx) {
+            applyData();
+        }
+        // Also listen for future attach events
+        self.on('attach', applyData);
+    }
+    calcSize() {
+        // Get widget dimensions, ensuring minimum sizes
+        const widgetWidth = Math.max(8, this.width);
+        const widgetHeight = Math.max(4, this.height);
+        // Calculate canvas size with braille multipliers
+        // Each terminal cell = 2 braille pixels wide, 4 braille pixels tall
+        let width = (widgetWidth - 2) * 2;
+        let height = widgetHeight * 4;
+        // Ensure minimum canvas size for bar rendering
+        width = Math.max(16, width);
+        height = Math.max(16, height);
+        // Round to required multiples (width: 2, height: 4) for braille mapping
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+    }
+    getSummedBars(bars) {
+        const res = [];
+        bars.forEach(function (stackedValues) {
+            const sum = stackedValues.reduce(function (a, b) {
+                return a + b;
+            }, 0);
+            res.push(sum);
+        });
+        return res;
+    }
+    setData(bars) {
+        if (!this.ctx) {
+            // Defer rendering until attached to screen
+            this._pendingData = bars;
+            return;
+        }
+        this._renderData(bars);
+    }
+    _renderData(bars) {
+        if (!this.ctx)
+            return;
+        this.clear();
+        const summedBars = this.getSummedBars(bars.data);
+        let maxBarValue = Math.max(...summedBars);
+        if (this.options.maxValue) {
+            maxBarValue = Math.max(maxBarValue, this.options.maxValue);
+        }
+        let x = this.options.xOffset;
+        for (let i = 0; i < bars.data.length; i++) {
+            this.renderBar(x, bars.data[i], summedBars[i], maxBarValue, bars.barCategory[i]);
+            x += this.options.barSpacing;
+        }
+        this.addLegend(bars, x);
+        // Sync canvas content to element
+        this.syncContent();
+    }
+    renderBar(x, bar, curBarSummedValue, maxBarValue, category) {
+        // First line is for label
+        const BUFFER_FROM_TOP = 2;
+        const BUFFER_FROM_BOTTOM = (this.options.border ? 2 : 0) + (this.options.showText ? 1 : 0);
+        const c = this.ctx;
+        c.strokeStyle = 'normal';
+        c.fillStyle = 'white';
+        if (this.options.labelColor) {
+            c.fillStyle = this.options.labelColor;
+        }
+        if (this.options.showText) {
+            c.fillText(category, x + 1, this.canvasSize.height - BUFFER_FROM_BOTTOM);
+        }
+        if (curBarSummedValue < 0)
+            return;
+        const maxBarHeight = this.canvasSize.height - BUFFER_FROM_TOP - BUFFER_FROM_BOTTOM;
+        const currentBarHeight = Math.round(maxBarHeight * (curBarSummedValue / maxBarValue));
+        // Start painting from bottom of bar, section by section
+        let y = maxBarHeight + BUFFER_FROM_TOP;
+        let availableBarHeight = currentBarHeight;
+        for (let i = 0; i < bar.length; i++) {
+            const currStackHeight = this.renderBarSection(x, y, bar[i], curBarSummedValue, currentBarHeight, availableBarHeight, this.options.barBgColor[i]);
+            y -= currStackHeight;
+            availableBarHeight -= currStackHeight;
+        }
+    }
+    renderBarSection(x, y, data, curBarSummedValue, currentBarHeight, availableBarHeight, bg) {
+        const c = this.ctx;
+        const currStackHeight = currentBarHeight <= 0
+            ? 0
+            : Math.min(availableBarHeight, // round() can make total stacks exceed curr bar height so we limit it
+            Math.round(currentBarHeight * (data / curBarSummedValue)));
+        c.strokeStyle = bg;
+        if (currStackHeight > 0) {
+            const calcY = y - currStackHeight;
+            // fillRect starts from the point bottom of start point so we compensate
+            const calcHeight = Math.max(0, currStackHeight - 1);
+            c.fillRect(x, calcY, this.options.barWidth, calcHeight);
+            c.fillStyle = 'white';
+            if (this.options.barFgColor) {
+                c.fillStyle = this.options.barFgColor;
+            }
+            if (this.options.showText) {
+                const str = String(utils.abbreviateNumber(data));
+                c.fillText(str, Math.floor(x + this.options.barWidth / 2 + str.length / 2), calcY + Math.round(calcHeight / 2));
+            }
+        }
+        return currStackHeight;
+    }
+    addLegend(bars, x) {
+        const self = this;
+        if (!this.options.showLegend)
+            return;
+        if (this.legend)
+            self.remove(this.legend);
+        const legendWidth = this.options.legend.width || 15;
+        this.legend = new Box({
+            height: bars.stackedCategory.length + 2,
+            top: 1,
+            width: legendWidth,
+            left: x,
+            content: '',
+            tags: true,
+            border: {
+                type: 'line',
+                fg: 'black'
+            },
+            style: {
+                fg: 'green'
+            },
+            screen: self.screen
+        });
+        let legendText = '';
+        const maxChars = legendWidth - 2;
+        for (let i = 0; i < bars.stackedCategory.length; i++) {
+            const color = utils.getColorCode(this.options.barBgColor[i]);
+            legendText +=
+                '{' +
+                    color +
+                    '-fg}' +
+                    bars.stackedCategory[i].substring(0, maxChars) +
+                    '{/' +
+                    color +
+                    '-fg}\r\n';
+        }
+        this.legend.setContent(legendText);
+        self.append(this.legend);
+    }
+    getOptionsPrototype() {
+        return {
+            barWidth: 1,
+            barSpacing: 1,
+            xOffset: 1,
+            maxValue: 1,
+            barBgColor: ['s'],
+            data: {
+                barCategory: ['s'],
+                stackedCategory: ['s'],
+                data: [[1]]
+            }
+        };
+    }
+    get type() {
+        return 'bar';
+    }
+}
+/**
+ * Factory function
+ */
+export function stackedBar(options = {}) {
+    return new StackedBar(options);
+}

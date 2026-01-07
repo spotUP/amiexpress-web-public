@@ -1,1 +1,92 @@
-export class Video{constructor(e){this.activeStreams=[],this.frameHandler=null,this.socket=e,this.setupHandlers()}setupHandlers(){this.socket.on("video:streams-update",e=>{this.activeStreams=e}),this.socket.on("video:frame",e=>{this.frameHandler&&this.frameHandler(e.frame)})}onFrame(e){this.frameHandler=e}async startStream(e,s){return new Promise((t,r)=>{this.socket.emit("video:start-stream",{source:e,options:s},e=>{e&&e.success?t(e.streamId):r(new Error(e?.error||"Failed to start video stream"))})})}async stopStream(e){return new Promise((s,t)=>{this.socket.emit("video:stop-stream",{streamId:e},e=>{e&&e.success?s():t(new Error(e?.error||"Failed to stop video stream"))})})}async subscribe(e){return new Promise((s,t)=>{this.socket.emit("video:subscribe",{streamId:e},e=>{e&&e.success?s():t(new Error(e?.error||"Failed to subscribe to video stream"))})})}async unsubscribe(e){return new Promise(s=>{this.socket.emit("video:unsubscribe",{streamId:e},()=>{s()})})}async getStreams(){return new Promise(e=>{this.socket.emit("video:get-streams",s=>{this.activeStreams=s,e(s)})})}async pauseStream(e){return new Promise(s=>{this.socket.emit("video:pause-stream",{streamId:e},()=>{s()})})}async resumeStream(e){return new Promise(s=>{this.socket.emit("video:resume-stream",{streamId:e},()=>{s()})})}}
+/**
+ * Video API Implementation
+ *
+ * Provides real-time ASCII video streaming capabilities for doors.
+ * Converts video sources (webcam, files, URLs) to ASCII art with 16-color ANSI palette.
+ */
+export class Video {
+    constructor(socket) {
+        this.activeStreams = [];
+        this.frameHandler = null;
+        this.socket = socket;
+        this.setupHandlers();
+    }
+    setupHandlers() {
+        this.socket.on('video:streams-update', (streams) => {
+            this.activeStreams = streams;
+        });
+        this.socket.on('video:frame', (data) => {
+            if (this.frameHandler) {
+                this.frameHandler(data.frame);
+            }
+        });
+    }
+    onFrame(handler) {
+        this.frameHandler = handler;
+    }
+    async startStream(source, options) {
+        return new Promise((resolve, reject) => {
+            this.socket.emit('video:start-stream', { source, options }, (response) => {
+                if (response && response.success) {
+                    resolve(response.streamId);
+                }
+                else {
+                    reject(new Error(response?.error || 'Failed to start video stream'));
+                }
+            });
+        });
+    }
+    async stopStream(streamId) {
+        return new Promise((resolve, reject) => {
+            this.socket.emit('video:stop-stream', { streamId }, (response) => {
+                if (response && response.success) {
+                    resolve();
+                }
+                else {
+                    reject(new Error(response?.error || 'Failed to stop video stream'));
+                }
+            });
+        });
+    }
+    async subscribe(streamId) {
+        return new Promise((resolve, reject) => {
+            this.socket.emit('video:subscribe', { streamId }, (response) => {
+                if (response && response.success) {
+                    resolve();
+                }
+                else {
+                    reject(new Error(response?.error || 'Failed to subscribe to video stream'));
+                }
+            });
+        });
+    }
+    async unsubscribe(streamId) {
+        return new Promise((resolve) => {
+            this.socket.emit('video:unsubscribe', { streamId }, () => {
+                resolve();
+            });
+        });
+    }
+    async getStreams() {
+        return new Promise((resolve) => {
+            this.socket.emit('video:get-streams', (streams) => {
+                this.activeStreams = streams;
+                resolve(streams);
+            });
+        });
+    }
+    async pauseStream(streamId) {
+        return new Promise((resolve) => {
+            this.socket.emit('video:pause-stream', { streamId }, () => {
+                resolve();
+            });
+        });
+    }
+    async resumeStream(streamId) {
+        return new Promise((resolve) => {
+            this.socket.emit('video:resume-stream', { streamId }, () => {
+                resolve();
+            });
+        });
+    }
+}

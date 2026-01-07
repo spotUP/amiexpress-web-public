@@ -1,1 +1,2170 @@
-import{Element}from"./element";import{Program}from"./program";import{cursor,screen as screenAnsi,attrs,blend}from"./colors";import{KeyBindings}from"./keybindings";import{ResponsiveLayoutManager}from"./responsive-layout";export class Screen extends Element{constructor(t={}){const e=t.responsive&&t.width||80,s=t.responsive?t.height||24:Math.min(t.height||24,25),i={...t.style||{}};void 0===i.bg&&(i.bg="black"),super({...t,style:i,left:0,top:0,width:e,height:s}),this._focused=null,this.focusHistory=[],this.focusStack=[],this.savedFocus=null,this.focusTrap=null,this.buffer=[],this.lastBuffer=[],this.dirty=!0,this._renderPending=!1,this._renderTimer=null,this._dirtyMinX=1/0,this._dirtyMinY=1/0,this._dirtyMaxX=-1/0,this._dirtyMaxY=-1/0,this._mouseIndex=[],this._mouseIndexValid=!1,this._hoveredElements=new Set,this.title="",this.cursorHidden=!0,this.cursorX=0,this.cursorY=0,this._dragging=null,this.keyHandlers=new Map,this.keyBindings=new KeyBindings,this._contextMenuHandler=null,this._responsive=!1,this._locked=!1,this._lockKeys=!1,this._hoverText=null,this._width=e,this._height=s,this._responsive=t.responsive||!1,this.screen=this,this.output=t.output||(t=>{"undefined"!=typeof process&&process.stdout&&process.stdout.write(t)}),this.program=new Program({output:this.output,terminal:t.terminal||"ansi",buffer:!0,title:t.title}),this.program.cols=this._width,this.program.rows=this._height,this.clearBuffers(),t.title&&this.setTitle(t.title),this.cursorHidden&&this.write(cursor.hide);const r={enableAutoResize:!1!==t.responsive,breakpoints:t.breakpoints};this.responsiveLayout=new ResponsiveLayoutManager(this,r),this.setupKeyRouting(),this.setupMouseRouting(),this.setupBrowserContextMenu()}setupBrowserContextMenu(){const t="undefined"!=typeof globalThis?globalThis.window:void 0,e="undefined"!=typeof globalThis?globalThis.document:void 0;t&&e&&(this._contextMenuHandler=t=>(t.preventDefault(),t.stopPropagation(),!1),e.addEventListener("contextmenu",this._contextMenuHandler,!0))}setupKeyRouting(){this.program.removeAllListeners("keypress"),this.program.on("keypress",(t,e)=>{this._handleKey(t,e)})}setupMouseRouting(){this.program.on("mouse",t=>{this.handleMouseEvent(t)})}handleMouseEvent(t){if(this.emit("mouse",t),this.emit(t.action,t),this._dragging)return void this._dragging.onMouse(t);const e=this.getElementsAt(t.x,t.y),s=new Set(e);for(const t of this._hoveredElements)s.has(t)||(t.onMouseLeave(),this._hoveredElements.delete(t));for(const t of e)this._hoveredElements.has(t)||this._hoveredElements.add(t);for(const s of e.slice().reverse())if(s.onMouse(t))break}_rebuildMouseIndex(){this._mouseIndex=[];for(let t=0;t<this.height;t++){this._mouseIndex[t]=[];for(let e=0;e<this.width;e++)this._mouseIndex[t][e]=[]}this.walk(t=>{if(t.hidden||!t.visible)return;const e=t._getCoords();if(e)for(let s=Math.max(0,e.yi);s<Math.min(this.height,e.yl);s++)for(let i=Math.max(0,e.xi);i<Math.min(this.width,e.xl);i++)this._mouseIndex[s][i].push(t)}),this._mouseIndexValid=!0}invalidateMouseIndex(){this._mouseIndexValid=!1}getElementsAt(t,e){if(this._mouseIndexValid&&e>=0&&e<this.height&&t>=0&&t<this.width)return[...this._mouseIndex[e][t]||[]];const s=[];return this.walk(i=>{i.hasMouseOver(t,e)&&!i.hidden&&i.visible&&s.push(i)}),s}walk(t){const e=s=>{t(s);for(const t of s.children)e(t)};for(const t of this.children)e(t)}enableMouse(){this.program.enableMouse()}disableMouse(){this.program.disableMouse()}write(t){this.program.write(t)}getOutput(){const t=this.program._buf||"";return this.program._buf="",t}setDimensions(t,e){if(void 0!==t&&(!isFinite(t)||t<=0))return;if(void 0!==e&&(!isFinite(e)||e<=0))return;const s=this._responsive?e||this._width:80,i=this._responsive?t||this._height:Math.min(t||23,23),r=this._responsive?i:i+2;this._width=s,this._height=r,this.program.cols=s,this.program.rows=r,this.clearBuffers(),this.walk(t=>{t._coordsCacheValid=!1}),this.dirty=!0}getDimensions(){return{width:this._width,height:this._height}}flush(){this.program.flush()}clearBuffers(){this.buffer=[],this.lastBuffer=[];for(let t=0;t<this.height;t++){this.buffer[t]=[],this.lastBuffer[t]=[];for(let e=0;e<this.width;e++)this.buffer[t][e]=[0," "],this.lastBuffer[t][e]=[0," "]}}forceFullRedraw(){for(let t=0;t<this.height;t++)if(this.lastBuffer[t])for(let e=0;e<this.width;e++)this.lastBuffer[t][e]=[-1,"\0"]}alloc(){const t=[];for(let e=0;e<this.height;e++){t[e]=[];for(let s=0;s<this.width;s++)t[e][s]=[0," "]}return t}realloc(){const t=this.buffer,e=this.lastBuffer;this.buffer=this.alloc(),this.lastBuffer=this.alloc();for(let s=0;s<Math.min(this.height,t.length);s++)for(let i=0;i<Math.min(this.width,t[s].length);i++)this.buffer[s][i]=t[s][i],this.lastBuffer[s][i]=e[s][i]}lock(){this._locked=!0}unlock(){this._locked=!1,this.render()}blankLine(t=" ",e=0){const s=[];for(let i=0;i<this.width;i++)s[i]=[e,t];return s}clearRegion(t,e,s,i){for(let r=s;r<i;r++)if(!(r<0||r>=this.height))for(let s=t;s<e;s++)s<0||s>=this.width||(this.buffer[r][s]=[0," "]);this._markDirty(t,s,e-1,i-1)}fillRegion(t,e,s,i,r,o){const h=511===(511&t);for(let n=r;n<o;n++)if(!(n<0||n>=this.height))for(let r=s;r<i;r++)if(!(r<0||r>=this.width))if(h){if(" "===e||""===e)continue;const s=-512&t|511&this.buffer[n][r][0];this.buffer[n][r]=[s,e]}else this.buffer[n][r]=[t,e];this._markDirty(s,r,i-1,o-1)}packAttr(t,e,s){return t<<18|e<<9|s}unpackAttr(t){return{flags:t>>18&511,fg:t>>9&511,bg:511&t}}attrToAnsi(t){const e=t>>18&511;let s=t>>9&511,i=511&t,r="0;";return 1&e&&(r+="1;"),2&e&&(r+="4;"),4&e&&(r+="5;"),8&e&&(r+="7;"),16&e&&(r+="8;"),r+=511===i?"40;":i<16?i<8?i+40+";":i-8+100+";":"48;5;"+i+";",r+=511===s?"37;":s<16?s<8?s+30+";":s-8+90+";":"38;5;"+s+";",";"===r[r.length-1]&&(r=r.slice(0,-1)),"["+r+"m"}styleToAttr(t){let e=0,s=511,i=0;return t.bold&&(e|=1),t.underline&&(e|=2),t.blink&&(e|=4),t.inverse&&(e|=8),t.invisible&&(e|=16),void 0!==t.fg&&(s=this._colorToCode(t.fg)),void 0!==t.bg&&(i=this._colorToCode(t.bg)),this.packAttr(e,s,i)}render(){this.destroyed||this._locked||this._renderPending||(this._renderPending=!0,this._renderTimer&&clearTimeout(this._renderTimer),this._renderTimer=setTimeout(()=>{this._renderPending=!1,this._renderTimer=null,this._doRender()},16))}_doRender(){if(this.destroyed)return;this._hasRendered||(this._hasRendered=!0,this.write("[0m"),this.write("[2J"),this.write("[H")),this._markDirty(0,0,this.width-1,this.height-1);const t=this.buffer.length,e=t>0?this.buffer[0].length:0;for(let s=0;s<t;s++)for(let t=0;t<e;t++)this.buffer[s][t]=[261632," "];this._renderElement(this),this.options.dockBorders&&this._dockBorders(),this._diff(),this.dirty=!1,this._rebuildMouseIndex(),this.emit("render")}_renderElement(t){if(!t.visible||t.hidden||t.destroyed)return;const e=t._getCoords();if(!e)return;t.options.shadow&&this._renderShadow(e),this._renderContent(t,e),t.options.border&&this._renderBorder(t,e),t.hasScrollbar?.()&&t.renderScrollbar&&t.renderScrollbar();const s=[...t.children].sort((t,e)=>(t.options.zIndex||0)-(e.options.zIndex||0));for(const t of s)this._renderElement(t)}_renderShadow(t){const{xi:e,xl:s,yi:i,yl:r}=t;this._markDirty(s,i+1,s+1,r),this._markDirty(e+1,r,s-1,r);let o=Math.max(i+1,0);for(;o<r+1&&this.buffer[o];o++){let t=s;for(;t<s+2&&this.buffer[o][t];t++)this.buffer[o][t][0]=blend(this.buffer[o][t][0])}for(o=r;o<r+1&&this.buffer[o];o++)for(let t=Math.max(e+1,0);t<s&&this.buffer[o][t];t++)this.buffer[o][t][0]=blend(this.buffer[o][t][0])}_renderContent(t,e){const s=t.getVisibleLines?t.getVisibleLines():t.getLines(),i=t.options.padding||0,r=t.options.border&&"none"!==t.options.border?.type?1:0,o="number"==typeof i?i:i.left||0,h="number"==typeof i?i:i.top||0,n="number"==typeof i?i:i.bottom||0,l="number"==typeof i?i:i.right||0,f=e.yi+r+h,u=e.xi+r+o,d=e.yl-r-n,a=e.xl-r-l;this._markDirty(u,f,a-1,d-1);const c=this._responsive?a:Math.min(a,80);let g=t.options.style||{};const p=t.options.style?.focus,_=t.options.style?.hover,b=t.options.style?.disabled;t.disabled&&b?g={...g,...b}:t.focused&&p?g={...g,...p}:t._hovered&&_&&(g={...g,..._});const m=this.styleToAttr(g),y=!!g.transparent,w=511===(511&m),x=t.options.ch||" ";if(y){for(let t=f;t<d;t++)if(!(t<0||t>=this.height))for(let e=u;e<c;e++){if(e<0||e>=this.width)continue;const s=this.buffer[t][e][0],i=this.buffer[t][e][1],r=blend(m,s);this.buffer[t][e]=[r,i]}}else if(!w)for(let t=f;t<d;t++)if(!(t<0||t>=this.height))for(let e=u;e<c;e++)e<0||e>=this.width||(this.buffer[t][e]=[m,x]);for(let t=0;t<s.length;t++){const e=f+t;if(e<0||e>=this.height||e>=d)continue;const i=s[t];let r=m,o=u,h=0;for(;h<i.length&&o<c;){if(""===i[h]&&"["===i[h+1]){let t=h+2;for(;t<i.length&&!/[mK]/.test(i[t]);)t++;if(t<i.length&&"m"===i[t]){const e=i.slice(h+2,t);r=this._parseAnsiToAttr(e,r,m),h=t+1;continue}h=t+1;continue}if(o>=0&&o<this.width)if(y){const t=this.buffer[e][o][0],s=blend(r,t);this.buffer[e][o]=[s,i[h]]}else this.buffer[e][o]=[r,i[h]];o++,h++}}}_parseAnsiToAttr(t,e,s){const i=(t.length?t.split(";"):["0"]).map(t=>{const e=parseInt(t,10);return Number.isNaN(e)?0:e});let{flags:r,fg:o,bg:h}=this.unpackAttr(e);const n=this.unpackAttr(s);for(let t=0;t<i.length;t++){const e=i[t];0===e?(r=n.flags,o=n.fg,h=n.bg):1===e?r|=1:4===e?r|=2:5===e?r|=4:7===e?r|=8:8===e?r|=16:22===e?r&=-2:24===e?r&=-3:25===e?r&=-5:27===e?r&=-9:28===e?r&=-17:e>=30&&e<=37?o=e-30:e>=90&&e<=97?o=e-90+8:39===e?o=n.fg:e>=40&&e<=47?h=e-40:e>=100&&e<=107?h=e-100+8:49===e?h=n.bg:38===e&&5===i[t+1]&&"number"==typeof i[t+2]?(o=Math.max(0,Math.min(255,i[t+2])),t+=2):48===e&&5===i[t+1]&&"number"==typeof i[t+2]&&(h=Math.max(0,Math.min(255,i[t+2])),t+=2)}return this.packAttr(r,o,h)}_renderBorder(t,e){const s=t.options.border;if(!s)return;const i="string"==typeof s?s:s?.type||"line";if("none"===i)return;this._markDirty(e.xi,e.yi,e.xl-1,e.yl-1);const r={line:{tl:"┌",tr:"┐",bl:"└",br:"┘",h:"─",v:"│"},heavy:{tl:"┏",tr:"┓",bl:"┗",br:"┛",h:"━",v:"┃"},double:{tl:"╔",tr:"╗",bl:"╚",br:"╝",h:"═",v:"║"},round:{tl:"╭",tr:"╮",bl:"╰",br:"╯",h:"─",v:"│"},ascii:{tl:".",tr:".",bl:"`",br:"'",h:"-",v:"|"},bg:{tl:" ",tr:" ",bl:" ",br:" ",h:" ",v:" "}},o=r[i]??r.line;let h=t.options.style?.border||{};if(t.disabled){const e=t.options.style?.disabled;h=e?.border?{...h,...e.border}:{...h,fg:"gray"}}else if(t._overBorder){const e=t.options.style?.hover;h=e?.border?{...h,...e.border}:{...h,fg:"white",bold:!0}}else if(t.hasFocusedChild()){const e=t.options.style?.focus;h=e?.border?{...h,...e.border}:{...h,fg:"cyan",bold:!0}}const n=this.styleToAttr(h),l="object"==typeof s&&s.labelStyle?s.labelStyle:h||{},f=this.styleToAttr(l);if(e.yi>=0&&e.yi<this.height)for(let t=e.xi;t<e.xl;t++){if(t<0||t>=this.width)continue;let s=o.h;t===e.xi?s=o.tl:t===e.xl-1&&(s=o.tr),this.buffer[e.yi][t]=[n,s]}if(e.yl-1>=0&&e.yl-1<this.height)for(let t=e.xi;t<e.xl;t++){if(t<0||t>=this.width)continue;let s=o.h;t===e.xi?s=o.bl:t===e.xl-1&&(s=o.br),this.buffer[e.yl-1][t]=[n,s]}for(let t=e.yi+1;t<e.yl-1;t++)t<0||t>=this.height||(e.xi>=0&&e.xi<this.width&&(this.buffer[t][e.xi]=[n,o.v]),e.xl-1>=0&&e.xl-1<this.width&&(this.buffer[t][e.xl-1]=[n,o.v]));if(t.options.label){const s=String(t.options.label).trim();if("ascii"===i)this._renderAsciiLabel(e,s,f,n);else{const t=` ${s} `;let i=e.xi+2;for(let s=0;s<t.length&&i<e.xl-1;s+=1,i+=1)i>=0&&i<this.width&&(this.buffer[e.yi][i]=[f,t[s]])}}}_dockBorders(){for(let t=0;t<this.height;t++)for(let e=0;e<this.width;e++){const s=this.buffer[t][e][1];ANGLES[s]&&(this.buffer[t][e][1]=this._getAngle(this.buffer,e,t,s))}}_renderAsciiLabel(t,e,s,i){if(!e)return;const r=`[ ${e} ]`,o=Math.max(0,t.xl-t.xi-2),h=r.length>o?r.slice(0,o):r,n=t.xi+3,l=Math.max(t.xi+1,t.xl-h.length-1),f=n<=l?n:l;for(let e=0;e<h.length&&f+e<t.xl-1;e+=1){const i=f+e;i>=0&&i<this.width&&(this.buffer[t.yi][i]=[s,h[e]])}for(let e=t.xi+1;e<f&&e<this.width;e+=1)e>=0&&(this.buffer[t.yi][e]=[i,"-"]);for(let e=f+h.length;e<t.xl-1&&e<this.width;e+=1)e>=0&&(this.buffer[t.yi][e]=[i,"-"])}_getAngle(t,e,s,i){let r=0;const o=t[s][e][0];if(t[s][e-1]&&L_ANGLES[t[s][e-1][1]]){if(!this.options.ignoreDockContrast&&t[s][e-1][0]!==o)return i;r|=8}if(t[s-1]&&U_ANGLES[t[s-1][e][1]]){if(!this.options.ignoreDockContrast&&t[s-1][e][0]!==o)return i;r|=4}if(t[s][e+1]&&R_ANGLES[t[s][e+1][1]]){if(!this.options.ignoreDockContrast&&t[s][e+1][0]!==o)return i;r|=2}if(t[s+1]&&D_ANGLES[t[s+1][e][1]]){if(!this.options.ignoreDockContrast&&t[s+1][e][0]!==o)return i;r|=1}return ANGLE_TABLE[r]||i}_markDirty(t,e,s,i){this._dirtyMinX=Math.min(this._dirtyMinX,t),this._dirtyMinY=Math.min(this._dirtyMinY,e),this._dirtyMaxX=Math.max(this._dirtyMaxX,s),this._dirtyMaxY=Math.max(this._dirtyMaxY,i)}_diff(){const t=[];let e=-1,s=-1,i=-1,r=this._dirtyMinY,o=this._dirtyMaxY,h=this._dirtyMinX,n=this._dirtyMaxX;const l=this.buffer.length,f=l>0?this.buffer[0].length:0;r>o||h>n?(r=0,o=l-1,h=0,n=f-1):(r=Math.max(0,Math.min(r,l-1)),o=Math.max(0,Math.min(o,l-1)),h=Math.max(0,Math.min(h,f-1)),n=Math.max(0,Math.min(n,f-1)));for(let l=r;l<=o;l++)for(let r=h;r<=n;r++){const[o,h]=this.buffer[l][r],[n,f]=this.lastBuffer[l][r];o===n&&h===f||(r===e+1&&l===s||t.push(cursor.pos(r,l)),o!==i&&(t.push(this.attrToAnsi(o)),i=o),t.push(h),this.lastBuffer[l][r]=[o,h],e=r,s=l)}t.length>0&&this.write(t.join("")),this._dirtyMinX=1/0,this._dirtyMinY=1/0,this._dirtyMaxX=-1/0,this._dirtyMaxY=-1/0}draw(t,e){this.render()}_insertBufferLine(t,e,s,i){if(!(t<=0)){for(let s=i-1;s>=e+t;s--)this.buffer[s]=this.buffer[s-t],this.lastBuffer[s]=this.lastBuffer[s-t];for(let s=e;s<e+t;s++)this.buffer[s]=this.blankLine(),this.lastBuffer[s]=this.blankLine()}}_deleteBufferLine(t,e,s,i){if(!(t<=0)){for(let s=e;s<i-t;s++)this.buffer[s]=this.buffer[s+t],this.lastBuffer[s]=this.lastBuffer[s+t];for(let e=i-t;e<i;e++)this.buffer[e]=this.blankLine(),this.lastBuffer[e]=this.blankLine()}}insertBottomLines(t,e,s=1){this._insertBufferLine(s,e-s,t,e)}deleteBottomLines(t,e,s=1){this._deleteBufferLine(s,e-s,t,e)}insertTopLines(t,e,s=1){this._insertBufferLine(s,t,t,e)}deleteTopLines(t,e,s=1){this._deleteBufferLine(s,t,t,e)}scrollUp(t=1){this.deleteTopLines(0,this.height,t)}scrollDown(t=1){this.insertTopLines(0,this.height,t)}insertBufferLines(t,e,s,i){this._insertBufferLine(t,e,s,i)}deleteBufferLines(t,e,s,i){this._deleteBufferLine(t,e,s,i)}insertBufferTop(t,e){this.insertBufferLines(1,t,t,e)}insertBufferBottom(t,e){this.deleteBufferLines(1,t,t,e)}deleteBufferTop(t,e){this.deleteBufferLines(1,t,t,e)}deleteBufferBottom(t,e){this.clearRegion(0,this.width,e,e+1)}setScrollRegion(t,e){this.program.csr(t,e)}resetScrollRegion(){this.program.resetCursor()}focusPush(t){this._focused&&this.focusStack.push(this._focused),t.focus()}focusPop(){const t=this.focusStack.pop();return t&&!t.destroyed?(t.focus(),t):null}saveFocus(){return this.savedFocus=this._focused,this.savedFocus}restoreFocus(){return this.savedFocus&&this.savedFocus.focus(),this.savedFocus}rewindFocus(){for(;this.focusHistory.length>0;)this.focusPop()}trapFocus(t){if(this.focusTrap===t)return;this._focused&&this.focusStack.push(this._focused),this.focusTrap=t;const e=this._getFocusable(t);e.length>0&&e[0].focus()}releaseFocusTrap(){this.focusTrap&&(this.focusTrap=null,this.focusPop())}isFocusTrapped(){return null!==this.focusTrap}getFocusTrap(){return this.focusTrap}_getFocusable(t=this){const e=this.focusTrap||t,s=[],i=t=>{if(t.hidden||!t.visible||t.disabled||t.destroyed)return;if(t.options&&t.options.focusable&&!1!==t.options.tabbable&&-1!==t.options.tabIndex&&s.push(t),t.children){const e=[...t.children].sort((t,e)=>{const s=t.options&&t.options.tabIndex||0,i=e.options&&e.options.tabIndex||0;return s>0&&i>0?s-i:s>0?-1:i>0?1:0});for(const t of e)i(t)}};return i(e),s}focusNext(){const t=this._getFocusable();if(0===t.length)return;const e=this._focused;if(!e)return void t[0].focus();const s=t.indexOf(e);if(-1===s)return void t[0].focus();t[(s+1)%t.length].focus()}focusPrevious(){const t=this._getFocusable();if(0===t.length)return;const e=this._focused;if(!e)return void t[t.length-1].focus();const s=t.indexOf(e);if(-1===s)return void t[t.length-1].focus();t[(s-1+t.length)%t.length].focus()}focusPrev(){this.focusPrevious()}focusOffset(t){const e=this._getFocusable();if(0===e.length)return;const s=this._focused;if(!s){return void e[t>=0?0:e.length-1].focus()}const i=e.indexOf(s);if(-1===i)return void e[0].focus();const r=(i+t)%e.length;e[r<0?r+e.length:r].focus()}enableMouseToggle(t){let e=!0;this.key(["f12","M-m"],()=>{e=!e,e?this.enableMouse():this.disableMouse(),t&&t(e),this.render()})}key(t,e){const s=Array.isArray(t)?t:[t];for(const t of s)this.keyHandlers.has(t)||this.keyHandlers.set(t,[]),this.keyHandlers.get(t).push(e)}onceKey(t,e){const s=(i,r)=>{this.unkey(t,s),e(i,r)};this.key(t,s)}unkey(t,e){const s=Array.isArray(t)?t:[t];for(const t of s){const s=this.keyHandlers.get(t);if(s){const t=s.indexOf(e);-1!==t&&s.splice(t,1)}}}_handleKey(t,e){if(void 0===this._audioUnlocked&&(this._audioUnlocked=!0,this.emit("user-interaction")),this._lockKeys)return;let s=this.focusTrap;s&&(s.hidden||s.destroyed)&&(this.releaseFocusTrap(),s=this.focusTrap);const i=!!s,r=this._focused;if(s&&r&&r!==s&&!r.hasAncestor?.(s)){const t=this._getFocusable();t.length>0&&t[0].focus()}const o=i?void 0:this.keyHandlers.get(e.full||e.name);let h=!1;if(o&&o.length>0)for(const s of o)!0===s(t,e)&&(h=!0);if(!h&&this._focused){const s=e.full||e.name;s&&!0===this._focused.emit(`keypress ${s}`,t,e)&&(h=!0),h||!0===this._focused.emit("keypress",t,e)&&(h=!0)}if(!h){const t=e.name;if("tab"===t)return e.shift?this.focusPrevious():this.focusNext(),void this.render();if(!e.shift&&("up"===t||"left"===t))return this.focusPrevious(),void this.render();if(!e.shift&&("down"===t||"right"===t))return this.focusNext(),void this.render()}i||this.emit("keypress",t,e)}setTitle(t){this.title=t,this.write(`]0;${t}`)}showCursor(){this.cursorHidden&&(this.cursorHidden=!1,this.write(cursor.show))}hideCursor(){this.cursorHidden||(this.cursorHidden=!0,this.write(cursor.hide))}enter(){this.program.alternateBuffer(),this.program.hideCursor(),this.clear(),this.render(),this.emit("enter")}leave(){this.program.showCursor(),this.program.normalBuffer(),this.emit("leave")}getFocused(){return this._focused}setFocused(t){const e=t=>t?t.options?.border&&"none"!==t.options?.border.type?t:t.parent&&t.parent!==this?e(t.parent):null:null;if(this._focused&&this._focused!==t){this._focused.focused=!1,this._focused.emit("blur");const t=e(this._focused);t&&t._originalBorderColor&&(t.options?.style?.border&&(t.options.style.border.fg=t._originalBorderColor,t.options.style.border.bold=t._originalBorderBold||!1),t.style?.border&&(t.style.border.fg=t._originalBorderColor,t.style.border.bold=t._originalBorderBold||!1))}if(this._focused=t,t){t.focused=!0,t.emit("focus");const s=e(t);if(s){const t=s.options?.style?.border||s.style?.border||{};s._originalBorderColor||(s._originalBorderColor=t.fg||"cyan",s._originalBorderBold=t.bold||!1),s.options?.style?.border&&(s.options.style.border.fg="white",s.options.style.border.bold=!0),s.style?.border&&(s.style.border.fg="white",s.style.border.bold=!0)}}this.render()}get width(){return this._width}set width(t){!isFinite(t)||t<=0||(this._width=t,this.program.cols=t)}get height(){return this._height}set height(t){!isFinite(t)||t<=0||(this._height=t,this.program.rows=t)}get terminal(){return this.program.terminal}get cols(){return this._width}set cols(t){this._width=t,this.program.cols=t,this.realloc()}get rows(){return this._height}set rows(t){this._height=t,this.program.rows=t,this.realloc()}lockKeys(){this._lockKeys=!0}unlockKeys(){this._lockKeys=!1}resize(t,e){if(!isFinite(t)||t<=0||!isFinite(e)||e<=0)return;if(t===this._width&&e===this._height)return;const s=t<this._width||e<this._height;t>80&&(this._responsive=!0),this._width=t,this._height=e,this.program.cols=t,this.program.rows=e,s&&this.program.write("[2J[H"),this.realloc(),this.walk(t=>{t._coordsCacheValid=!1}),this.emit("resize"),this.render()}_colorToCode(t){if("number"==typeof t)return t;const e={transparent:511,none:511,default:511,black:0,red:1,green:2,yellow:3,blue:4,magenta:5,cyan:6,white:7,gray:8,grey:8,lightblack:8,lightred:9,lightgreen:10,lightyellow:11,lightblue:12,lightmagenta:13,lightcyan:14,lightwhite:15},s=String(t).toLowerCase();return void 0!==e[s]?e[s]:7}_stripAnsi(t){return t.replace(/\x1b\[[0-9;]*m/g,"")}clear(){this.clearBuffers(),this.program.clear()}spawn(t,e,s){throw new Error("spawn() not supported in browser environment - requires Node.js child_process")}exec(t,e,s,i){throw new Error("exec() not supported in browser environment - requires Node.js child_process")}readEditor(t,e){const s=new Error("readEditor() not supported in browser environment - requires Node.js fs/child_process");if(!e)throw s;e(s)}displayImage(t,e){const s=new Error("displayImage() not supported in browser environment - requires external w3mimgdisplay");if(!e)throw s;e(s)}setEffects(t,e,s,i,r,o){if(!r)return;const h={};let n;if(o&&"function"!=typeof t&&(t[o]=h),"function"!=typeof t){const e=t;n=()=>e}else n=t;let l=null;if(e)if("function"!=typeof e){const t=e;l=()=>t}else l=e;const f=t=>function(){const e=n(),s=l?l():null,i=e.style||{},o=s&&s.style||{};void 0!==h[t]&&(i[t]=h[t],delete h[t]),void 0!==r[t]&&(h[t]=i[t],i[t]=r[t]),s&&void 0!==r[t+"Focus"]&&(h[t]=o[t],o[t]=r[t+"Focus"]),this.screen.render()};n().on(s,f(s)),n().on(i,f(i))}_initHover(){this._hoverText||(this._hoverText=null)}screenshot(t,e,s,i,r){null==t&&(t=0),null==e&&(e=this.cols),null==s&&(s=0),null==i&&(i=this.rows),t<0&&(t=0),s<0&&(s=0);let o="";for(let r=s;r<i;r++){let s="";for(let i=t;i<e;i++){const t=this.buffer[r]?.[i];t&&t.length>=2?s+=t[1]||" ":s+=" "}o+=s,r<i-1&&(o+="\n")}return o}destroy(){if(!this.destroyed){if(this._renderTimer&&(clearTimeout(this._renderTimer),this._renderTimer=null),this._contextMenuHandler){const t="undefined"!=typeof globalThis?globalThis.document:void 0;t&&t.removeEventListener("contextmenu",this._contextMenuHandler,!0),this._contextMenuHandler=null}this.write(cursor.show),this.write(screenAnsi.clear),this.write(cursor.pos(0,0)),this.write(attrs.reset),this.flush(),this.program.destroy(),super.destroy()}}_handleData(t){this.program._handleData(t)}}const ANGLES={"┘":!0,"┐":!0,"┌":!0,"└":!0,"┼":!0,"├":!0,"┤":!0,"┴":!0,"┬":!0,"│":!0,"─":!0},L_ANGLES={"┌":!0,"└":!0,"┼":!0,"├":!0,"┴":!0,"┬":!0,"─":!0},U_ANGLES={"┐":!0,"┌":!0,"┼":!0,"├":!0,"┤":!0,"┬":!0,"│":!0},R_ANGLES={"┘":!0,"┐":!0,"┼":!0,"┤":!0,"┴":!0,"┬":!0,"─":!0},D_ANGLES={"┘":!0,"└":!0,"┼":!0,"├":!0,"┤":!0,"┴":!0,"│":!0},ANGLE_TABLE={0:"",1:"│",2:"─",3:"┌",4:"│",5:"│",6:"└",7:"├",8:"─",9:"┐",10:"─",11:"┬",12:"┘",13:"┤",14:"┴",15:"┼"};
+/**
+ * Screen class - Root container and rendering manager
+ */
+import { Element } from './element';
+import { Program } from './program';
+import { cursor, screen as screenAnsi, attrs, blend } from './colors';
+import { KeyBindings } from './keybindings';
+import { ResponsiveLayoutManager } from './responsive-layout';
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+// Terser strips literal \x1b from string constants
+const ESC = String.fromCharCode(27);
+export class Screen extends Element {
+    constructor(options = {}) {
+        // BBS Terminal Constraints (when not in responsive mode):
+        // - Width: 80 columns (classic BBS standard)
+        // - Height: 24 rows (classic BBS standard)
+        // In responsive mode, use provided dimensions or defaults
+        const bbsWidth = options.responsive ? (options.width || 80) : 80;
+        const bbsHeight = options.responsive
+            ? (options.height || 24)
+            : Math.min(options.height || 24, 25);
+        const style = { ...(options.style || {}) };
+        if (style.bg === undefined) {
+            style.bg = 'black';
+        }
+        super({
+            ...options,
+            style,
+            left: 0,
+            top: 0,
+            width: bbsWidth,
+            height: bbsHeight,
+        });
+        this._focused = null;
+        // Focus history
+        this.focusHistory = [];
+        this.focusStack = []; // Stack for pushing/popping focus (modals)
+        this.savedFocus = null;
+        // Focus trapping (for modals)
+        this.focusTrap = null;
+        // Rendering state
+        // Buffer format: [y][x] = [attr, char]
+        // attr is 27-bit packed: (flags << 18) | (fg << 9) | bg
+        this.buffer = [];
+        this.lastBuffer = [];
+        this.dirty = true;
+        // Render batching (Opt #1: 70-80% reduction in render calls)
+        this._renderPending = false;
+        this._renderTimer = null;
+        // Dirty region tracking (Opt #5: 50-60% reduction in diff cells)
+        this._dirtyMinX = Infinity;
+        this._dirtyMinY = Infinity;
+        this._dirtyMaxX = -Infinity;
+        this._dirtyMaxY = -Infinity;
+        // Spatial mouse index (Opt #7: O(1) vs O(n) mouse hit testing)
+        this._mouseIndex = []; // [y][x] = elements at that position
+        this._mouseIndexValid = false;
+        // Track currently hovered elements (Opt #27: Avoid O(n) tree walk)
+        this._hoveredElements = new Set();
+        // Title
+        this.title = '';
+        // Cursor state
+        this.cursorHidden = true;
+        this.cursorX = 0;
+        this.cursorY = 0;
+        // Drag tracking (EXACT from neo-blessed screen.js)
+        this._dragging = null;
+        // Key handlers
+        this.keyHandlers = new Map();
+        // Global keyboard shortcuts
+        this.keyBindings = new KeyBindings();
+        // Browser context menu handler (stored for cleanup)
+        this._contextMenuHandler = null;
+        // Responsive mode - allows wider than 80 columns
+        this._responsive = false;
+        this._locked = false;
+        // ============================================================================
+        // Key Locking
+        // ============================================================================
+        this._lockKeys = false;
+        this._hoverText = null;
+        this._width = bbsWidth;
+        this._height = bbsHeight;
+        this._responsive = options.responsive || false;
+        this.screen = this;
+        // Set output callback (for backward compatibility)
+        this.output = options.output || ((data) => {
+            if (typeof process !== 'undefined' && process.stdout) {
+                process.stdout.write(data);
+            }
+        });
+        // Create Program instance
+        this.program = new Program({
+            output: this.output,
+            terminal: options.terminal || 'ansi',
+            buffer: true,
+            title: options.title,
+        });
+        // Set dimensions on program
+        this.program.cols = this._width;
+        this.program.rows = this._height;
+        // Initialize buffers
+        this.clearBuffers();
+        // Set title
+        if (options.title) {
+            this.setTitle(options.title);
+        }
+        // Hide cursor by default
+        if (this.cursorHidden) {
+            this.write(cursor.hide);
+        }
+        // Initialize responsive layout manager
+        const responsiveConfig = {
+            enableAutoResize: options.responsive !== false,
+            breakpoints: options.breakpoints,
+        };
+        this.responsiveLayout = new ResponsiveLayoutManager(this, responsiveConfig);
+        // Setup event routing from program to screen/elements
+        this.setupKeyRouting();
+        this.setupMouseRouting();
+        // In browser environment, prevent browser context menu to allow app to use right-click
+        this.setupBrowserContextMenu();
+    }
+    /**
+     * Setup browser context menu prevention
+     * This allows SDK doors to use right-click without the browser menu appearing
+     */
+    setupBrowserContextMenu() {
+        // Only setup in browser environment
+        // Use typeof check to avoid TypeScript errors in Node.js compilation
+        const win = typeof globalThis !== 'undefined' ? globalThis.window : undefined;
+        const doc = typeof globalThis !== 'undefined' ? globalThis.document : undefined;
+        if (!win || !doc) {
+            return;
+        }
+        // Create handler that prevents the browser context menu
+        this._contextMenuHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        };
+        // Add to document to catch all context menu events
+        doc.addEventListener('contextmenu', this._contextMenuHandler, true);
+    }
+    // ============================================================================
+    // Key Event Routing
+    // ============================================================================
+    /**
+     * Setup key event routing from Program to Screen
+     */
+    setupKeyRouting() {
+        // Remove existing listeners to prevent duplication if Program is reused
+        this.program.removeAllListeners('keypress');
+        // Listen to Program's keypress events
+        this.program.on('keypress', (ch, key) => {
+            this._handleKey(ch, key);
+        });
+    }
+    // ============================================================================
+    // Mouse Event Routing
+    // ============================================================================
+    /**
+     * Setup mouse event routing from Program to Elements
+     */
+    setupMouseRouting() {
+        // Listen to Program's mouse events
+        this.program.on('mouse', (event) => {
+            this.handleMouseEvent(event);
+        });
+    }
+    /**
+     * Handle mouse event and route to appropriate elements
+     */
+    handleMouseEvent(event) {
+        // Emit on screen first (generic mouse event and specific action event)
+        this.emit('mouse', event);
+        this.emit(event.action, event);
+        // If we're currently dragging an element, route events EXCLUSIVELY to it
+        // This prevents dragging foreground elements from triggering background hover/clicks
+        if (this._dragging) {
+            this._dragging.onMouse(event);
+            return;
+        }
+        // Find all elements under the mouse cursor
+        const elements = this.getElementsAt(event.x, event.y);
+        // Current hovered elements (use Set for O(1) lookups)
+        const currentHovered = new Set(elements);
+        // Emit mouseleave for elements no longer hovered
+        // Use tracked set instead of O(n) tree walk
+        for (const el of this._hoveredElements) {
+            if (!currentHovered.has(el)) {
+                el.onMouseLeave();
+                this._hoveredElements.delete(el);
+            }
+        }
+        // Add newly hovered elements to tracking set
+        for (const el of elements) {
+            if (!this._hoveredElements.has(el)) {
+                this._hoveredElements.add(el);
+            }
+        }
+        // Route event to elements (from top to bottom in z-order)
+        // Use slice().reverse() to avoid mutating the elements array
+        for (const element of elements.slice().reverse()) {
+            if (element.onMouse(event)) {
+                // Event was handled by this element, stop propagation
+                // This prevents dragging foreground elements from also dragging background elements
+                break;
+            }
+        }
+    }
+    // Opt #7: Rebuild spatial mouse index (O(1) lookups vs O(n) tree walks)
+    _rebuildMouseIndex() {
+        // Initialize 2D grid
+        this._mouseIndex = [];
+        for (let y = 0; y < this.height; y++) {
+            this._mouseIndex[y] = [];
+            for (let x = 0; x < this.width; x++) {
+                this._mouseIndex[y][x] = [];
+            }
+        }
+        // Walk tree and add elements to their grid cells
+        this.walk((el) => {
+            if (el.hidden || !el.visible)
+                return;
+            const coords = el._getCoords();
+            if (!coords)
+                return;
+            // Add element to all cells it occupies
+            for (let y = Math.max(0, coords.yi); y < Math.min(this.height, coords.yl); y++) {
+                for (let x = Math.max(0, coords.xi); x < Math.min(this.width, coords.xl); x++) {
+                    this._mouseIndex[y][x].push(el);
+                }
+            }
+        });
+        this._mouseIndexValid = true;
+    }
+    /**
+     * Invalidate mouse index when elements move or change
+     * Called by Element when positions change
+     */
+    invalidateMouseIndex() {
+        this._mouseIndexValid = false;
+    }
+    /**
+     * Get all elements at screen coordinates
+     */
+    getElementsAt(x, y) {
+        // Opt #7: Use spatial index if valid
+        if (this._mouseIndexValid && y >= 0 && y < this.height && x >= 0 && x < this.width) {
+            // CRITICAL: Return a copy to prevent caller from mutating internal index with .reverse()
+            return [...(this._mouseIndex[y][x] || [])];
+        }
+        // Fallback to tree walk if index not built yet
+        const elements = [];
+        this.walk((el) => {
+            if (el.hasMouseOver(x, y) && !el.hidden && el.visible) {
+                elements.push(el);
+            }
+        });
+        return elements;
+    }
+    /**
+     * Walk the element tree
+     */
+    walk(callback) {
+        const visit = (el) => {
+            callback(el);
+            for (const child of el.children) {
+                visit(child);
+            }
+        };
+        for (const child of this.children) {
+            visit(child);
+        }
+    }
+    /**
+     * Enable mouse support on screen
+     */
+    enableMouse() {
+        this.program.enableMouse();
+    }
+    /**
+     * Disable mouse support on screen
+     */
+    disableMouse() {
+        this.program.disableMouse();
+    }
+    // ============================================================================
+    // Output
+    // ============================================================================
+    write(data) {
+        this.program.write(data);
+    }
+    /**
+     * Get the rendered ANSI output from the program buffer
+     */
+    getOutput() {
+        const output = this.program._buf || '';
+        this.program._buf = ''; // Clear buffer after reading
+        return output;
+    }
+    // ============================================================================
+    // BBS Terminal Dimensions
+    // ============================================================================
+    /**
+     * Set screen dimensions based on user configuration
+     * BBS Constraints (non-responsive mode):
+     * - Width: 80 columns (classic BBS standard)
+     * - Height: User-configurable (default 23 content + 2 prompts = 25 total max)
+     *
+     * @param linesPerScreen User's configured lines per screen (default 23)
+     * @param width Optional width (only used in responsive mode)
+     */
+    setDimensions(linesPerScreen, width) {
+        // Validate inputs
+        if (linesPerScreen !== undefined && (!isFinite(linesPerScreen) || linesPerScreen <= 0)) {
+            return;
+        }
+        if (width !== undefined && (!isFinite(width) || width <= 0)) {
+            return;
+        }
+        // In responsive mode, use provided width; otherwise 80 columns
+        const bbsWidth = this._responsive ? (width || this._width) : 80;
+        const contentLines = this._responsive
+            ? (linesPerScreen || this._height)
+            : Math.min(linesPerScreen || 23, 23);
+        const bbsHeight = this._responsive ? contentLines : (contentLines + 2);
+        this._width = bbsWidth;
+        this._height = bbsHeight;
+        this.program.cols = bbsWidth;
+        this.program.rows = bbsHeight;
+        // Reinitialize buffers with new dimensions
+        this.clearBuffers();
+        // Invalidate all element coordinate caches after dimension change
+        this.walk((el) => {
+            el._coordsCacheValid = false;
+        });
+        this.dirty = true;
+    }
+    /**
+     * Get current screen dimensions
+     */
+    getDimensions() {
+        return {
+            width: this._width,
+            height: this._height
+        };
+    }
+    /**
+     * Flush buffered output
+     */
+    flush() {
+        this.program.flush();
+    }
+    // ============================================================================
+    // Buffer Management
+    // ============================================================================
+    clearBuffers() {
+        this.buffer = [];
+        this.lastBuffer = [];
+        for (let y = 0; y < this.height; y++) {
+            this.buffer[y] = [];
+            this.lastBuffer[y] = [];
+            for (let x = 0; x < this.width; x++) {
+                // Default: no attributes (0x000), space character
+                this.buffer[y][x] = [0x000, ' '];
+                this.lastBuffer[y][x] = [0x000, ' '];
+            }
+        }
+    }
+    /**
+     * Force a full screen redraw on the next render by invalidating lastBuffer.
+     * This ensures all cells are output to the terminal, which is useful after
+     * destroying dialogs or overlays where remnants might otherwise persist.
+     *
+     * Call this before render() when transitioning between dialogs/overlays.
+     */
+    forceFullRedraw() {
+        // Set lastBuffer to an impossible state (attr=-1) so _diff will output all cells
+        for (let y = 0; y < this.height; y++) {
+            if (!this.lastBuffer[y])
+                continue;
+            for (let x = 0; x < this.width; x++) {
+                // Guard: check cell exists
+                if (!this.lastBuffer[y][x])
+                    continue;
+                this.lastBuffer[y][x] = [-1, '\x00'];
+            }
+        }
+    }
+    /**
+     * Allocate (create) a new blank buffer
+     */
+    alloc() {
+        const buf = [];
+        for (let y = 0; y < this.height; y++) {
+            buf[y] = [];
+            for (let x = 0; x < this.width; x++) {
+                buf[y][x] = [0x000, ' '];
+            }
+        }
+        return buf;
+    }
+    /**
+     * Reallocate buffers (called on resize)
+     */
+    realloc() {
+        const obuf = this.buffer;
+        const oline = this.lastBuffer;
+        this.buffer = this.alloc();
+        this.lastBuffer = this.alloc();
+        // Copy old content
+        for (let y = 0; y < Math.min(this.height, obuf.length); y++) {
+            for (let x = 0; x < Math.min(this.width, obuf[y].length); x++) {
+                this.buffer[y][x] = obuf[y][x];
+                this.lastBuffer[y][x] = oline[y][x];
+            }
+        }
+    }
+    /**
+     * Lock the screen to prevent rendering during batch updates
+     */
+    lock() {
+        this._locked = true;
+    }
+    /**
+     * Unlock the screen and trigger a coordinated render
+     */
+    unlock() {
+        this._locked = false;
+        this.render();
+    }
+    /**
+     * Create a blank line
+     */
+    blankLine(ch = ' ', attr = 0x000) {
+        const line = [];
+        for (let x = 0; x < this.width; x++) {
+            line[x] = [attr, ch];
+        }
+        return line;
+    }
+    clearRegion(xi, xl, yi, yl) {
+        for (let y = yi; y < yl; y++) {
+            // Guard: check both height bounds AND actual buffer row existence
+            if (y < 0 || y >= this.height || !this.buffer[y])
+                continue;
+            for (let x = xi; x < xl; x++) {
+                // Guard: check both width bounds AND actual buffer cell existence
+                if (x < 0 || x >= this.width || !this.buffer[y][x])
+                    continue;
+                this.buffer[y][x] = [0x000, ' '];
+            }
+        }
+        // Opt #5: Mark region as dirty for differential rendering
+        this._markDirty(xi, yi, xl - 1, yl - 1);
+    }
+    fillRegion(attr, ch, xi, xl, yi, yl) {
+        // Check if background is transparent (0x1ff = no color)
+        const bgColor = attr & 0x1ff;
+        const isTransparentBg = bgColor === 0x1ff;
+        for (let y = yi; y < yl; y++) {
+            // Guard: check both height bounds AND actual buffer row existence
+            if (y < 0 || y >= this.height || !this.buffer[y])
+                continue;
+            for (let x = xi; x < xl; x++) {
+                // Guard: check both width bounds AND actual buffer cell existence
+                if (x < 0 || x >= this.width || !this.buffer[y][x])
+                    continue;
+                if (isTransparentBg) {
+                    // For transparent background with space character, skip entirely
+                    // This preserves both the existing character AND background (true transparency)
+                    if (ch === ' ' || ch === '') {
+                        // Don't modify buffer at all - leave existing content visible
+                        continue;
+                    }
+                    // For transparent bg with actual content, preserve bg but update character
+                    const existingAttr = this.buffer[y][x][0];
+                    const existingBg = existingAttr & 0x1ff;
+                    // Combine new fg/flags with existing bg
+                    const newAttr = (attr & ~0x1ff) | existingBg;
+                    this.buffer[y][x] = [newAttr, ch];
+                }
+                else {
+                    this.buffer[y][x] = [attr, ch];
+                }
+            }
+        }
+        // Opt #5: Mark region as dirty for differential rendering
+        this._markDirty(xi, yi, xl - 1, yl - 1);
+    }
+    // ============================================================================
+    // Attribute Packing/Unpacking
+    // ============================================================================
+    /**
+     * Pack attributes into 27-bit integer
+     * Format: (flags << 18) | (fg << 9) | bg
+     * Flags: bold(1), underline(2), blink(4), inverse(8), invisible(16)
+     */
+    packAttr(flags, fg, bg) {
+        return (flags << 18) | (fg << 9) | bg;
+    }
+    /**
+     * Unpack attributes from 27-bit integer
+     */
+    unpackAttr(attr) {
+        return {
+            flags: (attr >> 18) & 0x1ff,
+            fg: (attr >> 9) & 0x1ff,
+            bg: attr & 0x1ff,
+        };
+    }
+    /**
+     * Convert attribute to ANSI string
+     * EXACT 1:1 PORT from neo-blessed screen.js codeAttr() lines 1508-1572
+     */
+    attrToAnsi(attr) {
+        const flags = (attr >> 18) & 0x1ff;
+        let fg = (attr >> 9) & 0x1ff;
+        let bg = attr & 0x1ff;
+        // CRITICAL: Start with reset (SGR 0) to clear ALL previous attributes.
+        // This ensures no bold/underline/inverse/etc. bleeding between cells.
+        let out = '0;';
+        // Flags (bold, underline, etc.)
+        if (flags & 1)
+            out += '1;'; // bold
+        if (flags & 2)
+            out += '4;'; // underline
+        if (flags & 4)
+            out += '5;'; // blink
+        if (flags & 8)
+            out += '7;'; // inverse
+        if (flags & 16)
+            out += '8;'; // invisible
+        // Background color - ALWAYS explicitly set
+        // BBS terminals expect black background by default, but web terminals often default to white.
+        // We must ALWAYS emit an explicit background color, never rely on terminal default.
+        if (bg === 0x1ff) {
+            // Default/transparent bg -> use black (40) for BBS compatibility
+            out += '40;';
+        }
+        else if (bg < 16) {
+            if (bg < 8) {
+                out += (bg + 40) + ';'; // Standard bg: 40-47
+            }
+            else {
+                out += ((bg - 8) + 100) + ';'; // Bright bg: 100-107
+            }
+        }
+        else {
+            // 256-color mode for bg
+            out += '48;5;' + bg + ';';
+        }
+        // Foreground color - ALWAYS explicitly set
+        // Use white (37) as default fg for visibility on black background
+        if (fg === 0x1ff) {
+            // Default fg -> use white (37) for BBS compatibility on black bg
+            out += '37;';
+        }
+        else if (fg < 16) {
+            if (fg < 8) {
+                out += (fg + 30) + ';'; // Standard fg: 30-37
+            }
+            else {
+                out += ((fg - 8) + 90) + ';'; // Bright fg: 90-97
+            }
+        }
+        else {
+            // 256-color mode for fg
+            out += '38;5;' + fg + ';';
+        }
+        // Remove trailing semicolon
+        if (out[out.length - 1] === ';')
+            out = out.slice(0, -1);
+        return ESC + '[' + out + 'm';
+    }
+    /**
+     * Parse style object to attribute code
+     */
+    styleToAttr(style) {
+        let flags = 0;
+        let fgCode = 0x1ff; // Default: no color
+        let bgCode = 0; // Default background: black
+        if (style.bold)
+            flags |= 1;
+        if (style.underline)
+            flags |= 2;
+        if (style.blink)
+            flags |= 4;
+        if (style.inverse)
+            flags |= 8;
+        if (style.invisible)
+            flags |= 16;
+        if (style.fg !== undefined) {
+            fgCode = this._colorToCode(style.fg);
+        }
+        if (style.bg !== undefined) {
+            bgCode = this._colorToCode(style.bg);
+        }
+        return this.packAttr(flags, fgCode, bgCode);
+    }
+    // ============================================================================
+    // Rendering
+    // ============================================================================
+    render() {
+        if (this.destroyed || this._locked)
+            return;
+        // Opt #1: Batch renders - coalesce multiple render requests into single frame
+        if (this._renderPending)
+            return;
+        this._renderPending = true;
+        if (this._renderTimer)
+            clearTimeout(this._renderTimer);
+        this._renderTimer = setTimeout(() => {
+            this._renderPending = false;
+            this._renderTimer = null;
+            this._doRender();
+        }, 16); // 16ms = ~60fps throttle (prevents flicker from rapid keypresses like shift+arrow)
+    }
+    _doRender() {
+        if (this.destroyed)
+            return;
+        // On first render, reset all terminal attributes to ensure clean state
+        // This prevents leftover colors from previous screens affecting our output
+        if (!this._hasRendered) {
+            this._hasRendered = true;
+            // Reset all attributes and clear screen
+            this.write(ESC + '[0m'); // Reset all attributes
+            this.write(ESC + '[2J'); // Clear screen
+            this.write(ESC + '[H'); // Move cursor to home
+        }
+        // Mark entire screen as dirty since we're clearing the entire buffer
+        this._markDirty(0, 0, this.width - 1, this.height - 1);
+        // Clear buffer with default attribute
+        // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
+        // Original neo-blessed uses 0x1ff which results in NO background ANSI code,
+        // causing elements to use terminal's default background (not always black).
+        // BBS doors expect black background by default.
+        const dattr = ((0 << 18) | (0x1ff << 9)) | 0; // fg=0x1ff (default), bg=0 (black)
+        // Use buffer dimensions, not screen dimensions, to avoid race condition during resize
+        const bufHeight = this.buffer.length;
+        const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
+        for (let y = 0; y < bufHeight; y++) {
+            for (let x = 0; x < bufWidth; x++) {
+                this.buffer[y][x] = [dattr, ' '];
+            }
+        }
+        // Render all children recursively
+        this._renderElement(this);
+        // Dock borders if enabled
+        if (this.options.dockBorders) {
+            this._dockBorders();
+        }
+        // Diff and draw
+        this._diff();
+        // Mark as clean
+        this.dirty = false;
+        // Opt #7: Rebuild mouse index after rendering
+        this._rebuildMouseIndex();
+        this.emit('render');
+    }
+    _renderElement(element) {
+        if (!element.visible || element.hidden || element.destroyed) {
+            return;
+        }
+        // Calculate position
+        const pos = element._getCoords();
+        if (!pos)
+            return;
+        // Render shadow FIRST (behind the element)
+        if (element.options.shadow) {
+            this._renderShadow(pos);
+        }
+        // Render element content
+        this._renderContent(element, pos);
+        // Render border
+        if (element.options.border) {
+            this._renderBorder(element, pos);
+        }
+        // Render scrollbar if element has one
+        if (element.hasScrollbar?.() && element.renderScrollbar) {
+            element.renderScrollbar();
+        }
+        // Render children - sort by zIndex if available
+        const sortedChildren = [...element.children].sort((a, b) => {
+            const zA = a.options.zIndex || 0;
+            const zB = b.options.zIndex || 0;
+            return zA - zB;
+        });
+        for (const child of sortedChildren) {
+            this._renderElement(child);
+        }
+    }
+    /**
+     * Render shadow effect (EXACT 1:1 PORT FROM blessed element.js lines 2119-2145)
+     * Uses colors.blend() with single argument to darken pixels
+     */
+    _renderShadow(pos) {
+        const { xi, xl, yi, yl } = pos;
+        // Mark shadow area as dirty so _diff() outputs the changes
+        // Shadow extends 2 chars right and 1 row down
+        this._markDirty(xl, yi + 1, xl + 1, yl);
+        this._markDirty(xi + 1, yl, xl - 1, yl);
+        // Right shadow (exactly from blessed)
+        let y = Math.max(yi + 1, 0);
+        for (; y < yl + 1; y++) {
+            if (!this.buffer[y])
+                break;
+            let x = xl;
+            for (; x < xl + 2; x++) {
+                if (!this.buffer[y][x])
+                    break;
+                // blessed: lines[y][x][0] = colors.blend(lines[y][x][0])
+                this.buffer[y][x][0] = blend(this.buffer[y][x][0]);
+            }
+        }
+        // Bottom shadow (exactly from blessed)
+        y = yl;
+        for (; y < yl + 1; y++) {
+            if (!this.buffer[y])
+                break;
+            for (let x = Math.max(xi + 1, 0); x < xl; x++) {
+                if (!this.buffer[y][x])
+                    break;
+                // blessed: lines[y][x][0] = colors.blend(lines[y][x][0])
+                this.buffer[y][x][0] = blend(this.buffer[y][x][0]);
+            }
+        }
+    }
+    _renderContent(element, pos) {
+        // Use getVisibleLines() to respect scroll position (childBase)
+        const lines = element.getVisibleLines ? element.getVisibleLines() : element.getLines();
+        const padding = element.options.padding || 0;
+        const hasBorder = element.options.border && element.options.border?.type !== 'none';
+        const border = hasBorder ? 1 : 0;
+        const padLeft = typeof padding === 'number' ? padding : padding.left || 0;
+        const padTop = typeof padding === 'number' ? padding : padding.top || 0;
+        const padBottom = typeof padding === 'number' ? padding : padding.bottom || 0;
+        const padRight = typeof padding === 'number' ? padding : padding.right || 0;
+        const startY = pos.yi + border + padTop;
+        const startX = pos.xi + border + padLeft;
+        const maxY = pos.yl - border - padBottom;
+        const maxX = pos.xl - border - padRight;
+        // Mark element content area as dirty so _diff() outputs the changes
+        // This is critical for scrolling to work - content changes need to be in dirty region
+        this._markDirty(startX, startY, maxX - 1, maxY - 1);
+        // BBS Constraint: Enforce 80-column width limit (unless responsive mode)
+        const bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
+        // Get style attribute code with focus/hover/disabled state applied
+        let style = element.options.style || {};
+        const focusStyle = element.options.style?.focus;
+        const hoverStyle = element.options.style?.hover;
+        const disabledStyle = element.options.style?.disabled;
+        if (element.disabled && disabledStyle) {
+            style = { ...style, ...disabledStyle };
+        }
+        else if (element.focused && focusStyle) {
+            style = { ...style, ...focusStyle };
+        }
+        else if (element._hovered && hoverStyle) {
+            style = { ...style, ...hoverStyle };
+        }
+        const baseAttr = this.styleToAttr(style);
+        // Check for neo-blessed style transparency (color blending at 50% opacity)
+        const isBlendTransparent = !!style.transparent;
+        // Fill background (for elements without borders, this is essential for visibility)
+        // BUT skip if background is transparent (0x1ff) - preserve existing content
+        const bgColor = baseAttr & 0x1ff;
+        const isTransparentBg = bgColor === 0x1ff;
+        const fillChar = element.options.ch || ' ';
+        if (isBlendTransparent) {
+            // Neo-blessed style: blend colors at 50% opacity
+            // Keep underlying characters visible, only blend the color attributes
+            // EXACT from neo-blessed element.js line 1945: colors.blend(attr, lines[y][x][0])
+            for (let y = startY; y < maxY; y++) {
+                if (y < 0 || y >= this.height || !this.buffer[y])
+                    continue;
+                for (let x = startX; x < bbsMaxX; x++) {
+                    if (x < 0 || x >= this.width || !this.buffer[y][x])
+                        continue;
+                    const existingAttr = this.buffer[y][x][0];
+                    const existingChar = this.buffer[y][x][1];
+                    // Two arguments = transparency mode (blends at 50% alpha by default)
+                    const blendedAttr = blend(baseAttr, existingAttr);
+                    this.buffer[y][x] = [blendedAttr, existingChar];
+                }
+            }
+        }
+        else if (!isTransparentBg) {
+            // Normal fill - overwrite buffer
+            for (let y = startY; y < maxY; y++) {
+                if (y < 0 || y >= this.height || !this.buffer[y])
+                    continue;
+                for (let x = startX; x < bbsMaxX; x++) {
+                    if (x < 0 || x >= this.width || !this.buffer[y][x])
+                        continue;
+                    this.buffer[y][x] = [baseAttr, fillChar];
+                }
+            }
+        }
+        // If transparent bg (not blend), skip fill entirely - preserve existing buffer content
+        // Render lines
+        for (let i = 0; i < lines.length; i++) {
+            const y = startY + i;
+            // Guard: check both this.height AND actual buffer existence to prevent crashes during resize
+            if (y < 0 || y >= this.height || y >= maxY || !this.buffer[y])
+                continue;
+            const line = lines[i];
+            // Parse line with ANSI codes and render character by character
+            let currentAttr = baseAttr;
+            let x = startX;
+            let idx = 0;
+            while (idx < line.length && x < bbsMaxX) {
+                // Check for ANSI escape sequence
+                if (line[idx] === ESC && line[idx + 1] === '[') {
+                    // Parse ANSI sequence
+                    let end = idx + 2;
+                    while (end < line.length && !/[mK]/.test(line[end])) {
+                        end++;
+                    }
+                    if (end < line.length && line[end] === 'm') {
+                        // Extract SGR parameters
+                        const params = line.slice(idx + 2, end);
+                        currentAttr = this._parseAnsiToAttr(params, currentAttr, baseAttr);
+                        idx = end + 1;
+                        continue;
+                    }
+                    // Skip unknown sequences
+                    idx = end + 1;
+                    continue;
+                }
+                // Regular character - write to buffer
+                // Guard: check both width bounds AND actual buffer cell existence
+                if (x >= 0 && x < this.width && this.buffer[y] && this.buffer[y][x]) {
+                    if (isBlendTransparent) {
+                        // Blend text color with existing content
+                        // EXACT from neo-blessed element.js line 2076: colors.blend(attr, lines[y][x][0])
+                        const existingAttr = this.buffer[y][x][0];
+                        // Two arguments = transparency mode (blends at 50% alpha by default)
+                        const blendedAttr = blend(currentAttr, existingAttr);
+                        this.buffer[y][x] = [blendedAttr, line[idx]];
+                    }
+                    else {
+                        this.buffer[y][x] = [currentAttr, line[idx]];
+                    }
+                }
+                x++;
+                idx++;
+            }
+        }
+    }
+    /**
+     * Parse ANSI SGR parameters and update attribute
+     */
+    _parseAnsiToAttr(params, currentAttr, baseAttr) {
+        const rawCodes = params.length ? params.split(';') : ['0'];
+        const codes = rawCodes.map((value) => {
+            const parsed = parseInt(value, 10);
+            return Number.isNaN(parsed) ? 0 : parsed;
+        });
+        let { flags, fg, bg } = this.unpackAttr(currentAttr);
+        const base = this.unpackAttr(baseAttr);
+        for (let i = 0; i < codes.length; i++) {
+            const code = codes[i];
+            if (code === 0) {
+                flags = base.flags;
+                fg = base.fg;
+                bg = base.bg;
+            }
+            else if (code === 1) {
+                flags |= 1; // bold
+            }
+            else if (code === 4) {
+                flags |= 2; // underline
+            }
+            else if (code === 5) {
+                flags |= 4; // blink
+            }
+            else if (code === 7) {
+                flags |= 8; // inverse
+            }
+            else if (code === 8) {
+                flags |= 16; // invisible
+            }
+            else if (code === 22) {
+                flags &= ~1; // normal intensity
+            }
+            else if (code === 24) {
+                flags &= ~2; // underline off
+            }
+            else if (code === 25) {
+                flags &= ~4; // blink off
+            }
+            else if (code === 27) {
+                flags &= ~8; // inverse off
+            }
+            else if (code === 28) {
+                flags &= ~16; // visible
+            }
+            else if (code >= 30 && code <= 37) {
+                fg = code - 30; // foreground color 0-7
+            }
+            else if (code >= 90 && code <= 97) {
+                fg = code - 90 + 8; // bright foreground
+            }
+            else if (code === 39) {
+                fg = base.fg;
+            }
+            else if (code >= 40 && code <= 47) {
+                bg = code - 40; // background color 0-7
+            }
+            else if (code >= 100 && code <= 107) {
+                bg = code - 100 + 8; // bright background
+            }
+            else if (code === 49) {
+                bg = base.bg;
+            }
+            else if (code === 38 && codes[i + 1] === 5 && typeof codes[i + 2] === 'number') {
+                fg = Math.max(0, Math.min(255, codes[i + 2]));
+                i += 2;
+            }
+            else if (code === 48 && codes[i + 1] === 5 && typeof codes[i + 2] === 'number') {
+                bg = Math.max(0, Math.min(255, codes[i + 2]));
+                i += 2;
+            }
+        }
+        return this.packAttr(flags, fg, bg);
+    }
+    _renderBorder(element, pos) {
+        const border = element.options.border;
+        if (!border)
+            return;
+        const borderType = typeof border === 'string' ? border : border?.type || 'line';
+        if (borderType === 'none')
+            return;
+        // Mark border area as dirty so _diff() outputs the changes
+        this._markDirty(pos.xi, pos.yi, pos.xl - 1, pos.yl - 1);
+        const borderChars = {
+            line: { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+            heavy: { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
+            double: { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+            round: { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
+            ascii: { tl: '.', tr: '.', bl: '`', br: '\'', h: '-', v: '|' },
+            bg: { tl: ' ', tr: ' ', bl: ' ', br: ' ', h: ' ', v: ' ' },
+        };
+        const chars = borderChars[borderType] ?? borderChars.line;
+        // Determine border style with hover/focus/disabled support
+        let borderStyle = element.options.style?.border || {};
+        if (element.disabled) {
+            const disabledStyle = element.options.style?.disabled;
+            if (disabledStyle?.border) {
+                borderStyle = { ...borderStyle, ...disabledStyle.border };
+            }
+            else {
+                borderStyle = { ...borderStyle, fg: 'gray' };
+            }
+        }
+        else if (element._overBorder) {
+            // HOVER HIGHLIGHT
+            const hoverStyle = element.options.style?.hover;
+            if (hoverStyle?.border) {
+                borderStyle = { ...borderStyle, ...hoverStyle.border };
+            }
+            else {
+                // Default hover: bright white
+                borderStyle = { ...borderStyle, fg: 'white', bold: true };
+            }
+        }
+        else if (element.hasFocusedChild()) {
+            const focusStyle = element.options.style?.focus;
+            if (focusStyle?.border) {
+                borderStyle = { ...borderStyle, ...focusStyle.border };
+            }
+            else {
+                // Default focus: cyan
+                borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
+            }
+        }
+        const attr = this.styleToAttr(borderStyle);
+        // Label uses border style if available, otherwise default
+        const labelStyle = typeof border === 'object' && border.labelStyle
+            ? border.labelStyle
+            : borderStyle || {};
+        const labelAttr = this.styleToAttr(labelStyle);
+        // Top border
+        // Guard: check both height bounds AND actual buffer row existence
+        if (pos.yi >= 0 && pos.yi < this.height && this.buffer[pos.yi]) {
+            for (let x = pos.xi; x < pos.xl; x++) {
+                if (x < 0 || x >= this.width || !this.buffer[pos.yi][x])
+                    continue;
+                let ch = chars.h;
+                if (x === pos.xi)
+                    ch = chars.tl;
+                else if (x === pos.xl - 1)
+                    ch = chars.tr;
+                this.buffer[pos.yi][x] = [attr, ch];
+            }
+        }
+        // Bottom border
+        const bottomY = pos.yl - 1;
+        // Guard: check both height bounds AND actual buffer row existence
+        if (bottomY >= 0 && bottomY < this.height && this.buffer[bottomY]) {
+            for (let x = pos.xi; x < pos.xl; x++) {
+                if (x < 0 || x >= this.width || !this.buffer[bottomY][x])
+                    continue;
+                let ch = chars.h;
+                if (x === pos.xi)
+                    ch = chars.bl;
+                else if (x === pos.xl - 1)
+                    ch = chars.br;
+                this.buffer[bottomY][x] = [attr, ch];
+            }
+        }
+        // Left and right borders
+        for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
+            // Guard: check both height bounds AND actual buffer row existence
+            if (y < 0 || y >= this.height || !this.buffer[y])
+                continue;
+            if (pos.xi >= 0 && pos.xi < this.width && this.buffer[y][pos.xi]) {
+                this.buffer[y][pos.xi] = [attr, chars.v];
+            }
+            if (pos.xl - 1 >= 0 && pos.xl - 1 < this.width && this.buffer[y][pos.xl - 1]) {
+                this.buffer[y][pos.xl - 1] = [attr, chars.v];
+            }
+        }
+        // Label
+        if (element.options.label) {
+            const rawLabel = String(element.options.label).trim();
+            if (borderType === 'ascii') {
+                this._renderAsciiLabel(pos, rawLabel, labelAttr, attr);
+            }
+            else {
+                const labelText = ` ${rawLabel} `;
+                let x = pos.xi + 2;
+                for (let i = 0; i < labelText.length && x < pos.xl - 1; i += 1, x += 1) {
+                    // Guard: check buffer existence
+                    if (x >= 0 && x < this.width && this.buffer[pos.yi] && this.buffer[pos.yi][x]) {
+                        this.buffer[pos.yi][x] = [labelAttr, labelText[i]];
+                    }
+                }
+            }
+        }
+    }
+    _dockBorders() {
+        for (let y = 0; y < this.height; y++) {
+            // Guard: check buffer row exists
+            if (!this.buffer[y])
+                continue;
+            for (let x = 0; x < this.width; x++) {
+                // Guard: check buffer cell exists
+                if (!this.buffer[y][x])
+                    continue;
+                const ch = this.buffer[y][x][1];
+                if (!ANGLES[ch])
+                    continue;
+                this.buffer[y][x][1] = this._getAngle(this.buffer, x, y, ch);
+            }
+        }
+    }
+    _renderAsciiLabel(pos, label, labelAttr, borderAttr) {
+        if (!label)
+            return;
+        // Guard: check buffer row exists
+        if (!this.buffer[pos.yi])
+            return;
+        const text = `[ ${label} ]`;
+        const maxWidth = Math.max(0, pos.xl - pos.xi - 2);
+        const truncated = text.length > maxWidth ? text.slice(0, maxWidth) : text;
+        const minStart = pos.xi + 3;
+        const maxStart = Math.max(pos.xi + 1, pos.xl - truncated.length - 1);
+        const start = minStart <= maxStart ? minStart : maxStart;
+        for (let i = 0; i < truncated.length && start + i < pos.xl - 1; i += 1) {
+            const x = start + i;
+            // Guard: check buffer cell exists
+            if (x >= 0 && x < this.width && this.buffer[pos.yi][x]) {
+                this.buffer[pos.yi][x] = [labelAttr, truncated[i]];
+            }
+        }
+        for (let x = pos.xi + 1; x < start && x < this.width; x += 1) {
+            // Guard: check buffer cell exists
+            if (x >= 0 && this.buffer[pos.yi][x]) {
+                this.buffer[pos.yi][x] = [borderAttr, '-'];
+            }
+        }
+        const end = start + truncated.length;
+        for (let x = end; x < pos.xl - 1 && x < this.width; x += 1) {
+            // Guard: check buffer cell exists
+            if (x >= 0 && this.buffer[pos.yi][x]) {
+                this.buffer[pos.yi][x] = [borderAttr, '-'];
+            }
+        }
+    }
+    _getAngle(lines, x, y, fallback) {
+        let angle = 0;
+        const attr = lines[y][x][0];
+        if (lines[y][x - 1] && L_ANGLES[lines[y][x - 1][1]]) {
+            if (!this.options.ignoreDockContrast && lines[y][x - 1][0] !== attr) {
+                return fallback;
+            }
+            angle |= 1 << 3;
+        }
+        if (lines[y - 1] && U_ANGLES[lines[y - 1][x][1]]) {
+            if (!this.options.ignoreDockContrast && lines[y - 1][x][0] !== attr) {
+                return fallback;
+            }
+            angle |= 1 << 2;
+        }
+        if (lines[y][x + 1] && R_ANGLES[lines[y][x + 1][1]]) {
+            if (!this.options.ignoreDockContrast && lines[y][x + 1][0] !== attr) {
+                return fallback;
+            }
+            angle |= 1 << 1;
+        }
+        if (lines[y + 1] && D_ANGLES[lines[y + 1][x][1]]) {
+            if (!this.options.ignoreDockContrast && lines[y + 1][x][0] !== attr) {
+                return fallback;
+            }
+            angle |= 1 << 0;
+        }
+        return ANGLE_TABLE[angle] || fallback;
+    }
+    // Opt #5: Mark rectangular region as dirty
+    _markDirty(x1, y1, x2, y2) {
+        // Expand dirty region to include new area
+        this._dirtyMinX = Math.min(this._dirtyMinX, x1);
+        this._dirtyMinY = Math.min(this._dirtyMinY, y1);
+        this._dirtyMaxX = Math.max(this._dirtyMaxX, x2);
+        this._dirtyMaxY = Math.max(this._dirtyMaxY, y2);
+    }
+    _diff() {
+        // Opt #4: Use array join instead of string concat (O(n) vs O(n²))
+        const parts = [];
+        let lastX = -1;
+        let lastY = -1;
+        let lastAttr = -1;
+        // Opt #5: Only diff dirty region (50-60% reduction in cells checked)
+        // If dirty region is invalid (min > max), diff entire screen
+        let minY = this._dirtyMinY;
+        let maxY = this._dirtyMaxY;
+        let minX = this._dirtyMinX;
+        let maxX = this._dirtyMaxX;
+        // Use actual buffer dimensions to avoid race condition during resize
+        const bufHeight = this.buffer.length;
+        const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
+        if (minY > maxY || minX > maxX) {
+            // Invalid region, diff entire buffer
+            minY = 0;
+            maxY = bufHeight - 1;
+            minX = 0;
+            maxX = bufWidth - 1;
+        }
+        else {
+            // Clamp to buffer bounds (not screen bounds to avoid race condition)
+            minY = Math.max(0, Math.min(minY, bufHeight - 1));
+            maxY = Math.max(0, Math.min(maxY, bufHeight - 1));
+            minX = Math.max(0, Math.min(minX, bufWidth - 1));
+            maxX = Math.max(0, Math.min(maxX, bufWidth - 1));
+        }
+        for (let y = minY; y <= maxY; y++) {
+            // Guard: check buffer row exists
+            if (!this.buffer[y] || !this.lastBuffer[y])
+                continue;
+            for (let x = minX; x <= maxX; x++) {
+                // Guard: check buffer cells exist
+                if (!this.buffer[y][x] || !this.lastBuffer[y][x])
+                    continue;
+                const [attr, ch] = this.buffer[y][x];
+                const [lastAttrCell, lastCh] = this.lastBuffer[y][x];
+                if (attr !== lastAttrCell || ch !== lastCh) {
+                    // Position cursor if needed
+                    if (x !== lastX + 1 || y !== lastY) {
+                        // ALWAYS use explicit cursor positioning to prevent drift
+                        // The \r\n optimization was causing rendering corruption on hover
+                        parts.push(cursor.pos(x, y));
+                    }
+                    // Change attributes if needed
+                    if (attr !== lastAttr) {
+                        parts.push(this.attrToAnsi(attr));
+                        lastAttr = attr;
+                    }
+                    // Write character
+                    parts.push(ch);
+                    this.lastBuffer[y][x] = [attr, ch];
+                    lastX = x;
+                    lastY = y;
+                }
+            }
+        }
+        if (parts.length > 0) {
+            this.write(parts.join(''));
+        }
+        // Opt #5: Reset dirty region after rendering
+        this._dirtyMinX = Infinity;
+        this._dirtyMinY = Infinity;
+        this._dirtyMaxX = -Infinity;
+        this._dirtyMaxY = -Infinity;
+    }
+    draw(start, end) {
+        this.render();
+    }
+    // ============================================================================
+    // Line Manipulation (Scrolling Support)
+    // ============================================================================
+    /**
+     * Insert n blank buffer lines at position, pushing existing lines down
+     */
+    _insertBufferLine(n, y, top, bottom) {
+        if (n <= 0)
+            return;
+        // Shift lines down
+        for (let i = bottom - 1; i >= y + n; i--) {
+            this.buffer[i] = this.buffer[i - n];
+            this.lastBuffer[i] = this.lastBuffer[i - n];
+        }
+        // Fill new lines with blanks
+        for (let i = y; i < y + n; i++) {
+            this.buffer[i] = this.blankLine();
+            this.lastBuffer[i] = this.blankLine();
+        }
+    }
+    /**
+     * Delete n buffer lines at position, pulling lines up
+     */
+    _deleteBufferLine(n, y, top, bottom) {
+        if (n <= 0)
+            return;
+        // Shift lines up
+        for (let i = y; i < bottom - n; i++) {
+            this.buffer[i] = this.buffer[i + n];
+            this.lastBuffer[i] = this.lastBuffer[i + n];
+        }
+        // Fill bottom lines with blanks
+        for (let i = bottom - n; i < bottom; i++) {
+            this.buffer[i] = this.blankLine();
+            this.lastBuffer[i] = this.blankLine();
+        }
+    }
+    /**
+     * Insert n lines at bottom of region
+     */
+    insertBottomLines(top, bottom, n = 1) {
+        this._insertBufferLine(n, bottom - n, top, bottom);
+    }
+    /**
+     * Delete n lines from bottom of region
+     */
+    deleteBottomLines(top, bottom, n = 1) {
+        this._deleteBufferLine(n, bottom - n, top, bottom);
+    }
+    /**
+     * Insert n lines at top of region
+     */
+    insertTopLines(top, bottom, n = 1) {
+        this._insertBufferLine(n, top, top, bottom);
+    }
+    /**
+     * Delete n lines from top of region
+     */
+    deleteTopLines(top, bottom, n = 1) {
+        this._deleteBufferLine(n, top, top, bottom);
+    }
+    /**
+     * Scroll screen up by n lines
+     */
+    scrollUp(n = 1) {
+        this.deleteTopLines(0, this.height, n);
+    }
+    /**
+     * Scroll screen down by n lines
+     */
+    scrollDown(n = 1) {
+        this.insertTopLines(0, this.height, n);
+    }
+    /**
+     * Insert n lines at y position within scroll region (buffer manipulation)
+     * Neo-blessed compatible API - different from Element.insertLine which handles content
+     */
+    insertBufferLines(n, y, top, bottom) {
+        this._insertBufferLine(n, y, top, bottom);
+    }
+    /**
+     * Delete n lines at y position within scroll region (buffer manipulation)
+     * Neo-blessed compatible API - different from Element.deleteLine which handles content
+     */
+    deleteBufferLines(n, y, top, bottom) {
+        this._deleteBufferLine(n, y, top, bottom);
+    }
+    /**
+     * Insert line at top of scroll region (buffer manipulation)
+     */
+    insertBufferTop(top, bottom) {
+        this.insertBufferLines(1, top, top, bottom);
+    }
+    /**
+     * Insert line at bottom of scroll region (buffer manipulation)
+     */
+    insertBufferBottom(top, bottom) {
+        this.deleteBufferLines(1, top, top, bottom);
+    }
+    /**
+     * Delete line at top of scroll region (buffer manipulation)
+     */
+    deleteBufferTop(top, bottom) {
+        this.deleteBufferLines(1, top, top, bottom);
+    }
+    /**
+     * Delete line at bottom of scroll region (buffer manipulation)
+     */
+    deleteBufferBottom(top, bottom) {
+        this.clearRegion(0, this.width, bottom, bottom + 1);
+    }
+    /**
+     * Set scroll region (uses terminal CSR)
+     */
+    setScrollRegion(top, bottom) {
+        this.program.csr(top, bottom);
+    }
+    /**
+     * Reset scroll region
+     */
+    resetScrollRegion() {
+        this.program.resetCursor();
+    }
+    // ============================================================================
+    // Focus Management
+    // ============================================================================
+    /**
+     * Push current focus to stack and focus a new element
+     */
+    focusPush(element) {
+        if (this._focused) {
+            this.focusStack.push(this._focused);
+        }
+        element.focus();
+    }
+    /**
+     * Pop focus from stack and restore it
+     */
+    focusPop() {
+        const prev = this.focusStack.pop();
+        if (prev && !prev.destroyed) {
+            prev.focus();
+            return prev;
+        }
+        return null;
+    }
+    saveFocus() {
+        this.savedFocus = this._focused;
+        return this.savedFocus;
+    }
+    restoreFocus() {
+        if (this.savedFocus) {
+            this.savedFocus.focus();
+        }
+        return this.savedFocus;
+    }
+    rewindFocus() {
+        while (this.focusHistory.length > 0) {
+            this.focusPop();
+        }
+    }
+    /**
+     * Enable focus trapping within a container (for modals)
+     * Tab/Shift+Tab will only cycle through elements within the container
+     */
+    trapFocus(container) {
+        if (this.focusTrap === container)
+            return;
+        // Save current focus via stack
+        if (this._focused) {
+            this.focusStack.push(this._focused);
+        }
+        this.focusTrap = container;
+        // Focus first element in trap
+        const focusable = this._getFocusable(container);
+        if (focusable.length > 0) {
+            focusable[0].focus();
+        }
+    }
+    /**
+     * Disable focus trapping and restore previous focus
+     */
+    releaseFocusTrap() {
+        if (!this.focusTrap)
+            return;
+        this.focusTrap = null;
+        // Restore focus from stack
+        this.focusPop();
+    }
+    /**
+     * Check if focus is currently trapped
+     */
+    isFocusTrapped() {
+        return this.focusTrap !== null;
+    }
+    /**
+     * Get the current focus trap container (if any)
+     */
+    getFocusTrap() {
+        return this.focusTrap;
+    }
+    /**
+     * Get all focusable elements in tree order, sorted by tabIndex
+     * If focus is trapped, only returns elements within the trap container
+     */
+    _getFocusable(element = this) {
+        const root = this.focusTrap || element;
+        const focusableList = [];
+        const traverse = (el) => {
+            if (el.hidden || !el.visible || el.disabled || el.destroyed) {
+                return;
+            }
+            // Check if element itself is focusable
+            const isFocusable = el.options && el.options.focusable &&
+                el.options.tabbable !== false &&
+                el.options.tabIndex !== -1;
+            if (isFocusable) {
+                focusableList.push(el);
+            }
+            // Continue to children
+            if (el.children) {
+                // Sort children by tabIndex if provided, otherwise natural tree order
+                const sortedChildren = [...el.children].sort((a, b) => {
+                    const aIdx = (a.options && a.options.tabIndex) || 0;
+                    const bIdx = (b.options && b.options.tabIndex) || 0;
+                    if (aIdx > 0 && bIdx > 0)
+                        return aIdx - bIdx;
+                    if (aIdx > 0)
+                        return -1;
+                    if (bIdx > 0)
+                        return 1;
+                    return 0;
+                });
+                for (const child of sortedChildren) {
+                    traverse(child);
+                }
+            }
+        };
+        traverse(root);
+        return focusableList;
+    }
+    /**
+     * Focus next focusable element
+     */
+    focusNext() {
+        const focusable = this._getFocusable();
+        if (focusable.length === 0)
+            return;
+        const current = this._focused;
+        if (!current) {
+            focusable[0].focus();
+            return;
+        }
+        const index = focusable.indexOf(current);
+        if (index === -1) {
+            focusable[0].focus();
+            return;
+        }
+        const next = focusable[(index + 1) % focusable.length];
+        next.focus();
+    }
+    /**
+     * Focus previous focusable element
+     */
+    focusPrevious() {
+        const focusable = this._getFocusable();
+        if (focusable.length === 0)
+            return;
+        const current = this._focused;
+        if (!current) {
+            focusable[focusable.length - 1].focus();
+            return;
+        }
+        const index = focusable.indexOf(current);
+        if (index === -1) {
+            focusable[focusable.length - 1].focus();
+            return;
+        }
+        const prev = focusable[(index - 1 + focusable.length) % focusable.length];
+        prev.focus();
+    }
+    /**
+     * Alias for focusPrevious
+     */
+    focusPrev() {
+        this.focusPrevious();
+    }
+    /**
+     * Focus element at offset from current
+     */
+    focusOffset(offset) {
+        const focusable = this._getFocusable();
+        if (focusable.length === 0)
+            return;
+        const current = this._focused;
+        if (!current) {
+            const index = offset >= 0 ? 0 : focusable.length - 1;
+            focusable[index].focus();
+            return;
+        }
+        const index = focusable.indexOf(current);
+        if (index === -1) {
+            focusable[0].focus();
+            return;
+        }
+        const newIndex = (index + offset) % focusable.length;
+        const target = focusable[newIndex < 0 ? newIndex + focusable.length : newIndex];
+        target.focus();
+    }
+    /**
+     * Enable global key bindings (F12, Alt+M) to toggle mouse tracking.
+     * Useful for allowing users to disable mouse capture for text selection.
+     * @param callback Optional callback triggered on toggle, receives (enabled: boolean)
+     */
+    enableMouseToggle(callback) {
+        let mouseEnabled = true;
+        this.key(['f12', 'M-m'], () => {
+            mouseEnabled = !mouseEnabled;
+            if (mouseEnabled) {
+                this.enableMouse();
+            }
+            else {
+                this.disableMouse();
+            }
+            if (callback) {
+                callback(mouseEnabled);
+            }
+            this.render();
+        });
+    }
+    // ============================================================================
+    // Key Handling
+    // ============================================================================
+    key(keys, handler) {
+        const keyList = Array.isArray(keys) ? keys : [keys];
+        for (const k of keyList) {
+            if (!this.keyHandlers.has(k)) {
+                this.keyHandlers.set(k, []);
+            }
+            this.keyHandlers.get(k).push(handler);
+        }
+    }
+    onceKey(keys, handler) {
+        const wrapper = (ch, key) => {
+            this.unkey(keys, wrapper);
+            handler(ch, key);
+        };
+        this.key(keys, wrapper);
+    }
+    unkey(keys, handler) {
+        const keyList = Array.isArray(keys) ? keys : [keys];
+        for (const k of keyList) {
+            const handlers = this.keyHandlers.get(k);
+            if (handlers) {
+                const index = handlers.indexOf(handler);
+                if (index !== -1) {
+                    handlers.splice(index, 1);
+                }
+            }
+        }
+    }
+    // Called by external input handler
+    _handleKey(ch, key) {
+        // Attempt to unlock audio on first interaction
+        if (this._audioUnlocked === undefined) {
+            this._audioUnlocked = true;
+            this.emit('user-interaction');
+        }
+        // Respect key locking
+        if (this._lockKeys)
+            return;
+        let focusTrap = this.focusTrap;
+        if (focusTrap && (focusTrap.hidden || focusTrap.destroyed)) {
+            this.releaseFocusTrap();
+            focusTrap = this.focusTrap;
+        }
+        const suppressGlobalKeys = !!focusTrap;
+        const focused = this._focused;
+        if (focusTrap && focused && focused !== focusTrap && !focused.hasAncestor?.(focusTrap)) {
+            const focusable = this._getFocusable();
+            if (focusable.length > 0) {
+                focusable[0].focus();
+            }
+        }
+        // Try registered screen key handlers first (unless focus is trapped)
+        const handlers = suppressGlobalKeys ? undefined : this.keyHandlers.get(key.full || key.name);
+        let handled = false;
+        if (handlers && handlers.length > 0) {
+            for (const handler of handlers) {
+                if (handler(ch, key) === true)
+                    handled = true;
+            }
+        }
+        // Emit to focused element
+        if (!handled && this._focused) {
+            // Emit specific key event first (for element.key() handlers)
+            const keyName = key.full || key.name;
+            if (keyName) {
+                if (this._focused.emit(`keypress ${keyName}`, ch, key) === true)
+                    handled = true;
+            }
+            // Emit generic keypress event
+            if (!handled) {
+                if (this._focused.emit('keypress', ch, key) === true)
+                    handled = true;
+            }
+        }
+        // Default Tab/Shift-Tab and Arrow keys for focus navigation (only if not handled by widget)
+        if (!handled) {
+            const keyName = key.name;
+            if (keyName === 'tab') {
+                if (key.shift) {
+                    this.focusPrevious();
+                }
+                else {
+                    this.focusNext();
+                }
+                this.render();
+                return;
+            }
+            // Arrow keys for focus navigation (when not handled by widget)
+            if (!key.shift && (keyName === 'up' || keyName === 'left')) {
+                this.focusPrevious();
+                this.render();
+                return;
+            }
+            if (!key.shift && (keyName === 'down' || keyName === 'right')) {
+                this.focusNext();
+                this.render();
+                return;
+            }
+        }
+        if (!suppressGlobalKeys) {
+            this.emit('keypress', ch, key);
+        }
+    }
+    // ============================================================================
+    // Title
+    // ============================================================================
+    setTitle(title) {
+        this.title = title;
+        this.write(ESC + `]0;${title}` + String.fromCharCode(7));
+    }
+    // ============================================================================
+    // Cursor
+    // ============================================================================
+    showCursor() {
+        if (this.cursorHidden) {
+            this.cursorHidden = false;
+            this.write(cursor.show);
+        }
+    }
+    hideCursor() {
+        if (!this.cursorHidden) {
+            this.cursorHidden = true;
+            this.write(cursor.hide);
+        }
+    }
+    // ============================================================================
+    // Lifecycle
+    // ============================================================================
+    /**
+     * Enter alternate buffer and initialize screen
+     */
+    enter() {
+        this.program.alternateBuffer();
+        this.program.hideCursor();
+        this.clear();
+        this.render();
+        this.emit('enter');
+    }
+    /**
+     * Leave alternate buffer and restore terminal
+     */
+    leave() {
+        this.program.showCursor();
+        this.program.normalBuffer();
+        this.emit('leave');
+    }
+    // ============================================================================
+    // Property Getters/Setters
+    // ============================================================================
+    /**
+     * Get currently focused element
+     */
+    getFocused() {
+        return this._focused;
+    }
+    /**
+     * Set focused element (called by Element.focus())
+     */
+    setFocused(element) {
+        // Helper to find the element with a visible border (may be parent)
+        const findBorderElement = (el) => {
+            if (!el)
+                return null;
+            // Check if element has a border with fg color
+            if (el.options?.border && el.options?.border.type !== 'none') {
+                return el;
+            }
+            // Walk up to parent (but stop at screen)
+            if (el.parent && el.parent !== this) {
+                return findBorderElement(el.parent);
+            }
+            return null;
+        };
+        // Blur previous focused element
+        if (this._focused && this._focused !== element) {
+            this._focused.focused = false;
+            this._focused.emit('blur');
+            // Restore original border color on blur
+            const prevBorderEl = findBorderElement(this._focused);
+            if (prevBorderEl && prevBorderEl._originalBorderColor) {
+                // Update both options.style.border and style.border for consistency
+                if (prevBorderEl.options?.style?.border) {
+                    prevBorderEl.options.style.border.fg = prevBorderEl._originalBorderColor;
+                    prevBorderEl.options.style.border.bold = prevBorderEl._originalBorderBold || false;
+                }
+                if (prevBorderEl.style?.border) {
+                    prevBorderEl.style.border.fg = prevBorderEl._originalBorderColor;
+                    prevBorderEl.style.border.bold = prevBorderEl._originalBorderBold || false;
+                }
+            }
+        }
+        // Focus new element
+        this._focused = element;
+        if (element) {
+            element.focused = true;
+            element.emit('focus');
+            // Automatically set high-contrast borders on focused elements
+            const borderEl = findBorderElement(element);
+            if (borderEl) {
+                // Store original border color if not already stored
+                const currentStyle = borderEl.options?.style?.border || borderEl.style?.border || {};
+                if (!borderEl._originalBorderColor) {
+                    borderEl._originalBorderColor = currentStyle.fg || 'cyan';
+                    borderEl._originalBorderBold = currentStyle.bold || false;
+                }
+                // Set prominent white border for focused element
+                if (borderEl.options?.style?.border) {
+                    borderEl.options.style.border.fg = 'white';
+                    borderEl.options.style.border.bold = true;
+                }
+                if (borderEl.style?.border) {
+                    borderEl.style.border.fg = 'white';
+                    borderEl.style.border.bold = true;
+                }
+            }
+        }
+        // Re-render to update focus border styling
+        this.render();
+    }
+    /**
+     * Get width (overrides Element.width for Screen)
+     */
+    get width() {
+        return this._width;
+    }
+    /**
+     * Set width
+     */
+    set width(value) {
+        // Validate width is a positive finite number
+        if (!isFinite(value) || value <= 0) {
+            return;
+        }
+        this._width = value;
+        this.program.cols = value;
+    }
+    /**
+     * Get height (overrides Element.height for Screen)
+     */
+    get height() {
+        return this._height;
+    }
+    /**
+     * Set height
+     */
+    set height(value) {
+        // Validate height is a positive finite number
+        if (!isFinite(value) || value <= 0) {
+            return;
+        }
+        this._height = value;
+        this.program.rows = value;
+    }
+    /**
+     * Get terminal type
+     */
+    get terminal() {
+        return this.program.terminal;
+    }
+    /**
+     * Get number of columns
+     */
+    get cols() {
+        return this._width;
+    }
+    /**
+     * Set number of columns
+     */
+    set cols(value) {
+        this._width = value;
+        this.program.cols = value;
+        this.realloc();
+    }
+    /**
+     * Get number of rows
+     */
+    get rows() {
+        return this._height;
+    }
+    /**
+     * Set number of rows
+     */
+    set rows(value) {
+        this._height = value;
+        this.program.rows = value;
+        this.realloc();
+    }
+    /**
+     * Lock key handlers (prevent input processing)
+     */
+    lockKeys() {
+        this._lockKeys = true;
+    }
+    /**
+     * Unlock key handlers
+     */
+    unlockKeys() {
+        this._lockKeys = false;
+    }
+    // ============================================================================
+    // Resize
+    // ============================================================================
+    /**
+     * Resize the screen to new dimensions
+     * Called when terminal size changes (e.g., browser window resize)
+     */
+    resize(cols, rows) {
+        // Validate dimensions
+        if (!isFinite(cols) || cols <= 0 || !isFinite(rows) || rows <= 0) {
+            return;
+        }
+        if (cols === this._width && rows === this._height) {
+            return; // No change
+        }
+        const wasShrinking = cols < this._width || rows < this._height;
+        // Enable responsive mode if resizing to wider than 80 columns
+        if (cols > 80) {
+            this._responsive = true;
+        }
+        this._width = cols;
+        this._height = rows;
+        this.program.cols = cols;
+        this.program.rows = rows;
+        // When shrinking, clear the terminal first to prevent line wrap artifacts
+        // The old content rendered at larger width gets incorrectly wrapped otherwise
+        if (wasShrinking) {
+            // Clear entire screen and move cursor to home
+            this.program.write(ESC + '[2J' + ESC + '[H');
+        }
+        // Reallocate buffers for new size
+        this.realloc();
+        // Invalidate all element coordinate caches after resize
+        // This ensures elements recalculate their positions with new screen dimensions
+        this.walk((el) => {
+            el._coordsCacheValid = false;
+        });
+        // Emit resize event for elements that need to respond
+        this.emit('resize');
+        // Force full redraw
+        this.render();
+    }
+    // ============================================================================
+    // Utilities
+    // ============================================================================
+    _colorToCode(color) {
+        if (typeof color === 'number')
+            return color;
+        const colors = {
+            // Special - transparent means keep existing background
+            transparent: 0x1ff,
+            none: 0x1ff,
+            default: 0x1ff,
+            // Standard colors
+            black: 0,
+            red: 1,
+            green: 2,
+            yellow: 3,
+            blue: 4,
+            magenta: 5,
+            cyan: 6,
+            white: 7,
+            // Bright colors
+            gray: 8,
+            grey: 8,
+            lightblack: 8,
+            lightred: 9,
+            lightgreen: 10,
+            lightyellow: 11,
+            lightblue: 12,
+            lightmagenta: 13,
+            lightcyan: 14,
+            lightwhite: 15,
+        };
+        const lowerColor = String(color).toLowerCase();
+        return colors[lowerColor] !== undefined ? colors[lowerColor] : 7;
+    }
+    _stripAnsi(str) {
+        // Use RegExp constructor to avoid Terser stripping ESC in regex literal
+        const ansiRegex = new RegExp(ESC + '\\[[0-9;]*m', 'g');
+        return str.replace(ansiRegex, '');
+    }
+    /**
+     * Clear entire screen
+     */
+    clear() {
+        this.clearBuffers();
+        this.program.clear();
+    }
+    // ============================================================================
+    // Advanced Features (External Programs, Effects, Screenshot)
+    // ============================================================================
+    /**
+     * Spawn external program
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1737-1798
+     */
+    spawn(file, args, options) {
+        throw new Error('spawn() not supported in browser environment - requires Node.js child_process');
+    }
+    /**
+     * Execute external program and get success status
+     * NOTE: Browser environment stub - requires Node.js child_process
+     * STUB from neo-blessed screen.js lines 1800-1814
+     */
+    exec(file, args, options, callback) {
+        throw new Error('exec() not supported in browser environment - requires Node.js child_process');
+    }
+    /**
+     * Open text editor and return edited content
+     * NOTE: Browser environment stub - requires Node.js fs and child_process
+     * STUB from neo-blessed screen.js lines 1816-1864
+     */
+    readEditor(options, callback) {
+        const err = new Error('readEditor() not supported in browser environment - requires Node.js fs/child_process');
+        if (callback)
+            callback(err);
+        else
+            throw err;
+    }
+    /**
+     * Display image using external image viewer
+     * NOTE: Browser environment stub - requires Node.js child_process and external w3mimgdisplay
+     * STUB from neo-blessed screen.js lines 1866-1904
+     */
+    displayImage(file, callback) {
+        const err = new Error('displayImage() not supported in browser environment - requires external w3mimgdisplay');
+        if (callback)
+            callback(err);
+        else
+            throw err;
+    }
+    /**
+     * Set visual effects (hover, blur, focus) on element
+     * EXACT from neo-blessed screen.js lines 1906-1957
+     */
+    setEffects(el, fel, over, out, effects, temp) {
+        if (!effects)
+            return;
+        const tmp = {};
+        if (temp && typeof el !== 'function') {
+            el[temp] = tmp;
+        }
+        let getEl;
+        if (typeof el !== 'function') {
+            const _el = el;
+            getEl = () => _el;
+        }
+        else {
+            getEl = el;
+        }
+        let getFel = null;
+        if (fel) {
+            if (typeof fel !== 'function') {
+                const _fel = fel;
+                getFel = () => _fel;
+            }
+            else {
+                getFel = fel;
+            }
+        }
+        const $ = (name) => {
+            return function () {
+                const _el = getEl();
+                const _fel = getFel ? getFel() : null;
+                const elStyle = _el.style || {};
+                const felStyle = _fel ? (_fel.style || {}) : {};
+                if (tmp[name] !== undefined) {
+                    elStyle[name] = tmp[name];
+                    delete tmp[name];
+                }
+                if (effects[name] !== undefined) {
+                    tmp[name] = elStyle[name];
+                    elStyle[name] = effects[name];
+                }
+                if (_fel && effects[name + 'Focus'] !== undefined) {
+                    tmp[name] = felStyle[name];
+                    felStyle[name] = effects[name + 'Focus'];
+                }
+                this.screen.render();
+            };
+        };
+        getEl().on(over, $(over));
+        getEl().on(out, $(out));
+    }
+    /**
+     * Initialize hover text box
+     * Creates tooltip-style box that appears on hover
+     * EXACT from neo-blessed screen.js lines 615-672
+     */
+    _initHover() {
+        if (this._hoverText) {
+            return;
+        }
+        // Would require Box widget - deferred for now
+        // Full implementation requires blessed Box widget with specific options
+        // Hover text should appear at cursor position with auto-hide timer
+        this._hoverText = null;
+    }
+    /**
+     * Take screenshot of screen buffer as text
+     * Returns ANSI/plain text representation of current screen
+     * EXACT from neo-blessed screen.js lines 2108-2197
+     */
+    screenshot(xi, xl, yi, yl, term) {
+        if (xi == null)
+            xi = 0;
+        if (xl == null)
+            xl = this.cols;
+        if (yi == null)
+            yi = 0;
+        if (yl == null)
+            yl = this.rows;
+        if (xi < 0)
+            xi = 0;
+        if (yi < 0)
+            yi = 0;
+        let main = '';
+        for (let y = yi; y < yl; y++) {
+            let line = '';
+            for (let x = xi; x < xl; x++) {
+                const cell = this.buffer[y]?.[x];
+                if (cell && cell.length >= 2) {
+                    line += cell[1] || ' '; // cell[0] = attr, cell[1] = char
+                }
+                else {
+                    line += ' ';
+                }
+            }
+            main += line;
+            if (y < yl - 1)
+                main += '\n';
+        }
+        return main;
+    }
+    // ============================================================================
+    // Cleanup
+    // ============================================================================
+    destroy() {
+        if (this.destroyed)
+            return;
+        // Clear pending render timer to prevent firing after destroy
+        if (this._renderTimer) {
+            clearTimeout(this._renderTimer);
+            this._renderTimer = null;
+        }
+        // Remove browser context menu handler
+        if (this._contextMenuHandler) {
+            const doc = typeof globalThis !== 'undefined' ? globalThis.document : undefined;
+            if (doc) {
+                doc.removeEventListener('contextmenu', this._contextMenuHandler, true);
+            }
+            this._contextMenuHandler = null;
+        }
+        this.write(cursor.show);
+        this.write(screenAnsi.clear);
+        this.write(cursor.pos(0, 0));
+        this.write(attrs.reset);
+        this.flush();
+        // Destroy program
+        this.program.destroy();
+        super.destroy();
+    }
+    /**
+     * Handle input data (forward to program)
+     */
+    _handleData(data) {
+        this.program._handleData(data);
+    }
+}
+const ANGLES = {
+    '┘': true,
+    '┐': true,
+    '┌': true,
+    '└': true,
+    '┼': true,
+    '├': true,
+    '┤': true,
+    '┴': true,
+    '┬': true,
+    '│': true,
+    '─': true,
+};
+const L_ANGLES = {
+    '┌': true,
+    '└': true,
+    '┼': true,
+    '├': true,
+    '┴': true,
+    '┬': true,
+    '─': true,
+};
+const U_ANGLES = {
+    '┐': true,
+    '┌': true,
+    '┼': true,
+    '├': true,
+    '┤': true,
+    '┬': true,
+    '│': true,
+};
+const R_ANGLES = {
+    '┘': true,
+    '┐': true,
+    '┼': true,
+    '┤': true,
+    '┴': true,
+    '┬': true,
+    '─': true,
+};
+const D_ANGLES = {
+    '┘': true,
+    '└': true,
+    '┼': true,
+    '├': true,
+    '┤': true,
+    '┴': true,
+    '│': true,
+};
+const ANGLE_TABLE = {
+    0: '',
+    1: '│',
+    2: '─',
+    3: '┌',
+    4: '│',
+    5: '│',
+    6: '└',
+    7: '├',
+    8: '─',
+    9: '┐',
+    10: '─',
+    11: '┬',
+    12: '┘',
+    13: '┤',
+    14: '┴',
+    15: '┼',
+};

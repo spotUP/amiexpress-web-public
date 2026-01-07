@@ -1,1 +1,241 @@
-import{Box}from"./box";export class Video extends Box{constructor(t={}){const{src:e,file:i,autoPlay:s,loop:h,controls:r,muted:o,...a}=t;super({...a,width:t.width||60,height:t.height||20,border:void 0!==t.border?t.border:{type:"line"}}),this.src="",this.playing=!1,this.streaming=!1,this.currentTime=0,this.duration=0,this.autoPlay=s||!1,this.loop=h||!1,this.controls=!1!==r,this.muted=o||!1,e?this.setSource(e):i&&this.setSource(i),this.controls&&this.setupControls()}setupControls(){this.enableKeys(),this.key(["space"],()=>{this.togglePlay()}),this.key(["left"],()=>{this.seek(-5)}),this.key(["right"],()=>{this.seek(5)}),this.key(["m"],()=>{this.toggleMute()}),this.key(["f"],()=>{this.emit("fullscreen")})}setSource(t){this.src=t,this.currentTime=0,this.playing=!1,this.streaming=!1,this.updateDisplay(),this.emit("load",t),this.autoPlay&&this.play()}setFrame(t){this.streaming=!0,this.setContent(t),this.screen&&this.screen.render()}updateDisplay(){if(this.streaming)return;const t="number"==typeof this.width?this.width:60,e="number"==typeof this.height?this.height:20,i=[];for(let s=0;s<e-3;s++)i.push(" ".repeat(t));const s=`[${this.playing?"Playing":"Paused"}] ${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`,h=Math.floor((t-s.length)/2);if(i.push(" ".repeat(h)+s),this.controls){const e="[Space] Play/Pause  [←→] Seek  [M] Mute  [F] Fullscreen",s=Math.floor((t-e.length)/2);i.push(" ".repeat(s)+e)}this.setContent(i.join("\n")),this.screen&&this.screen.render()}formatTime(t){const e=Math.floor(t/60),i=Math.floor(t%60);return`${e.toString().padStart(2,"0")}:${i.toString().padStart(2,"0")}`}play(){this.playing=!0,this.updateDisplay(),this.emit("play")}pause(){this.playing=!1,this.updateDisplay(),this.emit("pause")}togglePlay(){this.playing?this.pause():this.play()}stop(){this.playing=!1,this.currentTime=0,this.updateDisplay(),this.emit("stop")}seek(t){this.currentTime=Math.max(0,Math.min(this.duration,this.currentTime+t)),this.updateDisplay(),this.emit("seek",this.currentTime)}seekTo(t){this.currentTime=Math.max(0,Math.min(this.duration,t)),this.updateDisplay(),this.emit("seek",this.currentTime)}getCurrentTime(){return this.currentTime}getDuration(){return this.duration}setDuration(t){this.duration=t,this.updateDisplay()}isPlaying(){return this.playing}isMuted(){return this.muted}mute(){this.muted=!0,this.emit("mute")}unmute(){this.muted=!1,this.emit("unmute")}toggleMute(){this.muted?this.unmute():this.mute()}getSource(){return this.src}setLoop(t){this.loop=t}isLooping(){return this.loop}}
+/**
+ * Video - Video playback widget (browser-compatible placeholder)
+ */
+import { Box } from './box';
+export class Video extends Box {
+    constructor(options = {}) {
+        const { src, file, autoPlay, loop, controls, muted, ...boxOptions } = options;
+        super({
+            ...boxOptions,
+            width: options.width || 60,
+            height: options.height || 20,
+            border: options.border !== undefined ? options.border : { type: 'line' },
+        });
+        this.src = '';
+        this.playing = false;
+        this.streaming = false;
+        this.currentTime = 0;
+        this.duration = 0;
+        this.autoPlay = autoPlay || false;
+        this.loop = loop || false;
+        this.controls = controls !== false;
+        this.muted = muted || false;
+        if (src) {
+            this.setSource(src);
+        }
+        else if (file) {
+            this.setSource(file);
+        }
+        // Setup controls if enabled
+        if (this.controls) {
+            this.setupControls();
+        }
+    }
+    /**
+     * Setup keyboard controls
+     */
+    setupControls() {
+        this.enableKeys();
+        this.key(['space'], () => {
+            this.togglePlay();
+        });
+        this.key(['left'], () => {
+            this.seek(-5);
+        });
+        this.key(['right'], () => {
+            this.seek(5);
+        });
+        this.key(['m'], () => {
+            this.toggleMute();
+        });
+        this.key(['f'], () => {
+            this.emit('fullscreen');
+        });
+    }
+    /**
+     * Set video source
+     */
+    setSource(src) {
+        this.src = src;
+        this.currentTime = 0;
+        this.playing = false;
+        this.streaming = false;
+        this.updateDisplay();
+        this.emit('load', src);
+        if (this.autoPlay) {
+            this.play();
+        }
+    }
+    /**
+     * Set raw video frame (ASCII)
+     */
+    setFrame(frame) {
+        this.streaming = true;
+        this.setContent(frame);
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Update display
+     */
+    updateDisplay() {
+        if (this.streaming)
+            return;
+        const w = typeof this.width === 'number' ? this.width : 60;
+        const h = typeof this.height === 'number' ? this.height : 20;
+        const lines = [];
+        // Video frame placeholder
+        for (let i = 0; i < h - 3; i++) {
+            lines.push(' '.repeat(w));
+        }
+        // Video info
+        const info = `[${this.playing ? 'Playing' : 'Paused'}] ${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`;
+        const padding = Math.floor((w - info.length) / 2);
+        lines.push(' '.repeat(padding) + info);
+        // Controls
+        if (this.controls) {
+            const controlsText = `[Space] Play/Pause  [←→] Seek  [M] Mute  [F] Fullscreen`;
+            const controlsPadding = Math.floor((w - controlsText.length) / 2);
+            lines.push(' '.repeat(controlsPadding) + controlsText);
+        }
+        this.setContent(lines.join('\n'));
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Format time in MM:SS
+     */
+    formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    /**
+     * Play video
+     */
+    play() {
+        this.playing = true;
+        this.updateDisplay();
+        this.emit('play');
+    }
+    /**
+     * Pause video
+     */
+    pause() {
+        this.playing = false;
+        this.updateDisplay();
+        this.emit('pause');
+    }
+    /**
+     * Toggle play/pause
+     */
+    togglePlay() {
+        if (this.playing) {
+            this.pause();
+        }
+        else {
+            this.play();
+        }
+    }
+    /**
+     * Stop video
+     */
+    stop() {
+        this.playing = false;
+        this.currentTime = 0;
+        this.updateDisplay();
+        this.emit('stop');
+    }
+    /**
+     * Seek by offset
+     */
+    seek(offset) {
+        this.currentTime = Math.max(0, Math.min(this.duration, this.currentTime + offset));
+        this.updateDisplay();
+        this.emit('seek', this.currentTime);
+    }
+    /**
+     * Seek to time
+     */
+    seekTo(time) {
+        this.currentTime = Math.max(0, Math.min(this.duration, time));
+        this.updateDisplay();
+        this.emit('seek', this.currentTime);
+    }
+    /**
+     * Get current time
+     */
+    getCurrentTime() {
+        return this.currentTime;
+    }
+    /**
+     * Get duration
+     */
+    getDuration() {
+        return this.duration;
+    }
+    /**
+     * Set duration
+     */
+    setDuration(duration) {
+        this.duration = duration;
+        this.updateDisplay();
+    }
+    /**
+     * Check if playing
+     */
+    isPlaying() {
+        return this.playing;
+    }
+    /**
+     * Check if muted
+     */
+    isMuted() {
+        return this.muted;
+    }
+    /**
+     * Mute audio
+     */
+    mute() {
+        this.muted = true;
+        this.emit('mute');
+    }
+    /**
+     * Unmute audio
+     */
+    unmute() {
+        this.muted = false;
+        this.emit('unmute');
+    }
+    /**
+     * Toggle mute
+     */
+    toggleMute() {
+        if (this.muted) {
+            this.unmute();
+        }
+        else {
+            this.mute();
+        }
+    }
+    /**
+     * Get video source
+     */
+    getSource() {
+        return this.src;
+    }
+    /**
+     * Set loop mode
+     */
+    setLoop(loop) {
+        this.loop = loop;
+    }
+    /**
+     * Check if looping
+     */
+    isLooping() {
+        return this.loop;
+    }
+}

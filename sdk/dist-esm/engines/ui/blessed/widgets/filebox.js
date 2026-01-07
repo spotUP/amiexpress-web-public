@@ -1,1 +1,141 @@
-import{List}from"./list";import{Box}from"./box";export class FileBox extends Box{constructor(e={}){const{cwd:t,directory:s,allowMultiple:i,...l}=e;super({...l,border:void 0!==e.border?e.border:{type:"line"},label:e.label||" Select File "}),this.selected=[],this.cwd=t||"/",this.directory=s||!1,this.allowMultiple=i||!1,this.list=new List({parent:this,top:0,left:0,width:"100%-2",height:"100%-2",keys:!0,vi:!0,mouse:!0,style:e.style}),this.list.on("select",(e,t)=>{this.handleSelection(e.content||e)}),this.list.key(["escape","q"],()=>(this.emit("cancel"),this.hide(),!0)),this.refresh()}refresh(){this.emit("refresh",this.cwd),this.list.setItems(["(Use setItems() to populate file list)","","Example:",'fileBox.setItems(["file1.txt", "file2.txt"]);'])}handleSelection(e){if(".."===e){const e=this.cwd.split("/").filter(e=>e);return e.pop(),this.cwd="/"+e.join("/"),void this.refresh()}if(e.endsWith("/")){const t=e.slice(0,-1);"/"===this.cwd?this.cwd="/"+t:this.cwd=this.cwd+"/"+t,this.refresh()}else if(this.allowMultiple){const t=this.selected.indexOf(e);t>=0?this.selected.splice(t,1):this.selected.push(e),this.emit("select",this.selected,this.cwd)}else this.selected=[e],this.emit("select",e,this.cwd),this.directory||this.hide()}setItems(e){const t="/"!==this.cwd?["..",...e]:e;this.list.setItems(t)}getCwd(){return this.cwd}setCwd(e){this.cwd=e,this.refresh()}getSelected(){return[...this.selected]}clearSelection(){this.selected=[]}focus(){this.list.focus()}}
+/**
+ * FileBox - File/directory selection dialog
+ */
+import { List } from './list';
+import { Box } from './box';
+export class FileBox extends Box {
+    constructor(options = {}) {
+        const { cwd, directory, allowMultiple, ...boxOptions } = options;
+        super({
+            ...boxOptions,
+            border: options.border !== undefined ? options.border : { type: 'line' },
+            label: options.label || ' Select File ',
+        });
+        this.selected = [];
+        this.cwd = cwd || '/';
+        this.directory = directory || false;
+        this.allowMultiple = allowMultiple || false;
+        // Create internal list
+        this.list = new List({
+            parent: this,
+            top: 0,
+            left: 0,
+            width: '100%-2',
+            height: '100%-2',
+            keys: true,
+            vi: true,
+            mouse: true,
+            style: options.style,
+        });
+        // Handle selection
+        this.list.on('select', (item, index) => {
+            this.handleSelection(item.content || item);
+        });
+        // Handle cancel
+        this.list.key(['escape', 'q'], () => {
+            this.emit('cancel');
+            this.hide();
+            return true;
+        });
+        // Load initial directory
+        this.refresh();
+    }
+    /**
+     * Refresh file list
+     */
+    refresh() {
+        // In browser, we can't actually list files
+        // This is a placeholder that emits an event for custom handling
+        this.emit('refresh', this.cwd);
+        // Default empty list with instructions
+        this.list.setItems([
+            '(Use setItems() to populate file list)',
+            '',
+            'Example:',
+            'fileBox.setItems(["file1.txt", "file2.txt"]);',
+        ]);
+    }
+    /**
+     * Handle file/directory selection
+     */
+    handleSelection(item) {
+        if (item === '..') {
+            // Go up one directory
+            const parts = this.cwd.split('/').filter(p => p);
+            parts.pop();
+            this.cwd = '/' + parts.join('/');
+            this.refresh();
+            return;
+        }
+        if (item.endsWith('/')) {
+            // Directory - navigate into it
+            const dirName = item.slice(0, -1);
+            if (this.cwd === '/') {
+                this.cwd = '/' + dirName;
+            }
+            else {
+                this.cwd = this.cwd + '/' + dirName;
+            }
+            this.refresh();
+        }
+        else {
+            // File - select it
+            if (this.allowMultiple) {
+                const index = this.selected.indexOf(item);
+                if (index >= 0) {
+                    this.selected.splice(index, 1);
+                }
+                else {
+                    this.selected.push(item);
+                }
+                this.emit('select', this.selected, this.cwd);
+            }
+            else {
+                this.selected = [item];
+                this.emit('select', item, this.cwd);
+                if (!this.directory) {
+                    this.hide();
+                }
+            }
+        }
+    }
+    /**
+     * Set file list items
+     */
+    setItems(items) {
+        // Add parent directory option if not at root
+        const listItems = this.cwd !== '/' ? ['..', ...items] : items;
+        this.list.setItems(listItems);
+    }
+    /**
+     * Get current directory
+     */
+    getCwd() {
+        return this.cwd;
+    }
+    /**
+     * Set current directory
+     */
+    setCwd(cwd) {
+        this.cwd = cwd;
+        this.refresh();
+    }
+    /**
+     * Get selected items
+     */
+    getSelected() {
+        return [...this.selected];
+    }
+    /**
+     * Clear selection
+     */
+    clearSelection() {
+        this.selected = [];
+    }
+    /**
+     * Focus the file list
+     */
+    focus() {
+        this.list.focus();
+    }
+}

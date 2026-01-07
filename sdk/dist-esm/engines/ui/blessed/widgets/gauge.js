@@ -1,1 +1,158 @@
-import{ContribCanvas as Canvas}from"./contrib-canvas";export class Gauge extends Canvas{constructor(t={}){super(t),this._pendingPercent=null,this._pendingStack=null,this.options.stroke=this.options.stroke||"magenta",this.options.fill=this.options.fill||"white",this.options.showLabel=!1!==this.options.showLabel;const e=()=>{this._pendingStack?(this._renderStack(this._pendingStack),this._pendingStack=null):null!==this._pendingPercent?(this._renderPercent(this._pendingPercent),this._pendingPercent=null):this.options.stack?(this.stack=this.options.stack,this._renderStack(this.stack)):void 0!==this.options.percent&&(this.percent=this.options.percent,this._renderPercent(this.percent))};this.screen&&this.ctx&&e(),this.on("attach",e)}calcSize(){let t=2*Math.max(8,this.width)-4,e=4*Math.max(4,this.height);t=Math.max(8,t),e=Math.max(8,e),t=2*Math.floor(t/2),e=4*Math.floor(e/4),this.canvasSize={width:t,height:e}}get type(){return"gauge"}setData(t){Array.isArray(t)&&t.length>0?this.setStack(t):"number"==typeof t&&this.setPercent(t)}setPercent(t){this.ctx?this._renderPercent(t):this._pendingPercent=t}_renderPercent(t){if(!this.ctx)return;const e=this.ctx;e.strokeStyle=this.options.stroke,e.fillStyle=this.options.fill,e.clearRect(0,0,this.canvasSize.width,this.canvasSize.height);let s=t;t<1.001&&(s=100*t);const i=s/100*(this.canvasSize.width-3);e.fillRect(1,2,i,2);i<7&&(e.strokeStyle="normal"),this.options.showLabel&&e.fillText(Math.round(s)+"%",7,3),this.syncContent()}setStack(t){this.ctx?this._renderStack(t):this._pendingStack=t}_renderStack(t){if(!this.ctx)return;const e=["green","magenta","cyan","red","blue"],s=this.ctx;let i=1,n=5;s.clearRect(0,0,this.canvasSize.width,this.canvasSize.height);for(let h=0;h<t.length;h++){const o=t[h];let r;r="object"==typeof o?o.percent:o,s.strokeStyle=("object"==typeof o?o.stroke:void 0)||e[h%e.length],s.fillStyle=this.options.fill,n=5,r<1.001&&(r*=100);const a=r/100*(this.canvasSize.width-3);s.fillRect(i,2,a,2),n=a/2-1;const c=i+n;i+a<c&&(s.strokeStyle="normal"),this.options.showLabel&&s.fillText(r+"%",c,3),i+=a}this.syncContent()}getOptionsPrototype(){return{percent:10}}}export function gauge(t={}){return new Gauge(t)}
+/**
+ * Gauge Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/gauge.js
+ * Progress bar gauge with single percent or stacked segments
+ */
+import { ContribCanvas as Canvas } from './contrib-canvas';
+/**
+ * Gauge Widget
+ * Displays progress bars with percentage labels
+ */
+export class Gauge extends Canvas {
+    constructor(options = {}) {
+        super(options);
+        this._pendingPercent = null;
+        this._pendingStack = null;
+        this.options.stroke = this.options.stroke || 'magenta';
+        this.options.fill = this.options.fill || 'white';
+        this.options.showLabel = this.options.showLabel !== false;
+        // Apply pending data first, then options data
+        const applyData = () => {
+            if (this._pendingStack) {
+                this._renderStack(this._pendingStack);
+                this._pendingStack = null;
+            }
+            else if (this._pendingPercent !== null) {
+                this._renderPercent(this._pendingPercent);
+                this._pendingPercent = null;
+            }
+            else if (this.options.stack) {
+                this.stack = this.options.stack;
+                this._renderStack(this.stack);
+            }
+            else if (this.options.percent !== undefined) {
+                this.percent = this.options.percent;
+                this._renderPercent(this.percent);
+            }
+        };
+        // If already attached (parent was specified in options), apply data now
+        if (this.screen && this.ctx) {
+            applyData();
+        }
+        // Also listen for future attach events
+        this.on('attach', applyData);
+    }
+    calcSize() {
+        // Get widget dimensions with minimums
+        const widgetWidth = Math.max(8, this.width);
+        const widgetHeight = Math.max(4, this.height);
+        // Calculate canvas size (gauge uses text-like coordinates, so multiply by braille factors)
+        let width = widgetWidth * 2 - 4;
+        let height = widgetHeight * 4;
+        // Ensure minimum canvas size for gauge bar (needs y=2 + height=2)
+        width = Math.max(8, width);
+        height = Math.max(8, height);
+        // Round to required multiples (width: 2, height: 4) for braille mapping
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+    }
+    get type() {
+        return 'gauge';
+    }
+    setData(data) {
+        if (Array.isArray(data) && data.length > 0) {
+            this.setStack(data);
+        }
+        else if (typeof data === 'number') {
+            this.setPercent(data);
+        }
+    }
+    setPercent(percent) {
+        if (!this.ctx) {
+            this._pendingPercent = percent;
+            return;
+        }
+        this._renderPercent(percent);
+    }
+    _renderPercent(percent) {
+        if (!this.ctx)
+            return;
+        const c = this.ctx;
+        c.strokeStyle = this.options.stroke;
+        c.fillStyle = this.options.fill;
+        c.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
+        let adjustedPercent = percent;
+        if (percent < 1.001) {
+            adjustedPercent = percent * 100;
+        }
+        const width = (adjustedPercent / 100) * (this.canvasSize.width - 3);
+        c.fillRect(1, 2, width, 2);
+        let textX = 7;
+        if (width < textX) {
+            c.strokeStyle = 'normal';
+        }
+        if (this.options.showLabel) {
+            c.fillText(Math.round(adjustedPercent) + '%', textX, 3);
+        }
+        // Sync canvas content to element
+        this.syncContent();
+    }
+    setStack(stack) {
+        if (!this.ctx) {
+            this._pendingStack = stack;
+            return;
+        }
+        this._renderStack(stack);
+    }
+    _renderStack(stack) {
+        if (!this.ctx)
+            return;
+        const colors = ['green', 'magenta', 'cyan', 'red', 'blue'];
+        const c = this.ctx;
+        let leftStart = 1;
+        let textLeft = 5;
+        c.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
+        for (let i = 0; i < stack.length; i++) {
+            const currentStack = stack[i];
+            let percent;
+            if (typeof currentStack === 'object') {
+                percent = currentStack.percent;
+            }
+            else {
+                percent = currentStack;
+            }
+            c.strokeStyle =
+                (typeof currentStack === 'object' ? currentStack.stroke : undefined) ||
+                    colors[i % colors.length];
+            c.fillStyle = this.options.fill;
+            textLeft = 5;
+            if (percent < 1.001) {
+                percent = percent * 100;
+            }
+            const width = (percent / 100) * (this.canvasSize.width - 3);
+            c.fillRect(leftStart, 2, width, 2);
+            textLeft = width / 2 - 1;
+            const textX = leftStart + textLeft;
+            if (leftStart + width < textX) {
+                c.strokeStyle = 'normal';
+            }
+            if (this.options.showLabel) {
+                c.fillText(percent + '%', textX, 3);
+            }
+            leftStart += width;
+        }
+        // Sync canvas content to element
+        this.syncContent();
+    }
+    getOptionsPrototype() {
+        return { percent: 10 };
+    }
+}
+/**
+ * Factory function
+ */
+export function gauge(options = {}) {
+    return new Gauge(options);
+}

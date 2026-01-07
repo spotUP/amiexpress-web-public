@@ -1,1 +1,131 @@
-import{ContribCanvas as Canvas}from"./contrib-canvas";export class Bar extends Canvas{constructor(t={}){super(t),this._pendingData=null,this.options.barWidth=this.options.barWidth||6,this.options.barSpacing=this.options.barSpacing||9,this.options.barSpacing-this.options.barWidth<3&&(this.options.barSpacing=this.options.barWidth+3),this.options.xOffset=null==this.options.xOffset?5:this.options.xOffset,!1===this.options.showText?this.options.showText=!1:this.options.showText=!0;const i=()=>{this._pendingData?(this._renderData(this._pendingData),this._pendingData=null):this.options.data&&this._renderData(this.options.data)};this.screen&&this.ctx&&i(),this.on("attach",i)}calcSize(){let t=2*(Math.max(8,this.width)-2),i=4*Math.max(4,this.height);t=Math.max(16,t),i=Math.max(16,i),t=2*Math.floor(t/2),i=4*Math.floor(i/4),this.canvasSize={width:t,height:i}}setData(t){this.ctx?this._renderData(t):this._pendingData=t}_renderData(t){if(!this.ctx)return;this.clear();const i=this.ctx;let s=Math.max(...t.data);s=Math.max(s,this.options.maxHeight||0);let a=this.options.xOffset;const o=this.canvasSize.height-5;for(let h=0;h<t.data.length;h++){const n=Math.round(o*(t.data[h]/s));t.data[h]>0?(i.strokeStyle="blue",this.options.barBgColor&&(i.strokeStyle=this.options.barBgColor),i.fillRect(a,o-n+1,this.options.barWidth,n)):i.strokeStyle="normal",i.fillStyle="white",this.options.barFgColor&&(i.fillStyle=this.options.barFgColor),this.options.showText&&i.fillText(t.data[h].toString(),a+1,this.canvasSize.height-4),i.strokeStyle="normal",i.fillStyle="white",this.options.labelColor&&(i.fillStyle=this.options.labelColor),this.options.showText&&i.fillText(t.titles[h],a+1,this.canvasSize.height-3),a+=this.options.barSpacing}this.syncContent()}getOptionsPrototype(){return{barWidth:1,barSpacing:1,xOffset:1,maxHeight:1,data:{titles:["s"],data:[1]}}}get type(){return"bar"}}export function bar(t={}){return new Bar(t)}
+/**
+ * Bar Chart Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/charts/bar.js
+ * Vertical bar chart with labels
+ */
+import { ContribCanvas as Canvas } from './contrib-canvas';
+/**
+ * Bar Chart Widget
+ * Displays vertical bars with labels and values
+ */
+export class Bar extends Canvas {
+    constructor(options = {}) {
+        super(options);
+        this._pendingData = null;
+        this.options.barWidth = this.options.barWidth || 6;
+        this.options.barSpacing = this.options.barSpacing || 9;
+        if (this.options.barSpacing - this.options.barWidth < 3) {
+            this.options.barSpacing = this.options.barWidth + 3;
+        }
+        this.options.xOffset = this.options.xOffset == null ? 5 : this.options.xOffset;
+        if (this.options.showText === false) {
+            this.options.showText = false;
+        }
+        else {
+            this.options.showText = true;
+        }
+        // Apply pending data or initial data once attached
+        const applyData = () => {
+            if (this._pendingData) {
+                this._renderData(this._pendingData);
+                this._pendingData = null;
+            }
+            else if (this.options.data) {
+                this._renderData(this.options.data);
+            }
+        };
+        // If already attached (parent was specified in options), apply data now
+        if (this.screen && this.ctx) {
+            applyData();
+        }
+        // Also listen for future attach events
+        this.on('attach', applyData);
+    }
+    calcSize() {
+        // Get widget dimensions, ensuring minimum sizes
+        const widgetWidth = Math.max(8, this.width);
+        const widgetHeight = Math.max(4, this.height);
+        // Calculate canvas size with braille multipliers
+        // Each terminal cell = 2 braille pixels wide, 4 braille pixels tall
+        let width = (widgetWidth - 2) * 2;
+        let height = widgetHeight * 4;
+        // Ensure minimum canvas size for bar rendering
+        width = Math.max(16, width);
+        height = Math.max(16, height);
+        // Round to required multiples (width: 2, height: 4) for braille mapping
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+    }
+    setData(bar) {
+        if (!this.ctx) {
+            // Defer rendering until attached to screen
+            this._pendingData = bar;
+            return;
+        }
+        this._renderData(bar);
+    }
+    _renderData(bar) {
+        if (!this.ctx)
+            return;
+        this.clear();
+        const c = this.ctx;
+        let max = Math.max(...bar.data);
+        max = Math.max(max, this.options.maxHeight || 0);
+        let x = this.options.xOffset;
+        const barY = this.canvasSize.height - 5;
+        for (let i = 0; i < bar.data.length; i++) {
+            const h = Math.round(barY * (bar.data[i] / max));
+            if (bar.data[i] > 0) {
+                c.strokeStyle = 'blue';
+                if (this.options.barBgColor) {
+                    c.strokeStyle = this.options.barBgColor;
+                }
+                c.fillRect(x, barY - h + 1, this.options.barWidth, h);
+            }
+            else {
+                c.strokeStyle = 'normal';
+            }
+            c.fillStyle = 'white';
+            if (this.options.barFgColor) {
+                c.fillStyle = this.options.barFgColor;
+            }
+            if (this.options.showText) {
+                c.fillText(bar.data[i].toString(), x + 1, this.canvasSize.height - 4);
+            }
+            c.strokeStyle = 'normal';
+            c.fillStyle = 'white';
+            if (this.options.labelColor) {
+                c.fillStyle = this.options.labelColor;
+            }
+            if (this.options.showText) {
+                c.fillText(bar.titles[i], x + 1, this.canvasSize.height - 3);
+            }
+            x += this.options.barSpacing;
+        }
+        // Sync canvas content to element
+        this.syncContent();
+    }
+    getOptionsPrototype() {
+        return {
+            barWidth: 1,
+            barSpacing: 1,
+            xOffset: 1,
+            maxHeight: 1,
+            data: {
+                titles: ['s'],
+                data: [1]
+            }
+        };
+    }
+    get type() {
+        return 'bar';
+    }
+}
+/**
+ * Factory function
+ */
+export function bar(options = {}) {
+    return new Bar(options);
+}

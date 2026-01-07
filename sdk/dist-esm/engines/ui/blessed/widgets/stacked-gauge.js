@@ -1,1 +1,70 @@
-import{Box}from"./box";export class StackedGauge extends Box{constructor(t){super({border:"line",height:3,...t}),this.stack=[],this.stack=t.stack||[],this.showLabel=!1!==t.showLabel,this.on("resize",()=>this.updateContent()),this.updateContent()}setStack(t){this.stack=t,this.updateContent()}updateContent(){const t=this._getCoords();if(!t)return;const e=t.xl-t.xi-(this.options.border?2:0);if(e<=0)return;let s="",o=0;if(this.stack.forEach(t=>{const r=Math.floor(e*t.percent/100),n=`{${t.color}-bg}`;s+=`${n}${" ".repeat(r)}{/}`,o+=t.percent}),o<100){const t=e-s.replace(/{[^}]*}/g,"").length;t>0&&(s+=" ".repeat(t))}if(this.showLabel&&this.stack.length>0){let t="\n";this.stack.forEach(e=>{e.label&&(t+=`{${e.color}-fg}${e.label} (${e.percent}%){/}  `)}),s+=t}this.setContent(s),this.screen?.render()}get type(){return"stacked-gauge"}}export function stackedGauge(t){return new StackedGauge(t)}
+/**
+ * StackedGauge Widget
+ * Displays multiple progress segments in a single bar
+ */
+import { Box } from './box';
+export class StackedGauge extends Box {
+    constructor(options) {
+        super({
+            border: 'line',
+            height: 3,
+            ...options,
+        });
+        this.stack = [];
+        this.stack = options.stack || [];
+        this.showLabel = options.showLabel !== false;
+        this.on('resize', () => this.updateContent());
+        this.updateContent();
+    }
+    /**
+     * Update the stack data
+     */
+    setStack(stack) {
+        this.stack = stack;
+        this.updateContent();
+    }
+    updateContent() {
+        const pos = this._getCoords();
+        if (!pos)
+            return;
+        const width = pos.xl - pos.xi - (this.options.border ? 2 : 0);
+        if (width <= 0)
+            return;
+        let content = '';
+        let totalPercent = 0;
+        this.stack.forEach(segment => {
+            const segmentWidth = Math.floor((width * segment.percent) / 100);
+            const colorTag = `{${segment.color}-bg}`;
+            content += `${colorTag}${' '.repeat(segmentWidth)}{/}`;
+            totalPercent += segment.percent;
+        });
+        // Fill remaining space
+        if (totalPercent < 100) {
+            const remainingWidth = width - content.replace(/{[^}]*}/g, '').length;
+            if (remainingWidth > 0) {
+                content += ' '.repeat(remainingWidth);
+            }
+        }
+        // Add labels if enabled
+        if (this.showLabel && this.stack.length > 0) {
+            let labels = '\n';
+            this.stack.forEach(segment => {
+                if (segment.label) {
+                    labels += `{${segment.color}-fg}${segment.label} (${segment.percent}%){/}  `;
+                }
+            });
+            content += labels;
+        }
+        this.setContent(content);
+        this.screen?.render();
+    }
+    get type() {
+        return 'stacked-gauge';
+    }
+}
+/**
+ * Factory function
+ */
+export function stackedGauge(options) {
+    return new StackedGauge(options);
+}

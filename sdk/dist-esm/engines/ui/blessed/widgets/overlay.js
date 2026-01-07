@@ -1,1 +1,175 @@
-import{Box}from"./box";export class Overlay extends Box{constructor(t={}){const{bg:e,...i}=t.style||{};super({...t,top:t.top||0,left:t.left||0,width:t.width||"100%",height:t.height||"100%",focusable:!0,keyable:!0,clickable:!0,style:{bg:"transparent",...i}}),this._overlayOpacity=void 0!==t.opacity?t.opacity:.5,this._overlayWidgetId=`overlay-${Date.now()}-${Math.random().toString(36).substr(2,9)}`,this.enableKeys(),this.on("show",()=>{this.screen&&this.options.trapFocus&&this.screen.trapFocus(this),this._emitOverlayWidgetEvent(!0),this.screen&&this.screen.render()}),this.on("hide",()=>{this.screen&&this.options.trapFocus&&this.screen.releaseFocusTrap(),this._emitOverlayWidgetEvent(!1)}),this.key(["escape"],()=>{this.hide(),this.emit("cancel"),this.screen&&this.screen.render()}),this.on("attach",()=>{this.screen&&this.screen.on("resize",()=>{this.hidden||this._emitOverlayWidgetEvent(!0)})})}_emitOverlayWidgetEvent(t){if(!this.screen)return;const e=this._getCoords(),i=e?{x:e.xi,y:e.yi,width:e.xl-e.xi,height:e.yl-e.yi}:{x:0,y:0,width:this.screen.width,height:this.screen.height},s=`]9999;overlay;${JSON.stringify({id:this._overlayWidgetId,show:t,opacity:this._overlayOpacity,x:i.x,y:i.y,width:i.width,height:i.height})}`;this.screen.program.write(s)}get opacity(){return this._overlayOpacity}setOpacity(t){this._overlayOpacity=Math.max(0,Math.min(1,t)),this.screen&&!this.hidden&&(this._emitOverlayWidgetEvent(!0),this.screen.render())}getOpacity(){return this._overlayOpacity}fadeIn(t=300,e){const i=t/20,s=this.opacity/20;let h=0;const r=setInterval(()=>{h+=s,h>=this.opacity&&(h=this.opacity,clearInterval(r),e&&e()),this.screen&&this.screen.render()},i);this.show()}fadeOut(t=300,e){const i=t/20,s=this.opacity/20;let h=this.opacity;const r=setInterval(()=>{h-=s,h<=0&&(h=0,clearInterval(r),this.hide(),e&&e()),this.screen&&this.screen.render()},i)}}
+/**
+ * Overlay - Semi-transparent overlay widget
+ *
+ * For web connections: Uses actual CSS transparency via socket events
+ * For telnet/SSH: Falls back to solid dark background
+ */
+import { Box } from './box';
+// Use String.fromCharCode(27) for ESC to survive Terser minification
+const ESC = String.fromCharCode(27);
+export class Overlay extends Box {
+    constructor(options = {}) {
+        // Extract style without bg - Overlay uses no background for ANSI
+        // The CSS overlay provides the visual dimming effect for web clients
+        const { bg: _ignoredBg, ...styleWithoutBg } = options.style || {};
+        super({
+            ...options,
+            top: options.top || 0,
+            left: options.left || 0,
+            width: options.width || '100%',
+            height: options.height || '100%',
+            focusable: true, // Enable focus for key handling
+            keyable: true, // Enable key events
+            clickable: true, // Enable click events
+            style: {
+                bg: 'transparent',
+                ...styleWithoutBg,
+                // CSS overlay provides dimming for web, ANSI clients just see the modal on top
+            },
+        });
+        this._overlayOpacity = options.opacity !== undefined ? options.opacity : 0.5;
+        this._overlayWidgetId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Enable key handling
+        this.enableKeys();
+        // Auto-focus when shown - also emit web transparency event and trap focus (optional)
+        this.on('show', () => {
+            if (this.screen && this.options.trapFocus) {
+                this.screen.trapFocus(this);
+            }
+            this._emitOverlayWidgetEvent(true);
+            if (this.screen) {
+                this.screen.render();
+            }
+        });
+        // Emit hide event for web transparency and release focus trap
+        this.on('hide', () => {
+            if (this.screen && this.options.trapFocus) {
+                this.screen.releaseFocusTrap();
+            }
+            this._emitOverlayWidgetEvent(false);
+        });
+        // Default escape handler to hide overlay
+        this.key(['escape'], () => {
+            this.hide();
+            this.emit('cancel');
+            if (this.screen) {
+                this.screen.render();
+            }
+        });
+        // Update overlay position on screen resize (for web clients)
+        this.on('attach', () => {
+            if (this.screen) {
+                this.screen.on('resize', () => {
+                    // Only update if overlay is visible
+                    if (!this.hidden) {
+                        this._emitOverlayWidgetEvent(true);
+                    }
+                });
+            }
+        });
+    }
+    /**
+     * Emit overlay event for web clients to render actual transparency
+     */
+    _emitOverlayWidgetEvent(show) {
+        if (!this.screen) {
+            return;
+        }
+        // Get element position for positioned overlay rendering
+        const coords = this._getCoords();
+        const pos = coords ? {
+            x: coords.xi,
+            y: coords.yi,
+            width: coords.xl - coords.xi,
+            height: coords.yl - coords.yi,
+        } : {
+            // Default to full screen if coords not available
+            x: 0,
+            y: 0,
+            width: this.screen.width,
+            height: this.screen.height,
+        };
+        // Send a special escape sequence that the frontend can intercept
+        // Format: ESC ] 9999 ; overlay ; <json> BEL
+        const data = JSON.stringify({
+            id: this._overlayWidgetId,
+            show,
+            opacity: this._overlayOpacity,
+            // Position info for positioned overlays (web only)
+            x: pos.x,
+            y: pos.y,
+            width: pos.width,
+            height: pos.height,
+        });
+        const osc = ESC + `]9999;overlay;${data}` + String.fromCharCode(7);
+        // Use OSC (Operating System Command) format that won't display as text
+        // Write directly through the screen's program which handles output
+        this.screen.program.write(osc);
+    }
+    /**
+     * Get overlay opacity
+     */
+    get opacity() {
+        return this._overlayOpacity;
+    }
+    /**
+     * Set overlay opacity (0-1)
+     */
+    setOpacity(opacity) {
+        this._overlayOpacity = Math.max(0, Math.min(1, opacity));
+        if (this.screen && !this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+            this.screen.render();
+        }
+    }
+    /**
+     * Get overlay opacity (legacy method)
+     */
+    getOpacity() {
+        return this._overlayOpacity;
+    }
+    /**
+     * Show overlay with fade in effect
+     */
+    fadeIn(duration = 300, callback) {
+        const steps = 20;
+        const stepDuration = duration / steps;
+        const opacityStep = this.opacity / steps;
+        let currentOpacity = 0;
+        const interval = setInterval(() => {
+            currentOpacity += opacityStep;
+            if (currentOpacity >= this.opacity) {
+                currentOpacity = this.opacity;
+                clearInterval(interval);
+                if (callback)
+                    callback();
+            }
+            if (this.screen) {
+                this.screen.render();
+            }
+        }, stepDuration);
+        this.show();
+    }
+    /**
+     * Hide overlay with fade out effect
+     */
+    fadeOut(duration = 300, callback) {
+        const steps = 20;
+        const stepDuration = duration / steps;
+        const opacityStep = this.opacity / steps;
+        let currentOpacity = this.opacity;
+        const interval = setInterval(() => {
+            currentOpacity -= opacityStep;
+            if (currentOpacity <= 0) {
+                currentOpacity = 0;
+                clearInterval(interval);
+                this.hide();
+                if (callback)
+                    callback();
+            }
+            if (this.screen) {
+                this.screen.render();
+            }
+        }, stepDuration);
+    }
+}

@@ -1,1 +1,159 @@
-import{Box}from"./box";import{RadioButton}from"./radiobutton";export class RadioSet extends Box{constructor(e={}){super({...e,focusable:!0}),this.radioButtons=[],this.selectedIndex=-1;const t=e.items||[],s=!1!==e.vertical,i=e.spacing||1;this.selectedIndex=e.selected??-1,t.forEach((t,n)=>{const o="string"==typeof t?{text:t,value:t}:t,d=new RadioButton({...o,parent:this,top:s?n*i:0,left:s?0:n*((o.text?.length||3)+4+i),checked:n===e.selected});this.radioButtons.push(d),d.on("select",()=>{this.selectRadio(n)})}),this.on("focus",()=>this.screen?.render()),this.on("blur",()=>this.screen?.render()),this.enableMouse(),this.on("keypress",this._onKeypress.bind(this))}_onKeypress(e,t){return!!this.focused&&("up"===t.name||"left"===t.name?(this.selectPrevious(),this.screen?.render(),!0):("down"===t.name||"right"===t.name)&&(this.selectNext(),this.screen?.render(),!0))}selectRadio(e){e<0||e>=this.radioButtons.length||this.selectedIndex!==e&&(this.selectedIndex>=0&&this.selectedIndex<this.radioButtons.length&&this.radioButtons[this.selectedIndex].deselect(),this.selectedIndex=e,this.radioButtons[e].select(),this.emit("change",this.getValue(),e))}selectPrevious(){const e=this.selectedIndex-1;e>=0&&this.selectRadio(e)}selectNext(){const e=this.selectedIndex+1;e<this.radioButtons.length&&this.selectRadio(e)}getSelectedIndex(){return this.selectedIndex}getValue(){return this.selectedIndex>=0&&this.selectedIndex<this.radioButtons.length?this.radioButtons[this.selectedIndex].value:null}setValue(e){const t=this.radioButtons.findIndex(t=>t.value===e);t>=0&&this.selectRadio(t)}getRadioButtons(){return this.radioButtons}addRadio(e){const t="string"==typeof e?{text:e,value:e}:e,s=this.radioButtons.length,i=new RadioButton({...t,parent:this,top:s});return this.radioButtons.push(i),i.on("select",()=>{this.selectRadio(s)}),i}removeRadio(e){if(e<0||e>=this.radioButtons.length)return;this.radioButtons[e].destroy(),this.radioButtons.splice(e,1),this.selectedIndex===e?this.selectedIndex=-1:this.selectedIndex>e&&this.selectedIndex--}}
+/**
+ * RadioSet - Container for managing a group of radio buttons
+ */
+import { Box } from './box';
+import { RadioButton } from './radiobutton';
+export class RadioSet extends Box {
+    constructor(options = {}) {
+        super({
+            ...options,
+            focusable: true,
+        });
+        this.radioButtons = [];
+        this.selectedIndex = -1;
+        const items = options.items || [];
+        const vertical = options.vertical !== false;
+        const spacing = options.spacing || 1;
+        this.selectedIndex = options.selected ?? -1;
+        // Create radio buttons
+        items.forEach((item, index) => {
+            const radioOptions = typeof item === 'string'
+                ? { text: item, value: item }
+                : item;
+            const radio = new RadioButton({
+                ...radioOptions,
+                parent: this,
+                top: vertical ? index * spacing : 0,
+                left: vertical ? 0 : index * ((radioOptions.text?.length || 3) + 4 + spacing),
+                checked: index === options.selected,
+            });
+            this.radioButtons.push(radio);
+            // Handle selection
+            radio.on('select', () => {
+                this.selectRadio(index);
+            });
+        });
+        // RE-RENDER ON FOCUS/BLUR
+        this.on('focus', () => this.screen?.render());
+        this.on('blur', () => this.screen?.render());
+        this.enableMouse();
+        // Arrow key navigation
+        this.on('keypress', this._onKeypress.bind(this));
+    }
+    _onKeypress(ch, key) {
+        if (!this.focused)
+            return false;
+        if (key.name === 'up' || key.name === 'left') {
+            this.selectPrevious();
+            this.screen?.render();
+            return true;
+        }
+        if (key.name === 'down' || key.name === 'right') {
+            this.selectNext();
+            this.screen?.render();
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Select a radio button by index
+     */
+    selectRadio(index) {
+        if (index < 0 || index >= this.radioButtons.length)
+            return;
+        if (this.selectedIndex === index)
+            return;
+        // Deselect current
+        if (this.selectedIndex >= 0 && this.selectedIndex < this.radioButtons.length) {
+            this.radioButtons[this.selectedIndex].deselect();
+        }
+        // Select new
+        this.selectedIndex = index;
+        this.radioButtons[index].select();
+        this.emit('change', this.getValue(), index);
+    }
+    /**
+     * Select previous radio button
+     */
+    selectPrevious() {
+        const newIndex = this.selectedIndex - 1;
+        if (newIndex >= 0) {
+            this.selectRadio(newIndex);
+        }
+    }
+    /**
+     * Select next radio button
+     */
+    selectNext() {
+        const newIndex = this.selectedIndex + 1;
+        if (newIndex < this.radioButtons.length) {
+            this.selectRadio(newIndex);
+        }
+    }
+    /**
+     * Get selected radio button index
+     */
+    getSelectedIndex() {
+        return this.selectedIndex;
+    }
+    /**
+     * Get selected radio button value
+     */
+    getValue() {
+        if (this.selectedIndex >= 0 && this.selectedIndex < this.radioButtons.length) {
+            return this.radioButtons[this.selectedIndex].value;
+        }
+        return null;
+    }
+    /**
+     * Set selected radio button by value
+     */
+    setValue(value) {
+        const index = this.radioButtons.findIndex(radio => radio.value === value);
+        if (index >= 0) {
+            this.selectRadio(index);
+        }
+    }
+    /**
+     * Get all radio buttons
+     */
+    getRadioButtons() {
+        return this.radioButtons;
+    }
+    /**
+     * Add a radio button
+     */
+    addRadio(options) {
+        const radioOptions = typeof options === 'string'
+            ? { text: options, value: options }
+            : options;
+        const index = this.radioButtons.length;
+        const radio = new RadioButton({
+            ...radioOptions,
+            parent: this,
+            top: index,
+        });
+        this.radioButtons.push(radio);
+        radio.on('select', () => {
+            this.selectRadio(index);
+        });
+        return radio;
+    }
+    /**
+     * Remove a radio button by index
+     */
+    removeRadio(index) {
+        if (index < 0 || index >= this.radioButtons.length)
+            return;
+        const radio = this.radioButtons[index];
+        radio.destroy();
+        this.radioButtons.splice(index, 1);
+        // Adjust selected index
+        if (this.selectedIndex === index) {
+            this.selectedIndex = -1;
+        }
+        else if (this.selectedIndex > index) {
+            this.selectedIndex--;
+        }
+    }
+}

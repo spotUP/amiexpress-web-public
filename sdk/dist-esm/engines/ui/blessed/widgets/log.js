@@ -1,1 +1,100 @@
-import{Element}from"../core/element";export class Log extends Element{constructor(t={}){let s;s=t.scrollbar&&"object"==typeof t.scrollbar?{ch:t.scrollbar.ch||" ",track:t.scrollbar.track||{ch:" ",style:{bg:"black"}},style:t.scrollbar.style||{bg:"cyan"}}:{ch:" ",track:{ch:" ",style:{bg:"black"}},style:{bg:"cyan"}},super({scrollable:!0,alwaysScroll:!0,clickable:!0,mouse:!0,...t,scrollbar:s}),this.scrollback=1e3,this.scrollOnInput=!1,this.scrollback=t.scrollback||1e3,this.scrollOnInput=!1!==t.scrollOnInput,this.on("wheelup",()=>{this.scroll(-1)}),this.on("wheeldown",()=>{this.scroll(1)})}log(t){this.add(t)}add(t){const s=this.getLines();for(s.push(t);s.length>this.scrollback;)s.shift();const l=s.join("\n");this.setContent(l);const e=this.getScrollHeight(),c=Math.max(0,e-(this.height||10));this.setScrollPerc(100),this.setScroll(c),this.childBase=c,this.emit("log",t)}clear(){this.setContent("")}setLine(t,s){const l=this.getLines();t>=0&&t<l.length&&(l[t]=s,this.setContent(l.join("\n")))}getLineCount(){return this.getLines().length}getVisibleRange(){const t=this.childBase||0;return{start:t,end:t+(this.height||10)}}}
+/**
+ * Log widget - Scrolling log viewer
+ */
+import { Element } from '../core/element';
+export class Log extends Element {
+    constructor(options = {}) {
+        // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
+        let scrollbarConfig;
+        if (options.scrollbar && typeof options.scrollbar === 'object') {
+            // User provided scrollbar config - merge with Amiga-safe defaults
+            scrollbarConfig = {
+                ch: options.scrollbar.ch || ' ',
+                track: options.scrollbar.track || { ch: ' ', style: { bg: 'black' } },
+                style: options.scrollbar.style || { bg: 'cyan' },
+            };
+        }
+        else {
+            // No scrollbar config provided - use Amiga-safe defaults
+            scrollbarConfig = {
+                ch: ' ',
+                track: { ch: ' ', style: { bg: 'black' } },
+                style: { bg: 'cyan' },
+            };
+        }
+        super({
+            scrollable: true,
+            alwaysScroll: true,
+            clickable: true,
+            mouse: true,
+            ...options,
+            scrollbar: scrollbarConfig,
+        });
+        this.scrollback = 1000;
+        this.scrollOnInput = false;
+        this.scrollback = options.scrollback || 1000;
+        this.scrollOnInput = options.scrollOnInput !== false;
+        // Mouse wheel scrolling
+        this.on('wheelup', () => {
+            this.scroll(-1);
+        });
+        this.on('wheeldown', () => {
+            this.scroll(1);
+        });
+    }
+    log(text) {
+        this.add(text);
+    }
+    add(text) {
+        const lines = this.getLines();
+        lines.push(text);
+        // Enforce scrollback limit
+        while (lines.length > this.scrollback) {
+            lines.shift();
+        }
+        const content = lines.join('\n');
+        this.setContent(content);
+        // ALWAYS scroll to bottom to show new content (regardless of scrollOnInput setting)
+        // Use multiple methods to ensure scroll happens
+        const scrollHeight = this.getScrollHeight();
+        const maxScroll = Math.max(0, scrollHeight - (this.height || 10));
+        // Method 1: setScrollPerc to 100%
+        this.setScrollPerc(100);
+        // Method 2: setScroll to max
+        this.setScroll(maxScroll);
+        // Method 3: Set childBase directly (internal scroll position)
+        this.childBase = maxScroll;
+        this.emit('log', text);
+    }
+    clear() {
+        this.setContent('');
+    }
+    /**
+     * Set content of a specific line by index (for animations)
+     * Uses the inherited getLines() from Element
+     */
+    setLine(index, content) {
+        const lines = this.getLines();
+        if (index >= 0 && index < lines.length) {
+            lines[index] = content;
+            this.setContent(lines.join('\n'));
+        }
+    }
+    /**
+     * Get the number of lines
+     */
+    getLineCount() {
+        return this.getLines().length;
+    }
+    /**
+     * Get visible range of lines
+     */
+    getVisibleRange() {
+        const childBase = this.childBase || 0;
+        const height = this.height || 10;
+        return {
+            start: childBase,
+            end: childBase + height,
+        };
+    }
+}

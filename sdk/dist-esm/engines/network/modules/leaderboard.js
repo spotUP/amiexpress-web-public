@@ -1,1 +1,335 @@
-import{EventEmitter}from"events";export class LeaderboardManager extends EventEmitter{constructor(e){super(),this.name="leaderboard",this.leaderboardCache=new Map,this.statsCache=new Map,this.achievementsCache=new Map,this.cacheTimeout=6e4,this.connection=e,this.setupEventHandlers()}async init(){}setupEventHandlers(){const e=this.connection.getSocket();e&&(e.on("leaderboard:updated",e=>{const t=`${e.type}:${e.gameMode||"default"}`;this.leaderboardCache.delete(t),this.emit("leaderboard:updated",e)}),e.on("achievement:unlocked",e=>{this.emit("achievement:unlocked",e)}),e.on("achievement:progress",e=>{this.emit("achievement:progress",e.achievementId,e.progress)}),e.on("stats:updated",e=>{this.statsCache.set(e.playerId,{data:e,timestamp:Date.now()}),this.emit("stats:updated",e)}))}async getLeaderboard(e){const t=`${e.type}:${e.gameMode||"default"}:${e.season||0}:${e.offset||0}`,s=this.leaderboardCache.get(t);return s&&Date.now()-s.timestamp<this.cacheTimeout?s.data:new Promise((s,n)=>{const a=this.connection.getSocket();a?.connected?a.emit("leaderboard:get",e,e=>{e.success&&e.leaderboard?(this.leaderboardCache.set(t,{data:e.leaderboard,timestamp:Date.now()}),s(e.leaderboard)):n(new Error(e.error||"Failed to get leaderboard"))}):n(new Error("Not connected"))})}async getPlayerRank(e,t="global"){return new Promise((s,n)=>{const a=this.connection.getSocket();a?.connected?a.emit("leaderboard:get_rank",{playerId:e,type:t},e=>{e.success?s(e.entry||null):s(null)}):s(null)})}async getLeaderboardAroundPlayer(e,t="global",s=5){return new Promise((n,a)=>{const c=this.connection.getSocket();c?.connected?c.emit("leaderboard:get_around",{playerId:e,type:t,range:s},e=>{e.success&&e.entries?n(e.entries):n([])}):n([])})}async getStats(e){if(void 0!==e){const t=this.statsCache.get(e);if(t&&Date.now()-t.timestamp<this.cacheTimeout)return t.data}return new Promise((t,s)=>{const n=this.connection.getSocket();n?.connected?n.emit("stats:get",{playerId:e},e=>{e.success&&e.stats?(this.statsCache.set(e.stats.playerId,{data:e.stats,timestamp:Date.now()}),t(e.stats)):s(new Error(e.error||"Failed to get stats"))}):s(new Error("Not connected"))})}async getAchievements(e){const t=e??0,s=this.achievementsCache.get(t);return s&&Date.now()-s.timestamp<this.cacheTimeout?s.data:new Promise((s,n)=>{const a=this.connection.getSocket();a?.connected?a.emit("achievements:get",{playerId:e},e=>{e.success&&e.categories?(this.achievementsCache.set(t,{data:e.categories,timestamp:Date.now()}),s(e.categories)):n(new Error(e.error||"Failed to get achievements"))}):n(new Error("Not connected"))})}async getAchievement(e,t){const s=await this.getAchievements(t);for(const t of s){const s=t.achievements.find(t=>t.id===e);if(s)return s}return null}unlockAchievement(e){const t=this.connection.getSocket();t?.connected&&t.emit("achievements:unlock",{achievementId:e})}updateAchievementProgress(e,t){const s=this.connection.getSocket();s?.connected&&s.emit("achievements:progress",{achievementId:e,progress:t})}async getMatchHistory(e,t=20){return new Promise((s,n)=>{const a=this.connection.getSocket();a?.connected?a.emit("matches:history",{playerId:e,limit:t},e=>{e.success&&e.matches?s(e.matches):s([])}):s([])})}async getMatch(e){return new Promise((t,s)=>{const n=this.connection.getSocket();n?.connected?n.emit("matches:get",{matchId:e},e=>{e.success&&e.match?t(e.match):t(null)}):t(null)})}async submitMatchResult(e){return new Promise((t,s)=>{const n=this.connection.getSocket();n?.connected?n.emit("matches:submit",e,e=>{e.success?t():s(new Error(e.error||"Failed to submit match result"))}):s(new Error("Not connected"))})}async getTopPlayers(e,t=10){return new Promise((s,n)=>{const a=this.connection.getSocket();a?.connected?a.emit("leaderboard:top_by_stat",{stat:e,limit:t},e=>{e.success&&e.entries?s(e.entries):s([])}):s([])})}async compareStats(e){return new Promise((t,s)=>{const n=this.connection.getSocket();n?.connected?n.emit("stats:compare",{otherPlayerId:e},e=>{e.success&&e.self&&e.other?t({self:e.self,other:e.other}):t(null)}):t(null)})}clearCache(){this.leaderboardCache.clear(),this.statsCache.clear(),this.achievementsCache.clear()}dispose(){this.clearCache(),this.removeAllListeners()}}export default LeaderboardManager;
+/**
+ * Leaderboards & Stats Module
+ *
+ * Rankings, statistics, and achievements with:
+ * - Global, friends, and seasonal leaderboards
+ * - Player statistics tracking
+ * - Achievement system
+ * - Match history
+ */
+import { EventEmitter } from 'events';
+/**
+ * Leaderboard Manager
+ *
+ * Manages leaderboards, player statistics, and achievements.
+ */
+export class LeaderboardManager extends EventEmitter {
+    constructor(connection) {
+        super();
+        this.name = 'leaderboard';
+        this.leaderboardCache = new Map();
+        this.statsCache = new Map();
+        this.achievementsCache = new Map();
+        this.cacheTimeout = 60000; // 1 minute cache
+        this.connection = connection;
+        this.setupEventHandlers();
+    }
+    /**
+     * Initialize leaderboard manager
+     */
+    async init() {
+        // Nothing to initialize
+    }
+    /**
+     * Setup socket event handlers
+     */
+    setupEventHandlers() {
+        const socket = this.connection.getSocket();
+        if (!socket)
+            return;
+        socket.on('leaderboard:updated', (data) => {
+            // Invalidate cache
+            const cacheKey = `${data.type}:${data.gameMode || 'default'}`;
+            this.leaderboardCache.delete(cacheKey);
+            this.emit('leaderboard:updated', data);
+        });
+        socket.on('achievement:unlocked', (achievement) => {
+            this.emit('achievement:unlocked', achievement);
+        });
+        socket.on('achievement:progress', (data) => {
+            this.emit('achievement:progress', data.achievementId, data.progress);
+        });
+        socket.on('stats:updated', (stats) => {
+            this.statsCache.set(stats.playerId, { data: stats, timestamp: Date.now() });
+            this.emit('stats:updated', stats);
+        });
+    }
+    /**
+     * Get leaderboard
+     */
+    async getLeaderboard(query) {
+        const cacheKey = `${query.type}:${query.gameMode || 'default'}:${query.season || 0}:${query.offset || 0}`;
+        // Check cache
+        const cached = this.leaderboardCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+            return cached.data;
+        }
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                reject(new Error('Not connected'));
+                return;
+            }
+            socket.emit('leaderboard:get', query, (response) => {
+                if (response.success && response.leaderboard) {
+                    this.leaderboardCache.set(cacheKey, {
+                        data: response.leaderboard,
+                        timestamp: Date.now(),
+                    });
+                    resolve(response.leaderboard);
+                }
+                else {
+                    reject(new Error(response.error || 'Failed to get leaderboard'));
+                }
+            });
+        });
+    }
+    /**
+     * Get player's rank in leaderboard
+     */
+    async getPlayerRank(playerId, type = 'global') {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve(null);
+                return;
+            }
+            socket.emit('leaderboard:get_rank', { playerId, type }, (response) => {
+                if (response.success) {
+                    resolve(response.entry || null);
+                }
+                else {
+                    resolve(null);
+                }
+            });
+        });
+    }
+    /**
+     * Get leaderboard around player
+     */
+    async getLeaderboardAroundPlayer(playerId, type = 'global', range = 5) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve([]);
+                return;
+            }
+            socket.emit('leaderboard:get_around', { playerId, type, range }, (response) => {
+                if (response.success && response.entries) {
+                    resolve(response.entries);
+                }
+                else {
+                    resolve([]);
+                }
+            });
+        });
+    }
+    /**
+     * Get player statistics
+     */
+    async getStats(playerId) {
+        // Check cache
+        if (playerId !== undefined) {
+            const cached = this.statsCache.get(playerId);
+            if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+                return cached.data;
+            }
+        }
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                reject(new Error('Not connected'));
+                return;
+            }
+            socket.emit('stats:get', { playerId }, (response) => {
+                if (response.success && response.stats) {
+                    this.statsCache.set(response.stats.playerId, {
+                        data: response.stats,
+                        timestamp: Date.now(),
+                    });
+                    resolve(response.stats);
+                }
+                else {
+                    reject(new Error(response.error || 'Failed to get stats'));
+                }
+            });
+        });
+    }
+    /**
+     * Get achievements
+     */
+    async getAchievements(playerId) {
+        const id = playerId ?? 0;
+        // Check cache
+        const cached = this.achievementsCache.get(id);
+        if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+            return cached.data;
+        }
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                reject(new Error('Not connected'));
+                return;
+            }
+            socket.emit('achievements:get', { playerId }, (response) => {
+                if (response.success && response.categories) {
+                    this.achievementsCache.set(id, {
+                        data: response.categories,
+                        timestamp: Date.now(),
+                    });
+                    resolve(response.categories);
+                }
+                else {
+                    reject(new Error(response.error || 'Failed to get achievements'));
+                }
+            });
+        });
+    }
+    /**
+     * Get single achievement
+     */
+    async getAchievement(achievementId, playerId) {
+        const categories = await this.getAchievements(playerId);
+        for (const category of categories) {
+            const achievement = category.achievements.find(a => a.id === achievementId);
+            if (achievement) {
+                return achievement;
+            }
+        }
+        return null;
+    }
+    /**
+     * Unlock achievement (local notification, server validates)
+     */
+    unlockAchievement(achievementId) {
+        const socket = this.connection.getSocket();
+        if (socket?.connected) {
+            socket.emit('achievements:unlock', { achievementId });
+        }
+    }
+    /**
+     * Update achievement progress
+     */
+    updateAchievementProgress(achievementId, progress) {
+        const socket = this.connection.getSocket();
+        if (socket?.connected) {
+            socket.emit('achievements:progress', { achievementId, progress });
+        }
+    }
+    /**
+     * Get match history
+     */
+    async getMatchHistory(playerId, limit = 20) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve([]);
+                return;
+            }
+            socket.emit('matches:history', { playerId, limit }, (response) => {
+                if (response.success && response.matches) {
+                    resolve(response.matches);
+                }
+                else {
+                    resolve([]);
+                }
+            });
+        });
+    }
+    /**
+     * Get specific match details
+     */
+    async getMatch(matchId) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve(null);
+                return;
+            }
+            socket.emit('matches:get', { matchId }, (response) => {
+                if (response.success && response.match) {
+                    resolve(response.match);
+                }
+                else {
+                    resolve(null);
+                }
+            });
+        });
+    }
+    /**
+     * Submit match result (for host/server)
+     */
+    async submitMatchResult(result) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                reject(new Error('Not connected'));
+                return;
+            }
+            socket.emit('matches:submit', result, (response) => {
+                if (response.success) {
+                    resolve();
+                }
+                else {
+                    reject(new Error(response.error || 'Failed to submit match result'));
+                }
+            });
+        });
+    }
+    /**
+     * Get top players for a specific stat
+     */
+    async getTopPlayers(stat, limit = 10) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve([]);
+                return;
+            }
+            socket.emit('leaderboard:top_by_stat', { stat, limit }, (response) => {
+                if (response.success && response.entries) {
+                    resolve(response.entries);
+                }
+                else {
+                    resolve([]);
+                }
+            });
+        });
+    }
+    /**
+     * Compare stats with another player
+     */
+    async compareStats(otherPlayerId) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve(null);
+                return;
+            }
+            socket.emit('stats:compare', { otherPlayerId }, (response) => {
+                if (response.success && response.self && response.other) {
+                    resolve({ self: response.self, other: response.other });
+                }
+                else {
+                    resolve(null);
+                }
+            });
+        });
+    }
+    /**
+     * Clear cache
+     */
+    clearCache() {
+        this.leaderboardCache.clear();
+        this.statsCache.clear();
+        this.achievementsCache.clear();
+    }
+    /**
+     * Dispose of leaderboard manager
+     */
+    dispose() {
+        this.clearCache();
+        this.removeAllListeners();
+    }
+}
+export default LeaderboardManager;

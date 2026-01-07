@@ -1,1 +1,156 @@
-import{Box}from"./box";import{Button}from"./button";export class Accordion extends Box{constructor(e){super({...e,scrollable:!0,alwaysScroll:!0}),this.items=[],this.multiple=e.multiple||!1,this.headerStyle=e.style?.header||{fg:"white",bg:"black"},this.expandedStyle=e.style?.expanded||{fg:"black",bg:"cyan",bold:!0},e.items&&e.items.forEach(e=>{this.addItem(e.label,e.content,e.expanded)}),this.relayout()}addItem(e,t,n=!1){const i=this.items.length,s=new Button({parent:this,top:0,left:0,right:0,height:1,content:` ${n?"v":">"} ${e} `,padding:0,align:"left",style:n?this.expandedStyle:this.headerStyle,border:void 0});let o;s.on("press",()=>{this.toggleItem(i)}),"string"==typeof t?o=new Box({parent:this,top:1,left:0,right:0,height:t.split("\n").length,content:t,hidden:!n}):(o=t,o.parent=this,o.top=1,o.left=0,o.right=0,n||o.hide(),this.append(o)),this.items.push({header:s,content:o,expanded:n}),this.relayout()}toggleItem(e){const t=this.items[e];t&&(t.expanded?this.collapseItem(e):this.expandItem(e))}expandItem(e){const t=this.items[e];t&&!t.expanded&&(this.multiple||this.items.forEach((t,n)=>{n!==e&&t.expanded&&this.collapseItem(n,!1)}),t.expanded=!0,t.content.show(),t.header.setContent(t.header.content.replace(">","v")),t.header.setStyle(this.expandedStyle),this.relayout(),this.emit("expand",e))}collapseItem(e,t=!0){const n=this.items[e];n&&n.expanded&&(n.expanded=!1,n.content.hide(),n.header.setContent(n.header.content.replace("v",">")),n.header.setStyle(this.headerStyle),t&&this.relayout(),this.emit("collapse",e))}relayout(){let e=0;this.items.forEach(t=>{if(t.header.top=e,e+=1,t.expanded){t.content.top=e;const n="number"==typeof t.content.height?t.content.height:t.content.children.length||t.content.getLines().length||1;e+=n}}),this.screen?.render()}get type(){return"accordion"}}export function accordion(e){return new Accordion(e)}
+/**
+ * Accordion Widget
+ * Manages multiple stacked expandable sections
+ */
+import { Box } from './box';
+import { Button } from './button';
+export class Accordion extends Box {
+    constructor(options) {
+        super({
+            ...options,
+            scrollable: true,
+            alwaysScroll: true,
+        });
+        this.items = [];
+        this.multiple = options.multiple || false;
+        this.headerStyle = options.style?.header || { fg: 'white', bg: 'black' };
+        this.expandedStyle = options.style?.expanded || { fg: 'black', bg: 'cyan', bold: true };
+        if (options.items) {
+            options.items.forEach(item => {
+                this.addItem(item.label, item.content, item.expanded);
+            });
+        }
+        this.relayout();
+    }
+    /**
+     * Add a new accordion section
+     */
+    addItem(label, content, expanded = false) {
+        const index = this.items.length;
+        // Create header button
+        const header = new Button({
+            parent: this,
+            top: 0, // Positioned by relayout
+            left: 0,
+            right: 0,
+            height: 1,
+            // Amiga-safe arrows: use v/> instead of Unicode triangles
+            content: ` ${expanded ? 'v' : '>'} ${label} `,
+            padding: 0,
+            align: 'left',
+            style: expanded ? this.expandedStyle : this.headerStyle,
+            border: undefined,
+        });
+        header.on('press', () => {
+            this.toggleItem(index);
+        });
+        // Create or prepare content element
+        let contentElement;
+        if (typeof content === 'string') {
+            contentElement = new Box({
+                parent: this,
+                top: 1,
+                left: 0,
+                right: 0,
+                height: content.split('\n').length,
+                content,
+                hidden: !expanded,
+            });
+        }
+        else {
+            contentElement = content;
+            contentElement.parent = this;
+            contentElement.top = 1;
+            contentElement.left = 0;
+            contentElement.right = 0;
+            if (!expanded)
+                contentElement.hide();
+            this.append(contentElement);
+        }
+        this.items.push({
+            header,
+            content: contentElement,
+            expanded,
+        });
+        this.relayout();
+    }
+    /**
+     * Toggle a section's expanded state
+     */
+    toggleItem(index) {
+        const item = this.items[index];
+        if (!item)
+            return;
+        if (item.expanded) {
+            this.collapseItem(index);
+        }
+        else {
+            this.expandItem(index);
+        }
+    }
+    /**
+     * Expand a section
+     */
+    expandItem(index) {
+        const item = this.items[index];
+        if (!item || item.expanded)
+            return;
+        // If multiple expansion not allowed, collapse others
+        if (!this.multiple) {
+            this.items.forEach((it, i) => {
+                if (i !== index && it.expanded) {
+                    this.collapseItem(i, false); // Don't relayout yet
+                }
+            });
+        }
+        item.expanded = true;
+        item.content.show();
+        item.header.setContent(item.header.content.replace('>', 'v'));
+        item.header.setStyle(this.expandedStyle);
+        this.relayout();
+        this.emit('expand', index);
+    }
+    /**
+     * Collapse a section
+     */
+    collapseItem(index, shouldRelayout = true) {
+        const item = this.items[index];
+        if (!item || !item.expanded)
+            return;
+        item.expanded = false;
+        item.content.hide();
+        item.header.setContent(item.header.content.replace('v', '>'));
+        item.header.setStyle(this.headerStyle);
+        if (shouldRelayout) {
+            this.relayout();
+        }
+        this.emit('collapse', index);
+    }
+    /**
+     * Recalculate positions of all headers and content blocks
+     */
+    relayout() {
+        let currentTop = 0;
+        this.items.forEach(item => {
+            item.header.top = currentTop;
+            currentTop += 1;
+            if (item.expanded) {
+                item.content.top = currentTop;
+                const height = typeof item.content.height === 'number'
+                    ? item.content.height
+                    : (item.content.children.length || item.content.getLines().length || 1);
+                currentTop += height;
+            }
+        });
+        this.screen?.render();
+    }
+    get type() {
+        return 'accordion';
+    }
+}
+/**
+ * Factory function
+ */
+export function accordion(options) {
+    return new Accordion(options);
+}

@@ -1,1 +1,62 @@
-export var AnsiColor;!function(e){e[e.Black=0]="Black",e[e.Red=1]="Red",e[e.Green=2]="Green",e[e.Yellow=3]="Yellow",e[e.Blue=4]="Blue",e[e.Magenta=5]="Magenta",e[e.Cyan=6]="Cyan",e[e.White=7]="White",e[e.BrightBlack=8]="BrightBlack",e[e.Gray=8]="Gray",e[e.BrightRed=9]="BrightRed",e[e.BrightGreen=10]="BrightGreen",e[e.BrightYellow=11]="BrightYellow",e[e.BrightBlue=12]="BrightBlue",e[e.BrightMagenta=13]="BrightMagenta",e[e.BrightCyan=14]="BrightCyan",e[e.BrightWhite=15]="BrightWhite"}(AnsiColor||(AnsiColor={}));export var AnsiStyle;!function(e){e[e.Normal=0]="Normal",e[e.Bold=1]="Bold",e[e.Dim=2]="Dim",e[e.Italic=3]="Italic",e[e.Underline=4]="Underline",e[e.Blink=5]="Blink",e[e.Reverse=7]="Reverse"}(AnsiStyle||(AnsiStyle={}));export var SpecialKey;!function(e){e.Enter="\r",e.Escape="",e.Backspace="",e.Tab="\t",e.Space=" ",e.ArrowUp="[A",e.ArrowDown="[B",e.ArrowRight="[C",e.ArrowLeft="[D",e.Delete="[3~",e.Home="[H",e.End="[F",e.PageUp="[5~",e.PageDown="[6~"}(SpecialKey||(SpecialKey={}));
+/**
+ * Core Type Definitions for AmiExpress BBS Door SDK
+ *
+ * These types provide the foundation for all door development,
+ * ensuring type safety and enabling AI-friendly code generation.
+ */
+/**
+ * ANSI Color codes (0-15 standard palette)
+ */
+export var AnsiColor;
+(function (AnsiColor) {
+    AnsiColor[AnsiColor["Black"] = 0] = "Black";
+    AnsiColor[AnsiColor["Red"] = 1] = "Red";
+    AnsiColor[AnsiColor["Green"] = 2] = "Green";
+    AnsiColor[AnsiColor["Yellow"] = 3] = "Yellow";
+    AnsiColor[AnsiColor["Blue"] = 4] = "Blue";
+    AnsiColor[AnsiColor["Magenta"] = 5] = "Magenta";
+    AnsiColor[AnsiColor["Cyan"] = 6] = "Cyan";
+    AnsiColor[AnsiColor["White"] = 7] = "White";
+    AnsiColor[AnsiColor["BrightBlack"] = 8] = "BrightBlack";
+    AnsiColor[AnsiColor["Gray"] = 8] = "Gray";
+    AnsiColor[AnsiColor["BrightRed"] = 9] = "BrightRed";
+    AnsiColor[AnsiColor["BrightGreen"] = 10] = "BrightGreen";
+    AnsiColor[AnsiColor["BrightYellow"] = 11] = "BrightYellow";
+    AnsiColor[AnsiColor["BrightBlue"] = 12] = "BrightBlue";
+    AnsiColor[AnsiColor["BrightMagenta"] = 13] = "BrightMagenta";
+    AnsiColor[AnsiColor["BrightCyan"] = 14] = "BrightCyan";
+    AnsiColor[AnsiColor["BrightWhite"] = 15] = "BrightWhite";
+})(AnsiColor || (AnsiColor = {}));
+/**
+ * ANSI text styles
+ */
+export var AnsiStyle;
+(function (AnsiStyle) {
+    AnsiStyle[AnsiStyle["Normal"] = 0] = "Normal";
+    AnsiStyle[AnsiStyle["Bold"] = 1] = "Bold";
+    AnsiStyle[AnsiStyle["Dim"] = 2] = "Dim";
+    AnsiStyle[AnsiStyle["Italic"] = 3] = "Italic";
+    AnsiStyle[AnsiStyle["Underline"] = 4] = "Underline";
+    AnsiStyle[AnsiStyle["Blink"] = 5] = "Blink";
+    AnsiStyle[AnsiStyle["Reverse"] = 7] = "Reverse";
+})(AnsiStyle || (AnsiStyle = {}));
+/**
+ * Special keys for easy reference
+ */
+export var SpecialKey;
+(function (SpecialKey) {
+    SpecialKey["Enter"] = "\r";
+    SpecialKey["Escape"] = "\u001B";
+    SpecialKey["Backspace"] = "";
+    SpecialKey["Tab"] = "\t";
+    SpecialKey["Space"] = " ";
+    SpecialKey["ArrowUp"] = "\u001B[A";
+    SpecialKey["ArrowDown"] = "\u001B[B";
+    SpecialKey["ArrowRight"] = "\u001B[C";
+    SpecialKey["ArrowLeft"] = "\u001B[D";
+    SpecialKey["Delete"] = "\u001B[3~";
+    SpecialKey["Home"] = "\u001B[H";
+    SpecialKey["End"] = "\u001B[F";
+    SpecialKey["PageUp"] = "\u001B[5~";
+    SpecialKey["PageDown"] = "\u001B[6~";
+})(SpecialKey || (SpecialKey = {}));

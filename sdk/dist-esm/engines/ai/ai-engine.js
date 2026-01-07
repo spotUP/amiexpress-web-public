@@ -1,1 +1,436 @@
-import{EventEmitter}from"events";export class AIEngine extends EventEmitter{constructor(t={}){super(),this.agents=new Map,this.behaviors=new Map,this.config={heuristic:t.heuristic||"euclidean",maxIterations:t.maxIterations||1e3,updateInterval:t.updateInterval||100,debug:t.debug??!1},this.registerDefaultBehaviors()}init(){this.updateTimer=setInterval(()=>{this.update(this.config.updateInterval/1e3)},this.config.updateInterval)}createAgent(t,e,s){const i={id:t,position:{...e},state:{state:"idle",data:{}},speed:s?.speed||1,sightRange:s?.sightRange||10,data:s?.data||{}};return this.agents.set(t,i),this.emit("agent-created",i),i}removeAgent(t){this.agents.delete(t),this.emit("agent-removed",t)}getAgent(t){return this.agents.get(t)}getAllAgents(){return Array.from(this.agents.values())}findPath(t,e,s){const i=[],a=new Set,n={position:t,g:0,h:this.heuristic(t,e),f:0};n.f=n.g+n.h,i.push(n);let o=0;for(;i.length>0&&o<this.config.maxIterations;){o++,i.sort((t,e)=>t.f-e.f);const t=i.shift();if(t.position.x===e.x&&t.position.y===e.y)return this.reconstructPath(t);a.add(this.positionKey(t.position));const n=this.getNeighbors(t.position);for(const o of n){if(!s(o))continue;if(a.has(this.positionKey(o)))continue;const n=t.g+this.distance(t.position,o),r=this.heuristic(o,e),h=n+r,g=i.find(t=>t.position.x===o.x&&t.position.y===o.y);g?n<g.g&&(g.g=n,g.f=n+g.h,g.parent=t):i.push({position:o,g:n,h:r,f:h,parent:t})}}return null}registerBehavior(t){this.behaviors.set(t.name,t)}setState(t,e,s){const i=this.agents.get(t);if(!i)return;const a=this.behaviors.get(e),n=i.state.state;if(n!==e){const t=this.behaviors.get(n);t?.onExit?.(i)}i.state={state:e,data:s||{}},a?.onEnter?.(i),this.emit("state-change",i,n,e)}moveAlongPath(t,e){const s=this.agents.get(t);if(!s||!s.path||0===s.path.length)return!1;const i=s.path[0],a=i.x-s.position.x,n=i.y-s.position.y,o=Math.sqrt(a*a+n*n);if(o<.1)return s.path.shift(),s.path.length>0;const r=s.speed*e;return s.position.x+=a/o*r,s.position.y+=n/o*r,!0}canSee(t,e){const s=this.agents.get(t);if(!s)return!1;return this.distance(s.position,e)<=s.sightRange}findNearestAgent(t,e){let s=null,i=1/0;for(const a of this.agents.values()){if(e&&!e(a))continue;const n=this.distance(t,a.position);n<i&&(i=n,s=a)}return s}getAgentsInRange(t,e){const s=[];for(const i of this.agents.values()){this.distance(t,i.position)<=e&&s.push(i)}return s}update(t){for(const e of this.agents.values()){const s=this.behaviors.get(e.state.state);if(s?.onUpdate?.(e,t),s?.transitions)for(const t of s.transitions)if(t.condition(e)){this.setState(e.id,t.to);break}e.path&&e.path.length>0&&this.moveAlongPath(e.id,t)}this.emit("update",t)}registerDefaultBehaviors(){this.registerBehavior({name:"idle",onUpdate:(t,e)=>{}}),this.registerBehavior({name:"patrol",onEnter:t=>{t.state.data.waypoints||(t.state.data.waypoints=[],t.state.data.currentWaypoint=0)},onUpdate:(t,e)=>{const s=t.state.data.waypoints;if(s&&0!==s.length&&(!t.path||0===t.path.length)){const e=t.state.data.currentWaypoint,i=s[e];t.state.target=i,t.path=[i],t.state.data.currentWaypoint=(e+1)%s.length}}}),this.registerBehavior({name:"chase",onUpdate:(t,e)=>{if(!t.state.target)return;const s=t.state.target;this.distance(t.position,s)>1?t.path=[s]:this.setState(t.id,"attack")}}),this.registerBehavior({name:"attack",onEnter:t=>{this.emit("agent-attack",t)},onUpdate:(t,e)=>{if(!t.state.target)return void this.setState(t.id,"idle");const s=t.state.target;this.distance(t.position,s)>t.sightRange&&this.setState(t.id,"idle")}}),this.registerBehavior({name:"flee",onUpdate:(t,e)=>{if(!t.state.target)return void this.setState(t.id,"idle");const s=t.state.target,i=t.position.x-s.x,a=t.position.y-s.y,n=Math.sqrt(i*i+a*a);if(n<t.sightRange){const e=t.position.x+i/n*10,s=t.position.y+a/n*10;t.path=[{x:e,y:s}]}else this.setState(t.id,"idle")}})}heuristic(t,e){switch(this.config.heuristic){case"manhattan":return Math.abs(t.x-e.x)+Math.abs(t.y-e.y);case"diagonal":const s=Math.abs(t.x-e.x),i=Math.abs(t.y-e.y);return Math.max(s,i);default:return this.distance(t,e)}}distance(t,e){const s=t.x-e.x,i=t.y-e.y;return Math.sqrt(s*s+i*i)}getNeighbors(t){return[{x:t.x-1,y:t.y},{x:t.x+1,y:t.y},{x:t.x,y:t.y-1},{x:t.x,y:t.y+1},{x:t.x-1,y:t.y-1},{x:t.x+1,y:t.y-1},{x:t.x-1,y:t.y+1},{x:t.x+1,y:t.y+1}]}reconstructPath(t){const e=[];let s=t;for(;s;)e.unshift(s.position),s=s.parent;return e}positionKey(t){return`${t.x},${t.y}`}dispose(){this.updateTimer&&clearInterval(this.updateTimer),this.agents.clear(),this.behaviors.clear(),this.removeAllListeners()}}
+/**
+ * AI Engine - Pathfinding and Behavior Management
+ *
+ * Provides AI capabilities for BBS door games including:
+ * - A* pathfinding
+ * - Behavior state machines
+ * - NPC movement and decision making
+ * - Threat assessment
+ * - Goal-oriented action planning (GOAP)
+ *
+ * @example Basic Pathfinding
+ * ```typescript
+ * const ai = new AIEngine();
+ *
+ * const path = ai.findPath(
+ *   { x: 0, y: 0 },
+ *   { x: 10, y: 10 },
+ *   (pos) => !isBlocked(pos)
+ * );
+ * ```
+ *
+ * @example Behavior State Machine
+ * ```typescript
+ * const npc = ai.createAI('enemy1', { x: 10, y: 10 });
+ *
+ * ai.setState(npc, 'patrol');
+ * ai.onStateChange(npc, (oldState, newState) => {
+ *   console.log(`NPC transitioned: ${oldState} -> ${newState}`);
+ * });
+ *
+ * // Update each frame
+ * ai.update(deltaTime);
+ * ```
+ */
+import { EventEmitter } from 'events';
+/**
+ * AI Engine
+ * Handles pathfinding, behavior management, and decision making
+ */
+export class AIEngine extends EventEmitter {
+    constructor(config = {}) {
+        super();
+        this.agents = new Map();
+        this.behaviors = new Map();
+        this.config = {
+            heuristic: config.heuristic || 'euclidean',
+            maxIterations: config.maxIterations || 1000,
+            updateInterval: config.updateInterval || 100,
+            debug: config.debug ?? false
+        };
+        this.registerDefaultBehaviors();
+    }
+    /**
+     * Initialize AI engine
+     */
+    init() {
+        // Start update loop
+        this.updateTimer = setInterval(() => {
+            this.update(this.config.updateInterval / 1000);
+        }, this.config.updateInterval);
+    }
+    /**
+     * Create AI agent
+     */
+    createAgent(id, position, config) {
+        const agent = {
+            id,
+            position: { ...position },
+            state: {
+                state: 'idle',
+                data: {}
+            },
+            speed: config?.speed || 1,
+            sightRange: config?.sightRange || 10,
+            data: config?.data || {}
+        };
+        this.agents.set(id, agent);
+        this.emit('agent-created', agent);
+        return agent;
+    }
+    /**
+     * Remove AI agent
+     */
+    removeAgent(id) {
+        this.agents.delete(id);
+        this.emit('agent-removed', id);
+    }
+    /**
+     * Get AI agent
+     */
+    getAgent(id) {
+        return this.agents.get(id);
+    }
+    /**
+     * Get all agents
+     */
+    getAllAgents() {
+        return Array.from(this.agents.values());
+    }
+    /**
+     * Find path from start to goal using A*
+     */
+    findPath(start, goal, isWalkable) {
+        const openSet = [];
+        const closedSet = new Set();
+        const startNode = {
+            position: start,
+            g: 0,
+            h: this.heuristic(start, goal),
+            f: 0
+        };
+        startNode.f = startNode.g + startNode.h;
+        openSet.push(startNode);
+        let iterations = 0;
+        while (openSet.length > 0 && iterations < this.config.maxIterations) {
+            iterations++;
+            // Get node with lowest f score
+            openSet.sort((a, b) => a.f - b.f);
+            const current = openSet.shift();
+            // Check if we reached the goal
+            if (current.position.x === goal.x && current.position.y === goal.y) {
+                return this.reconstructPath(current);
+            }
+            closedSet.add(this.positionKey(current.position));
+            // Check neighbors
+            const neighbors = this.getNeighbors(current.position);
+            for (const neighbor of neighbors) {
+                if (!isWalkable(neighbor))
+                    continue;
+                if (closedSet.has(this.positionKey(neighbor)))
+                    continue;
+                const g = current.g + this.distance(current.position, neighbor);
+                const h = this.heuristic(neighbor, goal);
+                const f = g + h;
+                // Check if neighbor is already in open set
+                const existingNode = openSet.find(n => n.position.x === neighbor.x && n.position.y === neighbor.y);
+                if (!existingNode) {
+                    openSet.push({
+                        position: neighbor,
+                        g,
+                        h,
+                        f,
+                        parent: current
+                    });
+                }
+                else if (g < existingNode.g) {
+                    existingNode.g = g;
+                    existingNode.f = g + existingNode.h;
+                    existingNode.parent = current;
+                }
+            }
+        }
+        // No path found
+        return null;
+    }
+    /**
+     * Register behavior
+     */
+    registerBehavior(behavior) {
+        this.behaviors.set(behavior.name, behavior);
+    }
+    /**
+     * Set agent state/behavior
+     */
+    setState(agentId, stateName, data) {
+        const agent = this.agents.get(agentId);
+        if (!agent)
+            return;
+        const behavior = this.behaviors.get(stateName);
+        const oldState = agent.state.state;
+        // Exit old behavior
+        if (oldState !== stateName) {
+            const oldBehavior = this.behaviors.get(oldState);
+            oldBehavior?.onExit?.(agent);
+        }
+        // Update state
+        agent.state = {
+            state: stateName,
+            data: data || {}
+        };
+        // Enter new behavior
+        behavior?.onEnter?.(agent);
+        this.emit('state-change', agent, oldState, stateName);
+    }
+    /**
+     * Move agent along path
+     */
+    moveAlongPath(agentId, delta) {
+        const agent = this.agents.get(agentId);
+        if (!agent || !agent.path || agent.path.length === 0) {
+            return false;
+        }
+        const target = agent.path[0];
+        const dx = target.x - agent.position.x;
+        const dy = target.y - agent.position.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < 0.1) {
+            // Reached waypoint
+            agent.path.shift();
+            return agent.path.length > 0;
+        }
+        // Move towards target
+        const step = agent.speed * delta;
+        agent.position.x += (dx / distance) * step;
+        agent.position.y += (dy / distance) * step;
+        return true;
+    }
+    /**
+     * Check if agent can see target
+     */
+    canSee(agentId, target) {
+        const agent = this.agents.get(agentId);
+        if (!agent)
+            return false;
+        const distance = this.distance(agent.position, target);
+        return distance <= agent.sightRange;
+    }
+    /**
+     * Find nearest agent
+     */
+    findNearestAgent(position, filter) {
+        let nearest = null;
+        let minDistance = Infinity;
+        for (const agent of this.agents.values()) {
+            if (filter && !filter(agent))
+                continue;
+            const distance = this.distance(position, agent.position);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearest = agent;
+            }
+        }
+        return nearest;
+    }
+    /**
+     * Get agents within range
+     */
+    getAgentsInRange(position, range) {
+        const result = [];
+        for (const agent of this.agents.values()) {
+            const distance = this.distance(position, agent.position);
+            if (distance <= range) {
+                result.push(agent);
+            }
+        }
+        return result;
+    }
+    /**
+     * Update all agents
+     */
+    update(delta) {
+        for (const agent of this.agents.values()) {
+            // Update behavior
+            const behavior = this.behaviors.get(agent.state.state);
+            behavior?.onUpdate?.(agent, delta);
+            // Check transitions
+            if (behavior?.transitions) {
+                for (const transition of behavior.transitions) {
+                    if (transition.condition(agent)) {
+                        this.setState(agent.id, transition.to);
+                        break;
+                    }
+                }
+            }
+            // Move along path if one exists
+            if (agent.path && agent.path.length > 0) {
+                this.moveAlongPath(agent.id, delta);
+            }
+        }
+        this.emit('update', delta);
+    }
+    /**
+     * Register default behaviors
+     */
+    registerDefaultBehaviors() {
+        // Idle behavior
+        this.registerBehavior({
+            name: 'idle',
+            onUpdate: (agent, delta) => {
+                // Do nothing, just idle
+            }
+        });
+        // Patrol behavior
+        this.registerBehavior({
+            name: 'patrol',
+            onEnter: (agent) => {
+                if (!agent.state.data.waypoints) {
+                    agent.state.data.waypoints = [];
+                    agent.state.data.currentWaypoint = 0;
+                }
+            },
+            onUpdate: (agent, delta) => {
+                const waypoints = agent.state.data.waypoints;
+                if (!waypoints || waypoints.length === 0)
+                    return;
+                if (!agent.path || agent.path.length === 0) {
+                    // Move to next waypoint
+                    const wpIndex = agent.state.data.currentWaypoint;
+                    const target = waypoints[wpIndex];
+                    agent.state.target = target;
+                    agent.path = [target]; // Simple path, could use findPath for complex maps
+                    agent.state.data.currentWaypoint = (wpIndex + 1) % waypoints.length;
+                }
+            }
+        });
+        // Chase behavior
+        this.registerBehavior({
+            name: 'chase',
+            onUpdate: (agent, delta) => {
+                if (!agent.state.target)
+                    return;
+                const target = agent.state.target;
+                const distance = this.distance(agent.position, target);
+                if (distance > 1) {
+                    // Continue chasing
+                    agent.path = [target]; // Could use findPath here
+                }
+                else {
+                    // Reached target, transition to attack
+                    this.setState(agent.id, 'attack');
+                }
+            }
+        });
+        // Attack behavior
+        this.registerBehavior({
+            name: 'attack',
+            onEnter: (agent) => {
+                this.emit('agent-attack', agent);
+            },
+            onUpdate: (agent, delta) => {
+                if (!agent.state.target) {
+                    this.setState(agent.id, 'idle');
+                    return;
+                }
+                const target = agent.state.target;
+                const distance = this.distance(agent.position, target);
+                if (distance > agent.sightRange) {
+                    // Lost sight of target
+                    this.setState(agent.id, 'idle');
+                }
+            }
+        });
+        // Flee behavior
+        this.registerBehavior({
+            name: 'flee',
+            onUpdate: (agent, delta) => {
+                if (!agent.state.target) {
+                    this.setState(agent.id, 'idle');
+                    return;
+                }
+                const threat = agent.state.target;
+                const dx = agent.position.x - threat.x;
+                const dy = agent.position.y - threat.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < agent.sightRange) {
+                    // Run away
+                    const fleeX = agent.position.x + (dx / distance) * 10;
+                    const fleeY = agent.position.y + (dy / distance) * 10;
+                    agent.path = [{ x: fleeX, y: fleeY }];
+                }
+                else {
+                    // Safe distance reached
+                    this.setState(agent.id, 'idle');
+                }
+            }
+        });
+    }
+    /**
+     * Calculate heuristic distance
+     */
+    heuristic(a, b) {
+        switch (this.config.heuristic) {
+            case 'manhattan':
+                return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+            case 'diagonal':
+                const dx = Math.abs(a.x - b.x);
+                const dy = Math.abs(a.y - b.y);
+                return Math.max(dx, dy);
+            case 'euclidean':
+            default:
+                return this.distance(a, b);
+        }
+    }
+    /**
+     * Calculate actual distance
+     */
+    distance(a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    /**
+     * Get neighboring positions (8 directions)
+     */
+    getNeighbors(pos) {
+        return [
+            { x: pos.x - 1, y: pos.y }, // Left
+            { x: pos.x + 1, y: pos.y }, // Right
+            { x: pos.x, y: pos.y - 1 }, // Up
+            { x: pos.x, y: pos.y + 1 }, // Down
+            { x: pos.x - 1, y: pos.y - 1 }, // Up-left
+            { x: pos.x + 1, y: pos.y - 1 }, // Up-right
+            { x: pos.x - 1, y: pos.y + 1 }, // Down-left
+            { x: pos.x + 1, y: pos.y + 1 } // Down-right
+        ];
+    }
+    /**
+     * Reconstruct path from goal node
+     */
+    reconstructPath(node) {
+        const path = [];
+        let current = node;
+        while (current) {
+            path.unshift(current.position);
+            current = current.parent;
+        }
+        return path;
+    }
+    /**
+     * Create position key for set
+     */
+    positionKey(pos) {
+        return `${pos.x},${pos.y}`;
+    }
+    /**
+     * Cleanup
+     */
+    dispose() {
+        if (this.updateTimer) {
+            clearInterval(this.updateTimer);
+        }
+        this.agents.clear();
+        this.behaviors.clear();
+        this.removeAllListeners();
+    }
+}

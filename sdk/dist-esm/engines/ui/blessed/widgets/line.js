@@ -1,1 +1,88 @@
-import{Box}from"./box";export class Line extends Box{constructor(t={}){const e=t.orientation||"horizontal";super({...t,width:"horizontal"===e?t.width||"100%":t.width||1,height:"horizontal"===e?t.height||1:t.height||"100%"}),this.orientation=e,this.lineChar=t.ch||this.getLineChar(t.type||"line"),this.on("attach",()=>{this.updateContent()}),this.screen&&this.updateContent()}getLineChar(t){if("horizontal"===this.orientation){const e={line:"─",heavy:"━",double:"═",ascii:"-"};return e[t]||e.line}{const e={line:"│",heavy:"┃",double:"║",ascii:"|"};return e[t]||e.line}}updateContent(){if("horizontal"===this.orientation){const t=this.iwidth||("number"==typeof this.width?this.width:0);this.setContent(this.lineChar.repeat(t))}else{const t=this.iheight||("number"==typeof this.height?this.height:0),e=[];for(let i=0;i<t;i++)e.push(this.lineChar);this.setContent(e.join("\n"))}}setChar(t){this.lineChar=t,this.updateContent(),this.screen&&this.screen.render()}setType(t){this.lineChar=this.getLineChar(t),this.updateContent(),this.screen&&this.screen.render()}}export function line(t={}){return new Line(t)}
+/**
+ * Line - Horizontal or vertical line widget
+ */
+import { Box } from './box';
+export class Line extends Box {
+    constructor(options = {}) {
+        const orientation = options.orientation || 'horizontal';
+        super({
+            ...options,
+            width: orientation === 'horizontal' ? options.width || '100%' : options.width || 1,
+            height: orientation === 'horizontal' ? options.height || 1 : options.height || '100%',
+        });
+        this.orientation = orientation;
+        this.lineChar = options.ch || this.getLineChar(options.type || 'line');
+        this.on('attach', () => {
+            this.updateContent();
+        });
+        if (this.screen) {
+            this.updateContent();
+        }
+    }
+    /**
+     * Get line character based on type
+     */
+    getLineChar(type) {
+        if (this.orientation === 'horizontal') {
+            const chars = {
+                line: '─',
+                heavy: '━',
+                double: '═',
+                ascii: '-',
+            };
+            return chars[type] || chars.line;
+        }
+        else {
+            const chars = {
+                line: '│',
+                heavy: '┃',
+                double: '║',
+                ascii: '|',
+            };
+            return chars[type] || chars.line;
+        }
+    }
+    /**
+     * Update line content
+     */
+    updateContent() {
+        if (this.orientation === 'horizontal') {
+            const width = this.iwidth || (typeof this.width === 'number' ? this.width : 0);
+            this.setContent(this.lineChar.repeat(width));
+        }
+        else {
+            const height = this.iheight || (typeof this.height === 'number' ? this.height : 0);
+            const lines = [];
+            for (let i = 0; i < height; i++) {
+                lines.push(this.lineChar);
+            }
+            this.setContent(lines.join('\n'));
+        }
+    }
+    /**
+     * Set line character
+     */
+    setChar(ch) {
+        this.lineChar = ch;
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Set line type
+     */
+    setType(type) {
+        this.lineChar = this.getLineChar(type);
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+}
+/**
+ * Factory function
+ */
+export function line(options = {}) {
+    return new Line(options);
+}

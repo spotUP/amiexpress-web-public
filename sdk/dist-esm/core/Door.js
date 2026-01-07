@@ -1,1 +1,205 @@
-import{Output}from"./Output";import{Input}from"./Input";import{Storage}from"./Storage";import{Audio}from"../media/Audio";import{Video}from"../media/Video";export class Door{constructor(n){this.startHandlers=[],this.inputHandlers=[],this.closeHandlers=[],this.errorHandlers=[],this.isRunning=!1,this.inputLoopResolve=null,this.config=n}onStart(n){return this.startHandlers.push(n),this}onInput(n){return this.inputHandlers.push(n),this}onClose(n){return this.closeHandlers.push(n),this}onError(n){return this.errorHandlers.push(n),this}async execute(n){this.isRunning&&(console.warn("[Door] Door was in running state from previous session - resetting"),this.isRunning=!1,this.inputLoopResolve=null),this.isRunning=!0;const{socket:t,bbsSession:o,user:s,params:e=[],bbs:i}=n;i?.enableGameMode&&i.enableGameMode();const r=this.createContext(t,o,s,e,i);try{for(const n of this.startHandlers)await n(r);this.inputHandlers.length>0&&await this.runInputLoop(t,o,r);for(const n of this.closeHandlers)await n(r)}catch(n){for(const t of this.errorHandlers)await t(r,n);if(0===this.errorHandlers.length)throw n}finally{this.isRunning=!1}}async exit(){this.isRunning=!1}createContext(n,t,o,s,e){const i=new Output(n),r=new Input(t,i),u=new Storage({doorName:this.config.name.toLowerCase().replace(/[^a-z0-9]/g,"_"),userId:o.id}),a=new Audio(n,t?.currentRoomId),l=new Video(n);return{user:o,nodeId:t.nodeId||1,output:i,input:r,storage:u,audio:a,video:l,params:s,bbs:e,socket:n,bbsSession:t,close:()=>{this.isRunning=!1,t.doorInputHandler&&(t.doorInputHandler=null),this.inputLoopResolve&&(this.inputLoopResolve(),this.inputLoopResolve=null)}}}async runInputLoop(n,t,o){return new Promise(s=>{this.inputLoopResolve=s;t.doorInputHandler=async n=>{if(!this.isRunning)return t.doorInputHandler=null,void s();try{const t={key:n,raw:n,ctrl:!1,alt:!1,shift:!1,meta:!1};for(const n of this.inputHandlers)await n(o,t)}catch(n){for(const t of this.errorHandlers)await t(o,n);if(0===this.errorHandlers.length)throw n}},n.once("disconnect",()=>{t.doorInputHandler=null,this.isRunning=!1,this.inputLoopResolve=null,s()}),n.once("door:close",()=>{t.doorInputHandler=null,this.isRunning=!1,this.inputLoopResolve=null,s()})})}getConfig(){return{...this.config}}isActive(){return this.isRunning}}
+/**
+ * Door - Base Class for BBS Doors
+ *
+ * Professional door framework with lifecycle hooks and type safety
+ */
+import { Output } from './Output';
+import { Input } from './Input';
+import { Storage } from './Storage';
+import { Audio } from '../media/Audio';
+import { Video } from '../media/Video';
+export class Door {
+    constructor(config) {
+        this.startHandlers = [];
+        this.inputHandlers = [];
+        this.closeHandlers = [];
+        this.errorHandlers = [];
+        this.isRunning = false;
+        this.inputLoopResolve = null;
+        this.config = config;
+    }
+    // ===== Lifecycle Registration =====
+    /**
+     * Register a handler to run when the door starts
+     */
+    onStart(handler) {
+        this.startHandlers.push(handler);
+        return this;
+    }
+    /**
+     * Register a handler to run on user input
+     */
+    onInput(handler) {
+        this.inputHandlers.push(handler);
+        return this;
+    }
+    /**
+     * Register a handler to run when the door closes
+     */
+    onClose(handler) {
+        this.closeHandlers.push(handler);
+        return this;
+    }
+    /**
+     * Register an error handler
+     */
+    onError(handler) {
+        this.errorHandlers.push(handler);
+        return this;
+    }
+    // ===== Door Execution =====
+    /**
+     * Execute the door
+     *
+     * This is called by the BBS backend when a user runs the door
+     */
+    async execute(rawSession) {
+        // Reset state if door was left in running state from a previous crash/disconnect
+        // ESM modules are cached, so the same Door instance may be reused across sessions
+        if (this.isRunning) {
+            console.warn('[Door] Door was in running state from previous session - resetting');
+            this.isRunning = false;
+            this.inputLoopResolve = null;
+        }
+        this.isRunning = true;
+        const { socket, bbsSession, user, params = [], bbs } = rawSession;
+        // Enable game mode for smooth keyboard input (bypasses OS key repeat delay)
+        // This tells the frontend to send raw keydown/keyup events
+        if (bbs?.enableGameMode) {
+            bbs.enableGameMode();
+        }
+        // Create context
+        const context = this.createContext(socket, bbsSession, user, params, bbs);
+        try {
+            // Call start handlers
+            for (const handler of this.startHandlers) {
+                await handler(context);
+            }
+            // Set up input loop
+            if (this.inputHandlers.length > 0) {
+                await this.runInputLoop(socket, bbsSession, context);
+            }
+            // Call close handlers
+            for (const handler of this.closeHandlers) {
+                await handler(context);
+            }
+        }
+        catch (error) {
+            // Call error handlers
+            for (const handler of this.errorHandlers) {
+                await handler(context, error);
+            }
+            // Re-throw if no error handlers
+            if (this.errorHandlers.length === 0) {
+                throw error;
+            }
+        }
+        finally {
+            this.isRunning = false;
+        }
+    }
+    /**
+     * Exit the door
+     *
+     * Can be called from within handlers to immediately close the door
+     */
+    async exit() {
+        this.isRunning = false;
+    }
+    // ===== Internal Methods =====
+    createContext(socket, bbsSession, user, params, bbs) {
+        const output = new Output(socket);
+        const input = new Input(bbsSession, output);
+        const storage = new Storage({
+            doorName: this.config.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+            userId: user.id,
+        });
+        const audio = new Audio(socket, bbsSession?.currentRoomId);
+        const video = new Video(socket);
+        return {
+            user,
+            nodeId: bbsSession.nodeId || 1,
+            output,
+            input,
+            storage,
+            audio,
+            video,
+            params,
+            bbs,
+            socket,
+            bbsSession,
+            close: () => {
+                this.isRunning = false;
+                // Immediately clean up input handler to unblock the input loop
+                if (bbsSession.doorInputHandler) {
+                    bbsSession.doorInputHandler = null;
+                }
+                // Resolve the input loop promise to exit the door
+                if (this.inputLoopResolve) {
+                    this.inputLoopResolve();
+                    this.inputLoopResolve = null;
+                }
+            },
+        };
+    }
+    async runInputLoop(socket, bbsSession, context) {
+        return new Promise((resolve) => {
+            // Store resolve function so close() can call it
+            this.inputLoopResolve = resolve;
+            const handler = async (data) => {
+                if (!this.isRunning) {
+                    bbsSession.doorInputHandler = null;
+                    resolve();
+                    return;
+                }
+                try {
+                    // Parse key press
+                    const keyPress = {
+                        key: data,
+                        raw: data,
+                        ctrl: false,
+                        alt: false,
+                        shift: false,
+                        meta: false,
+                    };
+                    // Call input handlers
+                    for (const inputHandler of this.inputHandlers) {
+                        await inputHandler(context, keyPress);
+                    }
+                }
+                catch (error) {
+                    // Call error handlers
+                    for (const errorHandler of this.errorHandlers) {
+                        await errorHandler(context, error);
+                    }
+                    // Re-throw if no error handlers
+                    if (this.errorHandlers.length === 0) {
+                        throw error;
+                    }
+                }
+            };
+            bbsSession.doorInputHandler = handler;
+            // Handle disconnection
+            socket.once('disconnect', () => {
+                bbsSession.doorInputHandler = null;
+                this.isRunning = false;
+                this.inputLoopResolve = null;
+                resolve();
+            });
+            // Handle door:close event
+            socket.once('door:close', () => {
+                bbsSession.doorInputHandler = null;
+                this.isRunning = false;
+                this.inputLoopResolve = null;
+                resolve();
+            });
+        });
+    }
+    // ===== Getters =====
+    getConfig() {
+        return { ...this.config };
+    }
+    isActive() {
+        return this.isRunning;
+    }
+}

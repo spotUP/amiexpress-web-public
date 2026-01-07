@@ -1,1 +1,178 @@
-import{Box}from"./box";export class BigText extends Box{constructor(t={}){super({...t,width:t.width||"shrink",height:t.height||"shrink"}),this.text="",this.text=t.text||"",this.font=t.font||"standard",this.fch=t.fch||"#",this.updateContent()}generateBigText(){switch(this.font){case"banner":return this.generateBanner();case"block":return this.generateBlock();case"simple":return this.generateSimple();default:return this.generateStandard()}}generateStandard(){const t={A:["  ###  "," #   # ","#     #","#######","#     #"],B:["######","#     #","######","#     #","######"],C:[" ##### ","#     #","#      ","#     #"," ##### "]," ":["   ","   ","   ","   ","   "]},e=["","","","",""],n=this.text.toUpperCase().split("");for(const s of n){const n=t[s]||t[" "];for(let t=0;t<5;t++)e[t]+=n[t]+" "}return e.join("\n")}generateBanner(){const t={A:[" ### ","# # #","#####"],B:["#### ","#### ","#### "]," ":["  ","  ","  "]},e=["","",""],n=this.text.toUpperCase().split("");for(const s of n){const n=t[s]||t[" "];for(let t=0;t<3;t++)e[t]+=n[t]+" "}return e.join("\n")}generateBlock(){const t=this.fch,e=[];for(let n=0;n<5;n++){let n="";for(const e of this.text)n+=t.repeat(5)+" ";e.push(n)}return e.join("\n")}generateSimple(){const t=this.text.split("").map(t=>t+" ").join("");return t+"\n"+t}updateContent(){const t=this.generateBigText();this.setContent(t)}setText(t){this.text=t,this.updateContent(),this.screen&&this.screen.render()}getText(){return this.text}setFont(t){this.font=t,this.updateContent(),this.screen&&this.screen.render()}setFillChar(t){this.fch=t,this.updateContent(),this.screen&&this.screen.render()}}
+/**
+ * BigText - Large ASCII text widget using figlet-style fonts
+ */
+import { Box } from './box';
+export class BigText extends Box {
+    constructor(options = {}) {
+        super({
+            ...options,
+            width: options.width || 'shrink',
+            height: options.height || 'shrink',
+        });
+        this.text = '';
+        this.text = options.text || '';
+        this.font = options.font || 'standard';
+        this.fch = options.fch || '#';
+        this.updateContent();
+    }
+    /**
+     * Generate big text from input string
+     */
+    generateBigText() {
+        switch (this.font) {
+            case 'banner':
+                return this.generateBanner();
+            case 'block':
+                return this.generateBlock();
+            case 'simple':
+                return this.generateSimple();
+            default:
+                return this.generateStandard();
+        }
+    }
+    /**
+     * Generate standard 5-line ASCII art
+     */
+    generateStandard() {
+        const patterns = {
+            A: [
+                '  ###  ',
+                ' #   # ',
+                '#     #',
+                '#######',
+                '#     #',
+            ],
+            B: [
+                '######',
+                '#     #',
+                '######',
+                '#     #',
+                '######',
+            ],
+            C: [
+                ' ##### ',
+                '#     #',
+                '#      ',
+                '#     #',
+                ' ##### ',
+            ],
+            // Add more letters as needed...
+            ' ': [
+                '   ',
+                '   ',
+                '   ',
+                '   ',
+                '   ',
+            ],
+        };
+        const lines = ['', '', '', '', ''];
+        const chars = this.text.toUpperCase().split('');
+        for (const char of chars) {
+            const pattern = patterns[char] || patterns[' '];
+            for (let i = 0; i < 5; i++) {
+                lines[i] += pattern[i] + ' ';
+            }
+        }
+        return lines.join('\n');
+    }
+    /**
+     * Generate banner style (3-line)
+     */
+    generateBanner() {
+        const patterns = {
+            A: [
+                ' ### ',
+                '# # #',
+                '#####',
+            ],
+            B: [
+                '#### ',
+                '#### ',
+                '#### ',
+            ],
+            // Simplified patterns
+            ' ': [
+                '  ',
+                '  ',
+                '  ',
+            ],
+        };
+        const lines = ['', '', ''];
+        const chars = this.text.toUpperCase().split('');
+        for (const char of chars) {
+            const pattern = patterns[char] || patterns[' '];
+            for (let i = 0; i < 3; i++) {
+                lines[i] += pattern[i] + ' ';
+            }
+        }
+        return lines.join('\n');
+    }
+    /**
+     * Generate block style (filled rectangles)
+     */
+    generateBlock() {
+        const width = 5;
+        const height = 5;
+        const ch = this.fch;
+        const lines = [];
+        for (let i = 0; i < height; i++) {
+            let line = '';
+            for (const char of this.text) {
+                line += ch.repeat(width) + ' ';
+            }
+            lines.push(line);
+        }
+        return lines.join('\n');
+    }
+    /**
+     * Generate simple double-height text
+     */
+    generateSimple() {
+        const topLine = this.text.split('').map(c => c + ' ').join('');
+        const bottomLine = topLine;
+        return topLine + '\n' + bottomLine;
+    }
+    /**
+     * Update content with generated big text
+     */
+    updateContent() {
+        const bigText = this.generateBigText();
+        this.setContent(bigText);
+    }
+    /**
+     * Set text content
+     */
+    setText(text) {
+        this.text = text;
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Get text content
+     */
+    getText() {
+        return this.text;
+    }
+    /**
+     * Set font style
+     */
+    setFont(font) {
+        this.font = font;
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Set fill character
+     */
+    setFillChar(ch) {
+        this.fch = ch;
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+}

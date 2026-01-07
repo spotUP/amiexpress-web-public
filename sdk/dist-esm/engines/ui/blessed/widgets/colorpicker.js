@@ -1,1 +1,77 @@
-import{Box}from"./box";import{Button}from"./button";export class ColorPicker extends Box{constructor(e={}){super({width:20,height:6,border:"line",label:" Color ",...e}),this.selectedColor="white",this.colorButtons=[],this.selectedColor=e.color||"white",this.setupGrid()}setupGrid(){ColorPicker.ANSI_COLORS.forEach((e,t)=>{const o=Math.floor(t/8),r=new Button({parent:this,top:1*o,left:2*(t%8),width:2,height:1,content:"  ",style:{bg:e,focus:{bg:"white",fg:"black"}},border:void 0});r.on("press",()=>{this.selectColor(e)}),this.colorButtons.push(r)})}selectColor(e){this.selectedColor=e,this.emit("select",e),this.screen?.render()}getSelectedColor(){return this.selectedColor}get type(){return"colorpicker"}}ColorPicker.ANSI_COLORS=["black","red","green","yellow","blue","magenta","cyan","white","light-black","light-red","light-green","light-yellow","light-blue","light-magenta","light-cyan","light-white"];export function colorpicker(e){return new ColorPicker(e)}
+/**
+ * ColorPicker Widget
+ * Visual grid for selecting ANSI colors
+ */
+import { Box } from './box';
+import { Button } from './button';
+export class ColorPicker extends Box {
+    constructor(options = {}) {
+        super({
+            width: 20,
+            height: 6,
+            border: 'line',
+            label: ' Color ',
+            ...options,
+        });
+        this.selectedColor = 'white';
+        this.colorButtons = [];
+        this.selectedColor = options.color || 'white';
+        this.setupGrid();
+    }
+    setupGrid() {
+        const cols = 8;
+        const itemWidth = 2;
+        const itemHeight = 1;
+        ColorPicker.ANSI_COLORS.forEach((color, index) => {
+            const row = Math.floor(index / cols);
+            const col = index % cols;
+            const btn = new Button({
+                parent: this,
+                top: row * itemHeight,
+                left: col * itemWidth,
+                width: itemWidth,
+                height: itemHeight,
+                content: '  ',
+                style: {
+                    bg: color,
+                    focus: {
+                        bg: 'white',
+                        fg: 'black'
+                    }
+                },
+                border: undefined,
+            });
+            btn.on('press', () => {
+                this.selectColor(color);
+            });
+            this.colorButtons.push(btn);
+        });
+    }
+    /**
+     * Select a color programmatically
+     */
+    selectColor(color) {
+        this.selectedColor = color;
+        this.emit('select', color);
+        this.screen?.render();
+    }
+    /**
+     * Get the currently selected color
+     */
+    getSelectedColor() {
+        return this.selectedColor;
+    }
+    get type() {
+        return 'colorpicker';
+    }
+}
+ColorPicker.ANSI_COLORS = [
+    'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+    'light-black', 'light-red', 'light-green', 'light-yellow', 'light-blue', 'light-magenta', 'light-cyan', 'light-white'
+];
+/**
+ * Factory function
+ */
+export function colorpicker(options) {
+    return new ColorPicker(options);
+}

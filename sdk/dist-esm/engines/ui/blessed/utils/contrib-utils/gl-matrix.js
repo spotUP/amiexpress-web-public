@@ -1,1 +1,717 @@
-export const EPSILON=1e-6;export const ARRAY_TYPE="undefined"!=typeof Float32Array?Float32Array:Array;export const RANDOM=Math.random;export const vec2={create(){const t=new ARRAY_TYPE(2);return ARRAY_TYPE!==Float32Array&&(t[0]=0,t[1]=0),t},clone(t){const a=new ARRAY_TYPE(2);return a[0]=t[0],a[1]=t[1],a},fromValues(t,a){const r=new ARRAY_TYPE(2);return r[0]=t,r[1]=a,r},copy:(t,a)=>(t[0]=a[0],t[1]=a[1],t),set:(t,a,r)=>(t[0]=a,t[1]=r,t),add:(t,a,r)=>(t[0]=a[0]+r[0],t[1]=a[1]+r[1],t),subtract:(t,a,r)=>(t[0]=a[0]-r[0],t[1]=a[1]-r[1],t),multiply:(t,a,r)=>(t[0]=a[0]*r[0],t[1]=a[1]*r[1],t),divide:(t,a,r)=>(t[0]=a[0]/r[0],t[1]=a[1]/r[1],t),ceil:(t,a)=>(t[0]=Math.ceil(a[0]),t[1]=Math.ceil(a[1]),t),floor:(t,a)=>(t[0]=Math.floor(a[0]),t[1]=Math.floor(a[1]),t),min:(t,a,r)=>(t[0]=Math.min(a[0],r[0]),t[1]=Math.min(a[1],r[1]),t),max:(t,a,r)=>(t[0]=Math.max(a[0],r[0]),t[1]=Math.max(a[1],r[1]),t),round:(t,a)=>(t[0]=Math.round(a[0]),t[1]=Math.round(a[1]),t),scale:(t,a,r)=>(t[0]=a[0]*r,t[1]=a[1]*r,t),scaleAndAdd:(t,a,r,n)=>(t[0]=a[0]+r[0]*n,t[1]=a[1]+r[1]*n,t),distance(t,a){const r=a[0]-t[0],n=a[1]-t[1];return Math.sqrt(r*r+n*n)},squaredDistance(t,a){const r=a[0]-t[0],n=a[1]-t[1];return r*r+n*n},length(t){const a=t[0],r=t[1];return Math.sqrt(a*a+r*r)},squaredLength(t){const a=t[0],r=t[1];return a*a+r*r},negate:(t,a)=>(t[0]=-a[0],t[1]=-a[1],t),inverse:(t,a)=>(t[0]=1/a[0],t[1]=1/a[1],t),normalize(t,a){const r=a[0],n=a[1];let s=r*r+n*n;return s>0&&(s=1/Math.sqrt(s),t[0]=a[0]*s,t[1]=a[1]*s),t},dot:(t,a)=>t[0]*a[0]+t[1]*a[1],cross(t,a,r){const n=a[0]*r[1]-a[1]*r[0];return t[0]=t[1]=0,t[2]=n,t},lerp(t,a,r,n){const s=a[0],e=a[1];return t[0]=s+n*(r[0]-s),t[1]=e+n*(r[1]-e),t},random(t,a){a=a||1;const r=2*RANDOM()*Math.PI;return t[0]=Math.cos(r)*a,t[1]=Math.sin(r)*a,t},transformMat2(t,a,r){const n=a[0],s=a[1];return t[0]=r[0]*n+r[2]*s,t[1]=r[1]*n+r[3]*s,t},transformMat2d(t,a,r){const n=a[0],s=a[1];return t[0]=r[0]*n+r[2]*s+r[4],t[1]=r[1]*n+r[3]*s+r[5],t},transformMat3(t,a,r){const n=a[0],s=a[1];return t[0]=r[0]*n+r[3]*s+r[6],t[1]=r[1]*n+r[4]*s+r[7],t},transformMat4(t,a,r){const n=a[0],s=a[1];return t[0]=r[0]*n+r[4]*s+r[12],t[1]=r[1]*n+r[5]*s+r[13],t},rotate(t,a,r,n){const s=a[0]-r[0],e=a[1]-r[1],o=Math.sin(n),c=Math.cos(n);return t[0]=s*c-e*o+r[0],t[1]=s*o+e*c+r[1],t},angle(t,a){const r=t[0],n=t[1],s=a[0],e=a[1];let o=r*r+n*n;o>0&&(o=1/Math.sqrt(o));let c=s*s+e*e;c>0&&(c=1/Math.sqrt(c));const h=(r*s+n*e)*o*c;return h>1?0:h<-1?Math.PI:Math.acos(h)},str:t=>"vec2("+t[0]+", "+t[1]+")",exactEquals:(t,a)=>t[0]===a[0]&&t[1]===a[1],equals(t,a){const r=t[0],n=t[1],s=a[0],e=a[1];return Math.abs(r-s)<=EPSILON*Math.max(1,Math.abs(r),Math.abs(s))&&Math.abs(n-e)<=EPSILON*Math.max(1,Math.abs(n),Math.abs(e))},len:t=>vec2.length(t),sub:(t,a,r)=>vec2.subtract(t,a,r),mul:(t,a,r)=>vec2.multiply(t,a,r),div:(t,a,r)=>vec2.divide(t,a,r),dist:(t,a)=>vec2.distance(t,a),sqrDist:(t,a)=>vec2.squaredDistance(t,a),sqrLen:t=>vec2.squaredLength(t),forEach(t,a,r,n,s,e){const o=vec2.create();let c,h;for(a||(a=2),r||(r=0),h=n?Math.min(n*a+r,t.length):t.length,c=r;c<h;c+=a)o[0]=t[c],o[1]=t[c+1],s(o,o,e),t[c]=o[0],t[c+1]=o[1];return t}};export const mat2d={create(){const t=new ARRAY_TYPE(6);return ARRAY_TYPE!==Float32Array&&(t[1]=0,t[2]=0,t[4]=0,t[5]=0),t[0]=1,t[3]=1,t},clone(t){const a=new ARRAY_TYPE(6);return a[0]=t[0],a[1]=t[1],a[2]=t[2],a[3]=t[3],a[4]=t[4],a[5]=t[5],a},copy:(t,a)=>(t[0]=a[0],t[1]=a[1],t[2]=a[2],t[3]=a[3],t[4]=a[4],t[5]=a[5],t),identity:t=>(t[0]=1,t[1]=0,t[2]=0,t[3]=1,t[4]=0,t[5]=0,t),fromValues(t,a,r,n,s,e){const o=new ARRAY_TYPE(6);return o[0]=t,o[1]=a,o[2]=r,o[3]=n,o[4]=s,o[5]=e,o},set:(t,a,r,n,s,e,o)=>(t[0]=a,t[1]=r,t[2]=n,t[3]=s,t[4]=e,t[5]=o,t),invert(t,a){const r=a[0],n=a[1],s=a[2],e=a[3],o=a[4],c=a[5];let h=r*e-n*s;return h?(h=1/h,t[0]=e*h,t[1]=-n*h,t[2]=-s*h,t[3]=r*h,t[4]=(s*c-e*o)*h,t[5]=(n*o-r*c)*h,t):null},determinant:t=>t[0]*t[3]-t[1]*t[2],multiply(t,a,r){const n=a[0],s=a[1],e=a[2],o=a[3],c=a[4],h=a[5],M=r[0],u=r[1],l=r[2],m=r[3],i=r[4],d=r[5];return t[0]=n*M+e*u,t[1]=s*M+o*u,t[2]=n*l+e*m,t[3]=s*l+o*m,t[4]=n*i+e*d+c,t[5]=s*i+o*d+h,t},rotate(t,a,r){const n=a[0],s=a[1],e=a[2],o=a[3],c=a[4],h=a[5],M=Math.sin(r),u=Math.cos(r);return t[0]=n*u+e*M,t[1]=s*u+o*M,t[2]=n*-M+e*u,t[3]=s*-M+o*u,t[4]=c,t[5]=h,t},scale(t,a,r){const n=a[0],s=a[1],e=a[2],o=a[3],c=a[4],h=a[5],M=r[0],u=r[1];return t[0]=n*M,t[1]=s*M,t[2]=e*u,t[3]=o*u,t[4]=c,t[5]=h,t},translate(t,a,r){const n=a[0],s=a[1],e=a[2],o=a[3],c=a[4],h=a[5],M=r[0],u=r[1];return t[0]=n,t[1]=s,t[2]=e,t[3]=o,t[4]=n*M+e*u+c,t[5]=s*M+o*u+h,t},fromRotation(t,a){const r=Math.sin(a),n=Math.cos(a);return t[0]=n,t[1]=r,t[2]=-r,t[3]=n,t[4]=0,t[5]=0,t},fromScaling:(t,a)=>(t[0]=a[0],t[1]=0,t[2]=0,t[3]=a[1],t[4]=0,t[5]=0,t),fromTranslation:(t,a)=>(t[0]=1,t[1]=0,t[2]=0,t[3]=1,t[4]=a[0],t[5]=a[1],t),str:t=>"mat2d("+t[0]+", "+t[1]+", "+t[2]+", "+t[3]+", "+t[4]+", "+t[5]+")",frob:t=>Math.sqrt(Math.pow(t[0],2)+Math.pow(t[1],2)+Math.pow(t[2],2)+Math.pow(t[3],2)+Math.pow(t[4],2)+Math.pow(t[5],2)+1),add:(t,a,r)=>(t[0]=a[0]+r[0],t[1]=a[1]+r[1],t[2]=a[2]+r[2],t[3]=a[3]+r[3],t[4]=a[4]+r[4],t[5]=a[5]+r[5],t),subtract:(t,a,r)=>(t[0]=a[0]-r[0],t[1]=a[1]-r[1],t[2]=a[2]-r[2],t[3]=a[3]-r[3],t[4]=a[4]-r[4],t[5]=a[5]-r[5],t),multiplyScalar:(t,a,r)=>(t[0]=a[0]*r,t[1]=a[1]*r,t[2]=a[2]*r,t[3]=a[3]*r,t[4]=a[4]*r,t[5]=a[5]*r,t),multiplyScalarAndAdd:(t,a,r,n)=>(t[0]=a[0]+r[0]*n,t[1]=a[1]+r[1]*n,t[2]=a[2]+r[2]*n,t[3]=a[3]+r[3]*n,t[4]=a[4]+r[4]*n,t[5]=a[5]+r[5]*n,t),exactEquals:(t,a)=>t[0]===a[0]&&t[1]===a[1]&&t[2]===a[2]&&t[3]===a[3]&&t[4]===a[4]&&t[5]===a[5],equals(t,a){const r=t[0],n=t[1],s=t[2],e=t[3],o=t[4],c=t[5],h=a[0],M=a[1],u=a[2],l=a[3],m=a[4],i=a[5];return Math.abs(r-h)<=EPSILON*Math.max(1,Math.abs(r),Math.abs(h))&&Math.abs(n-M)<=EPSILON*Math.max(1,Math.abs(n),Math.abs(M))&&Math.abs(s-u)<=EPSILON*Math.max(1,Math.abs(s),Math.abs(u))&&Math.abs(e-l)<=EPSILON*Math.max(1,Math.abs(e),Math.abs(l))&&Math.abs(o-m)<=EPSILON*Math.max(1,Math.abs(o),Math.abs(m))&&Math.abs(c-i)<=EPSILON*Math.max(1,Math.abs(c),Math.abs(i))},mul:(t,a,r)=>mat2d.multiply(t,a,r),sub:(t,a,r)=>mat2d.subtract(t,a,r)};
+/**
+ * gl-matrix - Complete 1:1 TypeScript Port
+ *
+ * Port from gl-matrix v2.x (vec2 and mat2d modules)
+ * Used by drawille-canvas for 2D transformations
+ */
+// Configuration Constants
+export const EPSILON = 0.000001;
+export const ARRAY_TYPE = typeof Float32Array !== 'undefined' ? Float32Array : Array;
+export const RANDOM = Math.random;
+// ============================================================================
+// vec2 Module - Complete Implementation
+// ============================================================================
+export const vec2 = {
+    /**
+     * Creates a new, empty vec2
+     */
+    create() {
+        const out = new ARRAY_TYPE(2);
+        if (ARRAY_TYPE !== Float32Array) {
+            out[0] = 0;
+            out[1] = 0;
+        }
+        return out;
+    },
+    /**
+     * Creates a new vec2 initialized with values from an existing vector
+     */
+    clone(a) {
+        const out = new ARRAY_TYPE(2);
+        out[0] = a[0];
+        out[1] = a[1];
+        return out;
+    },
+    /**
+     * Creates a new vec2 initialized with the given values
+     */
+    fromValues(x, y) {
+        const out = new ARRAY_TYPE(2);
+        out[0] = x;
+        out[1] = y;
+        return out;
+    },
+    /**
+     * Copy the values from one vec2 to another
+     */
+    copy(out, a) {
+        out[0] = a[0];
+        out[1] = a[1];
+        return out;
+    },
+    /**
+     * Set the components of a vec2 to the given values
+     */
+    set(out, x, y) {
+        out[0] = x;
+        out[1] = y;
+        return out;
+    },
+    /**
+     * Adds two vec2's
+     */
+    add(out, a, b) {
+        out[0] = a[0] + b[0];
+        out[1] = a[1] + b[1];
+        return out;
+    },
+    /**
+     * Subtracts vector b from vector a
+     */
+    subtract(out, a, b) {
+        out[0] = a[0] - b[0];
+        out[1] = a[1] - b[1];
+        return out;
+    },
+    /**
+     * Multiplies two vec2's
+     */
+    multiply(out, a, b) {
+        out[0] = a[0] * b[0];
+        out[1] = a[1] * b[1];
+        return out;
+    },
+    /**
+     * Divides two vec2's
+     */
+    divide(out, a, b) {
+        out[0] = a[0] / b[0];
+        out[1] = a[1] / b[1];
+        return out;
+    },
+    /**
+     * Math.ceil the components of a vec2
+     */
+    ceil(out, a) {
+        out[0] = Math.ceil(a[0]);
+        out[1] = Math.ceil(a[1]);
+        return out;
+    },
+    /**
+     * Math.floor the components of a vec2
+     */
+    floor(out, a) {
+        out[0] = Math.floor(a[0]);
+        out[1] = Math.floor(a[1]);
+        return out;
+    },
+    /**
+     * Returns the minimum of two vec2's
+     */
+    min(out, a, b) {
+        out[0] = Math.min(a[0], b[0]);
+        out[1] = Math.min(a[1], b[1]);
+        return out;
+    },
+    /**
+     * Returns the maximum of two vec2's
+     */
+    max(out, a, b) {
+        out[0] = Math.max(a[0], b[0]);
+        out[1] = Math.max(a[1], b[1]);
+        return out;
+    },
+    /**
+     * Math.round the components of a vec2
+     */
+    round(out, a) {
+        out[0] = Math.round(a[0]);
+        out[1] = Math.round(a[1]);
+        return out;
+    },
+    /**
+     * Scales a vec2 by a scalar number
+     */
+    scale(out, a, b) {
+        out[0] = a[0] * b;
+        out[1] = a[1] * b;
+        return out;
+    },
+    /**
+     * Adds two vec2's after scaling the second operand by a scalar value
+     */
+    scaleAndAdd(out, a, b, scale) {
+        out[0] = a[0] + b[0] * scale;
+        out[1] = a[1] + b[1] * scale;
+        return out;
+    },
+    /**
+     * Calculates the euclidian distance between two vec2's
+     */
+    distance(a, b) {
+        const x = b[0] - a[0];
+        const y = b[1] - a[1];
+        return Math.sqrt(x * x + y * y);
+    },
+    /**
+     * Calculates the squared euclidian distance between two vec2's
+     */
+    squaredDistance(a, b) {
+        const x = b[0] - a[0];
+        const y = b[1] - a[1];
+        return x * x + y * y;
+    },
+    /**
+     * Calculates the length of a vec2
+     */
+    length(a) {
+        const x = a[0];
+        const y = a[1];
+        return Math.sqrt(x * x + y * y);
+    },
+    /**
+     * Calculates the squared length of a vec2
+     */
+    squaredLength(a) {
+        const x = a[0];
+        const y = a[1];
+        return x * x + y * y;
+    },
+    /**
+     * Negates the components of a vec2
+     */
+    negate(out, a) {
+        out[0] = -a[0];
+        out[1] = -a[1];
+        return out;
+    },
+    /**
+     * Returns the inverse of the components of a vec2
+     */
+    inverse(out, a) {
+        out[0] = 1.0 / a[0];
+        out[1] = 1.0 / a[1];
+        return out;
+    },
+    /**
+     * Normalize a vec2
+     */
+    normalize(out, a) {
+        const x = a[0];
+        const y = a[1];
+        let len = x * x + y * y;
+        if (len > 0) {
+            len = 1 / Math.sqrt(len);
+            out[0] = a[0] * len;
+            out[1] = a[1] * len;
+        }
+        return out;
+    },
+    /**
+     * Calculates the dot product of two vec2's
+     */
+    dot(a, b) {
+        return a[0] * b[0] + a[1] * b[1];
+    },
+    /**
+     * Computes the cross product of two vec2's
+     */
+    cross(out, a, b) {
+        const z = a[0] * b[1] - a[1] * b[0];
+        out[0] = out[1] = 0;
+        out[2] = z;
+        return out;
+    },
+    /**
+     * Performs a linear interpolation between two vec2's
+     */
+    lerp(out, a, b, t) {
+        const ax = a[0];
+        const ay = a[1];
+        out[0] = ax + t * (b[0] - ax);
+        out[1] = ay + t * (b[1] - ay);
+        return out;
+    },
+    /**
+     * Generates a random vector with the given scale
+     */
+    random(out, scale) {
+        scale = scale || 1.0;
+        const r = RANDOM() * 2.0 * Math.PI;
+        out[0] = Math.cos(r) * scale;
+        out[1] = Math.sin(r) * scale;
+        return out;
+    },
+    /**
+     * Transforms the vec2 with a mat2
+     */
+    transformMat2(out, a, m) {
+        const x = a[0];
+        const y = a[1];
+        out[0] = m[0] * x + m[2] * y;
+        out[1] = m[1] * x + m[3] * y;
+        return out;
+    },
+    /**
+     * Transforms the vec2 with a mat2d
+     */
+    transformMat2d(out, a, m) {
+        const x = a[0];
+        const y = a[1];
+        out[0] = m[0] * x + m[2] * y + m[4];
+        out[1] = m[1] * x + m[3] * y + m[5];
+        return out;
+    },
+    /**
+     * Transforms the vec2 with a mat3
+     */
+    transformMat3(out, a, m) {
+        const x = a[0];
+        const y = a[1];
+        out[0] = m[0] * x + m[3] * y + m[6];
+        out[1] = m[1] * x + m[4] * y + m[7];
+        return out;
+    },
+    /**
+     * Transforms the vec2 with a mat4
+     */
+    transformMat4(out, a, m) {
+        const x = a[0];
+        const y = a[1];
+        out[0] = m[0] * x + m[4] * y + m[12];
+        out[1] = m[1] * x + m[5] * y + m[13];
+        return out;
+    },
+    /**
+     * Rotate a 2D vector
+     */
+    rotate(out, a, b, c) {
+        const p0 = a[0] - b[0];
+        const p1 = a[1] - b[1];
+        const sinC = Math.sin(c);
+        const cosC = Math.cos(c);
+        out[0] = p0 * cosC - p1 * sinC + b[0];
+        out[1] = p0 * sinC + p1 * cosC + b[1];
+        return out;
+    },
+    /**
+     * Get the angle between two 2D vectors
+     */
+    angle(a, b) {
+        const x1 = a[0];
+        const y1 = a[1];
+        const x2 = b[0];
+        const y2 = b[1];
+        let len1 = x1 * x1 + y1 * y1;
+        if (len1 > 0) {
+            len1 = 1 / Math.sqrt(len1);
+        }
+        let len2 = x2 * x2 + y2 * y2;
+        if (len2 > 0) {
+            len2 = 1 / Math.sqrt(len2);
+        }
+        const cosine = (x1 * x2 + y1 * y2) * len1 * len2;
+        if (cosine > 1.0) {
+            return 0;
+        }
+        else if (cosine < -1.0) {
+            return Math.PI;
+        }
+        else {
+            return Math.acos(cosine);
+        }
+    },
+    /**
+     * Returns a string representation of a vector
+     */
+    str(a) {
+        return 'vec2(' + a[0] + ', ' + a[1] + ')';
+    },
+    /**
+     * Returns whether or not the vectors exactly have the same elements
+     */
+    exactEquals(a, b) {
+        return a[0] === b[0] && a[1] === b[1];
+    },
+    /**
+     * Returns whether or not the vectors have approximately the same elements
+     */
+    equals(a, b) {
+        const a0 = a[0], a1 = a[1];
+        const b0 = b[0], b1 = b[1];
+        return (Math.abs(a0 - b0) <= EPSILON * Math.max(1.0, Math.abs(a0), Math.abs(b0)) &&
+            Math.abs(a1 - b1) <= EPSILON * Math.max(1.0, Math.abs(a1), Math.abs(b1)));
+    },
+    /**
+     * Alias for length
+     */
+    len(a) {
+        return vec2.length(a);
+    },
+    /**
+     * Alias for subtract
+     */
+    sub(out, a, b) {
+        return vec2.subtract(out, a, b);
+    },
+    /**
+     * Alias for multiply
+     */
+    mul(out, a, b) {
+        return vec2.multiply(out, a, b);
+    },
+    /**
+     * Alias for divide
+     */
+    div(out, a, b) {
+        return vec2.divide(out, a, b);
+    },
+    /**
+     * Alias for distance
+     */
+    dist(a, b) {
+        return vec2.distance(a, b);
+    },
+    /**
+     * Alias for squaredDistance
+     */
+    sqrDist(a, b) {
+        return vec2.squaredDistance(a, b);
+    },
+    /**
+     * Alias for squaredLength
+     */
+    sqrLen(a) {
+        return vec2.squaredLength(a);
+    },
+    /**
+     * Perform operation over an array of vec2s
+     */
+    forEach(a, stride, offset, count, fn, arg) {
+        const vec = vec2.create();
+        let i, l;
+        if (!stride) {
+            stride = 2;
+        }
+        if (!offset) {
+            offset = 0;
+        }
+        if (count) {
+            l = Math.min(count * stride + offset, a.length);
+        }
+        else {
+            l = a.length;
+        }
+        for (i = offset; i < l; i += stride) {
+            vec[0] = a[i];
+            vec[1] = a[i + 1];
+            fn(vec, vec, arg);
+            a[i] = vec[0];
+            a[i + 1] = vec[1];
+        }
+        return a;
+    }
+};
+// ============================================================================
+// mat2d Module - Complete Implementation
+// ============================================================================
+export const mat2d = {
+    /**
+     * Creates a new identity mat2d
+     */
+    create() {
+        const out = new ARRAY_TYPE(6);
+        if (ARRAY_TYPE !== Float32Array) {
+            out[1] = 0;
+            out[2] = 0;
+            out[4] = 0;
+            out[5] = 0;
+        }
+        out[0] = 1;
+        out[3] = 1;
+        return out;
+    },
+    /**
+     * Creates a new mat2d initialized with values from an existing matrix
+     */
+    clone(a) {
+        const out = new ARRAY_TYPE(6);
+        out[0] = a[0];
+        out[1] = a[1];
+        out[2] = a[2];
+        out[3] = a[3];
+        out[4] = a[4];
+        out[5] = a[5];
+        return out;
+    },
+    /**
+     * Copy the values from one mat2d to another
+     */
+    copy(out, a) {
+        out[0] = a[0];
+        out[1] = a[1];
+        out[2] = a[2];
+        out[3] = a[3];
+        out[4] = a[4];
+        out[5] = a[5];
+        return out;
+    },
+    /**
+     * Set a mat2d to the identity matrix
+     */
+    identity(out) {
+        out[0] = 1;
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = 1;
+        out[4] = 0;
+        out[5] = 0;
+        return out;
+    },
+    /**
+     * Create a new mat2d with the given values
+     */
+    fromValues(a, b, c, d, tx, ty) {
+        const out = new ARRAY_TYPE(6);
+        out[0] = a;
+        out[1] = b;
+        out[2] = c;
+        out[3] = d;
+        out[4] = tx;
+        out[5] = ty;
+        return out;
+    },
+    /**
+     * Set the components of a mat2d to the given values
+     */
+    set(out, a, b, c, d, tx, ty) {
+        out[0] = a;
+        out[1] = b;
+        out[2] = c;
+        out[3] = d;
+        out[4] = tx;
+        out[5] = ty;
+        return out;
+    },
+    /**
+     * Inverts a mat2d
+     */
+    invert(out, a) {
+        const aa = a[0], ab = a[1], ac = a[2], ad = a[3];
+        const atx = a[4], aty = a[5];
+        let det = aa * ad - ab * ac;
+        if (!det) {
+            return null;
+        }
+        det = 1.0 / det;
+        out[0] = ad * det;
+        out[1] = -ab * det;
+        out[2] = -ac * det;
+        out[3] = aa * det;
+        out[4] = (ac * aty - ad * atx) * det;
+        out[5] = (ab * atx - aa * aty) * det;
+        return out;
+    },
+    /**
+     * Calculates the determinant of a mat2d
+     */
+    determinant(a) {
+        return a[0] * a[3] - a[1] * a[2];
+    },
+    /**
+     * Multiplies two mat2d's
+     */
+    multiply(out, a, b) {
+        const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+        const b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3], b4 = b[4], b5 = b[5];
+        out[0] = a0 * b0 + a2 * b1;
+        out[1] = a1 * b0 + a3 * b1;
+        out[2] = a0 * b2 + a2 * b3;
+        out[3] = a1 * b2 + a3 * b3;
+        out[4] = a0 * b4 + a2 * b5 + a4;
+        out[5] = a1 * b4 + a3 * b5 + a5;
+        return out;
+    },
+    /**
+     * Rotates a mat2d by the given angle
+     */
+    rotate(out, a, rad) {
+        const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+        const s = Math.sin(rad);
+        const c = Math.cos(rad);
+        out[0] = a0 * c + a2 * s;
+        out[1] = a1 * c + a3 * s;
+        out[2] = a0 * -s + a2 * c;
+        out[3] = a1 * -s + a3 * c;
+        out[4] = a4;
+        out[5] = a5;
+        return out;
+    },
+    /**
+     * Scales the mat2d by the dimensions in the given vec2
+     */
+    scale(out, a, v) {
+        const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+        const v0 = v[0], v1 = v[1];
+        out[0] = a0 * v0;
+        out[1] = a1 * v0;
+        out[2] = a2 * v1;
+        out[3] = a3 * v1;
+        out[4] = a4;
+        out[5] = a5;
+        return out;
+    },
+    /**
+     * Translates the mat2d by the dimensions in the given vec2
+     */
+    translate(out, a, v) {
+        const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+        const v0 = v[0], v1 = v[1];
+        out[0] = a0;
+        out[1] = a1;
+        out[2] = a2;
+        out[3] = a3;
+        out[4] = a0 * v0 + a2 * v1 + a4;
+        out[5] = a1 * v0 + a3 * v1 + a5;
+        return out;
+    },
+    /**
+     * Creates a matrix from a given angle
+     */
+    fromRotation(out, rad) {
+        const s = Math.sin(rad), c = Math.cos(rad);
+        out[0] = c;
+        out[1] = s;
+        out[2] = -s;
+        out[3] = c;
+        out[4] = 0;
+        out[5] = 0;
+        return out;
+    },
+    /**
+     * Creates a matrix from a vector scaling
+     */
+    fromScaling(out, v) {
+        out[0] = v[0];
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = v[1];
+        out[4] = 0;
+        out[5] = 0;
+        return out;
+    },
+    /**
+     * Creates a matrix from a vector translation
+     */
+    fromTranslation(out, v) {
+        out[0] = 1;
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = 1;
+        out[4] = v[0];
+        out[5] = v[1];
+        return out;
+    },
+    /**
+     * Returns a string representation of a mat2d
+     */
+    str(a) {
+        return ('mat2d(' + a[0] + ', ' + a[1] + ', ' + a[2] + ', ' + a[3] + ', ' + a[4] + ', ' + a[5] + ')');
+    },
+    /**
+     * Returns Frobenius norm of a mat2d
+     */
+    frob(a) {
+        return Math.sqrt(Math.pow(a[0], 2) +
+            Math.pow(a[1], 2) +
+            Math.pow(a[2], 2) +
+            Math.pow(a[3], 2) +
+            Math.pow(a[4], 2) +
+            Math.pow(a[5], 2) +
+            1);
+    },
+    /**
+     * Adds two mat2d's
+     */
+    add(out, a, b) {
+        out[0] = a[0] + b[0];
+        out[1] = a[1] + b[1];
+        out[2] = a[2] + b[2];
+        out[3] = a[3] + b[3];
+        out[4] = a[4] + b[4];
+        out[5] = a[5] + b[5];
+        return out;
+    },
+    /**
+     * Subtracts matrix b from matrix a
+     */
+    subtract(out, a, b) {
+        out[0] = a[0] - b[0];
+        out[1] = a[1] - b[1];
+        out[2] = a[2] - b[2];
+        out[3] = a[3] - b[3];
+        out[4] = a[4] - b[4];
+        out[5] = a[5] - b[5];
+        return out;
+    },
+    /**
+     * Multiply each element of the matrix by a scalar
+     */
+    multiplyScalar(out, a, b) {
+        out[0] = a[0] * b;
+        out[1] = a[1] * b;
+        out[2] = a[2] * b;
+        out[3] = a[3] * b;
+        out[4] = a[4] * b;
+        out[5] = a[5] * b;
+        return out;
+    },
+    /**
+     * Adds two mat2d's after multiplying each element of the second operand by a scalar
+     */
+    multiplyScalarAndAdd(out, a, b, scale) {
+        out[0] = a[0] + b[0] * scale;
+        out[1] = a[1] + b[1] * scale;
+        out[2] = a[2] + b[2] * scale;
+        out[3] = a[3] + b[3] * scale;
+        out[4] = a[4] + b[4] * scale;
+        out[5] = a[5] + b[5] * scale;
+        return out;
+    },
+    /**
+     * Returns whether or not the matrices have exactly the same elements
+     */
+    exactEquals(a, b) {
+        return (a[0] === b[0] &&
+            a[1] === b[1] &&
+            a[2] === b[2] &&
+            a[3] === b[3] &&
+            a[4] === b[4] &&
+            a[5] === b[5]);
+    },
+    /**
+     * Returns whether or not the matrices have approximately the same elements
+     */
+    equals(a, b) {
+        const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+        const b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3], b4 = b[4], b5 = b[5];
+        return (Math.abs(a0 - b0) <= EPSILON * Math.max(1.0, Math.abs(a0), Math.abs(b0)) &&
+            Math.abs(a1 - b1) <= EPSILON * Math.max(1.0, Math.abs(a1), Math.abs(b1)) &&
+            Math.abs(a2 - b2) <= EPSILON * Math.max(1.0, Math.abs(a2), Math.abs(b2)) &&
+            Math.abs(a3 - b3) <= EPSILON * Math.max(1.0, Math.abs(a3), Math.abs(b3)) &&
+            Math.abs(a4 - b4) <= EPSILON * Math.max(1.0, Math.abs(a4), Math.abs(b4)) &&
+            Math.abs(a5 - b5) <= EPSILON * Math.max(1.0, Math.abs(a5), Math.abs(b5)));
+    },
+    /**
+     * Alias for multiply
+     */
+    mul(out, a, b) {
+        return mat2d.multiply(out, a, b);
+    },
+    /**
+     * Alias for subtract
+     */
+    sub(out, a, b) {
+        return mat2d.subtract(out, a, b);
+    }
+};

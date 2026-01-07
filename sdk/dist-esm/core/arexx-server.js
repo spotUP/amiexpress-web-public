@@ -1,1 +1,347 @@
-import*as net from"net";import{GraphicsEngine}from"../engines/graphics/graphics-engine";import{PhysicsEngine}from"../engines/physics/physics-engine";import{AudioEngine}from"../engines/audio/audio-engine";export class ARexxServer{constructor(e=3002){this.sessions=new Map,this.port=e,this.server=net.createServer(this.handleConnection.bind(this))}start(){this.server.listen(this.port,()=>{console.log(`ARexx Bridge Server listening on port ${this.port}`)})}stop(){this.server.close()}handleConnection(e){console.log("ARexx client connected:",e.remoteAddress);let s="";e.on("data",n=>{s+=n.toString();const t=s.split("\n");s=t.pop()||"";for(const s of t)s.trim()&&this.processCommand(e,s.trim())}),e.on("end",()=>{console.log("ARexx client disconnected");for(const[s,n]of this.sessions.entries())n.socket===e&&this.sessions.delete(s)}),e.on("error",e=>{console.error("Socket error:",e)})}processCommand(e,s){const n=this.parseCommand(s),t=n.CMD;if(t)try{switch(t){case"CREATE_DOOR":this.handleCreateDoor(e,n);break;case"CLEAR":this.handleClear(e,n);break;case"DRAW_TEXT":this.handleDrawText(e,n);break;case"DRAW_BOX":this.handleDrawBox(e,n);break;case"LOAD_ANSI":this.handleLoadAnsi(e,n);break;case"DRAW_ANSI":this.handleDrawAnsi(e,n);break;case"CREATE_SPRITE":this.handleCreateSprite(e,n);break;case"MOVE_SPRITE":this.handleMoveSprite(e,n);break;case"DRAW_SPRITE":this.handleDrawSprite(e,n);break;case"CREATE_BODY":this.handleCreateBody(e,n);break;case"APPLY_FORCE":this.handleApplyForce(e,n);break;case"SET_VELOCITY":this.handleSetVelocity(e,n);break;case"UPDATE_PHYSICS":this.handleUpdatePhysics(e,n);break;case"PLAY_SOUND":this.handlePlaySound(e,n);break;case"GEN_MUSIC":this.handleGenerateMusic(e,n);break;case"WAIT_INPUT":this.handleWaitInput(e,n);break;case"SEND_ANSI":this.handleSendAnsi(e,n);break;case"RENDER":this.handleRender(e,n);break;case"DISPOSE":this.handleDispose(e,n);break;default:this.sendResponse(e,`ERROR:Unknown command ${t}`)}}catch(s){this.sendResponse(e,`ERROR:${s instanceof Error?s.message:"Unknown error"}`)}else this.sendResponse(e,"ERROR:Invalid command format")}parseCommand(e){const s={},n=e.split("||");for(const e of n){const n=e.indexOf(":");if(n>0){const t=e.substring(0,n),i=e.substring(n+1);s[t]=i}}return s}sendResponse(e,s){e.write(s+"\n")}getSession(e){const s=this.sessions.get(e);if(!s)throw new Error(`Door session ${e} not found`);return s}handleCreateDoor(e,s){const n=`door_${Date.now()}_${Math.random().toString(36).substr(2,9)}`,t={id:n,name:s.NAME||"Unnamed Door",version:s.VERSION||"1.0.0",author:s.AUTHOR||"Unknown",graphics:new GraphicsEngine({width:80,height:24}),physics:new PhysicsEngine({gravity:9.8}),audio:new AudioEngine,socket:e};this.sessions.set(n,t),this.sendResponse(e,`DOOR_ID:${n}`)}handleClear(e,s){const n=this.getSession(s.DOOR),t=parseInt(s.COLOR||"0");n.graphics.clear(t),this.sendResponse(e,"OK")}handleDrawText(e,s){const n=this.getSession(s.DOOR),t=parseInt(s.X),i=parseInt(s.Y),a=s.TEXT,o=parseInt(s.COLOR||"7");n.graphics.drawText(t,i,a,o),this.sendResponse(e,"OK")}handleDrawBox(e,s){const n=this.getSession(s.DOOR),t=parseInt(s.X),i=parseInt(s.Y),a=parseInt(s.WIDTH),o=parseInt(s.HEIGHT),r=parseInt(s.FG||"7");n.graphics.drawBox({x:t,y:i,width:a,height:o},"single",r),this.sendResponse(e,"OK")}handleLoadAnsi(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=s.DATA;n.graphics.loadAnsi(t,i),this.sendResponse(e,"OK")}handleDrawAnsi(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseInt(s.X||"0"),a=parseInt(s.Y||"0");n.graphics.drawAnsi(t,{x:i,y:a}),this.sendResponse(e,"OK")}handleCreateSprite(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseInt(s.X),a=parseInt(s.Y),o=parseInt(s.WIDTH),r=parseInt(s.HEIGHT),h=s.FRAME;n.graphics.createSprite({id:t,frames:[{data:h,duration:100}],position:{x:i,y:a},size:{width:o,height:r}}),this.sendResponse(e,`OK:${t}`)}handleMoveSprite(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseInt(s.X),a=parseInt(s.Y);n.graphics.moveSprite(t,{x:i,y:a}),this.sendResponse(e,"OK")}handleDrawSprite(e,s){const n=this.getSession(s.DOOR),t=s.ID;n.graphics.drawSprite(t),this.sendResponse(e,"OK")}handleCreateBody(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseInt(s.X),a=parseInt(s.Y),o=parseInt(s.WIDTH),r=parseInt(s.HEIGHT),h=parseFloat(s.MASS),d="1"===s.STATIC;n.physics.createBody({id:t,position:{x:i,y:a},size:{width:o,height:r},mass:h,static:d}),this.sendResponse(e,`OK:${t}`)}handleApplyForce(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseFloat(s.FX),a=parseFloat(s.FY);n.physics.applyForce(t,{x:i,y:a}),this.sendResponse(e,"OK")}handleSetVelocity(e,s){const n=this.getSession(s.DOOR),t=s.ID,i=parseFloat(s.VX),a=parseFloat(s.VY);n.physics.setVelocity(t,{x:i,y:a}),this.sendResponse(e,"OK")}handleUpdatePhysics(e,s){const n=this.getSession(s.DOOR),t=parseFloat(s.DELTA);n.physics.update(t),this.sendResponse(e,"OK")}handlePlaySound(e,s){const n=this.getSession(s.DOOR),t=s.TYPE,i=parseInt(s.FREQ),a=parseFloat(s.DURATION);n.audio.playSound(t,{frequency:i,duration:a,envelope:"pluck",volume:.5}),this.sendResponse(e,"OK")}handleGenerateMusic(e,s){const n=this.getSession(s.DOOR),t=s.PROMPT,i=parseInt(s.TEMPO),a=s.PATTERN;n.audio.generateMusic({prompt:t,tempo:i,pattern:a,instruments:["square"]}),this.sendResponse(e,"OK")}handleWaitInput(e,s){this.sendResponse(e,"KEY:")}handleSendAnsi(e,s){this.sendResponse(e,"OK")}handleRender(e,s){const n=this.getSession(s.DOOR).graphics.render();this.sendResponse(e,`ANSI:${n}`)}handleDispose(e,s){const n=s.DOOR;this.getSession(n).audio.dispose(),this.sessions.delete(n),this.sendResponse(e,"OK")}}export const arexxServer=new ARexxServer;
+/**
+ * ARexx Bridge Server
+ *
+ * Handles communication between ARexx scripts and the SDK backend.
+ * Listens for commands from ARexx bridge and forwards them to the appropriate engines.
+ */
+import * as net from 'net';
+import { GraphicsEngine } from '../engines/graphics/graphics-engine';
+import { PhysicsEngine } from '../engines/physics/physics-engine';
+import { AudioEngine } from '../engines/audio/audio-engine';
+export class ARexxServer {
+    constructor(port = 3002) {
+        this.sessions = new Map();
+        this.port = port;
+        this.server = net.createServer(this.handleConnection.bind(this));
+    }
+    /**
+     * Start ARexx bridge server
+     */
+    start() {
+        this.server.listen(this.port, () => {
+            console.log(`ARexx Bridge Server listening on port ${this.port}`);
+        });
+    }
+    /**
+     * Stop ARexx bridge server
+     */
+    stop() {
+        this.server.close();
+    }
+    /**
+     * Handle incoming connection
+     */
+    handleConnection(socket) {
+        console.log('ARexx client connected:', socket.remoteAddress);
+        let buffer = '';
+        socket.on('data', (data) => {
+            buffer += data.toString();
+            // Process complete commands (terminated by newline)
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.trim()) {
+                    this.processCommand(socket, line.trim());
+                }
+            }
+        });
+        socket.on('end', () => {
+            console.log('ARexx client disconnected');
+            // Clean up sessions for this socket
+            for (const [doorId, session] of this.sessions.entries()) {
+                if (session.socket === socket) {
+                    this.sessions.delete(doorId);
+                }
+            }
+        });
+        socket.on('error', (err) => {
+            console.error('Socket error:', err);
+        });
+    }
+    /**
+     * Process command from ARexx
+     */
+    processCommand(socket, command) {
+        // Parse command (format: CMD:xxx||PARAM:value||...)
+        const params = this.parseCommand(command);
+        const cmd = params.CMD;
+        if (!cmd) {
+            this.sendResponse(socket, 'ERROR:Invalid command format');
+            return;
+        }
+        try {
+            switch (cmd) {
+                case 'CREATE_DOOR':
+                    this.handleCreateDoor(socket, params);
+                    break;
+                case 'CLEAR':
+                    this.handleClear(socket, params);
+                    break;
+                case 'DRAW_TEXT':
+                    this.handleDrawText(socket, params);
+                    break;
+                case 'DRAW_BOX':
+                    this.handleDrawBox(socket, params);
+                    break;
+                case 'LOAD_ANSI':
+                    this.handleLoadAnsi(socket, params);
+                    break;
+                case 'DRAW_ANSI':
+                    this.handleDrawAnsi(socket, params);
+                    break;
+                case 'CREATE_SPRITE':
+                    this.handleCreateSprite(socket, params);
+                    break;
+                case 'MOVE_SPRITE':
+                    this.handleMoveSprite(socket, params);
+                    break;
+                case 'DRAW_SPRITE':
+                    this.handleDrawSprite(socket, params);
+                    break;
+                case 'CREATE_BODY':
+                    this.handleCreateBody(socket, params);
+                    break;
+                case 'APPLY_FORCE':
+                    this.handleApplyForce(socket, params);
+                    break;
+                case 'SET_VELOCITY':
+                    this.handleSetVelocity(socket, params);
+                    break;
+                case 'UPDATE_PHYSICS':
+                    this.handleUpdatePhysics(socket, params);
+                    break;
+                case 'PLAY_SOUND':
+                    this.handlePlaySound(socket, params);
+                    break;
+                case 'GEN_MUSIC':
+                    this.handleGenerateMusic(socket, params);
+                    break;
+                case 'WAIT_INPUT':
+                    this.handleWaitInput(socket, params);
+                    break;
+                case 'SEND_ANSI':
+                    this.handleSendAnsi(socket, params);
+                    break;
+                case 'RENDER':
+                    this.handleRender(socket, params);
+                    break;
+                case 'DISPOSE':
+                    this.handleDispose(socket, params);
+                    break;
+                default:
+                    this.sendResponse(socket, `ERROR:Unknown command ${cmd}`);
+            }
+        }
+        catch (error) {
+            this.sendResponse(socket, `ERROR:${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+    /**
+     * Parse command string into parameters
+     */
+    parseCommand(command) {
+        const params = {};
+        const parts = command.split('||');
+        for (const part of parts) {
+            const colonIndex = part.indexOf(':');
+            if (colonIndex > 0) {
+                const key = part.substring(0, colonIndex);
+                const value = part.substring(colonIndex + 1);
+                params[key] = value;
+            }
+        }
+        return params;
+    }
+    /**
+     * Send response back to ARexx
+     */
+    sendResponse(socket, response) {
+        socket.write(response + '\n');
+    }
+    /**
+     * Get session by door ID
+     */
+    getSession(doorId) {
+        const session = this.sessions.get(doorId);
+        if (!session) {
+            throw new Error(`Door session ${doorId} not found`);
+        }
+        return session;
+    }
+    // Command handlers
+    handleCreateDoor(socket, params) {
+        const doorId = `door_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const session = {
+            id: doorId,
+            name: params.NAME || 'Unnamed Door',
+            version: params.VERSION || '1.0.0',
+            author: params.AUTHOR || 'Unknown',
+            graphics: new GraphicsEngine({ width: 80, height: 24 }),
+            physics: new PhysicsEngine({ gravity: 9.8 }),
+            audio: new AudioEngine(),
+            socket
+        };
+        this.sessions.set(doorId, session);
+        this.sendResponse(socket, `DOOR_ID:${doorId}`);
+    }
+    handleClear(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const color = parseInt(params.COLOR || '0');
+        session.graphics.clear(color);
+        this.sendResponse(socket, 'OK');
+    }
+    handleDrawText(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const x = parseInt(params.X);
+        const y = parseInt(params.Y);
+        const text = params.TEXT;
+        const color = parseInt(params.COLOR || '7');
+        session.graphics.drawText(x, y, text, color);
+        this.sendResponse(socket, 'OK');
+    }
+    handleDrawBox(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const x = parseInt(params.X);
+        const y = parseInt(params.Y);
+        const width = parseInt(params.WIDTH);
+        const height = parseInt(params.HEIGHT);
+        const fg = parseInt(params.FG || '7');
+        session.graphics.drawBox({ x, y, width, height }, 'single', fg);
+        this.sendResponse(socket, 'OK');
+    }
+    handleLoadAnsi(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const data = params.DATA;
+        session.graphics.loadAnsi(id, data);
+        this.sendResponse(socket, 'OK');
+    }
+    handleDrawAnsi(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const x = parseInt(params.X || '0');
+        const y = parseInt(params.Y || '0');
+        session.graphics.drawAnsi(id, { x, y });
+        this.sendResponse(socket, 'OK');
+    }
+    handleCreateSprite(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const x = parseInt(params.X);
+        const y = parseInt(params.Y);
+        const width = parseInt(params.WIDTH);
+        const height = parseInt(params.HEIGHT);
+        const frameData = params.FRAME;
+        session.graphics.createSprite({
+            id,
+            frames: [{ data: frameData, duration: 100 }],
+            position: { x, y },
+            size: { width, height }
+        });
+        this.sendResponse(socket, `OK:${id}`);
+    }
+    handleMoveSprite(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const x = parseInt(params.X);
+        const y = parseInt(params.Y);
+        session.graphics.moveSprite(id, { x, y });
+        this.sendResponse(socket, 'OK');
+    }
+    handleDrawSprite(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        session.graphics.drawSprite(id);
+        this.sendResponse(socket, 'OK');
+    }
+    handleCreateBody(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const x = parseInt(params.X);
+        const y = parseInt(params.Y);
+        const width = parseInt(params.WIDTH);
+        const height = parseInt(params.HEIGHT);
+        const mass = parseFloat(params.MASS);
+        const isStatic = params.STATIC === '1';
+        session.physics.createBody({
+            id,
+            position: { x, y },
+            size: { width, height },
+            mass,
+            static: isStatic
+        });
+        this.sendResponse(socket, `OK:${id}`);
+    }
+    handleApplyForce(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const fx = parseFloat(params.FX);
+        const fy = parseFloat(params.FY);
+        session.physics.applyForce(id, { x: fx, y: fy });
+        this.sendResponse(socket, 'OK');
+    }
+    handleSetVelocity(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const id = params.ID;
+        const vx = parseFloat(params.VX);
+        const vy = parseFloat(params.VY);
+        session.physics.setVelocity(id, { x: vx, y: vy });
+        this.sendResponse(socket, 'OK');
+    }
+    handleUpdatePhysics(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const delta = parseFloat(params.DELTA);
+        session.physics.update(delta);
+        this.sendResponse(socket, 'OK');
+    }
+    handlePlaySound(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const type = params.TYPE;
+        const freq = parseInt(params.FREQ);
+        const duration = parseFloat(params.DURATION);
+        session.audio.playSound(type, {
+            frequency: freq,
+            duration,
+            envelope: 'pluck',
+            volume: 0.5
+        });
+        this.sendResponse(socket, 'OK');
+    }
+    handleGenerateMusic(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const prompt = params.PROMPT;
+        const tempo = parseInt(params.TEMPO);
+        const pattern = params.PATTERN;
+        session.audio.generateMusic({
+            prompt,
+            tempo,
+            pattern,
+            instruments: ['square']
+        });
+        this.sendResponse(socket, 'OK');
+    }
+    handleWaitInput(socket, params) {
+        // This would integrate with the BBS terminal input system
+        // For now, return a placeholder
+        this.sendResponse(socket, 'KEY:');
+    }
+    handleSendAnsi(socket, params) {
+        // This would send ANSI to the BBS terminal
+        // For now, just acknowledge
+        this.sendResponse(socket, 'OK');
+    }
+    handleRender(socket, params) {
+        const session = this.getSession(params.DOOR);
+        const ansiOutput = session.graphics.render();
+        this.sendResponse(socket, `ANSI:${ansiOutput}`);
+    }
+    handleDispose(socket, params) {
+        const doorId = params.DOOR;
+        const session = this.getSession(doorId);
+        session.audio.dispose();
+        this.sessions.delete(doorId);
+        this.sendResponse(socket, 'OK');
+    }
+}
+// Export singleton instance
+export const arexxServer = new ARexxServer();

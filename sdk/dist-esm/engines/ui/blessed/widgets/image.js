@@ -1,1 +1,124 @@
-import{Box}from"./box";export class Image extends Box{constructor(t={}){const{src:e,file:s,type:h,scale:i,autoPlay:a,...r}=t;super({...r,width:t.width||"shrink",height:t.height||"shrink"}),this.src="",this.imageData="",this.imageType=h||"overlay",this.scale=i||1,this.autoPlay=!1!==a,e?this.setImage(e):s&&this.setImage(s)}setImage(t){this.src=t,this.emit("load",t);const e=this.generatePlaceholder();this.setContent(e),this.screen&&this.screen.render()}generatePlaceholder(){const t="number"==typeof this.width?this.width:40,e="number"==typeof this.height?this.height:10,s=[];s.push("┌"+"─".repeat(t-2)+"┐");for(let h=0;h<e-4;h++)s.push("│"+" ".repeat(t-2)+"│");const h=`[Image: ${this.src.substring(0,t-10)}]`,i=Math.floor((t-h.length)/2);return s.push("│"+" ".repeat(i)+h+" ".repeat(t-2-i-h.length)+"│"),s.push("└"+"─".repeat(t-2)+"┘"),s.join("\n")}loadImage(t){this.imageData=t,this.setImage(t)}clearImage(){this.src="",this.imageData="",this.setContent(""),this.screen&&this.screen.render()}getImage(){return this.src}setScale(t){this.scale=Math.max(.1,Math.min(10,t)),this.setImage(this.src)}getScale(){return this.scale}play(){this.autoPlay=!0,this.emit("play")}pause(){this.autoPlay=!1,this.emit("pause")}isPlaying(){return this.autoPlay}getImageSize(){return{width:"number"==typeof this.width?this.width:0,height:"number"==typeof this.height?this.height:0}}}
+/**
+ * Image - Browser-compatible image display widget
+ * Note: Uses data URLs or external image sources
+ */
+import { Box } from './box';
+export class Image extends Box {
+    constructor(options = {}) {
+        const { src, file, type, scale, autoPlay, ...boxOptions } = options;
+        super({
+            ...boxOptions,
+            width: options.width || 'shrink',
+            height: options.height || 'shrink',
+        });
+        this.src = '';
+        this.imageData = '';
+        this.imageType = type || 'overlay';
+        this.scale = scale || 1.0;
+        this.autoPlay = autoPlay !== false;
+        if (src) {
+            this.setImage(src);
+        }
+        else if (file) {
+            this.setImage(file);
+        }
+    }
+    /**
+     * Set image source (URL or data URL)
+     */
+    setImage(src) {
+        this.src = src;
+        this.emit('load', src);
+        // For browser compatibility, we display ASCII representation
+        // Real image rendering would require canvas integration
+        const placeholder = this.generatePlaceholder();
+        this.setContent(placeholder);
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Generate ASCII placeholder for image
+     */
+    generatePlaceholder() {
+        const w = typeof this.width === 'number' ? this.width : 40;
+        const h = typeof this.height === 'number' ? this.height : 10;
+        const lines = [];
+        lines.push('┌' + '─'.repeat(w - 2) + '┐');
+        for (let i = 0; i < h - 4; i++) {
+            lines.push('│' + ' '.repeat(w - 2) + '│');
+        }
+        // Add image info in center
+        const info = `[Image: ${this.src.substring(0, w - 10)}]`;
+        const padding = Math.floor((w - info.length) / 2);
+        lines.push('│' + ' '.repeat(padding) + info + ' '.repeat(w - 2 - padding - info.length) + '│');
+        lines.push('└' + '─'.repeat(w - 2) + '┘');
+        return lines.join('\n');
+    }
+    /**
+     * Load image from data URL
+     */
+    loadImage(dataUrl) {
+        this.imageData = dataUrl;
+        this.setImage(dataUrl);
+    }
+    /**
+     * Clear image
+     */
+    clearImage() {
+        this.src = '';
+        this.imageData = '';
+        this.setContent('');
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Get image source
+     */
+    getImage() {
+        return this.src;
+    }
+    /**
+     * Set image scale
+     */
+    setScale(scale) {
+        this.scale = Math.max(0.1, Math.min(10.0, scale));
+        this.setImage(this.src);
+    }
+    /**
+     * Get image scale
+     */
+    getScale() {
+        return this.scale;
+    }
+    /**
+     * Play animation (for animated images)
+     */
+    play() {
+        this.autoPlay = true;
+        this.emit('play');
+    }
+    /**
+     * Pause animation
+     */
+    pause() {
+        this.autoPlay = false;
+        this.emit('pause');
+    }
+    /**
+     * Check if playing
+     */
+    isPlaying() {
+        return this.autoPlay;
+    }
+    /**
+     * Get image dimensions (placeholder)
+     */
+    getImageSize() {
+        return {
+            width: typeof this.width === 'number' ? this.width : 0,
+            height: typeof this.height === 'number' ? this.height : 0,
+        };
+    }
+}

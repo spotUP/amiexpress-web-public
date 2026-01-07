@@ -1,1 +1,339 @@
-import{EventEmitter}from"events";const DEFAULT_CONFIG={autoAway:!0,autoAwayTimeout:3e5,showActivity:!0,showGame:!0,allowInvites:!0};export class PresenceManager extends EventEmitter{constructor(e,t={}){super(),this.name="presence",this._self=null,this.subscriptions=new Set,this.presenceCache=new Map,this.lastActivity=Date.now(),this.connection=e,this.config={...DEFAULT_CONFIG,...t},this.setupEventHandlers()}get self(){return this._self}async init(){this.startAutoAway()}setupEventHandlers(){const e=this.connection.getSocket();e&&(e.on("presence:update",e=>{this.presenceCache.set(e.playerId,e),this._self&&e.playerId===this._self.playerId&&(this._self=e),this.emit("presence:update",e)}),e.on("presence:offline",e=>{const t=this.presenceCache.get(e);t&&(t.status="offline",t.lastSeen=new Date,this.emit("presence:update",t))}),e.on("presence:batch",e=>{for(const t of e)this.presenceCache.set(t.playerId,t),this.emit("presence:update",t)}))}setStatus(e){this._self||(this._self=this.createDefaultPresence()),this._self.status=e,this.broadcastPresence()}setActivity(e){this._self||(this._self=this.createDefaultPresence()),this._self.activity=e,this.broadcastPresence()}setCustomStatus(e){this._self||(this._self=this.createDefaultPresence()),this._self.customStatus=e,this.broadcastPresence()}setGameActivity(e,t,s,i){this.config.showGame&&this.setActivity({type:"in-game",game:e,details:t,partySize:s,partyMax:i,startedAt:new Date})}setLobbyActivity(e,t){this.setActivity({type:"in-lobby",room:e,details:t,startedAt:new Date})}setSpectatingActivity(e,t){this.setActivity({type:"spectating",game:e,room:t,startedAt:new Date})}clearActivity(){this.setActivity({type:"idle",startedAt:new Date})}async getPresence(e){const t=this.presenceCache.get(e);return t&&Date.now()-t.lastSeen.getTime()<3e4?t:new Promise((s,i)=>{const n=this.connection.getSocket();n?.connected?n.emit("presence:get",{playerId:e},i=>{i.success&&i.presence?(this.presenceCache.set(e,i.presence),s(i.presence)):s(t||null)}):s(t||null)})}async getPresences(e){return new Promise((t,s)=>{const i=this.connection.getSocket();if(!i?.connected){const s=new Map;for(const t of e){const e=this.presenceCache.get(t);e&&s.set(t,e)}return void t(s)}i.emit("presence:get_batch",{playerIds:e},e=>{const s=new Map;if(e.success&&e.presences)for(const t of e.presences)this.presenceCache.set(t.playerId,t),s.set(t.playerId,t);t(s)})})}subscribe(e){const t=e.filter(e=>!this.subscriptions.has(e));if(0===t.length)return;for(const e of t)this.subscriptions.add(e);const s=this.connection.getSocket();s?.connected&&s.emit("presence:subscribe",{playerIds:t})}unsubscribe(e){const t=e.filter(e=>this.subscriptions.has(e));if(0===t.length)return;for(const e of t)this.subscriptions.delete(e);const s=this.connection.getSocket();s?.connected&&s.emit("presence:unsubscribe",{playerIds:t})}broadcastPresence(){if(!this._self)return;const e=this.connection.getSocket();e?.connected&&e.emit("presence:update",this._self)}createDefaultPresence(){return{playerId:0,username:"",status:"online",activity:{type:"idle"},lastSeen:new Date,platform:"web"}}recordActivity(){this.lastActivity=Date.now(),"away"===this._self?.status&&this.setStatus("online")}startAutoAway(){this.config.autoAway&&(this.stopAutoAway(),this.awayTimer=setInterval(()=>{if("online"===this._self?.status){Date.now()-this.lastActivity>=this.config.autoAwayTimeout&&this.setStatus("away")}},3e4))}stopAutoAway(){this.awayTimer&&(clearInterval(this.awayTimer),this.awayTimer=void 0)}configure(e){this.config={...this.config,...e},void 0!==e.autoAway&&(this.stopAutoAway(),e.autoAway&&this.startAutoAway())}getSubscriptions(){return Array.from(this.subscriptions)}getCached(e){return this.presenceCache.get(e)}clearCache(){this.presenceCache.clear()}dispose(){this.stopAutoAway(),this.subscriptions.clear(),this.presenceCache.clear(),this._self=null,this.removeAllListeners()}}export default PresenceManager;
+/**
+ * Player Presence Module
+ *
+ * Online status and activity tracking with:
+ * - Presence states (online, away, busy, invisible, offline)
+ * - Activity tracking (in menu, in game, spectating)
+ * - Rich presence (show current game/room)
+ * - Auto-away detection
+ * - Presence broadcasting and subscriptions
+ */
+import { EventEmitter } from 'events';
+// Default presence configuration
+const DEFAULT_CONFIG = {
+    autoAway: true,
+    autoAwayTimeout: 300000, // 5 minutes
+    showActivity: true,
+    showGame: true,
+    allowInvites: true,
+};
+/**
+ * Presence Manager
+ *
+ * Manages player online status and activity visibility.
+ */
+export class PresenceManager extends EventEmitter {
+    constructor(connection, config = {}) {
+        super();
+        this.name = 'presence';
+        this._self = null;
+        this.subscriptions = new Set();
+        this.presenceCache = new Map();
+        this.lastActivity = Date.now();
+        this.connection = connection;
+        this.config = { ...DEFAULT_CONFIG, ...config };
+        this.setupEventHandlers();
+    }
+    /**
+     * Get self presence
+     */
+    get self() {
+        return this._self;
+    }
+    /**
+     * Initialize presence manager
+     */
+    async init() {
+        this.startAutoAway();
+    }
+    /**
+     * Setup socket event handlers
+     */
+    setupEventHandlers() {
+        const socket = this.connection.getSocket();
+        if (!socket)
+            return;
+        socket.on('presence:update', (presence) => {
+            this.presenceCache.set(presence.playerId, presence);
+            if (this._self && presence.playerId === this._self.playerId) {
+                this._self = presence;
+            }
+            this.emit('presence:update', presence);
+        });
+        socket.on('presence:offline', (playerId) => {
+            const presence = this.presenceCache.get(playerId);
+            if (presence) {
+                presence.status = 'offline';
+                presence.lastSeen = new Date();
+                this.emit('presence:update', presence);
+            }
+        });
+        socket.on('presence:batch', (updates) => {
+            for (const presence of updates) {
+                this.presenceCache.set(presence.playerId, presence);
+                this.emit('presence:update', presence);
+            }
+        });
+    }
+    /**
+     * Set own status
+     */
+    setStatus(status) {
+        if (!this._self) {
+            this._self = this.createDefaultPresence();
+        }
+        this._self.status = status;
+        this.broadcastPresence();
+    }
+    /**
+     * Set own activity
+     */
+    setActivity(activity) {
+        if (!this._self) {
+            this._self = this.createDefaultPresence();
+        }
+        this._self.activity = activity;
+        this.broadcastPresence();
+    }
+    /**
+     * Set custom status message
+     */
+    setCustomStatus(status) {
+        if (!this._self) {
+            this._self = this.createDefaultPresence();
+        }
+        this._self.customStatus = status;
+        this.broadcastPresence();
+    }
+    /**
+     * Set game activity
+     */
+    setGameActivity(game, details, partySize, partyMax) {
+        if (!this.config.showGame)
+            return;
+        this.setActivity({
+            type: 'in-game',
+            game,
+            details,
+            partySize,
+            partyMax,
+            startedAt: new Date(),
+        });
+    }
+    /**
+     * Set lobby activity
+     */
+    setLobbyActivity(roomName, details) {
+        this.setActivity({
+            type: 'in-lobby',
+            room: roomName,
+            details,
+            startedAt: new Date(),
+        });
+    }
+    /**
+     * Set spectating activity
+     */
+    setSpectatingActivity(game, roomName) {
+        this.setActivity({
+            type: 'spectating',
+            game,
+            room: roomName,
+            startedAt: new Date(),
+        });
+    }
+    /**
+     * Clear activity (go idle)
+     */
+    clearActivity() {
+        this.setActivity({
+            type: 'idle',
+            startedAt: new Date(),
+        });
+    }
+    /**
+     * Get presence for a player
+     */
+    async getPresence(playerId) {
+        // Check cache first
+        const cached = this.presenceCache.get(playerId);
+        if (cached && Date.now() - cached.lastSeen.getTime() < 30000) {
+            return cached;
+        }
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                resolve(cached || null);
+                return;
+            }
+            socket.emit('presence:get', { playerId }, (response) => {
+                if (response.success && response.presence) {
+                    this.presenceCache.set(playerId, response.presence);
+                    resolve(response.presence);
+                }
+                else {
+                    resolve(cached || null);
+                }
+            });
+        });
+    }
+    /**
+     * Get multiple presences
+     */
+    async getPresences(playerIds) {
+        return new Promise((resolve, reject) => {
+            const socket = this.connection.getSocket();
+            if (!socket?.connected) {
+                const result = new Map();
+                for (const id of playerIds) {
+                    const cached = this.presenceCache.get(id);
+                    if (cached)
+                        result.set(id, cached);
+                }
+                resolve(result);
+                return;
+            }
+            socket.emit('presence:get_batch', { playerIds }, (response) => {
+                const result = new Map();
+                if (response.success && response.presences) {
+                    for (const presence of response.presences) {
+                        this.presenceCache.set(presence.playerId, presence);
+                        result.set(presence.playerId, presence);
+                    }
+                }
+                resolve(result);
+            });
+        });
+    }
+    /**
+     * Subscribe to presence updates for players
+     */
+    subscribe(playerIds) {
+        const newIds = playerIds.filter(id => !this.subscriptions.has(id));
+        if (newIds.length === 0)
+            return;
+        for (const id of newIds) {
+            this.subscriptions.add(id);
+        }
+        const socket = this.connection.getSocket();
+        if (socket?.connected) {
+            socket.emit('presence:subscribe', { playerIds: newIds });
+        }
+    }
+    /**
+     * Unsubscribe from presence updates
+     */
+    unsubscribe(playerIds) {
+        const removedIds = playerIds.filter(id => this.subscriptions.has(id));
+        if (removedIds.length === 0)
+            return;
+        for (const id of removedIds) {
+            this.subscriptions.delete(id);
+        }
+        const socket = this.connection.getSocket();
+        if (socket?.connected) {
+            socket.emit('presence:unsubscribe', { playerIds: removedIds });
+        }
+    }
+    /**
+     * Broadcast own presence to server
+     */
+    broadcastPresence() {
+        if (!this._self)
+            return;
+        const socket = this.connection.getSocket();
+        if (socket?.connected) {
+            socket.emit('presence:update', this._self);
+        }
+    }
+    /**
+     * Create default presence
+     */
+    createDefaultPresence() {
+        return {
+            playerId: 0, // Will be set by server
+            username: '',
+            status: 'online',
+            activity: {
+                type: 'idle',
+            },
+            lastSeen: new Date(),
+            platform: 'web',
+        };
+    }
+    /**
+     * Record activity (for auto-away)
+     */
+    recordActivity() {
+        this.lastActivity = Date.now();
+        if (this._self?.status === 'away') {
+            this.setStatus('online');
+        }
+    }
+    /**
+     * Start auto-away timer
+     */
+    startAutoAway() {
+        if (!this.config.autoAway)
+            return;
+        this.stopAutoAway();
+        this.awayTimer = setInterval(() => {
+            if (this._self?.status === 'online') {
+                const idle = Date.now() - this.lastActivity;
+                if (idle >= this.config.autoAwayTimeout) {
+                    this.setStatus('away');
+                }
+            }
+        }, 30000); // Check every 30 seconds
+    }
+    /**
+     * Stop auto-away timer
+     */
+    stopAutoAway() {
+        if (this.awayTimer) {
+            clearInterval(this.awayTimer);
+            this.awayTimer = undefined;
+        }
+    }
+    /**
+     * Configure presence manager
+     */
+    configure(config) {
+        this.config = { ...this.config, ...config };
+        if (config.autoAway !== undefined) {
+            this.stopAutoAway();
+            if (config.autoAway) {
+                this.startAutoAway();
+            }
+        }
+    }
+    /**
+     * Get all subscribed player IDs
+     */
+    getSubscriptions() {
+        return Array.from(this.subscriptions);
+    }
+    /**
+     * Get cached presence
+     */
+    getCached(playerId) {
+        return this.presenceCache.get(playerId);
+    }
+    /**
+     * Clear presence cache
+     */
+    clearCache() {
+        this.presenceCache.clear();
+    }
+    /**
+     * Dispose of presence manager
+     */
+    dispose() {
+        this.stopAutoAway();
+        this.subscriptions.clear();
+        this.presenceCache.clear();
+        this._self = null;
+        this.removeAllListeners();
+    }
+}
+export default PresenceManager;

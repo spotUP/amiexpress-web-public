@@ -1,1 +1,75 @@
-import{Element}from"../core/element";export class ProgressBar extends Element{constructor(t={}){super({border:"line",style:{bg:"black",fg:"cyan"},...t}),this.filled=0,this.orientation="horizontal",this.ch=" ",this.pch=" ",this.filled=t.filled||t.value||0,this.orientation=t.orientation||"horizontal",this.ch=t.ch||" ",this.pch=t.pch||" ",this._updateContent()}_updateContent(){const t=this._getCoords();if(!t)return;const e=this.options.padding||0,s=this.options.border?1:0,i="number"==typeof e?e:e.left||0,o="number"==typeof e?e:e.top||0,r="number"==typeof e?e:e.right||0,h="number"==typeof e?e:e.bottom||0,n=t.xl-t.xi-2*s-i-r,l=t.yl-t.yi-2*s-o-h,p=this.options.style?.fg||"cyan";if("horizontal"===this.orientation){const t=Math.floor(n*this.filled/100),e=t>0?`{${p}-bg}${this.ch.repeat(t)}{/${p}-bg}`:"",s=this.pch.repeat(n-t);this.setContent(e+s)}else{const t=Math.floor(l*this.filled/100),e=[];for(let s=0;s<l;s++)s<l-t?e.push(this.pch.repeat(n)):e.push(`{${p}-bg}${this.ch.repeat(n)}{/${p}-bg}`);this.setContent(e.join("\n"))}}setProgress(t){this.filled=Math.max(0,Math.min(100,t)),this._updateContent(),this.emit("progress",this.filled)}getProgress(){return this.filled}progress(t){this.setProgress(this.filled+t)}reset(){this.setProgress(0)}}
+/**
+ * ProgressBar widget - Visual progress indicator
+ */
+import { Element } from '../core/element';
+export class ProgressBar extends Element {
+    constructor(options = {}) {
+        super({
+            border: 'line',
+            // Default style: cyan fill on black background for visibility
+            style: { bg: 'black', fg: 'cyan' },
+            ...options,
+        });
+        this.filled = 0;
+        this.orientation = 'horizontal';
+        // Use space character - style.bg provides the fill color (Amiga-safe, no Unicode needed)
+        this.ch = ' ';
+        this.pch = ' ';
+        this.filled = options.filled || options.value || 0;
+        this.orientation = options.orientation || 'horizontal';
+        // Space character with background color for Amiga compatibility
+        this.ch = options.ch || ' ';
+        this.pch = options.pch || ' ';
+        this._updateContent();
+    }
+    _updateContent() {
+        const pos = this._getCoords();
+        if (!pos)
+            return;
+        const padding = this.options.padding || 0;
+        const border = this.options.border ? 1 : 0;
+        const padLeft = typeof padding === 'number' ? padding : padding.left || 0;
+        const padTop = typeof padding === 'number' ? padding : padding.top || 0;
+        const padRight = typeof padding === 'number' ? padding : padding.right || 0;
+        const padBottom = typeof padding === 'number' ? padding : padding.bottom || 0;
+        const width = pos.xl - pos.xi - border * 2 - padLeft - padRight;
+        const height = pos.yl - pos.yi - border * 2 - padTop - padBottom;
+        // Get fill color from style (default cyan)
+        const fillBg = this.options.style?.fg || 'cyan';
+        if (this.orientation === 'horizontal') {
+            const filledWidth = Math.floor((width * this.filled) / 100);
+            // Use blessed tags for filled portion with background color (Amiga-safe)
+            const filledPart = filledWidth > 0 ? `{${fillBg}-bg}${this.ch.repeat(filledWidth)}{/${fillBg}-bg}` : '';
+            const emptyPart = this.pch.repeat(width - filledWidth);
+            this.setContent(filledPart + emptyPart);
+        }
+        else {
+            const filledHeight = Math.floor((height * this.filled) / 100);
+            const lines = [];
+            for (let i = 0; i < height; i++) {
+                if (i < height - filledHeight) {
+                    lines.push(this.pch.repeat(width));
+                }
+                else {
+                    // Use blessed tags for filled portion with background color
+                    lines.push(`{${fillBg}-bg}${this.ch.repeat(width)}{/${fillBg}-bg}`);
+                }
+            }
+            this.setContent(lines.join('\n'));
+        }
+    }
+    setProgress(percent) {
+        this.filled = Math.max(0, Math.min(100, percent));
+        this._updateContent();
+        this.emit('progress', this.filled);
+    }
+    getProgress() {
+        return this.filled;
+    }
+    progress(amount) {
+        this.setProgress(this.filled + amount);
+    }
+    reset() {
+        this.setProgress(0);
+    }
+}

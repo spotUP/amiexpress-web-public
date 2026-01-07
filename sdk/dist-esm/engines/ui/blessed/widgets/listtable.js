@@ -1,1 +1,237 @@
-import{Box}from"./box";export class ListTable extends Box{constructor(e={}){const{rows:t,headers:s,columnWidths:h,align:i,interactive:o,noCellBorders:n,...l}=e;super({...l,scrollable:!0,mouse:!0,tags:!0,wrap:!1,style:{fg:"white",...e.style||{}}}),this.rows=[],this.headers=[],this.columnWidths=[],this.align=[],this.selectedRow=0,this.headers=s||[],this.rows=t||[],this.columnWidths=h||[],this.align=i||[],this.interactive=!1!==o,this.noCellBorders=n||!1,0===this.columnWidths.length&&this.calculateColumnWidths(),this.updateContent(),this.interactive&&(this.enableMouse(),this.enableKeys(),this.options.focusable=!0,this.on("focus",()=>{this.screen?.render()}),this.on("blur",()=>{this.screen?.render()}),this.on("keypress",this._onKeypress.bind(this)),this.on("click",e=>{const t=this.getRowFromY(e.y);t>=0&&this.selectRow(t)}),this.on("wheelup",()=>{this.selectPrevious()}),this.on("wheeldown",()=>{this.selectNext()}))}_onKeypress(e,t){return!(!this.interactive||!this.focused)&&("up"===t.name||"k"===t.name?(this.selectPrevious(),this.screen?.render(),!0):"down"===t.name||"j"===t.name?(this.selectNext(),this.screen?.render(),!0):("enter"===t.name||"space"===t.name)&&(this.emit("select",this.rows[this.selectedRow],this.selectedRow),!0))}calculateColumnWidths(){const e=Math.max(this.headers.length,...this.rows.map(e=>e.length));this.columnWidths=new Array(e).fill(0);for(let e=0;e<this.headers.length;e++)this.columnWidths[e]=Math.max(this.columnWidths[e],this.headers[e].length);for(const e of this.rows)for(let t=0;t<e.length;t++)this.columnWidths[t]=Math.max(this.columnWidths[t],e[t].length);this.columnWidths=this.columnWidths.map(e=>e+2)}formatCell(e,t){const s=this.columnWidths[t]||10,h=this.align[t]||"left";let i=e;i.length>s-2&&(i=i.substring(0,s-3)+"...");const o=s-i.length;if("center"===h){const e=Math.floor(o/2),t=o-e;i=" ".repeat(e)+i+" ".repeat(t)}else"right"===h?i=" ".repeat(o)+i:i+=" ".repeat(o);return i}updateContent(){const e=[],t=this.noCellBorders?" ":"│";if(this.headers.length>0){const s=this.headers.map((e,t)=>this.formatCell(e,t));e.push(t+s.join(t)+t);const h=this.columnWidths.map(e=>"─".repeat(e));e.push(this.noCellBorders?h.join(" "):"├"+h.join("┼")+"┤")}for(let s=0;s<this.rows.length;s++){const h=t+this.rows[s].map((e,t)=>this.formatCell(e,t)).join(t)+t;if(this.interactive&&s===this.selectedRow){const t=this.focused?"{black-fg}{yellow-bg}":"{white-fg}{blue-bg}";e.push(`${t}${h}{/}`)}else e.push(h)}this.setContent(e.join("\n"))}getRowFromY(e){const t=e-this.itop-(this.headers.length>0?2:0);return t>=0&&t<this.rows.length?t:-1}selectRow(e){e<0||e>=this.rows.length||(this.selectedRow=e,this.updateContent(),this.emit("select row",e,this.rows[e]),this.screen&&this.screen.render())}selectPrevious(){this.selectedRow>0&&this.selectRow(this.selectedRow-1)}selectNext(){this.selectedRow<this.rows.length-1&&this.selectRow(this.selectedRow+1)}setData(e){e.length>0?(this.headers=e[0],this.rows=e.slice(1)):(this.headers=[],this.rows=[]),this.calculateColumnWidths(),this.updateContent(),this.screen&&this.screen.render()}setHeaders(e){this.headers=e,this.calculateColumnWidths(),this.updateContent(),this.screen&&this.screen.render()}getSelected(){return this.selectedRow}getSelectedRow(){return this.rows[this.selectedRow]}}
+/**
+ * ListTable - Enhanced table with list-like selection behavior
+ */
+import { Box } from './box';
+export class ListTable extends Box {
+    constructor(options = {}) {
+        // Destructure ListTable-specific properties
+        const { rows, headers, columnWidths, align, interactive, noCellBorders, ...boxOptions } = options;
+        super({
+            ...boxOptions,
+            scrollable: true,
+            mouse: true,
+            tags: true, // Enable tag parsing for selection highlighting
+            wrap: false, // Tables should NOT wrap - it breaks column layout
+            style: {
+                fg: 'white',
+                ...(options.style || {}),
+            },
+        });
+        this.rows = [];
+        this.headers = [];
+        this.columnWidths = [];
+        this.align = [];
+        this.selectedRow = 0;
+        this.headers = headers || [];
+        this.rows = rows || [];
+        this.columnWidths = columnWidths || [];
+        this.align = align || [];
+        this.interactive = interactive !== false;
+        this.noCellBorders = noCellBorders || false;
+        // Auto-calculate column widths if not provided
+        if (this.columnWidths.length === 0) {
+            this.calculateColumnWidths();
+        }
+        this.updateContent();
+        if (this.interactive) {
+            this.enableMouse();
+            this.enableKeys();
+            this.options.focusable = true; // Enable focus
+            // Focus/blur handlers
+            this.on('focus', () => {
+                this.screen?.render();
+            });
+            this.on('blur', () => {
+                this.screen?.render();
+            });
+            // Navigation keys
+            this.on('keypress', this._onKeypress.bind(this));
+            this.on('click', (data) => {
+                const rowIndex = this.getRowFromY(data.y);
+                if (rowIndex >= 0) {
+                    this.selectRow(rowIndex);
+                }
+            });
+            // Mouse wheel handlers - move selection up/down
+            this.on('wheelup', () => {
+                this.selectPrevious();
+            });
+            this.on('wheeldown', () => {
+                this.selectNext();
+            });
+        }
+    }
+    _onKeypress(ch, key) {
+        if (!this.interactive || !this.focused)
+            return false;
+        if (key.name === 'up' || key.name === 'k') {
+            this.selectPrevious();
+            this.screen?.render();
+            return true;
+        }
+        if (key.name === 'down' || key.name === 'j') {
+            this.selectNext();
+            this.screen?.render();
+            return true;
+        }
+        if (key.name === 'enter' || key.name === 'space') {
+            this.emit('select', this.rows[this.selectedRow], this.selectedRow);
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Calculate column widths automatically
+     */
+    calculateColumnWidths() {
+        const numCols = Math.max(this.headers.length, ...this.rows.map(row => row.length));
+        this.columnWidths = new Array(numCols).fill(0);
+        // Check headers
+        for (let i = 0; i < this.headers.length; i++) {
+            this.columnWidths[i] = Math.max(this.columnWidths[i], this.headers[i].length);
+        }
+        // Check all rows
+        for (const row of this.rows) {
+            for (let i = 0; i < row.length; i++) {
+                this.columnWidths[i] = Math.max(this.columnWidths[i], row[i].length);
+            }
+        }
+        // Add padding
+        this.columnWidths = this.columnWidths.map(w => w + 2);
+    }
+    /**
+     * Format a cell value
+     */
+    formatCell(value, colIndex) {
+        const width = this.columnWidths[colIndex] || 10;
+        const alignment = this.align[colIndex] || 'left';
+        let formatted = value;
+        if (formatted.length > width - 2) {
+            formatted = formatted.substring(0, width - 3) + '...';
+        }
+        const padding = width - formatted.length;
+        if (alignment === 'center') {
+            const leftPad = Math.floor(padding / 2);
+            const rightPad = padding - leftPad;
+            formatted = ' '.repeat(leftPad) + formatted + ' '.repeat(rightPad);
+        }
+        else if (alignment === 'right') {
+            formatted = ' '.repeat(padding) + formatted;
+        }
+        else {
+            formatted = formatted + ' '.repeat(padding);
+        }
+        return formatted;
+    }
+    /**
+     * Generate table content
+     */
+    updateContent() {
+        const lines = [];
+        const border = this.noCellBorders ? ' ' : '│';
+        // Header row
+        if (this.headers.length > 0) {
+            const headerCells = this.headers.map((h, i) => this.formatCell(h, i));
+            lines.push(border + headerCells.join(border) + border);
+            // Header separator
+            const separators = this.columnWidths.map(w => '─'.repeat(w));
+            lines.push(this.noCellBorders ? separators.join(' ') : '├' + separators.join('┼') + '┤');
+        }
+        // Data rows
+        for (let rowIdx = 0; rowIdx < this.rows.length; rowIdx++) {
+            const row = this.rows[rowIdx];
+            const cells = row.map((cell, i) => this.formatCell(cell, i));
+            const line = border + cells.join(border) + border;
+            if (this.interactive && rowIdx === this.selectedRow) {
+                // Highlight selected row: High contrast when focused, subtle when not
+                const style = this.focused ? '{black-fg}{yellow-bg}' : '{white-fg}{blue-bg}';
+                lines.push(`${style}${line}{/}`);
+            }
+            else {
+                lines.push(line);
+            }
+        }
+        this.setContent(lines.join('\n'));
+    }
+    /**
+     * Get row index from Y coordinate
+     */
+    getRowFromY(y) {
+        const relY = y - this.itop;
+        const headerOffset = this.headers.length > 0 ? 2 : 0;
+        const rowIndex = relY - headerOffset;
+        return rowIndex >= 0 && rowIndex < this.rows.length ? rowIndex : -1;
+    }
+    /**
+     * Select a row
+     */
+    selectRow(index) {
+        if (index < 0 || index >= this.rows.length)
+            return;
+        this.selectedRow = index;
+        this.updateContent();
+        this.emit('select row', index, this.rows[index]);
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Select previous row
+     */
+    selectPrevious() {
+        if (this.selectedRow > 0) {
+            this.selectRow(this.selectedRow - 1);
+        }
+    }
+    /**
+     * Select next row
+     */
+    selectNext() {
+        if (this.selectedRow < this.rows.length - 1) {
+            this.selectRow(this.selectedRow + 1);
+        }
+    }
+    /**
+     * Set table data
+     * First row is treated as headers (blessed-contrib compatible)
+     */
+    setData(rows) {
+        if (rows.length > 0) {
+            // First row is headers, rest is data (blessed-contrib compatibility)
+            this.headers = rows[0];
+            this.rows = rows.slice(1);
+        }
+        else {
+            this.headers = [];
+            this.rows = [];
+        }
+        this.calculateColumnWidths();
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Set headers
+     */
+    setHeaders(headers) {
+        this.headers = headers;
+        this.calculateColumnWidths();
+        this.updateContent();
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Get selected row index
+     */
+    getSelected() {
+        return this.selectedRow;
+    }
+    /**
+     * Get selected row data
+     */
+    getSelectedRow() {
+        return this.rows[this.selectedRow];
+    }
+}

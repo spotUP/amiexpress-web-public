@@ -1,1 +1,327 @@
-import{AnsiColor}from"../../core/types";import{EventEmitter}from"events";export class LevelManager extends EventEmitter{constructor(){super(),this.levels=new Map,this.layers=new Map}createLevel(e,t,s,l){const r=[];for(let e=0;e<s;e++){const s=[];for(let l=0;l<t;l++)s.push({type:"empty",gridPosition:{x:l,y:e},char:" ",color:AnsiColor.Black,solid:!1,properties:{}});r.push(s)}const i={id:e,name:l?.name||e,gridSize:{width:t,height:s},tiles:r,spawns:[],data:l?.custom||{}};return this.levels.set(e,i),this.emit("level-created",i),i}loadFromString(e,t,s,l){const r=t.trim().split("\n"),i=r.length,n=Math.max(...r.map(e=>e.length)),o=[],h=[];for(let e=0;e<i;e++){const t=[],l=r[e];for(let r=0;r<n;r++){const i=s[l[r]||" "]||{type:"empty",solid:!1,char:" ",color:AnsiColor.Black},n={type:i.type,gridPosition:{x:r,y:e},char:i.char,color:i.color,solid:i.solid,properties:i.properties||{}};"spawn"===i.type&&h.push({x:r,y:e}),t.push(n)}o.push(t)}const a={id:e,name:l?.name||e,gridSize:{width:n,height:i},tiles:o,spawns:h,data:l?.custom||{}};return this.levels.set(e,a),this.emit("level-loaded",a),a}loadFromJSON(e){const t=JSON.parse(e);return this.levels.set(t.id,t),this.emit("level-loaded",t),t}saveToJSON(e){const t=this.levels.get(e);if(!t)throw new Error(`Level ${e} not found`);return JSON.stringify(t,null,2)}getLevel(e){return this.levels.get(e)}setCurrentLevel(e){const t=this.levels.get(e);if(!t)throw new Error(`Level ${e} not found`);this.currentLevel=t,this.emit("level-changed",t)}getCurrentLevel(){return this.currentLevel}getTile(e,t,s){const l=this.levels.get(e);return l?s<0||s>=l.tiles.length||t<0||t>=l.tiles[s].length?null:l.tiles[s][t]:null}setTile(e,t,s,l){const r=this.levels.get(e);r&&(s<0||s>=r.tiles.length||t<0||t>=r.tiles[s].length||(Object.assign(r.tiles[s][t],l),this.emit("tile-changed",r,t,s)))}isWalkable(e,t,s){const l=this.getTile(e,t,s);return null!==l&&!l.solid}getSpawnPoint(e,t=0){const s=this.levels.get(e);return s&&s.spawns[t]?s.spawns[t]:null}addSpawnPoint(e,t){const s=this.levels.get(e);s&&(s.spawns.push(t),this.emit("spawn-added",s,t))}findTilesByType(e,t){const s=this.levels.get(e);if(!s)return[];const l=[];for(const e of s.tiles)for(const s of e)s.type===t&&l.push(s);return l}getTilesInRect(e,t,s,l,r){if(!this.levels.get(e))return[];const i=[];for(let n=s;n<s+r;n++)for(let s=t;s<t+l;s++){const t=this.getTile(e,s,n);t&&i.push(t)}return i}renderToString(e,t){const s=this.levels.get(e);if(!s)return"";let l="";for(const e of s.tiles){for(const t of e)l+=t.char;l+="\n"}return l}addLayer(e,t){this.layers.has(e)||this.layers.set(e,[]);const s=this.layers.get(e);s.push(t),s.sort((e,t)=>e.zIndex-t.zIndex),this.emit("layer-added",e,t)}getLayers(e){return this.layers.get(e)||[]}cloneLevel(e,t){const s=this.levels.get(e);if(!s)throw new Error(`Level ${e} not found`);const l=s.tiles.map(e=>e.map(e=>({...e}))),r={...s,id:t,tiles:l,spawns:[...s.spawns]};return this.levels.set(t,r),this.emit("level-cloned",s,r),r}removeLevel(e){this.levels.delete(e),this.layers.delete(e),this.emit("level-removed",e)}getLevelIds(){return Array.from(this.levels.keys())}dispose(){this.levels.clear(),this.layers.clear(),this.removeAllListeners()}}
+/**
+ * Level Manager - Tile Map and Level Management
+ *
+ * Handles tile-based levels and maps for BBS door games.
+ *
+ * Features:
+ * - Tile map loading and rendering
+ * - Collision detection
+ * - Layer management
+ * - Spawn point handling
+ * - Level transitions
+ * - Save/load level state
+ *
+ * @example Basic Usage
+ * ```typescript
+ * const levelMgr = new LevelManager();
+ *
+ * const level = levelMgr.loadFromString(`
+ *   ################
+ *   #..............#
+ *   #..S.........E.#
+ *   #..............#
+ *   ################
+ * `, {
+ *   '#': { type: 'wall', solid: true, char: '#', color: AnsiColor.White },
+ *   '.': { type: 'floor', solid: false, char: '.', color: AnsiColor.Black },
+ *   'S': { type: 'spawn', solid: false, char: ' ', color: AnsiColor.Black },
+ *   'E': { type: 'exit', solid: false, char: ' ', color: AnsiColor.Black }
+ * });
+ *
+ * const spawn = levelMgr.getSpawnPoint(level.id, 0);
+ * ```
+ */
+import { AnsiColor } from '../../core/types';
+import { EventEmitter } from 'events';
+/**
+ * Level Manager
+ * Handles level loading, management, and tile operations
+ */
+export class LevelManager extends EventEmitter {
+    constructor() {
+        super();
+        this.levels = new Map();
+        this.layers = new Map();
+    }
+    /**
+     * Create empty level
+     */
+    createLevel(id, width, height, metadata) {
+        const tiles = [];
+        for (let y = 0; y < height; y++) {
+            const row = [];
+            for (let x = 0; x < width; x++) {
+                row.push({
+                    type: 'empty',
+                    gridPosition: { x, y },
+                    char: ' ',
+                    color: AnsiColor.Black,
+                    solid: false,
+                    properties: {}
+                });
+            }
+            tiles.push(row);
+        }
+        const level = {
+            id,
+            name: metadata?.name || id,
+            gridSize: { width, height },
+            tiles,
+            spawns: [],
+            data: metadata?.custom || {}
+        };
+        this.levels.set(id, level);
+        this.emit('level-created', level);
+        return level;
+    }
+    /**
+     * Load level from ASCII string
+     */
+    loadFromString(id, mapString, tileDefs, metadata) {
+        const lines = mapString.trim().split('\n');
+        const height = lines.length;
+        const width = Math.max(...lines.map(l => l.length));
+        const tiles = [];
+        const spawns = [];
+        for (let y = 0; y < height; y++) {
+            const row = [];
+            const line = lines[y];
+            for (let x = 0; x < width; x++) {
+                const char = line[x] || ' ';
+                const def = tileDefs[char] || {
+                    type: 'empty',
+                    solid: false,
+                    char: ' ',
+                    color: AnsiColor.Black
+                };
+                const tile = {
+                    type: def.type,
+                    gridPosition: { x, y },
+                    char: def.char,
+                    color: def.color,
+                    solid: def.solid,
+                    properties: def.properties || {}
+                };
+                // Track spawn points
+                if (def.type === 'spawn') {
+                    spawns.push({ x, y });
+                }
+                row.push(tile);
+            }
+            tiles.push(row);
+        }
+        const level = {
+            id,
+            name: metadata?.name || id,
+            gridSize: { width, height },
+            tiles,
+            spawns,
+            data: metadata?.custom || {}
+        };
+        this.levels.set(id, level);
+        this.emit('level-loaded', level);
+        return level;
+    }
+    /**
+     * Load level from JSON
+     */
+    loadFromJSON(json) {
+        const data = JSON.parse(json);
+        const level = data;
+        this.levels.set(level.id, level);
+        this.emit('level-loaded', level);
+        return level;
+    }
+    /**
+     * Save level to JSON
+     */
+    saveToJSON(levelId) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            throw new Error(`Level ${levelId} not found`);
+        return JSON.stringify(level, null, 2);
+    }
+    /**
+     * Get level
+     */
+    getLevel(id) {
+        return this.levels.get(id);
+    }
+    /**
+     * Set current level
+     */
+    setCurrentLevel(id) {
+        const level = this.levels.get(id);
+        if (!level)
+            throw new Error(`Level ${id} not found`);
+        this.currentLevel = level;
+        this.emit('level-changed', level);
+    }
+    /**
+     * Get current level
+     */
+    getCurrentLevel() {
+        return this.currentLevel;
+    }
+    /**
+     * Get tile at position
+     */
+    getTile(levelId, x, y) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return null;
+        if (y < 0 || y >= level.tiles.length)
+            return null;
+        if (x < 0 || x >= level.tiles[y].length)
+            return null;
+        return level.tiles[y][x];
+    }
+    /**
+     * Set tile at position
+     */
+    setTile(levelId, x, y, tile) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return;
+        if (y < 0 || y >= level.tiles.length)
+            return;
+        if (x < 0 || x >= level.tiles[y].length)
+            return;
+        Object.assign(level.tiles[y][x], tile);
+        this.emit('tile-changed', level, x, y);
+    }
+    /**
+     * Check if position is walkable
+     */
+    isWalkable(levelId, x, y) {
+        const tile = this.getTile(levelId, x, y);
+        return tile !== null && !tile.solid;
+    }
+    /**
+     * Get spawn point
+     */
+    getSpawnPoint(levelId, index = 0) {
+        const level = this.levels.get(levelId);
+        if (!level || !level.spawns[index])
+            return null;
+        return level.spawns[index];
+    }
+    /**
+     * Add spawn point
+     */
+    addSpawnPoint(levelId, position) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return;
+        level.spawns.push(position);
+        this.emit('spawn-added', level, position);
+    }
+    /**
+     * Find tiles by type
+     */
+    findTilesByType(levelId, type) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return [];
+        const result = [];
+        for (const row of level.tiles) {
+            for (const tile of row) {
+                if (tile.type === type) {
+                    result.push(tile);
+                }
+            }
+        }
+        return result;
+    }
+    /**
+     * Get tiles in rectangle
+     */
+    getTilesInRect(levelId, x, y, width, height) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return [];
+        const result = [];
+        for (let ty = y; ty < y + height; ty++) {
+            for (let tx = x; tx < x + width; tx++) {
+                const tile = this.getTile(levelId, tx, ty);
+                if (tile)
+                    result.push(tile);
+            }
+        }
+        return result;
+    }
+    /**
+     * Render level to string (ASCII)
+     */
+    renderToString(levelId, layerName) {
+        const level = this.levels.get(levelId);
+        if (!level)
+            return '';
+        let output = '';
+        for (const row of level.tiles) {
+            for (const tile of row) {
+                output += tile.char;
+            }
+            output += '\n';
+        }
+        return output;
+    }
+    /**
+     * Add layer to level
+     */
+    addLayer(levelId, layer) {
+        if (!this.layers.has(levelId)) {
+            this.layers.set(levelId, []);
+        }
+        const layers = this.layers.get(levelId);
+        layers.push(layer);
+        layers.sort((a, b) => a.zIndex - b.zIndex);
+        this.emit('layer-added', levelId, layer);
+    }
+    /**
+     * Get layers for level
+     */
+    getLayers(levelId) {
+        return this.layers.get(levelId) || [];
+    }
+    /**
+     * Clone level
+     */
+    cloneLevel(sourceId, targetId) {
+        const source = this.levels.get(sourceId);
+        if (!source)
+            throw new Error(`Level ${sourceId} not found`);
+        const tiles = source.tiles.map(row => row.map(tile => ({ ...tile })));
+        const level = {
+            ...source,
+            id: targetId,
+            tiles,
+            spawns: [...source.spawns]
+        };
+        this.levels.set(targetId, level);
+        this.emit('level-cloned', source, level);
+        return level;
+    }
+    /**
+     * Remove level
+     */
+    removeLevel(id) {
+        this.levels.delete(id);
+        this.layers.delete(id);
+        this.emit('level-removed', id);
+    }
+    /**
+     * Get all level IDs
+     */
+    getLevelIds() {
+        return Array.from(this.levels.keys());
+    }
+    /**
+     * Cleanup
+     */
+    dispose() {
+        this.levels.clear();
+        this.layers.clear();
+        this.removeAllListeners();
+    }
+}

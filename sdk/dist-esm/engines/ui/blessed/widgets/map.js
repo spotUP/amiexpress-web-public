@@ -1,1 +1,183 @@
-import{ContribCanvas as Canvas}from"./contrib-canvas";import{world,antarctica}from"./map-data";export class Map extends Canvas{constructor(t={}){super(t);const i=()=>{this.options.style=this.options.style||{},this.draw()};this.screen&&i(),this.on("attach",i)}calcSize(){let t=2*Math.max(20,this.width)-12,i=4*Math.max(10,this.height);t=Math.max(32,t),i=Math.max(24,i),t=2*Math.floor(t/2),i=4*Math.floor(i/4),this.canvasSize={width:t,height:i};const s=void 0===this.options.labelSpace?5:this.options.labelSpace;this.iMAP_START_X_POS=s,this.iMAP_START_Y_POS=s,this.iMAP_WIDTH=t-2*s,this.iMAP_HEIGHT=i-2*s}get type(){return"map"}degreesOfLatitudeToScreenY(t){const i=this.options.startLat||0,s=this.options.endLat||180,o=Number(t)+90;if(!(o<i||o>s))return o===i?this.iMAP_HEIGHT+this.iMAP_START_Y_POS:o===s?this.iMAP_START_Y_POS:this.iMAP_HEIGHT-(o-i)*(this.iMAP_HEIGHT/(s-i))+this.iMAP_START_Y_POS}degreesOfLongitudeToScreenX(t){const i=this.options.startLon||0,s=this.options.endLon||360,o=Number(t)+180;if(!(o<i||o>s))return o===i?this.iMAP_START_X_POS:o===s?this.iMAP_START_X_POS+this.iMAP_WIDTH:this.iMAP_START_X_POS+(o-i)*(this.iMAP_WIDTH/(s-i))}draw(){if(!this.ctx)return;const t=this.ctx;if(this.clear(),this.options.disableBackground||(t.fillStyle="black",t.fillRect(0,0,this.canvasSize.width,this.canvasSize.height)),this.options.disableMapBackground||(t.fillStyle="blue",t.fillRect(this.iMAP_START_X_POS,this.iMAP_START_Y_POS,this.iMAP_WIDTH,this.iMAP_HEIGHT)),this.drawLandMass(),this.options.markers)for(const t of this.options.markers)this.drawMarker(t);this.syncContent()}drawLandMass(){const t=this.ctx,i=[...world.shapes];this.options.excludeAntarctica||i.push(...antarctica.shapes);const s=this.options.shapeColor||this.options.style.shapeColor||"green";t.fillStyle=s,t.strokeStyle=s;for(const s of i){t.beginPath();let i=!0;for(const o of s){const s=this.degreesOfLongitudeToScreenX(o.lon),e=this.degreesOfLatitudeToScreenY(o.lat);void 0!==s&&void 0!==e&&(i?(t.moveTo(s,e),i=!1):t.lineTo(s,e))}this.options.disableFill||t.fill(),t.stroke()}}drawMarker(t){const i=this.ctx,s=this.degreesOfLongitudeToScreenX(t.lon),o=this.degreesOfLatitudeToScreenY(t.lat);void 0!==s&&void 0!==o&&(i.fillStyle=t.color||"red",i.fillText(t.char||"X",s,o))}addMarker(t){this.options.markers||(this.options.markers=[]),this.options.markers.push(t),this.ctx&&(this.drawMarker(t),this.syncContent())}clearMarkers(){this.options.markers=[],this.draw()}getOptionsPrototype(){return{startLon:10,endLon:10,startLat:10,endLat:10,region:"world",markers:[{lon:"-79.0000",lat:"37.5000",color:"red",char:"X"},{lon:"79.0000",lat:"37.5000",color:"blue",char:"O"}]}}}export function map(t={}){return new Map(t)}
+/**
+ * Map Widget
+ *
+ * 1:1 port from blessed-contrib/lib/widget/map.js
+ * Geographic map display with markers
+ *
+ * Note: Original depends on 'map-canvas' npm package for rendering.
+ * This implementation provides the API but requires map-canvas integration.
+ */
+import { ContribCanvas as Canvas } from './contrib-canvas';
+import { world, antarctica } from './map-data';
+/**
+ * Map Widget
+ * Displays geographic maps with marker support
+ */
+export class Map extends Canvas {
+    constructor(options = {}) {
+        super(options);
+        const init = () => {
+            this.options.style = this.options.style || {};
+            this.draw();
+        };
+        if (this.screen) {
+            init();
+        }
+        this.on('attach', init);
+    }
+    calcSize() {
+        // Get widget dimensions with minimums
+        const widgetWidth = Math.max(20, this.width);
+        const widgetHeight = Math.max(10, this.height);
+        // Calculate canvas size
+        // Width: subtract 12 pixels for padding/borders (approx 6 chars)
+        let width = widgetWidth * 2 - 12;
+        let height = widgetHeight * 4;
+        // Ensure minimum canvas size for map rendering
+        width = Math.max(32, width);
+        height = Math.max(24, height);
+        // Round to required multiples (width: 2, height: 4) for braille mapping
+        width = Math.floor(width / 2) * 2;
+        height = Math.floor(height / 4) * 4;
+        this.canvasSize = { width, height };
+        const labelSpace = this.options.labelSpace === undefined ? 5 : this.options.labelSpace;
+        this.iMAP_START_X_POS = labelSpace;
+        this.iMAP_START_Y_POS = labelSpace;
+        this.iMAP_WIDTH = width - (labelSpace * 2);
+        this.iMAP_HEIGHT = height - (labelSpace * 2);
+    }
+    get type() {
+        return 'map';
+    }
+    degreesOfLatitudeToScreenY(iDegreesOfLatitude) {
+        const minLat = this.options.startLat || 0;
+        const maxLat = this.options.endLat || 180;
+        const iAdjustedDegreesOfLatitude = Number(iDegreesOfLatitude) + 90;
+        if (iAdjustedDegreesOfLatitude < minLat || iAdjustedDegreesOfLatitude > maxLat) {
+            return undefined;
+        }
+        if (iAdjustedDegreesOfLatitude === minLat) {
+            return this.iMAP_HEIGHT + this.iMAP_START_Y_POS;
+        }
+        else if (iAdjustedDegreesOfLatitude === maxLat) {
+            return this.iMAP_START_Y_POS;
+        }
+        else {
+            return (this.iMAP_HEIGHT - ((iAdjustedDegreesOfLatitude - minLat) * (this.iMAP_HEIGHT / (maxLat - minLat)))) + this.iMAP_START_Y_POS;
+        }
+    }
+    degreesOfLongitudeToScreenX(iDegreesOfLongitude) {
+        const minLon = this.options.startLon || 0;
+        const maxLon = this.options.endLon || 360;
+        const iAdjustedDegreesOfLongitude = Number(iDegreesOfLongitude) + 180;
+        if (iAdjustedDegreesOfLongitude < minLon || iAdjustedDegreesOfLongitude > maxLon) {
+            return undefined;
+        }
+        if (iAdjustedDegreesOfLongitude === minLon) {
+            return this.iMAP_START_X_POS;
+        }
+        else if (iAdjustedDegreesOfLongitude === maxLon) {
+            return this.iMAP_START_X_POS + this.iMAP_WIDTH;
+        }
+        else {
+            return (this.iMAP_START_X_POS + ((iAdjustedDegreesOfLongitude - minLon) * (this.iMAP_WIDTH / (maxLon - minLon))));
+        }
+    }
+    draw() {
+        if (!this.ctx)
+            return;
+        const ctx = this.ctx;
+        this.clear();
+        // Draw background
+        if (!this.options.disableBackground) {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, this.canvasSize.width, this.canvasSize.height);
+        }
+        // Draw map background (ocean)
+        if (!this.options.disableMapBackground) {
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(this.iMAP_START_X_POS, this.iMAP_START_Y_POS, this.iMAP_WIDTH, this.iMAP_HEIGHT);
+        }
+        // Draw landmass
+        this.drawLandMass();
+        // Draw markers
+        if (this.options.markers) {
+            for (const m of this.options.markers) {
+                this.drawMarker(m);
+            }
+        }
+        this.syncContent();
+    }
+    drawLandMass() {
+        const ctx = this.ctx;
+        const shapes = [...world.shapes];
+        if (!this.options.excludeAntarctica) {
+            shapes.push(...antarctica.shapes);
+        }
+        const shapeColor = this.options.shapeColor || this.options.style.shapeColor || 'green';
+        ctx.fillStyle = shapeColor;
+        ctx.strokeStyle = shapeColor;
+        for (const shape of shapes) {
+            ctx.beginPath();
+            let first = true;
+            for (const point of shape) {
+                const x = this.degreesOfLongitudeToScreenX(point.lon);
+                const y = this.degreesOfLatitudeToScreenY(point.lat);
+                if (x !== undefined && y !== undefined) {
+                    if (first) {
+                        ctx.moveTo(x, y);
+                        first = false;
+                    }
+                    else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+            }
+            if (!this.options.disableFill)
+                ctx.fill();
+            ctx.stroke();
+        }
+    }
+    drawMarker(marker) {
+        const ctx = this.ctx;
+        const x = this.degreesOfLongitudeToScreenX(marker.lon);
+        const y = this.degreesOfLatitudeToScreenY(marker.lat);
+        if (x !== undefined && y !== undefined) {
+            ctx.fillStyle = marker.color || 'red';
+            ctx.fillText(marker.char || 'X', x, y);
+        }
+    }
+    addMarker(marker) {
+        if (!this.options.markers) {
+            this.options.markers = [];
+        }
+        this.options.markers.push(marker);
+        if (this.ctx) {
+            this.drawMarker(marker);
+            this.syncContent();
+        }
+    }
+    clearMarkers() {
+        this.options.markers = [];
+        this.draw();
+    }
+    getOptionsPrototype() {
+        return {
+            startLon: 10,
+            endLon: 10,
+            startLat: 10,
+            endLat: 10,
+            region: 'world',
+            markers: [
+                { lon: '-79.0000', lat: '37.5000', color: 'red', char: 'X' },
+                { lon: '79.0000', lat: '37.5000', color: 'blue', char: 'O' }
+            ]
+        };
+    }
+}
+/**
+ * Factory function
+ */
+export function map(options = {}) {
+    return new Map(options);
+}

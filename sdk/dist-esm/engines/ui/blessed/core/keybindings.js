@@ -1,1 +1,183 @@
-export class KeyBindings{constructor(){this.shortcuts=new Map,this.contextShortcuts=new Map}register(t){for(const s of t.keys)if(t.context){this.contextShortcuts.has(t.context)||this.contextShortcuts.set(t.context,new Map);const e=this.contextShortcuts.get(t.context);e.has(s)||e.set(s,[]),e.get(s).push(t)}else this.shortcuts.has(s)||this.shortcuts.set(s,[]),this.shortcuts.get(s).push(t)}unregister(t){for(const s of t.keys)if(t.context){const e=this.contextShortcuts.get(t.context);if(e){const o=e.get(s);if(o){const n=o.indexOf(t);n>-1&&o.splice(n,1),0===o.length&&e.delete(s)}}}else{const e=this.shortcuts.get(s);if(e){const o=e.indexOf(t);o>-1&&e.splice(o,1),0===e.length&&this.shortcuts.delete(s)}}}handle(t,s){const e=this._keyEventToString(t);if(s){const t=this.contextShortcuts.get(s);if(t){const s=t.get(e);if(s&&s.length>0)return s[0].action(),!0}}const o=this.shortcuts.get(e);return!!(o&&o.length>0)&&(o[0].action(),!0)}getAllShortcuts(){const t=[];for(const s of this.shortcuts.values())t.push(...s);for(const s of this.contextShortcuts.values())for(const e of s.values())t.push(...e);return t}getContextShortcuts(t){const s=this.contextShortcuts.get(t);if(!s)return[];const e=[];for(const t of s.values())e.push(...t);return e}clear(){this.shortcuts.clear(),this.contextShortcuts.clear()}_keyEventToString(t){let s="";return t.ctrl&&(s+="C-"),t.meta&&(s+="M-"),t.shift&&t.name.length>1&&(s+="S-"),s+=t.name,s}static formatKeyCombo(t){const s=t.split("-"),e=[];let o="";for(let t=0;t<s.length;t++){const n=s[t];"C"===n?e.push("Ctrl"):"M"===n?e.push("Alt"):"S"===n?e.push("Shift"):o=n}return o=1===o.length?o.toUpperCase():o.charAt(0).toUpperCase()+o.slice(1),e.length>0?`${e.join("+")}+${o}`:o}}
+/**
+ * KeyBindings - Global keyboard shortcut management
+ *
+ * Features:
+ * - Register global shortcuts (Ctrl+S, Ctrl+Q, etc.)
+ * - Context-aware shortcuts (different actions based on focused element)
+ * - Conflict detection and resolution
+ * - Customizable shortcuts
+ */
+export class KeyBindings {
+    constructor() {
+        this.shortcuts = new Map();
+        this.contextShortcuts = new Map();
+    }
+    /**
+     * Register a global keyboard shortcut
+     */
+    register(action) {
+        for (const key of action.keys) {
+            if (action.context) {
+                // Context-specific shortcut
+                if (!this.contextShortcuts.has(action.context)) {
+                    this.contextShortcuts.set(action.context, new Map());
+                }
+                const contextMap = this.contextShortcuts.get(action.context);
+                if (!contextMap.has(key)) {
+                    contextMap.set(key, []);
+                }
+                contextMap.get(key).push(action);
+            }
+            else {
+                // Global shortcut
+                if (!this.shortcuts.has(key)) {
+                    this.shortcuts.set(key, []);
+                }
+                this.shortcuts.get(key).push(action);
+            }
+        }
+    }
+    /**
+     * Unregister a keyboard shortcut
+     */
+    unregister(action) {
+        for (const key of action.keys) {
+            if (action.context) {
+                const contextMap = this.contextShortcuts.get(action.context);
+                if (contextMap) {
+                    const actions = contextMap.get(key);
+                    if (actions) {
+                        const index = actions.indexOf(action);
+                        if (index > -1) {
+                            actions.splice(index, 1);
+                        }
+                        if (actions.length === 0) {
+                            contextMap.delete(key);
+                        }
+                    }
+                }
+            }
+            else {
+                const actions = this.shortcuts.get(key);
+                if (actions) {
+                    const index = actions.indexOf(action);
+                    if (index > -1) {
+                        actions.splice(index, 1);
+                    }
+                    if (actions.length === 0) {
+                        this.shortcuts.delete(key);
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * Handle a key event and execute matching shortcuts
+     * Returns true if a shortcut was executed
+     */
+    handle(key, context) {
+        const keyName = this._keyEventToString(key);
+        // Check context-specific shortcuts first
+        if (context) {
+            const contextMap = this.contextShortcuts.get(context);
+            if (contextMap) {
+                const actions = contextMap.get(keyName);
+                if (actions && actions.length > 0) {
+                    // Execute first matching action
+                    actions[0].action();
+                    return true;
+                }
+            }
+        }
+        // Check global shortcuts
+        const actions = this.shortcuts.get(keyName);
+        if (actions && actions.length > 0) {
+            // Execute first matching action
+            actions[0].action();
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Get all registered shortcuts
+     */
+    getAllShortcuts() {
+        const all = [];
+        // Global shortcuts
+        for (const actions of this.shortcuts.values()) {
+            all.push(...actions);
+        }
+        // Context shortcuts
+        for (const contextMap of this.contextShortcuts.values()) {
+            for (const actions of contextMap.values()) {
+                all.push(...actions);
+            }
+        }
+        return all;
+    }
+    /**
+     * Get shortcuts for a specific context
+     */
+    getContextShortcuts(context) {
+        const contextMap = this.contextShortcuts.get(context);
+        if (!contextMap)
+            return [];
+        const all = [];
+        for (const actions of contextMap.values()) {
+            all.push(...actions);
+        }
+        return all;
+    }
+    /**
+     * Clear all shortcuts
+     */
+    clear() {
+        this.shortcuts.clear();
+        this.contextShortcuts.clear();
+    }
+    /**
+     * Convert KeyEvent to string representation (e.g., 'C-s', 'M-q')
+     */
+    _keyEventToString(key) {
+        let result = '';
+        if (key.ctrl)
+            result += 'C-';
+        if (key.meta)
+            result += 'M-';
+        if (key.shift && key.name.length > 1)
+            result += 'S-'; // Only add S- for special keys
+        result += key.name;
+        return result;
+    }
+    /**
+     * Get human-readable description of a key combination
+     */
+    static formatKeyCombo(keyCombo) {
+        const parts = keyCombo.split('-');
+        const modifiers = [];
+        let key = '';
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (part === 'C') {
+                modifiers.push('Ctrl');
+            }
+            else if (part === 'M') {
+                modifiers.push('Alt');
+            }
+            else if (part === 'S') {
+                modifiers.push('Shift');
+            }
+            else {
+                key = part;
+            }
+        }
+        // Capitalize key name
+        if (key.length === 1) {
+            key = key.toUpperCase();
+        }
+        else {
+            key = key.charAt(0).toUpperCase() + key.slice(1);
+        }
+        return modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key;
+    }
+}

@@ -1,1 +1,67 @@
-export class EventEmitter{constructor(){this.events=new Map}on(e,t){return this.events.has(e)||this.events.set(e,[]),this.events.get(e).push(t),this}once(e,t){const s=(...n)=>(this.removeListener(e,s),t(...n));return this.on(e,s)}removeListener(e,t){const s=this.events.get(e);if(s){const e=s.indexOf(t);-1!==e&&s.splice(e,1)}return this}removeAllListeners(e){return e?this.events.delete(e):this.events.clear(),this}emit(e,...t){const s=this.events.get(e);if(!s||0===s.length)return!1;let n=!1;for(const e of s.slice())try{!0===e(...t)&&(n=!0)}catch(e){}return n}listeners(e){return this.events.get(e)||[]}listenerCount(e){return this.listeners(e).length}eventNames(){return Array.from(this.events.keys())}}
+/**
+ * Event emitter implementation for blessed elements
+ */
+export class EventEmitter {
+    constructor() {
+        this.events = new Map();
+    }
+    on(event, handler) {
+        if (!this.events.has(event)) {
+            this.events.set(event, []);
+        }
+        this.events.get(event).push(handler);
+        return this;
+    }
+    once(event, handler) {
+        const wrapper = (...args) => {
+            this.removeListener(event, wrapper);
+            return handler(...args);
+        };
+        return this.on(event, wrapper);
+    }
+    removeListener(event, handler) {
+        const handlers = this.events.get(event);
+        if (handlers) {
+            const index = handlers.indexOf(handler);
+            if (index !== -1) {
+                handlers.splice(index, 1);
+            }
+        }
+        return this;
+    }
+    removeAllListeners(event) {
+        if (event) {
+            this.events.delete(event);
+        }
+        else {
+            this.events.clear();
+        }
+        return this;
+    }
+    emit(event, ...args) {
+        const handlers = this.events.get(event);
+        if (!handlers || handlers.length === 0) {
+            return false;
+        }
+        let handled = false;
+        for (const handler of handlers.slice()) {
+            try {
+                if (handler(...args) === true) {
+                    handled = true;
+                }
+            }
+            catch (err) {
+            }
+        }
+        return handled;
+    }
+    listeners(event) {
+        return this.events.get(event) || [];
+    }
+    listenerCount(event) {
+        return this.listeners(event).length;
+    }
+    eventNames() {
+        return Array.from(this.events.keys());
+    }
+}
