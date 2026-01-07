@@ -116,8 +116,11 @@ export class DoorLifecycleManager {
   private watchAutoUpper: number = 0;
   private lastA5OutOfRangeLogged: number = 0;
   private lastA4ZeroLogged = false;
+  private firstInvalidPCLogged = false;
   private loggedAedoorPc = new Set<number>();
   private loggedAedoorPcCount = 0;
+  private lastA3 = 0;
+  private a3ChangeCount = 0;
 
   constructor(
     emulator: MoiraEmulator,
@@ -377,6 +380,19 @@ console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockS
       }
       // ========== END OVERCLOCKING SYSTEM ==========
 
+      // CRITICAL: Create AEDoorPort BEFORE door execution starts
+      // XIM doors check for this port at startup to detect BBS mode
+      // If port doesn't exist, doors print error banner and exit
+      const nodeId = this.config.bbsSession?.nodeId || 1;
+      const portName = `AEDoorPort${nodeId}`;
+      const existingPort = this.execLibrary.findPort(portName);
+      if (!existingPort) {
+        const portAddr = this.execLibrary.createPort(portName, 0);
+console.log(`[DoorLifecycleManager] Created ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
+      } else {
+console.log(`[DoorLifecycleManager] ${portName} already exists at 0x${existingPort.toString(16)}`);
+      }
+
       // Send the INIT/STAT startup messages so doors see the expected AEDoor handshake.
       await this.sendStartupMessage();
 
@@ -494,11 +510,65 @@ console.log(`[DoorLifecycleManager] Call tracking enabled`);
         const pc = this.emulator.getRegister(16);
         this.recordProgressByPc(pc);
         // Track recent PCs for crash diagnostics
+        const prevPC = this.lastPCs.length > 0 ? this.lastPCs[this.lastPCs.length - 1] : 0;
         this.lastPCs.push(pc);
         if (this.lastPCs.length > 8) {
           this.lastPCs.shift();
         }
       this.debugMonitor?.setLastPCs(this.lastPCs);
+
+      // TRACE: Detect first invalid PC and log what instruction caused it
+      if (!this.firstInvalidPCLogged &&
+          this.codeLowerBound !== 0 && this.codeUpperBound !== 0 &&
+          pc !== 0 &&
+          (pc < this.codeLowerBound || pc > this.codeUpperBound)) {
+        this.firstInvalidPCLogged = true;
+        const cpu = (this.emulator as any).cpu;
+        let prevInstr = '???';
+        if (cpu && cpu.nativeDisassemble) {
+          try {
+            prevInstr = cpu.nativeDisassemble(prevPC);
+          } catch {}
+        }
+        // Get all registers at time of failure
+        const d0 = this.emulator.getRegister(0);
+        const d1 = this.emulator.getRegister(1);
+        const d2 = this.emulator.getRegister(2);
+        const a0 = this.emulator.getRegister(8);
+        const a1 = this.emulator.getRegister(9);
+        const a2 = this.emulator.getRegister(10);
+        const a3 = this.emulator.getRegister(11);
+        const a4 = this.emulator.getRegister(12);
+        const a5 = this.emulator.getRegister(13);
+        const sp = this.emulator.getRegister(15);
+
+        console.error(
+          `[DoorLifecycleManager] FIRST INVALID PC DETECTED!\n` +
+          `  Previous PC: 0x${prevPC.toString(16)}\n` +
+          `  Instruction: ${prevInstr}\n` +
+          `  New PC: 0x${pc.toString(16)} (OUT OF BOUNDS)\n` +
+          `  Code region: 0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}\n` +
+          `  D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} D2=0x${d2.toString(16)}\n` +
+          `  A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} A2=0x${a2.toString(16)}\n` +
+          `  A3=0x${a3.toString(16)} A4=0x${a4.toString(16)} A5=0x${a5.toString(16)} SP=0x${sp.toString(16)}\n` +
+          `  This instruction caused the first jump outside code!`
+        );
+        // Read memory at prevPC to see the raw instruction bytes
+        try {
+          const opcode = this.emulator.readMemory16(prevPC);
+          const operand = this.emulator.readMemory32(prevPC + 2);
+          console.error(
+            `  Raw bytes: opcode=0x${opcode.toString(16)} operand=0x${operand.toString(16)}`
+          );
+        } catch {}
+        // If instruction involves A3, show what A3 points to
+        if (prevInstr.includes('A3')) {
+          console.error(
+            `  A3 is involved in the instruction!\n` +
+            `  A3 points to: 0x${a3.toString(16)}`
+          );
+        }
+      }
       this.debugMonitor?.checkPcProbes(pc, this.executionState.iterationCount);
       this.debugMonitor?.checkWatchedValues();
         if (process.env.DEBUG_68K_NATIVE === '1') {
@@ -754,6 +824,43 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
               );
             }
           }
+        }
+
+        // TRACE A3 CHANGES (to find what sets A3 to 0x90000)
+        const currentA3 = this.emulator.getRegister(11); // A3 is register 11
+        if (currentA3 !== this.lastA3) {
+          this.a3ChangeCount++;
+
+          // Log significant A3 changes (> 0x1000) or if A3 reaches suspicious values
+          const delta = currentA3 - this.lastA3;
+          const isSuspicious = (currentA3 >= 0x8F000 && currentA3 <= 0x91000);
+
+          if (Math.abs(delta) > 0x1000 || isSuspicious || this.a3ChangeCount < 20) {
+            try {
+              const cpu = (this.emulator as any).cpu;
+              let instr = '???';
+              if (cpu && cpu.nativeDisassemble) {
+                try {
+                  instr = cpu.nativeDisassemble(pcAfterBatch);
+                } catch {}
+              }
+
+              console.log(
+                `[A3 CHANGE #${this.a3ChangeCount}] PC=0x${pcAfterBatch.toString(16)} ` +
+                `A3: 0x${this.lastA3.toString(16)} -> 0x${currentA3.toString(16)} ` +
+                `(delta=${delta >= 0 ? '+' : ''}0x${delta.toString(16)}) ` +
+                `instr: ${instr}` +
+                (isSuspicious ? ' *** SUSPICIOUS VALUE ***' : '')
+              );
+
+              // Stop tracking after we hit 0x90000
+              if (currentA3 === 0x90000) {
+                console.log(`\n*** A3 = 0x90000 REACHED at PC=0x${pcAfterBatch.toString(16)} ***\n`);
+              }
+            } catch {}
+          }
+
+          this.lastA3 = currentA3;
         }
 
         // Generic stuck loop detection: detect ANY repeated identical PC jump pattern

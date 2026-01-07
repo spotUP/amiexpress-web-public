@@ -84,8 +84,21 @@ console.log(`  ${segInfo}`);
       }
     }
 
-    // Load segments into memory
-    hunkLoader.load(this.emulator, hunkFile);
+    // Load segments into memory (pass fileName for synthetic relocations)
+    hunkLoader.load(this.emulator, hunkFile, this.config.executablePath);
+
+    // CRITICAL: Allocate door Task structure AFTER door segments to avoid overlap
+    // Find the highest address used by door segments
+    let highestSegmentEnd = 0;
+    for (const seg of hunkFile.segments) {
+      const segEnd = seg.address + seg.size;
+      if (segEnd > highestSegmentEnd) {
+        highestSegmentEnd = segEnd;
+      }
+    }
+
+    // Allocate Task structure dynamically after door segments
+    this.execLibrary.allocateDoorTask(highestSegmentEnd);
 
 console.log(
       `[DoorLoader] Door loaded at entry point: 0x${hunkFile.entryPoint.toString(
@@ -286,7 +299,9 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
     write32(prCES, 2); // error -> stdout
     write32(prConsoleTask, 0);
     write32(prFileSystemTask, 0);
-    write32(prCLI, cliBptr);
+    // CRITICAL: XIM doors MUST have pr_CLI = NULL to indicate BBS mode, not CLI mode
+    // Non-XIM doors get a CLI structure so they can parse arguments properly
+    write32(prCLI, doorType === "XIM" ? 0 : cliBptr);
     // Route process return to the exit trap instead of the seglist header (DOS cleanup stub).
     write32(prReturnAddr, this.exitTrapAddress);
     write32(prPktWait, 0);
@@ -376,13 +391,20 @@ console.log(
       )} moduleBPTR=0x${segListBptr.toString(16)}`
     );
 
-    // Store pr_CLI BPTR into Task at offset 0xac
+    if (doorType === "XIM") {
+console.log(
+        `[DoorLoader] XIM door detected - setting pr_CLI = NULL (BBS mode, not CLI)`
+      );
+    }
+
+    // Store pr_CLI BPTR into Task at offset 0xac (already done above, but verify consistency)
     const execBase = this.execLibrary.getExecBaseAddress();
     const thisTaskPtr = this.emulator.readMemory32(execBase + 0x114); // pr_CurrentTask
     const prCLIOffset = 0xac;
-    this.emulator.writeMemory32(thisTaskPtr + prCLIOffset, cliBptr);
+    const finalPrCLI = doorType === "XIM" ? 0 : cliBptr;
+    this.emulator.writeMemory32(thisTaskPtr + prCLIOffset, finalPrCLI);
 console.log(
-      `[DoorLoader] Process set: pr_CLI=0x${cliBptr.toString(
+      `[DoorLoader] Process set: pr_CLI=0x${finalPrCLI.toString(
         16
       )} pr_SegList=0x${segListBptr.toString(
         16

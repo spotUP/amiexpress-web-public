@@ -693,7 +693,8 @@ console.log(
       return;
     }
 
-    const taskAddr = 0x090000; // Current task address (must match ExecLibrary)
+    // Get the dynamically allocated task address from ExecLibrary
+    const taskAddr = this.sharedState.execLibrary.getCurrentTaskAddress();
     const prCliOffset = 0xac; // pr_CLI offset inside struct Process
     // CLI structures at 0x110000+ to avoid overlap with door code (0x1000-0x100000)
     const cliStructAddr = 0x110000;
@@ -776,12 +777,15 @@ console.log(
     this.emulator.writeMemory32(cliStructAddr + 0x5c, localVarsListAddr >> 2); // cli_LocalVars (BPTR)
 
     const cliBPTR = cliStructAddr >> 2;
-    this.emulator.writeMemory32(taskAddr + prCliOffset, cliBPTR);
+
+    // CRITICAL: Do NOT write pr_CLI here! Task hasn't been allocated yet (address=0)
+    // DoorLoader will write pr_CLI after allocating the Task structure
+    const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
 
 console.log(
       `[AmigaDoorSession] Created CLI struct at 0x${cliStructAddr.toString(
         16
-      )} (pr_CLI=0x${cliBPTR.toString(16)})`
+      )} (cliBPTR=0x${cliBPTR.toString(16)}${isXimDoor ? " - XIM door, pr_CLI will be set to NULL by DoorLoader" : " - will be written to pr_CLI by DoorLoader"})`
     );
 console.log(
       `[AmigaDoorSession]   Command BSTR len=${cmdLine.length} at 0x${cmdLineAddr.toString(
@@ -790,7 +794,7 @@ console.log(
     );
 
     // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
-    const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
+    // Note: isXimDoor already defined above
     const cliArgsRaw = Array.isArray(this.config.args) ? this.config.args : [];
     let cliArgs: string[] = [];
     if (isXimDoor) {
@@ -815,7 +819,12 @@ console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
 
     // Restore pr_CLI if a door CreatePort() overwrites it
+    // CRITICAL: XIM doors MUST keep pr_CLI = 0 (BBS mode), so don't restore for them
     this.sharedState.execLibrary.setDoorInitCallback(() => {
+      // Don't restore pr_CLI for XIM doors - they need it to stay 0
+      if (isXimDoor) {
+        return;
+      }
       const currentValue = this.emulator?.readMemory32(taskAddr + prCliOffset) ?? 0;
       if (currentValue === 0) {
         this.emulator?.writeMemory32(taskAddr + prCliOffset, cliBPTR);
