@@ -886,11 +886,10 @@ export function createScreen(
       console.log(`[createScreen] Received screen:resize event: ${size.cols}x${size.rows}`);
       console.log(`[createScreen] Current screen size: ${screen.width}x${screen.height}`);
 
-      // CRITICAL: Immediately update dimensions to prevent rendering at wrong size
-      // This prevents blessed from outputting cursor positions beyond terminal width
-      (screen as any).width = size.cols;
-      (screen as any).height = size.rows;
-      console.log(`[createScreen] Force-updated dimensions: ${screen.width}x${screen.height}`);
+      // IMPORTANT: Do NOT force-update screen.width/height before calling resize()!
+      // The setters update _width/_height but don't reallocate buffers.
+      // This causes resize() to see dimensions already match and return early,
+      // leaving buffers at the old size - resulting in a black screen.
 
       console.log(`[createScreen] screen.resize is: ${typeof screen.resize}`);
       if (typeof screen.resize === 'function') {

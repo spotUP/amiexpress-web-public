@@ -11,7 +11,7 @@
 import { Box } from './box';
 import { Button } from './button';
 import { Overlay } from './overlay';
-import { makeModalResponsive } from '../utils/modal-helpers';
+import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
 
 export interface MessageOptions extends ElementOptions {
@@ -26,6 +26,7 @@ export class Message extends Box {
   private okButton: Button;
   private _overlay?: Overlay;
   private _responsiveCleanup?: () => void;
+  private _trapCleanup?: () => void;
 
   constructor(options: MessageOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -146,6 +147,16 @@ export class Message extends Box {
       this._responsiveCleanup = makeModalResponsive(this);
     }
 
+    // Trap input within modal (save focus state and push onto focus stack)
+    if (this.screen) {
+      this.screen.saveFocus?.();
+      this.screen.focusPush?.(this);
+      // Also trap navigation keys to prevent them from leaking to elements behind
+      if (!this._trapCleanup) {
+        this._trapCleanup = trapModalInput(this);
+      }
+    }
+
     this.show();
     this.setFront();
     this.okButton.focus();
@@ -157,23 +168,37 @@ export class Message extends Box {
   }
 
   /**
-   * Override hide to also hide overlay and cleanup responsive listener
+   * Override hide to also hide overlay and restore focus state
    */
   hide(): void {
     super.hide();
     if (this._overlay) {
       this._overlay.hide();
     }
-    // Don't cleanup responsive listener on hide - keep it for next show
+
+    // Restore focus state when modal is hidden
+    if (this.screen) {
+      this.screen.restoreFocus?.();
+    }
+
+    // Cleanup trap handlers
+    if (this._trapCleanup) {
+      this._trapCleanup();
+      this._trapCleanup = undefined;
+    }
   }
 
   /**
-   * Override destroy to cleanup responsive listener
+   * Override destroy to cleanup responsive listener and trap handlers
    */
   destroy(): void {
     if (this._responsiveCleanup) {
       this._responsiveCleanup();
       this._responsiveCleanup = undefined;
+    }
+    if (this._trapCleanup) {
+      this._trapCleanup();
+      this._trapCleanup = undefined;
     }
     super.destroy();
   }

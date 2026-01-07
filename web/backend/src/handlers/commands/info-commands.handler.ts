@@ -1153,7 +1153,9 @@ console.log(`[W Command] Modem emulation disabled (full speed)`);
   }
 
   // Send updated modem speed to frontend for client-side emulation
+  // Also track in session so doors can query it via bbs.getModemSpeed()
 console.log(`[W Command] Emitting modem-speed event with bps=${bps}`);
+  (session as any).modemSpeed = bps;
   socket.emit('modem-speed', bps);
 console.log(`[W Command] modem-speed event emitted`);
 

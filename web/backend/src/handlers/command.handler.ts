@@ -1106,7 +1106,9 @@ console.log(`[LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.usern
 
           // Send modem speed to frontend for client-side emulation (web terminal only)
           // Telnet uses server-side throttling, web terminal needs client-side throttling
+          // Also track in session so doors can query it via bbs.getModemSpeed()
 console.log(`[LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
+          (session as any).modemSpeed = userBaud;
           socket.emit('modem-speed', userBaud);
 console.log(`[LOGIN] modem-speed event emitted`);
 

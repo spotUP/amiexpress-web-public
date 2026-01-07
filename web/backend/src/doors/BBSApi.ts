@@ -416,6 +416,50 @@ console.log('[BBSApi] Mouse events disabled');
     this.setTerminalMode('fixed');
   }
 
+  // ===== Modem Emulation =====
+
+  /**
+   * Get current modem emulation speed in bps
+   * Returns 0 if modem emulation is disabled (full speed)
+   */
+  getModemSpeed(): number {
+    return (this.session as any).modemSpeed || 0;
+  }
+
+  /**
+   * Set modem emulation speed
+   * @param bps Baud rate (e.g., 2400, 9600, 14400). Use 0 to disable emulation (full speed)
+   */
+  setModemSpeed(bps: number): void {
+    (this.session as any).modemSpeed = bps;
+
+    // Update backend modem emulator (the one that wraps socket.emit)
+    const { getModemEmulator } = require('../utils/modem-emulator.util');
+    const modemEmulator = getModemEmulator(this.socket);
+    if (bps > 0) {
+      modemEmulator.enable(bps);
+    } else {
+      modemEmulator.disable();
+    }
+
+    // Notify frontend modem emulator as well
+    this.socket.emit('modem-speed', bps);
+  }
+
+  /**
+   * Disable modem emulation (full speed)
+   */
+  disableModemEmulation(): void {
+    this.setModemSpeed(0);
+  }
+
+  /**
+   * Check if modem emulation is active
+   */
+  isModemEmulationActive(): boolean {
+    return this.getModemSpeed() > 0;
+  }
+
   /**
    * Check if a key is currently pressed (game mode only)
    * @param key Key to check (e.g., 'ArrowLeft', 'a', 'space')

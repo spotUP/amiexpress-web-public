@@ -126,24 +126,35 @@ export function createModalBackdrop(screen: Screen, opacity: number = 0.5): {
 }
 
 /**
- * Show a modal with backdrop and centered positioning
+ * Show a modal with backdrop, centered positioning, and input trapping
+ *
+ * Input trapping ensures keyboard events don't leak to elements behind the modal.
+ * This is critical for modals shown over lists/tables that have their own key handlers.
  */
 export function showModal(modal: Element, options: {
   backdrop?: boolean;
   backdropOpacity?: number;
   onClose?: () => void;
+  trapInput?: boolean;  // Default true - trap keyboard input within modal
 } = {}): () => void {
   if (!modal || !modal.screen) {
     return () => {};
   }
 
-  const { backdrop = true, backdropOpacity = 0.5, onClose } = options;
+  const { backdrop = true, backdropOpacity = 0.5, onClose, trapInput = true } = options;
   const cleanups: Array<() => void> = [];
+  const screen = modal.screen;
+
+  // Save focus state before showing modal
+  let savedFocus: Element | null = null;
+  if (trapInput && screen.saveFocus) {
+    savedFocus = screen.saveFocus();
+  }
 
   // Create backdrop if requested
   let overlayElement: Element | null = null;
   if (backdrop) {
-    const { overlay, cleanup } = createModalBackdrop(modal.screen, backdropOpacity);
+    const { overlay, cleanup } = createModalBackdrop(screen, backdropOpacity);
     overlayElement = overlay;
     overlay.show();
     cleanups.push(cleanup);
@@ -153,11 +164,16 @@ export function showModal(modal: Element, options: {
   const responsiveCleanup = makeModalResponsive(modal);
   cleanups.push(responsiveCleanup);
 
+  // Push modal onto focus stack to trap input
+  if (trapInput && screen.focusPush) {
+    screen.focusPush(modal);
+  }
+
   // Show modal
   modal.show();
   (modal as any).setFront?.();
   (modal as any).focus?.();
-  modal.screen.render();
+  screen.render();
 
   // Close handler
   const handleClose = () => {
@@ -165,8 +181,14 @@ export function showModal(modal: Element, options: {
     if (overlayElement) {
       overlayElement.hide();
     }
+
+    // Restore focus state
+    if (trapInput && screen.restoreFocus) {
+      screen.restoreFocus();
+    }
+
     cleanups.forEach(fn => fn());
-    modal.screen?.render();
+    screen?.render();
     onClose?.();
   };
 
@@ -176,9 +198,37 @@ export function showModal(modal: Element, options: {
 
   // Return cleanup function
   return () => {
+    if (trapInput && screen.restoreFocus) {
+      screen.restoreFocus();
+    }
     cleanups.forEach(fn => fn());
     if (overlayElement) {
       overlayElement.hide();
     }
+  };
+}
+
+/**
+ * Trap keyboard navigation keys within a modal element
+ *
+ * Call this on a modal to prevent arrow keys, page up/down, home/end from
+ * reaching elements behind the modal.
+ */
+export function trapModalInput(modal: Element): () => void {
+  const keysToTrap = ['up', 'down', 'pageup', 'pagedown', 'home', 'end'];
+  const handlers: Array<() => void> = [];
+
+  keysToTrap.forEach(key => {
+    const handler = () => {
+      // Do nothing - absorb the key
+    };
+    (modal as any).key?.([key], handler);
+    handlers.push(() => {
+      (modal as any).unkey?.([key], handler);
+    });
+  });
+
+  return () => {
+    handlers.forEach(fn => fn());
   };
 }

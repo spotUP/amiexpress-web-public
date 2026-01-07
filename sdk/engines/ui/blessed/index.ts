@@ -703,4 +703,4 @@ export default {
 
 // Modal Helpers - Utilities for centering and managing modals
 export * as modalHelpers from './utils/modal-helpers';
-export { centerElement, makeModalResponsive, createModalBackdrop, showModal } from './utils/modal-helpers';
+export { centerElement, makeModalResponsive, createModalBackdrop, showModal, trapModalInput } from './utils/modal-helpers';

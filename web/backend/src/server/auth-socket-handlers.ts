@@ -140,7 +140,9 @@ console.error('[Session Restore] Failed to load command history:', err);
         }
 
         // Send modem speed to frontend for client-side emulation
+        // Also track in session so doors can query it via bbs.getModemSpeed()
         console.log(`[SESSION RESTORE] Emitting modem-speed event with userBaud=${userBaud}`);
+        (session as any).modemSpeed = userBaud;
         socket.emit('modem-speed', userBaud);
         console.log(`[SESSION RESTORE] modem-speed event emitted`);
 
@@ -453,7 +455,9 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
       }
 
       // Send modem speed to frontend for client-side emulation (web terminal only)
+      // Also track in session so doors can query it via bbs.getModemSpeed()
       console.log(`[WEB LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
+      (session as any).modemSpeed = userBaud;
       socket.emit('modem-speed', userBaud);
       console.log(`[WEB LOGIN] modem-speed event emitted`);
 

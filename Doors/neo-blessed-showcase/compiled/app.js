@@ -2253,7 +2253,19 @@ End of sample markdown.`;
                 if (currentDemo === 'webcam' && !isRendering && !isSwitchingStream) {
                     isRendering = true;
                     if (isFullscreen) {
+                        // CRITICAL: Ensure fullscreenBox covers entire screen on EVERY frame
+                        // This prevents coordinate cache issues from causing alternating small renders
+                        const w = screen.width || 80;
+                        const h = screen.height || 24;
+                        // Always reset ALL position/size properties to prevent blessed coordinate cache issues
+                        fullscreenBox.top = 0;
+                        fullscreenBox.left = 0;
+                        fullscreenBox.width = w;
+                        fullscreenBox.height = h;
+                        // Clear blessed's internal position cache to force recalculation
+                        fullscreenBox._lpos = null;
                         fullscreenBox.setContent(frame);
+                        fullscreenBox.setFront(); // Ensure it stays on top
                     }
                     else {
                         webcamBox.setContent(frame);
@@ -2367,7 +2379,110 @@ End of sample markdown.`;
             mouse: false, // Disable mouse events
             style: { bg: 'black' },
         });
+        // Helper to show modem speed warning modal
+        const showModemWarningModal = () => {
+            return new Promise((resolve) => {
+                // Save current focus and lock screen keys to trap input in modal
+                const savedFocus = screen.saveFocus();
+                const modal = blessed_1.default.box({
+                    parent: screen,
+                    top: 'center',
+                    left: 'center',
+                    width: 60,
+                    height: 12,
+                    border: { type: 'line' },
+                    style: {
+                        fg: 'white',
+                        bg: 'black',
+                        border: { fg: 'yellow' },
+                    },
+                    tags: true,
+                    shadow: true,
+                });
+                const message = blessed_1.default.box({
+                    parent: modal,
+                    top: 1,
+                    left: 2,
+                    right: 2,
+                    height: 5,
+                    tags: true,
+                    content: '{yellow-fg}Warning:{/} Modem emulation is active.\n\n' +
+                        'Fullscreen video requires full speed to render\n' +
+                        'smoothly. Disable modem emulation?',
+                    style: { fg: 'white', bg: 'black' },
+                });
+                const okButton = blessed_1.default.button({
+                    parent: modal,
+                    bottom: 1,
+                    left: 10,
+                    width: 16,
+                    height: 3,
+                    content: '{center}[ OK ]{/center}',
+                    tags: true,
+                    mouse: true,
+                    keys: true,
+                    style: {
+                        fg: 'white',
+                        bg: 'green',
+                        focus: { fg: 'black', bg: 'lightgreen' },
+                    },
+                });
+                const cancelButton = blessed_1.default.button({
+                    parent: modal,
+                    bottom: 1,
+                    right: 10,
+                    width: 16,
+                    height: 3,
+                    content: '{center}[ Cancel ]{/center}',
+                    tags: true,
+                    mouse: true,
+                    keys: true,
+                    style: {
+                        fg: 'white',
+                        bg: 'red',
+                        focus: { fg: 'black', bg: 'lightred' },
+                    },
+                });
+                const cleanup = (result) => {
+                    modal.destroy();
+                    screen.restoreFocus();
+                    screen.render();
+                    resolve(result);
+                };
+                okButton.on('press', () => cleanup(true));
+                cancelButton.on('press', () => cleanup(false));
+                // Handle Enter key
+                okButton.key(['enter', 'space'], () => cleanup(true));
+                cancelButton.key(['enter', 'space'], () => cleanup(false));
+                // Handle Escape to cancel
+                modal.key(['escape'], () => cleanup(false));
+                // Tab/arrow between buttons
+                okButton.key(['tab', 'right'], () => cancelButton.focus());
+                cancelButton.key(['tab', 'left'], () => okButton.focus());
+                okButton.key(['left'], () => cancelButton.focus());
+                cancelButton.key(['right'], () => okButton.focus());
+                // Block other keys from reaching elements behind the modal
+                modal.key(['up', 'down', 'pageup', 'pagedown', 'home', 'end'], () => {
+                    // Do nothing - absorb these keys
+                });
+                // Focus the modal and OK button
+                screen.focusPush(modal);
+                okButton.focus();
+                screen.render();
+            });
+        };
         const toggleFullscreen = async () => {
+            // Check if trying to ENTER fullscreen while modem emulation is active
+            if (!isFullscreen && bbs.isModemEmulationActive?.()) {
+                const disableModem = await showModemWarningModal();
+                if (disableModem) {
+                    bbs.disableModemEmulation?.();
+                }
+                else {
+                    // User cancelled - don't enter fullscreen
+                    return;
+                }
+            }
             isFullscreen = !isFullscreen;
             if (isFullscreen) {
                 // Hide all UI elements for true fullscreen
@@ -2421,9 +2536,29 @@ End of sample markdown.`;
                 // Disable wide mode to return to 80x24
                 console.log(`[Normal] Disabling wide mode...`);
                 console.log(`[Normal] Screen before disableWideMode: ${screen.width}x${screen.height}`);
+                // Create a promise that resolves on resize or timeout (same pattern as entering fullscreen)
+                const resizePromise = new Promise((resolve) => {
+                    let resolved = false;
+                    const onResize = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    };
+                    screen.on('resize', onResize);
+                    // Timeout fallback in case resize doesn't fire
+                    setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    }, 800);
+                });
                 bbs.disableWideMode?.();
-                // Wait for terminal to resize back to 80x24
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await resizePromise;
+                console.log(`[Normal] Screen after resize: ${screen.width}x${screen.height}`);
                 if (screen.program)
                     screen.program.showCursor();
                 fullscreenBox.hide();
@@ -2432,8 +2567,9 @@ End of sample markdown.`;
                 menuBox.show();
                 demoBox.show();
                 statusBar.show();
+                // Force full redraw to clear any artifacts from the larger screen
+                screen.forceFullRedraw();
                 screen.render();
-                console.log(`[Normal] Screen after 300ms delay: ${screen.width}x${screen.height}`);
                 console.log(`[Normal] Starting video stream in normal mode...`);
                 // startVideoStream will handle stopping old stream and starting new one
                 await startVideoStream();
@@ -2479,31 +2615,102 @@ End of sample markdown.`;
                 screen.render();
             }
         });
-        // ESC to exit fullscreen AND stop video (return to menu)
-        screen.key(['escape', 'q'], async () => {
+        // ESC to exit fullscreen (return to webcam demo in normal mode)
+        // Q to quit webcam demo entirely and return to menu
+        screen.key(['escape'], async () => {
             if (isFullscreen) {
-                // Stop the video stream completely
-                if (videoService && activeStreamId) {
-                    try {
-                        await videoService.stopStream(activeStreamId);
-                        activeStreamId = null;
-                    }
-                    catch (err) {
-                        // Ignore errors from stopping
-                    }
-                }
-                // Exit fullscreen mode
+                // Exit fullscreen but keep webcam running in normal mode
+                console.log(`[ESC] Exiting fullscreen, returning to normal webcam view...`);
+                // Create a promise that resolves on resize or timeout
+                const resizePromise = new Promise((resolve) => {
+                    let resolved = false;
+                    const onResize = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    };
+                    screen.on('resize', onResize);
+                    setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    }, 800);
+                });
                 isFullscreen = false;
                 fullscreenBox.hide();
                 bbs.disableWideMode?.();
-                // Wait for terminal to resize back to 80x25
-                await new Promise(resolve => setTimeout(resolve, 300));
-                // Return to demo selection menu
-                demoBox.hide();
-                menuList.show();
-                menuList.focus();
+                await resizePromise;
+                console.log(`[ESC] Screen after resize: ${screen.width}x${screen.height}`);
+                // Restore cursor
+                if (screen.program)
+                    screen.program.showCursor();
+                // Restore all UI elements
+                headerBar.show();
+                menuBox.show();
+                demoBox.show(); // Keep demoBox visible with webcam
+                statusBar.show();
+                // Force full redraw to clear any artifacts from the larger screen
+                screen.forceFullRedraw();
                 screen.render();
+                // Restart stream in normal (non-fullscreen) mode
+                await startVideoStream();
             }
+        });
+        // Q to quit webcam demo entirely and return to menu
+        screen.key(['q'], async () => {
+            // Stop the video stream completely
+            if (videoService && activeStreamId) {
+                try {
+                    await videoService.stopStream(activeStreamId);
+                    activeStreamId = null;
+                }
+                catch (err) {
+                    // Ignore errors from stopping
+                }
+            }
+            if (isFullscreen) {
+                // Exit fullscreen first
+                console.log(`[Q] Quitting webcam demo from fullscreen...`);
+                const resizePromise = new Promise((resolve) => {
+                    let resolved = false;
+                    const onResize = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    };
+                    screen.on('resize', onResize);
+                    setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            screen.removeListener('resize', onResize);
+                            resolve();
+                        }
+                    }, 800);
+                });
+                isFullscreen = false;
+                fullscreenBox.hide();
+                bbs.disableWideMode?.();
+                await resizePromise;
+                if (screen.program)
+                    screen.program.showCursor();
+            }
+            // Restore all UI elements
+            headerBar.show();
+            menuBox.show();
+            statusBar.show();
+            // Return to demo selection menu
+            demoBox.hide();
+            menuList.show();
+            menuList.focus();
+            // Force full redraw
+            screen.forceFullRedraw();
+            screen.render();
         });
         // Resize handler - update fullscreen box and restart stream
         screen.on('resize', () => {
