@@ -8,6 +8,7 @@
 
 import { Socket } from 'socket.io';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -659,7 +660,7 @@ console.log('✅ [CHAT MESSAGE] Message saved to database');
 
     // Broadcast message to room (both users)
     const roomName = `chat:${session.chatSessionId}`;
-    const timestamp = new Date().toLocaleTimeString('en-US', {
+    const timestamp = getSystemTime().toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false

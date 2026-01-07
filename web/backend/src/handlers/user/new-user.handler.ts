@@ -23,6 +23,7 @@ import { userFileManager } from '../../services/UserFileManager';
 import { emitUserLogin } from '../../services/bbs-event-emitter';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
+import { getSystemTime } from '../../utils/date-time.util';
 
 // Dependencies (injected from index.ts)
 let db: any;
@@ -1011,7 +1012,7 @@ async function persistQuestionnaireAnswers(session: any): Promise<void> {
     amigafs.mkdirSync(nodeDir, { recursive: true });
   }
 
-  const now = new Date();
+  const now = getSystemTime();
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toTimeString().split(' ')[0];
   const header: string[] = [
@@ -1125,7 +1126,7 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
     }
 
     // Create user in database
-    const now = new Date();
+    const now = getSystemTime();
     const newUserId = await db.createUser({
       username: data.username,
       passwordHash: passwordHash,

@@ -8,6 +8,8 @@ import { AmigaFileCache } from "./AmigaFileCache";
 import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
+import { initializeENVFiles } from "../utils/env-initializer";
+import { getSystemTime } from '../../utils/date-time.util';
 
 // ========== File Operation Debugging ==========
 // Set DEBUG_FILE_OPS=1 to log all file operations (Open, Close, Read, Write, Lock, etc.)
@@ -329,6 +331,16 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
       secLevel
     );
 
+    // Initialize ENV: device files (Lock/Open/Read access)
+    // This creates files like ENV:JC_PWFAIL.*, ENV:STATS@*, etc.
+    // that many Amiga doors expect to find on disk
+    initializeENVFiles('/tmp/ram/ENV', {
+      nodeId,
+      totalNodes: 8,
+      bbsName: 'AmiExpress Web BBS',
+      sysop: 'Sysop'
+    });
+
 console.log(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
   }
 
@@ -338,7 +350,7 @@ console.log(`[DosLibrary] Environment variables initialized for node ${nodeId}`)
   private logDoorFile(message: string): void {
     try {
       const logFile = path.join(this.rootPath, "logs", "backend.log");
-      const line = `[DoorFile] ${new Date().toISOString()} ${message}\n`;
+      const line = `[DoorFile] ${getSystemTime().toISOString()} ${message}\n`;
       fs.appendFileSync(logFile, line, { encoding: "utf8" });
     } catch {
       /* ignore logging failures */
@@ -1558,7 +1570,7 @@ console.log(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
     const dateStampPtr = this.emulator.getRegister(CPURegister.D1);
 
     // Get current local time
-    const now = new Date();
+    const now = getSystemTime();
 
     // Calculate days since Jan 1, 1978 (Local)
     const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -5073,7 +5085,7 @@ console.log(
     );
 
     // Default to current date/time if parsing fails
-    const now = new Date();
+    const now = getSystemTime();
     let year = now.getFullYear();
     let month = now.getMonth() + 1;
     let day = now.getDate();

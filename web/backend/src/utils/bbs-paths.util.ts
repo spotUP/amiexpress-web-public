@@ -168,26 +168,30 @@ export class BBSPaths {
     }
 
     // DOORS: assign
-    if (amigaPath.startsWith('DOORS:') || amigaPath.startsWith('Doors:')) {
-      const subpath = amigaPath.substring(6).replace(/\//g, path.sep);
+    const doorsMatch = amigaPath.match(/^DOORS:(.*)$/i);
+    if (doorsMatch) {
+      const subpath = doorsMatch[1].replace(/\//g, path.sep);
       return path.join(this.doors(), subpath);
     }
 
     // BBS: assign
-    if (amigaPath.startsWith('BBS:')) {
-      const subpath = amigaPath.substring(4).replace(/\//g, path.sep);
+    const bbsMatch = amigaPath.match(/^BBS:(.*)$/i);
+    if (bbsMatch) {
+      const subpath = bbsMatch[1].replace(/\//g, path.sep);
       return path.join(this.bbs(), subpath);
     }
 
     // PROGDIR: assign (door's own directory)
-    if ((amigaPath.startsWith('PROGDIR:') || amigaPath.startsWith('ProgDir:')) && doorName) {
-      const subpath = amigaPath.substring(8).replace(/\//g, path.sep);
+    const progMatch = amigaPath.match(/^PROGDIR:(.*)$/i);
+    if (progMatch && doorName) {
+      const subpath = progMatch[1].replace(/\//g, path.sep);
       return path.join(this.doors(doorName), subpath);
     }
 
     // S: assign (system directory)
-    if (amigaPath.startsWith('S:')) {
-      const subpath = amigaPath.substring(2).replace(/\//g, path.sep);
+    const sysMatch = amigaPath.match(/^S:(.*)$/i);
+    if (sysMatch) {
+      const subpath = sysMatch[1].replace(/\//g, path.sep);
       return path.join(this.system(), subpath);
     }
 

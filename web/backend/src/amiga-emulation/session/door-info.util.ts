@@ -1,4 +1,5 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
+import { getSystemTime } from '../../utils/date-time.util';
 
 /**
  * Populate DoorInfo and NodeStatus blocks similarly to AEDoor.library for XIM doors.
@@ -58,7 +59,7 @@ export function populateDoorInfoStructs(
     const sysopName = opts.sysopName || "Sysop";
 
     // Format current date and time
-    const now = new Date();
+    const now = getSystemTime();
     const dateStr = `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear()}`;
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 

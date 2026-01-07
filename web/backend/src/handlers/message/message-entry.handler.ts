@@ -16,6 +16,7 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.
 import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
 
 
 // Dependencies (injected from index.ts)
@@ -388,7 +389,7 @@ async function saveMessage(socket: any, session: BBSSession): Promise<void> {
   try {
     // Create message object
     const messageBody = entry.body.join('\n');
-    const messageDate = new Date();
+    const messageDate = getSystemTime();
 
     const message = {
       subject: entry.subject,
@@ -1098,7 +1099,7 @@ async function saveForwardedMessage(socket: any, session: BBSSession, deleteOrig
       subject: forwardData.subject,
       body: originalMsg.body, // Copy original message body
       author: session.user.username,
-      timestamp: new Date(),
+      timestamp: getSystemTime(),
       conferenceId: originalMsg.conferenceId,
       messageBaseId: originalMsg.messageBaseId,
       isPrivate: forwardData.isPrivate,
@@ -1315,7 +1316,7 @@ function displayFileInfo(socket: any, filename: string, stats: any): void {
     : AnsiUtil.colorize(String(stats.size).padStart(8), 'white');
 
   // Format modification date/time (express.e:8327-8332, 8339-8340)
-  const mtime = stats.mtime || new Date();
+  const mtime = stats.mtime || getSystemTime();
   const dateStr = `${String(mtime.getMonth() + 1).padStart(2, '0')}/${String(mtime.getDate()).padStart(2, '0')}/${String(mtime.getFullYear()).substring(2)}`;
   const timeStr = `${String(mtime.getHours()).padStart(2, '0')}:${String(mtime.getMinutes()).padStart(2, '0')}:${String(mtime.getSeconds()).padStart(2, '0')}`;
 

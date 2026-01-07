@@ -11,6 +11,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
 import { UserFileManager } from './UserFileManager';
+import { getSystemTime } from '../utils/date-time.util';
 import type {
   AmigaBBSArchive,
   AmigaUserData,
@@ -115,7 +116,7 @@ console.log('[AmigaParser] Using BBS root:', bbsRoot);
       archiveFormat,
       archivePath,
       extractedPath,
-      importDate: new Date(),
+      importDate: getSystemTime(),
     };
 
     // Parse users
@@ -745,7 +746,7 @@ console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
   private finalizeCallersLogEntry(entry: Partial<AmigaCallersLogEntry>): AmigaCallersLogEntry {
     return {
       username: entry.username || 'Unknown',
-      loginTime: entry.loginTime || new Date(),
+      loginTime: entry.loginTime || getSystemTime(),
       logoffTime: entry.logoffTime,
       duration: entry.duration || 0,
       uploaded: entry.uploaded || 0,
@@ -784,7 +785,7 @@ console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
         parseInt(second, 10)
       );
     } catch (error) {
-      return new Date();
+      return getSystemTime();
     }
   }
 

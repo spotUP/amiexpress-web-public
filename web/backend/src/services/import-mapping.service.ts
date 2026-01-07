@@ -9,6 +9,7 @@
  */
 
 import * as crypto from 'crypto';
+import { getSystemTime } from '../utils/date-time.util';
 import type { User } from '../types';
 import type { Conference } from '../database/types';
 import type {
@@ -55,7 +56,7 @@ export class ImportMappingService {
 
       // Login tracking
       lastLogin: amigaUser.lastLogin || undefined,
-      firstLogin: amigaUser.firstLogin || new Date(),
+      firstLogin: amigaUser.firstLogin || getSystemTime(),
       calls: amigaUser.calls || 0,
       callsToday: amigaUser.callsToday || 0,
 
@@ -88,8 +89,8 @@ export class ImportMappingService {
       byteLimit: amigaUser.byteLimit || 0,
 
       // Timestamps
-      created: new Date(),
-      updated: new Date(),
+      created: getSystemTime(),
+      updated: getSystemTime(),
     };
   }
 
@@ -101,8 +102,8 @@ export class ImportMappingService {
     return {
       name: this.sanitizeConferenceName(amigaConf.database.conferenceName),
       description: this.generateConferenceDescription(amigaConf),
-      created: new Date(),
-      updated: new Date(),
+      created: getSystemTime(),
+      updated: getSystemTime(),
     };
   }
 
@@ -423,7 +424,7 @@ export class ImportMappingService {
         // Keep existing name
         name: existing.name,
         // Preserve updated timestamp
-        updated: new Date(),
+        updated: getSystemTime(),
       },
       // Import file areas that don't exist
       importFileAreas: imported.fileAreas.map(area => ({

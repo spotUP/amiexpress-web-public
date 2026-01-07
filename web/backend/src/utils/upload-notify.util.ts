@@ -10,6 +10,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { runExecuteOn } from '../services/batch-scheduler';
 import { mailOnUpload } from '../services/mail-notification.service';
+import { getSystemTime } from '../utils/date-time.util';
 
 function resolveSysopStatsDir(bbsDataPath: string): string {
   const rootDir = path.join(bbsDataPath, 'SysopStats');
@@ -133,7 +134,7 @@ console.log(`[UploadNotify] Upload event triggered for ${username}`);
         await webhookService.sendWebhook('new_upload', {
           username,
           location,
-          timestamp: new Date().toISOString(),
+          timestamp: getSystemTime().toISOString(),
         });
 console.log(`[UploadNotify] NEW_UPLOAD webhook triggered`);
       } catch (webhookError: any) {

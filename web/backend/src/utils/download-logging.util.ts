@@ -10,6 +10,7 @@ import * as path from 'path';
 import { User } from '../types';
 import { getACSConfig, LevelFlags } from './acs.util';
 import { config } from '../config';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * Log download activity
@@ -29,7 +30,7 @@ export async function logDownload(
 ): Promise<void> {
 
   const username = user.username || 'Unknown';
-  const timestamp = new Date().toISOString();
+  const timestamp = getSystemTime().toISOString();
 
   // express.e:9478 - Format log message
   const message = isFree
@@ -66,7 +67,7 @@ export async function logUpload(
 ): Promise<void> {
 
   const username = user.username || 'Unknown';
-  const timestamp = new Date().toISOString();
+  const timestamp = getSystemTime().toISOString();
 
   // express.e:9484 - Format upload message
   const message = isResume

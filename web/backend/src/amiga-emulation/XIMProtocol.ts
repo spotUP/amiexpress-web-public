@@ -119,9 +119,12 @@ console.log(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`)
       language: this.bbsSession?.language || 'txt',
       // confAccess is read from disk files (user.data) by door.handler.ts
       // Do NOT fall back to bbsSession.user.confAccess - that's SQLite data
-      confAccess: this.bbsSession?.confAccess || '',
+      // Default to full access (25 conferences) if not set
+      confAccess: this.bbsSession?.confAccess || 'XXXXXXXXXXXXXXXXXXXXXXXXX',
       carrierDropped: false,
       rawArrow: false,  // Default: convert arrow escape sequences to internal codes
+      transfering: false,  // File transfer in progress flag (express.e:3383)
+      doorSilent: false,   // Silent door output flag (express.e:3383)
       returnCommand: this.bbsSession?.returnCommand,
       prvCommand: undefined,
       chainCommand: undefined,

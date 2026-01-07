@@ -11,6 +11,7 @@ import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getSystemTime } from '../utils/date-time.util';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -25,7 +26,7 @@ const sysop = requireSysop();
 router.get('/deployment/health', auth, sysop, async (req: Request, res: Response) => {
   try {
     const healthStatus = {
-      timestamp: new Date().toISOString(),
+      timestamp: getSystemTime().toISOString(),
       overall: 'healthy',
       checks: {
         environment: await checkEnvironment(),

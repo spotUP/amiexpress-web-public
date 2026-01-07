@@ -3,6 +3,7 @@ import * as path from 'path';
 import Zmodem = require('zmodem.js');
 import { BBSSession } from '../index';
 import { BBSSessionData } from '../amiga-emulation/xim/types';
+import { getSystemTime } from '../utils/date-time.util';
 
 export type TransferDirection = 'download' | 'upload';
 
@@ -146,7 +147,7 @@ console.warn('[ZMODEM] Unknown session role:', role);
         const offer = await zsession.send_offer({
           name: basename,
           size: entry.stat.size,
-          mtime: entry.stat.mtime || new Date(),
+          mtime: entry.stat.mtime || getSystemTime(),
           mode: entry.stat.mode || 0o644,
           files_remaining: filesRemaining,
           bytes_remaining: bytesRemaining,

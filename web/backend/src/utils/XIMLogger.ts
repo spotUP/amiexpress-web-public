@@ -22,6 +22,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 export type XIMMessageType =
   | 'JH_INIT' | 'JH_STAT' | 'JH_TERMINATE' | 'JH_HK' | 'JH_SM'
@@ -140,10 +141,14 @@ console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
   }
 
   /**
-   * Get Unix timestamp in seconds (matches Amiga DateStamp format)
+   * Get Unix timestamp in Amiga CONSOLE_DEBUG format (seconds.hundredths)
+   * Real Amiga format: 1767759268.21 (10 digits . 2 digits)
    */
-  private getAmigaTimestamp(): number {
-    return Math.floor(Date.now() / 1000);
+  private getAmigaTimestamp(): string {
+    const now = Date.now();
+    const seconds = Math.floor(now / 1000);
+    const hundredths = Math.floor((now % 1000) / 10); // 0-99
+    return `${seconds}.${hundredths.toString().padStart(2, '0')}`;
   }
 
   /**
@@ -231,7 +236,7 @@ console.error('[XIMLogger] Failed to initialize Amiga log stream:', err);
     if (level === 'error') this.errorCount++;
 
     const entry: XIMLogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: getSystemTime().toISOString(),
       level,
       direction,
       door,

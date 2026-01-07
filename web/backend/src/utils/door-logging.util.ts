@@ -1,6 +1,7 @@
 import { appendFileSync } from 'fs';
 import * as path from 'path';
 import { XIMCommand, XIMMessage } from '../amiga-emulation/xim/types';
+import { getSystemTime } from '../utils/date-time.util';
 
 const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 const doorLogPath = path.join(projectRoot, 'logs', 'door-68k.log');
@@ -22,7 +23,7 @@ function sanitizeString(value: string | undefined | null): string {
 }
 
 export function logDoorMessage(msg: XIMMessage, commandName?: string) {
-  const timestamp = new Date().toISOString();
+  const timestamp = getSystemTime().toISOString();
   const resolvedName =
     commandName ??
     XIMCommand[msg.command] ??

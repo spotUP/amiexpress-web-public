@@ -5,6 +5,7 @@ import path from 'path';
 import { config } from '../config';
 import { doorApiRouter } from '../doors/door-api-routes';
 import { deploymentRouter } from '../api/deployment-routes';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * Express Application Setup
@@ -64,7 +65,7 @@ app.use((req: Request & { originalUrl?: string; ip?: string }, res: Response, ne
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const line = `[ACCESS] ${new Date().toISOString()} ${req.ip || (req as any).socket?.remoteAddress || '-'} ${req.method} ${req.originalUrl || req.url} ${res.statusCode} ${duration}ms\n`;
+    const line = `[ACCESS] ${getSystemTime().toISOString()} ${req.ip || (req as any).socket?.remoteAddress || '-'} ${req.method} ${req.originalUrl || req.url} ${res.statusCode} ${duration}ms\n`;
     accessStream.write(line);
   });
   next();
@@ -75,7 +76,7 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: getSystemTime().toISOString() });
 });
 
 app.get('/api', (req, res) => {
@@ -93,7 +94,7 @@ const errorLogPath = path.join(logsDir, 'error.log');
 app.use(
   (err: any, req: Request & { originalUrl?: string }, res: Response, next: NextFunction) => {
     try {
-      const line = `[ERROR] ${new Date().toISOString()} ${req.method} ${req.originalUrl || req.url} ${err?.message || err}\n`;
+      const line = `[ERROR] ${getSystemTime().toISOString()} ${req.method} ${req.originalUrl || req.url} ${err?.message || err}\n`;
       fs.appendFileSync(errorLogPath, line, { encoding: 'utf8' });
     } catch (_) {
       /* ignore logging failures */

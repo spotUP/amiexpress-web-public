@@ -47,6 +47,7 @@ import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
 import { emitUserLogout } from '../services/bbs-event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 const DISCONNECT_GRACE_MS = 15000;
 
@@ -295,7 +296,7 @@ console.error('[SOCKET HANDLER ERROR] Failed to load audio-video.handler:', err)
 function logDoorDebug(message: string) {
   try {
     const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-    const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+    const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
     fs.appendFileSync(logPath, line, { encoding: 'utf8' });
   } catch {
     /* ignore */
@@ -571,13 +572,19 @@ console.error('No session found for socket:', socket.id);
       // Handle backspace
       if (data === '\x7f' || data === '\b') {
         (session as any).checkPauseBuffer = ((session as any).checkPauseBuffer as string).slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        // Only echo back if NOT in a door (doors handle their own echo)
+        if (!session.inDoorManager) {
+          socket.emit('ansi-output', '\b \b');
+        }
         return;
       }
 
       // Accumulate other characters
       (session as any).checkPauseBuffer += data;
-      socket.emit('ansi-output', data);
+      // Only echo back if NOT in a door (doors handle their own echo)
+      if (!session.inDoorManager) {
+        socket.emit('ansi-output', data);
+      }
       return;
     }
 
@@ -605,14 +612,19 @@ console.error('No session found for socket:', socket.id);
       // Handle backspace
       if (data === '\x7f' || data === '\b') {
         (session as any).flagPauseBuffer = ((session as any).flagPauseBuffer as string).slice(0, -1);
-        socket.emit('ansi-output', '\b \b');
+        // Only echo back if NOT in a door (doors handle their own echo)
+        if (!session.inDoorManager) {
+          socket.emit('ansi-output', '\b \b');
+        }
         return;
       }
 
       // Append printable characters
       (session as any).flagPauseBuffer += data;
-      // Echo the character so the user sees input
-      socket.emit('ansi-output', data);
+      // Echo the character so the user sees input (only if not in door)
+      if (!session.inDoorManager) {
+        socket.emit('ansi-output', data);
+      }
       return;
     }
 

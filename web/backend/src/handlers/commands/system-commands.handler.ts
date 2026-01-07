@@ -105,7 +105,6 @@ console.error('[LOGOFF] Failed to save command history:', err);
 console.log('[ENV] Logoff');
 
   // Set session state to logoff
-  session.state = BBSState.AWAIT;
   session.subState = LoggedOnSubState.LOGOFF;
 
   // express.e:8187 - displayScreen(SCREEN_LOGOFF)
@@ -133,6 +132,48 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
   } catch (err) {
 console.error('[LOGOFF] Failed to save flagged files:', err);
   }
+
+  // express.e:8234-8293 - Check relogon flag to determine next state
+  // IF (relogon)
+  //   processSysCommand('RELOGON')
+  //   StringF(tempstr,'RELOGON\d',node)
+  //   processSysCommand(tempstr)
+  // ...
+  // IF (relogon=FALSE)
+  //   state:=STATE_AWAIT
+  //   modemOffHook()
+  // ELSE
+  //   state:=STATE_LOGON
+  //   relogon:=FALSE
+  // ENDIF
+  if (session.relogon) {
+    // Relogon requested - run RELOGON commands and return to login
+    console.log('[LOGOFF] Relogon requested - processing RELOGON commands');
+
+    // express.e:8235-8237 - Run RELOGON and RELOGONn system commands
+    try {
+      const { processSysCommand } = require('../../utils/syscommand.util');
+      await processSysCommand(socket, session, 'RELOGON');
+      await processSysCommand(socket, session, `RELOGON${session.nodeId || 0}`);
+    } catch (err) {
+      console.error('[LOGOFF] Error processing RELOGON commands:', err);
+    }
+
+    // express.e:8291-8292 - Set state to LOGON and clear relogon flag
+    session.state = BBSState.LOGON;
+    session.relogon = false;
+
+    console.log('[LOGOFF] Relogon complete - returning to login state');
+    socket.emit('ansi-output', '\r\n');
+
+    // Return to login flow (don't disconnect)
+    const { handleLoginPrompt } = require('../login.handler');
+    await handleLoginPrompt(socket, session);
+    return;
+  }
+
+  // Normal logout - express.e:8284-8289
+  session.state = BBSState.AWAIT;
 
   // express.e logoff message - show modem disconnect message
   socket.emit('ansi-output', '\r\n\r\nClick...NO CARRIER\r\n');

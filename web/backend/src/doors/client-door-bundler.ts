@@ -7,6 +7,7 @@ import * as esbuild from 'esbuild';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface BundleOptions {
   doorPath: string;
@@ -405,7 +406,7 @@ console.warn('writeFileSync failed:', err);
       isDirectory: () => false,
       isFile: () => true,
       size: 0,
-      mtime: new Date(),
+      mtime: getSystemTime(),
     };
   },
 };

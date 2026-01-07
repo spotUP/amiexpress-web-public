@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 interface SessionLog {
   sessionId: string;
@@ -32,8 +33,8 @@ class SessionLogManager {
       userId,
       username,
       nodeId,
-      startTime: new Date(),
-      lastActivity: new Date(),
+      startTime: getSystemTime(),
+      lastActivity: getSystemTime(),
       output: [],
       maxLines: this.MAX_LINES_PER_SESSION
     });
@@ -52,7 +53,7 @@ console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${usern
     }
 
     log.output.push(output);
-    log.lastActivity = new Date();
+    log.lastActivity = getSystemTime();
 
     // Trim if exceeds max lines
     if (log.output.length > log.maxLines) {
@@ -86,7 +87,7 @@ console.log(`[SessionLogManager] Started tracking session: ${sessionId} (${usern
     }
 
     log.output.push(`\x1b[33m[INPUT: ${displayInput}]\x1b[0m`);
-    log.lastActivity = new Date();
+    log.lastActivity = getSystemTime();
 
     // Trim if exceeds max lines
     if (log.output.length > log.maxLines) {
@@ -245,7 +246,7 @@ console.log('[SessionLogManager] Cleared all session logs');
     }
 
     // Generate filename with timestamp and username
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = getSystemTime().toISOString().replace(/[:.]/g, '-');
     const username = log.username || 'guest';
     const filename = `session_${username}_${timestamp}.log`;
     const filePath = path.join(logsDir, filename);

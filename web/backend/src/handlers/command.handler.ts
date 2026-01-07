@@ -228,6 +228,7 @@ import { initializeSecurity } from '../utils/security.util';
 
 // Import getters from dependency-injection module (eliminates duplicate variables)
 import {
+import { getSystemTime } from '../utils/date-time.util';
   getDatabase,
   getConfig,
   getConferences,
@@ -521,6 +522,15 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         continue;
       }
 
+      // Initialize session.currentConf at the start of display flow if not already set
+      // This ensures conference scan doors have the correct conference number
+      if (!session.currentConf) {
+        session.currentConf = session.user?.confRJoin || 1;
+      }
+      if (!session.currentMsgBase) {
+        session.currentMsgBase = session.user?.msgBaseRJoin || 1;
+      }
+
       const confNumber = session.currentConf || session.user?.confRJoin || 1;
       const toolFlags = getConferenceToolFlags(confNumber);
 
@@ -567,9 +577,10 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       if (session.subState === LoggedOnSubState.CONF_SCAN) {
-        displayFlowLog('running confScan');
-        const { performConferenceScan } = require('./message/message-scan.handler');
-        await performConferenceScan(socket, session);
+        displayFlowLog('SKIPPING confScan (N door stuck in polling loop - needs investigation)');
+        // TEMPORARILY DISABLED: N door (AquaScan) enters infinite GetMsg polling after EXPRESS_VERSION
+        // const { performConferenceScan } = require('./message/message-scan.handler');
+        // await performConferenceScan(socket, session);
         // express.e: confScan uses nonStopMail flag but returns to DISPLAY_CONF_BULL
         session.menuPause = true;
         session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -589,14 +600,8 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         }
         displayFlowLog('skip CONF_BULL (toolFlags or not shown)');
         // express.e: join default conference/message base without triggering mail scan again
-        const confToJoin = session.user?.confRJoin || 1;
-        const msgBaseToJoin = session.user?.msgBaseRJoin || 1;
-        if (!session.currentConf) {
-          session.currentConf = confToJoin;
-        }
-        if (!session.currentMsgBase) {
-          session.currentMsgBase = msgBaseToJoin;
-        }
+        // NOTE: session.currentConf and session.currentMsgBase are now initialized at the start
+        // of the display flow loop (line 526-531), so we don't need to initialize them here
         session.blockOLM = false;
         try {
           const { loadFlagged, loadHistory } = require('../server/database-helpers');
@@ -811,7 +816,7 @@ console.log(`[WHO2] Executing helper tool: ${data}`);
       if (data === 'DOORS:who/NI') {
         // NodeIn - create node tracking file on connection
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
-        const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${new Date().toISOString()}\n`;
+        const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${getSystemTime().toISOString()}\n`;
         amigafs.writeFileSync(nodeFile, nodeData);
 console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
       } else {
@@ -1128,7 +1133,7 @@ console.log(`[LOGIN] modem-speed event emitted`);
           }
 
           // Update last login and node files
-          await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+          await db.updateUser(user.id, { lastLogin: getSystemTime(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
           const nodeId = session.nodeId || 0;
           try {
             nodeFileManager.writeNodeUserFile(nodeId, user);
@@ -2904,7 +2909,7 @@ console.log(' In message body input state, received:', JSON.stringify(data));
               subject: session.messageSubject || 'No Subject',
               body: body,
               author: session.user?.username || 'Anonymous',
-              timestamp: new Date(),
+              timestamp: getSystemTime(),
               conferenceId: session.currentConf,
               messageBaseId: session.currentMsgBase,
               isPrivate: session.tempData?.isPrivate || false,
@@ -4007,7 +4012,7 @@ console.log(`[GA] Door path: ${doorPath}`);
         const logDoorDebug = (message: string) => {
           try {
             const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-            const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+            const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
             amigafs.appendFileSync(logPath, line, { encoding: 'utf8' });
           } catch (err) {
 console.error('[GA] Failed to log door debug:', err);

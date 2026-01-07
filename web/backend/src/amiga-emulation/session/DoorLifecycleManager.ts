@@ -17,10 +17,13 @@ import { TIMDoorMessageHandler } from "./TIMDoorMessageHandler.js";
 import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 import { DebugMonitor } from "./lifecycle/DebugMonitor.js";
+import { getSystemTime } from '../../utils/date-time.util';
 
 // Performance: Verbose 68K debugging is disabled by default
 // Set DEBUG_68K=1 to enable detailed execution tracing
+// Set TRACE_PC_JUMPS=1 to log all PC jumps > 0x1000 bytes (catches bad jumps/returns)
 const DEBUG_68K = process.env.DEBUG_68K === "1";
+const TRACE_PC_JUMPS = process.env.TRACE_PC_JUMPS === "1";
 
 export interface ExecutionState {
   iterationCount: number;
@@ -112,6 +115,7 @@ export class DoorLifecycleManager {
   private lastA5OutOfRangeLogged: number = 0;
   private lastA4ZeroLogged = false;
   private loggedAedoorPc = new Set<number>();
+  private loggedAedoorPcCount = 0;
 
   constructor(
     emulator: MoiraEmulator,
@@ -442,6 +446,21 @@ console.error(
         }
       }
 
+      const debugStackWritesEnv = process.env.DEBUG_STACK_WRITES;
+      if (debugStackWritesEnv) {
+console.log(`[DoorLifecycleManager] DEBUG_STACK_WRITES=${debugStackWritesEnv}`);
+console.log(
+          `[DoorLifecycleManager] Stack write logging support: setDebugStackWrites=${
+            typeof this.emulator.setDebugStackWrites
+          }`
+        );
+      }
+      // TEMPORARY: Force enable stack write logging to debug PC corruption
+      if (this.emulator.setDebugStackWrites) {
+        this.emulator.setDebugStackWrites(true);
+console.log("[DoorLifecycleManager] Stack write logging FORCE ENABLED for debugging");
+      }
+
       const callTrackingEnv = process.env.DOOR_CALL_TRACKING;
       if (callTrackingEnv) {
 console.log(`[DoorLifecycleManager] DOOR_CALL_TRACKING=${callTrackingEnv}`);
@@ -479,8 +498,14 @@ console.log(`[DoorLifecycleManager] Call tracking enabled`);
       this.debugMonitor?.checkPcProbes(pc, this.executionState.iterationCount);
       this.debugMonitor?.checkWatchedValues();
         if (process.env.DEBUG_68K_NATIVE === '1') {
-          if (pc >= 0x200240 && pc <= 0x2002f0 && !this.loggedAedoorPc.has(pc)) {
+          const inAedoorRange = pc >= 0x1fff00 && pc <= 0x200600;
+          if (
+            inAedoorRange &&
+            !this.loggedAedoorPc.has(pc) &&
+            this.loggedAedoorPcCount < 50
+          ) {
             this.loggedAedoorPc.add(pc);
+            this.loggedAedoorPcCount++;
             const d0 = this.emulator.getRegister(0);
             const d1 = this.emulator.getRegister(1);
             const a0 = this.emulator.getRegister(8);
@@ -694,7 +719,39 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         const pcBeforeBatch = this.emulator.getRegister(16);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
         const pcAfterBatch = this.emulator.getRegister(16);
-        
+
+        // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
+        if (TRACE_PC_JUMPS && pcBeforeBatch > 0 && pcAfterBatch > 0) {
+          const pcDelta = pcAfterBatch - pcBeforeBatch;
+          const isPCInCode = pcAfterBatch >= this.codeLowerBound && pcAfterBatch <= this.codeUpperBound;
+          const wasPCInCode = pcBeforeBatch >= this.codeLowerBound && pcBeforeBatch <= this.codeUpperBound;
+
+          // Log jumps > 0x1000 that cross code boundaries (likely RTS/BSR/JMP)
+          if (Math.abs(pcDelta) > 0x1000 && (!isPCInCode || !wasPCInCode)) {
+            const sp = this.emulator.getRegister(15);
+            const d0 = this.emulator.getRegister(0);
+            const a0 = this.emulator.getRegister(8);
+
+            try {
+              const stackVal0 = this.emulator.readMemory32(sp);
+              const stackVal4 = this.emulator.readMemory32(sp + 4);
+              console.log(
+                `[PC_JUMP] 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} ` +
+                `(delta=0x${pcDelta.toString(16)}) ` +
+                `SP=0x${sp.toString(16)} [SP]=0x${stackVal0.toString(16)} [SP+4]=0x${stackVal4.toString(16)} ` +
+                `D0=0x${d0.toString(16)} A0=0x${a0.toString(16)} ` +
+                `inCode=${wasPCInCode}->${isPCInCode} ` +
+                `codeRegion=[0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`
+              );
+            } catch {
+              console.log(
+                `[PC_JUMP] 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} ` +
+                `(delta=0x${pcDelta.toString(16)}) inCode=${wasPCInCode}->${isPCInCode}`
+              );
+            }
+          }
+        }
+
         // Generic stuck loop detection: detect ANY repeated identical PC jump pattern
         // This avoids door-specific magic numbers like 0x9c40 (CLAUDE.md rule #2)
         const jumpSize = pcAfterBatch - pcBeforeBatch;
@@ -712,29 +769,29 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // The PC may be in trap handler code (0xc00000+) which is outside door's code region
         const isWaitingForXIMInput = this.ximProtocol?.isWaitingForLineInput() ?? false;
 
+        // Smart PC bounds check: only flag truly invalid addresses
+        // Valid PC ranges:
+        // - 0x1000+ (code/data segments)
+        // - 0x80000+ (libraries, system functions)
+        // - 0xC00000+ (chip RAM for libraries/AEDoor)
+        // Invalid: null (0), odd addresses, very low memory (<0x400)
+        const isPCInvalid = pcAfterBatch === 0 ||
+                           (pcAfterBatch % 2 !== 0) ||
+                           (pcAfterBatch > 0x400 && pcAfterBatch < 0x1000);
+
         // Skip stuck detection if:
         // 1. Emulator is paused or task is waiting (isInWaitLoop)
-        // 2. XIM door with PC in valid code region (normal execution)
+        // 2. PC is in any valid region (code, library, or chip RAM)
         // 3. XIM door waiting for user input (polling GetMsg for our reply)
-        const skipStuckDetection = isInWaitLoop || (isXIMDoor && isPCInCodeRegion) || isWaitingForXIMInput;
+        const skipStuckDetection = isInWaitLoop || !isPCInvalid || isWaitingForXIMInput;
 
-        // DEBUG: Log stuck loop detection state when PC is outside code region
-        if (!isPCInCodeRegion && pcAfterBatch > 0x100000) {
-          console.log(`[DoorLifecycleManager][STUCK_DEBUG] pc=0x${pcAfterBatch.toString(16)} jumpSize=0x${jumpSize.toString(16)} lastJump=0x${(this.executionState.lastJumpSize || 0).toString(16)} skip=${skipStuckDetection} inWait=${isInWaitLoop} ximWait=${isWaitingForXIMInput} count=${this.executionState.stuckLoopCount}`);
-        }
-
-        if (jumpSize > 0x100 && jumpSize === this.executionState.lastJumpSize && !skipStuckDetection) {
-          this.executionState.stuckLoopCount++;
-          if (this.executionState.stuckLoopCount > 10) {
-console.error(`[DoorLifecycleManager] STUCK LOOP DETECTED: PC jumping by 0x${jumpSize.toString(16)} repeatedly (${this.executionState.stuckLoopCount} times)`);
+        // Only detect stuck loops for truly invalid PC addresses
+        if (isPCInvalid && !skipStuckDetection) {
+console.error(`[DoorLifecycleManager] Invalid PC detected: 0x${pcAfterBatch.toString(16)}`);
 console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)}, code region: [0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`);
-            this.terminate();
-            return;
-          }
-        } else {
-          this.executionState.stuckLoopCount = 0;
+          this.terminate();
+          return;
         }
-        this.executionState.lastJumpSize = jumpSize;
 
         // Update iteration count with actual instructions executed
         const instructionsExecuted = result < 0 ? Math.abs(result) - 1 : result;
@@ -1898,7 +1955,7 @@ console.error(`[DoorLifecycleManager] TIM polling error:`, error);
       const d1 = this.emulator.getRegister(1);
       const a0 = this.emulator.getRegister(8);
       const a1 = this.emulator.getRegister(9);
-      const line = `[DoorRegs] ${new Date().toISOString()} iter=${this.executionState.iterationCount} pc=0x${pc.toString(
+      const line = `[DoorRegs] ${getSystemTime().toISOString()} iter=${this.executionState.iterationCount} pc=0x${pc.toString(
         16
       )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
         16

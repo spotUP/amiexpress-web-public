@@ -1,5 +1,6 @@
 import { db, Webhook } from '../database';
 import axios from 'axios';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * Webhook Trigger Types
@@ -64,7 +65,7 @@ class WebhookService {
 
       const eventData: WebhookEventData = {
         trigger,
-        timestamp: new Date(),
+        timestamp: getSystemTime(),
         data
       };
 
@@ -492,7 +493,7 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
 
       const testEvent: WebhookEventData = {
         trigger: WebhookTrigger.SYSTEM_ERROR,
-        timestamp: new Date(),
+        timestamp: getSystemTime(),
         data: {
           error: 'This is a test notification from AmiExpress BBS',
           details: 'If you see this message, the webhook is working correctly!'

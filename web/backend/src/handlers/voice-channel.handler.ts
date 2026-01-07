@@ -11,6 +11,7 @@
 
 import type { Socket } from 'socket.io';
 import type { BBSSession } from '../index';
+import { getSystemTime } from '../utils/date-time.util';
 
 interface VoiceParticipant {
   userId: number | string;
@@ -54,7 +55,7 @@ function addVoiceParticipant(
     isMuted: false,
     hasVideo: false,
     hasScreenShare: false,
-    joinedAt: new Date(),
+    joinedAt: getSystemTime(),
   };
 
   voiceChannels.get(roomId)!.set(userId, participant);

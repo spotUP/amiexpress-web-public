@@ -23,6 +23,7 @@ import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.uti
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
+import { getSystemTime } from '../utils/date-time.util';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -30,7 +31,7 @@ import type { User } from '../database/types';
 function logDoorDebug(message: string) {
   try {
     const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-    const line = `[DoorDebug] ${new Date().toISOString()} ${message}\n`;
+    const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
     fs.appendFileSync(logPath, line, { encoding: 'utf8' });
   } catch (err) {
 console.error('[DoorDebug] Failed to log door debug:', err);
@@ -440,7 +441,7 @@ function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: b
     return { user: session.user, isGuest: false };
   }
 
-  const now = new Date();
+  const now = getSystemTime();
   const nodeId = session.nodeId || 0;
   const linesPerScreen = session.tempData?.termHeight || session.screenHeight || 24;
 
@@ -1258,7 +1259,7 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
     doorSession = {
       doorId: door.id,
       userId: doorUser.id,
-      startTime: new Date(),
+      startTime: getSystemTime(),
       status: 'running'
     };
     doorSessions.push(doorSession);
@@ -1343,7 +1344,7 @@ console.error(`Unknown door type: ${door.type}`);
 
     // Mark session as completed
     if (doorSession) {
-      doorSession.endTime = new Date();
+      doorSession.endTime = getSystemTime();
       doorSession.status = 'completed';
     }
 
@@ -1387,7 +1388,7 @@ console.error(`[executeDoor] Stack trace:`, error.stack);
       callersLogManager.logDoorExit(nodeId, `${door.name} (ERROR)`);
 
       if (doorSession) {
-        doorSession.endTime = new Date();
+        doorSession.endTime = getSystemTime();
         doorSession.status = 'error';
       }
     } catch (cleanupError) {
@@ -1499,10 +1500,10 @@ console.log(`[executeTypeScriptDoor] Actual filesystem path: ${resolvedDoorPath}
     const importPath = `file://${resolvedDoorPath}`;
 console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
-    // Show animated preloader if SHOWPRELOADER tooltype is set
+    // Show animated preloader if PRELOADER tooltype is set
     // Only show for doors that explicitly enable it (avoids delay for simple doors)
-    const showPreloader = door.toolTypes?.SHOWPRELOADER?.toUpperCase() === 'YES' ||
-                         door.toolTypes?.SHOWPRELOADER === '1';
+    const showPreloader = door.toolTypes?.PRELOADER?.toUpperCase() === 'YES' ||
+                         door.toolTypes?.PRELOADER === '1';
 
     let doorModule: any;
     if (showPreloader) {
@@ -2242,6 +2243,17 @@ console.log(`[executeAmigaDoor] Setting doorCommand="${door.command}" on session
     (session as any).doorCommand = door.command;
     (session as any).doorId = door.command;
 console.log(`[executeAmigaDoor] Verified session.doorCommand="${(session as any).doorCommand}"`);
+
+    // Initialize session.currentConf if not already set (for BB_CONFNUM query)
+    // Doors expect this to return the user's current conference number
+console.log(`[executeAmigaDoor] BEFORE currentConf init: session.currentConf=${session.currentConf} user.confRJoin=${session.user?.confRJoin}`);
+    if (!session.currentConf || session.currentConf === 0) {
+      session.currentConf = session.user?.confRJoin || 1;
+console.log(`[executeAmigaDoor] AFTER init: session.currentConf=${session.currentConf}`);
+    }
+    if (!session.currentMsgBase || session.currentMsgBase === 0) {
+      session.currentMsgBase = session.user?.msgBaseRJoin || 1;
+    }
 
     // Set door parameters for EXPRESS_VERSION to return (XIM doors need this)
     // CRITICAL: Must return FULL command line (command + params), not just params

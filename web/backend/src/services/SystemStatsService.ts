@@ -6,6 +6,7 @@
  */
 
 import { db } from '../database';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface DailyStats {
   date: string;  // YYYY-MM-DD
@@ -41,7 +42,7 @@ class SystemStatsService {
    * Get today's date in YYYY-MM-DD format
    */
   private getTodayDate(): string {
-    const now = new Date();
+    const now = getSystemTime();
     return now.toISOString().split('T')[0];
   }
 

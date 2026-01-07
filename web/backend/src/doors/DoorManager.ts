@@ -35,6 +35,7 @@ import {
   Tooltype
 } from '../utils/info-file.util';
 import {
+import { getSystemTime } from '../utils/date-time.util';
   InfoEditorState,
   findInfoFile,
   openInfoFile,
@@ -1111,7 +1112,7 @@ console.log('[Door Manager] Analysis completed successfully');
         filename: data.originalname,
         type: 'archive',
         size: data.size,
-        uploadDate: new Date(),
+        uploadDate: getSystemTime(),
         installed: false,
         archivePath: archivePath,
         fileidDiz: analysis.metadata?.fileidDiz,

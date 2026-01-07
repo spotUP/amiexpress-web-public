@@ -29,6 +29,7 @@ import type {
 } from '../types/amiga-import';
 import type { User } from '../types';
 import { stripSecretsFromConfigFile } from './bbs-config-file.service';
+import { getSystemTime } from '../utils/date-time.util';
 import type { Conference } from '../database/types';
 
 /**
@@ -122,7 +123,7 @@ console.log('[ImportTransaction] Creating session for:', archivePath);
       status: 'pending',
       progress: 0,
       conflicts: [],
-      createdAt: new Date(),
+      createdAt: getSystemTime(),
       archivePath,
     };
 
@@ -437,7 +438,7 @@ console.log('[ImportTransaction] Extraction complete');
     const backupDir = path.join(process.cwd(), 'data', 'backups');
     await fs.mkdir(backupDir, { recursive: true });
 
-    const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0];
+    const timestamp = getSystemTime().toISOString().replace(/:/g, '-').split('.')[0];
     const backupPath = path.join(backupDir, `backup-${timestamp}.db`);
 
 console.log(`[ImportTransaction] Creating database backup: ${backupPath}`);
@@ -816,7 +817,7 @@ console.log(`[ImportTransaction] Imported ${screens.length} screens to ${screens
       sessionId,
       progress,
       message,
-      timestamp: new Date(),
+      timestamp: getSystemTime(),
     };
 
     this.emit('progress', event);

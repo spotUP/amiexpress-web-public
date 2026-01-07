@@ -44,6 +44,7 @@ import { runExecuteOn } from '../services/batch-scheduler';
 import { mailOnSysopPage } from '../services/mail-notification.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 // BBS root for config and log files
 const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
@@ -372,7 +373,7 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
   session.subState = LoggedOnSubState.OPERATOR_CHAT_WAITING;
 
   // Display waiting message with animated dots
-  const currentTime = new Date().toLocaleString();
+  const currentTime = getSystemTime().toLocaleString();
   const bbsConfig = loadBBSConfig(bbsRoot);
   const sysopName = bbsConfig.sysop_name || 'the operator';
 
@@ -625,8 +626,8 @@ console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages
     sysopId,
     sysopHandle,
     sysopSessionId,
-    startedAt: new Date(),
-    lastActivity: new Date(),
+    startedAt: getSystemTime(),
+    lastActivity: getSystemTime(),
     messages: existingMessages,
     isTyping: { user: false, sysop: false }
   };
@@ -716,13 +717,13 @@ async function sendChatMessage(
     senderHandle,
     senderType,
     message,
-    timestamp: new Date(),
+    timestamp: getSystemTime(),
     nodeId
   };
 
   const saved = repository.addChatMessage(chatMessage);
   chatSession.messages.push(saved);
-  chatSession.lastActivity = new Date();
+  chatSession.lastActivity = getSystemTime();
 
   // Clear typing buffers
   if (senderType === 'user') (chatSession as any).userTypingBuffer = '';
@@ -856,7 +857,7 @@ async function logChatTranscript(repository: OperatorChatRepository, session: Ch
   if (!page) return;
 
   const messages = repository.getChatMessages(session.pageId);
-  const duration = Math.floor((new Date().getTime() - session.startedAt.getTime()) / 1000);
+  const duration = Math.floor((getSystemTime().getTime() - session.startedAt.getTime()) / 1000);
 
   const transcript = [
     `=== Operator Chat Transcript ===`,
@@ -979,7 +980,7 @@ console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
 function isQuietHours(config: OperatorChatConfig): boolean {
   if (!config.quietHours.enabled) return false;
 
-  const now = new Date();
+  const now = getSystemTime();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
   const currentTime = currentHour * 60 + currentMinute;

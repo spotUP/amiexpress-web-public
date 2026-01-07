@@ -370,6 +370,8 @@ export interface XIMState {
   confAccess: string;
   carrierDropped: boolean;
   rawArrow: boolean;  // When true, pass raw escape sequences; when false, convert to arrow codes
+  transfering: boolean; // When true, file transfer in progress - suppress JH_WRITE output (express.e:3383)
+  doorSilent: boolean;  // When true, door output suppressed - used by silent doors (express.e:3383)
   ximPortAddr?: number;
   aePortAddr?: number;
   doorPortAddr?: number;

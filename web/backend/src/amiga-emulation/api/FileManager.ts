@@ -17,6 +17,7 @@ import { FileHandle } from './FileHandle';
 import { PathManager } from './PathManager';
 import { AmigaFileCache } from './AmigaFileCache';
 import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
 
 /** Callback type for sysop debug messages */
 export type DoorDebugCallback = (message: string, level: 'info' | 'warn' | 'error') => void;
@@ -194,7 +195,7 @@ console.log(`[FileManager] Open: "${amiPath}" mode=${mode}`);
     const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
     const logToFile = (msg: string) => {
       try {
-        amigafs.appendFileSync(logPath, `[FileManager] ${new Date().toISOString()} ${msg}\n`, { encoding: 'utf8' });
+        amigafs.appendFileSync(logPath, `[FileManager] ${getSystemTime().toISOString()} ${msg}\n`, { encoding: 'utf8' });
       } catch {
         /* ignore */
       }

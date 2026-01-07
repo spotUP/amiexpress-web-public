@@ -16,6 +16,7 @@ import type { Database } from '../database';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
+import { getSystemTime } from '../utils/date-time.util';
 
 // Standard API response format
 interface ApiResponse<T = any> {
@@ -51,7 +52,7 @@ export function createConfigRouter(database: Database): ReturnType<typeof expres
       success: true,
       data,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: getSystemTime().toISOString()
     };
     res.json(response);
   };
@@ -68,7 +69,7 @@ console.error('Config API error:', error);
     const response: ApiResponse = {
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: getSystemTime().toISOString()
     };
 
     res.status(statusCode).json(response);
@@ -1284,7 +1285,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         timeUsed: 0,
         chatLimit: userData.chatLimit ?? defaults.chatLimit ?? 0,
         chatUsed: 0,
-        firstLogin: new Date(),
+        firstLogin: getSystemTime(),
         calls: 0,
         callsToday: 0,
         newUser: true,

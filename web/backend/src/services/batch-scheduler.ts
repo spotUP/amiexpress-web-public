@@ -7,6 +7,7 @@ import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLog
 import { generateMultiTop } from '../utils/multitop-generator';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { InfoFileParser } from './info-file-parser';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * EXECUTE_ON_* Event Types (from express.e:6666-6744)
@@ -167,7 +168,7 @@ function processMciInCommand(
   }
 
   // Date/time
-  const now = new Date();
+  const now = getSystemTime();
   result = result.replace(/%D/gi, now.toLocaleDateString());
   result = result.replace(/%T/gi, now.toLocaleTimeString());
 
@@ -635,7 +636,7 @@ console.error(`[BatchScheduler] Error executing line "${rawLine}":`, err);
 export async function runLoginBatches(nodeId: number): Promise<void> {
   const baseDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
-  const day = new Date().getDay(); // 0-6, Sunday = 0
+  const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
 
@@ -658,7 +659,7 @@ export async function runLoginBatches(nodeId: number): Promise<void> {
 export async function runLogoffBatches(nodeId: number): Promise<void> {
   const baseDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
-  const day = new Date().getDay(); // 0-6, Sunday = 0
+  const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';
 
@@ -718,7 +719,7 @@ function runAmigaDoorViaRunner(
       phone: '000-000-0000',
       linesPerScreen: 24,
       protocol: 'Z',
-      lastLogin: new Date(),
+      lastLogin: getSystemTime(),
     } as any, 60 * 60);
     doorDropFileManager.createDorInfo(nodeId, {
       id: nodeId,
@@ -736,7 +737,7 @@ function runAmigaDoorViaRunner(
       phone: '000-000-0000',
       linesPerScreen: 24,
       protocol: 'Z',
-      lastLogin: new Date(),
+      lastLogin: getSystemTime(),
     } as any);
   } catch (err: any) {
 console.warn('[BatchScheduler] Failed to create drop files:', err?.message || err);

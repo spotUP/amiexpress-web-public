@@ -16,6 +16,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
 import { getDatabase } from '../command-handler/dependency-injection';
+import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
 
@@ -470,7 +471,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
         let output = '';
         output += `Conference ${confId} User Statistics\n`;
-        output += `Generated: ${new Date().toISOString()}\n`;
+        output += `Generated: ${getSystemTime().toISOString()}\n`;
         output += `${'='.repeat(80)}\n\n`;
 
         // Write each user's statistics - express.e:22540-22580

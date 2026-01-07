@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { Database } from '../../database';
 import { sanitizeInput } from '../../utils/input-normalizer.util';
 import { AuthRequest } from '../../middleware/auth.middleware';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export class AuthHandler {
   constructor(private db: Database) {}
@@ -59,7 +60,7 @@ export class AuthHandler {
 
       // Update last login
       await this.db.updateUser(user.id, {
-        lastLogin: new Date(),
+        lastLogin: getSystemTime(),
         calls: user.calls + 1,
         callsToday: user.callsToday + 1
       });
@@ -149,7 +150,7 @@ console.error('Me error:', error);
         timeUsed: 0,
         chatLimit: 0,
         chatUsed: 0,
-        firstLogin: new Date(),
+        firstLogin: getSystemTime(),
         calls: 1,
         callsToday: 1,
         newUser: true,

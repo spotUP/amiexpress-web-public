@@ -102,6 +102,7 @@ export interface MoiraCPU {
   setDebugExceptions?(enabled: boolean): void;
   setDebugWatchpoints?(enabled: boolean): void;
   setDebugMemoryAccess?(enabled: boolean): void;
+  setDebugStackWrites?(enabled: boolean): void;
   getDebugAddressErrors?(): boolean;
   getDebugExceptions?(): boolean;
 
@@ -886,6 +887,23 @@ console.warn(
 console.log(
         `[MoiraEmulator] Debug memory access logging: ${enabled ? "ON" : "OFF"}`
       );
+    }
+  }
+
+  /**
+   * Enable stack-adjacent write logging
+   */
+  setDebugStackWrites(enabled: boolean): void {
+    if (!this.cpu) {
+      throw new Error("CPU not initialized");
+    }
+    if (this.cpu.setDebugStackWrites) {
+      this.cpu.setDebugStackWrites(enabled);
+console.log(
+        `[MoiraEmulator] Debug stack write logging: ${enabled ? "ON" : "OFF"}`
+      );
+    } else {
+console.warn("[MoiraEmulator] setDebugStackWrites not available (rebuild WASM)");
     }
   }
 

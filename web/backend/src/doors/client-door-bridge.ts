@@ -46,6 +46,7 @@ interface ClientDoorSession {
 }
 
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * Client Door Bridge
@@ -132,7 +133,7 @@ console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}
       socket,
       bbsSession: session,
       active: true,
-      startTime: new Date(),
+      startTime: getSystemTime(),
       rpcHandlers: new Map(),
     };
 

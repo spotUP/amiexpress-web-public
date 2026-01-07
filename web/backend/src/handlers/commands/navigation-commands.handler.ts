@@ -16,6 +16,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { finalizeCommand } from '../../utils/command-response.util';
+import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
 
@@ -58,7 +59,7 @@ export function setNavigationCommandsDependencies(deps: {
  */
 export function handleTimeCommand(socket: any, session: BBSSession): void {
   // express.e:25625 - DateStamp(dt.stamp)
-  const now = new Date();
+  const now = getSystemTime();
 
   // express.e:25633-25638 - Display date and time
   const dateString = now.toLocaleDateString('en-US', {

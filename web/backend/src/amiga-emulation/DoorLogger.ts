@@ -10,6 +10,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class DoorLogger {
   private logPath: string;
@@ -21,7 +22,7 @@ export class DoorLogger {
   constructor(doorName: string, nodeId?: number | string) {
 console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`);
     this.doorName = doorName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    this.startTime = new Date();
+    this.startTime = getSystemTime();
 
     // Create session ID: YYYYMMDD-HHMMSS-node#
     const ts = this.startTime.toISOString()

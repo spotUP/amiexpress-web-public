@@ -32,6 +32,51 @@ import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 
 /**
+ * Detect if content is an ANSI animation that should play at modem speed
+ *
+ * ANSI animations use many cursor positioning codes to draw frame-by-frame.
+ * They need to play at 14.4kbps (14400 bps) for proper timing, regardless of
+ * the user's current modem speed setting.
+ *
+ * Detection criteria:
+ * - High density of cursor positioning codes (\x1b[y;xH or \x1b[y;xf)
+ * - Many ANSI escape sequences relative to content size
+ *
+ * @param content - Raw screen content
+ * @returns true if content appears to be an ANSI animation
+ */
+function isAnsiAnimation(content: string): boolean {
+  // Skip PETSCII files
+  if (!content || content.length < 100) return false;
+
+  // Count cursor positioning codes: ESC[y;xH or ESC[y;xf
+  const cursorMoves = content.match(/\x1b\[\d+;\d+[Hf]/g) || [];
+  const cursorMoveCount = cursorMoves.length;
+
+  // Count all ANSI escape sequences
+  const ansiCodes = content.match(/\x1b\[[0-9;?]*[A-Za-z]/g) || [];
+  const ansiCount = ansiCodes.length;
+
+  // Animation threshold: High density of cursor positioning
+  // Typical animations have 50+ cursor moves per 1KB of content
+  const contentKb = content.length / 1024;
+  const cursorDensity = cursorMoveCount / Math.max(0.1, contentKb);
+  const ansiDensity = ansiCount / Math.max(0.1, contentKb);
+
+  // Consider it an animation if:
+  // - High cursor positioning density (50+ per KB)
+  // - OR very high overall ANSI density (100+ per KB) with some cursor moves
+  const isAnimation = cursorDensity > 50 || (ansiDensity > 100 && cursorMoveCount > 10);
+
+  if (isAnimation) {
+    console.log(`[ANSI-ANIM] Detected animation: ${cursorMoveCount} cursor moves, ${ansiCount} total ANSI codes, ${content.length} bytes`);
+    console.log(`[ANSI-ANIM] Density: ${cursorDensity.toFixed(1)} cursor/KB, ${ansiDensity.toFixed(1)} ANSI/KB`);
+  }
+
+  return isAnimation;
+}
+
+/**
  * Screen directory type - matches express.e:6544-6640
  * Each screen type uses a specific base directory
  */
@@ -654,7 +699,7 @@ export async function parseMciCodes(
   const downloadBytes = user.downloadBytes || 0;
 
   // Date/Time setup
-  const now = new Date();
+  const now = getSystemTime();
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dayName = days[now.getDay()];
@@ -2010,6 +2055,37 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       conference: session.currentConf
     });
 
+    // ANSI Animation Detection: Force 14.4kbps playback for animated screens
+    // Animations need proper timing to play frame-by-frame, regardless of user's modem speed
+    const isAnimation = !isPetscii && isAnsiAnimation(content);
+
+    if (isAnimation) {
+      // Save current modem state in session for later restoration
+      session.savedModemState = {
+        enabled: session.modemEmulationEnabled || false,
+        bps: session.modemBps || 0
+      };
+
+      // Force 14.4kbps modem emulation for animation playback
+      const { getModemEmulator } = require('../utils/modem-emulator.util');
+      const modemEmulator = getModemEmulator(socket);
+      modemEmulator.install();
+      modemEmulator.enable(14400);
+      session.modemEmulationEnabled = true;
+      session.modemBps = 14400;
+
+      // Disable AnsiBuffer batching when modem emulation is enabled
+      const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+      const ansiBuffer = getAnsiBuffer(socket);
+      ansiBuffer.setFlushDelay(0);
+
+      console.log(`[ANSI-ANIM] Enabled 14.4kbps modem emulation for ${screenName} (was: ${session.savedModemState.bps} bps)`);
+      DebugLogger.screen(socket.id, `ANSI animation detected - forced 14.4kbps playback`, {
+        screen: screenName,
+        previousSpeed: session.savedModemState.bps
+      });
+    }
+
     let parsed: string;
     let commands: any[] = [];
     let inlineEmitted = false;  // Track if parseMciCodes already emitted content inline
@@ -2392,12 +2468,14 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
           screenFlowLog(screenName, `Queued ${commands.length} command(s) to run after pause`);
         }
         emitPrompt(socket, '\r\n(Pause)...Space To Resume: ');
+        restoreModemState(socket, session);
         return true;
       }
 
       executeScreenCommands();
       session.slowmo = 0;
       session.slowmoCount = 0;
+      restoreModemState(socket, session);
       return true;
     }
 
@@ -2415,6 +2493,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
     }
     await emitPage(0, pageSize, true);
     session.lastScreenHadPause = true;
+    restoreModemState(socket, session);
     return true;
   }
 
@@ -2597,6 +2676,37 @@ console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, 
 /**
  * Start pagination for arbitrary lines (non-screen MCI output).
  */
+/**
+ * Restore modem state after animation playback
+ * Called when screen display completes, pagination ends, or segment processing finishes
+ */
+function restoreModemState(socket: any, session: BBSSession): void {
+  if (session.savedModemState) {
+    const { getModemEmulator } = require('../utils/modem-emulator.util');
+    const modemEmulator = getModemEmulator(socket);
+
+    if (session.savedModemState.enabled && session.savedModemState.bps > 0) {
+      modemEmulator.enable(session.savedModemState.bps);
+      session.modemEmulationEnabled = true;
+      session.modemBps = session.savedModemState.bps;
+      console.log(`[ANSI-ANIM] Restored modem emulation to ${session.savedModemState.bps} bps`);
+    } else {
+      modemEmulator.disable();
+      session.modemEmulationEnabled = false;
+      session.modemBps = 0;
+      console.log(`[ANSI-ANIM] Restored modem emulation to disabled (full speed)`);
+    }
+
+    // Restore AnsiBuffer flush delay
+    const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+    const ansiBuffer = getAnsiBuffer(socket);
+    ansiBuffer.setFlushDelay(session.savedModemState.enabled ? 0 : 16);
+
+    // Clear saved state to prevent double-restore
+    session.savedModemState = undefined;
+  }
+}
+
 export function startPagination(
   socket: any,
   session: BBSSession,
@@ -2701,8 +2811,12 @@ export async function handlePaginatedScreenInput(socket: any, session: BBSSessio
     // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
       await processNextScreenSegment(socket, session);
+      restoreModemState(socket, session);
       return true;
     }
+
+    // Restore modem state before final return
+    restoreModemState(socket, session);
   }
 
   return true;

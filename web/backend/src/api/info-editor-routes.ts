@@ -10,6 +10,7 @@ import * as amigafs from '../utils/amigafs';
 import { execSync } from 'child_process';
 import { config } from '../config';
 import { parseInfoFile, writeInfoFile, updateTooltype, toggleTooltypeComment as toggleComment, Tooltype as InfoTooltype } from '../utils/info-file.util';
+import { getSystemTime } from '../utils/date-time.util';
 
 export const infoEditorRouter = express.Router();
 
@@ -292,7 +293,7 @@ console.error('[InfoEditor] Error modifying binary .info file:', parseError);
       // Fallback: create .tooltypes.txt file
       const tooltypesPath = fullPath + '.tooltypes.txt';
       let content = `# Tooltypes for ${path.basename(fullPath)}\n`;
-      content += `# Generated: ${new Date().toISOString()}\n`;
+      content += `# Generated: ${getSystemTime().toISOString()}\n`;
       content += `# Warning: Binary modification failed, manual update required\n\n`;
 
       for (const tt of tooltypes) {

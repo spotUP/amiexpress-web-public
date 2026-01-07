@@ -39,6 +39,7 @@ import { ChatRepository } from './database/chat-repository';
 import { BulletinRepository } from './database/bulletin-repository';
 import { WebhookRepository } from './database/webhook-repository';
 import { ConfigRepository } from './database/config-repository';
+import { getSystemTime } from './utils/date-time.util';
 
 // Re-export types for backward compatibility
 export type {
@@ -385,8 +386,16 @@ console.log('✓ Added fontpreference column');
       }
 
       if (!columnNames.includes('baud')) {
-        this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 0');
+        this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 56000');
 console.log('✓ Added baud column');
+      }
+
+      // Migration: Update existing users with baud=0 or 9600 to 56000 (56kbps - modern modem speed)
+      // baud=0 means "no throttling" which breaks modem emulation at login
+      const usersNeedingUpdate = this.db.prepare('SELECT COUNT(*) as count FROM users WHERE baud IN (0, 9600)').get() as any;
+      if (usersNeedingUpdate.count > 0) {
+        this.db.exec('UPDATE users SET baud = 56000 WHERE baud IN (0, 9600)');
+console.log(`✓ Migrated ${usersNeedingUpdate.count} users to baud=56000 (56kbps)`);
       }
 
       // Check and add missing columns to system_config table
@@ -762,7 +771,7 @@ console.error('Error running migrations:', error);
           securityflags TEXT DEFAULT NULL,
           secoverride TEXT DEFAULT NULL,
           userflags INTEGER DEFAULT 0,
-          baud INTEGER DEFAULT 0,
+          baud INTEGER DEFAULT 56000,
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
@@ -2564,7 +2573,7 @@ console.log(`  ✓ Created file area: ${area.name}`);
         timeUsed: 0,
         chatLimit: 0,
         chatUsed: 0,
-        firstLogin: new Date(),
+        firstLogin: getSystemTime(),
         calls: 0,
         callsToday: 0,
         newUser: false,

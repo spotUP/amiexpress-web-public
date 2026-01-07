@@ -6,6 +6,7 @@
  */
 
 import { injectable } from 'tsyringe';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export interface ChatSession {
   id: string;
@@ -52,11 +53,11 @@ export class ChatSessionUseCase {
     const session: ChatSession = {
       id: `chat_${Date.now()}_${userId}`,
       userId,
-      startTime: new Date(),
+      startTime: getSystemTime(),
       status: 'paging',
       messages: [],
       pageCount: 1,
-      lastActivity: new Date()
+      lastActivity: getSystemTime()
     };
 
     this.chatState.activeSessions.push(session);
@@ -75,7 +76,7 @@ console.log(`Chat session created: ${session.id} for user ${username}`);
 
     session.status = 'active';
     session.sysopId = sysopId;
-    session.lastActivity = new Date();
+    session.lastActivity = getSystemTime();
 
     // Remove from paging queue
     const pagingIndex = this.chatState.pagingUsers.indexOf(session.userId);
@@ -96,7 +97,7 @@ console.log(`Chat session accepted: ${sessionId} by sysop ${sysopId}`);
 
     const session = this.chatState.activeSessions[sessionIndex];
     session.status = 'ended';
-    session.endTime = new Date();
+    session.endTime = getSystemTime();
 
     // Remove from active sessions
     this.chatState.activeSessions.splice(sessionIndex, 1);
@@ -131,12 +132,12 @@ console.log(`Chat session ended: ${sessionId}`);
       senderId,
       senderName,
       content,
-      timestamp: new Date(),
+      timestamp: getSystemTime(),
       isSysop
     };
 
     session.messages.push(message);
-    session.lastActivity = new Date();
+    session.lastActivity = getSystemTime();
 
     return message;
   }

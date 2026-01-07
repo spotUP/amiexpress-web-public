@@ -138,20 +138,22 @@ console.log(`[XIMBBSInfo] JH_SYSOP: "${sysopName}"`);
    *     getExpressMajorVer(tempstring)
    *     AstrCopy(msg.string,tempstring,200)
    *
-   * Real Amiga behavior (from actual logs): Returns door command args like "J 2" or "N S U".
-   * This contradicts express.e source which says return version, but doors expect args.
-   * Evidence: AQUASCAN_NSU_DEBUG_SESSION.md shows EXPRESS_VERSION returning "N S U" on real Amiga.
+   * CRITICAL: The real Amiga logs show TWO different behaviors:
+   * - Bulls.log line 20-22: EXPRESS_VERSION returns "v5.3" (version string)
+   * - AquaScan logs: EXPRESS_VERSION sometimes returns "N S U" (door args)
+   *
+   * The issue: doors like joincnf CHECK the version and require 3.x/4.x!
+   * If we return the door command instead of version, doors exit silently.
+   *
+   * Solution: Return ACTUAL version string "v5.3" (AmiExpress 5.x compatible with 3.x/4.x)
    */
   handleExpressVersion(msg: XIMMessage): void {
-    // Return door args per REAL AMIGA behavior (not express.e source)
-    const session: any = this.bbsSession || {};
-    const fullCommandLine = session.doorParams || session.commandParams || '';
-    const command = session.doorCommand || session.command || '';
-    const result = fullCommandLine.trim() || command.trim();
+    // Return version string - doors need this to verify compatibility!
+    const version = 'v5.3'; // AmiExpress 5.x (backwards compatible with 3.x/4.x)
 
-console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning door args="${result}" (real Amiga behavior)`);
+console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning version="${version}" (for door compatibility checks)`);
 
-    this.messageParser.writeMessageString(msg.msgAddr, result);
+    this.messageParser.writeMessageString(msg.msgAddr, version);
 
     // Verify what was written to buffer
     const verifyBuffer = this.messageParser.readString(
@@ -223,14 +225,23 @@ console.log(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
 
       case XIMCommand.BB_CONFNUM:
         {
-          // Check both currentConference (GlobalStructures) and currentConf (legacy)
-          // Returns 0-based conference number
-          const confNum =
+          // CRITICAL: Returns 0-based conference number (currentConf - 1)
+          // Per express.e:3832: StringF(tempstring,'\d',currentConf-1)
+          // Example: User in conference 29 → returns "28", conference 1 → returns "0"
+          // Try multiple possible sources for current conference
+          // Priority: currentConference > currentConf > conferenceId > user.lastConf > default to 1
+          const currentConfNum =
             (this.bbsSession as any)?.currentConference !== undefined
-              ? (this.bbsSession as any).currentConference - 1
+              ? (this.bbsSession as any).currentConference
               : (this.bbsSession as any)?.currentConf !== undefined
-                ? (this.bbsSession as any).currentConf - 1
-                : (this.bbsSession?.conferenceId || 1) - 1;
+                ? (this.bbsSession as any).currentConf
+                : this.bbsSession?.conferenceId !== undefined
+                  ? this.bbsSession.conferenceId
+                  : (this.bbsSession?.user as any)?.lastConf !== undefined
+                    ? (this.bbsSession.user as any).lastConf
+                    : 1; // Default to conference 1
+          // MUST subtract 1 to convert to 0-based (express.e requirement)
+          const confNum = currentConfNum - 1;
           value = confNum.toString();
 
           // CRITICAL DEBUG: Log buffer state BEFORE write to track "23" vs "2" issue
@@ -239,7 +250,7 @@ console.log(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
             DoorConstants.MESSAGE_STRING_CAPACITY
           );
 console.log(`[XIMBBSInfo][BB_CONFNUM] BEFORE write: buffer="${beforeWrite}" (incoming from door)`);
-console.log(`[XIMBBSInfo][BB_CONFNUM] Calculated value: "${value}" (currentConference=${(this.bbsSession as any)?.currentConference})`);
+console.log(`[XIMBBSInfo][BB_CONFNUM] Calculated value: "${value}" (0-based) from currentConfNum=${currentConfNum} (currentConf=${(this.bbsSession as any)?.currentConf})`);
 console.log(`[XIMBBSInfo][BB_CONFNUM] Will write "${value}" to buffer at 0x${(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET).toString(16)}`);
           break;
         }
@@ -323,6 +334,8 @@ console.log(`[XIMBBSInfo][BB_CONFNUM] Message state: cmd=${cmd}, data=${data}, s
       }
     } else if (!isRead && msg.string) {
       // Accept updated values (write mode)
+      // CRITICAL: Only BB_CONFNAME and BB_CONFLOCAL support WRITE mode
+      // BB_LOCAL is READ-ONLY per express.e:3708-3709
       switch (msg.command) {
         case XIMCommand.BB_CONFNAME:
           this.bbsSession.conferenceName = msg.string;
@@ -330,9 +343,7 @@ console.log(`[XIMBBSInfo][BB_CONFNUM] Message state: cmd=${cmd}, data=${data}, s
         case XIMCommand.BB_CONFLOCAL:
           this.bbsSession.conferencePath = msg.string;
           break;
-        case XIMCommand.BB_LOCAL:
-          this.bbsSession.bbsPath = msg.string;
-          break;
+        // BB_LOCAL intentionally omitted - READ-ONLY
       }
     }
 
@@ -423,16 +434,21 @@ console.log('  BB_PURGELINEEND: Clear from cursor');
   }
 
   /**
-   * Handle non-stop text flag
-   * From E sources (express.e:3875-3876)
+   * Handle non-stop text flag - WRITE-ONLY command
+   * From E sources (express.e:3875-3876):
+   *   IF (msg.data=0) THEN nonStopDisplayFlag:=FALSE ELSE nonStopDisplayFlag:=TRUE
+   *
+   * CRITICAL: This is WRITE-ONLY, NOT bidirectional!
+   * - data=0 → disable non-stop text (pause at page breaks)
+   * - data≠0 → enable non-stop text (no pausing)
+   * - Does NOT return any value in string field
+   * - Does NOT use msg.data to determine READ/WRITE mode
    */
   handleNonStopText(msg: XIMMessage): void {
-    const enable = msg.data !== 0;
-
-console.log(`[XIMBBSInfo] BB_NONSTOPTEXT: ${enable ? 'Enable' : 'Disable'} non-stop text`);
-
-    this.state.nonStopText = enable;
+    // WRITE-ONLY: data=0 disables, data≠0 enables
+    this.state.nonStopText = msg.data !== 0;
     this.state.lineCount = 0;
+console.log(`[XIMBBSInfo] BB_NONSTOPTEXT: ${this.state.nonStopText ? 'ENABLED' : 'DISABLED'} (data=${msg.data})`);
     this.reply(msg, msg.data ?? 0);
   }
 

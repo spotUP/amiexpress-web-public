@@ -388,6 +388,7 @@ export interface BBSSession {
   slowmoCount?: number; // Remaining byte budget before next slowmo delay
   modemEmulationEnabled?: boolean; // When true, throttle screen output to modem-like speeds
   modemBps?: number; // Target bits per second for modem emulation
+  savedModemState?: { enabled: boolean; bps: number }; // Saved modem state for restoration after animation
 
   // Phase 10: Message Pointer System (express.e:199-200, 4882-4973)
   lastMsgReadConf: number; // Last message manually read (confBase.confYM) - express.e:199
@@ -512,7 +513,7 @@ console.error("[CRITICAL] Stack:", reason?.stack || "No stack trace");
     config.get("dataDir") || "./data",
     "logs/unhandled-errors.log"
   );
-  const timestamp = new Date().toISOString();
+  const timestamp = getSystemTime().toISOString();
   const errorLog = `\n\n=== UNHANDLED REJECTION at ${timestamp} ===\n${
     reason?.stack || reason
   }\n`;
@@ -529,7 +530,7 @@ console.error("[CRITICAL] Stack:", error.stack);
     config.get("dataDir") || "./data",
     "logs/unhandled-errors.log"
   );
-  const timestamp = new Date().toISOString();
+  const timestamp = getSystemTime().toISOString();
   const errorLog = `\n\n=== UNCAUGHT EXCEPTION at ${timestamp} ===\n${error.stack}\n`;
   fs.appendFileSync(logPath, errorLog, "utf8");
   // Don't exit - keep server running unless it's truly fatal
@@ -872,6 +873,7 @@ setNewUserDependencies({
 
 // Import HTTP routes setup
 import { registerHttpRoutes } from "./server/routes-setup";
+import { getSystemTime } from './utils/date-time.util';
 
 // ===== HTTP Routes (now in server/routes-setup.ts) =====
 // Routes registered in startup section below
@@ -1257,7 +1259,7 @@ console.error("Failed to assign node to session:", error);
   const packageJson = require("../package.json");
   const bbsVersion = packageJson.version || "1.0.0-web";
 
-  const connectionTime = new Date();
+  const connectionTime = getSystemTime();
   const dateStr = connectionTime.toLocaleString("en-US", {
     weekday: "short",
     month: "short",
@@ -1307,7 +1309,7 @@ console.log(
   }
 
   // express.e:29514-29515 - Running AmiExpress {version} Copyright...
-  const currentYear = new Date().getFullYear();
+  const currentYear = getSystemTime().getFullYear();
   socket.emit(
     "ansi-output",
     `\r\n\r\nRunning AmiExpress ${bbsVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`

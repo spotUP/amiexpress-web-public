@@ -17,6 +17,7 @@ import { DoorConstants } from '../DoorTypes';
 import { ZmodemTransferManager, TransferDirection, TransferTransport } from '../../services/zmodem-transfer.service';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { ximLogger } from '../../utils/XIMLogger';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export class XIMSystemCommandsHandler {
   private emulator: MoiraEmulator;
@@ -346,7 +347,7 @@ console.log('[BBSInfo] Post-register population complete');
    * Get formatted date string (MM/DD/YYYY)
    */
   private getFormattedDate(): string {
-    const now = new Date();
+    const now = getSystemTime();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
     const year = now.getFullYear();
@@ -357,7 +358,7 @@ console.log('[BBSInfo] Post-register population complete');
    * Get formatted time string (HH:MM:SS)
    */
   private getFormattedTime(): string {
-    const now = new Date();
+    const now = getSystemTime();
     const hours = now.getHours().toString().padStart(2, '0');
     const minutes = now.getMinutes().toString().padStart(2, '0');
     const seconds = now.getSeconds().toString().padStart(2, '0');
@@ -1466,7 +1467,7 @@ console.log(`[XIMSystem]   Processed: "${processed.substring(0, 40)}..."`);
     result = result.replace(/~SL/gi, (user?.secLevel ?? 10).toString());
 
     // Date/time codes
-    const now = new Date();
+    const now = getSystemTime();
     result = result.replace(/~TI/gi, now.toLocaleTimeString());
     result = result.replace(/~DA/gi, now.toLocaleDateString());
 

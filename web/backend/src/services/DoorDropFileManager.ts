@@ -63,6 +63,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../database';
 import { loadBBSConfig } from './bbs-config-file.service';
+import { getSystemTime } from '../utils/date-time.util';
 
 // Cache for previous caller info per node (avoids reading logs repeatedly)
 interface PreviousCallerInfo {
@@ -173,13 +174,13 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
       if (fs.existsSync(trackingPath)) {
         const content = fs.readFileSync(trackingPath, 'utf8').trim();
         const [dateStr, bytesStr] = content.split(':');
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getSystemTime().toISOString().slice(0, 10);
         if (dateStr === today) {
           total = parseInt(bytesStr) || 0;
         }
       }
       total += bytes;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getSystemTime().toISOString().slice(0, 10);
       fs.writeFileSync(trackingPath, `${today}:${total}`, 'utf8');
     } catch (err) {
       // Silent fail
@@ -196,7 +197,7 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
       if (fs.existsSync(trackingPath)) {
         const content = fs.readFileSync(trackingPath, 'utf8').trim();
         const [dateStr, bytesStr] = content.split(':');
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getSystemTime().toISOString().slice(0, 10);
         if (dateStr === today) {
           return parseInt(bytesStr) || 0;
         }
@@ -227,7 +228,7 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
     }
 
     // Format dates
-    const now = new Date();
+    const now = getSystemTime();
     const lastLogin = user.lastLogin || now;
     const formatDate = (date: Date) => {
       const mm = String(date.getMonth() + 1).padStart(2, '0');

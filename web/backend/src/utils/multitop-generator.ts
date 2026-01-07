@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { db } from '../database';
+import { getSystemTime } from '../utils/date-time.util';
 
 interface DesignConfig {
   sortField: SortField;
@@ -399,11 +400,11 @@ function replacePlaceholders(
         val = globalStats.activeUsers.toString();
         break;
       case 'LD':
-        const now = new Date();
+        const now = getSystemTime();
         val = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
         break;
       case 'LT':
-        val = new Date().toTimeString().split(' ')[0];
+        val = getSystemTime().toTimeString().split(' ')[0];
         break;
       case 'VT':
         val = 'MultiTop v2.1';

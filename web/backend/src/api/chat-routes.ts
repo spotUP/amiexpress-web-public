@@ -10,6 +10,7 @@
 
 import express, { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
 
 // Standard API response format
@@ -32,7 +33,7 @@ export function createChatRouter(database: Database): ReturnType<typeof express.
       success: true,
       data,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: getSystemTime().toISOString()
     };
     res.json(response);
   };
@@ -45,7 +46,7 @@ console.error('[Chat API] Error:', error);
     const response: ApiResponse = {
       success: false,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: getSystemTime().toISOString()
     };
 
     res.status(statusCode).json(response);

@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { db } from '../database';
 import { QWKPacket, QWKMessage, FTNMessage } from '../types';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class QWKManager {
   private qwkPath: string;
@@ -29,7 +30,7 @@ export class QWKManager {
       const packet: Omit<QWKPacket, 'id'> = {
         filename,
         size: fs.statSync(packetPath).size,
-        created: new Date(),
+        created: getSystemTime(),
         fromBBS: 'UNKNOWN', // Will be determined from packet
         toBBS: this.bbsId,
         status: 'processing',
@@ -59,7 +60,7 @@ console.error(`Error processing QWK packet ${filename}:`, error);
       const packetId = await db.createQWKPacket({
         filename,
         size: fs.statSync(packetPath).size,
-        created: new Date(),
+        created: getSystemTime(),
         fromBBS: 'UNKNOWN',
         toBBS: this.bbsId,
         status: 'error',
@@ -208,7 +209,7 @@ console.error('Error parsing QWK packet:', error);
           date.setHours(hours, minutes);
         }
       } else {
-        date = new Date();
+        date = getSystemTime();
       }
 
       // Read message body (starts after header)
@@ -274,7 +275,7 @@ console.error('Error parsing QWK message:', error);
     }
 
     // Create QWK packet filename
-    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const timestamp = getSystemTime().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `${this.bbsId}${timestamp}.QWK`;
 
     // Generate QWK packet (simplified)
@@ -285,7 +286,7 @@ console.error('Error parsing QWK message:', error);
     const packetId = await db.createQWKPacket({
       filename,
       size: fs.statSync(packetPath).size,
-      created: new Date(),
+      created: getSystemTime(),
       fromBBS: this.bbsId,
       toBBS: 'USER', // Will be set when downloaded
       status: 'completed',
@@ -351,7 +352,7 @@ console.error('Error parsing QWK message:', error);
     header.write(bbsId, 20, 8, 'ascii');
 
     // Creation time (current time)
-    const now = new Date();
+    const now = getSystemTime();
     const timeStr = now.toISOString().slice(0, 19).replace(/[:-]/g, '');
     header.write(timeStr, 12, 8, 'ascii');
 
@@ -441,7 +442,7 @@ console.error('Error parsing QWK message:', error);
     // Update packet status and add download timestamp
     await db.updateQWKPacket(packetId, {
       status: 'downloaded',
-      processedAt: new Date()
+      processedAt: getSystemTime()
     });
   }
 
@@ -476,7 +477,7 @@ console.error('Error processing incoming QWK packets:', error);
 
   // Clean up old processed packets
   async cleanupOldPackets(maxAgeDays: number = 30): Promise<void> {
-    const cutoffDate = new Date();
+    const cutoffDate = getSystemTime();
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get packets older than cutoff
@@ -716,7 +717,7 @@ console.error('Error parsing FTN message:', error);
                      parseInt(hours), parseInt(minutes), parseInt(seconds));
     } catch (error) {
 console.error('Error parsing FTN date:', dateStr, error);
-      return new Date();
+      return getSystemTime();
     }
   }
 
@@ -783,7 +784,7 @@ console.error('Error parsing FTN date:', dateStr, error);
 
     // Packet password (empty)
     // Creation time
-    const now = new Date();
+    const now = getSystemTime();
     const timeStr = now.toISOString().slice(0, 19).replace(/[:-]/g, '');
     header.write(timeStr, 24, 8, 'ascii');
 
@@ -923,7 +924,7 @@ console.error('Error processing incoming FTN packets:', error);
 
   // Clean up old processed packets
   async cleanupOldPackets(maxAgeDays: number = 30): Promise<void> {
-    const cutoffDate = new Date();
+    const cutoffDate = getSystemTime();
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
 
     // Get messages older than cutoff

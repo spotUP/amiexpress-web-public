@@ -7,6 +7,7 @@ import { fileAreaManager } from '../services/FileAreaManager';
 import type { FileArea, FileEntry } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class FileRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
@@ -265,8 +266,8 @@ console.error(`[Database] Failed to delete file entry from disk:`, error);
       const fullArea: FileArea = {
         ...area,
         id: areaId,
-        created: new Date(),
-        updated: new Date()
+        created: getSystemTime(),
+        updated: getSystemTime()
       };
       fileAreaManager.createAreaDirFile(fullArea);
 console.log(`[Database] Created .dir file for area "${area.name}" in conference ${area.conferenceId}`);

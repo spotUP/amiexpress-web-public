@@ -6,6 +6,7 @@
  */
 
 import { User } from '../types';
+import { getSystemTime } from '../utils/date-time.util';
 import type { Conference } from '../database/types';
 
 export interface DownloadRequest {
@@ -309,7 +310,7 @@ export async function updateDownloadStats(
   }
 
   // Update last download time
-  user.lastDownloadTime = new Date();
+  user.lastDownloadTime = getSystemTime();
 
   // Update topDownloadCPS if this download achieved a higher CPS
   // Use provided CPS or simulate modem speed

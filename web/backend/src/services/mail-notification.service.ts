@@ -12,6 +12,7 @@
 
 import nodemailer from 'nodemailer';
 import { db } from '../database';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface MailOptions {
   smtpHost: string;
@@ -337,7 +338,7 @@ export async function testSmtpConnection(): Promise<{ success: boolean; error?: 
 
     // Then send a test email
     const bbsName = await getBbsName();
-    const now = new Date().toLocaleString();
+    const now = getSystemTime().toLocaleString();
     await transporter.sendMail({
       from: options.bbsEmail || `noreply@${options.smtpHost}`,
       to: options.sysopEmail,

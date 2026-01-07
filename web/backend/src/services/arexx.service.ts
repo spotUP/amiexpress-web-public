@@ -5,6 +5,7 @@ import { db } from '../database';
 import { AREXXContext, AREXXScript } from '../types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { callersLogManager } from './CallersLogManager';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * AREXX Variable Storage
@@ -126,7 +127,7 @@ class AREXXFunctions {
    * Time/Date functions
    */
   static TIME(format?: string): string {
-    const now = new Date();
+    const now = getSystemTime();
     switch (format?.toUpperCase()) {
       case 'H':
       case 'HOURS':
@@ -143,7 +144,7 @@ class AREXXFunctions {
   }
 
   static DATE(format?: string): string {
-    const now = new Date();
+    const now = getSystemTime();
     switch (format?.toUpperCase()) {
       case 'D':
       case 'DAYS':
@@ -232,7 +233,7 @@ class BBSFunctions {
         subject,
         body,
         author: this.context.user?.username || 'System',
-        timestamp: new Date(),
+        timestamp: getSystemTime(),
         conferenceId: this.context.session?.currentConf || 1,
         messageBaseId: this.context.session?.currentMsgBase || 1,
         isPrivate,

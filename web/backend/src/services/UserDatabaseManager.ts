@@ -435,15 +435,19 @@ export class UserDatabaseManager {
   }
 
   readConfAccessFromDisk(slotNumber: number): string {
-    if (!fs.existsSync(this.userDataPath)) return "";
+    if (!fs.existsSync(this.userDataPath)) return "XXXXXXXXXXXXXXXXXXXXXXXXX"; // Default: full access to all 25 conferences
     const CONF_ACCESS_OFFSET = 136;
-    const CONF_ACCESS_SIZE = 10;
+    const CONF_ACCESS_SIZE = 10; // user.data only stores 10 bytes
+    const TOTAL_CONFERENCES = 25; // Doors expect 25 characters
     const fd = fs.openSync(this.userDataPath, "r");
     try {
       const buffer = Buffer.alloc(CONF_ACCESS_SIZE);
       fs.readSync(fd, buffer, 0, CONF_ACCESS_SIZE, slotNumber * this.USER_SIZE + CONF_ACCESS_OFFSET);
       let result = "";
+      // Read the 10 bytes from disk
       for (let i = 0; i < CONF_ACCESS_SIZE; i++) result += buffer[i] === 0x58 ? "X" : "_";
+      // Pad to 25 characters with 'X' (full access to remaining conferences 11-25)
+      while (result.length < TOTAL_CONFERENCES) result += "X";
       return result;
     } finally { fs.closeSync(fd); }
   }

@@ -15,6 +15,7 @@ import { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
+import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -90,7 +91,7 @@ console.log('📡 [BROADCAST] Starting broadcast:', {
   });
 
   const socketRoom = 'room:' + roomId;
-  const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const timestamp = getSystemTime().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
   const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message + '\r\n';
 
 console.log('📡 [BROADCAST] Emitting to socket room:', socketRoom);
@@ -113,7 +114,7 @@ console.log('📡 [BROADCAST] Sent ansi-output to all in room');
     username: senderUsername,
     content: message,
     type: 'message',
-    createdAt: new Date(),
+    createdAt: getSystemTime(),
   };
 
   if (excludeSocketId) {
@@ -231,6 +232,26 @@ console.log('🚪 Room join request:', session.user?.id, data.roomId || data.roo
       room = await db.getChatRoom(data.roomId);
     } else if (data.roomName) {
       room = await db.getChatRoomByName(data.roomName);
+
+      // Auto-create room if it doesn't exist
+      if (!room) {
+        const sanitizedName = sanitizeRoomName(data.roomName);
+        if (!sanitizedName) {
+          return sendRoomError(socket, 'Invalid room name');
+        }
+
+        console.log(`[Room Auto-Create] Creating new room: ${sanitizedName}`);
+        const roomId = await db.createChatRoom({
+          name: sanitizedName,
+          description: `Auto-created room: ${sanitizedName}`,
+          isPrivate: false,
+          maxMembers: 100,
+          createdBy: session.user.id
+        });
+
+        room = await db.getChatRoom(roomId);
+        console.log(`[Room Auto-Create] Created room ${sanitizedName} with ID ${roomId}`);
+      }
     } else {
       return sendRoomError(socket, 'Invalid room ID or room name');
     }

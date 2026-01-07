@@ -562,7 +562,7 @@ console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
         if (isRead) {
           // Format as Amiga-style date: "DD-MMM-YY HH:MM:SS"
           // Based on express.e:3775 formatCDateTime(getSystemTime(),tempstring)
-          const now = new Date();
+          const now = getSystemTime();
           const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const day = now.getDate().toString().padStart(2, '0');
           const month = months[now.getMonth()];
@@ -597,25 +597,27 @@ console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
         break;
 
       case XIMCommand.DT_CONFACCESS:
+        // express.e:3777-3778: Uses 10 bytes for conferences 1-10
+        // For 25 conferences (1-25), use DT_CONFACCESS2 instead!
         if (isRead) {
-          // express.e:3777-3778 uses 10-char conference access string from disk
           let confAccess =
             (this.bbsSession as any)?.confAccess ||
             this.state.confAccess ||
             '';
-          if (confAccess.length < 10) {
-            confAccess = confAccess.padEnd(10, '_');
-          } else if (confAccess.length > 10) {
-            confAccess = confAccess.slice(0, 10);
+          // Default to full access for first 10 conferences if empty
+          if (confAccess.length === 0) {
+            confAccess = 'XXXXXXXXXX'; // 10 X's = full access to conferences 1-10
           }
-          this.messageParser.writeString(stringAddr, confAccess, 10);
-console.log(`  [READ] DT_CONFACCESS: "${confAccess}" (from disk)`);
+          // Truncate to 10 bytes (conferences 1-10 only)
+          const confAccess10 = confAccess.slice(0, 10).padEnd(10, 'X');
+          this.messageParser.writeString(stringAddr, confAccess10, 10);
+console.log(`  [READ] DT_CONFACCESS: "${confAccess10}" (10 chars, confs 1-10)`);
         } else {
-          // Write operation - update state (will need to sync to disk separately)
+          // Write operation - accept 10 characters
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
           (this.bbsSession as any).confAccess = newAccess;
-console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}"`);
+console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}" (10 chars)`);
         }
         break;
 
@@ -667,10 +669,22 @@ console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newV
         break;
 
       case XIMCommand.DT_DUMP:
-        if (isRead) {
-          const dumpData = JSON.stringify(user || {}, null, 2);
-          this.messageParser.writeString(stringAddr, dumpData, 200);
-console.log(`  [READ] DT_DUMP: User data dumped`);
+        // express.e:3667-3668: WRITE-ONLY - saves user data to file specified in msg.string
+        {
+          const filename = this.messageParser.readString(stringAddr, 200);
+          if (filename && filename.trim().length > 0) {
+            try {
+              const fs = require('fs');
+              const path = require('path');
+              const bbsRoot = (this.bbsSession as any)?.bbsRoot || process.cwd();
+              const fullPath = path.resolve(bbsRoot, filename);
+              const userData = JSON.stringify(user || {}, null, 2);
+              fs.writeFileSync(fullPath, userData, 'utf8');
+console.log(`  [WRITE] DT_DUMP: Saved user data to ${fullPath}`);
+            } catch (err) {
+console.error(`  [WRITE] DT_DUMP: Failed to save to ${filename}:`, err);
+            }
+          }
         }
         break;
 
@@ -702,6 +716,7 @@ console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
           let updated = currentFlags;
 
           if (msg.command === XIMCommand.DT_ADDBIT) {
+            // express.e:3853-3854: setTempSecurityFlags(msg.data)
             updated = currentFlags | bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
@@ -711,6 +726,7 @@ console.log(
               )}, flags=0x${updated.toString(16)}`
             );
           } else if (msg.command === XIMCommand.DT_REMBIT) {
+            // express.e:3855-3856: clearTempSecurityFlags(msg.data)
             updated = currentFlags & ~bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
@@ -720,12 +736,17 @@ console.log(
               )}, flags=0x${updated.toString(16)}`
             );
           } else {
-            replyData = (currentFlags & bitMask) !== 0 ? 1 : 0;
+            // express.e:3857-3858: msg.command:=checkSecurity(msg.data)
+            // CRITICAL: Result goes in msg.command field, NOT msg.data!
+            const result = (currentFlags & bitMask) !== 0 ? 1 : 0;
+            this.messageParser.writeCommand(msg.msgAddr, result);
 console.log(
               `  [READ] DT_QUERYBIT: mask=0x${bitMask.toString(
                 16
-              )}, result=${replyData}`
+              )}, result=${result} (in msg.command)`
             );
+            // Don't set replyData - result already written to msg.command
+            return;
           }
         }
         break;
@@ -931,12 +952,20 @@ console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
         break;
 
       case XIMCommand.DT_CALLEDTODAY:
-        // express.e:4189-4195: Times called today
+        // express.e:4189-4195: Times called today via getTodaysCalls()
+        // express.e:28425-28432: getTodaysCalls() checks if last login was different day
         {
           if (isRead) {
-            const timesOnToday = (user as any)?.timesOnToday ?? 1;
+            // Implement getTodaysCalls() logic from express.e:28425-28432
+            const currTime = Math.floor(Date.now() / 1000);
+            const currDay = Math.floor((currTime - 21600) / 86400); // -21600 = 6 hour offset
+            const timeLastOn = user?.timeLastOn || (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
+            const lastDay = Math.floor((timeLastOn - 21600) / 86400);
+
+            // If different day, return 0; otherwise return timesOnToday
+            const timesOnToday = (currDay !== lastDay) ? 0 : ((user as any)?.timesOnToday ?? 0);
             this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
-console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday}`);
+console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday} (currDay=${currDay}, lastDay=${lastDay})`);
           } else {
             const newCount = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCount) && user) (user as any).timesOnToday = newCount;

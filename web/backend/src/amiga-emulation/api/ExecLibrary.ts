@@ -13,6 +13,7 @@ import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
 import { notifySysop } from "../../utils/sysop-alert.util";
+import { getSystemTime } from '../../utils/date-time.util';
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -266,7 +267,7 @@ console.log(
       const bbsRoot =
         process.env.BBS_DATA_DIR || "~/Code/amiexpress-web";
       const logFile = path.join(bbsRoot, "logs", "backend.log");
-      const line = `[ExecDebug] ${new Date().toISOString()} ${message}\n`;
+      const line = `[ExecDebug] ${getSystemTime().toISOString()} ${message}\n`;
       fs.appendFileSync(logFile, line, { encoding: "utf8" });
     } catch (e) {
       // Log error to console as fallback
@@ -2166,6 +2167,26 @@ console.log(
           this.libraries.set("AEDoor.library", lib);
           this.libraries.set("aedoor.library", lib);
           this.writeLibraryToMemory(lib);
+          const baseAddr = loadedLib.baseAddress;
+
+          if (process.env.DEBUG_68K_NATIVE === '1') {
+            const probeOffsets = [0x0, 0x10, 0x20, 0x100, 0x170, 0x278, 0x388];
+            const probeBytes: string[] = [];
+            for (const off of probeOffsets) {
+              const b0 = this.emulator.readMemory(baseAddr + off);
+              const b1 = this.emulator.readMemory(baseAddr + off + 1);
+              const b2 = this.emulator.readMemory(baseAddr + off + 2);
+              const b3 = this.emulator.readMemory(baseAddr + off + 3);
+              probeBytes.push(
+                `+0x${off.toString(16)}=0x${b0.toString(16).padStart(2,'0')}${b1.toString(16).padStart(2,'0')}${b2.toString(16).padStart(2,'0')}${b3.toString(16).padStart(2,'0')}`
+              );
+            }
+console.log(
+              `[ExecLibrary] AEDoor mem probe @0x${baseAddr.toString(
+                16
+              )}: ${probeBytes.join(' ')}`
+            );
+          }
 
           // CRITICAL: Write system library bases that native AEDoor code expects!
           // Native code does: movea.l 0x22(a6), a6 to get ExecBase
@@ -2196,7 +2217,6 @@ console.log(
 
           // CRITICAL: Create JMP table at negative offsets for library function calls
           // When a door does JSR -42(A6), it jumps to base-42 which must have a JMP instruction
-          const baseAddr = loadedLib.baseAddress;
           const aedoorJmpTable: Array<{
             lvo: number;
             fileOffset: number;
@@ -2233,7 +2253,7 @@ console.log(
             )}:`
           );
           for (const func of aedoorJmpTable) {
-            const targetAddr = baseAddr + func.fileOffset;
+            const targetAddr = baseAddr + (func.fileOffset - 0x20);
             const jmpAddr = baseAddr + func.lvo; // Negative offset from base
 
             // Write JMP.L instruction (0x4EF9) followed by target address

@@ -16,6 +16,7 @@ import { ChatSessionUseCase, ChatSession, ChatMessage } from '../../services/use
 import { LoggedOnSubState } from '../../constants/bbs-states';
 
 import { ChatState } from '../../services/use-cases/chat-session.use-case';
+import { getSystemTime } from '../../utils/date-time.util';
 
 // Dependencies that need to be injected externally (circular dependency workaround)
 let executePagerDoor: (socket: any, session: BBSSession, chatSession: ChatSession) => boolean;
@@ -62,7 +63,7 @@ console.log('Starting sysop page for user:', session.user.username);
     );
 
     // Log the page
-console.log(`Operator paged at ${new Date().toISOString()} by ${session.user.username}`);
+console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.user.username}`);
 
     // Trigger webhook for sysop page
     this.sendPagerWebhook(session);
@@ -81,7 +82,7 @@ console.log(`Operator paged at ${new Date().toISOString()} by ${session.user.use
    * Display internal pager - Internal pager display (like the dots in ccom())
    */
   displayInternalPager(socket: any, session: BBSSession, chatSession: ChatSession): void {
-    const displayTime = new Date().toLocaleTimeString();
+    const displayTime = getSystemTime().toLocaleTimeString();
     const sysopName = 'Sysop';
 
     socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);

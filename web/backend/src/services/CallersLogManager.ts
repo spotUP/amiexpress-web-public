@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class CallersLogManager {
   private bbsRoot: string;
@@ -54,7 +55,7 @@ console.log(`[CallersLog] Created directory: Node${nodeId}/`);
    * Format: DD-Mon-YY HH:MM
    * Example: 01-Nov-25 20:49
    */
-  private formatTimestamp(date: Date = new Date()): string {
+  private formatTimestamp(date: Date = getSystemTime()): string {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

@@ -21,6 +21,7 @@ import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { db } from '../database';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface BBSUser {
   id: string;
@@ -172,12 +173,12 @@ export class BBSApi {
   }
 
   /**
-   * Get terminal dimensions (40x25 for PETSCII, 80x24 for ANSI)
+   * Get terminal dimensions (40x25 for PETSCII, 80x25 for ANSI)
    */
   getTerminalSize(): { width: number; height: number } {
     return {
       width: this.session?.screenWidth || 80,
-      height: this.session?.screenHeight || 24
+      height: this.session?.screenHeight || 25
     };
   }
 
@@ -369,8 +370,9 @@ console.log('[BBSApi] Mouse events disabled');
    * - 'wide': responsive width (for neo-blessed doors that support wider layouts)
    */
   setTerminalMode(mode: 'fixed' | 'wide'): void {
+    console.log(`[BBSApi] setTerminalMode called with mode=${mode}, socket.id=${this.socket.id}`);
     this.socket.emit('terminal-mode', mode);
-console.log(`[BBSApi] Terminal mode set to: ${mode}`);
+    console.log(`[BBSApi] Emitted terminal-mode event with mode=${mode}`);
   }
 
   /**
@@ -816,7 +818,7 @@ console.error(`[BBSApi] Error listing directory ${directory}:`, error);
         subject,
         body,
         author: this.session.user?.username || 'Unknown',
-        timestamp: new Date(),
+        timestamp: getSystemTime(),
         conferenceId: this.getCurrentConference(),
         messageBaseId: 1, // Default to first message base
         isPrivate: true,
@@ -847,7 +849,7 @@ console.error('[BBSApi] Error sending message:', error);
         subject,
         body,
         author: this.session.user?.username || 'Unknown',
-        timestamp: new Date(),
+        timestamp: getSystemTime(),
         conferenceId: this.getCurrentConference(),
         messageBaseId: 1, // Default to first message base
         isPrivate: false,

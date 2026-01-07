@@ -28,6 +28,7 @@ private:
     bool debugExceptions = false;      // Log all exception vectors
     bool debugWatchpoints = false;     // Log when watchpoints are hit
     bool debugMemoryAccess = false;    // Detailed memory access logging with stack traces
+    bool debugStackWrites = false;     // Log writes near current SP
 
     // ========== Breakpoint Support ==========
     std::vector<uint32_t> breakpoints;  // PC addresses to break on
@@ -107,6 +108,7 @@ public:
     void setDebugExceptions(bool enabled) { debugExceptions = enabled; }
     void setDebugWatchpoints(bool enabled) { debugWatchpoints = enabled; }
     void setDebugMemoryAccess(bool enabled) { debugMemoryAccess = enabled; }
+    void setDebugStackWrites(bool enabled) { debugStackWrites = enabled; }
 
     bool getDebug() const { return debugEnabled; }
     bool getDebugInstructions() const { return debugInstructions; }
@@ -603,6 +605,19 @@ public:
                            ' val=0x' + $1.toString(16).padStart(2, '0') +
                            ' PC=0x' + $2.toString(16).padStart(6, '0'));
             }, addr, val, reg.pc);
+        }
+
+        // Stack-relative write tracing (diagnose return address corruption)
+        if (debugStackWrites) {
+            uint32_t sp = reg.a[7];
+            if (addr >= sp - 0x40 && addr <= sp + 0x40) {
+                EM_ASM({
+                    console.log('[STACK WRITE8] addr=0x' + $0.toString(16).padStart(6, '0') +
+                                ' val=0x' + $1.toString(16).padStart(2, '0') +
+                                ' PC=0x' + $2.toString(16).padStart(6, '0') +
+                                ' SP=0x' + $3.toString(16).padStart(6, '0'));
+                }, addr, val, reg.pc, sp);
+            }
         }
 
         // Check watchpoints (runtime watchpoint addresses)
@@ -1308,6 +1323,7 @@ EMSCRIPTEN_BINDINGS(moira_module) {
         .function("setDebugExceptions", &MoiraCPU::setDebugExceptions)
         .function("setDebugWatchpoints", &MoiraCPU::setDebugWatchpoints)
         .function("setDebugMemoryAccess", &MoiraCPU::setDebugMemoryAccess)
+        .function("setDebugStackWrites", &MoiraCPU::setDebugStackWrites)
         .function("getDebug", &MoiraCPU::getDebug)
         .function("getDebugInstructions", &MoiraCPU::getDebugInstructions)
         .function("getDebugAddressErrors", &MoiraCPU::getDebugAddressErrors)

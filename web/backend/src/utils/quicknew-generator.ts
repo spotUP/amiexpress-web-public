@@ -3,6 +3,7 @@ import * as path from 'path';
 import { db } from '../database';
 import { config } from '../config';
 import { loadConferenceFileAreas } from '../services/file-areas-loader';
+import { getSystemTime } from '../utils/date-time.util';
 
 interface QuickNewSection {
   title: string;
@@ -68,7 +69,7 @@ function renderSection(section: QuickNewSection): string {
 }
 
 export async function generateQuickNewScreen(confId: number, daysBack = 7): Promise<string> {
-  const now = new Date();
+  const now = getSystemTime();
   const cutoff = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
   const yesterdayStart = new Date(now);
   yesterdayStart.setHours(0, 0, 0, 0);
@@ -278,7 +279,7 @@ export async function generateQuickNewFromConfig(
     return null;
   }
 
-  const now = new Date();
+  const now = getSystemTime();
   const cutoff = new Date(now.getTime() - (daysBack + 1) * 24 * 60 * 60 * 1000); // +1 day buffer
   const yesterdayStart = new Date(now);
   yesterdayStart.setHours(0, 0, 0, 0);
@@ -317,8 +318,8 @@ console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
           maxFiles: 0,
           uploadAccess: 0,
           downloadAccess: 0,
-          created: new Date(),
-          updated: new Date()
+          created: getSystemTime(),
+          updated: getSystemTime()
         }));
       }
 

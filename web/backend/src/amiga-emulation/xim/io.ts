@@ -21,6 +21,7 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
 import { ximLogger } from '../../utils/XIMLogger';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -41,6 +42,8 @@ export class XIMIOHandler {
   // Hotkey/pause state
   private waitingForHotkey: boolean = false;
   private hotkeyMessage: XIMMessage | null = null;
+  private waitingForExtHotkey: boolean = false;
+  private extHotkeyMessage: XIMMessage | null = null;
   private waitingForPause: boolean = false;
   private pauseReply: { msg: XIMMessage; data: number } | null = null;
   private pauseInputBuffer: string = '';
@@ -70,7 +73,7 @@ export class XIMIOHandler {
    */
   isWaitingForLineInput(): boolean {
     return (
-      this.waitingForLineInput || this.waitingForHotkey || this.waitingForPause
+      this.waitingForLineInput || this.waitingForHotkey || this.waitingForExtHotkey || this.waitingForPause
     );
   }
 
@@ -131,6 +134,12 @@ console.log('[XIMIOHandler] Accumulating pause input');
       if (this.waitingForHotkey && this.hotkeyMessage) {
         // For hotkeys, if it's an escape sequence, pass the full sequence
         this.completeHotkey(token);
+        continue;
+      }
+
+      if (this.waitingForExtHotkey && this.extHotkeyMessage) {
+        // For extended hotkeys, pass the character/sequence
+        this.completeExtHotkey(token);
         continue;
       }
 
@@ -291,7 +300,7 @@ console.log('[XIMIOHandler] Line input completed, resuming emulator');
 
   /**
    * Handle door write request (JH_WRITE)
-   * From E sources (express.e:3380)
+   * From E sources (express.e:3382-3385)
    */
   handleWrite(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
@@ -302,11 +311,20 @@ console.log(
       JSON.stringify(text)
     );
 
-    // express.e:3380 - JH_WRITE calls aePuts(msg.string)
-    // aePuts does NOT increment lineCount or check for pause.
-    const bytesWritten = this.emitText(text, addNewline, false, false, msg);
-
+    // express.e:3382-3385 - JH_WRITE checks transfering and doorSilent flags
+    // CASE JH_WRITE
+    //   IF (transfering=FALSE) AND (doorSilent=FALSE)
+    //     aePuts(msg.string)
+    //   ENDIF
+    let bytesWritten = 0;
+    if (!this.state.transfering && !this.state.doorSilent) {
+      // aePuts does NOT increment lineCount or check for pause.
+      bytesWritten = this.emitText(text, addNewline, false, false, msg);
 console.log(`[XIMIOHandler] Sent ${bytesWritten} bytes to terminal`);
+    } else {
+console.log(`[XIMIOHandler] Output suppressed (transfering=${this.state.transfering}, doorSilent=${this.state.doorSilent})`);
+    }
+
     this.reply(msg, bytesWritten);
   }
 
@@ -346,6 +364,14 @@ console.log('[XIMIOHandler] GETKEY: No input queued');
   handleSendMessage(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
     const shouldAddNewline = msg.data !== 0;
+    const trimmed = text.trim();
+
+    // AmiExpress doors sometimes send "bbs:" paths via JH_SM for file display.
+    if (trimmed.toLowerCase().startsWith('bbs:')) {
+      const patched: XIMMessage = { ...msg, string: trimmed };
+      this.handleShowFile(patched);
+      return;
+    }
 
     // DEBUG: Log raw bytes from message string buffer
     const rawBytes: number[] = [];
@@ -555,25 +581,73 @@ console.log('[XIMIOHandler] JH_HK: Resuming emulator');
   }
 
   /**
+   * Complete a pending extended hotkey prompt
+   * Called when input arrives while waitingForExtHotkey is true.
+   * Sends the reply and resumes the emulator.
+   *
+   * CRITICAL: Returns character code in msg.command field, NOT msg.data!
+   */
+  private completeExtHotkey(char: string): void {
+    if (!this.extHotkeyMessage) {
+      return;
+    }
+
+    const msg = this.extHotkeyMessage;
+    const charCode = char.charCodeAt(0);
+
+console.log('========================================');
+console.log(`[XIMIOHandler] JH_ExtHK COMPLETE:`);
+console.log(`  Input char: ${JSON.stringify(char)} (charCode=${charCode})`);
+console.log(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
+console.log('========================================');
+
+    // CRITICAL: Character code goes in msg.command field, NOT msg.data!
+    this.messageParser.writeCommand(msg.msgAddr, charCode);
+    this.reply(msg, this.state.carrierDropped ? -1 : 1);
+
+    this.waitingForExtHotkey = false;
+    this.extHotkeyMessage = null;
+
+    // Resume emulator execution now that we have input
+console.log('[XIMIOHandler] JH_ExtHK: Resuming emulator');
+    this.emulator.resume();
+  }
+
+  /**
    * Handle extended hotkey (JH_ExtHK)
    * From E sources (express.e:3432-3435)
+   *
+   * CRITICAL: This command BLOCKS until input or timeout, like JH_HK!
+   * express.e: msg.command:=readChar(doorTimeout,Shl(1,msg.signal))
+   *
+   * Returns character code in msg.command field (NOT msg.data!)
+   * Returns data=1 on success, data=-1 on timeout
    */
   handleExtendedHotkey(msg: XIMMessage): void {
-console.log('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal');
+console.log('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
     this.state.lineCount = 0;
 
-    if (this.inputQueue.length > 0) {
-      const char = this.inputQueue.shift()!;
-      this.messageParser.writeCommand(msg.msgAddr, char.charCodeAt(0));
-      this.messageParser.writeMessageString(msg.msgAddr, char);
-console.log(`  [READ] Extended hotkey: '${char}'`);
-      this.reply(msg, 1);
-    } else {
-      this.messageParser.writeCommand(msg.msgAddr, 0);
-      this.messageParser.writeMessageString(msg.msgAddr, '');
-console.log('  [TIMEOUT] No input available');
+    if (this.state.carrierDropped) {
+      this.messageParser.writeCommand(msg.msgAddr, -1);
       this.reply(msg, -1);
+      return;
     }
+
+    if (this.inputQueue.length > 0) {
+      // Input available - return immediately
+      const char = this.inputQueue.shift()!;
+      const charCode = char.charCodeAt(0);
+      this.messageParser.writeCommand(msg.msgAddr, charCode);
+console.log(`  [READ] Extended hotkey: '${char}' (code=${charCode})`);
+      this.reply(msg, 1);
+      return;
+    }
+
+    // No input - PAUSE emulator and wait (implements blocking!)
+console.log('  [WAITING] No input, pausing emulator');
+    this.waitingForExtHotkey = true;
+    this.extHotkeyMessage = msg;
+    this.emulator.pause();
   }
 
   /**
@@ -903,7 +977,7 @@ console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
         resultString = bbsSession.bbsPath || '~/Code/amiexpress-web/reference-boardBBS';
         break;
       case 9: // Long date format
-        const date = new Date();
+        const date = getSystemTime();
         resultString = date.toLocaleDateString('en-US', {
           weekday: 'long',
           year: 'numeric',
@@ -912,7 +986,7 @@ console.log(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
         });
         break;
       case 10: // Long time format
-        const time = new Date();
+        const time = getSystemTime();
         resultString = time.toLocaleTimeString('en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -1377,6 +1451,13 @@ console.log('[XIMIOHandler] Reply sent via ReplyMsg');
       this.hotkeyMessage = null;
     }
 
+    if (this.waitingForExtHotkey && this.extHotkeyMessage) {
+      this.messageParser.writeCommand(this.extHotkeyMessage.msgAddr, -1);
+      this.reply(this.extHotkeyMessage, -1);
+      this.waitingForExtHotkey = false;
+      this.extHotkeyMessage = null;
+    }
+
     if (this.waitingForPause && this.pauseReply) {
       this.reply(this.pauseReply.msg, -1);
       this.waitingForPause = false;
@@ -1445,6 +1526,12 @@ console.log('[XIMIOHandler] Aborting pending line input');
 console.log('[XIMIOHandler] Aborting pending hotkey');
       this.waitingForHotkey = false;
       this.hotkeyMessage = null;
+    }
+
+    if (this.waitingForExtHotkey && this.extHotkeyMessage) {
+console.log('[XIMIOHandler] Aborting pending extended hotkey');
+      this.waitingForExtHotkey = false;
+      this.extHotkeyMessage = null;
     }
 
     if (this.waitingForPause) {

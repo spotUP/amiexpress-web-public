@@ -193,12 +193,12 @@ console.log(`[InternalRouter] Overriding internal command '${command}' with exte
       return RESULT_SUCCESS;
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
-console.log('🔥 BEFORE calling handleLiveChatCommand, params:', params);
+console.log('[BEFORE] calling handleLiveChatCommand, params:', params);
       try {
         await handleLiveChatCommand(socket, session, params);
-console.log('✅ AFTER calling handleLiveChatCommand successfully');
+console.log('[OK] AFTER calling handleLiveChatCommand successfully');
       } catch (error) {
-console.error('❌ ERROR in handleLiveChatCommand:', error);
+console.error('[ERROR] in handleLiveChatCommand:', error);
         throw error;
       }
       return RESULT_SUCCESS;

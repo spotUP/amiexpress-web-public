@@ -35,6 +35,7 @@ import { mailOnLogon, mailOnPwdFail, isMailEventEnabled, isSmtpConfigured } from
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
 import { emitUserLogin } from '../services/bbs-event-emitter';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * Register authentication socket event handlers
@@ -123,6 +124,30 @@ console.log('[Session Restore] Found existing session for user, rebinding to new
         loadHistory(existingSession, user.id).catch((err: any) => {
 console.error('[Session Restore] Failed to load command history:', err);
         });
+
+        // Re-apply modem emulation from restored session
+        const userBaud = user.baud || 0;
+        existingSession.modemBps = userBaud;
+        existingSession.modemEmulationEnabled = userBaud > 0;
+
+        // Re-install modem speed emulator on new socket
+        const { getModemEmulator } = require('../utils/modem-emulator.util');
+        const modemEmulator = getModemEmulator(socket);
+        modemEmulator.install();
+        if (userBaud > 0) {
+          modemEmulator.enable(userBaud);
+          console.log(`[SESSION RESTORE] Modem emulation re-enabled at ${userBaud} bps for ${user.username}`);
+        }
+
+        // Send modem speed to frontend for client-side emulation
+        console.log(`[SESSION RESTORE] Emitting modem-speed event with userBaud=${userBaud}`);
+        socket.emit('modem-speed', userBaud);
+        console.log(`[SESSION RESTORE] modem-speed event emitted`);
+
+        // Disable AnsiBuffer batching when modem emulation is enabled
+        const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+        const ansiBuffer = getAnsiBuffer(socket);
+        ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
 
         // Notify client of successful restoration
         socket.emit('session-restored', {
@@ -403,7 +428,7 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
       const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
       
       // Update last login
-      await db.updateUser(user.id, { lastLogin: new Date(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
+      await db.updateUser(user.id, { lastLogin: getSystemTime(), calls: user.calls + 1, callsToday: user.callsToday + 1 });
 
       // Set session user data
       // ... (existing code continues) ...
@@ -412,6 +437,30 @@ console.warn(`[LOGIN] User ${user.username} has no slot number, skipping disk sy
       session.user = { ...user, lastLoginBeforeUpdate };
       session.ansiMode = user.ansi;
       installAnsiFilter(socket, session);
+
+      // Apply modem emulation preference from user baud (0/undefined = full speed)
+      const userBaud = user.baud || 0;
+      session.modemBps = userBaud;
+      session.modemEmulationEnabled = userBaud > 0;
+
+      // Install modem speed emulator (wraps socket.emit for throttled output)
+      const { getModemEmulator } = require('../utils/modem-emulator.util');
+      const modemEmulator = getModemEmulator(socket);
+      modemEmulator.install();
+      if (userBaud > 0) {
+        modemEmulator.enable(userBaud);
+        console.log(`[WEB LOGIN] Modem emulation enabled at ${userBaud} bps for ${user.username}`);
+      }
+
+      // Send modem speed to frontend for client-side emulation (web terminal only)
+      console.log(`[WEB LOGIN] Emitting modem-speed event with userBaud=${userBaud}`);
+      socket.emit('modem-speed', userBaud);
+      console.log(`[WEB LOGIN] modem-speed event emitted`);
+
+      // Disable AnsiBuffer batching when modem emulation is enabled
+      const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+      const ansiBuffer = getAnsiBuffer(socket);
+      ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
 
       // Load command history from database
       const { loadHistory } = require('../utils/command-history.util');

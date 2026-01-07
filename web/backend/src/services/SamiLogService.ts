@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { config } from '../config';
 import { BBSState } from '../constants/bbs-states';
+import { getSystemTime } from '../utils/date-time.util';
 import type { BBSSession } from '../index';
 
 const DATA_DIR = config.get('dataDir');
@@ -103,7 +104,7 @@ function parseCallerEntry(line: string): any | null {
 
 function parseTime(timeStr: string): number {
   const [h, m, s] = timeStr.split(':').map(n => parseInt(n) || 0);
-  const now = new Date();
+  const now = getSystemTime();
   now.setHours(h, m, s, 0);
   return now.getTime();
 }

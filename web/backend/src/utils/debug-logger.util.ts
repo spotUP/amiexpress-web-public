@@ -5,6 +5,7 @@
  */
 
 import { sessionLogManager } from '../services/SessionLogManager';
+import { getSystemTime } from '../utils/date-time.util';
 
 export enum DebugCategory {
   DOOR = 'DOOR',
@@ -89,7 +90,7 @@ export class DebugLogger {
     const { category, level, message, data, includeTimestamp = true } = options;
 
     const timestamp = includeTimestamp
-      ? `\x1b[0;90m[${new Date().toISOString().substr(11, 12)}]\x1b[0m `
+      ? `\x1b[0;90m[${getSystemTime().toISOString().substr(11, 12)}]\x1b[0m `
       : '';
 
     const categoryColor = this.getCategoryColor(category);

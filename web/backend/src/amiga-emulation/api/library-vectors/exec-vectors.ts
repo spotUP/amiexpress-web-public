@@ -7,13 +7,14 @@ import { LibraryVector } from "./types";
 import { ExecLibrary } from "../ExecLibrary";
 import * as fs from "fs";
 import * as path from "path";
+import { getSystemTime } from '../../../utils/date-time.util';
 
 // File-based debug logging for trap handlers
 function logTrap(message: string): void {
   try {
     const bbsRoot = process.env.BBS_DATA_DIR || '~/Code/amiexpress-web';
     const logFile = path.join(bbsRoot, "logs", "backend.log");
-    const line = `[TrapDebug] ${new Date().toISOString()} ${message}\n`;
+    const line = `[TrapDebug] ${getSystemTime().toISOString()} ${message}\n`;
     fs.appendFileSync(logFile, line, { encoding: "utf8" });
   } catch (e) {
 console.error(`[TrapDebug] Failed to write log: ${e}`);

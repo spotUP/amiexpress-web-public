@@ -561,7 +561,10 @@ console.log(`[DoorMessageHandler] Received post-register data request (cmd=${com
 
     switch (command) {
       case XIMCommand.JH_REGISTER:
-        // express.e:3379-3381: msg.command := IF loggedOnUser<>NIL THEN userLineLen ELSE 29
+        // express.e:3379-3381:
+        // CASE JH_REGISTER
+        //   msg.command:=IF loggedOnUser<>NIL THEN userLineLen ELSE 29
+        //   nodesPtr[]:=nodesPtr[]+1
 console.log(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
         const rawLineLen =
           (this.config.bbsSession as any)?.user?.linesPerScreen ??
@@ -576,7 +579,15 @@ console.log(`[DoorMessageHandler]   JH_REGISTER: Door registering with BBS`);
           msgAddr + DoorConstants.MESSAGE_LINE_OFFSET,
           0
         );
-console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}`);
+
+        // express.e:3381 - Increment active door counter
+        // nodesPtr[]:=nodesPtr[]+1
+        // For web BBS, track active doors in session
+        if (!this.config.bbsSession.activeDoorCount) {
+          this.config.bbsSession.activeDoorCount = 0;
+        }
+        this.config.bbsSession.activeDoorCount++;
+console.log(`[DoorMessageHandler]   Replied with line length ${lineLen}, activeDoorCount=${this.config.bbsSession.activeDoorCount}`);
 
         // Compatibility fallback for old-style doors (WALL, JoinCnf, etc.)
         // Modern doors (Bulls, AquaScan) send follow-up requests immediately after JH_REGISTER.
@@ -607,8 +618,35 @@ console.log(`[DoorMessageHandler]   JH_WRITE: "${str}"`);
         break;
 
       case XIMCommand.JH_SHUTDOWN:
-        // express.e:3388-3394: Decrement nodes counter and set exit flag
+        // express.e:3388-3394:
+        // CASE JH_SHUTDOWN
+        //   nodesPtr[]:=nodesPtr[]-1
+        //   IF(nodesPtr[]=0)
+        //     quietDownload:=FALSE
+        //     rawArrow:=FALSE
+        //     exitPtr[]:=TRUE
+        //   ENDIF
 console.log(`[DoorMessageHandler]   JH_SHUTDOWN: Door shutting down`);
+
+        // Decrement active door counter
+        if (this.config.bbsSession.activeDoorCount) {
+          this.config.bbsSession.activeDoorCount--;
+console.log(`[DoorMessageHandler]   Decremented activeDoorCount to ${this.config.bbsSession.activeDoorCount}`);
+
+          // If last door exited, reset flags per express.e:3390-3393
+          if (this.config.bbsSession.activeDoorCount === 0) {
+            if (this.config.bbsSession.quietDownload !== undefined) {
+              this.config.bbsSession.quietDownload = false;
+            }
+            if (this.config.bbsSession.rawArrow !== undefined) {
+              this.config.bbsSession.rawArrow = false;
+            }
+            // exitPtr flag - for web BBS, this would signal main loop to exit
+            // Not critical for web version as each door runs in isolated session
+console.log(`[DoorMessageHandler]   Last door exited - reset quietDownload and rawArrow flags`);
+          }
+        }
+
         this.execLibrary.putMsg(replyPortAddr, msgAddr, {
           suppressDoorCallback: true,
         });
@@ -867,9 +905,16 @@ console.log(`[DoorMessageHandler]   JH_20/QUICK_KEY: Quick key read`);
         break;
 
       case XIMCommand.JH_SIGBIT:
-        // express.e:3463-3464: Return door signal bit
+        // express.e:3463-3464:
+        // CASE JH_SIGBIT
+        //   msg.data:=doorExtSig
+        // Return the door extended signal bit for JH_ExtHK extended hotkeys
+        // doorExtSig is allocated via AllocSignal() for extended door signaling
+        // For web BBS, we use a fixed signal bit (bit 30 - user signals are 16-31)
 console.log(`[DoorMessageHandler]   JH_SIGBIT: Signal bit request`);
-        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
+        const doorExtSig = 30; // Signal bit for extended door signals (user-allocatable range)
+        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, doorExtSig);
+console.log(`[DoorMessageHandler]   Replied with doorExtSig: ${doorExtSig}`);
         break;
 
       case XIMCommand.JH_FetchKey:
@@ -920,12 +965,14 @@ console.log(`[DoorMessageHandler]   CHAIN: Chain command`);
 
       case XIMCommand.RETURNCOMMAND:
         // express.e:3492-3493: Store command to run on exit
-console.log(`[DoorMessageHandler]   RETURNCOMMAND: "${str}"`);
+        // TODO: Implement return command handler (store command for execution on door exit)
+console.log(`[DoorMessageHandler]   RETURNCOMMAND: Stub - not implemented`);
         break;
 
       case XIMCommand.RETURNCOMMAND2:
-        // express.e:4064-4065: Store second command to run on exit
-console.log(`[DoorMessageHandler]   RETURNCOMMAND2: "${str}"`);
+        // express.e:4064-4065: Store second command to run on exit (same handler)
+        // TODO: Implement return command handler (store second command for execution on door exit)
+console.log(`[DoorMessageHandler]   RETURNCOMMAND2: Stub - not implemented`);
         break;
 
       // DT_* commands (user data)
@@ -1492,12 +1539,11 @@ console.log(`[DoorMessageHandler]   Misc query command: ${command}`);
         this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 0);
         break;
 
+      // BB_NONSTOPTEXT - REMOVED - handled in bbs-info.ts (WRITE-ONLY per express.e:3875-3876)
+      // This was a duplicate implementation with WRONG bidirectional logic
+      // Correct WRITE-ONLY implementation is in bbs-info.ts:447-453
+
       // Commands that don't need responses
-      case XIMCommand.BB_NONSTOPTEXT:
-        // express.e:3875-3876: Enable/disable non-stop text (pagination)
-        this.nonStopDisplayFlag = data !== 0;
-console.log(`[DoorMessageHandler]   BB_NONSTOPTEXT: ${this.nonStopDisplayFlag ? 'ENABLED' : 'DISABLED'}`);
-        break;
 
       case XIMCommand.BB_PURGELINE:
         // express.e:3869-3870,1914-1924: Clear input buffer
@@ -1516,6 +1562,15 @@ console.log(`[DoorMessageHandler]   BB_PURGELINEEND: Abort and clear (no-op in w
         break;
 
       case XIMCommand.BB_DROPDTR:
+        // express.e:3834-3839: Drop DTR (modem hangup)
+        // processOlmMessageQueue(TRUE); Delay(30); modemOffHook(); resetSerOut:=TRUE
+console.log(`[DoorMessageHandler]   BB_DROPDTR: Dropping DTR (hangup)`);
+        // For web implementation, trigger disconnect event
+        if (this.config.bbsSession?.socket) {
+          (this.config.bbsSession.socket as any).emit('hangup', { reason: 'BB_DROPDTR' });
+        }
+        break;
+
       case XIMCommand.ENVSTAT:
       case XIMCommand.SV_NEWMSG:
       case XIMCommand.PRV_COMMAND:
@@ -1542,21 +1597,54 @@ console.log(`[DoorMessageHandler]   BB_PURGELINEEND: Abort and clear (no-op in w
       case XIMCommand.DT_CALLEDTODAY:
       case XIMCommand.BB_PCONFNAME:
         // express.e:3779-3785: Get conference name by number (1-9)
+        // Uses getConfName(temp) to read NAME.n from ConfConfig.info
         {
           const confNum = parseInt(str) || 0;
           if (confNum < 1 || confNum > 9) {
 console.log(`[DoorMessageHandler]   BB_PCONFNAME: Invalid conf ${confNum}, returning ERROR`);
             this.writeStringToMessage(msgAddr, "ERROR");
           } else {
-            // Return generic conference name (requires conference system integration)
-            const confName = `Conference ${confNum}`;
+            // Read conference name from ConfConfig.info
+            try {
+              const { loadConfConfig } = require('../../services/conf-config.service');
+              const bbsRoot = (this.config.bbsSession as any)?.bbsRoot || process.cwd();
+              const confConfig = loadConfConfig(bbsRoot);
+              const confName = confConfig?.entries[confNum - 1]?.name || `Conference ${confNum}`;
 console.log(`[DoorMessageHandler]   BB_PCONFNAME: ${confNum} -> "${confName}"`);
-            this.writeStringToMessage(msgAddr, confName);
+              this.writeStringToMessage(msgAddr, confName);
+            } catch (error) {
+console.log(`[DoorMessageHandler]   BB_PCONFNAME: Error reading ConfConfig.info: ${error}`);
+              this.writeStringToMessage(msgAddr, `Conference ${confNum}`);
+            }
           }
         }
         break;
 
       case XIMCommand.BB_PCONFLOCAL:
+        // express.e:3786-3793: Get conference location by number (1-9)
+        // Uses getConfLocation(temp,tempstring) to read LOCATION.n from ConfConfig.info
+        {
+          const confNum = parseInt(str) || 0;
+          if (confNum < 1 || confNum > 9) {
+console.log(`[DoorMessageHandler]   BB_PCONFLOCAL: Invalid conf ${confNum}, returning ERROR`);
+            this.writeStringToMessage(msgAddr, "ERROR");
+          } else {
+            // Read conference location from ConfConfig.info
+            try {
+              const { loadConfConfig } = require('../../services/conf-config.service');
+              const bbsRoot = (this.config.bbsSession as any)?.bbsRoot || process.cwd();
+              const confConfig = loadConfConfig(bbsRoot);
+              const confDir = confConfig?.entries[confNum - 1]?.location || `BBS:Conf${confNum}/`;
+console.log(`[DoorMessageHandler]   BB_PCONFLOCAL(${confNum}): "${confDir}"`);
+              this.writeStringToMessage(msgAddr, confDir);
+            } catch (error) {
+console.log(`[DoorMessageHandler]   BB_PCONFLOCAL: Error reading ConfConfig.info: ${error}`);
+              this.writeStringToMessage(msgAddr, `BBS:Conf${confNum}/`);
+            }
+          }
+        }
+        break;
+
       case XIMCommand.BB_CALLERSLOG:
         // express.e:3804-3805: Log to callers log
 console.log(`[DoorMessageHandler]   BB_CALLERSLOG: "${str}"`);
@@ -1570,6 +1658,17 @@ console.log(`[DoorMessageHandler]   BB_UDLOG: "${str}"`);
         break;
 
       case XIMCommand.BB_GETTASK:
+        // express.e:3840-3841: msg.task:=FindTask(0)
+        // Returns current task pointer (Amiga-specific)
+        // For web implementation, return mock task pointer in msg.task field
+        {
+          const mockTaskPtr = 0xC0001000; // Mock task pointer (valid Amiga address range)
+console.log(`[DoorMessageHandler]   BB_GETTASK: Returning mock task pointer 0x${mockTaskPtr.toString(16)}`);
+          // Write to msg.task field (offset 16 in Message structure per aedoor.i)
+          this.emulator.writeMemory32(msgAddr + 16, mockTaskPtr);
+        }
+        break;
+
       case XIMCommand.BB_SCRLEFT:
         // express.e:3861-3862: Screen left edge (0 for terminals)
 console.log(`[DoorMessageHandler]   BB_SCRLEFT: 0`);
@@ -2039,7 +2138,8 @@ console.log(`[DoorMessageHandler]   BB_CONFLOCAL(127): "${confDir}"`);
           // Returns user's conference access permissions
           // bbsSession.confAccess comes from disk (user.data) via door.handler.ts
           // Do NOT fall back to user?.confAccess - that's SQLite database data
-          const confAccess = (this.config.bbsSession as any)?.confAccess || '';
+          // Default to full access (25 conferences) if not set
+          const confAccess = (this.config.bbsSession as any)?.confAccess || 'XXXXXXXXXXXXXXXXXXXXXXXXX';
 console.log(`[DoorMessageHandler]   DT_CONFACCESS(146): "${confAccess}" (from disk)`);
           this.writeStringToMessage(msgAddr, confAccess);
         }

@@ -19,6 +19,7 @@ echo "Source: $MOIRA_DIR"
 echo "Output: $OUT_DIR"
 
 # Compile to WebAssembly
+set -x
 emcc \
     -std=c++20 \
     -O3 \
@@ -34,6 +35,7 @@ emcc \
     "$MOIRA_DIR/Moira.cpp" \
     "$MOIRA_DIR/MoiraDebugger.cpp" \
     -o "$OUT_DIR/moira.js"
+set +x
 
 if [ $? -eq 0 ]; then
     echo "✓ Build successful!"

@@ -2,6 +2,7 @@ import { Socket } from "socket.io";
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { ExecLibrary } from "./ExecLibrary";
 import { XIMCommand } from "../xim/types";
+import { getSystemTime } from '../../utils/date-time.util';
 
 interface DoorInterfaceState {
   difaceAddr: number;
@@ -285,7 +286,7 @@ console.log(`[AEDoorLibrary] Populating BBSInfo at DIFace 0x${difaceAddr.toStrin
     const bbsName = 'AmiExpress-Web';
 
     // Get current date and time
-    const now = new Date();
+    const now = getSystemTime();
     const dateStr = now.toLocaleDateString('en-US', {
       month: '2-digit',
       day: '2-digit',

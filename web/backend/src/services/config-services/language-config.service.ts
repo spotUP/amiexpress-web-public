@@ -11,6 +11,7 @@ import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export class LanguageConfigService {
   private configRepo: ConfigRepository;
@@ -151,7 +152,7 @@ console.error('[LanguageConfigService] Error reading Languages/ directory:', err
     const newLanguage: Language = dbLanguage || {
       ...oldLanguage,
       ...validated,
-      updated_at: new Date()
+      updated_at: getSystemTime()
     };
 
     const mergedLanguage = { ...oldLanguage, ...validated };

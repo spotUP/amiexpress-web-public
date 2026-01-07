@@ -13,6 +13,7 @@
 import { db } from '../database';
 import type { MailStat, ConfBase } from '../types/message-pointers';
 import { DEFAULT_MAIL_STAT, DEFAULT_SCAN_FLAGS } from '../types/message-pointers';
+import { getSystemTime } from '../utils/date-time.util';
 
 function getSqliteDb(): any {
   const sqlite = (db as any).db;
@@ -146,7 +147,7 @@ export async function loadMsgPointers(
       lastMsgReadConf: 0,
       scanFlags: DEFAULT_SCAN_FLAGS,
       messagesPosted: 0,
-      newSinceDate: new Date(),
+      newSinceDate: getSystemTime(),
       bytesDownload: 0,
       bytesUpload: 0,
       upload: 0,

@@ -11,6 +11,7 @@ import { InfoFileParser } from '../info-file-parser';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
 
 export class ProtocolConfigService {
   private configRepo: ConfigRepository;
@@ -133,7 +134,7 @@ console.error('[ProtocolConfigService] Error reading Protocols/XprTypes.info:', 
     const newProtocol: Protocol = dbProtocol || {
       ...oldProtocol,
       ...validated,
-      updated_at: new Date()
+      updated_at: getSystemTime()
     };
 
     await this.writeXprTypesInfoFile();

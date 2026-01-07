@@ -14,6 +14,7 @@
 import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getSystemTime } from '../utils/date-time.util';
 
 const VERSION = '1.2.9';
 const PLATFORM_NAME = 'AMIEXPRESS-WEB';
@@ -47,7 +48,7 @@ const versionString = `${PLATFORM_NAME}/${SYSTEM_NAME}.${MACHINE_ARCH}/${VERSION
 const clientVersion = `Multi Relay Chat Client v${VERSION} [sf]`;
 
 function logger(message: string): void {
-  const now = new Date();
+  const now = getSystemTime();
   const timestamp = now.toISOString().replace('T', ' ').substring(0, 19);
 console.log(`${timestamp}  ${message.trim()}`);
 
@@ -116,7 +117,7 @@ function chatlog(data: string): void {
   const packet = splitBuffer(data, '~');
   if (packet.length > 6) {
     const message = packet[6];
-    const now = new Date();
+    const now = getSystemTime();
     const timestamp = now.toISOString().replace('T', ' ').substring(0, 19);
     const logFile = path.join(process.cwd(), 'mrcchat.log');
     fs.appendFileSync(logFile, `${timestamp} ${message}\n`);

@@ -8,6 +8,7 @@ import { messageFileManager } from '../services/MessageFileManager';
 import type { Conference, MessageBase } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class ConferenceRepository extends BaseRepository<any> {
   constructor(db: any) {
@@ -68,8 +69,8 @@ export class ConferenceRepository extends BaseRepository<any> {
         downloads: conf.downloads ?? 0,
         bytesUpload: conf.bytesUpload ?? 0,
         bytesDownload: conf.bytesDownload ?? 0,
-        created: new Date(),
-        updated: new Date()
+        created: getSystemTime(),
+        updated: getSystemTime()
       };
       conferenceFileManager.writeConferenceFile(fullConf, slotNumber);
 console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);

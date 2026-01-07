@@ -13,6 +13,7 @@
  */
 
 import axios from 'axios';
+import { getSystemTime } from '../utils/date-time.util';
 
 interface ChatContext {
   userHandle: string;
@@ -670,7 +671,7 @@ console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
  */
 function getContextModifiers(context: ChatContext): string[] {
   const modifiers: string[] = [];
-  const hour = new Date().getHours();
+  const hour = getSystemTime().getHours();
 
   // Time-based modifiers
   if (hour >= 5 && hour < 12) {

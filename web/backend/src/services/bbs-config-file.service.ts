@@ -12,6 +12,7 @@ import { InfoFileParser } from './info-file-parser';
 import { parseInfoFile, updateTooltype, writeInfoFile } from '../utils/info-file.util';
 import type { SystemConfig } from '../database/types';
 import { isSensitiveField } from '../utils/secrets-encryption.util';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface BBSConfigData {
   // Identity
@@ -555,7 +556,7 @@ export function stripSecretsFromConfigFile(bbsRoot: string): {
 } {
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
   const configTextPath = configPath + '.txt';
-  const backupTime = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupTime = getSystemTime().toISOString().replace(/[:.]/g, '-');
 
   let strippedCount = 0;
 

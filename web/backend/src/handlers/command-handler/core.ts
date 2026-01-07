@@ -7,6 +7,7 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util";
 import { displayMenuPrompt } from "./menu";
 import { processBBSCommand } from "./command-execution";
 import {
+import { getSystemTime } from '../../utils/date-time.util';
   runSysCommand as execSysCommand,
   runBbsCommand as execBbsCommand,
 } from "../command-execution.handler";
@@ -221,7 +222,7 @@ console.log(`[WHO2] Executing helper tool: ${data}`);
       if (data === "DOORS:who/NI") {
         // NodeIn - create node tracking file on connection
         const nodeFile = path.join(whoDir, `node${nodeId}.txt`);
-        const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${new Date().toISOString()}\n`;
+        const nodeData = `Node: ${nodeId}\nUser: ${username}\nConnected: ${getSystemTime().toISOString()}\n`;
         fs.writeFileSync(nodeFile, nodeData);
 console.log(`[WHO2] NI created tracking file: ${nodeFile}`);
       } else {

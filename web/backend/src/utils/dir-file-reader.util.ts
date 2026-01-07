@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { findCaseInsensitive } from './amigafs';
+import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * DIR File Reader Utility
@@ -109,7 +110,7 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
   // Parse date (field 2, format: DD-MMM-YY)
   // Example: "23-Oct-25"
   let uploadDateDisplay = '';
-  let uploadDate = new Date();
+  let uploadDate = getSystemTime();
   let description = '';
 
   // Parse date from field 2 (format: DD-MMM-YY)

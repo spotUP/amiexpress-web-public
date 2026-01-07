@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
 
 class XIMDebugLogger {
   private enabled: boolean;
@@ -16,7 +17,7 @@ class XIMDebugLogger {
 
   constructor() {
     this.enabled = process.env.XIM_DEBUG === '1' || process.env.XIM_DEBUG === 'true';
-    this.sessionStart = new Date();
+    this.sessionStart = getSystemTime();
     const projectRoot = path.resolve(__dirname, '../../../../..');
     const logsDir = path.join(projectRoot, 'logs');
     if (!amigafs.existsSync(logsDir)) {
@@ -39,7 +40,7 @@ console.error(`[XIM Debug] Failed to initialize log file: ${e}`);
   log(category: string, message: string, data?: any): void {
     if (!this.enabled) return;
 
-    const timestamp = new Date().toISOString();
+    const timestamp = getSystemTime().toISOString();
     const elapsed = Date.now() - this.sessionStart.getTime();
 
     let logLine = `[${timestamp}] [+${elapsed}ms] [${category}] ${message}`;

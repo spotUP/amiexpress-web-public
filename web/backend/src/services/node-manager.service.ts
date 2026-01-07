@@ -3,6 +3,7 @@
 
 import { db } from '../database';
 import { NodeSession, NodeInfo } from '../types';
+import { getSystemTime } from '../utils/date-time.util';
 
 export class NodeManager {
   private nodes: Map<number, NodeInfo> = new Map();
@@ -57,7 +58,7 @@ export class NodeManager {
       currentConf: 0,
       currentMsgBase: 0,
       timeRemaining: 60,
-      lastActivity: new Date(),
+      lastActivity: getSystemTime(),
       status: 'active'
     };
 
@@ -67,7 +68,7 @@ export class NodeManager {
     // Update node status
     availableNode.status = 'busy';
     availableNode.currentUser = userId;
-    availableNode.lastActivity = new Date();
+    availableNode.lastActivity = getSystemTime();
 
     return nodeSession as NodeSession;
   }
@@ -76,7 +77,7 @@ export class NodeManager {
   async updateSessionActivity(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) {
-      session.lastActivity = new Date();
+      session.lastActivity = getSystemTime();
       await db.updateNodeSession(sessionId, { lastActivity: session.lastActivity });
     }
   }
@@ -365,7 +366,7 @@ console.log(`Executing AREXX script: ${script.name}`);
     switch (script.filename) {
       case 'welcome.rexx':
         context.output.push('Welcome to AmiExpress Web!');
-        context.output.push(`Current time: ${new Date().toLocaleTimeString()}`);
+        context.output.push(`Current time: ${getSystemTime().toLocaleTimeString()}`);
         break;
 
       case 'newuser.rexx':
@@ -421,11 +422,11 @@ console.log(`Executing AREXX script: ${script.name}`);
         return context.sessionId !== undefined;
       }
       if (condition === 'time.morning') {
-        const hour = new Date().getHours();
+        const hour = getSystemTime().getHours();
         return hour >= 6 && hour < 12;
       }
       if (condition === 'time.evening') {
-        const hour = new Date().getHours();
+        const hour = getSystemTime().getHours();
         return hour >= 18 || hour < 6;
       }
       if (condition.startsWith('user.level>=')) {
@@ -549,7 +550,7 @@ export class ProtocolManager {
       size: transferData.size,
       bytesTransferred: 0,
       status: 'starting',
-      startTime: new Date()
+      startTime: getSystemTime()
     });
 
     // Start transfer based on protocol
@@ -665,7 +666,7 @@ console.error('FTP transfer initialization error:', error);
   async completeTransfer(sessionId: string, checksum?: string): Promise<void> {
     await db.updateTransferSession(sessionId, {
       status: 'completed',
-      endTime: new Date(),
+      endTime: getSystemTime(),
       checksum
     });
   }
@@ -674,7 +675,7 @@ console.error('FTP transfer initialization error:', error);
   async failTransfer(sessionId: string, error: string): Promise<void> {
     await db.updateTransferSession(sessionId, {
       status: 'error',
-      endTime: new Date(),
+      endTime: getSystemTime(),
       error
     });
   }

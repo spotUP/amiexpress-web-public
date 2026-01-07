@@ -36,6 +36,7 @@ import { SysopDebugUtil } from "../utils/sysop-debug.util";
 import { emitUpload } from "../services/bbs-event-emitter";
 import { userFileManager } from "../services/UserFileManager";
 import {
+import { getSystemTime } from '../utils/date-time.util';
   getUploadContextById,
   deleteUploadContextById,
 } from "./upload-session-store";
@@ -258,7 +259,7 @@ console.error(`[Upload] Error moving file: ${error.message}`);
       description: finalDescription, // Use DIZ if found, otherwise batch description
       size: data.size,
       uploader: session.user!.username,
-      uploadDate: new Date(),
+      uploadDate: getSystemTime(),
       downloads: 0,
       areaId: fileArea.id,
       fileIdDiz: finalDescription, // Store DIZ text if extracted
@@ -294,7 +295,7 @@ console.error(`[Upload] Error moving file: ${error.message}`);
       await writeUploadToDirFile(
         currentFile.filename,
         data.size,
-        new Date(),
+        getSystemTime(),
         finalDescription,
         checkedMarker,
         session.user!.username, // express.e:19507 uses loggedOnUser.name which is the BBS handle
@@ -317,7 +318,7 @@ console.log(
             conferencePath,
             currentFile.filename,
             data.size,
-            new Date(),
+            getSystemTime(),
             finalDescription,
             checkedMarker,
             session.user!.username,
@@ -723,7 +724,7 @@ console.log("[processFileUpload] File selected, checking for DIZ...");
             // No DIZ found - prompt for description (express.e:19290-19301)
             const maxDescLines = 10;
             const sizeStr = formatFileSize(data.size);
-            const dateStr = formatUploadDate(new Date());
+            const dateStr = formatUploadDate(getSystemTime());
             const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
             socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n\r\n");
@@ -753,7 +754,7 @@ console.error("[processFileUpload] Error extracting DIZ:", error);
           // Continue with manual description entry (express.e:19290-19301)
           const maxDescLines = 10;
           const sizeStr = formatFileSize(data.size);
-          const dateStr = formatUploadDate(new Date());
+          const dateStr = formatUploadDate(getSystemTime());
           const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
           socket.emit("ansi-output", "Error reading FILE_ID.DIZ.\r\n\r\n");
@@ -1066,7 +1067,7 @@ console.log("[file-uploaded] nodeWorkDir:", nodeWorkDir);
                 // No DIZ found - prompt for description (express.e:19290-19301)
                 const maxDescLines = 10;
                 const sizeStr = formatFileSize(data.size);
-                const dateStr = formatUploadDate(new Date());
+                const dateStr = formatUploadDate(getSystemTime());
                 const filename13 = data.originalname
                   .substring(0, 13)
                   .padEnd(13);
@@ -1104,7 +1105,7 @@ console.error("[FILE_ID.DIZ] Extraction error:", error);
               // On error, fall back to prompting for description (express.e:19290-19301)
               const maxDescLines = 10;
               const sizeStr = formatFileSize(data.size);
-              const dateStr = formatUploadDate(new Date());
+              const dateStr = formatUploadDate(getSystemTime());
               const filename13 = data.originalname.substring(0, 13).padEnd(13);
 
               socket.emit("ansi-output", "Error reading FILE_ID.DIZ.\r\n\r\n");

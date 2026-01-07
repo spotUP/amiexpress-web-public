@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
 import { ConferenceSetupService } from './conference-setup.service';
+import { getSystemTime } from '../utils/date-time.util';
 
 export interface HealthIssue {
   severity: 'error' | 'warning' | 'info';
@@ -73,7 +74,7 @@ export class BBSHealthCheckService {
     const hasWarnings = categories.some(cat => cat.warningCount > 0);
 
     return {
-      timestamp: new Date().toISOString(),
+      timestamp: getSystemTime().toISOString(),
       overallStatus: hasErrors ? 'errors' : hasWarnings ? 'warnings' : 'healthy',
       totalIssues,
       autoFixableIssues,
