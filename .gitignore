@@ -309,3 +309,7 @@ Bulletins/bull*.txt
 Screens/quicknew*.txt
 handoff.md
 Env/
+
+# BBS door password files
+Doors/Bossnuke/BossNuke.pw
+Commands/BBSCmd/nuke.info
