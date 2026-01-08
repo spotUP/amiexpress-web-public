@@ -41,11 +41,7 @@ export function createChatLog(
     border: { type: 'line', fg: 'green' },
     style: {
       fg: 'white',
-      bg: 'black',
-      focus: {
-        fg: 'white',
-        bg: 'black'
-      }
+      bg: 'lightblack',  // Dark grey for panel backgrounds
     },
   });
 
@@ -80,7 +76,7 @@ export function createChatLog(
     },
     style: {
       fg: 'white',
-      bg: 'black',
+      bg: 'lightblack',
     },
   });
 

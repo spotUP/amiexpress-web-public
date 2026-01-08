@@ -26,12 +26,42 @@ export class MediaHandler {
   private audioBuffers: Map<string, AudioBufferSourceNode[]> = new Map();
   private volume: number = 1.0;
   private isMuted: boolean = false;
+  private uiSoundsEnabled: boolean = true;  // UI sounds flag (separate from voice mute)
   private analyserNode: AnalyserNode | null = null;
   private audioLevelInterval: any = null;
 
   constructor(socket: Socket) {
     this.socket = socket;
     this.setupSocketHandlers();
+  }
+
+  /**
+   * Enable or disable UI sounds (click, hover, notifications, etc.)
+   * This is separate from voice chat muting
+   */
+  public setUISoundsEnabled(enabled: boolean): void {
+    this.uiSoundsEnabled = enabled;
+  }
+
+  /**
+   * Check if UI sounds are enabled
+   */
+  public isUISoundsEnabled(): boolean {
+    return this.uiSoundsEnabled;
+  }
+
+  /**
+   * Set the volume for UI sounds (0.0 to 1.0)
+   */
+  public setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume));
+  }
+
+  /**
+   * Get current volume level
+   */
+  public getVolume(): number {
+    return this.volume;
   }
 
   private setupSocketHandlers() {
@@ -48,8 +78,8 @@ export class MediaHandler {
 
     // Listen for procedural sound effects from the door
     this.socket.on('audio:play-sfx', async (data: any) => {
-      console.log('[MediaHandler] Received audio:play-sfx:', data.type, data.soundId || data.note || data.notes);
-      if (this.isMuted) return;
+      // Check UI sounds flag (separate from voice mute)
+      if (!this.uiSoundsEnabled) return;
 
       // Initialize audio context on first sound (required by browsers)
       if (!this.audioContext) {
@@ -67,6 +97,16 @@ export class MediaHandler {
           this.playChord(data.notes, data.duration);
           break;
       }
+    });
+
+    // Listen for UI sound enable/disable from door
+    this.socket.on('audio:set-ui-sounds', (data: { enabled: boolean }) => {
+      this.uiSoundsEnabled = data.enabled;
+    });
+
+    // Listen for volume changes from door
+    this.socket.on('audio:set-volume', (data: { volume: number }) => {
+      this.volume = Math.max(0, Math.min(1, data.volume));
     });
   }
 
@@ -284,13 +324,6 @@ export class MediaHandler {
   }
 
   /**
-   * Set local playback volume
-   */
-  setVolume(volume: number): void {
-    this.volume = Math.max(0, Math.min(1, volume));
-  }
-
-  /**
    * Mute/unmute all incoming audio
    */
   setMuted(muted: boolean): void {
@@ -378,12 +411,121 @@ export class MediaHandler {
 
   /**
    * Play a sound from the library (browser-compatible)
+   * Maps soundId to appropriate synthesized sounds
    */
   private playSound(soundId: string, params?: any): void {
-    console.log('[MediaHandler] Playing sound:', soundId, params);
-    // TODO: Implement sound library playback when needed
-    // For now, play a simple beep
-    this.playNote('C4', 100);
+    if (!this.audioContext) return;
+
+    // Sound library - maps soundId to synthesis parameters
+    const soundLibrary: { [key: string]: () => void } = {
+      // UI sounds
+      'click': () => this.playSynth('sine', 880, 0.05, 0.3),
+      'hover': () => this.playSynth('sine', 660, 0.03, 0.15),
+      'select': () => this.playSynth('triangle', 523, 0.08, 0.25),
+      'success': () => {
+        this.playSynth('sine', 523, 0.1, 0.3);
+        setTimeout(() => this.playSynth('sine', 659, 0.1, 0.3), 100);
+        setTimeout(() => this.playSynth('sine', 784, 0.15, 0.3), 200);
+      },
+      'error': () => {
+        this.playSynth('sawtooth', 200, 0.15, 0.4);
+        setTimeout(() => this.playSynth('sawtooth', 150, 0.2, 0.3), 150);
+      },
+      'warning': () => {
+        this.playSynth('triangle', 440, 0.1, 0.3);
+        setTimeout(() => this.playSynth('triangle', 440, 0.1, 0.3), 200);
+      },
+      'notification': () => {
+        this.playSynth('sine', 880, 0.08, 0.25);
+        setTimeout(() => this.playSynth('sine', 1109, 0.12, 0.25), 100);
+      },
+      'message': () => {
+        this.playSynth('sine', 523, 0.05, 0.2);
+        setTimeout(() => this.playSynth('sine', 659, 0.08, 0.2), 80);
+      },
+      'send': () => {
+        this.playSynth('sine', 659, 0.05, 0.2);
+        setTimeout(() => this.playSynth('sine', 784, 0.05, 0.2), 50);
+        setTimeout(() => this.playSynth('sine', 1047, 0.08, 0.15), 100);
+      },
+      'typing': () => this.playSynth('sine', 1200, 0.02, 0.1),
+      'join': () => {
+        this.playSynth('sine', 392, 0.08, 0.2);
+        setTimeout(() => this.playSynth('sine', 523, 0.1, 0.25), 100);
+      },
+      'leave': () => {
+        this.playSynth('sine', 523, 0.08, 0.2);
+        setTimeout(() => this.playSynth('sine', 392, 0.1, 0.2), 100);
+      },
+      'mention': () => {
+        this.playSynth('sine', 784, 0.05, 0.3);
+        setTimeout(() => this.playSynth('sine', 988, 0.05, 0.3), 80);
+        setTimeout(() => this.playSynth('sine', 784, 0.08, 0.25), 160);
+      },
+      'popup': () => this.playSynth('sine', 700, 0.06, 0.2),
+      'close': () => this.playSynth('sine', 400, 0.08, 0.2),
+      'minimize': () => {
+        this.playSynth('sine', 600, 0.04, 0.15);
+        setTimeout(() => this.playSynth('sine', 400, 0.06, 0.15), 50);
+      },
+      'maximize': () => {
+        this.playSynth('sine', 400, 0.04, 0.15);
+        setTimeout(() => this.playSynth('sine', 600, 0.06, 0.15), 50);
+      },
+      'dock': () => {
+        this.playSynth('sine', 500, 0.05, 0.2);
+        setTimeout(() => this.playSynth('sine', 600, 0.08, 0.2), 80);
+      },
+      // Menu sounds
+      'menu-open': () => this.playSynth('sine', 550, 0.05, 0.2),
+      'menu-close': () => this.playSynth('sine', 450, 0.05, 0.2),
+      'menu-select': () => this.playSynth('sine', 800, 0.04, 0.2),
+      // Confirmation/Cancel sounds (used by AudioService)
+      'confirm': () => {
+        this.playSynth('sine', 523, 0.06, 0.25);
+        setTimeout(() => this.playSynth('sine', 784, 0.1, 0.25), 80);
+      },
+      'cancel': () => {
+        this.playSynth('sine', 392, 0.06, 0.2);
+        setTimeout(() => this.playSynth('sine', 294, 0.1, 0.2), 80);
+      },
+      // Default fallback
+      'default': () => this.playSynth('sine', 440, 0.08, 0.2),
+    };
+
+    const playFunc = soundLibrary[soundId] || soundLibrary['default'];
+    playFunc();
+  }
+
+  /**
+   * Low-level synthesizer for sounds
+   */
+  private playSynth(
+    type: OscillatorType,
+    frequency: number,
+    duration: number,
+    volume: number = 0.3
+  ): void {
+    if (!this.audioContext) return;
+
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+
+    const adjustedVolume = this.volume * volume;
+    gainNode.gain.setValueAtTime(adjustedVolume, this.audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.001,
+      this.audioContext.currentTime + duration
+    );
+
+    oscillator.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+
+    oscillator.start(this.audioContext.currentTime);
+    oscillator.stop(this.audioContext.currentTime + duration + 0.05);
   }
 
   /**
@@ -392,30 +534,19 @@ export class MediaHandler {
   private playNote(note: string, duration: number = 200): void {
     if (!this.audioContext) return;
 
-    // Simple note-to-frequency mapping
+    // Extended note-to-frequency mapping
     const noteFrequencies: { [key: string]: number } = {
+      'C3': 130.81, 'D3': 146.83, 'E3': 164.81, 'F3': 174.61,
+      'G3': 196.00, 'A3': 220.00, 'B3': 246.94,
       'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
-      'G4': 392.00, 'A4': 440.00, 'B4': 493.88, 'C5': 523.25
+      'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
+      'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46,
+      'G5': 783.99, 'A5': 880.00, 'B5': 987.77,
+      'C6': 1046.50,
     };
 
     const frequency = noteFrequencies[note] || 440;
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-
-    oscillator.type = 'sine';
-    oscillator.frequency.value = frequency;
-
-    gainNode.gain.value = this.volume * 0.3; // Reduce volume for beeps
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.01,
-      this.audioContext.currentTime + duration / 1000
-    );
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + duration / 1000);
+    this.playSynth('sine', frequency, duration / 1000, 0.3);
   }
 
   /**

@@ -26,7 +26,8 @@ export function createHelpScreen(
     closable: true,  // Adds [X] button and ESC key binding
     trapFocus: true,
     ch: ' ',
-    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } },
+    zIndex: 9999,  // Ensure help is on top of everything
+    style: { fg: 'white', bg: 'blue', border: { fg: 'cyan' }, transparent: true },
   });
 
   blessed.bigtext({

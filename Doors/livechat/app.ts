@@ -460,10 +460,11 @@ export async function createApp(session: DoorSession) {
     topConstraint: MENU_HEIGHT,
     bottomConstraint: STATUS_HEIGHT + INPUT_HEIGHT,
     border: { type: 'line', fg: 'cyan' },
+    fitContent: { width: true, height: false },  // Auto-expand width to fit content
     style: {
       fg: 'white',
-      bg: 'black',
-    }
+      bg: 'lightblack',  // Dark grey for panel backgrounds
+    },
   });
 
   // ========== CHANNEL LIST (Inside Sidebar) ==========
@@ -873,6 +874,14 @@ export async function createApp(session: DoorSession) {
   sidebarPanel.on('dock', updateLayout);
   sidebarPanel.on('hide', updateLayout);
   sidebarPanel.on('show', updateLayout);
+
+  // UI sounds for panel events
+  sidebarPanel.on('dock', () => audio.playSound('dock'));
+  sidebarPanel.on('minimize', () => audio.playSound('minimize'));
+  sidebarPanel.on('maximize', () => audio.playSound('maximize'));
+  chatPanel.on('dock', () => audio.playSound('dock'));
+  chatPanel.on('minimize', () => audio.playSound('minimize'));
+  chatPanel.on('maximize', () => audio.playSound('maximize'));
 
   // Handle terminal resize
   screen.responsiveLayout.onResize((width, height) => {

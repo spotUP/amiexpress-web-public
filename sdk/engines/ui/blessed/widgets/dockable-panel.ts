@@ -105,6 +105,10 @@ export class DockablePanel extends Panel {
 
   private screenListenersBound: boolean = false;
 
+  // Static drop zone indicators (shared across all panels on a screen)
+  private static dropZones: Map<any, { left?: Element; right?: Element; top?: Element; bottom?: Element }> = new Map();
+  private static activeDropZone: DockPosition | null = null;
+
   constructor(options: DockablePanelOptions = {}) {
     super({
       ...options,
@@ -161,6 +165,7 @@ export class DockablePanel extends Panel {
     this.setupDocking();
     this.setupDragging();
     this.setupResizing();
+    this.setupKeyboardShortcuts();
 
     // Automatic state persistence
     if (this.persistenceKey) {
@@ -367,15 +372,48 @@ export class DockablePanel extends Panel {
       style: {
         fg: 'white',
         bg: 'blue',
+        hover: {
+          fg: 'white',
+          bg: 'lightblue',  // Light blue on hover to indicate draggable
+        },
       },
       content: options.label || options.title || 'Panel',
     });
 
     // Make title bar draggable and double-click to restore from minimized
     if (this.titleBar) {
-      // Double-click to restore when minimized
+      // Hover feedback for title bar (indicates draggable)
+      this.titleBar.on('mouseover', () => {
+        if (this.titleBar && this.titleBar.style && !this.isDragging) {
+          this.titleBar.style.bg = 'lightblue';
+          if (this.screen) this.screen.render();
+        }
+      });
+      this.titleBar.on('mouseout', () => {
+        if (this.titleBar && this.titleBar.style && !this.isDragging) {
+          this.titleBar.style.bg = 'blue';
+          if (this.screen) this.screen.render();
+        }
+      });
+
+      // Double-click to maximize/restore (universal UX pattern)
+      let lastClickTime = 0;
       this.titleBar.on('click', () => {
-        if (this.panelState.minimized) {
+        const now = Date.now();
+        const isDoubleClick = (now - lastClickTime) < 300;  // 300ms threshold
+        lastClickTime = now;
+
+        if (isDoubleClick) {
+          // Double-click: toggle maximize/restore
+          if (this.panelState.minimized) {
+            this.maximize();
+          } else if (this.isMaximized) {
+            this.restoreFromMaximized();
+          } else {
+            this.maximizeToScreen();
+          }
+        } else if (this.panelState.minimized) {
+          // Single click on minimized: restore
           this.maximize();
         }
       });
@@ -383,7 +421,7 @@ export class DockablePanel extends Panel {
       // Drag to move (only when not minimized)
       if (options.draggable !== false) {
         this.titleBar.on('mousedown', (data: any) => {
-          if (!this.panelState.minimized) {
+          if (!this.panelState.minimized && !this.isMaximized) {
             this.startDrag(data.x, data.y);
           }
         });
@@ -505,6 +543,76 @@ export class DockablePanel extends Panel {
     // Reset hover when mouse leaves panel
     this.on('mouseout', () => {
       this.updateBorderHover(null);
+    });
+  }
+
+  /**
+   * Setup keyboard shortcuts for panel management
+   * - Ctrl+Arrow: Dock to edge (left/right/top/bottom)
+   * - Ctrl+M: Minimize/restore
+   * - Ctrl+Shift+M: Maximize to screen/restore
+   * - Escape: Cancel drag or restore from maximized
+   */
+  private setupKeyboardShortcuts(): void {
+    // Panel must be focused to receive key events
+    this.on('keypress', (_ch: string, key: any) => {
+      if (!key) return;
+
+      const ctrl = key.ctrl;
+      const shift = key.shift;
+      const name = key.name;
+
+      // Ctrl+Arrow: Dock to edge
+      if (ctrl && !shift) {
+        switch (name) {
+          case 'left':
+            this.setDockPosition('left');
+            return;
+          case 'right':
+            this.setDockPosition('right');
+            return;
+          case 'up':
+            this.setDockPosition('top');
+            return;
+          case 'down':
+            this.setDockPosition('bottom');
+            return;
+        }
+      }
+
+      // Ctrl+M: Minimize/restore
+      if (ctrl && !shift && name === 'm') {
+        this.toggleMinimize();
+        return;
+      }
+
+      // Ctrl+Shift+M: Maximize to screen/restore
+      if (ctrl && shift && name === 'm') {
+        this.toggleMaximize();
+        return;
+      }
+
+      // Escape: Cancel drag or restore from maximized
+      if (name === 'escape') {
+        if (this.isDragging) {
+          // Cancel drag - restore to original position
+          this.isDragging = false;
+          this.position.left = this.dragStartLeft;
+          this.position.top = this.dragStartTop;
+          this.hideDropZoneIndicators();
+          this.removeSnapPreview();
+          if (this.screen) this.screen.render();
+        } else if (this.isMaximized) {
+          this.restoreFromMaximized();
+        }
+        return;
+      }
+
+      // Ctrl+F: Float (undock)
+      if (ctrl && !shift && name === 'f') {
+        this.setDockPosition('float');
+        return;
+      }
     });
   }
 
@@ -655,24 +763,34 @@ export class DockablePanel extends Panel {
     this.dragStartLeft = typeof this.left === 'number' ? this.left : 0;
     this.dragStartTop = typeof this.top === 'number' ? this.top : 0;
 
-    // Visual feedback: Change border color and enable transparency during drag
+    // Visual feedback: Change border color during drag
     if (this.style) {
       if (this.style.border) {
         this.style.border.fg = 'yellow';
       }
-      // Enable transparent mode during drag for visual feedback
+    }
+    if ((this.options.style as any)?.border) {
+      (this.options.style as any).border.fg = 'yellow';
+    }
+
+    // Enable transparent mode during drag (like shadowdemo - set directly on style objects)
+    if (!this.options.style) {
+      this.options.style = {};
+    }
+    (this.options.style as any).transparent = true;
+    if (this.style) {
       (this.style as any).transparent = true;
     }
-    // Emit overlay event for web client to apply CSS opacity
-    if ((this as any)._emitOverlayEvent) {
-      (this as any)._emitOverlayEvent(true);
-    }
+
     if (this.titleBar && this.titleBar.style) {
       this.titleBar.style.bg = 'cyan';
     }
 
     // Bring to front
     this.bringToFront();
+
+    // Show drop zone indicators during drag
+    this.showDropZoneIndicators();
 
     // Save original dock position before undocking (for panel swapping)
     if (this.dockPosition !== 'float') {
@@ -725,6 +843,8 @@ export class DockablePanel extends Panel {
       this.screen.lock();
       // Show snap preview ghost area
       this.updateSnapPreview(x, y);
+      // Update drop zone highlighting
+      this.updateDropZoneHighlight(x, y);
       this.screen.unlock();
     }
 
@@ -743,13 +863,20 @@ export class DockablePanel extends Panel {
         const borderOptions = this.options.border as any;
         this.style.border.fg = borderOptions?.fg || 'green';
       }
-      // Restore original transparent state (default to false)
-      (this.style as any).transparent = (this.options.style as any)?.transparent || false;
     }
-    // Emit overlay event to disable CSS opacity
-    if ((this as any)._emitOverlayEvent) {
-      (this as any)._emitOverlayEvent(false);
+    if ((this.options.style as any)?.border) {
+      const borderOptions = this.options.border as any;
+      (this.options.style as any).border.fg = borderOptions?.fg || 'green';
     }
+
+    // Disable transparent mode (set directly on style objects)
+    if (this.options.style) {
+      (this.options.style as any).transparent = false;
+    }
+    if (this.style) {
+      (this.style as any).transparent = false;
+    }
+
     if (this.titleBar && this.titleBar.style) {
       this.titleBar.style.bg = 'blue';
     }
@@ -757,6 +884,8 @@ export class DockablePanel extends Panel {
       this.checkEdgeDocking();
     }
 
+    // Hide drop zone indicators
+    this.hideDropZoneIndicators();
     this.removeSnapPreview();
 
     if (this.screen) {
@@ -1089,7 +1218,7 @@ export class DockablePanel extends Panel {
 
     if (dists.length > 0) {
       const bestEdge = dists[0].pos;
-      
+
       // Don't immediately re-snap to the SAME edge we just undocked from
       // unless we've moved away and come back
       if (bestEdge === this.panelState.originalDockPosition) {
@@ -1099,10 +1228,197 @@ export class DockablePanel extends Panel {
         return;
       }
 
+      // Check if another panel is already docked at this edge - if so, swap them
+      const existingPanel = this.findPanelDockedAt(bestEdge);
+      if (existingPanel && existingPanel !== this) {
+        // Swap: move existing panel to the opposite edge (intuitive behavior)
+        const oppositeEdge = this.getOppositeEdge(bestEdge);
+        existingPanel.setDockPosition(oppositeEdge);
+      }
+
       this.setDockPosition(bestEdge);
     }
 
     this.panelState.originalDockPosition = undefined;
+  }
+
+  /**
+   * Get the opposite edge for a dock position (for intuitive swapping)
+   */
+  private getOppositeEdge(position: DockPosition): DockPosition {
+    switch (position) {
+      case 'left': return 'right';
+      case 'right': return 'left';
+      case 'top': return 'bottom';
+      case 'bottom': return 'top';
+      default: return 'float';
+    }
+  }
+
+  /**
+   * Find a panel that is currently docked at the specified position
+   */
+  private findPanelDockedAt(position: DockPosition): DockablePanel | null {
+    if (!this.screen) return null;
+
+    for (const child of this.screen.children) {
+      if (!(child instanceof DockablePanel) || child === this) continue;
+
+      const otherPanel = child as DockablePanel;
+      if (otherPanel.getDockPosition() === position && !otherPanel.isMinimized()) {
+        return otherPanel;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Show drop zone indicators at screen edges
+   */
+  private showDropZoneIndicators(): void {
+    if (!this.screen) return;
+
+    // Get or create zones for this screen
+    let zones = DockablePanel.dropZones.get(this.screen);
+    if (!zones) {
+      zones = {};
+      DockablePanel.dropZones.set(this.screen, zones);
+    }
+
+    const sw = this.screen.width;
+    const sh = this.screen.height;
+    // Small strip indicators at edges (not large zones)
+    const stripWidth = 3;   // 3 chars wide for left/right
+    const stripHeight = 1;  // 1 row tall for top/bottom
+
+    // Create zone indicators if they don't exist
+    if (!zones.left) {
+      zones.left = new Box({
+        parent: this.screen,
+        left: 0,
+        top: this.topConstraint,
+        width: stripWidth,
+        height: sh - this.topConstraint - this.bottomConstraint,
+        style: { bg: 'blue', transparent: true },
+        tags: true,
+        content: '',
+      });
+      (zones.left as any)._isDropZone = true;
+    }
+
+    if (!zones.right) {
+      zones.right = new Box({
+        parent: this.screen,
+        right: 0,
+        top: this.topConstraint,
+        width: stripWidth,
+        height: sh - this.topConstraint - this.bottomConstraint,
+        style: { bg: 'blue', transparent: true },
+        tags: true,
+        content: '',
+      });
+      (zones.right as any)._isDropZone = true;
+    }
+
+    if (!zones.top) {
+      zones.top = new Box({
+        parent: this.screen,
+        left: 0,
+        top: this.topConstraint,
+        width: sw,
+        height: stripHeight,
+        style: { bg: 'blue', transparent: true },
+        tags: true,
+        content: '',
+      });
+      (zones.top as any)._isDropZone = true;
+    }
+
+    if (!zones.bottom) {
+      zones.bottom = new Box({
+        parent: this.screen,
+        left: 0,
+        bottom: this.bottomConstraint,
+        width: sw,
+        height: stripHeight,
+        style: { bg: 'blue', transparent: true },
+        tags: true,
+        content: '',
+      });
+      (zones.bottom as any)._isDropZone = true;
+    }
+
+    // Show all zones (dimmed initially)
+    for (const zone of Object.values(zones)) {
+      if (zone) {
+        zone.show();
+        zone.style.bg = 'blue';
+      }
+    }
+
+    DockablePanel.activeDropZone = null;
+  }
+
+  /**
+   * Hide drop zone indicators
+   */
+  private hideDropZoneIndicators(): void {
+    if (!this.screen) return;
+
+    const zones = DockablePanel.dropZones.get(this.screen);
+    if (zones) {
+      for (const zone of Object.values(zones)) {
+        if (zone) zone.hide();
+      }
+    }
+    DockablePanel.activeDropZone = null;
+  }
+
+  /**
+   * Update drop zone highlighting based on mouse position
+   */
+  private updateDropZoneHighlight(mouseX: number, mouseY: number): void {
+    if (!this.screen) return;
+
+    const zones = DockablePanel.dropZones.get(this.screen);
+    if (!zones) return;
+
+    const sw = this.screen.width;
+    const sh = this.screen.height;
+    // Small thresholds matching the strip indicators
+    const edgeThreshold = 5;  // 5 chars from edge
+    const vertThreshold = 3;  // 3 rows from edge
+
+    // Determine which zone mouse is in
+    let activeZone: DockPosition | null = null;
+
+    if (mouseX < edgeThreshold) {
+      activeZone = 'left';
+    } else if (mouseX >= sw - edgeThreshold) {
+      activeZone = 'right';
+    } else if (mouseY < this.topConstraint + vertThreshold) {
+      activeZone = 'top';
+    } else if (mouseY >= sh - this.bottomConstraint - vertThreshold) {
+      activeZone = 'bottom';
+    }
+
+    // Update highlighting
+    if (activeZone !== DockablePanel.activeDropZone) {
+      // Reset all to dim
+      for (const [pos, zone] of Object.entries(zones)) {
+        if (zone) {
+          zone.style.bg = 'blue';
+        }
+      }
+
+      // Highlight active zone
+      if (activeZone && zones[activeZone]) {
+        zones[activeZone]!.style.bg = 'cyan';
+      }
+
+      DockablePanel.activeDropZone = activeZone;
+      this.screen.render();
+    }
   }
 
   /**
@@ -1147,27 +1463,28 @@ export class DockablePanel extends Panel {
       });
     }
 
-    // Set preview dimensions based on edge
+    // Set preview dimensions based on edge (15% of screen for compact dock zones)
     let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
-    
+    const dockSize = 0.15;  // 15% of screen width/height for dock zones
+
     switch (edge) {
       case 'left':
-        targetW = Math.floor(sw * 0.3);
+        targetW = Math.floor(sw * dockSize);
         targetH = sh;
         break;
       case 'right':
-        targetX = sw - Math.floor(sw * 0.3);
-        targetW = Math.floor(sw * 0.3);
+        targetX = sw - Math.floor(sw * dockSize);
+        targetW = Math.floor(sw * dockSize);
         targetH = sh;
         break;
       case 'top':
         targetW = sw;
-        targetH = Math.floor(sh * 0.3);
+        targetH = Math.floor(sh * dockSize);
         break;
       case 'bottom':
-        targetY = sh - Math.floor(sh * 0.3);
+        targetY = sh - Math.floor(sh * dockSize);
         targetW = sw;
-        targetH = Math.floor(sh * 0.3);
+        targetH = Math.floor(sh * dockSize);
         break;
     }
 
@@ -1344,13 +1661,47 @@ export class DockablePanel extends Panel {
   }
 
   /**
-   * Set dock position
+   * Set dock position with visual feedback
    */
   setDockPosition(position: DockPosition): void {
+    const previousPosition = this.dockPosition;
     this.dockPosition = position;
     this.panelState.position = position;
     this.applyDockPosition(position);
+
+    // Visual feedback: brief border flash when docking (not for float)
+    if (position !== 'float' && previousPosition !== position) {
+      this.flashBorder('cyan', 150);
+    }
+
     this.emit('dock', position);
+  }
+
+  /**
+   * Flash the border color briefly for visual feedback
+   */
+  private flashBorder(color: string, duration: number): void {
+    if (!this.style?.border) return;
+
+    const originalColor = (this as any)._originalBorderColor || this.style.border.fg || 'green';
+
+    // Set flash color
+    this.style.border.fg = color;
+    if ((this.options.style as any)?.border) {
+      (this.options.style as any).border.fg = color;
+    }
+    if (this.screen) this.screen.render();
+
+    // Restore original color after duration
+    setTimeout(() => {
+      if (this.style?.border) {
+        this.style.border.fg = originalColor;
+      }
+      if ((this.options.style as any)?.border) {
+        (this.options.style as any).border.fg = originalColor;
+      }
+      if (this.screen) this.screen.render();
+    }, duration);
   }
 
   /**
@@ -1582,33 +1933,54 @@ export class DockablePanel extends Panel {
    * Toggle fullscreen maximization
    */
   public toggleMaximize(): void {
-    if (this.preMaximizeState) {
-      // Restore from maximized
-      this.setState(this.preMaximizeState);
-      this.preMaximizeState = null;
+    if (this.isMaximized) {
+      this.restoreFromMaximized();
     } else {
-      // Save current state
-      this.preMaximizeState = this.getState();
-      
-      // Expand to fill screen (respect topConstraint)
-      if (this.screen) {
-        this.setState({
-          x: 0,
-          y: this.topConstraint,
-          width: this.screen.width,
-          height: this.screen.height - this.topConstraint,
-          position: 'float'
-        });
-        this.bringToFront();
-      }
+      this.maximizeToScreen();
     }
   }
 
   /**
    * Check if panel is currently maximized to fullscreen
    */
-  public isMaximized(): boolean {
+  public get isMaximized(): boolean {
     return this.preMaximizeState !== null;
+  }
+
+  /**
+   * Maximize panel to fill screen
+   */
+  public maximizeToScreen(): void {
+    if (this.preMaximizeState) return;  // Already maximized
+
+    // Save current state
+    this.preMaximizeState = this.getState();
+
+    // Expand to fill screen (respect constraints)
+    if (this.screen) {
+      this.setState({
+        x: 0,
+        y: this.topConstraint,
+        width: this.screen.width,
+        height: this.screen.height - this.topConstraint - this.bottomConstraint,
+        position: 'float'
+      });
+      this.bringToFront();
+      // Visual feedback
+      this.flashBorder('yellow', 100);
+    }
+  }
+
+  /**
+   * Restore panel from maximized state
+   */
+  public restoreFromMaximized(): void {
+    if (!this.preMaximizeState) return;  // Not maximized
+
+    this.setState(this.preMaximizeState);
+    this.preMaximizeState = null;
+    // Visual feedback
+    this.flashBorder('green', 100);
   }
 
   /**

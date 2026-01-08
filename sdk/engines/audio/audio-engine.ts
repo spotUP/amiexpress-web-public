@@ -138,8 +138,65 @@ class AudioEngine {
         console.error('Tone.js start failed:', e);
       }
     }
-    
+
     this.initialized = true;
+  }
+
+  /**
+   * Enable or disable UI sounds
+   * When in Node.js with socket, sends command to web client
+   *
+   * @param enabled - Whether UI sounds should be enabled
+   *
+   * @example
+   * ```typescript
+   * // Disable UI sounds for quiet mode
+   * audio.setUISoundsEnabled(false);
+   *
+   * // Re-enable
+   * audio.setUISoundsEnabled(true);
+   * ```
+   */
+  public setUISoundsEnabled(enabled: boolean): void {
+    this.config.enabled = enabled;
+
+    // If we're in Node.js with a socket, relay to client
+    const isBrowser = typeof globalThis !== 'undefined' && (globalThis as any).window !== undefined;
+    if (!isBrowser && this.socket) {
+      this.socket.emit('audio:set-ui-sounds', { enabled });
+    }
+  }
+
+  /**
+   * Check if UI sounds are enabled
+   */
+  public isUISoundsEnabled(): boolean {
+    return this.config.enabled;
+  }
+
+  /**
+   * Set the SFX volume (0.0 to 1.0)
+   * When in Node.js with socket, sends command to web client
+   *
+   * @param volume - Volume level (0.0 to 1.0)
+   */
+  public setSfxVolume(volume: number): void {
+    this.config.sfxVolume = Math.max(0, Math.min(1, volume));
+
+    // If we're in Node.js with a socket, relay to client
+    const isBrowser = typeof globalThis !== 'undefined' && (globalThis as any).window !== undefined;
+    if (!isBrowser && this.socket) {
+      this.socket.emit('audio:set-volume', { volume: this.config.sfxVolume });
+    } else if (this.sfxGain && this.sfxGain.gain) {
+      this.sfxGain.gain.value = this.config.sfxVolume;
+    }
+  }
+
+  /**
+   * Get current SFX volume
+   */
+  public getSfxVolume(): number {
+    return this.config.sfxVolume;
   }
 
   /**
