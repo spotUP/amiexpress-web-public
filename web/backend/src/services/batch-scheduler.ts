@@ -10,6 +10,37 @@ import { InfoFileParser } from './info-file-parser';
 import { getSystemTime } from '../utils/date-time.util';
 
 /**
+ * Get door type from .info file (TYPE tooltype)
+ * Returns 'XIM' for XIM doors, 'SIM' as default for plain AmigaDOS executables
+ */
+function getDoorTypeFromInfo(doorPath: string): string {
+  const infoPath = doorPath + '.info';
+  if (!fs.existsSync(infoPath)) {
+    return 'SIM'; // Default for doors without .info files
+  }
+
+  try {
+    const buffer = fs.readFileSync(infoPath);
+    const parser = new InfoFileParser();
+    const parsed = parser.parse(buffer);
+
+    // Look for TYPE tooltype (e.g., TYPE=XIM)
+    const typeValue = parsed.toolTypes.get('TYPE');
+    if (typeValue) {
+      const upperType = typeValue.toUpperCase();
+      // Valid door types: XIM, AIM, SIM, TIM
+      if (['XIM', 'AIM', 'SIM', 'TIM'].includes(upperType)) {
+        return upperType;
+      }
+    }
+    return 'SIM'; // Default
+  } catch (err) {
+    console.warn(`[BatchScheduler] Failed to read ${infoPath}: ${err}`);
+    return 'SIM'; // Default on error
+  }
+}
+
+/**
  * EXECUTE_ON_* Event Types (from express.e:6666-6744)
  * These are tooltypes in bbsConfig.info that specify commands to run on BBS events.
  */
@@ -749,14 +780,15 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
 
     const useTsRunner = resolvedRunner.endsWith('.ts');
     const command = useTsRunner ? 'npx' : 'node';
-    // For batch doors: use default loop limit with guard enabled
-    // The 60s timeout provides the primary safety net for stuck doors
-    // IMPORTANT: Batch doors are SIM-type (plain AmigaDOS executables), NOT XIM doors
-    // Setting doortype=SIM disables XIM protocol polling which batch doors don't use
+    // For batch doors: read door type from .info file
+    // Some batch doors (like quicklogon, ByteKillHandler) are actually XIM doors
+    // that need XIM protocol polling to communicate with the BBS
+    const doorType = getDoorTypeFromInfo(doorPath);
+    console.log(`[BatchScheduler] Running door ${path.basename(doorPath)} as type ${doorType}`);
     const toolTypes = {}; // Use DoorLifecycleManager defaults
     const execArgs = useTsRunner
-      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', 'SIM']
-      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', 'SIM'];
+      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType]
+      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType];
 
     const child: any = require('child_process').spawn(command, execArgs, {
       cwd: cwd || path.dirname(doorPath),

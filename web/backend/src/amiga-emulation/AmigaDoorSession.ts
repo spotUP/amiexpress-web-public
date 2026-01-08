@@ -498,17 +498,23 @@ console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger n
       // before any door code or native library initialization can call FindPort().
       // See lines 605-617 for the new early creation location.
 
-      // Initialize TIM Door Handler for TIM-type doors (Phase 5C)
-      // TIM doors use DoorControl{n} port with simpler doorMsg structure
-      // Reference: express.e lines 4371-4525
-      if (this.config.doorType === "TIM") {
+      // Initialize TIM Door Handler for DoorControl-using doors (Phase 5C)
+      // TIM, SIM, IIM, SUP doors all use DoorControl{n} port (per express.e:4316-4320)
+      // Only XIM doors use AEDoorPort - all others use DoorControl with doorMsg structure
+      // CRITICAL: Default to SIM if doorType not specified (matches LibraryManager default)
+      const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
+      const usesDoorControl = effectiveDoorType === "TIM" ||
+                              effectiveDoorType === "SIM" ||
+                              effectiveDoorType === "IIM" ||
+                              effectiveDoorType === "SUP";
+      if (usesDoorControl) {
         this.timHandler = new TIMDoorMessageHandler(
           this.emulator,
           this.socket,
           this.config
         );
         this.lifecycleManager.setTIMHandler(this.timHandler);
-console.log("[AmigaDoorSession] TIM door handler initialized");
+console.log(`[AmigaDoorSession] DoorControl handler initialized for ${effectiveDoorType} door`);
       }
 
 console.log("[AmigaDoorSession] All modular components initialized");
@@ -749,7 +755,7 @@ console.log(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sess
     this.emulator.writeMemory32(cliStructAddr + 0x28, -1); // cli_Interactive (TRUE)
     this.emulator.writeMemory32(cliStructAddr + 0x2c, 0); // cli_Background
     this.emulator.writeMemory32(cliStructAddr + 0x30, 0); // cli_CurrentOutput
-    this.emulator.writeMemory32(cliStructAddr + 0x34, 4096); // cli_DefaultStack
+    this.emulator.writeMemory32(cliStructAddr + 0x34, 65536 >> 2); // cli_DefaultStack (in longwords, not bytes) - generous 64KB default
     this.emulator.writeMemory32(cliStructAddr + 0x38, 0); // cli_StandardOutput
     this.emulator.writeMemory32(cliStructAddr + 0x3c, 0); // cli_Module
     this.emulator.writeMemory32(cliStructAddr + 0x40, 0); // cli_CurrentDir
@@ -834,16 +840,28 @@ console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     // Restore pr_CLI if a door CreatePort() overwrites it
     // XIM doors: pr_CLI is set by DoorLoader based on CLI_REQUIRED tooltype, don't modify here
     // Non-XIM doors: restore pr_CLI if it was cleared during CreatePort
+    // NOTE: DoorLoader creates its own CLI struct at a different address (0xa0000 vs 0x110000).
+    // This callback uses the CURRENT task address (from ExecLibrary) and the CLI struct
+    // created by DoorLoader, not the one from setupCliEnvironment.
     this.sharedState.execLibrary.setDoorInitCallback(() => {
       // Don't modify pr_CLI for XIM doors - DoorLoader already set the correct value
       if (isXimDoor) {
         return;
       }
-      const currentValue = this.emulator?.readMemory32(taskAddr + prCliOffset) ?? 0;
+      // Get CURRENT task address (may have been allocated by DoorLoader after this callback was set)
+      const currentTaskAddr = this.sharedState.execLibrary?.getCurrentTaskAddress() ?? 0;
+      if (currentTaskAddr === 0) {
+        console.log("[AmigaDoorSession] pr_CLI restore callback: task not allocated yet, skipping");
+        return;
+      }
+      const currentValue = this.emulator?.readMemory32(currentTaskAddr + prCliOffset) ?? 0;
       if (currentValue === 0) {
-        this.emulator?.writeMemory32(taskAddr + prCliOffset, cliBPTR);
+        // Use DoorLoader's CLI struct address (0xa0000 >> 2 = 0x28000)
+        // This is the CLI structure that DoorLoader populates with correct values
+        const doorLoaderCliBptr = 0xa0000 >> 2; // 0x28000
+        this.emulator?.writeMemory32(currentTaskAddr + prCliOffset, doorLoaderCliBptr);
 console.log(
-          "[AmigaDoorSession] pr_CLI was cleared during CreatePort; restored CLI pointer"
+          `[AmigaDoorSession] pr_CLI was cleared during CreatePort; restored to 0x${doorLoaderCliBptr.toString(16)} at task 0x${currentTaskAddr.toString(16)}`
         );
       }
     });

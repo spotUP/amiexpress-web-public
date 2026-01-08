@@ -94,6 +94,10 @@ export class AEDoorLibrary {
   private interfaces = new Map<number, DoorInterfaceState>();
   private activePrompt: PromptState | null = null;
 
+  // Callback to process XIM messages synchronously during waitForReply
+  // This is needed because trap handlers are synchronous and can't yield to async polling
+  private processXIMMessageCallback: ((bbsPortAddr: number) => void) | null = null;
+
   constructor(
     socket: Socket,
     emulator: MoiraEmulator,
@@ -106,6 +110,18 @@ export class AEDoorLibrary {
     this.sessionData = sessionData;
 
     this.setupInputHandler();
+  }
+
+  /**
+   * Set callback for processing XIM messages synchronously
+   * This is called from waitForReply to process pending messages
+   * The callback should:
+   * 1. Get message from bbsPortAddr via getMsg
+   * 2. Parse and handle the XIM command
+   * 3. Send reply via replyMsg
+   */
+  setXIMProcessor(callback: (bbsPortAddr: number) => void): void {
+    this.processXIMMessageCallback = callback;
   }
 
   /**
@@ -657,20 +673,16 @@ console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
 
   /**
    * PostDeleteComm() - LVO -138
-   * Called after door communication cleanup
+   * Per aedoor.library disassembly (libFunc20): Creates CommHandle, sends cmd 2, loops
+   * This is called during door cleanup. The native implementation creates a new comm handle
+   * and sends a cleanup command. We need to return success to allow doors to complete
+   * their cleanup and exit.
    */
   postDeleteComm(): number {
-    const nodeNum = this.emulator.getRegister(0);
-console.log(`[AEDoorLibrary] PostDeleteComm(node=${nodeNum})`);
-
-    // Basic cleanup validation
-    if (nodeNum < 1 || nodeNum > 99) {
-console.warn(`[AEDoorLibrary] PostDeleteComm: Invalid node number ${nodeNum}`);
-      this.emulator.setRegister(0, 0);
-      return -1; // Error
-    }
-
-    this.emulator.setRegister(0, 1); // Success
+    // The native libFunc20 creates a new CommHandle internally (via createComm) and sends
+    // command 2 to the BBS. D0 is not a node number input - it's set to 2 (command) internally.
+    // We just need to return success so doors can complete their cleanup loops.
+    this.emulator.setRegister(0, 1); // Success - comm handle pointer (non-zero = success)
     return 0;
   }
 
@@ -1371,12 +1383,20 @@ console.warn(
 
   private waitForReply(state: DoorInterfaceState, command: number): boolean {
     for (let i = 0; i < 10000; i++) {
+      // CRITICAL FIX 2026-01-08: Process XIM messages synchronously!
+      // We're inside a trap handler, so the async polling loop can't run.
+      // The door sent a message to the BBS, we need to process it and send
+      // the reply before the door's getMsg finds it.
+      if (this.processXIMMessageCallback && state.bbsPortAddr) {
+        this.processXIMMessageCallback(state.bbsPortAddr);
+      }
+
       const msgAddr = this.execLibrary.getMsg(state.replyPortAddr);
       if (msgAddr !== 0) {
         return true;
       }
     }
-console.warn(`[AEDoorLibrary] No reply for command ${command}`);
+    console.warn(`[AEDoorLibrary] No reply for command ${command} after 10000 iterations`);
     return false;
   }
 

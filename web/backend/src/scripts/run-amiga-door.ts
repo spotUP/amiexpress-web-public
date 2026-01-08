@@ -86,7 +86,10 @@ async function main(): Promise<void> {
     : path.join(process.cwd(), doorPathArg);
 
   const parsed = parseArgs(rest);
-  const doorArgs = [String(nodeId), ...parsed.args];
+  // XIM doors expect node number as first arg (express.e runDoor pattern)
+  // SIM/TIM/IIM/SUP doors are plain CLI utilities - pass args as-is from batch file
+  const isXimDoor = parsed.doorType.toUpperCase() === "XIM";
+  const doorArgs = isXimDoor ? [String(nodeId), ...parsed.args] : parsed.args;
   const socket = new MockSocket();
 
   const amigaSession = new AmigaDoorSession(socket as any, {

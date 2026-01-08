@@ -313,6 +313,38 @@ console.log(
       /* ignore logging errors */
     }
 
+    // CRITICAL FIX 2026-01-08: Set up synchronous XIM processor for AEDoor.library trap handlers
+    // When AEDoor.library's WriteStr/etc calls dispatchCommand -> waitForReply, the
+    // trap handler is synchronous and can't yield to the async pollXIMMessages loop.
+    // We provide a callback that processes XIM messages synchronously during waitForReply.
+    if (this.libraryManager?.aedoorLibrary && this.libraryManager?.execLibrary) {
+      const self = this; // Capture 'this' for callback
+      const execLib = this.libraryManager.execLibrary;
+      this.libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
+        // Get one message from the BBS port (the message the door just sent)
+        const msgAddr = execLib.getMsg(bbsPortAddr);
+        if (msgAddr && msgAddr !== 0 && self.ximProtocol) {
+          // Parse and handle the XIM message
+          const parsed = self.ximProtocol.parseMessage(msgAddr);
+          // Handle synchronously - for JH_WRITE this just emits to socket and replies
+          // Note: handleMessage is async but the sync parts (including replyMsg) run immediately
+          self.ximProtocol.handleMessage(parsed);
+        }
+      });
+    }
+
+    // CRITICAL: Send INIT/STAT to door's pr_MsgPort BEFORE first instruction executes
+    // AquaScan (and similar doors) call WaitPort on pr_MsgPort immediately after startup,
+    // expecting INIT/STAT messages for BBS mode detection. This must happen:
+    // - AFTER all initialization (DoorLoader, DoorMessageHandler, etc.)
+    // - BEFORE the first instruction executes (before door can call WaitPort)
+    // express.e starts door process at line 4336, then waits for JH_REGISTER. But doors
+    // like AquaScan check pr_MsgPort first for BBS mode detection before sending JH_REGISTER.
+    if (this.config.doorType === "XIM" && this.messageHandler && !this.executionState.startupMessageSent) {
+console.log("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door execution starts");
+      await this.sendStartupMessage();
+    }
+
     // Set up timeout
     if (this.lifecycleConfig.timeout) {
       this.executionTimer = setTimeout(() => {
@@ -391,9 +423,9 @@ console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockS
 console.log(`[DoorLifecycleManager] Created/verified ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
       }
 
-      // NOTE: INIT/STAT messages are now sent on FIRST pollXIMMessages() call
-      // when the door task exists. Sending too early (before task created) causes
-      // messages to be sent to wrong ports. See pollXIMMessages() for implementation.
+      // NOTE: DoorInfo structures are initialized on FIRST pollXIMMessages() call.
+      // BBS does NOT pre-send INIT/STAT - doors initiate with JH_REGISTER first.
+      // Old-style doors get INIT/STAT via 500ms fallback timer after JH_REGISTER.
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {
@@ -756,23 +788,32 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
         // === STEP 4: Check if PC is at a trap address (before batch execution) ===
         const isTrapAddr = this.libraryTraps?.isTrapAddress(pc);
+        console.log(`[TRAP-DEBUG] PC=0x${pc.toString(16)} isTrapAddr=${isTrapAddr}`);
         if (isTrapAddr) {
           // Handle the trap
           const trapHandled = await this.checkAndHandleLibraryTrap(pc);
+          console.log(`[TRAP-DEBUG] trapHandled=${trapHandled}`);
           if (trapHandled) {
             await this.handleTrapExecution(pc);
+            console.log(`[TRAP-DEBUG] After handleTrapExecution, calling pollXIMMessages`);
 
             // === STEP 4B: Check if WaitPort returned 0 (no messages) ===
             // Doors like Bulls/FR use tight WaitPort loops and need immediate XIM polling.
             // Without this, messages queue up but never get processed because XIM polling
             // only happens every 10000 instructions (after batch execution).
             // AquaScan uses Wait() which pauses, so it doesn't need this - it polls during pause.
-            if (
-              this.config.doorType === "XIM" &&
-              this.libraryManager?.execLibrary?.getNeedsXIMPoll()
-            ) {
+            // CRITICAL FIX 2026-01-08: ALWAYS poll for XIM messages after trap handling!
+            // The door is in a tight GetMsg loop - each iteration handles a trap and continues,
+            // which skips the batch execution path where pollXIMMessages was being called.
+            // We must poll here for XIM doors, regardless of the needsXIMPoll flag.
+            if (this.config.doorType === "XIM" || this.detectedXIMPort) {
               await this.pollXIMMessages();
-              this.libraryManager.execLibrary.clearNeedsXIMPoll();
+            }
+
+            // Also clear the flag if it was set
+            const execLib = this.libraryManager?.execLibrary;
+            if (execLib?.getNeedsXIMPoll()) {
+              execLib.clearNeedsXIMPoll();
             }
 
             continue;
@@ -790,7 +831,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // DEBUG: Use small batch to catch PC corruption
         const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 10000;
         const pcBeforeBatch = this.emulator.getRegister(16);
+        console.log(`[BATCH-DEBUG] Starting batch at PC=0x${pcBeforeBatch.toString(16)}`);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
+        console.log(`[BATCH-DEBUG] Batch result=${result}, newPC=0x${this.emulator.getRegister(16).toString(16)}`);
         const pcAfterBatch = this.emulator.getRegister(16);
 
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
@@ -871,7 +914,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // XIM doors CAN legitimately loop polling for messages while waiting for input
         const isInWaitLoop = this.emulator.isPaused() ||
                             (this.libraryManager?.execLibrary as any)?.currentTask?.isWaiting;
-        const isXIMDoor = this.config.doorType === 'XIM';
+        const isXIMDoor = this.config.doorType === 'XIM' || this.detectedXIMPort;
         const isPCInCodeRegion = pcAfterBatch >= this.codeLowerBound && pcAfterBatch <= this.codeUpperBound;
 
         // CRITICAL: Check if XIM door is waiting for user input (sent JH_HK/JH_LI, awaiting reply)
@@ -939,6 +982,18 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         if (result < 0) {
           // Clear trap hit flag for next iteration
           this.emulator.clearTrapHit();
+
+          // CRITICAL FIX: For XIM doors, check if needsXIMPoll was set during trap handling
+          // and poll BEFORE continuing. Otherwise XIM polling is skipped and door hangs.
+          if (this.config.doorType === "XIM" || this.detectedXIMPort) {
+            const execLib = this.libraryManager?.execLibrary;
+            if (execLib?.getNeedsXIMPoll()) {
+              console.log(`[XIM-TRAP] Trap hit with needsXIMPoll=true, polling now`);
+              await this.pollXIMMessages();
+              execLib.clearNeedsXIMPoll();
+            }
+          }
+
           // Continue loop - next iteration will detect trap at current PC and handle it
           continue;
         }
@@ -951,14 +1006,26 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         }
 
         // === STEP 5B: Poll for XIM messages from native AEDoor.library ===
-        // Only poll for XIM doors - SIM doors don't use XIM protocol
-        if (this.config.doorType === "XIM") {
-          await this.pollXIMMessages();
+        // ALWAYS call pollXIMMessages - it will auto-detect XIM doors by checking
+        // if AEDoorPort exists, even if doorType is configured as SIM.
+        // This handles cases where .info file is missing or has wrong TYPE.
+        const execLib5b = this.libraryManager?.execLibrary;
+        if (execLib5b?.getNeedsXIMPoll()) {
+          console.log(`[XIM-BATCH] needsXIMPoll flag set during batch, polling now`);
+          execLib5b.clearNeedsXIMPoll();
         }
+        await this.pollXIMMessages();
 
-        // === STEP 5C: Poll for TIM messages from DoorControl port ===
-        // TIM doors use DoorControl{n} port with simpler doorMsg structure
-        if (this.config.doorType === "TIM") {
+        // === STEP 5C: Poll for TIM/SIM messages from DoorControl port ===
+        // TIM, SIM, IIM, SUP doors all use DoorControl{n} port (per express.e:4316-4320)
+        // Only XIM doors use AEDoorPort - all others use DoorControl
+        // CRITICAL: Default to SIM if doorType not specified
+        const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
+        const usesDoorControl = effectiveDoorType === "TIM" ||
+                                effectiveDoorType === "SIM" ||
+                                effectiveDoorType === "IIM" ||
+                                effectiveDoorType === "SUP";
+        if (usesDoorControl) {
           await this.pollTIMMessages();
         }
 
@@ -989,10 +1056,20 @@ console.log(
     // 6. Reply is never sent, Signal() never called
     // 7. Door stays paused forever until timeout
 
-    if (this.config.doorType === "XIM") {
+    // CRITICAL: Default to SIM if doorType not specified
+    const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
+
+    if (effectiveDoorType === "XIM") {
       await this.pollXIMMessages();
-    } else if (this.config.doorType === "TIM") {
-      await this.pollTIMMessages();
+    } else {
+      // TIM, SIM, IIM, SUP doors all use DoorControl port (per express.e:4316-4320)
+      const usesDoorControl = effectiveDoorType === "TIM" ||
+                              effectiveDoorType === "SIM" ||
+                              effectiveDoorType === "IIM" ||
+                              effectiveDoorType === "SUP";
+      if (usesDoorControl) {
+        await this.pollTIMMessages();
+      }
     }
 
     await new Promise((resolve) => setImmediate(resolve));
@@ -1871,6 +1948,7 @@ console.log(
    */
   private pollCount = 0;
   private lastPollLog = 0;
+  private detectedXIMPort = false; // AUTO-DETECT: Set true when door creates AEDoorPort
 
   private async pollXIMMessages(): Promise<void> {
     this.pollCount++;
@@ -1878,27 +1956,24 @@ console.log(
     // AGGRESSIVE LOGGING: Log EVERY poll to see when it stops working
 console.log(`[DoorLifecycleManager][pollXIMMessages] POLL #${this.pollCount} doorType="${this.config.doorType}"`);
 
-    // Send INIT/STAT on first poll when door task exists
+    // Initialize protocol on first poll - log doorType for debugging
     if (this.pollCount === 1) {
 console.log(`[DoorLifecycleManager] pollXIMMessages called: doorType="${this.config.doorType}"`);
-      // CRITICAL: Send INIT/STAT messages now that door task exists
-      // Legacy XIM doors (AquaScan, JoinCnf, WALL) wait for these before sending JH_REGISTER
-      // See commit c9a529286 and express.e:3343-3355
-      await this.sendStartupMessage();
+      // CORRECT PROTOCOL (from express.e:4352-4369):
+      // - BBS waits for door to send JH_REGISTER first
+      // - BBS does NOT pre-send INIT/STAT (that caused our polling to consume them)
+      // - JH_REGISTER handler has 500ms fallback for old-style doors
+      //
+      // REMOVED: await this.sendStartupMessage();
+      // AquaScan was exiting with code 10 because we sent INIT/STAT BEFORE the door
+      // opened AEDoor.library. The door expects to receive startup messages AFTER
+      // it initializes communication, not before.
     }
 
     // Log every 10000 polls to confirm polling is active
     if (this.pollCount - this.lastPollLog >= 10000) {
 console.log(`[DoorLifecycleManager] XIM polling active: ${this.pollCount} polls so far`);
       this.lastPollLog = this.pollCount;
-    }
-
-    // Only poll for XIM doors
-    if (this.config.doorType !== "XIM") {
-      if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] XIM polling DISABLED: doorType=${this.config.doorType}`);
-      }
-      return;
     }
 
     // CRITICAL: Skip polling if we're already waiting for user input
@@ -1929,12 +2004,25 @@ console.log(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
     this.emulator.writeString(portNameAddr, portName);
 
     const aePortAddr = execLib.findPort(portNameAddr);
+
+    // Log port search every 1000 polls to debug
+    if (this.pollCount % 1000 === 1) {
+console.log(`[DoorLifecycleManager] XIM poll #${this.pollCount}: searching for ${portName}, found=0x${(aePortAddr || 0).toString(16)}`);
+    }
+
     if (!aePortAddr || aePortAddr === 0) {
-      // Port not found yet, door might not have registered
+      // Port not found yet - door might not have created it
       if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] XIM polling: AEDoorPort not found yet (will retry)`);
+console.log(`[DoorLifecycleManager] XIM polling: ${portName} not found yet (will keep checking)`);
       }
       return;
+    }
+
+    // AUTO-DETECT: Mark that we found AEDoorPort - this door IS using XIM protocol
+    // regardless of what its .info file says (handles missing/incorrect TYPE in .info)
+    if (!this.detectedXIMPort) {
+      this.detectedXIMPort = true;
+console.log(`[DoorLifecycleManager] XIM AUTO-DETECT: Door created ${portName} at 0x${aePortAddr.toString(16)} - enabling XIM polling (config doorType=${this.config.doorType})`);
     }
 
     if (this.pollCount === 1) {
@@ -1968,7 +2056,12 @@ console.log(`[DoorLifecycleManager] XIM polling: Got message at 0x${msgAddr.toSt
 console.log(`[DoorLifecycleManager] XIM polling: Parsed message command=${msg.command} data=${msg.data}`);
             // Handle the message (this will route output to socket)
             await this.ximProtocol.handleMessage(msg);
-            // Note: Reply is sent via ReplyMsg to door's reply port
+
+            // CRITICAL: Reply the message so door's GetMsg on its reply port receives it!
+            // In Amiga IPC, after GetMsg you MUST ReplyMsg to return message to sender.
+            // The door's mn_ReplyPort (DoorReplyPort{n}) is waiting for this.
+            execLib.replyMsg(msgAddr);
+console.log(`[DoorLifecycleManager] XIM polling: Replied message at 0x${msgAddr.toString(16)}`);
 
             // Check if door requested shutdown (JH_SHUTDOWN)
             if (this.ximProtocol.isShuttingDown()) {
@@ -1977,9 +2070,13 @@ console.log(`[DoorLifecycleManager] XIM polling: Door shutdown detected, stoppin
             }
           } else {
 console.log(`[DoorLifecycleManager] XIM polling: Failed to parse message`);
+            // Still reply even if parse failed, so door doesn't hang
+            execLib.replyMsg(msgAddr);
           }
         } else {
 console.log(`[DoorLifecycleManager] XIM polling: ximProtocol is null`);
+          // Still reply even without handler, so door doesn't hang
+          execLib.replyMsg(msgAddr);
         }
       } else {
 console.log(`[DoorLifecycleManager][pollXIMMessages] NO MESSAGE - getMsg returned 0`);
@@ -2011,10 +2108,15 @@ console.log(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} pol
       this.lastTimPollLog = this.timPollCount;
     }
 
-    // Only poll for TIM doors
-    if (this.config.doorType !== "TIM") {
+    // Poll for all DoorControl-using doors (TIM, SIM, IIM, SUP)
+    const effectiveDoorType = (this.config.doorType || "SIM").toUpperCase();
+    const usesDoorControl = effectiveDoorType === "TIM" ||
+                            effectiveDoorType === "SIM" ||
+                            effectiveDoorType === "IIM" ||
+                            effectiveDoorType === "SUP";
+    if (!usesDoorControl) {
       if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${this.config.doorType}`);
+console.log(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${effectiveDoorType} (not a DoorControl type)`);
       }
       return;
     }
@@ -2059,12 +2161,20 @@ console.log(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toSt
         // Found a message! Handle it with TIM handler
         if (this.timHandler) {
           const result = await this.timHandler.handleMessage(msgAddr);
+
+          // CRITICAL: Reply to the message so door's GetMsg receives it!
+          // TIM/SIM doors poll their reply port waiting for the replied message
+          execLib.replyMsg(msgAddr);
+console.log(`[DoorLifecycleManager] TIM polling: Replied to message at 0x${msgAddr.toString(16)}`);
+
           if (result.exit) {
 console.log(`[DoorLifecycleManager] TIM door requested exit`);
             this.executionState.isRunning = false;
           }
         } else {
 console.log(`[DoorLifecycleManager] TIM polling: timHandler is null`);
+          // Even without handler, reply so door doesn't hang
+          execLib.replyMsg(msgAddr);
         }
       }
     } catch (error) {

@@ -145,6 +145,8 @@ export class ExecLibrary {
   // Flag set when WaitPort returns 0 (no messages) - signals execution loop to poll XIM
   // This fixes doors that use tight WaitPort loops (Bulls, FR) vs Wait() (AquaScan)
   private needsXIMPoll: boolean = false;
+  private static instanceCounter = 0;
+  private instanceId: number;
 
   // Flag set when Wait() blocks - tells handleTrap NOT to advance PC
   // This allows Wait() to be re-executed after Signal() wakes the door
@@ -187,6 +189,8 @@ export class ExecLibrary {
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
+    this.instanceId = ++ExecLibrary.instanceCounter;
+    console.log(`[ExecLibrary] Created instance #${this.instanceId}`);
 
     // Initialize ExecBase structure
     this.execBase = {
@@ -344,6 +348,10 @@ console.log(
    * Used by execution loop to trigger immediate XIM polling for doors in tight WaitPort loops
    */
   getNeedsXIMPoll(): boolean {
+    // Debug: Log which instance is being checked
+    if (this.needsXIMPoll) {
+      console.log(`[ExecLibrary] getNeedsXIMPoll() returning TRUE (instance=${this.instanceId})`);
+    }
     return this.needsXIMPoll;
   }
 
@@ -3868,27 +3876,53 @@ console.log("[ExecLibrary] AddTail(NULL) - ignoring");
       return;
     }
 
+    // Read current values for debugging
+    const oldHead = this.emulator.readMemory32(listAddr + 0);
+    let tailPredAddr = this.emulator.readMemory32(listAddr + 8); // lh_TailPred
+    const tailAddr = listAddr + 4; // lh_Tail
+
+    // CRITICAL FIX 2026-01-08: Handle uninitialized/corrupted lists
+    // If tailPred is 0, invalid, or not properly aligned, the list wasn't initialized properly.
+    // Fix it by initializing to an empty list structure first.
+    // Node pointers must be at least word-aligned (even address on 68K)
+    const isTailPredInvalid =
+      tailPredAddr === 0 ||
+      tailPredAddr < 0x1000 ||
+      (tailPredAddr & 1) !== 0;  // Odd address = not aligned
+    if (isTailPredInvalid) {
+      console.log(`[ExecLibrary] AddTail: FIXING corrupted list at 0x${listAddr.toString(16)} (tailPred was 0x${tailPredAddr.toString(16)}, invalid=${tailPredAddr === 0 ? 'null' : tailPredAddr < 0x1000 ? 'low' : 'odd'})`);
+      // Initialize empty list: head -> tail, tailPred -> head location
+      this.emulator.writeMemory32(listAddr + 0, tailAddr); // lh_Head -> lh_Tail
+      this.emulator.writeMemory32(listAddr + 4, 0); // lh_Tail = NULL
+      this.emulator.writeMemory32(listAddr + 8, listAddr); // lh_TailPred -> lh_Head
+      tailPredAddr = listAddr; // Use the fixed value
+    }
+
+    this.logExecDebug(`AddTail: BEFORE list=0x${listAddr.toString(16)} head=0x${oldHead.toString(16)} tailPred=0x${tailPredAddr.toString(16)}`);
+
 console.log(
       `[ExecLibrary] AddTail(list=0x${listAddr.toString(
         16
-      )}, node=0x${nodeAddr.toString(16)})`
+      )}, node=0x${nodeAddr.toString(16)}) tailPred=0x${tailPredAddr.toString(16)}`
     );
-
-    // Read current tail predecessor
-    const tailPredAddr = this.emulator.readMemory32(listAddr + 8); // lh_TailPred
-    const tailAddr = listAddr + 4; // lh_Tail
 
     // Set node links
     this.emulator.writeMemory32(nodeAddr + 0, tailAddr); // ln_Succ → tail
     this.emulator.writeMemory32(nodeAddr + 4, tailPredAddr); // ln_Pred → old last node
 
     // Update old last node's successor
+    // CRITICAL: For first node in empty list, tailPredAddr points to lh_Head location
+    // so this writes to lh_Head, making it point to the new node
     this.emulator.writeMemory32(tailPredAddr + 0, nodeAddr);
 
     // Update list tail predecessor
     this.emulator.writeMemory32(listAddr + 8, nodeAddr);
 
-console.log(`[ExecLibrary]   Node added to tail`);
+    // Verify the write
+    const newHead = this.emulator.readMemory32(listAddr + 0);
+    this.logExecDebug(`AddTail: AFTER list=0x${listAddr.toString(16)} head=0x${newHead.toString(16)} tailPred=0x${nodeAddr.toString(16)}`);
+
+console.log(`[ExecLibrary]   Node added to tail (head now 0x${newHead.toString(16)})`);
   }
 
   /**
@@ -3911,10 +3945,14 @@ console.log("[ExecLibrary] RemHead(NULL) - returning NULL");
     // Read head node
     const headAddr = this.emulator.readMemory32(listAddr + 0); // lh_Head
     const tailAddr = listAddr + 4; // lh_Tail
+    const tailPredAddr = this.emulator.readMemory32(listAddr + 8); // lh_TailPred
+
+    // DEBUG: Log all list values
+    this.logExecDebug(`RemHead: list=0x${listAddr.toString(16)} headAddr=0x${headAddr.toString(16)} tailAddr=0x${tailAddr.toString(16)} tailPred=0x${tailPredAddr.toString(16)}`);
 
     // Check if list is empty (head points to tail)
     if (headAddr === tailAddr) {
-console.log(`[ExecLibrary] RemHead: List empty`);
+console.log(`[ExecLibrary] RemHead: List empty (head=0x${headAddr.toString(16)} == tail=0x${tailAddr.toString(16)})`);
       return 0;
     }
 
@@ -4735,6 +4773,13 @@ console.log(`[ExecLibrary]   Deleted port at 0x${portAddr.toString(16)}`);
   }
 
   /**
+   * Alias for deleteMsgPort - used by AmigaDoorSession cleanup
+   */
+  deletePort(portAddr: number): void {
+    this.deleteMsgPort(portAddr);
+  }
+
+  /**
    * Create a public named message port
    * This is a helper method for BBS to create ports that doors can find
    *
@@ -5116,8 +5161,15 @@ console.error(
     if (port.messages.length === 0) {
       this.logExecDebug(`GetMsg: No messages, returning 0`);
 console.log(`[ExecLibrary]   No messages in port`);
+      // Set flag to trigger XIM polling - doors may be waiting for BBS reply while polling GetMsg
+      // This is critical for XIM doors that poll GetMsg instead of using Wait()
+      this.needsXIMPoll = true;
+      console.log(`[ExecLibrary]   SET needsXIMPoll=true (instance=${this.instanceId})`);
       return 0;
     }
+
+    // DEBUG: We have messages - trace the code path
+    this.logExecDebug(`GetMsg: PASSED messages check, messages.length=${port.messages.length}, skipReplies=${options?.skipReplies}`);
 
     // If skipReplies option is set, only return messages WE didn't put there via ReplyMsg
     // We track replied messages in repliedMessages set
@@ -5147,13 +5199,21 @@ console.log(
 console.log(
         `[ExecLibrary]   No door messages in port (${port.messages.length} replies waiting for door)`
       );
+      // Set flag to trigger XIM polling - door is waiting for reply processing
+      this.needsXIMPoll = true;
       return 0;
     }
+
+    // DEBUG: Reached normal path (skipReplies=false and has messages)
+    this.logExecDebug(`GetMsg: Taking NORMAL path - calling remHead for port "${port.name}"`);
 
     // CRITICAL FIX 2026-01-07: Remove message from BOTH JavaScript array AND memory list!
     // We added via addHead() which updated memory, now we must remove from memory too
     const msgListAddr = portAddr + 20; // mp_MsgList offset
     const msgAddr = this.remHead(msgListAddr); // Remove from memory list
+
+    // DEBUG: Log remHead result
+    this.logExecDebug(`GetMsg: remHead returned 0x${msgAddr.toString(16)}`);
 
     // Also remove from JavaScript array for consistency
     const arrayIndex = port.messages.indexOf(msgAddr);

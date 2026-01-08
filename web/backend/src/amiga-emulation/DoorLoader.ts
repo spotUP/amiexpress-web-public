@@ -189,7 +189,7 @@ console.log("[DoorLoader] Setting up CPU registers...");
       (s: any) => s.type.toUpperCase() === "DATA"
     );
     const dataBase = dataSegment ? dataSegment.address : 0;
-    this.stackSizeBytes = Math.max(4096, this.config.stack || 32768);
+    this.stackSizeBytes = Math.max(4096, this.config.stack || 65536);
     // Place stack AFTER last segment (like vamos does), not at hardcoded address
     // This prevents startup code from zeroing our stack/exit trap
     // For CODE+DATA programs: after DATA. For CODE-only: after CODE.
@@ -283,11 +283,12 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
 
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
     // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
-    //   0xe0000-0xe003F: CLIStruct (64 bytes, 16 fields), extended to 0xe007F for AX compat fields
-    //   0xe0080-0xe00FF: BSTR command name (128 bytes max)
-    //   0xe0200-0xe0213: FileLockStruct (20 bytes: fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
+    //   0xa0000-0xa003F: CLIStruct (64 bytes, 16 fields), extended to 0xa007F for AX compat fields
+    //   0xa0080-0xa00FF: BSTR command name (128 bytes max)
+    //   0xa0200-0xa0213: FileLockStruct (20 bytes: fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
+    // NOTE: CLI MUST NOT be at 0xe0000 - that address is used by intuition.library stub!
     const cliSize = 0x80; // 128 bytes: 64-byte standard CLI + extended fields + padding
-    const cliAddr = 0xe0000; // store CLI in chip space (must not overlap exception handlers at 0xf00000)
+    const cliAddr = 0xa0000; // Between ExecBase (0x80000) and DOS library (0xb0000)
     const cliBptr = cliAddr >> 2;
     const compatCliAddr = cliBptr; // raw pointer form for doors that skip BADDR
     const compatBstrAddr = compatCliAddr + cliSize;
@@ -335,8 +336,8 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
 
     // Create a minimal FileLock for BBS: as current dir/home dir
     // FileLockStruct is 20 bytes (5 x LONG/APTR/BPTR fields) - see amitools/vamos/libstructs/dos.py
-    // Placed at 0xe0200 to avoid overlap with CLI (0xe0000-0xe007F) + BSTR (0xe0080-0xe00FF)
-    const lockAddr = 0xe0200;
+    // Placed at 0xa0200 to avoid overlap with CLI (0xa0000-0xa007F) + BSTR (0xa0080-0xa00FF)
+    const lockAddr = 0xa0200;
     const FILELOCK_SIZE = 20; // fl_Link(4) + fl_Key(4) + fl_Access(4) + fl_Task(4) + fl_Volume(4)
     for (let i = 0; i < FILELOCK_SIZE; i++) {
       this.emulator.writeMemory(lockAddr + i, 0);
@@ -401,7 +402,7 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
     writeCli32(0x28, 1); // cli_Interactive
     writeCli32(0x2c, 0); // cli_Background
     writeCli32(0x30, 2); // cli_CurrentOutput (BPTR)
-    writeCli32(0x34, this.stackSizeBytes); // cli_DefaultStack
+    writeCli32(0x34, this.stackSizeBytes >> 2); // cli_DefaultStack (in longwords, not bytes)
     writeCli32(0x38, 2); // cli_StandardOutput (BPTR)
     writeCli32(0x3c, segListBptr); // cli_Module BPTR to seglist
     writeCli32(0x40, lockBptr); // cli_CurrentDir (mirror)
@@ -466,7 +467,14 @@ console.log(
     const thisTaskPtr = this.emulator.readMemory32(execBase + 0x114); // pr_CurrentTask
     const prCLIOffset = 0xac;
     const finalPrCLI = useCliPtr ? cliBptr : 0;
+    console.log(`[DoorLoader] DEBUG: thisTaskPtr=0x${thisTaskPtr.toString(16)} writing pr_CLI to 0x${(thisTaskPtr + prCLIOffset).toString(16)}`);
     this.emulator.writeMemory32(thisTaskPtr + prCLIOffset, finalPrCLI);
+    // Verify the write
+    const verifyPrCLI = this.emulator.readMemory32(thisTaskPtr + prCLIOffset);
+    console.log(`[DoorLoader] DEBUG: Verified pr_CLI at 0x${(thisTaskPtr + prCLIOffset).toString(16)} = 0x${verifyPrCLI.toString(16)}`);
+    // Also verify ExecBase->ThisTask
+    const verifyThisTask = this.emulator.readMemory32(execBase + 0x114);
+    console.log(`[DoorLoader] DEBUG: ExecBase->ThisTask at 0x${(execBase + 0x114).toString(16)} = 0x${verifyThisTask.toString(16)}`);
     if (cliRequired) {
       console.log(`[DoorLoader] CLI_REQUIRED=YES - setting pr_CLI to 0x${cliBptr.toString(16)}`);
     } else if (doorType === "XIM") {
@@ -666,7 +674,7 @@ console.error(`[DoorLoader] CRITICAL ERROR: Memory[0x4] is NOT ExecBase! Expecte
    */
   private setupStack(segListBptr: number): void {
     const stackBase = this.stackBaseAddr || 0;
-    const stackSize = this.stackSizeBytes || Math.max(4096, this.config.stack || 8192);
+    const stackSize = this.stackSizeBytes || Math.max(4096, this.config.stack || 65536);
     const stackTop = (stackBase + stackSize) & ~3;
     // Vamos shows initial SP 8 bytes below top; mirror that spacing
     const finalSP = stackTop - 8;
