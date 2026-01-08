@@ -21,7 +21,7 @@ export class Message extends Box {
         super({
             ...options,
             parent: useOverlay ? undefined : originalParent, // Don't set parent yet if using overlay
-            border: options.border || { type: 'line' },
+            border: options.border || { type: 'line', fg: 'white', bg: 'blue' },
             label: options.title || options.label || ' Message ',
             width: options.width || 40,
             height: height,
@@ -30,11 +30,17 @@ export class Message extends Box {
             padding: { left: 1, right: 1, top: 1, bottom: 1 },
             hidden: true,
             focusable: true,
-            shadow: false, // Disable shadow - causes rendering issues
+            shadow: true, // Enable shadow for depth
             ch: ' ', // Fill character for solid background
             style: {
                 ...options.style,
-                bg: options.style?.bg || 'black',
+                bg: options.style?.bg || 'blue',
+                transparent: true, // Transparent background like blessed shadow demo
+                border: {
+                    fg: 'white',
+                    bg: 'blue',
+                    ...options.style?.border,
+                },
             },
         });
         // Create overlay if enabled
@@ -49,8 +55,8 @@ export class Message extends Box {
             this._overlay.append(this);
         }
         // Message text - centered
-        // Use 'transparent' for bg to inherit from parent dialog
-        const dialogBg = options.style?.bg || 'black';
+        // Use same bg as dialog for consistent appearance
+        const dialogBg = options.style?.bg || 'blue';
         const messageHeight = Math.max(3, height - 7);
         this.messageText = new Box({
             parent: this,

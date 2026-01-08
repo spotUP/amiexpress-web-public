@@ -416,6 +416,16 @@ console.log('[BBSApi] Mouse events disabled');
     this.setTerminalMode('fixed');
   }
 
+  /**
+   * Set cursor style for mouse hover feedback (CSS cursor property)
+   * Valid styles: 'default', 'pointer', 'text', 'move', 'grab', 'grabbing',
+   *               'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize',
+   *               'col-resize', 'row-resize', 'crosshair', 'not-allowed'
+   */
+  setCursorStyle(style: string): void {
+    this.socket.emit('cursor-style', style);
+  }
+
   // ===== Modem Emulation =====
 
   /**

@@ -102,17 +102,9 @@ export class Program extends EventEmitter {
     write(data) {
         if (this._exiting)
             return;
-        if (this._buffer) {
-            this._buf += data;
-            if (!this._flush) {
-                this._flush = setTimeout(() => {
-                    this.flush();
-                }, 0);
-            }
-        }
-        else {
-            this.output(data);
-        }
+        // Always write immediately for responsive visual feedback
+        // Buffering causes delays during rapid updates like text selection
+        this.output(data);
     }
     /**
      * Flush buffered output

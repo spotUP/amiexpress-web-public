@@ -1363,6 +1363,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
+    // Cursor style for mouse hover feedback (CSS cursor property)
+    socket.on('cursor-style', (style: string) => {
+      if (terminalRef.current) {
+        terminalRef.current.style.cursor = style;
+      }
+    });
+
     // Terminal mode switching: 'fixed' = 80 cols, 'wide' = responsive
     socket.on('terminal-mode', (mode: 'fixed' | 'wide') => {
       console.log(`[BBSTerminal] *** TERMINAL MODE SWITCH *** Mode: ${mode}`);

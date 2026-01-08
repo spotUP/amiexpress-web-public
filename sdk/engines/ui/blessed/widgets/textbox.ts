@@ -16,6 +16,8 @@ export class Textbox extends Element {
   private selectionEnd: number = -1;
   private isDragging: boolean = false;
   private selectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private isKeyboardSelecting: boolean = false;  // True while actively selecting with Shift+Arrow
+  private lastKeyTime: number = 0;  // Track when last key was pressed
 
   constructor(options: TextboxOptions = {}) {
     super({
@@ -155,7 +157,11 @@ export class Textbox extends Element {
         if (key.shift) {
           this._extendSelection(-1);
         } else {
-          this.clearSelection();
+          // Only clear selection if we're not in rapid key repeat during selection
+          // (terminal may drop shift modifier during fast repeats)
+          if (this._shouldClearSelection()) {
+            this.clearSelection();
+          }
           this.cursorLeft();
         }
         return true;
@@ -164,7 +170,10 @@ export class Textbox extends Element {
         if (key.shift) {
           this._extendSelection(1);
         } else {
-          this.clearSelection();
+          // Only clear selection if we're not in rapid key repeat during selection
+          if (this._shouldClearSelection()) {
+            this.clearSelection();
+          }
           this.cursorRight();
         }
         return true;
@@ -173,6 +182,7 @@ export class Textbox extends Element {
         if (key.shift) {
           this._selectTo(0);
         } else {
+          this._endKeyboardSelection();
           this.clearSelection();
           this.cursorHome();
         }
@@ -180,8 +190,9 @@ export class Textbox extends Element {
 
       case 'end':
         if (key.shift) {
-          this._selectTo(this.value.length);
+          this._selectTo(this._getRenderedLength(this.value));
         } else {
+          this._endKeyboardSelection();
           this.clearSelection();
           this.cursorEnd();
         }
@@ -213,9 +224,41 @@ export class Textbox extends Element {
   }
 
   /**
+   * Check if we should clear selection on arrow key without shift.
+   * During rapid key repeat, terminal may drop shift modifier, so we
+   * protect selection if keys are coming fast.
+   */
+  private _shouldClearSelection(): boolean {
+    const now = Date.now();
+    const timeSinceLastKey = now - this.lastKeyTime;
+    this.lastKeyTime = now;
+
+    // If we're keyboard selecting and keys are coming fast (<150ms apart),
+    // don't clear - it's likely a dropped shift modifier during key repeat
+    if (this.isKeyboardSelecting && timeSinceLastKey < 150) {
+      return false;
+    }
+
+    // Otherwise, clear selection and end keyboard selecting mode
+    this._endKeyboardSelection();
+    return true;
+  }
+
+  /**
+   * End keyboard selection mode
+   */
+  private _endKeyboardSelection(): void {
+    this.isKeyboardSelecting = false;
+  }
+
+  /**
    * Extend selection by delta positions (-1 = left, 1 = right)
    */
   private _extendSelection(delta: number): void {
+    // Mark that we're actively selecting with keyboard
+    this.isKeyboardSelecting = true;
+    this.lastKeyTime = Date.now();
+
     // Start selection at cursor if not already selecting
     if (this.selectionStart === -1) {
       this.selectionStart = this.cursorPos;
@@ -235,6 +278,10 @@ export class Textbox extends Element {
    * Select from current selection start to target position
    */
   private _selectTo(pos: number): void {
+    // Mark that we're actively selecting with keyboard
+    this.isKeyboardSelecting = true;
+    this.lastKeyTime = Date.now();
+
     if (this.selectionStart === -1) {
       this.selectionStart = this.cursorPos;
     }
@@ -283,67 +330,369 @@ export class Textbox extends Element {
     return text.replace(/\{/g, '{open}').replace(/\}/g, '{close}');
   }
 
-  private _updateContent(): void {
-    this._ensureCursorVisible();
+  /**
+   * Strip blessed tags from text to get plain text
+   */
+  private _stripTags(text: string): string {
+    return text.replace(/\{[^}]*\}/g, '');
+  }
 
-    let text = this.value;
+  /**
+   * Convert custom ~effect~ tags to blessed tags for display
+   * These are preview approximations - actual effects render on send
+   */
+  private _convertEffectTags(text: string): string {
+    // Rainbow: cycle through colors for each character
+    text = text.replace(/~rainbow~(.*?)~\/rainbow~/g, (_, content) => {
+      const colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+      let result = '';
+      let colorIdx = 0;
+      for (const char of content) {
+        if (char === ' ') {
+          result += char;
+        } else {
+          result += `{${colors[colorIdx % colors.length]}-fg}${char}{/}`;
+          colorIdx++;
+        }
+      }
+      return result;
+    });
 
-    if (this.secret || this.censor) {
-      text = '*'.repeat(this.value.length);
+    // Pulse: show in cyan (pulsing effect can't be static)
+    text = text.replace(/~pulse~(.*?)~\/pulse~/g, '{cyan-fg}$1{/}');
+
+    // Sparkle: show in yellow with asterisks hint
+    text = text.replace(/~sparkle~(.*?)~\/sparkle~/g, '{yellow-fg}$1{/}');
+
+    // Shake: show in red (shaking can't be shown statically)
+    text = text.replace(/~shake~(.*?)~\/shake~/g, '{red-fg}$1{/}');
+
+    // Wave: show in blue
+    text = text.replace(/~wave~(.*?)~\/wave~/g, '{blue-fg}$1{/}');
+
+    // Gradient: extract colors and show first color
+    text = text.replace(/~gradient\s+from=(\w+)\s+to=(\w+)~(.*?)~\/gradient~/g,
+      (_, fromColor, _toColor, content) => `{${fromColor}-fg}${content}{/}`);
+
+    return text;
+  }
+
+  /**
+   * Strip custom effect tags, keeping only the content
+   */
+  private _stripEffectTags(text: string): string {
+    // Remove ~effect~ and ~/effect~ markers but keep content
+    return text
+      .replace(/~rainbow~/g, '')
+      .replace(/~\/rainbow~/g, '')
+      .replace(/~pulse~/g, '')
+      .replace(/~\/pulse~/g, '')
+      .replace(/~sparkle~/g, '')
+      .replace(/~\/sparkle~/g, '')
+      .replace(/~shake~/g, '')
+      .replace(/~\/shake~/g, '')
+      .replace(/~wave~/g, '')
+      .replace(/~\/wave~/g, '')
+      .replace(/~gradient\s+from=\w+\s+to=\w+~/g, '')
+      .replace(/~\/gradient~/g, '');
+  }
+
+  /**
+   * Get the rendered length of text (excluding tag characters)
+   */
+  private _getRenderedLength(text: string): number {
+    // Strip both blessed tags and effect tags to get visible length
+    return this._stripTags(this._stripEffectTags(text)).length;
+  }
+
+  /**
+   * Check if position is at start of an effect tag, return end position or -1
+   */
+  private _skipEffectTag(text: string, pos: number): number {
+    if (text[pos] !== '~') return -1;
+
+    // Check for opening tags: ~rainbow~, ~pulse~, etc.
+    const openingTags = ['~rainbow~', '~pulse~', '~sparkle~', '~shake~', '~wave~'];
+    for (const tag of openingTags) {
+      if (text.slice(pos, pos + tag.length) === tag) {
+        return pos + tag.length;
+      }
     }
 
-    // Get visible portion of text based on viewOffset
-    const visibleWidth = this._getVisibleWidth();
-    const visibleText = text.slice(this.viewOffset, this.viewOffset + visibleWidth);
+    // Check for closing tags: ~/rainbow~, ~/pulse~, etc.
+    const closingTags = ['~/rainbow~', '~/pulse~', '~/sparkle~', '~/shake~', '~/wave~', '~/gradient~'];
+    for (const tag of closingTags) {
+      if (text.slice(pos, pos + tag.length) === tag) {
+        return pos + tag.length;
+      }
+    }
 
-    let display: string;
+    // Check for gradient opening: ~gradient from=X to=Y~
+    const gradientMatch = text.slice(pos).match(/^~gradient\s+from=\w+\s+to=\w+~/);
+    if (gradientMatch) {
+      return pos + gradientMatch[0].length;
+    }
+
+    return -1;
+  }
+
+  /**
+   * Convert a rendered position to raw position in tagged text
+   */
+  private _renderedToRawPos(text: string, renderedPos: number): number {
+    let rawPos = 0;
+    let rendered = 0;
+
+    while (rawPos < text.length && rendered < renderedPos) {
+      // Skip blessed tags {tag}
+      if (text[rawPos] === '{') {
+        const endBrace = text.indexOf('}', rawPos);
+        if (endBrace !== -1) {
+          rawPos = endBrace + 1;
+          continue;
+        }
+      }
+
+      // Skip effect tags ~tag~
+      const effectEnd = this._skipEffectTag(text, rawPos);
+      if (effectEnd !== -1) {
+        rawPos = effectEnd;
+        continue;
+      }
+
+      rawPos++;
+      rendered++;
+    }
+
+    // Skip any tags at current position
+    while (rawPos < text.length) {
+      if (text[rawPos] === '{') {
+        const endBrace = text.indexOf('}', rawPos);
+        if (endBrace !== -1) {
+          rawPos = endBrace + 1;
+          continue;
+        }
+      }
+      const effectEnd = this._skipEffectTag(text, rawPos);
+      if (effectEnd !== -1) {
+        rawPos = effectEnd;
+        continue;
+      }
+      break;
+    }
+
+    return rawPos;
+  }
+
+  /**
+   * Convert a raw position to rendered position
+   */
+  private _rawToRenderedPos(text: string, rawPos: number): number {
+    let rendered = 0;
+    let pos = 0;
+
+    while (pos < rawPos && pos < text.length) {
+      // Skip blessed tags
+      if (text[pos] === '{') {
+        const endBrace = text.indexOf('}', pos);
+        if (endBrace !== -1 && endBrace < rawPos) {
+          pos = endBrace + 1;
+          continue;
+        } else if (endBrace !== -1) {
+          break;
+        }
+      }
+
+      // Skip effect tags
+      const effectEnd = this._skipEffectTag(text, pos);
+      if (effectEnd !== -1 && effectEnd <= rawPos) {
+        pos = effectEnd;
+        continue;
+      } else if (effectEnd !== -1) {
+        break;
+      }
+
+      pos++;
+      rendered++;
+    }
+
+    return rendered;
+  }
+
+  /**
+   * Get all unclosed blessed tags up to a position (for display)
+   * Works on converted text (after _convertEffectTags)
+   */
+  private _getOpenTagsAt(text: string, rawPos: number): string[] {
+    const tagStack: string[] = [];
+
+    for (let i = 0; i < rawPos && i < text.length; i++) {
+      if (text[i] === '{') {
+        const endBrace = text.indexOf('}', i);
+        if (endBrace !== -1) {
+          const tag = text.slice(i, endBrace + 1);
+          if (tag.startsWith('{/')) {
+            tagStack.pop();
+          } else if (!tag.endsWith('/}')) {
+            tagStack.push(tag);
+          }
+          i = endBrace;
+        }
+      }
+    }
+
+    return tagStack;
+  }
+
+  private _updateContent(): void {
     const useTags = (this.options as any).tags;
 
-    if (this.focused) {
-      // Check if there's a selection
-      if (this.hasSelection()) {
-        // Get normalized selection bounds
-        const selStart = Math.min(this.selectionStart, this.selectionEnd);
-        const selEnd = Math.max(this.selectionStart, this.selectionEnd);
+    // For tag-aware rendering, we work in "rendered" positions (what user sees)
+    // The raw value contains tags like {red-fg}text{/} or ~effect~, but cursor moves through visible chars
+    // Rendered length is calculated from raw value (stripping all tag types)
+    const renderedLength = useTags ? this._getRenderedLength(this.value) : this.value.length;
 
-        // Convert to visible range
-        const visStart = Math.max(0, selStart - this.viewOffset);
-        const visEnd = Math.min(visibleText.length, selEnd - this.viewOffset);
+    // Convert custom ~effect~ tags to blessed tags for display preview
+    const text = useTags ? this._convertEffectTags(this.value) : this.value;
 
-        if (visEnd > visStart && visStart < visibleText.length) {
-          // Render selection with inverse video
-          // Escape user content if tags are NOT enabled so {} chars don't break blessed
-          const before = useTags ? visibleText.slice(0, visStart) : this._escapeForDisplay(visibleText.slice(0, visStart));
-          const selected = useTags ? visibleText.slice(visStart, visEnd) : this._escapeForDisplay(visibleText.slice(visStart, visEnd));
-          const after = useTags ? visibleText.slice(visEnd) : this._escapeForDisplay(visibleText.slice(visEnd));
-          display = `${before}{inverse}${selected}{/inverse}${after}`;
+    // Clamp cursor to rendered length
+    if (useTags && this.cursorPos > renderedLength) {
+      this.cursorPos = renderedLength;
+    }
+
+    // For secret/censor mode, use plain text handling
+    if (this.secret || this.censor) {
+      const masked = '*'.repeat(renderedLength);
+      const visibleWidth = this._getVisibleWidth();
+      this._ensureCursorVisible();
+      const visibleText = masked.slice(this.viewOffset, this.viewOffset + visibleWidth);
+
+      if (this.focused) {
+        const cursorPosInView = this.cursorPos - this.viewOffset;
+        const beforeCursor = visibleText.slice(0, cursorPosInView);
+        const atCursor = visibleText[cursorPosInView] || ' ';
+        const afterCursor = visibleText.slice(cursorPosInView + 1);
+        this.setContent(`${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`);
+      } else {
+        this.setContent(visibleText);
+      }
+
+      if (this.screen) this.screen.render();
+      return;
+    }
+
+    // For non-tagged text, use simple rendering
+    if (!useTags || !text.includes('{')) {
+      this._ensureCursorVisible();
+      const visibleWidth = this._getVisibleWidth();
+      const visibleText = text.slice(this.viewOffset, this.viewOffset + visibleWidth);
+
+      let display: string;
+      if (this.focused) {
+        if (this.hasSelection()) {
+          const selStart = Math.min(this.selectionStart, this.selectionEnd);
+          const selEnd = Math.max(this.selectionStart, this.selectionEnd);
+          const visStart = Math.max(0, selStart - this.viewOffset);
+          const visEnd = Math.min(visibleText.length, selEnd - this.viewOffset);
+
+          if (visEnd > visStart && visStart < visibleText.length) {
+            const before = this._escapeForDisplay(visibleText.slice(0, visStart));
+            const selected = this._escapeForDisplay(visibleText.slice(visStart, visEnd));
+            const after = this._escapeForDisplay(visibleText.slice(visEnd));
+            display = `${before}{inverse}${selected}{/inverse}${after}`;
+          } else {
+            const cursorPosInView = this.cursorPos - this.viewOffset;
+            const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+            const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
+            const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+            display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+          }
         } else {
-          // Selection not visible, show cursor
           const cursorPosInView = this.cursorPos - this.viewOffset;
-          const beforeCursor = useTags ? visibleText.slice(0, cursorPosInView) : this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-          const atCursor = useTags ? (visibleText[cursorPosInView] || ' ') : this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
-          const afterCursor = useTags ? visibleText.slice(cursorPosInView + 1) : this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
+          const beforeCursor = this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
+          const atCursor = this._escapeForDisplay(visibleText[cursorPosInView] || ' ');
+          const afterCursor = this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
           display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
         }
       } else {
-        // No selection, show cursor as inverse video at cursor position
-        const cursorPosInView = this.cursorPos - this.viewOffset;
-        const beforeCursor = useTags ? visibleText.slice(0, cursorPosInView) : this._escapeForDisplay(visibleText.slice(0, cursorPosInView));
-        const atCursor = useTags ? (visibleText[cursorPosInView] || ' ') : this._escapeForDisplay(visibleText[cursorPosInView] || ' ');  // Space if at end
-        const afterCursor = useTags ? visibleText.slice(cursorPosInView + 1) : this._escapeForDisplay(visibleText.slice(cursorPosInView + 1));
-        display = `${beforeCursor}{inverse}${atCursor}{/inverse}${afterCursor}`;
+        display = this._escapeForDisplay(visibleText);
+      }
+
+      this.setContent(display);
+      if (this.screen) this.screen.render();
+      return;
+    }
+
+    // Tag-aware rendering - cursor positions are in rendered space
+    // For simplicity, we don't slice tagged content (to avoid breaking tags)
+    // Instead we show the full content and let blessed handle it
+
+    let display: string;
+    if (this.focused) {
+      if (this.hasSelection()) {
+        // Selection in rendered positions
+        const selStart = Math.min(this.selectionStart, this.selectionEnd);
+        const selEnd = Math.max(this.selectionStart, this.selectionEnd);
+
+        // Convert to raw positions
+        const rawSelStart = this._renderedToRawPos(text, selStart);
+        const rawSelEnd = this._renderedToRawPos(text, selEnd);
+
+        // Get open tags at selection start to re-apply them inside selection
+        const openTags = this._getOpenTagsAt(text, rawSelStart);
+
+        const before = text.slice(0, rawSelStart);
+        const selected = text.slice(rawSelStart, rawSelEnd);
+        const after = text.slice(rawSelEnd);
+
+        // Close open tags, add inverse, re-open them inside, then close at end
+        const closeTags = openTags.map(() => '{/}').join('');
+        const reopenTags = openTags.join('');
+
+        display = `${before}${closeTags}{inverse}${reopenTags}${selected}{/}${closeTags}{/inverse}${reopenTags}${after}`;
+      } else {
+        // Cursor position in rendered space
+        const rawCursorPos = this._renderedToRawPos(text, this.cursorPos);
+
+        // Get open tags at cursor
+        const openTags = this._getOpenTagsAt(text, rawCursorPos);
+        const closeTags = openTags.map(() => '{/}').join('');
+        const reopenTags = openTags.join('');
+
+        const before = text.slice(0, rawCursorPos);
+
+        // Get character at cursor (need to find next non-tag char)
+        let atCursor = ' ';
+        let afterStart = rawCursorPos;
+        if (rawCursorPos < text.length) {
+          // Skip any tags to find actual character
+          let pos = rawCursorPos;
+          while (pos < text.length && text[pos] === '{') {
+            const endBrace = text.indexOf('}', pos);
+            if (endBrace !== -1) {
+              pos = endBrace + 1;
+            } else {
+              break;
+            }
+          }
+          if (pos < text.length) {
+            atCursor = text[pos];
+            afterStart = pos + 1;
+          } else {
+            afterStart = text.length;
+          }
+        }
+
+        const after = text.slice(afterStart);
+
+        display = `${before}${closeTags}{inverse}${reopenTags}${atCursor}{/}${closeTags}{/inverse}${reopenTags}${after}`;
       }
     } else {
-      // Not focused - only escape if tags NOT enabled
-      display = useTags ? visibleText : this._escapeForDisplay(visibleText);
+      display = text;
     }
 
     this.setContent(display);
-
-    // Re-render screen to show the updated content
-    if (this.screen) {
-      this.screen.render();
-    }
+    if (this.screen) this.screen.render();
   }
 
   insertChar(ch: string): void {
@@ -352,7 +701,9 @@ export class Textbox extends Element {
       this.replaceSelection(ch);
       return;
     }
-    this.value = this.value.slice(0, this.cursorPos) + ch + this.value.slice(this.cursorPos);
+    // Convert rendered cursor position to raw position in value
+    const rawPos = this._renderedToRawPos(this.value, this.cursorPos);
+    this.value = this.value.slice(0, rawPos) + ch + this.value.slice(rawPos);
     this.cursorPos++;
     this._updateContent();
     this.emit('change', this.value);
@@ -365,7 +716,10 @@ export class Textbox extends Element {
       return;
     }
     if (this.cursorPos > 0) {
-      this.value = this.value.slice(0, this.cursorPos - 1) + this.value.slice(this.cursorPos);
+      // Convert rendered positions to raw positions
+      const rawPosBefore = this._renderedToRawPos(this.value, this.cursorPos - 1);
+      const rawPosAfter = this._renderedToRawPos(this.value, this.cursorPos);
+      this.value = this.value.slice(0, rawPosBefore) + this.value.slice(rawPosAfter);
       this.cursorPos--;
       this._updateContent();
       this.emit('change', this.value);
@@ -378,8 +732,12 @@ export class Textbox extends Element {
       this.replaceSelection('');
       return;
     }
-    if (this.cursorPos < this.value.length) {
-      this.value = this.value.slice(0, this.cursorPos) + this.value.slice(this.cursorPos + 1);
+    const renderedLength = this._getRenderedLength(this.value);
+    if (this.cursorPos < renderedLength) {
+      // Convert rendered positions to raw positions
+      const rawPos = this._renderedToRawPos(this.value, this.cursorPos);
+      const rawPosNext = this._renderedToRawPos(this.value, this.cursorPos + 1);
+      this.value = this.value.slice(0, rawPos) + this.value.slice(rawPosNext);
       this._updateContent();
       this.emit('change', this.value);
     }
@@ -403,10 +761,13 @@ export class Textbox extends Element {
     }
     const start = Math.min(this.selectionStart, this.selectionEnd);
     const end = Math.max(this.selectionStart, this.selectionEnd);
+    // Convert rendered positions to raw positions for extracting text
+    const rawStart = this._renderedToRawPos(this.value, start);
+    const rawEnd = this._renderedToRawPos(this.value, end);
     return {
       start,
       end,
-      text: this.value.slice(start, end),
+      text: this.value.slice(rawStart, rawEnd),
     };
   }
 
@@ -419,8 +780,12 @@ export class Textbox extends Element {
     }
     const start = Math.min(this.selectionStart, this.selectionEnd);
     const end = Math.max(this.selectionStart, this.selectionEnd);
-    this.value = this.value.slice(0, start) + text + this.value.slice(end);
-    this.cursorPos = start + text.length;
+    // Convert rendered positions to raw positions
+    const rawStart = this._renderedToRawPos(this.value, start);
+    const rawEnd = this._renderedToRawPos(this.value, end);
+    this.value = this.value.slice(0, rawStart) + text + this.value.slice(rawEnd);
+    // Calculate new cursor position - depends on whether replacement contains tags
+    this.cursorPos = start + this._getRenderedLength(text);
     this.clearSelection();
     this._updateContent();
     this.emit('change', this.value);
@@ -433,15 +798,18 @@ export class Textbox extends Element {
     this.selectionStart = -1;
     this.selectionEnd = -1;
     this.isDragging = false;
+    this.isKeyboardSelecting = false;
   }
 
   /**
    * Select all text
    */
   selectAll(): void {
+    const renderedLength = this._getRenderedLength(this.value);
     this.selectionStart = 0;
-    this.selectionEnd = this.value.length;
-    this.cursorPos = this.value.length;
+    this.selectionEnd = renderedLength;
+    this.cursorPos = renderedLength;
+    this.isKeyboardSelecting = false;  // Ctrl+A is a complete action
     this._updateContent();
   }
 
@@ -453,7 +821,8 @@ export class Textbox extends Element {
   }
 
   cursorRight(): void {
-    if (this.cursorPos < this.value.length) {
+    const renderedLength = this._getRenderedLength(this.value);
+    if (this.cursorPos < renderedLength) {
       this.cursorPos++;
       this._updateContent();
     }
@@ -466,7 +835,7 @@ export class Textbox extends Element {
   }
 
   cursorEnd(): void {
-    this.cursorPos = this.value.length;
+    this.cursorPos = this._getRenderedLength(this.value);
     this._updateContent();
   }
 
@@ -480,7 +849,7 @@ export class Textbox extends Element {
 
   setValue(value: string): void {
     this.value = value;
-    this.cursorPos = value.length;
+    this.cursorPos = this._getRenderedLength(value);
     this.viewOffset = 0;
     this._updateContent();
     this.emit('change', this.value);
@@ -705,7 +1074,7 @@ export class Textarea extends Element {
 
       case 'end':
         if (key.shift) {
-          this._selectTo(this.value.length);
+          this._selectTo(this._getRenderedLength(this.value));
         } else {
           this.clearSelection();
           this.cursorEnd();
@@ -827,6 +1196,13 @@ export class Textarea extends Element {
     pos += Math.max(0, Math.min(relativeX, lines[lineIndex]?.length || 0));
 
     return Math.max(0, Math.min(pos, this.value.length));
+  }
+
+  /**
+   * Get the rendered length of text (Textarea doesn't support tags, so just return length)
+   */
+  private _getRenderedLength(_text: string): number {
+    return _text.length;
   }
 
   private _getLines(): string[] {

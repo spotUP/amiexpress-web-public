@@ -450,7 +450,15 @@ console.log(
       initString.includes('STATUS');
     if (isAedoorInit || isAedoorStat) {
       const label = isAedoorInit ? 'JH_INIT' : 'JH_STAT';
-console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (replying as-is)`);
+console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (no reply needed)`);
+      // CRITICAL: INIT/STAT messages have NULL reply port (mn_ReplyPort=0)
+      // Door just reads them and continues - no reply needed
+      // Calling ReplyMsg with NULL port causes errors
+      const replyPort = this.emulator.readMemory32(msg.msgAddr + 14); // mn_ReplyPort at offset 14
+      if (replyPort === 0) {
+console.log(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (correct behavior)`);
+        return;
+      }
       // Log outgoing reply to XIM structured logger
       ximLogger.log('debug', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
         type: `${label}_REPLY`,

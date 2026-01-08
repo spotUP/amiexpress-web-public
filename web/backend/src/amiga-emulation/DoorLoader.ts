@@ -221,19 +221,27 @@ console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
     // as the program name so doors like AquaScan can detect which command invoked them.
     // Otherwise fallback to executable basename.
     const sessionCommand = this.config.bbsSession?.doorCommand;
+console.log(`[DoorLoader] sessionCommand="${sessionCommand}" type=${typeof sessionCommand} bbsSession=${!!this.config.bbsSession}`);
     const progName = (sessionCommand && typeof sessionCommand === 'string')
       ? sessionCommand.toUpperCase()
       : path.basename(this.config.executablePath);
+console.log(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCommand}" or basename)`);
+
     let customArgs: string[] = [];
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
     if (doorType === "XIM") {
-      // express.e runDoor builds "cmd node" for XIM doors (no params on CLI).
-      if (configArgs.length > 0) {
-console.log(
-          `[DoorLoader] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
-        );
-      }
+      // CRITICAL: XIM doors DO receive CLI arguments!
+      // express.e runDoor calls: runSysCommand('N','S U') which results in CLI args: "1 S U"
+      // The first arg is always the node number, followed by any command parameters
+      // Example: confScan calls runSysCommand('N','S U') -> CLI gets "1 S U"
       customArgs = [nodeId.toString()];
+      // Add any additional parameters (e.g., "S U" for newscan)
+      if (configArgs.length > 1) {
+        // Skip first arg if it's the node number (already added)
+        const additionalArgs = configArgs[0] === nodeId.toString() ? configArgs.slice(1) : configArgs;
+        customArgs.push(...additionalArgs);
+console.log(`[DoorLoader] XIM door with params: node=${nodeId}, additional=${JSON.stringify(additionalArgs)}`);
+      }
     } else if (configArgs.length > 0) {
       customArgs = configArgs;
     } else {

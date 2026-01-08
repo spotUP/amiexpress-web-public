@@ -391,11 +391,9 @@ console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockS
 console.log(`[DoorLifecycleManager] Created/verified ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
       }
 
-      // NOTE: express.e does NOT send proactive INIT/STAT messages (lines 4231-4370)!
-      // The BBS creates the port, starts the door, then WAITS for messages FROM the door.
-      // Door sends JH_REGISTER first, then requests data (DT_NAME, BB_NODEID, EXPRESS_VERSION, etc.)
-      // BBS responds to each request via ReplyMsg(). This is request/reply, not push.
-      // Proactive INIT/STAT sending was WRONG and caused doors to exit immediately (Dec 27+ regression).
+      // NOTE: INIT/STAT messages are now sent on FIRST pollXIMMessages() call
+      // when the door task exists. Sending too early (before task created) causes
+      // messages to be sent to wrong ports. See pollXIMMessages() for implementation.
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {
@@ -1880,9 +1878,13 @@ console.log(
     // AGGRESSIVE LOGGING: Log EVERY poll to see when it stops working
 console.log(`[DoorLifecycleManager][pollXIMMessages] POLL #${this.pollCount} doorType="${this.config.doorType}"`);
 
-    // Log doorType on first poll
+    // Send INIT/STAT on first poll when door task exists
     if (this.pollCount === 1) {
 console.log(`[DoorLifecycleManager] pollXIMMessages called: doorType="${this.config.doorType}"`);
+      // CRITICAL: Send INIT/STAT messages now that door task exists
+      // Legacy XIM doors (AquaScan, JoinCnf, WALL) wait for these before sending JH_REGISTER
+      // See commit c9a529286 and express.e:3343-3355
+      await this.sendStartupMessage();
     }
 
     // Log every 10000 polls to confirm polling is active

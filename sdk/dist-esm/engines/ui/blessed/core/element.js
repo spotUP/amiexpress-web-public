@@ -50,6 +50,7 @@ export class Element extends EventEmitter {
         this.content = '';
         this._lines = [];
         this._contentDirty = false;
+        this._lastParsedWidth = 0; // Track width for content reflow on resize
         // State
         this.visible = true;
         this.hidden = false;
@@ -2404,10 +2405,13 @@ export class Element extends EventEmitter {
      * Get visible content lines (with scrolling applied)
      */
     getVisibleLines() {
-        // Re-parse content if marked dirty and we now have valid dimensions
-        if (this._contentDirty && this.iwidth > 0) {
+        const currentWidth = this.iwidth;
+        // Re-parse content if marked dirty OR if width changed (for text reflow on resize)
+        const widthChanged = currentWidth > 0 && currentWidth !== this._lastParsedWidth;
+        if ((this._contentDirty || widthChanged) && currentWidth > 0) {
             this._lines = this.parseContent(this.content);
             this._contentDirty = false;
+            this._lastParsedWidth = currentWidth;
         }
         const start = this.childBase;
         const end = start + this.iheight;

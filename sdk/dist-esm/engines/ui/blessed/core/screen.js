@@ -63,6 +63,7 @@ export class Screen extends Element {
         this.cursorHidden = true;
         this.cursorX = 0;
         this.cursorY = 0;
+        this._cursorStyle = 'default'; // CSS cursor style for web frontend
         // Drag tracking (EXACT from neo-blessed screen.js)
         this._dragging = null;
         // Key handlers
@@ -208,6 +209,79 @@ export class Screen extends Element {
                 break;
             }
         }
+        // Update cursor style based on hovered elements
+        this.updateCursorStyleForHover(elements, event);
+    }
+    /**
+     * Determine and set the appropriate cursor style based on hovered elements
+     */
+    updateCursorStyleForHover(elements, event) {
+        // Check elements from top to bottom (reversed = front to back)
+        for (const el of elements.slice().reverse()) {
+            // Check if element has explicit cursor style
+            if (el.options.cursorStyle) {
+                this.setCursorStyle(el.options.cursorStyle);
+                return;
+            }
+            // Check for resize edge on resizable elements
+            if (el.detectResizeEdge) {
+                const edge = el.detectResizeEdge(event.x, event.y);
+                if (edge) {
+                    const cursorMap = {
+                        'n': 'ns-resize',
+                        's': 'ns-resize',
+                        'e': 'ew-resize',
+                        'w': 'ew-resize',
+                        'nw': 'nwse-resize',
+                        'se': 'nwse-resize',
+                        'ne': 'nesw-resize',
+                        'sw': 'nesw-resize',
+                    };
+                    this.setCursorStyle(cursorMap[edge] || 'default');
+                    return;
+                }
+            }
+            // Determine cursor from element type/properties
+            const cursorStyle = this.getCursorStyleForElement(el);
+            if (cursorStyle !== 'default') {
+                this.setCursorStyle(cursorStyle);
+                return;
+            }
+        }
+        // Default cursor if no special elements
+        this.setCursorStyle('default');
+    }
+    /**
+     * Get appropriate cursor style for an element based on its type and properties
+     */
+    getCursorStyleForElement(el) {
+        // Check element type name
+        const typeName = el.constructor.name.toLowerCase();
+        // Buttons get pointer cursor
+        if (typeName === 'button' || el._isButton) {
+            return 'pointer';
+        }
+        // Text inputs get text cursor
+        if (typeName === 'textbox' || typeName === 'textarea' || typeName === 'input') {
+            return 'text';
+        }
+        // Draggable elements (title bars) get grab cursor
+        if (el.options.draggable && !el.isResizing && !el.isDragging) {
+            return 'grab';
+        }
+        // Currently dragging elements get grabbing cursor
+        if (el.isDragging) {
+            return 'grabbing';
+        }
+        // Clickable elements get pointer
+        if (el.options.clickable || el.options.mouse) {
+            return 'pointer';
+        }
+        // Scrollable elements (might need scroll indicators)
+        if (el.options.scrollable) {
+            return 'default';
+        }
+        return 'default';
     }
     // Opt #7: Rebuild spatial mouse index (O(1) lookups vs O(n) tree walks)
     _rebuildMouseIndex() {
@@ -606,17 +680,9 @@ export class Screen extends Element {
     render() {
         if (this.destroyed || this._locked)
             return;
-        // Opt #1: Batch renders - coalesce multiple render requests into single frame
-        if (this._renderPending)
-            return;
-        this._renderPending = true;
-        if (this._renderTimer)
-            clearTimeout(this._renderTimer);
-        this._renderTimer = setTimeout(() => {
-            this._renderPending = false;
-            this._renderTimer = null;
-            this._doRender();
-        }, 16); // 16ms = ~60fps throttle (prevents flicker from rapid keypresses like shift+arrow)
+        // Render synchronously for immediate visual feedback
+        // This ensures text selection updates are visible during rapid key events
+        this._doRender();
     }
     _doRender() {
         if (this.destroyed)
@@ -690,6 +756,12 @@ export class Screen extends Element {
         });
         for (const child of sortedChildren) {
             this._renderElement(child);
+        }
+        // Re-render parent border AFTER children to ensure it stays visible
+        // This handles cases where child content might extend into the border area
+        // (e.g., during resize operations or with scrollable content)
+        if (element.options.border && sortedChildren.length > 0) {
+            this._renderBorder(element, pos);
         }
     }
     /**
@@ -1020,8 +1092,9 @@ export class Screen extends Element {
             if (pos.xi >= 0 && pos.xi < this.width && this.buffer[y][pos.xi]) {
                 this.buffer[y][pos.xi] = [attr, chars.v];
             }
-            if (pos.xl - 1 >= 0 && pos.xl - 1 < this.width && this.buffer[y][pos.xl - 1]) {
-                this.buffer[y][pos.xl - 1] = [attr, chars.v];
+            const rightBorderX = pos.xl - 1;
+            if (rightBorderX >= 0 && rightBorderX < this.width && this.buffer[y][rightBorderX]) {
+                this.buffer[y][rightBorderX] = [attr, chars.v];
             }
         }
         // Label
@@ -1656,6 +1729,25 @@ export class Screen extends Element {
             this.cursorHidden = true;
             this.write(cursor.hide);
         }
+    }
+    /**
+     * Set cursor style for web frontend (CSS cursor property)
+     * Valid styles: 'default', 'pointer', 'text', 'move', 'grab', 'grabbing',
+     *               'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize',
+     *               'col-resize', 'row-resize', 'crosshair', 'not-allowed'
+     */
+    setCursorStyle(style) {
+        if (this._cursorStyle === style)
+            return;
+        this._cursorStyle = style;
+        // Emit event for frontend to update CSS cursor
+        this.emit('cursor-style', style);
+    }
+    /**
+     * Get current cursor style
+     */
+    getCursorStyle() {
+        return this._cursorStyle;
     }
     // ============================================================================
     // Lifecycle

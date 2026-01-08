@@ -580,9 +580,9 @@ console.log("[LibraryManager] Installing library call traps...");
       return this.libraryTraps!.handleTrap(pc);
     });
 
-    // Reset allocator base after bootstrapping ports/libraries
-    // Use 0x100000 (1MB) to avoid overlap with door code segments (0x1000-0x100000)
-    this.execLibrary.setAllocBase(0x100000);
+    // NOTE: Do NOT reset allocator here - it already starts at 0x100000 (ExecLibrary.ts line 103)
+    // Resetting after port creation causes new allocations (doorInfo) to overlap with existing ports
+    // The allocator continues forward naturally from where ports left off
 
     this.libraryTraps.installExecVectors();
 

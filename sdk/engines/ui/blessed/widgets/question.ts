@@ -41,7 +41,7 @@ export class Question extends Box {
     super({
       ...options,
       parent: useOverlay ? undefined : originalParent,
-      border: options.border || { type: 'line' },
+      border: options.border || { type: 'line', fg: 'white', bg: 'blue' },
       label: options.title || options.label || ' Confirm ',
       width: options.width || 40,
       height: height,
@@ -50,11 +50,17 @@ export class Question extends Box {
       padding: { left: 1, right: 1, top: 1, bottom: 1 },
       hidden: true,
       focusable: true,
-      shadow: false,  // Disable shadow - causes rendering issues
+      shadow: true,  // Enable shadow for depth
       ch: ' ',  // Fill character for solid background
       style: {
         ...options.style,
-        bg: options.style?.bg || 'black',
+        bg: options.style?.bg || 'blue',
+        transparent: true,  // Transparent background like blessed shadow demo
+        border: {
+          fg: 'white',
+          bg: 'blue',
+          ...options.style?.border,
+        },
       },
     });
 
@@ -70,8 +76,8 @@ export class Question extends Box {
     }
 
     // Question text - centered at top
-    // Use 'transparent' for bg to inherit from parent dialog
-    const dialogBg = options.style?.bg || 'black';
+    // Use same bg as dialog for consistent appearance
+    const dialogBg = options.style?.bg || 'blue';
     this.messageText = new Box({
       parent: this,
       top: 0,

@@ -132,6 +132,7 @@ export interface ElementOptions {
   // Mouse
   mouse?: boolean;
   hoverText?: string;  // Tooltip text shown on hover
+  cursorStyle?: string;  // CSS cursor style on hover ('pointer', 'move', 'text', etc.)
 
   // Modal/Dialog features
   closable?: boolean;  // Add X close button and ESC key binding

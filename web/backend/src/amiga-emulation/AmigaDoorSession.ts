@@ -698,7 +698,14 @@ console.log(
     const result2VarAddr = 0x110360;
     const result2NameAddr = 0x110380;
 
-    const progName = path.basename(this.config.executablePath);
+    // Use doorCommand if available (e.g., "N" for newscan), otherwise use executable basename
+    // CRITICAL: AquaScan and other multi-function doors check the CLI program name to determine
+    // which operation to perform (N=newscan, NSU=new since upload, FR=file rescan, etc.)
+    const sessionCommand = this.config.bbsSession?.doorCommand;
+    const progName = (sessionCommand && typeof sessionCommand === 'string')
+      ? sessionCommand.toUpperCase()
+      : path.basename(this.config.executablePath);
+console.log(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sessionCommand}" or basename)`);
     // CRITICAL: Default to 1, not 0, to match port creation at line 437
     // This ensures the door's first argument matches the AEDoorPort name
     const nodeId =

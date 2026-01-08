@@ -2755,6 +2755,10 @@ console.log(
     return this.currentTask.address;
   }
 
+  getCurrentTaskMsgPort(): number {
+    return this.currentTask.msgPort;
+  }
+
   /**
    * Get library base address by name
    */
@@ -4966,15 +4970,14 @@ console.log(
     port.messages.push(msgAddr);
     port.signaled = true;
 
-    // CRITICAL FIX 2026-01-07: Use proper Exec list operations instead of overwriting lh_Head!
+    // CRITICAL FIX 2026-01-08: Use AddTail() for FIFO message ordering!
     // MsgPort.mp_MsgList is a doubly-linked list starting at offset 20
-    // We MUST use addHead() to properly link the message into the list
-    // Bug was: directly writing to lh_Head broke the linked list, causing native code
-    // to see the same message repeatedly after GetMsg removed it
+    // PutMsg() adds to TAIL, GetMsg() removes from HEAD = FIFO (first-in-first-out)
+    // Bug was: using AddHead() caused LIFO ordering - INIT sent first but STAT received first
     const msgListAddr = portAddr + 20; // mp_MsgList offset
-    this.addHead(msgListAddr, msgAddr);
+    this.addTail(msgListAddr, msgAddr);
 
-console.log(`[ExecLibrary]   ✓ Message added to port list via AddHead()`);
+console.log(`[ExecLibrary]   ✓ Message added to port list via AddTail()`);
 console.log(
       `[ExecLibrary]   Port now has ${port.messages.length} message(s) in queue`
     );

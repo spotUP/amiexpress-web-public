@@ -63,6 +63,20 @@ export class DockablePanel extends Panel {
         this.persistenceKey = options.persistenceKey;
         this.topConstraint = options.topConstraint || 0;
         this.bottomConstraint = options.bottomConstraint || 0;
+        // Initialize fitContent settings (default: enabled for both width and height)
+        if (options.fitContent === false) {
+            this.fitContentSettings = { width: false, height: false };
+        }
+        else if (typeof options.fitContent === 'object') {
+            this.fitContentSettings = {
+                width: options.fitContent.width !== false, // default true
+                height: options.fitContent.height !== false, // default true
+            };
+        }
+        else {
+            // Default: enabled for both
+            this.fitContentSettings = { width: true, height: true };
+        }
         // Suppress the border label from the base Panel/Box class
         // DockablePanel uses its own titleBar widget for the title
         this.options.label = undefined;
@@ -110,10 +124,29 @@ export class DockablePanel extends Panel {
     /**
      * Override append to ensure UI elements (title bar, resize handles) stay on top
      * When user content is added as children, we need to reorder so our UI is rendered last
+     * Also triggers fitToContent if enabled
      */
     append(element) {
         super.append(element);
         this.bringUIToFront();
+        // Auto-fit content when children are added
+        if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
+            // Listen for content changes on the child to re-fit
+            element.on?.('set content', () => {
+                this.scheduleFitToContent();
+            });
+            // Schedule fit after append (deferred to allow child to render)
+            this.scheduleFitToContent();
+        }
+    }
+    scheduleFitToContent() {
+        if (this._fitContentTimer) {
+            clearTimeout(this._fitContentTimer);
+        }
+        this._fitContentTimer = setTimeout(() => {
+            this.fitToContent();
+            this._fitContentTimer = undefined;
+        }, 10);
     }
     /**
      * Bring title bar to front (rendered last = on top)
@@ -504,9 +537,17 @@ export class DockablePanel extends Panel {
         this.dragStartY = y;
         this.dragStartLeft = typeof this.left === 'number' ? this.left : 0;
         this.dragStartTop = typeof this.top === 'number' ? this.top : 0;
-        // Visual feedback: Change border color during drag
-        if (this.style && this.style.border) {
-            this.style.border.fg = 'yellow';
+        // Visual feedback: Change border color and enable transparency during drag
+        if (this.style) {
+            if (this.style.border) {
+                this.style.border.fg = 'yellow';
+            }
+            // Enable transparent mode during drag for visual feedback
+            this.style.transparent = true;
+        }
+        // Emit overlay event for web client to apply CSS opacity
+        if (this._emitOverlayEvent) {
+            this._emitOverlayEvent(true);
         }
         if (this.titleBar && this.titleBar.style) {
             this.titleBar.style.bg = 'cyan';
@@ -567,10 +608,18 @@ export class DockablePanel extends Panel {
      */
     stopDrag() {
         this.isDragging = false;
-        // Restore border color
-        if (this.style && this.style.border) {
-            const borderOptions = this.options.border;
-            this.style.border.fg = borderOptions?.fg || 'green';
+        // Restore border color and disable transparency
+        if (this.style) {
+            if (this.style.border) {
+                const borderOptions = this.options.border;
+                this.style.border.fg = borderOptions?.fg || 'green';
+            }
+            // Restore original transparent state (default to false)
+            this.style.transparent = this.options.style?.transparent || false;
+        }
+        // Emit overlay event to disable CSS opacity
+        if (this._emitOverlayEvent) {
+            this._emitOverlayEvent(false);
         }
         if (this.titleBar && this.titleBar.style) {
             this.titleBar.style.bg = 'blue';
@@ -610,8 +659,14 @@ export class DockablePanel extends Panel {
      * Handle resizing from a specific edge
      */
     handleResizeFromEdge(edge, x, y) {
-        const deltaX = x - this.dragStartX;
-        const deltaY = y - this.dragStartY;
+        // Only calculate the delta that's relevant for this edge to avoid glitches
+        // Horizontal edges (e, w) only use deltaX - ignore vertical mouse movement
+        // Vertical edges (n, s) only use deltaY - ignore horizontal mouse movement
+        // Corners use both
+        const isHorizontalOnly = edge === 'e' || edge === 'w';
+        const isVerticalOnly = edge === 'n' || edge === 's';
+        const deltaX = isVerticalOnly ? 0 : (x - this.dragStartX);
+        const deltaY = isHorizontalOnly ? 0 : (y - this.dragStartY);
         // CRITICAL: Use saved start dimensions, not current (which change during resize)
         let newWidth = this.dragStartWidth;
         let newHeight = this.dragStartHeight;
@@ -788,6 +843,9 @@ export class DockablePanel extends Panel {
         // Invalidate coordinate cache for all children so they recalculate positions
         this._invalidateCoords();
         if (this.screen) {
+            // Force full redraw to ensure borders are properly rendered after resize
+            // This prevents artifacts where the right border disappears during resize
+            this.screen.forceFullRedraw();
             this.screen.render();
         }
         this.emit('resize', { width: newWidth, height: newHeight, x: newLeft, y: newTop });
@@ -804,6 +862,8 @@ export class DockablePanel extends Panel {
             this.titleBar.style.bg = 'blue';
         }
         this.hideResizeCursor();
+        // Disable auto-fit after manual resize (user explicitly set a size)
+        this.fitContentSettings = { width: false, height: false };
         if (this.screen) {
             this.screen.render();
         }
@@ -904,8 +964,8 @@ export class DockablePanel extends Panel {
                 border: { type: 'line', fg: 'cyan' },
                 style: {
                     fg: 'cyan',
-                    bg: 'cyan', // Use solid bg with opacity
-                    opacity: 0.5,
+                    bg: 'cyan',
+                    transparent: true, // Transparent background like blessed shadow demo
                 },
                 zIndex: 9999,
                 ch: ' ', // Use simple space for fill
@@ -1454,5 +1514,133 @@ export class DockablePanel extends Panel {
         if (saved) {
             await this.setState(saved);
         }
+    }
+    /**
+     * Calculate the content width/height needed to fit all children
+     * Returns { width, height } representing the minimum dimensions needed
+     */
+    calculateContentSize() {
+        let maxContentWidth = 0;
+        let totalContentHeight = 0;
+        // Helper to strip ANSI codes and blessed tags for accurate width calculation
+        const stripFormatting = (str) => {
+            // Strip ANSI escape codes
+            let clean = str.replace(/\x1b\[[0-9;]*m/g, '');
+            // Strip blessed tags like {red-fg}, {/red-fg}, {bold}, etc.
+            clean = clean.replace(/\{[^}]+\}/g, '');
+            return clean;
+        };
+        // Calculate based on direct children's content
+        for (const child of this.children) {
+            // Skip UI elements (title bar, buttons)
+            if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
+                continue;
+            }
+            const childContent = child.content || '';
+            const lines = childContent.split('\n');
+            for (const line of lines) {
+                const cleanLine = stripFormatting(line);
+                maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+            }
+            totalContentHeight += lines.length;
+            // Also check child's _lines if available (parsed content)
+            if (child._lines && Array.isArray(child._lines)) {
+                for (const line of child._lines) {
+                    const cleanLine = stripFormatting(String(line));
+                    maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
+                }
+                totalContentHeight = Math.max(totalContentHeight, child._lines.length);
+            }
+        }
+        // Add space for borders (2) and padding
+        const borderWidth = this.border ? 2 : 0;
+        const borderHeight = this.border ? 2 : 0;
+        const titleBarHeight = this.titleBar ? 1 : 0;
+        return {
+            width: maxContentWidth + borderWidth,
+            height: totalContentHeight + borderHeight + titleBarHeight,
+        };
+    }
+    /**
+     * Resize panel to fit its content (grow only, never shrink)
+     * Only expands when content doesn't fit, never shrinks below current size
+     * Respects minWidth/minHeight/maxWidth/maxHeight constraints
+     */
+    fitToContent() {
+        if (!this.fitContentSettings.width && !this.fitContentSettings.height) {
+            return; // fitContent disabled
+        }
+        const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
+        let newWidth = this.width;
+        let newHeight = this.height;
+        // Apply width fit if enabled - GROW ONLY (never shrink)
+        if (this.fitContentSettings.width) {
+            // Only grow if content is wider than current width
+            if (contentWidth > newWidth) {
+                newWidth = contentWidth;
+            }
+            // Apply max constraint
+            if (this.maxWidth)
+                newWidth = Math.min(newWidth, this.maxWidth);
+            // Constrain to screen
+            if (this.screen) {
+                newWidth = Math.min(newWidth, this.screen.width);
+            }
+        }
+        // Apply height fit if enabled - GROW ONLY (never shrink)
+        if (this.fitContentSettings.height) {
+            // Only grow if content is taller than current height
+            if (contentHeight > newHeight) {
+                newHeight = contentHeight;
+            }
+            // Apply max constraint
+            if (this.maxHeight)
+                newHeight = Math.min(newHeight, this.maxHeight);
+            // Constrain to screen
+            if (this.screen) {
+                const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
+                newHeight = Math.min(newHeight, maxScreenHeight);
+            }
+        }
+        // Only update if dimensions changed
+        if (newWidth !== this.width || newHeight !== this.height) {
+            this.position.width = newWidth;
+            this.position.height = newHeight;
+            this.panelState.width = newWidth;
+            this.panelState.height = newHeight;
+            // If docked right, adjust left position to maintain right edge
+            if (this.dockPosition === 'right' && this.screen) {
+                this.position.left = this.screen.width - newWidth;
+                this.panelState.x = this.position.left;
+            }
+            this._invalidateCoords();
+            if (this.screen) {
+                this.screen.render();
+            }
+            this.emit('fit-content', { width: newWidth, height: newHeight });
+        }
+    }
+    /**
+     * Enable or disable fitContent mode
+     */
+    setFitContent(enabled) {
+        if (enabled === false) {
+            this.fitContentSettings = { width: false, height: false };
+        }
+        else if (typeof enabled === 'object') {
+            this.fitContentSettings = {
+                width: enabled.width !== false,
+                height: enabled.height !== false,
+            };
+        }
+        else {
+            this.fitContentSettings = { width: true, height: true };
+        }
+    }
+    /**
+     * Get current fitContent settings
+     */
+    getFitContent() {
+        return { ...this.fitContentSettings };
     }
 }

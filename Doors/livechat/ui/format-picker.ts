@@ -166,7 +166,10 @@ export class FormatPicker {
     this.categoryList.on('select item', updateCategory);
     this.categoryList.on('action', updateCategory);
 
-    this.categoryList.on('select', () => this.formatList.focus());
+    this.categoryList.on('select', () => {
+      this.formatList.focus();
+      if (this.overlay.screen) this.overlay.screen.render();
+    });
     this.formatList.on('select', () => this.selectCurrentFormat());
 
     const handleTab = () => {

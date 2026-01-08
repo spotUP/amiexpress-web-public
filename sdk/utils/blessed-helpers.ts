@@ -903,6 +903,13 @@ export function createScreen(
     console.log('[createScreen] No bbs.on() available - resize events will not be handled');
   }
 
+  // Forward cursor-style events to frontend for mouse hover feedback
+  if (bbs && typeof bbs.setCursorStyle === 'function') {
+    screen.on('cursor-style', (style: string) => {
+      bbs.setCursorStyle(style);
+    });
+  }
+
   return screen;
 }
 

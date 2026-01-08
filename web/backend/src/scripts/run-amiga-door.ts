@@ -20,6 +20,7 @@ type ParsedOptions = {
   doorType: string;
   timeout?: number;
   args: string[];
+  command?: string;
 };
 
 function parseArgs(argv: string[]): ParsedOptions {
@@ -54,6 +55,12 @@ function parseArgs(argv: string[]): ParsedOptions {
       const raw = argv[i + 1];
       if (raw) {
         options.timeout = Number(raw);
+      }
+      i += 1;
+    } else if (arg === "--command") {
+      const raw = argv[i + 1];
+      if (raw) {
+        options.command = raw;
       }
       i += 1;
     } else {
@@ -101,6 +108,8 @@ async function main(): Promise<void> {
       bbsName: "AmiExpress-Web",
       sysopName: "Sysop",
       timeRemaining: 60,
+      doorCommand: parsed.command || undefined,  // Command that invoked the door (N, NSU, FR, etc.)
+      doorId: parsed.command || undefined,
     },
   });
 

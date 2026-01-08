@@ -328,17 +328,30 @@ console.warn(
       this.doorInfoAddr > 0
         ? this.emulator.readMemory32(this.doorInfoAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET)
         : 0;
+
+    // CRITICAL: Also send to the door's process message port (pr_MsgPort)
+    // Many doors (AquaScan) wait on their own pr_MsgPort, not AEDoorPort
+    // Get door task's pr_MsgPort directly from ExecLibrary
+    const doorTaskAddr = this.execLibrary.getCurrentTaskAddress();
+    const doorTaskPort = this.execLibrary.getCurrentTaskMsgPort();
+console.log(`[DoorMessageHandler] Door task: 0x${doorTaskAddr.toString(16)}, pr_MsgPort: 0x${doorTaskPort.toString(16)}`);
+
     const targetPorts = Array.from(
-      new Set([portAddr, doorInfoReply].filter((p) => p && p > 0))
+      new Set([portAddr, doorInfoReply, doorTaskPort].filter((p) => p && p > 0))
     );
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
 
     // Real AEDoor disasm sends two PutMsg calls with d0=0 (INIT) then d0=1 (STAT)
-    const initMsgAddr = this.allocateAedoorStyleMessage(0, 0, "INIT");
+    // CRITICAL: Door DOES reply to these messages - use doorReplyPort, NOT NULL!
+    // AquaScan calls ReplyMsg() on STAT message, needs valid reply port or exits with code 10
+    const initMsgAddr = this.allocateAedoorStyleMessage(0, 0, "INIT", this.doorReplyPortAddr);
+    // CRITICAL: STAT data must point to nodeStatusAddr, not doorInfoAddr + offset
+    // Legacy XIM doors read user info, node status etc from this structure
     const statMsgAddr = this.allocateAedoorStyleMessage(
       1,
-      this.doorInfoAddr + DoorConstants.MESSAGE_NODE_OFFSET,
-      statusText
+      this.nodeStatusAddr,
+      statusText,
+      this.doorReplyPortAddr
     );
     if (initMsgAddr === null || statMsgAddr === null) {
       return;
@@ -393,7 +406,8 @@ console.log(
   private allocateAedoorStyleMessage(
     command: number,
     data: number,
-    messageText: string
+    messageText: string,
+    explicitReplyPort?: number
   ): number | null {
     if (!this.doorInfoAddr) {
 console.error("[DoorMessageHandler] Cannot create message without DoorInfo");
@@ -417,10 +431,13 @@ console.error("[DoorMessageHandler] Failed to create reply port");
 console.error("[DoorMessageHandler] Failed to allocate AEDoor message buffer");
       return null;
     }
+    // CRITICAL: Use explicit reply port if provided (e.g., 0 for INIT/STAT), otherwise auto-detect
     const replyPortAddr =
-      this.doorReplyPortAddr ||
-      this.emulator.readMemory32(this.doorInfoAddr + 0x4) ||
-      this.execLibrary.getDoorPortAddress();
+      explicitReplyPort !== undefined
+        ? explicitReplyPort
+        : this.doorReplyPortAddr ||
+          this.emulator.readMemory32(this.doorInfoAddr + 0x4) ||
+          this.execLibrary.getDoorPortAddress();
     const NT_MESSAGE = 5;
 
     // Exec message header

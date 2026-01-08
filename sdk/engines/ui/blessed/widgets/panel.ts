@@ -31,10 +31,10 @@ export class Panel extends Box {
       clickable: true,  // Enable click events for panel activation
       style: {
         fg: 'white',
-        bg: 'black',
+        bg: 'lightblack',  // Dark grey (ANSI color 8) for modern look
         focus: {
           fg: 'white',
-          bg: 'black',
+          bg: 'lightblack',
         },
         ...options.style,
       },
