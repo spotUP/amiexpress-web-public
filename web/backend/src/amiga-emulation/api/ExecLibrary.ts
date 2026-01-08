@@ -813,6 +813,10 @@ console.log(
         if (this.onLibraryOpened) {
           this.onLibraryOpened(name, existingCheck.address);
         }
+
+        // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
+        this.createDynamicAEDoorPort(name);
+
         this.setLibraryNativeFlag(name, true);
         return {
           success: true,
@@ -849,6 +853,9 @@ console.log(
             this.onLibraryOpened(name, realLibrary.baseAddress);
           }
 
+          // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
+          this.createDynamicAEDoorPort(name);
+
           this.setLibraryNativeFlag(name, true);
           return { success: true, address: existing.address, isNative: true };
         }
@@ -871,6 +878,10 @@ console.log(
         if (this.onLibraryOpened) {
           this.onLibraryOpened(name, realLibrary.baseAddress);
         }
+
+        // CRITICAL: Create AEDoorPort dynamically when AEDoor.library is opened by the door
+        // (not on initial pre-open by LibraryManager)
+        this.createDynamicAEDoorPort(name);
 
         this.setLibraryNativeFlag(name, true);
         return {
@@ -1935,30 +1946,10 @@ console.log(
         this.emulator.setRegister(0, availMemResult);
         return true;
 
-      // *** CRITICAL MISSING CASES FOR XIM DOORS ***
-      case -366: // _LVOPutMsg - CRITICAL for native AEDoor.library!
-console.log(`[ExecLibrary] *** INTERCEPTED: PutMsg() (LVO -366) ***`);
-        // A0 = port address, A1 = message address
-        const putMsgPort = this.emulator.getRegister(8); // A0
-        const putMsgMsg = this.emulator.getRegister(9); // A1
-        this.putMsg(putMsgPort, putMsgMsg);
-        return true;
-
-      case -372: // _LVOGetMsg - used by XIM doors
-console.log(`[ExecLibrary] *** INTERCEPTED: GetMsg() (LVO -372) ***`);
-        // FIXED: A0 = register 8 (not 12 which is A4)
-        const portAddr = this.emulator.getRegister(8); // A0
-        const msgResult = this.getMsg(portAddr);
-        this.emulator.setRegister(0, msgResult); // Return message in D0
-        return true;
-
-      case -384: // _LVOWaitPort - Door will loop on this
-console.log(`[ExecLibrary] *** INTERCEPTED: WaitPort() (LVO -384) ***`);
-        // FIXED: A0 = register 8 (not 12 which is A4)
-        const waitPortAddr = this.emulator.getRegister(8); // A0
-        const waitPortResult = this.waitPort(waitPortAddr);
-        this.emulator.setRegister(0, waitPortResult);
-        return true;
+      // NOTE: PutMsg (-366), GetMsg (-372), and WaitPort (-384) are now handled
+      // by LibraryTraps + exec-vectors.ts (native ROM + trap system).
+      // The old intercepts here were causing DOUBLE TRAPPING which corrupted A0.
+      // Dec 27-28 refactor moved these to LibraryTraps for Kickstart ROM compatibility.
 
       // *** MEMORY COPY FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
       case -624: // _LVOCopyMem - CORRECTED from -474 (duplicate removed)
@@ -2097,15 +2088,18 @@ console.log(
     const existingPortAddr = this.findPort(tempAddr);
 
     if (!existingPortAddr || existingPortAddr === 0) {
-      // CRITICAL FIX: Create AEDoorPort with BBS Handler Task as owner
-      // This prevents the door from signaling itself when it sends messages
-      const portAddr = this.createPublicPort(portName, this.bbsTask);
+      // CRITICAL FIX (Jan 4 - reapplied): Create AEDoorPort with Door Task as owner
+      // When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
+      // Using bbsTask (Dec 27 fix) signals wrong task causing doors to hang.
+      // Use sigBit=12 because doors hardcode 0x1000 in Wait() mask
+      const AEDOORPORT_SIGBIT = 12;
+      const portAddr = this.createPublicPort(portName, this.currentTask, AEDOORPORT_SIGBIT);
 console.log(
         `[ExecLibrary]   Created ${portName} at 0x${portAddr.toString(
           16
-        )} owned by BBS Handler (0x${this.bbsTask.address.toString(
+        )} owned by Door Task (0x${this.currentTask.address.toString(
           16
-        )}) - (dynamic XIM port on door's OpenLibrary call)`
+        )}, sigBit=${AEDOORPORT_SIGBIT}) - (dynamic XIM port on door's OpenLibrary call)`
       );
     } else {
 console.log(
@@ -4786,10 +4780,9 @@ console.log(
   /**
    * Create AEDoorPort for XIM door communication.
    *
-   * CRITICAL: This port MUST be owned by the BBS task (not the door task).
-   * When a door calls PutMsg(AEDoorPort, msg), we signal the port owner.
-   * If the door owns the port, it signals ITSELF and Wait() returns immediately
-   * with the wrong signal, causing the door to take the wrong code path.
+   * CRITICAL: This port MUST be owned by the Door Task (not the BBS task).
+   * When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
+   * Using bbsTask signals wrong task causing doors to hang.
    *
    * Also uses sigBit=12 because doors hardcode this in their Wait() mask (0x11000).
    *
@@ -4811,14 +4804,14 @@ console.log(
     // and Wait for 0x11000 = bit 16 (reply) | bit 12 (AEDoorPort)
     const AEDOORPORT_SIGBIT = 12;
 
-    // CRITICAL FIX (Dec 27): Create AEDoorPort with BBS Handler Task as owner
-    // This prevents the door from signaling itself when it sends messages.
-    // Real Amiga has TWO tasks: BBS task owns AEDoorPort, Door task runs binary.
-    // When door calls PutMsg(AEDoorPort), it signals BBS task (not itself).
-    // See: Documentation/6-Progress/archive/2025-12/AQUASCAN_SIGNAL_FIX.md
+    // CRITICAL FIX (Jan 4): Create AEDoorPort with Door Task as owner
+    // When BBS sends message via PutMsg(), it Signal()s the door task to wake it up.
+    // Previous code used bbsTask which signaled wrong task causing doors to hang.
+    // Door must be signaled when messages arrive so Wait() returns.
+    // See commit d789b75cd - this was accidentally reverted by a0d0dfb92 refactor
     const portAddr = this.createPublicPort(
       name,
-      this.bbsTask,  // BBS task, not Door task
+      this.currentTask,  // Door task, not BBS task
       AEDOORPORT_SIGBIT
     );
 
@@ -4826,7 +4819,7 @@ console.log(
       `[ExecLibrary] Created AEDoorPort "${name}" at 0x${portAddr.toString(
         16
       )} ` +
-        `(sigBit=${AEDOORPORT_SIGBIT}, owner=BBS Task 0x${this.bbsTask.address.toString(
+        `(sigBit=${AEDOORPORT_SIGBIT}, owner=Door Task 0x${this.currentTask.address.toString(
           16
         )})`
     );

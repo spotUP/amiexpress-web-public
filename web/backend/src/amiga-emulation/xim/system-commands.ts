@@ -122,13 +122,13 @@ console.log(
 
     // express.e does not modify node/line/strptr/fillers for JH_REGISTER.
 
-    // Use standard ReplyMsg to send reply to the door's mn_ReplyPort.
-    // The door's reply port (e.g., 0xa0500) is separate from the AEDoorPort
-    // where we receive incoming commands. This prevents race conditions where
-    // our XIM polling loop would pick up our own reply messages.
+    // CRITICAL FIX (Dec 26 - restored Jan 8): XIM doors use BIDIRECTIONAL communication on ONE port
+    // Door sends messages TO AEDoorPort AND polls SAME port for replies
+    // Standard ReplyMsg() sends to mn_ReplyPort which causes door to miss replies
+    // Must use PutMsg() back to the AEDoorPort where door is polling
     //
-    // express.e line 4368 shows: ReplyMsg(msg) is called after processing XIM messages.
-    // This is the correct AmigaOS pattern - reply goes to message's mn_ReplyPort field.
+    // Reference: Documentation/6-Progress/archive/2025-12/RTW_DEBUG_SESSION_DEC25.md lines 280-356
+    // express.e does call ReplyMsg BUT for NATIVE AEDoor protocol doors (different from XIM)
 
     // Log outgoing reply to XIM structured logger
     ximLogger.log('debug', 'send', this.state.doorCommand || 'UNKNOWN', this.bbsSession?.nodeId || 1, {
@@ -140,8 +140,16 @@ console.log(
       message: 'Door registration acknowledged',
     });
 
-    this.execLibrary.replyMsg(msg.msgAddr);
-console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port`);
+    // Use bidirectional XIM protocol - send reply back to AEDoorPort
+    if (this.ximPortAddr !== 0) {
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+console.log(`[XIMSystem] Reply sent via PutMsg to ximPort=0x${this.ximPortAddr.toString(16)} (bidirectional XIM)`);
+    } else {
+      this.execLibrary.replyMsg(msg.msgAddr);
+console.log(`[XIMSystem] Reply sent via ReplyMsg to door's reply port (fallback)`);
+    }
 
 console.log(`[XIMSystem] Registration acknowledged`);
     // express.e only sets msg.command for JH_REGISTER; avoid post-register memory writes.

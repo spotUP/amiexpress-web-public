@@ -49,18 +49,73 @@ export class DoorLoader {
 
     // Read door binary (use amigafs for case-insensitive path resolution)
     let binary: Buffer;
+    let executablePath = this.config.executablePath;
+
+    // CRITICAL FIX: If path is a directory, look for executable inside
+    // Many .info files have LOCATION=DoorName instead of LOCATION=DoorName/DoorName
+    // Example: Bossnuke.info has LOCATION=Bossnuke, but executable is Bossnuke/BossNuke
+    // Example: FR.info has LOCATION=AquaScan, but executable is AquaScan/AquaScan.020
     try {
-      binary = amigafs.readFileSync(this.config.executablePath) as Buffer;
+      const stats = amigafs.statSync(executablePath);
+      if (stats.isDirectory()) {
+        // Path is a directory - look for executable with matching name
+        const dirName = path.basename(executablePath);
+
+        // Check common door binary patterns
+        const candidates = [
+          path.join(executablePath, dirName), // Exact match (Bossnuke/Bossnuke)
+          path.join(executablePath, dirName.toLowerCase()), // Lowercase (Bossnuke/bossnuke)
+          path.join(executablePath, dirName.toUpperCase()), // Uppercase (Bossnuke/BOSSNUKE)
+          path.join(executablePath, `${dirName}.020`), // 68020 version (AquaScan/AquaScan.020)
+          path.join(executablePath, `${dirName}.000`), // 68000 version (AquaScan/AquaScan.000)
+          path.join(executablePath, `${dirName.toLowerCase()}.020`),
+          path.join(executablePath, `${dirName.toLowerCase()}.000`),
+          path.join(executablePath, `${dirName.toUpperCase()}.020`),
+          path.join(executablePath, `${dirName.toUpperCase()}.000`),
+        ];
+
+        let found = false;
+        for (const candidate of candidates) {
+          if (amigafs.existsSync(candidate)) {
+            const candidateStats = amigafs.statSync(candidate);
+            if (candidateStats.isFile()) {
+              console.log(`[DoorLoader] Resolved directory ${executablePath} to executable: ${candidate}`);
+              executablePath = candidate;
+              found = true;
+              break;
+            }
+          }
+        }
+
+        if (!found) {
+          throw new Error(`LOCATION points to directory ${executablePath} but no matching executable found (tried: ${candidates.join(', ')})`);
+        }
+      }
+    } catch (error) {
+      // If stat fails, let readFileSync handle it and throw the error
+      const socket = this.config.bbsSession?.socket;
+      SysopDebugUtil.debugFileError(
+        socket,
+        this.config.bbsSession,
+        'stat',
+        executablePath,
+        error as Error
+      );
+      throw error;
+    }
+
+    try {
+      binary = amigafs.readFileSync(executablePath) as Buffer;
     } catch (error) {
       const socket = this.config.bbsSession?.socket;
       SysopDebugUtil.debugFileError(
         socket,
         this.config.bbsSession,
         'read',
-        this.config.executablePath,
+        executablePath,
         error as Error
       );
-      this.logger?.error(`Failed to read binary: ${this.config.executablePath}`);
+      this.logger?.error(`Failed to read binary: ${executablePath}`);
       throw error;
     }
 console.log(`[DoorLoader] Door binary size: ${binary.length} bytes`);

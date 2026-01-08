@@ -402,32 +402,54 @@ console.log(`[CommandPassword] Password correct, executing command: ${commandNam
   // Clean up password data
   delete session.tempData.passwordProtectedCommand;
 
-  // Execute the command (express.e:4750-4807)
-  const { executeCommandDoor } = require('./command-execution.handler');
-
-  // Set environment status based on command type
-  const { setEnvStat } = require('../utils/env.util');
-  const { EnvStat } = require('../constants/env-codes');
-
-  if (commandDef.type === 'AREXX' || commandDef.type === 'ARexx') {
-    setEnvStat(session, EnvStat.AREXX);
-  } else {
-    setEnvStat(session, EnvStat.DOORS);
+  // Execute the door using the same pattern as runCommand (lines 283-357)
+  if (!_executeDoor) {
+console.warn(`[CommandPassword] executeDoor not available - command execution skipped`);
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.errorLine('Command execution not available.'));
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
   }
 
-  // Execute the door/command
+  // Convert Amiga paths to Unix paths if needed
+  let location = commandDef.location;
+  if (location.includes(':')) {
+    location = location.replace(/:/g, '/');
+  }
+
+  const doorConfig = {
+    id: commandDef.name.toLowerCase(),
+    name: commandDef.name,
+    command: commandDef.name.toUpperCase(),
+    description: `${commandDef.type} door`,
+    type: commandDef.type,
+    path: location,
+    accessLevel: commandDef.access || 0,
+    enabled: true,
+    parameters: [],
+    priority: commandDef.priority || 'SAME',
+    stack: commandDef.stack || 20000,
+    resident: commandDef.resident || false,
+    expertMode: commandDef.expertMode || false,
+    mciText: commandDef.mciText,
+    quickMode: commandDef.quickMode,
+    silent: commandDef.silent,
+    trapOn: commandDef.trapOn,
+    multiNode: commandDef.multiNode,
+    logInputs: commandDef.logInputs,
+    scriptCheck: commandDef.scriptCheck,
+    banner: commandDef.banner,
+    mimicVer: commandDef.mimicVer,
+    passParameters: commandDef.passParameters,
+    internal: commandDef.internal,
+    args: commandDef.args,
+    toolTypes: commandDef.toolTypes
+  };
+
   try {
-    if (commandDef.type === 'TypeScript' || commandDef.type === 'TS') {
-      const { executeTypeScriptDoor } = require('../doors/TypeScriptDoorManager');
-      await executeTypeScriptDoor(socket, session, commandDef.location, commandName);
-    } else if (commandDef.type === 'AREXX' || commandDef.type === 'ARexx') {
-      const { ArexxDoorManager } = require('../doors/ArexxDoorManager');
-      await ArexxDoorManager.executeDoor(socket, session, commandDef.location, commandName);
-    } else {
-      // 68K Amiga door
-      const { executeAmigaDoor } = require('../doors/amigaDoorManager');
-      await executeAmigaDoor(socket, session, commandDef.location, commandName, commandDef.args || '');
-    }
+    session.doorExpertMode = Boolean(commandDef.expertMode);
+    await _executeDoor(socket, session, doorConfig);
   } catch (error: any) {
 console.error(`[CommandPassword] Error executing command ${commandName}:`, error);
     socket.emit('ansi-output', '\r\n');

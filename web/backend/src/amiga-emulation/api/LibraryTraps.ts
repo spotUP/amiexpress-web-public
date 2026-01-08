@@ -484,35 +484,65 @@ console.log(
    * See: Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm
    */
   installAEDoorVectors(): void {
+    if (!this.aedoorLibrary) {
+console.error(
+        "[LibraryTraps] Cannot install AEDoor vectors: library not set"
+      );
+      return;
+    }
+
     const aedoorBase = this.execLibrary.getLibraryBase("AEDoor.library");
+    if (aedoorBase === 0) {
+console.error(
+        "[LibraryTraps] Cannot install AEDoor vectors: library not opened"
+      );
+      return;
+    }
 
 console.log(
       `[LibraryTraps] ============================================`
     );
 console.log(
-      `[LibraryTraps] AEDoor.library vectors: NATIVE MODE (no traps)`
+      `[LibraryTraps] AEDoor.library vectors: TRAP MODE (TypeScript handlers)`
     );
 console.log(
       `[LibraryTraps] Base address: 0x${aedoorBase.toString(16)}`
     );
 console.log(
-      `[LibraryTraps] JMP table created by ExecLibrary.loadRealAEDoorLibrary()`
-    );
-console.log(
-      `[LibraryTraps] Native 68K code will execute for all AEDoor calls`
+      `[LibraryTraps] Installing ${AEDOOR_VECTORS.length} trap handlers...`
     );
 console.log(
       `[LibraryTraps] ============================================`
     );
 
-    // DO NOT install traps - let native library code execute!
-    // The JMP table is set up by ExecLibrary.loadRealAEDoorLibrary()
-    // which points to the actual function code in the loaded binary.
-    //
-    // Native library uses XIM protocol:
-    // - CreateComm: FindPort("AEDoorPort"), creates reply port, sends INIT
-    // - WriteStr: Copies text to buffer, sends JH_SM (cmd=4) via PutMsg
-    // - Backend polls AEDoorPort with GetMsg, routes messages to XIMProtocol
+    for (const vector of AEDOOR_VECTORS) {
+      const trapAddr = aedoorBase + vector.offset;
+
+      // Write ILLEGAL instruction at vector address to trigger trap
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+
+      // Store mapping of address to handler
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.aedoorLibrary);
+
+      // Also store mapping by offset (array-based to handle collisions)
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.aedoorLibrary);
+
+console.log(
+        `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
+          vector.offset
+        })`
+      );
+    }
+
+console.log(
+      `[LibraryTraps] Installed ${AEDOOR_VECTORS.length} AEDoor.library vectors`
+    );
   }
 
   /**

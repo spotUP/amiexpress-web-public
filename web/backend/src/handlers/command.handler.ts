@@ -2229,7 +2229,19 @@ console.log(' In file upload state - canceling upload');
 
   // Handle command password input (express.e:4716-4730)
   if (session.subState === LoggedOnSubState.COMMAND_PASSWORD_INPUT) {
-    await handleCommandPasswordInput(socket, session, data.trim());
+    if (data === '\r' || data === '\n') {
+      const input = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      await handleCommandPasswordInput(socket, session, input);
+    } else if (data === '\x7f' || data === '\b') {
+      if (session.inputBuffer?.length) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        emitText(socket, '\b \b');
+      }
+    } else if (data.length === 1 && data >= ' ' && data <= '~') {
+      session.inputBuffer = (session.inputBuffer || '') + data;
+      emitText(socket, '*'); // Mask password characters
+    }
     return;
   }
 

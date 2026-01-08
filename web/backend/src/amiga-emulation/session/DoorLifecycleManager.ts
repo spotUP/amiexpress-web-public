@@ -383,18 +383,19 @@ console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockS
       // CRITICAL: Create AEDoorPort BEFORE door execution starts
       // XIM doors check for this port at startup to detect BBS mode
       // If port doesn't exist, doors print error banner and exit
-      const nodeId = this.config.bbsSession?.nodeId || 1;
-      const portName = `AEDoorPort${nodeId}`;
-      const existingPort = this.execLibrary.findPort(portName);
-      if (!existingPort) {
-        const portAddr = this.execLibrary.createPort(portName, 0);
-console.log(`[DoorLifecycleManager] Created ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
-      } else {
-console.log(`[DoorLifecycleManager] ${portName} already exists at 0x${existingPort.toString(16)}`);
+      // (commit 74898f658 - this fixed joincnf, RTW, Bulls, AquaScan)
+      if (this.libraryManager?.execLibrary) {
+        const nodeId = this.config.bbsSession?.nodeId || 1;
+        const portName = `AEDoorPort${nodeId}`;
+        const portAddr = this.libraryManager.execLibrary.createAEDoorPort(portName);
+console.log(`[DoorLifecycleManager] Created/verified ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
       }
 
-      // Send the INIT/STAT startup messages so doors see the expected AEDoor handshake.
-      await this.sendStartupMessage();
+      // NOTE: express.e does NOT send proactive INIT/STAT messages (lines 4231-4370)!
+      // The BBS creates the port, starts the door, then WAITS for messages FROM the door.
+      // Door sends JH_REGISTER first, then requests data (DT_NAME, BB_NODEID, EXPRESS_VERSION, etc.)
+      // BBS responds to each request via ReplyMsg(). This is request/reply, not push.
+      // Proactive INIT/STAT sending was WRONG and caused doors to exit immediately (Dec 27+ regression).
 
       // CRITICAL: Verify all library trap ILLEGAL instructions are in place before execution
       if (this.libraryTraps) {

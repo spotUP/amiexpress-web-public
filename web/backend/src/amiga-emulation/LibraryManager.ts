@@ -702,19 +702,12 @@ console.log(
 console.warn("[LibraryManager] Failed to pre-open AEDoor.library");
     }
 
-    // CRITICAL: Create AEDoorPort BEFORE door starts (XIM protocol requirement)
-    // Real Amiga BBS creates these ports at startup, not dynamically
-    // XIM doors' CreateComm searches for AEDoorPort{nodeId} immediately
-    // Note: amigaNodeId already declared above from nodeId (line 376)
-    //
-    // Use dedicated createAEDoorPort() method which:
-    // 1. Uses sigBit=12 because doors hardcode 0x1000 in [a5+0x14]
-    // 2. Sets BBS task as owner (not door task) to prevent self-signaling
-    const aedoorPortName = `AEDoorPort${amigaNodeId}`;
-    const aedoorPortAddr = this.execLibrary.createAEDoorPort(aedoorPortName);
-console.log(
-      `[LibraryManager] Created ${aedoorPortName} at 0x${aedoorPortAddr.toString(16)} (XIM protocol port)`
-    );
+    // NOTE: AEDoorPort creation moved to DoorLifecycleManager.ts
+    // REASON: Must be created AFTER allocateDoorTask() sets currentTask.address
+    // TIMING: LibraryManager.initialize() runs before DoorLoader.loadDoor()
+    // which means currentTask.address is still 0 here. DoorLifecycleManager
+    // creates the port at the right time (after task allocation).
+    // See DoorLifecycleManager.ts lines 387-390
 
     // Re-evaluate isSIMType based on potentially overridden config.doorType
     const currentDoorType = (this.config.doorType || "SIM").toUpperCase();

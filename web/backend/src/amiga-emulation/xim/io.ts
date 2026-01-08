@@ -246,15 +246,24 @@ console.log('[XIMIOHandler] Door requesting line input');
       this.socket.emit('ansi-output', defaultText);
     }
 
+    // CRITICAL FIX: If door sends JH_LI with empty string and maxLen is large (64K+),
+    // it's likely just polling/initializing, not requesting actual line input yet.
+    // Send immediate empty reply to let door continue (it will use JH_HK/JH_PM later).
+    // This prevents the stuck polling issue with quicklogon and similar doors.
+    if (defaultText.length === 0 && maxLen >= 65536) {
+console.log('[XIMIOHandler] JH_LI: Empty request with large buffer - sending immediate empty reply (door will poll later)');
+      this.reply(msg, 1, '');
+      return;
+    }
+
     this.waitingForLineInput = true;
     this.lineInputMessage = msg;
     this.lineInputBuffer = defaultText;
     this.lineInputMaxLen = maxLen;
 
 console.log(
-      `[XIMIOHandler] Waiting for user to type line (max ${maxLen} chars), pausing emulator`
+      `[XIMIOHandler] JH_LI: Waiting for user to type line (max ${maxLen} chars)`
     );
-    this.emulator.pause();
   }
 
   /**

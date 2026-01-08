@@ -52,39 +52,28 @@ const MESSAGE_STRING_CAPACITY = 200;
  * AEDoor.library Bridge Class
  *
  * ============================================================================
- * ARCHITECTURAL CHANGE (2025-12-15) - MOST OF THIS CLASS IS NOW UNUSED
+ * ARCHITECTURAL STATUS (2026-01-08) - TRAP-BASED (ACTIVE)
  * ============================================================================
  *
- * PREVIOUS (INCORRECT) ARCHITECTURE:
- * - This class reimplemented AEDoor.library functions in TypeScript
- * - LibraryTraps.ts installed ILLEGAL instruction traps at library vectors
- * - When doors called library functions, traps intercepted and called methods
- *   in this class (createComm, writeStr, etc.)
- * - This TypeScript code constructed XIM messages and sent them to the BBS
+ * HISTORY:
+ * - 2024: TypeScript trap-based implementation (working)
+ * - Dec 2025: Switched to native AEDoor.library binary (broken)
+ * - Jan 2026: Restored trap-based implementation (working)
  *
- * CURRENT (CORRECT) ARCHITECTURE:
- * - We now use the REAL AEDoor.library binary (./Libs/AEDoor.library)
- * - Library loaded via LibraryLoader with proper HUNK parsing
- * - When doors call library functions, CPU executes REAL 68K code
- * - Real library constructs XIM messages and calls PutMsg/GetMsg (Exec functions)
- * - ExecLibrary intercepts PutMsg/GetMsg to bridge message port I/O
- * - Messages route to XIMProtocol.handleMessage() (NOT to this class!)
+ * CURRENT ARCHITECTURE:
+ * - LibraryTraps.ts installs ILLEGAL instruction traps at library vectors
+ * - When doors call library functions, traps intercept and call methods
+ *   in this class (createComm, writeStr, hotKey, etc.)
+ * - This TypeScript code constructs XIM messages and sends them to the BBS
+ * - Messages route through XIMProtocol.handleMessage()
  *
- * IMPACT:
- * - All library function methods in this class are NOW UNUSED
- * - createComm(), deleteComm(), writeStr(), prompt(), etc. are DEAD CODE
- * - They were only called by trap handlers which are now disabled
- * - The real library does all this work in native 68K code
+ * WHY NOT NATIVE:
+ * - Native AEDoor.library binary (./Libs/AEDoor.library) exists but doesn't work
+ * - Native code expects DoorInfo/NodeStatus structures we don't initialize properly
+ * - Doors using native library exit immediately without sending XIM messages
+ * - Trap-based approach gives us full control over XIM protocol
  *
- * WHAT REMAINS:
- * - This class is still instantiated but mostly unused
- * - Could be removed entirely in future cleanup
- * - For now, kept for backward compatibility
- *
- * See: AEDOOR_ARCHITECTURE_FIX.md for complete details
- * See: LibraryTraps.ts (AEDOOR_VECTORS commented out)
- * ============================================================================
- *
+ * DOORINFO STRUCTURE (DIFace):
  * The real 68K AEDoor.library allocates a DIFace structure that contains:
  *   0x00: dif_AEPort   -> Pointer to AEDoorPortX (BBS message port)
  *   0x04: dif_MsgPort  -> Pointer to the door's reply port
@@ -95,6 +84,7 @@ const MESSAGE_STRING_CAPACITY = 200;
  *
  * Using the disassembly of Libs/AEDoor.library we reproduce the same layout
  * so that 68K doors see exactly what they expect.
+ * ============================================================================
  */
 export class AEDoorLibrary {
   private socket: Socket;

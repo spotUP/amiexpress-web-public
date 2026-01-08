@@ -494,35 +494,9 @@ console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger n
       this.lifecycleManager.setLibraryTraps(this.sharedState.libraryTraps);
       this.lifecycleManager.setXIMProtocol(this.sharedState.ximProtocol);
 
-      // Create AEDoorPort BEFORE starting door execution
-      // Express.e creates the port at lines 4316-4328 BEFORE calling startProcess() at line 4336
-      // This matches: IF (mp:=FindPort(doorPort)) alreadyActive:=TRUE ELSE mp:=createPort(doorPort,0) ENDIF
-      const doorType = (this.config.doorType || "").toUpperCase();
-      if (doorType === "XIM" || doorType === "AIM") {
-        const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
-        const portName = `AEDoorPort${nodeId}`;
-        this.doorPortName = portName;
-
-        // Check if port already exists (alreadyActive mode from express.e:4324)
-        const portNameAddr = 0x500;
-        this.emulator.writeString(portNameAddr, portName);
-        const existingPort = this.sharedState.execLibrary?.findPort(portNameAddr);
-
-        if (existingPort && existingPort !== 0) {
-console.log(`[AmigaDoorSession] ${portName} already exists at 0x${existingPort.toString(16)} (alreadyActive mode)`);
-          this.createdDoorPort = false; // Don't delete on cleanup
-        } else {
-          // Create the port before door starts (express.e:4327)
-          // CRITICAL: Use createLightweightPort instead of createPublicPort!
-          // AEDoorPort is where doors send messages TO the BBS. We poll for messages
-          // in handlePausedState(), so we don't need PA_SIGNAL. Using PA_SIGNAL with
-          // the door's task as sigTask would cause the door to signal ITSELF when
-          // sending messages to the BBS, which is wrong and breaks Wait() synchronization.
-          const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
-console.log(`[AmigaDoorSession] Created ${portName} at 0x${portAddr?.toString(16)} BEFORE door execution (lightweight, no PA_SIGNAL)`);
-          this.createdDoorPort = true; // Delete on cleanup
-        }
-      }
+      // NOTE: AEDoorPort now created EARLY in initializeLibraries() to ensure it exists
+      // before any door code or native library initialization can call FindPort().
+      // See lines 605-617 for the new early creation location.
 
       // Initialize TIM Door Handler for TIM-type doors (Phase 5C)
       // TIM doors use DoorControl{n} port with simpler doorMsg structure
@@ -600,6 +574,24 @@ console.log(
     this.sharedState.aePortAddress = this.libraryManager.getDoorPortAddress(); // Same as door port for RTW
     this.sharedState.doorReplyPortAddr =
       this.libraryManager.getReplyPortAddress();
+
+    // CRITICAL FIX (Jan 8): Create AEDoorPort IMMEDIATELY after libraries init, BEFORE door loads!
+    // Native AEDoor.library or door's first instruction may call FindPort("AEDoorPort")
+    // during initialization. We must create it BEFORE any door code can execute.
+    // express.e creates port at lines 4316-4328 BEFORE startProcess() at line 4336.
+    const doorType = (this.config.doorType || "").toUpperCase();
+console.log(`[AmigaDoorSession][DEBUG] About to check doorType: "${doorType}" (XIM=${doorType === "XIM"}, AIM=${doorType === "AIM"})`);
+    if (doorType === "XIM" || doorType === "AIM") {
+      const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
+      const portName = `AEDoorPort${nodeId}`;
+      this.doorPortName = portName;
+console.log(`[AmigaDoorSession][DEBUG] Creating port: ${portName} for nodeId=${nodeId}`);
+      const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
+console.log(`[AmigaDoorSession] ✅ Created ${portName} at 0x${portAddr?.toString(16)} EARLY (before door load)`);
+      this.createdDoorPort = true; // Delete on cleanup
+    } else {
+console.log(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM or AIM`);
+    }
 
     // Set up sysop debug callback for file errors
     if (this.sharedState.dosLibrary) {

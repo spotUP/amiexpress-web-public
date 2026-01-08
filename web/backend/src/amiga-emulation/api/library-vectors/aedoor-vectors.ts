@@ -1,21 +1,26 @@
 /**
  * AEDoor.library function vectors
  *
- * ARCHITECTURAL NOTE (2025-12-15):
- * These trap-based TypeScript reimplementations are enabled.
- * We now use the REAL AEDoor.library binary (./Libs/AEDoor.library - 1128 bytes)
- * loaded via LibraryLoader with proper HUNK parsing and relocations.
+ * ARCHITECTURAL NOTE (2026-01-08):
+ * We use TRAP-BASED TypeScript implementations for AEDoor.library functions.
  *
- * WHY: The real library contains actual 68K code that:
- * - Creates message ports and structures
- * - Sends XIM messages via PutMsg/GetMsg
- * - Manages door interface properly
+ * HISTORY:
+ * - Originally used TypeScript trap handlers (working)
+ * - Attempted to use native AEDoor.library binary (Dec 2025 refactor)
+ * - Native approach failed - doors exit without sending XIM messages
+ * - Restored trap-based approach (Jan 2026)
  *
- * We intercept ONLY the Exec message port I/O (PutMsg/GetMsg) to bridge
- * between the emulated environment and the Node.js BBS backend.
+ * WHY TRAPS WORK BETTER:
+ * - TypeScript handlers construct XIM messages directly
+ * - Direct control over message port communication
+ * - No dependency on native library's memory structure expectations
+ * - Native library expected DoorInfo/NodeStatus structures we don't provide
  *
- * The native approach did not work - messages sent to wrong ports.
- * Re-enabling traps for output functions.
+ * TRAP INSTALLATION:
+ * - LibraryTraps.installAEDoorVectors() writes ILLEGAL (0x4AFC) at each vector
+ * - When door calls library function, CPU traps and calls our TypeScript handler
+ * - Handlers in this file implement CreateComm, WriteStr, HotKey, etc.
+ * - Messages sent via XIMProtocol to BBS backend
  */
 
 import { LibraryVector } from "./types";
