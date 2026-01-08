@@ -626,6 +626,7 @@ console.log(
     }
 
     // Set up library opened callback
+console.log("[AmigaDoorSession] Setting library opened callback");
     this.sharedState.execLibrary.setLibraryOpenedCallback(
       (name: string, addr: number) => {
         if (name.toLowerCase() === "dos.library") {
@@ -639,6 +640,19 @@ console.log(
             "[AmigaDoorSession] AEDoor.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installAEDoorVectors();
+
+          // CRITICAL: Send INIT/STAT to door's pr_MsgPort when library opens
+          // AquaScan (and similar doors) do WaitPort on pr_MsgPort BEFORE calling CreateComm,
+          // expecting startup messages to determine BBS vs CLI mode.
+          // Previously we sent these proactively on first poll (too early) or in CreateComm (too late).
+          // express.e:4352-4369 shows BBS waits for door to send JH_REGISTER, but doors like
+          // AquaScan use pr_MsgPort messages for BBS mode detection before sending JH_REGISTER.
+          if (this.messageHandler && !this.sharedState.sentInitialMessage) {
+console.log(
+              "[AmigaDoorSession] Sending INIT/STAT messages after AEDoor.library open"
+            );
+            this.sendStartupMessage();
+          }
         }
         if (name.toLowerCase() === "icon.library") {
 console.log(
@@ -784,7 +798,7 @@ console.log(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sess
 console.log(
       `[AmigaDoorSession] Created CLI struct at 0x${cliStructAddr.toString(
         16
-      )} (cliBPTR=0x${cliBPTR.toString(16)}${isXimDoor ? " - XIM door, pr_CLI will be set to NULL by DoorLoader" : " - will be written to pr_CLI by DoorLoader"})`
+      )} (cliBPTR=0x${cliBPTR.toString(16)}${isXimDoor ? " - XIM door, pr_CLI depends on CLI_REQUIRED tooltype" : " - will be written to pr_CLI by DoorLoader"})`
     );
 console.log(
       `[AmigaDoorSession]   Command BSTR len=${cmdLine.length} at 0x${cmdLineAddr.toString(
@@ -818,9 +832,10 @@ console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
 
     // Restore pr_CLI if a door CreatePort() overwrites it
-    // CRITICAL: XIM doors MUST keep pr_CLI = 0 (BBS mode), so don't restore for them
+    // XIM doors: pr_CLI is set by DoorLoader based on CLI_REQUIRED tooltype, don't modify here
+    // Non-XIM doors: restore pr_CLI if it was cleared during CreatePort
     this.sharedState.execLibrary.setDoorInitCallback(() => {
-      // Don't restore pr_CLI for XIM doors - they need it to stay 0
+      // Don't modify pr_CLI for XIM doors - DoorLoader already set the correct value
       if (isXimDoor) {
         return;
       }

@@ -362,9 +362,16 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
     write32(prCES, 2); // error -> stdout
     write32(prConsoleTask, 0);
     write32(prFileSystemTask, 0);
-    // CRITICAL: XIM doors MUST have pr_CLI = NULL to indicate BBS mode, not CLI mode
-    // Non-XIM doors get a CLI structure so they can parse arguments properly
-    write32(prCLI, doorType === "XIM" ? 0 : cliBptr);
+    // pr_CLI handling for different door types:
+    // - XIM doors with CLI_REQUIRED=YES tooltype need pr_CLI set to a valid pointer
+    //   (e.g., AquaScan checks pr_CLI and exits with code 10 if NULL)
+    // - Other XIM doors typically need pr_CLI = 0 for BBS mode detection
+    //   (e.g., WHO expects pr_CLI=0 to know it's running in BBS context)
+    // - Non-XIM doors get a CLI structure so they can parse arguments properly
+    const cliRequiredTooltype = this.config.toolTypes?.CLI_REQUIRED || this.config.toolTypes?.CLIREQUIRED;
+    const cliRequired = cliRequiredTooltype?.toUpperCase() === "YES";
+    const useCliPtr = doorType !== "XIM" || cliRequired;
+    write32(prCLI, useCliPtr ? cliBptr : 0);
     // Route process return to the exit trap instead of the seglist header (DOS cleanup stub).
     write32(prReturnAddr, this.exitTrapAddress);
     write32(prPktWait, 0);
@@ -454,18 +461,17 @@ console.log(
       )} moduleBPTR=0x${segListBptr.toString(16)}`
     );
 
-    if (doorType === "XIM") {
-console.log(
-        `[DoorLoader] XIM door detected - setting pr_CLI = NULL (BBS mode, not CLI)`
-      );
-    }
-
     // Store pr_CLI BPTR into Task at offset 0xac (already done above, but verify consistency)
     const execBase = this.execLibrary.getExecBaseAddress();
     const thisTaskPtr = this.emulator.readMemory32(execBase + 0x114); // pr_CurrentTask
     const prCLIOffset = 0xac;
-    const finalPrCLI = doorType === "XIM" ? 0 : cliBptr;
+    const finalPrCLI = useCliPtr ? cliBptr : 0;
     this.emulator.writeMemory32(thisTaskPtr + prCLIOffset, finalPrCLI);
+    if (cliRequired) {
+      console.log(`[DoorLoader] CLI_REQUIRED=YES - setting pr_CLI to 0x${cliBptr.toString(16)}`);
+    } else if (doorType === "XIM") {
+      console.log(`[DoorLoader] XIM door - setting pr_CLI = 0 (BBS mode)`);
+    }
 console.log(
       `[DoorLoader] Process set: pr_CLI=0x${finalPrCLI.toString(
         16

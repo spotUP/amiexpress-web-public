@@ -262,12 +262,19 @@ console.log("[DoorMessageHandler] checkForPause: waiting for user input");
   // follow-up messages. For these, we use a 500ms fallback timer to detect and
   // send INIT/STAT if needed (see processCommand JH_REGISTER case).
   sendStartupMessage(): void {
-console.log("[DoorMessageHandler] Sending INIT/STAT startup messages for XIM door");
-    // CRITICAL: Many XIM doors (AquaScan, JoinCnf, etc.) expect INIT/STAT messages BEFORE
-    // sending JH_REGISTER. Without these, doors sit in tight polling loops waiting forever.
-    // See express.e:3343-3355 for AEDoor protocol initialization.
-    // NOTE: Native AEDoor.library does NOT automatically send INIT/STAT - we must send them
-    // from the emulator regardless of whether we're using native library or not.
+console.log("[DoorMessageHandler] Sending INIT/STAT to door's task port (pr_MsgPort)");
+    // XIM DOOR STARTUP PROTOCOL:
+    //
+    // Doors with pr_CLI=0 (BBS mode) expect INIT/STAT on their TASK PORT (pr_MsgPort),
+    // similar to how Workbench sends startup messages to WB-launched programs.
+    //
+    // The door reads from pr_MsgPort, replies, then uses AEDoorPort1 for BBS communication.
+    // AEDoorPort1 is for door->BBS communication, NOT BBS->door!
+    //
+    // PREVIOUS BUG: We were sending INIT/STAT to AEDoorPort1, which our own polling
+    // consumed before the door could read them.
+    //
+    // See express.e:4352-4369 for the BBS side of XIM protocol.
     this.sendInitAndStatusMessages();
   }
 
@@ -322,29 +329,33 @@ console.warn(
       return;
     }
 
-    // AEDoor-based XIM doors expect the messages on the public AE port (AEDoorPortX)
-    const portAddr = this.execLibrary.getDoorPortAddress();
-    const doorInfoReply =
-      this.doorInfoAddr > 0
-        ? this.emulator.readMemory32(this.doorInfoAddr + DoorConstants.MESSAGE_REPLY_PORT_OFFSET)
-        : 0;
-
-    // CRITICAL: Also send to the door's process message port (pr_MsgPort)
-    // Many doors (AquaScan) wait on their own pr_MsgPort, not AEDoorPort
-    // Get door task's pr_MsgPort directly from ExecLibrary
+    // CRITICAL: XIM doors with pr_CLI=0 (BBS mode) expect INIT/STAT on their TASK PORT
+    // (pr_MsgPort), NOT on AEDoorPort1! AEDoorPort1 is for door->BBS communication.
+    //
+    // The door startup sequence (like AquaScan) is:
+    //   1. Check pr_CLI - if NULL, in BBS mode
+    //   2. Read startup message from pr_MsgPort (like WB startup)
+    //   3. Reply to it and continue
+    //   4. Call createComm() which finds AEDoorPort1 for sending TO the BBS
+    //
+    // Our polling on AEDoorPort1 was consuming INIT/STAT before the door could read them
+    // because we were sending to the WRONG port!
     const doorTaskAddr = this.execLibrary.getCurrentTaskAddress();
-    const doorTaskPort = this.execLibrary.getCurrentTaskMsgPort();
+    const doorTaskPort = doorTaskAddr > 0 ? doorTaskAddr + 0x5c : 0; // pr_MsgPort offset in Process
 console.log(`[DoorMessageHandler] Door task: 0x${doorTaskAddr.toString(16)}, pr_MsgPort: 0x${doorTaskPort.toString(16)}`);
 
+    // Target the door's pr_MsgPort where it reads startup messages
     const targetPorts = Array.from(
-      new Set([portAddr, doorInfoReply, doorTaskPort].filter((p) => p && p > 0))
+      new Set([doorTaskPort].filter((p) => p && p > 0))
     );
     const statusText = `NODE ${this.resolveNodeId()} STATUS READY`;
 
     // Real AEDoor disasm sends two PutMsg calls with d0=0 (INIT) then d0=1 (STAT)
     // CRITICAL: Door DOES reply to these messages - use doorReplyPort, NOT NULL!
-    // AquaScan calls ReplyMsg() on STAT message, needs valid reply port or exits with code 10
-    const initMsgAddr = this.allocateAedoorStyleMessage(0, 0, "INIT", this.doorReplyPortAddr);
+    // WHO door works with this format.
+    // FIX for AquaScan: INIT data should also point to nodeStatusAddr, not 0.
+    // AquaScan reads message data expecting a valid pointer for BBS mode detection.
+    const initMsgAddr = this.allocateAedoorStyleMessage(0, this.nodeStatusAddr, "INIT", this.doorReplyPortAddr);
     // CRITICAL: STAT data must point to nodeStatusAddr, not doorInfoAddr + offset
     // Legacy XIM doors read user info, node status etc from this structure
     const statMsgAddr = this.allocateAedoorStyleMessage(
@@ -364,9 +375,7 @@ console.log(
         ).toString(16)})`
       );
 console.log(
-        `[DoorMessageHandler]   port=0x${portAddr.toString(
-          16
-        )} msg=0x${msgAddr.toString(
+        `[DoorMessageHandler]   ports=[${targetPorts.map(p => '0x' + p.toString(16)).join(', ')}] msg=0x${msgAddr.toString(
           16
         )} reply=0x${this.doorReplyPortAddr.toString(
           16
@@ -385,14 +394,14 @@ console.log(
         });
       }
       // Also queue to the door's reply port (mn_ReplyPort) if present, matching AEDoor behavior where the door may WaitPort on its own reply port.
-      const replyPort = this.doorReplyPortAddr || doorInfoReply;
-      if (replyPort && !targetPorts.includes(replyPort)) {
-        this.execLibrary.putMsg(replyPort, msgAddr, {
+      if (this.doorReplyPortAddr && !targetPorts.includes(this.doorReplyPortAddr)) {
+        this.execLibrary.putMsg(this.doorReplyPortAddr, msgAddr, {
           suppressDoorCallback: this.messageConfig.suppressCallbacks,
         });
       }
     };
 
+    // Send both INIT and STAT messages to door's pr_MsgPort
     enqueue(initMsgAddr, "INIT");
     enqueue(statMsgAddr, "STAT");
 
@@ -680,7 +689,14 @@ console.log(`[DoorMessageHandler]   JH_SO: Serial output "${str}"`);
 
       case XIMCommand.JH_SM:
         // express.e:3406-3411: aePuts(msg.string) + optional newline + checkForPause
-console.log(`[DoorMessageHandler]   JH_SM: Send message "${str}"`);
+        // BBS mode detection: AquaScan sends JH_SM with data=0 as query, expects data=3 in reply
+        // See AquaScan offset 0x4f4c-0x4f60: checks response data, sets 0x114=1 if data==3
+console.log(`[DoorMessageHandler]   JH_SM: Send message "${str}" (data=${data})`);
+        if (data === 0) {
+          // BBS mode query - reply with data=3 to indicate we're a BBS
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 3);
+console.log(`[DoorMessageHandler]   JH_SM: BBS mode query, setting reply data=3`);
+        }
         let smOutput = str;
         if (data) {
           smOutput += "\r\n";
