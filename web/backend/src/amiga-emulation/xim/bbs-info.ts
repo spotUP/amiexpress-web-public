@@ -212,7 +212,7 @@ console.log(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
             fs.appendFileSync('~/Code/amiexpress-web/logs/bb-conflocal-debug.log', debugLine);
           } catch (e) { /* ignore */ }
 
-          ximLogger.log('info', 'send', 'SYSTEM', this.state.nodeId, {
+          ximLogger.log('info', 'send', 'SYSTEM', this.bbsSession?.nodeId || 1, {
             type: 'BB_CONFLOCAL_DEBUG',
             typeCode: 127,
             param: 0
