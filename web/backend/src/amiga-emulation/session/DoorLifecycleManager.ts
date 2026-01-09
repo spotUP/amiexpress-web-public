@@ -317,8 +317,8 @@ console.log(
     // When AEDoor.library's WriteStr/etc calls dispatchCommand -> waitForReply, the
     // trap handler is synchronous and can't yield to the async pollXIMMessages loop.
     // We provide a callback that processes XIM messages synchronously during waitForReply.
+    const self = this; // Capture 'this' for callback
     if (this.libraryManager?.aedoorLibrary && this.libraryManager?.execLibrary) {
-      const self = this; // Capture 'this' for callback
       const execLib = this.libraryManager.execLibrary;
       this.libraryManager.aedoorLibrary.setXIMProcessor((bbsPortAddr: number) => {
         // Get one message from the BBS port (the message the door just sent)
@@ -329,6 +329,39 @@ console.log(
           // Handle synchronously - for JH_WRITE this just emits to socket and replies
           // Note: handleMessage is async but the sync parts (including replyMsg) run immediately
           self.ximProtocol.handleMessage(parsed);
+        }
+      });
+    }
+
+    // CRITICAL FIX 2026-01-09: Set up doorMessageCallback for DIRECT XIM doors
+    // Some XIM doors (RTW, Bulls, JoinCnf) call PutMsg directly without using aedoor.library.
+    // LibraryManager sets a stub callback, we need to replace it with real XIM handling.
+    // This catches PutMsg to AEDoorPort from doors that do direct port communication.
+    // NOTE: This MUST be set up separately from aedoorLibrary - RTW doesn't use aedoor.library!
+    if (this.libraryManager?.execLibrary) {
+      const execLib = this.libraryManager.execLibrary;
+      execLib.setDoorMessageCallback((portAddr: number, msgAddr: number) => {
+        if (self.ximProtocol) {
+          // Only process messages to AEDoorPort (door -> BBS).
+          // DoorReplyPort messages are replies going back TO the door, not commands.
+          const portName = (execLib.getPortName(portAddr) ?? "").toLowerCase();
+          if (!portName.startsWith("aedoorport")) {
+            // Skip non-AEDoorPort messages (like replies to door's reply port)
+            return;
+          }
+          console.log(`[DoorLifecycleManager] Direct PutMsg callback: port=0x${portAddr.toString(16)} msg=0x${msgAddr.toString(16)}`);
+          // IMPORTANT: The message was just added to the port queue by PutMsg.
+          // We need to consume it via GetMsg to prevent double-processing.
+          // The msgAddr parameter tells us what was added, but we should verify.
+          const consumedAddr = execLib.getMsg(portAddr);
+          if (consumedAddr !== msgAddr) {
+            console.warn(`[DoorLifecycleManager] PutMsg callback: consumed 0x${consumedAddr.toString(16)} != passed 0x${msgAddr.toString(16)}`);
+          }
+          if (consumedAddr && consumedAddr !== 0) {
+            const parsed = self.ximProtocol.parseMessage(consumedAddr);
+            console.log(`[DoorLifecycleManager] Direct XIM message: cmd=${parsed.command} data=0x${parsed.data.toString(16)} string="${parsed.string}"`);
+            self.ximProtocol.handleMessage(parsed);
+          }
         }
       });
     }
@@ -935,7 +968,22 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // Detect stuck loops by tracking repeated identical jump patterns
         // If we see the SAME jump size 5+ times in a row, it's a stuck loop
         // Example: PC jumps by +0x9c40 repeatedly: 0xc023da -> 0xc0c01a -> 0xc15c5a -> ...
-        if (Math.abs(jumpSize) > 0x1000) { // Only track large jumps (small jumps are normal iteration)
+        //
+        // EXCEPTION: Jumps to library trap addresses are NORMAL repeated calls (e.g., FindToolType
+        // called multiple times to read config). Library trap regions are at negative offsets
+        // from library bases:
+        //   - exec.library: 0x7ff00-0x80000
+        //   - dos.library: 0xaff00-0xb0000
+        //   - icon.library: 0xcff00-0xd0000
+        //   - utility.library: 0xeff00-0xf0000
+        const isJumpToLibraryTrap = (
+          (pcAfterBatch >= 0x7ff00 && pcAfterBatch < 0x80000) ||   // exec.library
+          (pcAfterBatch >= 0xaff00 && pcAfterBatch < 0xb0000) ||   // dos.library
+          (pcAfterBatch >= 0xcff00 && pcAfterBatch < 0xd0000) ||   // icon.library
+          (pcAfterBatch >= 0xeff00 && pcAfterBatch < 0xf0000)      // utility.library
+        );
+
+        if (Math.abs(jumpSize) > 0x1000 && !isJumpToLibraryTrap) { // Only track large jumps, exclude library calls
           if (this.executionState.lastJumpSizes.length > 0 &&
               this.executionState.lastJumpSizes.every(js => js === jumpSize)) {
             this.executionState.sameJumpCount++;
@@ -958,6 +1006,10 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
             this.terminate();
             return;
           }
+        } else if (isJumpToLibraryTrap) {
+          // Reset stuck loop counter when we hit a library call - this is normal behavior
+          this.executionState.sameJumpCount = 0;
+          this.executionState.lastJumpSizes = [];
         }
 
         // Skip invalid PC detection if:
@@ -2562,7 +2614,40 @@ console.log(
       "[DoorLifecycleManager] === SENDING STARTUP MESSAGE TO DOOR ==="
     );
     this.executionState.startupMessageSent = true;
-    if (this.messageHandler) {
+
+    // CRITICAL FIX 2026-01-09: RTW/Bulls/JoinCnf expect WBStartup message format on pr_MsgPort
+    // These doors check offset 0x24 (sm_ArgList) for a valid pointer.
+    // Our jhMessage format has 0 at that offset, causing doors to take wrong code path.
+    // Solution: Send WBStartup message instead of jhMessage to pr_MsgPort.
+    //
+    // express.e shows BBS waits for door to send JH_REGISTER first, but doors like RTW
+    // check pr_MsgPort expecting Workbench-style startup (since pr_CLI == 0).
+    if (this.libraryManager?.execLibrary && this.config.doorType === "XIM") {
+      try {
+        const execLib = this.libraryManager.execLibrary;
+        const doorName = this.config.doorId || path.basename(this.config.executablePath) || "XIM";
+        const nodeId = this.config.bbsSession?.nodeId || 1;
+        // Use node number as the argument (doors expect this)
+        const args = [String(nodeId)];
+console.log(`[DoorLifecycleManager] Sending WBStartup message for XIM door: ${doorName} args=[${args.join(", ")}]`);
+        const msgAddr = execLib.seedWorkbenchStartup(doorName, args);
+        if (msgAddr !== 0) {
+console.log(`[DoorLifecycleManager] WBStartup message sent at 0x${msgAddr.toString(16)}`);
+        } else {
+console.warn("[DoorLifecycleManager] Failed to send WBStartup message, falling back to jhMessage");
+          // Fallback to old method
+          if (this.messageHandler) {
+            this.messageHandler.sendStartupMessage();
+          }
+        }
+      } catch (err) {
+console.error("[DoorLifecycleManager] Error sending WBStartup message:", err);
+        // Fallback to old method
+        if (this.messageHandler) {
+          this.messageHandler.sendStartupMessage();
+        }
+      }
+    } else if (this.messageHandler) {
       try {
         this.messageHandler.sendStartupMessage();
       } catch (err) {

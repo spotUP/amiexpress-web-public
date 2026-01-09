@@ -595,7 +595,9 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     // Unknown command
 console.log(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
 console.log(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
-    this.sendReply(msg, 0);
+    // Return 1 for unknown commands (0 might signal "not supported" to some doors)
+    // cmd=23 specifically is used by AquaScan right after JH_REGISTER
+    this.sendReply(msg, 1);
   }
 
   /**

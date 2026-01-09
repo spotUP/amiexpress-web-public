@@ -1368,21 +1368,19 @@ console.log(`[DoorMessageHandler]   Set paged flag to: ${pagedFlag}`);
         break;
 
       case XIMCommand.BB_MAINLINE:
-        // express.e:3794-3800: Main command line (command + params)
-        // doorParams already contains full command line (e.g., "N S U")
-        // set by door.handler.ts:2241-2242
+        // express.e:3794-3799: Return command text (command + params)
+        //   CASE BB_MAINLINE
+        //     IF StrLen(params)>0
+        //       StringF(tempstring,'\s \s',command,params)
+        //     ELSE
+        //       StrCopy(tempstring,command)
         {
-          const fullCommandLine =
-            (this.config.bbsSession as any)?.doorParams ||
-            (this.config.bbsSession as any)?.commandParams ||
-            '';
-          const command =
-            (this.config.bbsSession as any)?.doorCommand ||
-            (this.config.bbsSession as any)?.command ||
-            '';
-          const mainLine = (fullCommandLine || command).trim();
-console.log(`[DoorMessageHandler]   BB_MAINLINE: "${mainLine}"`);
-          this.writeStringToMessage(msgAddr, mainLine);
+          const doorParams = (this.config.bbsSession as any)?.doorParams || '';
+          const doorCommand = (this.config.bbsSession as any)?.doorCommand || '';
+          // If doorParams includes command (e.g., "FR A"), use it; otherwise combine
+          const result = doorParams.trim() || doorCommand.trim();
+console.log(`[DoorMessageHandler]   BB_MAINLINE: returning command="${result}" (per express.e:3794-3799)`);
+          this.writeStringToMessage(msgAddr, result);
         }
         break;
 
@@ -1420,16 +1418,14 @@ console.log(`[DoorMessageHandler]   BB_LINECOUNT SET: ${this.lineCount}`);
 
       // System commands
       case XIMCommand.EXPRESS_VERSION:
-        // REAL AMIGA BEHAVIOR: Returns door args, NOT version!
-        // Evidence: AQUASCAN_NSU_DEBUG_SESSION.md shows EXPRESS_VERSION returning "N S U"
-        // express.e:3808-3810 says return version, but actual doors expect args
+        // express.e:3808-3810: Return BBS version
+        //   CASE EXPRESS_VERSION
+        //     getExpressMajorVer(tempstring)
+        //     AstrCopy(msg.string,tempstring,200)
         {
-          // Return door args per real Amiga behavior
-          const doorParams = (this.config.bbsSession as any)?.doorParams || '';
-          const doorCommand = (this.config.bbsSession as any)?.doorCommand || '';
-          const result = doorParams.trim() || doorCommand.trim();
-console.log(`[DoorMessageHandler]   EXPRESS_VERSION: returning door args="${result}" (real Amiga behavior)`);
-          this.writeStringToMessage(msgAddr, result);
+          const version = this.getExpressMajorVersion();
+console.log(`[DoorMessageHandler]   EXPRESS_VERSION: returning version="${version}" (per express.e:3808-3810)`);
+          this.writeStringToMessage(msgAddr, version);
         }
         break;
 

@@ -138,20 +138,12 @@ console.log(`[XIMBBSInfo] JH_SYSOP: "${sysopName}"`);
    *     getExpressMajorVer(tempstring)
    *     AstrCopy(msg.string,tempstring,200)
    *
-   * CRITICAL: The real Amiga logs show TWO different behaviors:
-   * - Bulls.log line 20-22: EXPRESS_VERSION returns "v5.3" (version string)
-   * - AquaScan logs: EXPRESS_VERSION sometimes returns "N S U" (door args)
-   *
-   * The issue: doors like joincnf CHECK the version and require 3.x/4.x!
-   * If we return the door command instead of version, doors exit silently.
-   *
-   * Solution: Return ACTUAL version string "v5.3" (AmiExpress 5.x compatible with 3.x/4.x)
+   * Returns the BBS version string for compatibility checks.
    */
   handleExpressVersion(msg: XIMMessage): void {
-    // Return version string - doors need this to verify compatibility!
-    const version = 'v5.3'; // AmiExpress 5.x (backwards compatible with 3.x/4.x)
+    const version = this.getExpressMajorVersion();
 
-console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning version="${version}" (for door compatibility checks)`);
+console.log(`[XIMBBSInfo] EXPRESS_VERSION: returning version="${version}"`);
 
     this.messageParser.writeMessageString(msg.msgAddr, version);
 
@@ -504,28 +496,22 @@ console.log(`  [RESULT] ${value}`);
    * From express.e:3794-3800:
    *   CASE BB_MAINLINE
    *     IF StrLen(params)>0
-   *       StringF(tempstring,'\s \s',command,params)   // "N S U"
+   *       StringF(tempstring,'\s \s',command,params)
    *     ELSE
-   *       StrCopy(tempstring,command)                   // "N"
+   *       StrCopy(tempstring,command)
    *     ENDIF
    *     AstrCopy(msg.string,tempstring,200)
    *
    * Returns the command + parameters that invoked the door.
-   * This is how XIM doors get their invocation args!
    */
   handleMainLine(msg: XIMMessage): void {
-    // Get full command line from session (doorParams contains "command params" or just "command")
-    // door.handler.ts:2241 builds: fullCommandLine = door.command + (paramString ? ' ' + paramString : '')
     const session: any = this.bbsSession || {};
 
-    // doorParams/commandParams already contains full command line (e.g., "N S U")
     const fullCommandLine = session.doorParams || session.commandParams || '';
     const command = session.doorCommand || session.command || '';
-
-    // Use doorParams if set, otherwise just use command
     const result = fullCommandLine.trim() || command.trim();
 
-console.log(`[XIMBBSInfo] BB_MAINLINE - doorCommand="${command}" doorParams="${fullCommandLine}" result="${result}"`);
+console.log(`[XIMBBSInfo] BB_MAINLINE: returning command="${result}"`);
 
     this.messageParser.writeMessageString(msg.msgAddr, result);
     const verify = this.messageParser.readString(
