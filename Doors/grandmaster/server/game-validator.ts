@@ -114,6 +114,7 @@ export class GameValidator {
       classic: 1000000,
       zen: 1000000,
       training: 1000000,
+      tetrinet: 2000000,  // TetriNET multiplayer
     };
 
     const maxScore = MAX_SCORES[result.mode] || 1000000;
@@ -170,6 +171,7 @@ export class GameValidator {
       classic: 60000,
       zen: 60000,
       training: 30000,
+      tetrinet: 30000,    // TetriNET multiplayer
     };
 
     const minTime = MIN_TIMES[result.mode];
@@ -193,7 +195,8 @@ export class GameValidator {
       classic: 1800000,
       zen: 3600000,
       training: 3600000,
-  };
+      tetrinet: 1800000,  // TetriNET multiplayer
+    };
 
     const maxTime = MAX_TIMES[result.mode];
     if (maxTime && result.time > maxTime) {

@@ -198,6 +198,7 @@ export class LeaderboardScreen {
       classic: 'Classic Mode',
       zen: 'Zen Mode',
       cpu_battle: 'CPU Battle',
+      tetrinet: 'TetriNET',
     };
     return names[mode];
   }

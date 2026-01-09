@@ -10,6 +10,7 @@
 
 import { createScreen, createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { MultiplayerLobby, type LobbyEntryMode } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 /**
  * Door session interface
@@ -33,10 +34,14 @@ import { VersusScreen } from './ui/versus-screen';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
+import { DEFAULT_KEYS } from './input/config';
 import { SoundEngine } from './audio/sounds';
 import { HighScoreManager } from './core/high-scores';
 import { GrandmasterNetworkManager } from './network/network-manager';
 import { AttackManager } from './network/attack-system';
+import { TetriNetLobbyAdapter } from './network/tetrinet-lobby-adapter';
+import { TetriNetClient } from './network/tetrinet-client';
+import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
 
@@ -63,7 +68,12 @@ export class GrandmasterApp {
     this.highScores = new HighScoreManager();
     this.multiplayerServer = new MultiplayerServer();
     this.screen = this.createScreen();
-    this.inputHandler = new InputHandler(this.screen, session);
+    // Create input handler with user's key bindings
+    this.inputHandler = new InputHandler(
+      this.screen,
+      session,
+      this.state.settings.keyBindings as any
+    );
 
     // Initialize network manager if session has socket
     if (session.bbsSession?.socket) {
@@ -88,6 +98,17 @@ export class GrandmasterApp {
         previewCount: 5,
         musicVolume: 0.8,
         sfxVolume: 1.0,
+        keyBindings: {
+          left: [...DEFAULT_KEYS.left],
+          right: [...DEFAULT_KEYS.right],
+          rotateCW: [...DEFAULT_KEYS.rotateCW],
+          rotateCCW: [...DEFAULT_KEYS.rotateCCW],
+          rotate180: [...DEFAULT_KEYS.rotate180],
+          softDrop: [...DEFAULT_KEYS.softDrop],
+          hardDrop: [...DEFAULT_KEYS.hardDrop],
+          hold: [...DEFAULT_KEYS.hold],
+          pause: [...DEFAULT_KEYS.pause],
+        },
       },
       stats: {
         gamesPlayed: 0,
@@ -248,6 +269,9 @@ export class GrandmasterApp {
       case 'versus':
         await this.showLobby();
         break;
+      case 'tetrinet':
+        await this.showTetriNetLobby();
+        break;
       case 'training':
         await this.startGame('training');
         break;
@@ -397,6 +421,727 @@ export class GrandmasterApp {
       // Start multiplayer game
       await this.startVersusGame(result.mode);
     }
+  }
+
+  /**
+   * Show TetriNET lobby for classic TetriNET gameplay
+   */
+  private async showTetriNetLobby(): Promise<void> {
+    this.currentScreen = 'lobby';
+
+    // First show mode selection
+    const modeBox = createList({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 45,
+      height: 12,
+      border: { type: 'line' },
+      label: ' TetriNET Mode ',
+      style: {
+        border: { fg: 'yellow' },
+        selected: { bg: 'blue', fg: 'white' },
+      },
+      items: [
+        'Create Game (Standard)',
+        'Create Game (Extended - 16 specials)',
+        'Create Game (Classic - no specials)',
+        'Join Game',
+        '',
+        'Connect to External Server',
+        '',
+        'Back to Menu',
+      ],
+      keys: true,
+      vi: true,
+      mouse: true,
+    });
+
+    modeBox.focus();
+    this.screen.render();
+
+    const selection = await new Promise<number>((resolve) => {
+      modeBox.on('select', (_item: any, index: number) => {
+        resolve(index);
+      });
+      this.screen.key(['escape'], () => resolve(7));  // Back
+    });
+
+    modeBox.destroy();
+
+    if (selection === 4 || selection === 6 || selection === 7) {
+      return;  // Back to menu or separator
+    }
+
+    // Handle "Connect to External Server" option
+    if (selection === 5) {
+      await this.showTetriNetServerConnect();
+      return;
+    }
+
+    // Map selection to mode and entry type
+    const modeMap: Record<number, string> = {
+      0: 'standard',
+      1: 'extended',
+      2: 'classic',
+      3: 'standard',  // Join defaults to standard
+    };
+    const selectedMode = modeMap[selection] || 'standard';
+    const entryMode: LobbyEntryMode = selection === 3 ? 'join' : 'custom';
+
+    // Create TetriNET lobby adapter
+    if (!this.network) {
+      this.network = new GrandmasterNetworkManager(this.session.bbsSession);
+    }
+    const adapter = new TetriNetLobbyAdapter(this.network);
+
+    // Add local player
+    const playerName = this.session.user?.username || this.state.playerName;
+    adapter.addLocalPlayer(playerName, 1);
+
+    // Create lobby with TetriNET-specific features
+    const lobby = new MultiplayerLobby({
+      parent: this.screen,
+      adapter,
+      localPlayerId: 'slot-1',
+      title: 'TETRINET LOBBY',
+      features: {
+        slotBased: true,      // Slots 1-6
+        chat: true,           // Partyline chat
+        teams: true,          // Team selection
+        settingsEditor: true, // Game options
+        leaderboard: true,    // Winlist
+        bots: false,          // No bots in TetriNET
+      },
+      modes: {
+        standard: {
+          name: 'Standard (9 specials)',
+          maxPlayers: 6,
+          maxSlots: 6,
+          minPlayers: 2,
+          teamBased: true,
+          teams: ['Red', 'Blue'],
+        },
+        extended: {
+          name: 'Extended (16 specials)',
+          maxPlayers: 6,
+          maxSlots: 6,
+          minPlayers: 2,
+          teamBased: true,
+          teams: ['Red', 'Blue'],
+        },
+        classic: {
+          name: 'Classic (no specials)',
+          maxPlayers: 6,
+          maxSlots: 6,
+          minPlayers: 2,
+          teamBased: true,
+          teams: ['Red', 'Blue'],
+        },
+      },
+      gameSettings: [
+        {
+          key: 'startingLevel',
+          label: 'Starting Level',
+          type: 'number',
+          min: 1,
+          max: 100,
+          default: 1,
+        },
+        {
+          key: 'linesToMakeForSpecials',
+          label: 'Lines for Special',
+          type: 'number',
+          min: 1,
+          max: 4,
+          default: 1,
+        },
+        {
+          key: 'specialsAddedEachTime',
+          label: 'Specials Added',
+          type: 'number',
+          min: 1,
+          max: 4,
+          default: 1,
+        },
+        {
+          key: 'inventorySize',
+          label: 'Inventory Size',
+          type: 'number',
+          min: 1,
+          max: 18,
+          default: 10,
+        },
+        {
+          key: 'delayBeforeSuddenDeath',
+          label: 'Sudden Death (min)',
+          type: 'number',
+          min: 0,
+          max: 15,
+          default: 2,
+        },
+        {
+          key: 'suddenDeathTick',
+          label: 'SD Tick (sec)',
+          type: 'number',
+          min: 1,
+          max: 30,
+          default: 10,
+        },
+      ],
+      onSound: (sound) => {
+        const soundMap: Record<string, SoundEffect> = {
+          select: 'menu_select',
+          error: 'error',
+          countdown: 'countdown',
+          join: 'menu_select',
+          leave: 'menu_select',
+          chat: 'menu_select',
+        };
+        const sfx = soundMap[sound];
+        if (sfx) {
+          this.sounds.playSfx(sfx);
+        }
+      },
+    });
+
+    // Show lobby and wait for result
+    const result = await lobby.show(entryMode, selectedMode);
+
+    if (result.action === 'start') {
+      // Start TetriNET game with the settings from lobby
+      await this.startTetriNetGame(result.mode || 'standard', result.settings || {});
+    }
+  }
+
+  /**
+   * Start a TetriNET game
+   */
+  private async startTetriNetGame(mode: string, settings: Record<string, unknown>): Promise<void> {
+    // TODO: Implement TetriNET game screen
+    // For now show placeholder
+    const placeholder = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 8,
+      border: { type: 'line' },
+      style: { border: { fg: 'yellow' } },
+      content: `{bold}{yellow-fg}TetriNET Game Starting{/yellow-fg}{/bold}\n\n` +
+        `Mode: ${mode}\n` +
+        `Level: ${settings.startingLevel || 1}\n\n` +
+        `{gray-fg}Game screen coming soon...{/gray-fg}`,
+    });
+
+    this.screen.render();
+    await this.waitForKey();
+    placeholder.destroy();
+  }
+
+  /**
+   * Show TetriNET external server connection dialog
+   */
+  private async showTetriNetServerConnect(): Promise<void> {
+    // Import textbox helpers
+    const { createTextbox } = await import('@amiexpress/bbs-door-sdk/utils/blessed-helpers');
+
+    // Predefined server list from https://servers.tetrinet.fr/
+    const predefinedServers = [
+      { name: 'tetrinet.fr', host: 'tetrinet.fr' },
+      { name: 'tetrinet.de', host: 'tetrinet.de' },
+      { name: 'tetrinet.lfjr.net', host: 'tetrinet.lfjr.net' },
+      { name: 'tetrinet.cyteen.eu', host: 'tetrinet.cyteen.eu' },
+      { name: 'tetrinet.geekshed.net', host: 'tetrinet.geekshed.net' },
+      { name: 'linuxiuvat.de', host: 'linuxiuvat.de' },
+      { name: 'tetrinet.laber.fasel.org', host: 'tetrinet.laber.fasel.org' },
+    ];
+
+    // First, show server selection
+    const serverSelectBox = createList({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 45,
+      height: predefinedServers.length + 6,
+      border: { type: 'line' },
+      label: ' Select TetriNET Server ',
+      style: {
+        border: { fg: 'cyan' },
+        selected: { bg: 'blue', fg: 'white' },
+      },
+      items: [
+        ...predefinedServers.map(s => s.name),
+        '',
+        '{yellow-fg}Enter Custom Server...{/yellow-fg}',
+        '',
+        '{gray-fg}Back{/gray-fg}',
+      ],
+      keys: true,
+      vi: true,
+      mouse: true,
+    });
+
+    serverSelectBox.focus();
+    this.screen.render();
+
+    const serverSelection = await new Promise<number>((resolve) => {
+      serverSelectBox.on('select', (_item: any, index: number) => {
+        resolve(index);
+      });
+      this.screen.key(['escape'], () => resolve(predefinedServers.length + 3));  // Back
+    });
+
+    serverSelectBox.destroy();
+
+    // Handle back/cancel
+    if (serverSelection === predefinedServers.length || serverSelection === predefinedServers.length + 2 || serverSelection === predefinedServers.length + 3) {
+      return;
+    }
+
+    let selectedServer = '';
+    let selectedPort = 31457;
+
+    // Custom server entry
+    if (serverSelection === predefinedServers.length + 1) {
+      // Show custom server dialog
+      const customDialog = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 55,
+        height: 10,
+        border: { type: 'line' },
+        label: ' Enter Server Address ',
+        style: {
+          border: { fg: 'cyan' },
+        },
+      });
+
+      const serverLabel = createBox({
+        parent: customDialog,
+        top: 1,
+        left: 2,
+        width: 20,
+        height: 1,
+        content: '{bold}Server:{/bold}',
+      });
+
+      const serverInput = createTextbox({
+        parent: customDialog,
+        top: 1,
+        left: 22,
+        width: 28,
+        height: 3,
+        border: { type: 'line' },
+        style: {
+          border: { fg: 'white' },
+          focus: { fg: 'cyan' },
+        },
+        inputOnFocus: true,
+        mouse: true,
+      });
+
+      const portLabel = createBox({
+        parent: customDialog,
+        top: 4,
+        left: 2,
+        width: 20,
+        height: 1,
+        content: '{bold}Port:{/bold}',
+      });
+
+      const portInput = createTextbox({
+        parent: customDialog,
+        top: 4,
+        left: 22,
+        width: 10,
+        height: 3,
+        border: { type: 'line' },
+        style: {
+          border: { fg: 'white' },
+          focus: { fg: 'cyan' },
+        },
+        inputOnFocus: true,
+        mouse: true,
+      });
+      (portInput as any).setValue('31457');
+
+      const customInstructions = createBox({
+        parent: customDialog,
+        top: 7,
+        left: 2,
+        width: 50,
+        height: 1,
+        content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
+      });
+
+      this.screen.render();
+
+      const inputs = [serverInput, portInput];
+      let focusIndex = 0;
+      inputs[focusIndex].focus();
+
+      const customResult = await new Promise<{ server: string; port: number } | null>((resolve) => {
+        this.screen.key(['tab'], () => {
+          focusIndex = (focusIndex + 1) % inputs.length;
+          inputs[focusIndex].focus();
+          this.screen.render();
+        });
+
+        this.screen.key(['S-tab'], () => {
+          focusIndex = (focusIndex - 1 + inputs.length) % inputs.length;
+          inputs[focusIndex].focus();
+          this.screen.render();
+        });
+
+        this.screen.key(['enter'], () => {
+          const server = (serverInput as any).getValue()?.trim() || '';
+          const port = parseInt((portInput as any).getValue()?.trim() || '31457', 10);
+
+          if (!server) {
+            this.sounds.playSfx('error');
+            return;
+          }
+
+          resolve({ server, port });
+        });
+
+        this.screen.key(['escape'], () => {
+          resolve(null);
+        });
+      });
+
+      customDialog.destroy();
+
+      if (!customResult) {
+        return;  // Cancelled
+      }
+
+      selectedServer = customResult.server;
+      selectedPort = customResult.port;
+    } else {
+      // Predefined server
+      selectedServer = predefinedServers[serverSelection].host;
+    }
+
+    // Now show nickname dialog
+    const nickDialog = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 8,
+      border: { type: 'line' },
+      label: ` Connecting to ${selectedServer} `,
+      style: {
+        border: { fg: 'cyan' },
+      },
+    });
+
+    const nickLabel = createBox({
+      parent: nickDialog,
+      top: 1,
+      left: 2,
+      width: 20,
+      height: 1,
+      content: '{bold}Nickname:{/bold}',
+    });
+
+    const nickInput = createTextbox({
+      parent: nickDialog,
+      top: 1,
+      left: 22,
+      width: 20,
+      height: 3,
+      border: { type: 'line' },
+      style: {
+        border: { fg: 'white' },
+        focus: { fg: 'cyan' },
+      },
+      inputOnFocus: true,
+      mouse: true,
+    });
+    const playerName = this.session.user?.username || this.state.playerName;
+    (nickInput as any).setValue(playerName.substring(0, 15));
+
+    const nickInstructions = createBox({
+      parent: nickDialog,
+      top: 4,
+      left: 2,
+      width: 45,
+      height: 1,
+      content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
+    });
+
+    this.screen.render();
+    nickInput.focus();
+
+    const nickResult = await new Promise<string | null>((resolve) => {
+      this.screen.key(['enter'], () => {
+        const nickname = (nickInput as any).getValue()?.trim() || 'Player';
+        resolve(nickname.substring(0, 15));
+      });
+
+      this.screen.key(['escape'], () => {
+        resolve(null);
+      });
+    });
+
+    nickDialog.destroy();
+
+    if (!nickResult) {
+      return;  // Cancelled
+    }
+
+    const result = {
+      server: selectedServer,
+      port: selectedPort,
+      nickname: nickResult,
+    };
+
+    // Show connecting status
+    const statusBox = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 45,
+      height: 5,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      content: `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+        `${result.server}:${result.port}`,
+    });
+    this.screen.render();
+
+    try {
+      // Create client and connect
+      const client = new TetriNetClient({
+        host: result.server,
+        port: result.port,
+        nickname: result.nickname,
+        timeout: 15000,
+      });
+
+      await client.connect();
+
+      statusBox.setContent(
+        `{bold}{green-fg}Connected!{/green-fg}{/bold}\n\n` +
+        `Slot ${client.getSlot()} assigned`
+      );
+      this.screen.render();
+
+      // Wait a moment to show connected status
+      await new Promise(r => setTimeout(r, 1000));
+      statusBox.destroy();
+
+      // Show the external server lobby/game
+      await this.runTetriNetExternalGame(client);
+
+    } catch (error) {
+      statusBox.setContent(
+        `{bold}{red-fg}Connection Failed{/red-fg}{/bold}\n\n` +
+        `${(error as Error).message}`
+      );
+      this.screen.render();
+      await this.waitForKey();
+      statusBox.destroy();
+    }
+  }
+
+  /**
+   * Run TetriNET game connected to external server
+   */
+  private async runTetriNetExternalGame(client: TetriNetClient): Promise<void> {
+    // Create game screen for external server play
+    const gameBox = createBox({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      label: ` TetriNET - ${client.getSlot() ? `Slot ${client.getSlot()}` : 'Connected'} `,
+      border: { type: 'line' },
+      style: { border: { fg: 'yellow' } },
+    });
+
+    // Chat area (left side)
+    const chatArea = createBox({
+      parent: gameBox,
+      top: 0,
+      left: 0,
+      width: 35,
+      height: '100%-4',
+      label: ' Partyline Chat ',
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      scrollable: true,
+      alwaysScroll: true,
+      mouse: true,
+    });
+
+    // Players list (right side)
+    const playerList = createBox({
+      parent: gameBox,
+      top: 0,
+      right: 0,
+      width: 25,
+      height: 12,
+      label: ' Players ',
+      border: { type: 'line' },
+      style: { border: { fg: 'green' } },
+    });
+
+    // Status area
+    const statusArea = createBox({
+      parent: gameBox,
+      bottom: 1,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      style: { border: { fg: 'gray' } },
+      content: '{bold}Commands:{/bold} /team <name> | /me <action> | ESC to disconnect',
+    });
+
+    // Chat input
+    const { createTextbox } = await import('@amiexpress/bbs-door-sdk/utils/blessed-helpers');
+    const chatInput = createTextbox({
+      parent: gameBox,
+      bottom: 4,
+      left: 1,
+      width: 33,
+      height: 3,
+      border: { type: 'line' },
+      style: {
+        border: { fg: 'white' },
+        focus: { fg: 'cyan' },
+      },
+      inputOnFocus: true,
+      mouse: true,
+    });
+
+    // Helper to update player list
+    const updatePlayerList = () => {
+      const players = client.getPlayers();
+      let content = '';
+      for (let slot = 1; slot <= 6; slot++) {
+        const player = players.find(p => p.slot === slot);
+        if (player) {
+          const alive = player.alive ? '{green-fg}[OK]{/green-fg}' : '{red-fg}[OUT]{/red-fg}';
+          const team = player.team ? `{gray-fg}(${player.team}){/gray-fg}` : '';
+          content += `${slot}. {white-fg}${player.name}{/white-fg} ${alive} ${team}\n`;
+        } else {
+          content += `${slot}. {gray-fg}(empty){/gray-fg}\n`;
+        }
+      }
+      playerList.setContent(content.trim());
+      this.screen.render();
+    };
+
+    // Helper to add chat message
+    const addChatMessage = (msg: string) => {
+      const current = chatArea.getContent();
+      const lines = current.split('\n').slice(-50); // Keep last 50 lines
+      lines.push(msg);
+      chatArea.setContent(lines.join('\n'));
+      chatArea.setScrollPerc(100);
+      this.screen.render();
+    };
+
+    // Initial player list
+    updatePlayerList();
+
+    // Setup event handlers
+    client.on('player:joined', (player: any) => {
+      addChatMessage(`{green-fg}*** ${player.name} joined (slot ${player.slot}){/green-fg}`);
+      updatePlayerList();
+    });
+
+    client.on('player:left', (data: any) => {
+      addChatMessage(`{red-fg}*** Player left slot ${data.slot}{/red-fg}`);
+      updatePlayerList();
+    });
+
+    client.on('player:team', (data: any) => {
+      addChatMessage(`{cyan-fg}*** Slot ${data.slot} joined team: ${data.team}{/cyan-fg}`);
+      updatePlayerList();
+    });
+
+    client.on('chat', (data: any) => {
+      if (data.isAction) {
+        addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+      } else if (data.isGameMessage) {
+        addChatMessage(`{yellow-fg}[GAME] ${data.text}{/yellow-fg}`);
+      } else {
+        addChatMessage(`<${data.name}> ${data.text}`);
+      }
+    });
+
+    client.on('game:start', (data: any) => {
+      if (data.inProgress) {
+        addChatMessage(`{yellow-fg}*** Game is already in progress{/yellow-fg}`);
+      } else {
+        addChatMessage(`{bold}{green-fg}*** GAME STARTING! ***{/green-fg}{/bold}`);
+      }
+      updatePlayerList();
+    });
+
+    client.on('game:end', () => {
+      addChatMessage(`{bold}{yellow-fg}*** GAME OVER ***{/yellow-fg}{/bold}`);
+      updatePlayerList();
+    });
+
+    client.on('player:lost', (data: any) => {
+      addChatMessage(`{red-fg}*** Slot ${data.slot} topped out!{/red-fg}`);
+      updatePlayerList();
+    });
+
+    client.on('disconnected', () => {
+      addChatMessage(`{red-fg}*** Disconnected from server{/red-fg}`);
+    });
+
+    client.on('error', (error: Error) => {
+      addChatMessage(`{red-fg}*** Error: ${error.message}{/red-fg}`);
+    });
+
+    // Focus chat input
+    chatInput.focus();
+    this.screen.render();
+
+    // Handle input
+    await new Promise<void>((resolve) => {
+      // Submit chat
+      chatInput.on('submit', (value: string) => {
+        const text = value?.trim();
+        if (!text) {
+          (chatInput as any).clearValue();
+          chatInput.focus();
+          return;
+        }
+
+        if (text.startsWith('/team ')) {
+          client.setTeam(text.substring(6).trim());
+        } else if (text.startsWith('/me ')) {
+          client.sendAction(text.substring(4).trim());
+        } else {
+          client.sendChat(text);
+        }
+
+        (chatInput as any).clearValue();
+        chatInput.focus();
+        this.screen.render();
+      });
+
+      // ESC to quit
+      this.screen.key(['escape'], () => {
+        client.disconnect();
+        resolve();
+      });
+    });
+
+    // Cleanup
+    gameBox.destroy();
   }
 
   /**
@@ -561,6 +1306,9 @@ export class GrandmasterApp {
 
     const settingsScreen = new SettingsScreen(this.screen, this.state);
     await settingsScreen.show();
+
+    // Update input handler with any changed key bindings
+    this.inputHandler.updateConfig(this.state.settings.keyBindings as any);
   }
 
   /**

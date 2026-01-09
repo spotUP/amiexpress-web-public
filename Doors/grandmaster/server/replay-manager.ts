@@ -13,6 +13,7 @@ import type { GameMode, GameState, Piece, PieceType } from '../core/types';
 import type { ReplayData } from './game-validator';
 import { getDatabase } from './database/connection';
 import { ReplayRepository } from './database/replay-repository';
+import { UserRepository } from './database/user-repository';
 
 /**
  * Input action types
@@ -226,10 +227,12 @@ export class ReplayRecorder {
 export class ReplayManager {
   private replays: Map<string, Replay> = new Map();
   private repository: ReplayRepository;
+  private userRepository: UserRepository;
 
   constructor() {
     const db = getDatabase().getDb();
     this.repository = new ReplayRepository(db);
+    this.userRepository = new UserRepository(db);
   }
 
   /**
@@ -413,6 +416,8 @@ export class ReplayManager {
    * Persist replay to database
    */
   private async persistReplay(replay: Replay): Promise<void> {
+    // Ensure user exists before inserting replay (FK constraint)
+    this.userRepository.ensureUser(replay.metadata.userId, replay.metadata.username);
     await this.repository.insert(replay);
   }
 

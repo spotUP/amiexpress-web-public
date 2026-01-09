@@ -53,7 +53,8 @@ export type GameMode =
   | 'zen'
   | 'training'
   | 'versus'
-  | 'cpu_battle';
+  | 'cpu_battle'
+  | 'tetrinet';  // TetriNET mode with special blocks
 
 // ============================================================================
 // Game State
@@ -133,6 +134,18 @@ export interface GameState {
 // Player Settings
 // ============================================================================
 
+export interface KeyBindings {
+  left: string[];
+  right: string[];
+  rotateCW: string[];
+  rotateCCW: string[];
+  rotate180: string[];
+  softDrop: string[];
+  hardDrop: string[];
+  hold: string[];
+  pause: string[];
+}
+
 export interface PlayerSettings {
   rotationSystem: RotationSystem;
   das: number;              // Delayed Auto-Shift (ms)
@@ -143,6 +156,7 @@ export interface PlayerSettings {
   previewCount: number;
   musicVolume: number;
   sfxVolume: number;
+  keyBindings: KeyBindings;
 }
 
 // ============================================================================

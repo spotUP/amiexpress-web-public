@@ -6,7 +6,39 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import type { AppState, PlayerSettings, RotationSystem } from '../core/types';
+import type { AppState, PlayerSettings, RotationSystem, KeyBindings } from '../core/types';
+
+/**
+ * Friendly names for key bindings
+ */
+const KEY_DISPLAY_NAMES: Record<string, string> = {
+  'left': 'Left Arrow',
+  'right': 'Right Arrow',
+  'up': 'Up Arrow',
+  'down': 'Down Arrow',
+  'a': 'A',
+  'd': 'D',
+  's': 'S',
+  'w': 'W',
+  'z': 'Z',
+  'x': 'X',
+  'c': 'C',
+  'space': 'Space',
+  'return': 'Enter',
+  'enter': 'Enter',
+  'escape': 'Escape',
+  'p': 'P',
+  'lshift': 'Left Shift',
+  'rshift': 'Right Shift',
+  'lcontrol': 'Left Ctrl',
+  'rcontrol': 'Right Ctrl',
+  'pageup': 'Page Up',
+  'pagedown': 'Page Down',
+};
+
+function formatKeyBinding(keys: string[]): string {
+  return keys.map(k => KEY_DISPLAY_NAMES[k] || k.toUpperCase()).join(' / ');
+}
 
 /**
  * Settings screen
@@ -100,6 +132,7 @@ export class SettingsScreen {
    */
   private getMenuItems(): string[] {
     const s = this.state.settings;
+    const kb = s.keyBindings;
     return [
       `Rotation System:   {yellow-fg}${s.rotationSystem}{/yellow-fg}`,
       `DAS (ms):          {yellow-fg}${s.das}{/yellow-fg}`,
@@ -110,6 +143,17 @@ export class SettingsScreen {
       `Preview Count:     {yellow-fg}${s.previewCount}{/yellow-fg}`,
       `Music Volume:      {yellow-fg}${Math.floor(s.musicVolume * 100)}%{/yellow-fg}`,
       `SFX Volume:        {yellow-fg}${Math.floor(s.sfxVolume * 100)}%{/yellow-fg}`,
+      '',
+      '{cyan-fg}--- KEY BINDINGS ---{/cyan-fg}',
+      `Move Left:         {yellow-fg}${formatKeyBinding(kb.left)}{/yellow-fg}`,
+      `Move Right:        {yellow-fg}${formatKeyBinding(kb.right)}{/yellow-fg}`,
+      `Rotate CW (X):     {yellow-fg}${formatKeyBinding(kb.rotateCW)}{/yellow-fg}`,
+      `Rotate CCW (Z):    {yellow-fg}${formatKeyBinding(kb.rotateCCW)}{/yellow-fg}`,
+      `Rotate 180:        {yellow-fg}${formatKeyBinding(kb.rotate180)}{/yellow-fg}`,
+      `Soft Drop:         {yellow-fg}${formatKeyBinding(kb.softDrop)}{/yellow-fg}`,
+      `Hard Drop:         {yellow-fg}${formatKeyBinding(kb.hardDrop)}{/yellow-fg}`,
+      `Hold:              {yellow-fg}${formatKeyBinding(kb.hold)}{/yellow-fg}`,
+      `Pause:             {yellow-fg}${formatKeyBinding(kb.pause)}{/yellow-fg}`,
       '',
       '{green-fg}Save & Exit{/green-fg}',
     ];
@@ -130,9 +174,20 @@ export class SettingsScreen {
       'Background music volume',
       'Sound effects volume',
       '',
+      '',  // KEY BINDINGS header
+      'Press any key to rebind Move Left',
+      'Press any key to rebind Move Right',
+      'Press any key to rebind Rotate Clockwise',
+      'Press any key to rebind Rotate Counter-Clockwise',
+      'Press any key to rebind Rotate 180',
+      'Press any key to rebind Soft Drop',
+      'Press any key to rebind Hard Drop',
+      'Press any key to rebind Hold',
+      'Press any key to rebind Pause',
+      '',
       'Save changes and return to menu',
     ];
-    return `${descriptions[index]}`;
+    return `${descriptions[index] || ''}`;
   }
 
   /**
@@ -169,7 +224,35 @@ export class SettingsScreen {
       case 8:  // SFX Volume
         await this.adjustVolume('sfxVolume');
         break;
-      case 10:  // Save & Exit
+      // Key bindings (index 10 = header, 11-19 = bindings)
+      case 11:  // Move Left
+        await this.editKeyBinding('left', 'Move Left');
+        break;
+      case 12:  // Move Right
+        await this.editKeyBinding('right', 'Move Right');
+        break;
+      case 13:  // Rotate CW
+        await this.editKeyBinding('rotateCW', 'Rotate Clockwise');
+        break;
+      case 14:  // Rotate CCW
+        await this.editKeyBinding('rotateCCW', 'Rotate Counter-Clockwise');
+        break;
+      case 15:  // Rotate 180
+        await this.editKeyBinding('rotate180', 'Rotate 180');
+        break;
+      case 16:  // Soft Drop
+        await this.editKeyBinding('softDrop', 'Soft Drop');
+        break;
+      case 17:  // Hard Drop
+        await this.editKeyBinding('hardDrop', 'Hard Drop');
+        break;
+      case 18:  // Hold
+        await this.editKeyBinding('hold', 'Hold');
+        break;
+      case 19:  // Pause
+        await this.editKeyBinding('pause', 'Pause');
+        break;
+      case 21:  // Save & Exit
         menu.emit('keypress', null, { name: 'escape' });
         return;
     }
@@ -310,6 +393,88 @@ export class SettingsScreen {
 
       this.screen.on('keypress', keyHandler);
       this.screen.render();
+    });
+  }
+
+  /**
+   * Edit a key binding
+   */
+  private async editKeyBinding(bindingKey: keyof KeyBindings, displayName: string): Promise<void> {
+    const kb = this.state.settings.keyBindings;
+    const currentKeys = kb[bindingKey];
+
+    // Show key binding dialog
+    const bindingBox = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 55,
+      height: 12,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      content: '',
+    });
+
+    const keys = [...currentKeys];
+
+    const updateDisplay = () => {
+      bindingBox.setContent(
+        `{bold}{cyan-fg}${displayName.toUpperCase()}{/cyan-fg}{/bold}\n\n` +
+        `Current: {yellow-fg}${formatKeyBinding(keys)}{/yellow-fg}\n\n` +
+        `{gray-fg}Press a key to add it to the binding{/gray-fg}\n` +
+        `{gray-fg}Press Backspace to remove last key{/gray-fg}\n` +
+        `{gray-fg}Press Delete to clear all keys{/gray-fg}\n` +
+        `{gray-fg}Press Enter to save, Escape to cancel{/gray-fg}`
+      );
+    };
+
+    updateDisplay();
+    this.screen.render();
+
+    return new Promise((resolve) => {
+      const keyHandler = (_ch: any, key: any) => {
+        if (!key) return;
+
+        const keyName = key.full || key.name;
+
+        if (keyName === 'return' || keyName === 'enter') {
+          // Save binding
+          if (keys.length > 0) {
+            kb[bindingKey] = keys;
+          }
+          this.screen.removeListener('keypress', keyHandler);
+          bindingBox.destroy();
+          this.screen.render();
+          resolve();
+        } else if (keyName === 'escape') {
+          // Cancel
+          this.screen.removeListener('keypress', keyHandler);
+          bindingBox.destroy();
+          this.screen.render();
+          resolve();
+        } else if (keyName === 'backspace') {
+          // Remove last key
+          if (keys.length > 0) {
+            keys.pop();
+            updateDisplay();
+            this.screen.render();
+          }
+        } else if (keyName === 'delete') {
+          // Clear all keys
+          keys.length = 0;
+          updateDisplay();
+          this.screen.render();
+        } else {
+          // Add key if not already present
+          if (!keys.includes(keyName) && keys.length < 4) {
+            keys.push(keyName);
+            updateDisplay();
+            this.screen.render();
+          }
+        }
+      };
+
+      this.screen.on('keypress', keyHandler);
     });
   }
 }

@@ -16,6 +16,7 @@ export type MenuSelection =
   | 'marathon'
   | 'cpu_battle'
   | 'versus'
+  | 'tetrinet'
   | 'training'
   | 'settings'
   | 'stats'
@@ -97,6 +98,7 @@ export class MenuScreen {
           'MARATHON',
           'CPU BATTLE',
           'VERSUS',
+          '{yellow-fg}TETRINET{/yellow-fg}',
           'TRAINING',
           '',
           'Settings',
@@ -163,6 +165,7 @@ export class MenuScreen {
           'marathon',
           'cpu_battle',
           'versus',
+          'tetrinet',
           'training',
           'master',  // Separator line, default to master
           'settings',
@@ -188,12 +191,12 @@ export class MenuScreen {
 
       // Handle quit key
       menu.key(['q', 'Q'], () => {
-        menu.emit('select', null, 11);  // Trigger quit selection (index 11)
+        menu.emit('select', null, 12);  // Trigger quit selection (index 12)
       });
 
       // Handle F1 key for manual
       menu.key(['f1'], () => {
-        menu.emit('select', null, 10);  // Trigger manual selection (index 10)
+        menu.emit('select', null, 11);  // Trigger manual selection (index 11)
       });
 
       // Focus and render
@@ -260,6 +263,13 @@ export class MenuScreen {
       'Online multiplayer!\n\n' +
       'Battle other BBS\n' +
       'users in real-time.',
+
+      // TETRINET
+      '{bold}{yellow-fg}TETRINET{/yellow-fg}{/bold}\n\n' +
+      'Classic TetriNET!\n\n' +
+      '16 special blocks,\n' +
+      'up to 6 players,\n' +
+      'sudden death mode.',
 
       // TRAINING
       '{bold}{white-fg}TRAINING{/white-fg}{/bold}\n\n' +

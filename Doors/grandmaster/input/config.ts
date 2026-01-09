@@ -23,17 +23,20 @@ export interface KeyConfig {
 }
 
 /**
- * Default key bindings (TGM-style)
+ * Default key bindings (Modern Tetris style)
+ * - Arrow keys for movement
+ * - Up for hard drop
+ * - Z/X for rotation (CCW/CW)
  */
 export const DEFAULT_KEYS: KeyConfig = {
   left: ['left', 'a'],
   right: ['right', 'd'],
-  rotateCW: ['x', 'up', 'pageup'],
-  rotateCCW: ['z', 'lcontrol', 'rcontrol'],
+  rotateCW: ['x', 'pageup'],       // X = rotate clockwise
+  rotateCCW: ['z', 'lcontrol', 'rcontrol'],  // Z = rotate counter-clockwise
   rotate180: ['space'],
   softDrop: ['down', 's'],
-  hardDrop: ['return', 'enter'],
-  sonicDrop: [],  // Sonic drop disabled by default (TGM uses up for rotate)
+  hardDrop: ['up', 'return', 'enter'],  // Up arrow = hard drop
+  sonicDrop: [],
   hold: ['c', 'lshift', 'rshift'],
   pause: ['escape', 'p'],
 };

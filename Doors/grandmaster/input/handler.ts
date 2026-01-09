@@ -39,7 +39,7 @@ export class InputHandler {
   private lastLeftPress: number = 0;
   private lastRightPress: number = 0;
   private lastDownPress: number = 0;
-  private readonly KEY_RELEASE_TIMEOUT = 100; // ms to assume key released
+  private readonly KEY_RELEASE_TIMEOUT = 50; // ms to assume key released (fast for game mode)
 
   // Action callbacks
   private actionHandlers: Map<GameAction, () => void> = new Map();
@@ -234,6 +234,20 @@ export class InputHandler {
     this.lastLeftPress = 0;
     this.lastRightPress = 0;
     this.lastDownPress = 0;
+  }
+
+  /**
+   * Update key configuration
+   */
+  updateConfig(config: KeyConfig): void {
+    this.config = config;
+  }
+
+  /**
+   * Get current key configuration
+   */
+  getConfig(): KeyConfig {
+    return this.config;
   }
 
   /**
