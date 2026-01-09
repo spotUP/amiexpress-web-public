@@ -8,5 +8,5 @@
     "removeComments": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "dev-scripts/**/*"]
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "dev-scripts/**/*", "src/scripts/**/*"]
 }

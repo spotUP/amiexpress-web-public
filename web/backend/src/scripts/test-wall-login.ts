@@ -1,6 +1,8 @@
 /**
  * Test script to verify WALL door execution during login
+ * Run with: npx tsx src/scripts/test-wall-login.ts
  */
+// @ts-ignore - socket.io-client is a dev dependency
 import { io, Socket } from 'socket.io-client';
 
 const SERVER_URL = 'http://localhost:3001';
@@ -80,7 +82,7 @@ console.log('[TEST] Reached command prompt / main menu');
     }
   });
 
-  socket.on('connect_error', (err) => {
+  socket.on('connect_error', (err: Error) => {
 console.error('[ERROR] Connection failed:', err.message);
     process.exit(1);
   });
