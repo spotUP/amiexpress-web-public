@@ -282,7 +282,7 @@ console.error(`[FileManager] "${amiPath}" points to directory, cannot open as fi
       autoFlush: false,
       isNil: false,
       isConsole: false,
-      memoryBuffer
+      memoryBuffer,
     });
 
     // Try to open the file

@@ -234,9 +234,20 @@ console.log(`[icon.library]   Tooltype "${typeName}" not found in raw icon data`
       // Read pointer from array (each entry is 4 bytes)
       const tooltypeStrPtr = this.readLong(toolTypeArrayPtr + (arrayIndex * 4));
 
-      // NULL terminator - not found
+      // NULL terminator - not found in provided array
       if (tooltypeStrPtr === 0) {
-console.log(`[icon.library]   Tooltype "${searchTypeName}" not found after ${arrayIndex} entries - returning NULL`);
+console.log(`[icon.library]   Tooltype "${searchTypeName}" not found after ${arrayIndex} entries`);
+
+        // GENERIC FALLBACK: For DOORUSE.* lookups, try the door's main .info file
+        // Many doors load config icons without tooltypes, but DOORUSE entries are in the main door icon
+        if (searchTypeName.startsWith('DOORUSE.') && this.doorDirectory) {
+          const result = this.findTooltypeInDoorMainIcon(searchTypeName);
+          if (result !== 0) {
+            this.emulator.setRegister(CPURegister.D0, result);
+            return;
+          }
+        }
+
         this.emulator.setRegister(CPURegister.D0, 0);
         return;
       }
@@ -661,6 +672,77 @@ console.log(`[icon.library]   Returning address 0x${returnAddr.toString(16)} whi
 
     return 0; // Not found
   }
+
+  /**
+   * GENERIC FALLBACK: Find a DOORUSE.* tooltype in the door's main .info file
+   * This handles doors that call GetDiskObject on config files (which may not have tooltypes)
+   * but still need DOORUSE entries from the main door executable's icon.
+   */
+  private findTooltypeInDoorMainIcon(tooltypeName: string): number {
+    if (!this.doorDirectory) {
+console.log(`[icon.library]   Fallback: No door directory set`);
+      return 0;
+    }
+
+    // Find the door's main executable .info file
+    // doorDirectory is like /path/to/Doors/AquaScan, look for AquaScan.info (or AquaScan.020.info, etc.)
+    const doorName = path.basename(this.doorDirectory);
+    const possibleInfoFiles = [
+      path.join(this.doorDirectory, `${doorName}.info`),
+      path.join(this.doorDirectory, `${doorName}.020.info`),
+      path.join(this.doorDirectory, `${doorName}.000.info`),
+    ];
+
+console.log(`[icon.library]   Fallback: Searching for ${tooltypeName} in door's main icon...`);
+
+    for (const infoPath of possibleInfoFiles) {
+      const resolvedPath = amigafs.resolvePath(infoPath);
+      if (!resolvedPath) continue;
+
+console.log(`[icon.library]   Fallback: Checking ${resolvedPath}`);
+
+      const tooltypes = this.parseInfoFile(resolvedPath);
+      if (!tooltypes || tooltypes.length === 0) continue;
+
+      // Search for the requested tooltype
+      for (const tooltype of tooltypes) {
+        const upperTooltype = tooltype.toUpperCase();
+        const searchUpper = tooltypeName.toUpperCase();
+
+        if (upperTooltype.startsWith(searchUpper)) {
+          // Check for exact match or NAME=VALUE pattern
+          if (tooltype.length === tooltypeName.length || tooltype[tooltypeName.length] === '=') {
+            const equalsPos = tooltype.indexOf('=');
+            if (equalsPos >= 0) {
+              const value = tooltype.substring(equalsPos + 1);
+console.log(`[icon.library]   Fallback: Found ${tooltypeName} = "${value}" in ${path.basename(resolvedPath)}`);
+
+              // Allocate memory for the value string and return pointer to it
+              // Use a fixed location in memory for tooltype values (0xf2000+ area)
+              const valueAddr = 0xf2000 + (this.tooltypeValueOffset || 0);
+              this.tooltypeValueOffset = (this.tooltypeValueOffset || 0) + value.length + 1;
+              if (this.tooltypeValueOffset > 0x1000) this.tooltypeValueOffset = 0; // Wrap around
+
+              // Write the value to memory
+              for (let i = 0; i < value.length; i++) {
+                this.emulator.writeMemory(valueAddr + i, value.charCodeAt(i));
+              }
+              this.emulator.writeMemory(valueAddr + value.length, 0); // Null terminator
+
+console.log(`[icon.library]   Fallback: Returning value at 0x${valueAddr.toString(16)}`);
+              return valueAddr;
+            }
+          }
+        }
+      }
+    }
+
+console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door icon`);
+    return 0;
+  }
+
+  // Track offset for allocating tooltype value strings in memory
+  private tooltypeValueOffset: number = 0;
 
   private parseInfoFile(infoPath: string): string[] | null {
     try {

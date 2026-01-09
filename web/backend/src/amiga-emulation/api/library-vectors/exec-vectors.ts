@@ -28,7 +28,11 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9); // A1
       const version = emu.getRegister(0); // D0
-      return lib.openLibrary(nameAddr, version);
+      const name = emu.readString(nameAddr, 64);
+      console.log(`[exec-vectors] OpenLibrary TRAP: name="${name}" version=${version}`);
+      const result = lib.openLibrary(nameAddr, version);
+      console.log(`[exec-vectors] OpenLibrary TRAP result: 0x${result.toString(16)}`);
+      return result;
     },
   },
   {
@@ -132,7 +136,10 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     handler: (emu, lib: ExecLibrary) => {
       const size = emu.getRegister(0); // D0
       const flags = emu.getRegister(1); // D1
-      return lib.allocMem(size, flags);
+      console.log(`[exec-vectors] AllocMem TRAP: size=${size} (0x${size.toString(16)}) flags=0x${flags.toString(16)}`);
+      const result = lib.allocMem(size, flags);
+      console.log(`[exec-vectors] AllocMem TRAP result: 0x${result.toString(16)}`);
+      return result;
     },
   },
   {
@@ -163,7 +170,11 @@ console.log(
     name: "FindTask",
     handler: (emu, lib: ExecLibrary) => {
       const nameAddr = emu.getRegister(9); // A1
-      return lib.findTask(nameAddr);
+      const name = nameAddr ? emu.readString(nameAddr, 64) : "(null - current task)";
+      console.log(`[exec-vectors] FindTask TRAP: name="${name}"`);
+      const result = lib.findTask(nameAddr);
+      console.log(`[exec-vectors] FindTask TRAP result: 0x${result.toString(16)}`);
+      return result;
     },
   },
   {

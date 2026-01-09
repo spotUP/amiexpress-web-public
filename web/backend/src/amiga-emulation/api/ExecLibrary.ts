@@ -938,6 +938,11 @@ console.log(
             16
           )}, count=${existing.openCount}`
         );
+        // CRITICAL FIX: Always call callback to ensure vectors are installed
+        // This was missing, causing icon.library GetDiskObject traps to not work
+        if (this.onLibraryOpened) {
+          this.onLibraryOpened(name, existing.address);
+        }
         return existing.address;
       }
 
@@ -983,6 +988,10 @@ console.log(
           16
         )}, count=${existing.openCount}`
       );
+      // CRITICAL FIX: Always call callback to ensure vectors are installed
+      if (this.onLibraryOpened) {
+        this.onLibraryOpened(name, existing.address);
+      }
       return existing.address;
     }
 

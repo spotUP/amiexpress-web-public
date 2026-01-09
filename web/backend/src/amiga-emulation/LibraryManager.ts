@@ -604,6 +604,13 @@ console.log("[LibraryManager] Pre-opening utility.library and installing vectors
     this.execLibrary.openLibraryHybrid("utility.library", 37, false);
     this.libraryTraps.installUtilityVectors();
 
+    // Pre-open icon.library and install vectors immediately
+    // CRITICAL: AquaScan and other doors call GetDiskObject for config files
+    // XIMProtocol also uses iconLibrary directly to pre-load command .info files
+console.log("[LibraryManager] Pre-opening icon.library and installing vectors...");
+    this.execLibrary.openLibraryHybrid("icon.library", 36, false);
+    this.libraryTraps.installIconVectors();
+
     this.execLibrary.setLibraryOpenedCallback((name: string, addr: number) => {
       if (name.toLowerCase() === "dos.library") {
 console.log(

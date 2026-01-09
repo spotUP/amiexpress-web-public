@@ -576,6 +576,12 @@ console.log(
       // Write ILLEGAL instruction at vector address to trigger trap
       this.emulator.writeMemory16(trapAddr, 0x4AFC);
 
+      // VERIFY the write succeeded
+      const verify = this.emulator.readMemory16(trapAddr);
+      if (verify !== 0x4AFC) {
+        console.error(`[LibraryTraps] FAILED to write ILLEGAL at icon.${vector.name} (0x${trapAddr.toString(16)}): got 0x${verify.toString(16)}`);
+      }
+
       // Store mapping of address to handler
       this.trapMap.set(trapAddr, vector);
       this.libraryMap.set(trapAddr, this.iconLibrary);
@@ -591,9 +597,14 @@ console.log(
 console.log(
         `  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${
           vector.offset
-        })`
+        }) [VERIFIED: 0x${verify.toString(16)}]`
       );
     }
+
+    // Final verification - dump memory at GetDiskObject address
+    const getDiskObjAddr = iconBase + (-30);
+    const opcode = this.emulator.readMemory16(getDiskObjAddr);
+console.log(`[LibraryTraps] *** icon.library GetDiskObject at 0x${getDiskObjAddr.toString(16)} contains: 0x${opcode.toString(16)} (should be 0x4AFC) ***`);
 
 console.log(`[LibraryTraps] *** icon.library FULLY OPERATIONAL - ALL traps installed and ready ***`);
 
@@ -1340,12 +1351,31 @@ console.error(`  THIS IS THE BUG! ${vector.name}() corrupted SP!`);
 
     // Determine library base from the library instance
     // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
+    // CRITICAL: ALL libraries with trap handlers must be included here
     if (library === this.execLibrary) {
       properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
     } else if (library === this.dosLibrary) {
       properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
     } else if (library === this.aedoorLibrary) {
       properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
+    } else if (library === this.iconLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("icon.library") || 0x0D0000;
+    } else if (library === this.utilityLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("utility.library") || 0x0E0000;
+    } else if (library === this.mathFFPLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathffp.library") || 0x0F0000;
+    } else if (library === this.mathTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathtrans.library") || 0x100000;
+    } else if (library === this.mathIEEEDoubBasLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeedoubbas.library") || 0x110000;
+    } else if (library === this.mathIEEEDoubTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeedoubtrans.library") || 0x120000;
+    } else if (library === this.mathIEEESingBasLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeesingbas.library") || 0x130000;
+    } else if (library === this.mathIEEESingTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeesingtrans.library") || 0x140000;
+    } else if (library === this.intuitionLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("intuition.library") || 0x150000;
     }
 
     this.emulator.setRegister(14, properA6);
@@ -1601,12 +1631,31 @@ console.log(`[LibraryTraps]   SP after pop: 0x${spAfter.toString(16)}`);
 
     // Determine library base from the library instance
     // Fallback addresses must match ExecLibrary.ts memory layout (0x080000+)
+    // CRITICAL: ALL libraries with trap handlers must be included here
     if (library === this.execLibrary) {
       properA6 = this.execLibrary.getLibraryBase("exec.library") || 0x080000;
     } else if (library === this.dosLibrary) {
       properA6 = this.execLibrary.getLibraryBase("dos.library") || 0x0B0000;
     } else if (library === this.aedoorLibrary) {
       properA6 = this.execLibrary.getLibraryBase("AEDoor.library") || 0x0C0000;
+    } else if (library === this.iconLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("icon.library") || 0x0D0000;
+    } else if (library === this.utilityLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("utility.library") || 0x0E0000;
+    } else if (library === this.mathFFPLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathffp.library") || 0x0F0000;
+    } else if (library === this.mathTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathtrans.library") || 0x100000;
+    } else if (library === this.mathIEEEDoubBasLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeedoubbas.library") || 0x110000;
+    } else if (library === this.mathIEEEDoubTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeedoubtrans.library") || 0x120000;
+    } else if (library === this.mathIEEESingBasLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeesingbas.library") || 0x130000;
+    } else if (library === this.mathIEEESingTransLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("mathieeesingtrans.library") || 0x140000;
+    } else if (library === this.intuitionLibrary) {
+      properA6 = this.execLibrary.getLibraryBase("intuition.library") || 0x150000;
     }
 
     this.emulator.setRegister(14, properA6);
