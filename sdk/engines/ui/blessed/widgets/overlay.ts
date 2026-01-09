@@ -3,21 +3,34 @@
  *
  * For web connections: Uses actual CSS transparency via socket events
  * For telnet/SSH: Falls back to solid dark background
+ *
+ * Responsive features:
+ * - Tap-to-dismiss on mobile (tap outside content to close)
+ * - Adjustable mobile opacity
+ * - Touch-friendly dismiss targets
  */
 
-import { Box } from './box';
-import type { ElementOptions } from '../core/types';
+import { Box, BoxOptions } from './box';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 // Use String.fromCharCode(27) for ESC to survive Terser minification
 const ESC = String.fromCharCode(27);
 
-export interface OverlayOptions extends ElementOptions {
+export interface OverlayOptions extends BoxOptions {
   opacity?: number;
+  /** Enable tap-to-dismiss on mobile (default: true) */
+  tapToDismiss?: boolean;
+  /** Mobile opacity (default: 0.7, higher for visibility) */
+  mobileOpacity?: number;
 }
 
 export class Overlay extends Box {
   private _overlayOpacity: number;
+  private _desktopOpacity: number;
+  private _mobileOpacity: number;
   private _overlayWidgetId: string;
+  private _tapToDismiss: boolean;
 
   constructor(options: OverlayOptions = {}) {
     // Extract style without bg - Overlay uses no background for ANSI
@@ -40,8 +53,11 @@ export class Overlay extends Box {
       },
     });
 
-    this._overlayOpacity = options.opacity !== undefined ? options.opacity : 0.5;
+    this._desktopOpacity = options.opacity !== undefined ? options.opacity : 0.5;
+    this._mobileOpacity = options.mobileOpacity !== undefined ? options.mobileOpacity : 0.7;
+    this._overlayOpacity = this._desktopOpacity;
     this._overlayWidgetId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this._tapToDismiss = options.tapToDismiss !== false;  // Default: enabled
 
     // Enable key handling
     this.enableKeys();
@@ -71,6 +87,22 @@ export class Overlay extends Box {
       this.emit('cancel');
       if (this.screen) {
         this.screen.render();
+      }
+    });
+
+    // Tap-to-dismiss: click on overlay background (not children) to dismiss
+    this.on('click', (data: any) => {
+      if (!this._tapToDismiss) return;
+
+      // Check if click was on the overlay itself (not a child)
+      // This allows modal content to be clickable without dismissing
+      const target = data?.el || data?.element;
+      if (target === this || target === undefined) {
+        this.hide();
+        this.emit('dismiss');
+        if (this.screen) {
+          this.screen.render();
+        }
       }
     });
 
@@ -198,5 +230,107 @@ export class Overlay extends Box {
         this.screen.render();
       }
     }, stepDuration);
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle resize - update overlay dimensions
+   */
+  protected _handleResize(width: number, height: number, state: ResponsiveState): void {
+    // Call parent resize handler
+    super._handleResize(width, height, state);
+
+    // Update overlay event for web clients
+    if (!this.hidden) {
+      this._emitOverlayWidgetEvent(true);
+    }
+  }
+
+  /**
+   * Handle breakpoint change - adjust opacity
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    // Call parent handler
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+
+    // Update opacity based on breakpoint
+    if (state.isMobile) {
+      this._overlayOpacity = this._mobileOpacity;
+    } else {
+      this._overlayOpacity = this._desktopOpacity;
+    }
+
+    // Update overlay event if visible
+    if (!this.hidden) {
+      this._emitOverlayWidgetEvent(true);
+    }
+
+    // Emit for custom handling
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - increase opacity for visibility
+   */
+  protected _enterMobileMode(): void {
+    this._overlayOpacity = this._mobileOpacity;
+    if (!this.hidden) {
+      this._emitOverlayWidgetEvent(true);
+    }
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - restore desktop opacity
+   */
+  protected _exitMobileMode(): void {
+    this._overlayOpacity = this._desktopOpacity;
+    if (!this.hidden) {
+      this._emitOverlayWidgetEvent(true);
+    }
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Enable/disable tap-to-dismiss
+   */
+  setTapToDismiss(enabled: boolean): void {
+    this._tapToDismiss = enabled;
+  }
+
+  /**
+   * Check if tap-to-dismiss is enabled
+   */
+  isTapToDismissEnabled(): boolean {
+    return this._tapToDismiss;
+  }
+
+  /**
+   * Set mobile opacity
+   */
+  setMobileOpacity(opacity: number): void {
+    this._mobileOpacity = Math.max(0, Math.min(1, opacity));
+    if (this.isMobile() && !this.hidden) {
+      this._overlayOpacity = this._mobileOpacity;
+      this._emitOverlayWidgetEvent(true);
+    }
+  }
+
+  /**
+   * Set desktop opacity
+   */
+  setDesktopOpacity(opacity: number): void {
+    this._desktopOpacity = Math.max(0, Math.min(1, opacity));
+    if (!this.isMobile() && !this.hidden) {
+      this._overlayOpacity = this._desktopOpacity;
+      this._emitOverlayWidgetEvent(true);
+    }
   }
 }

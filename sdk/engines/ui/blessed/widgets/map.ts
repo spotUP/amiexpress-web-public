@@ -4,12 +4,18 @@
  * 1:1 port from blessed-contrib/lib/widget/map.js
  * Geographic map display with markers
  *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Recalculates map dimensions on breakpoint change
+ *
  * Note: Original depends on 'map-canvas' npm package for rendering.
  * This implementation provides the API but requires map-canvas integration.
  */
 
 import { ContribCanvas as Canvas, ContribCanvasOptions as CanvasOptions } from './contrib-canvas';
 import { world, antarctica } from './map-data';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface MapMarker {
   lon: string | number;
@@ -233,6 +239,21 @@ export class Map extends Canvas {
         { lon: '79.0000', lat: '37.5000', color: 'blue', char: 'O' }
       ]
     };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    this.calcSize();
+    this.draw();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

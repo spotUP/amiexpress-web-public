@@ -1,9 +1,14 @@
 /**
  * Canvas - Basic drawing canvas for custom rendering
+ *
+ * Responsive features:
+ * - Reinitializes buffer on breakpoint change
  */
 
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface CanvasOptions extends ElementOptions {
   fillChar?: string;
@@ -285,5 +290,20 @@ export class Canvas extends Box {
       width: this.canvasWidth,
       height: this.canvasHeight,
     };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Reinitialize buffer with new dimensions
+    this.initializeBuffer();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

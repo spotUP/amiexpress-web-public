@@ -3,11 +3,16 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/canvas.js
  * Provides a canvas widget with Braille-based drawing
+ *
+ * Responsive features:
+ * - Recalculates canvas size on breakpoint change
  */
 
 import { Box } from './box';
 import { Canvas as InnerCanvas, Context } from '../utils/contrib-utils/drawille-canvas';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ContribCanvasOptions extends ElementOptions {
   data?: any;
@@ -112,6 +117,25 @@ export class ContribCanvas extends Box {
 
   get type(): string {
     return 'canvas';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Recalculate canvas size for new dimensions
+    this.calcSize();
+    if (this._canvas && this.canvasSize) {
+      this._canvas = new InnerCanvas(this.canvasSize.width, this.canvasSize.height);
+      this.ctx = this._canvas.getContext();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

@@ -103,13 +103,11 @@ class AudioEngine {
       return;
     }
 
-    // Initialize Tone.js (browser only)
-    this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
-    this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
-    this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
-
-    // Build sound library
-    this.buildSoundLibrary();
+    // DEFER Tone.js initialization until init() is called (after user gesture)
+    // This prevents "AudioContext was not allowed to start" errors
+    this.masterGain = null as any;
+    this.musicGain = null as any;
+    this.sfxGain = null as any;
   }
 
   /**
@@ -131,11 +129,25 @@ class AudioEngine {
                        (globalThis as any).window !== undefined &&
                        typeof (globalThis as any).window.AudioContext !== 'undefined';
 
-    if (isBrowser && Tone.context && Tone.context.state !== 'running') {
+    if (isBrowser) {
+      // Start Tone.js AudioContext (must be after user gesture)
       try {
         await Tone.start();
+        console.log('[AudioEngine] Tone.js started successfully');
       } catch (e) {
-        console.error('Tone.js start failed:', e);
+        console.error('[AudioEngine] Tone.js start failed:', e);
+        return;
+      }
+
+      // NOW create the gain nodes (AudioContext is running)
+      if (!this.masterGain || !this.masterGain.gain) {
+        this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
+        this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
+        this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
+
+        // Build sound library after gains are created
+        this.buildSoundLibrary();
+        console.log('[AudioEngine] Audio system initialized');
       }
     }
 
@@ -1138,7 +1150,7 @@ class AudioEngine {
       return;
     }
 
-    if (!this.config.enabled || !this.initialized) return;
+    if (!this.config.enabled || !this.initialized || !this.sfxGain?.gain) return;
 
     const synth = new Tone.Synth().connect(this.sfxGain);
     synth.triggerAttackRelease(note, duration);

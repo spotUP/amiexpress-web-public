@@ -4,6 +4,8 @@
 
 import { Element } from '../core/element';
 import type { FormOptions, KeyEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class Form extends Element {
   private focusableChildren: Element[] = [];
@@ -97,5 +99,20 @@ export class Form extends Element {
 
   reset(): void {
     this.emit('reset');
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-update focusable list in case layout changed
+    this._updateFocusable();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

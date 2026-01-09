@@ -4,6 +4,8 @@
 
 import { Element } from '../core/element';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class Text extends Element {
   constructor(options: ElementOptions = {}) {
@@ -11,5 +13,18 @@ export class Text extends Element {
       ...options,
       border: options.border !== undefined ? options.border : undefined,
     });
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

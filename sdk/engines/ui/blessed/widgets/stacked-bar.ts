@@ -3,12 +3,18 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/charts/stacked-bar.js
  * Vertical stacked bar chart with legend
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Hides legend on mobile to save space
  */
 
 import { ContribCanvas as Canvas, ContribCanvasOptions as CanvasOptions } from './contrib-canvas';
 import { Box } from './box';
 import { Element } from '../core/element';
 import * as utils from '../utils/contrib-utils/utils';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface StackedBarData {
   barCategory: string[];
@@ -294,6 +300,29 @@ export class StackedBar extends Canvas {
 
   get type(): string {
     return 'bar';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    this.calcSize();
+    // Hide legend on mobile to save space
+    if (state.isMobile && this.legend) {
+      this.legend.hide();
+    } else if (!state.isMobile && this.legend && this.options.showLegend) {
+      this.legend.show();
+    }
+    if (this._pendingData) {
+      this._renderData(this._pendingData);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

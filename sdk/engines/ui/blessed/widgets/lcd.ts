@@ -4,10 +4,15 @@
  * 1:1 port from blessed-contrib/lib/widget/lcd.js
  * LCD sixteen-segment display for alphanumeric characters
  * Thanks to https://github.com/Enderer/sixteensegment for the original implementation
+ *
+ * Responsive features:
+ * - Recalculates segment dimensions on resize
  */
 
 import { ContribCanvas as Canvas, ContribCanvasOptions as CanvasOptions } from './contrib-canvas';
 import type { Context } from '../utils/contrib-utils/drawille-canvas';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface LCDOptions extends CanvasOptions {
   segmentWidth?: number;
@@ -179,6 +184,34 @@ export class LCD extends Canvas {
       elementSpacing: 4,
       elementPadding: 2
     };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Reinitialize segment display with new dimensions
+    if ((this as any).ctx && (this as any).canvasSize) {
+      this.segment16 = new SixteenSegment(
+        this.options.elements!,
+        (this as any).ctx!,
+        (this as any).canvasSize!.width,
+        (this as any).canvasSize!.height,
+        0,
+        0,
+        this.options
+      );
+      // Re-render current display
+      const display = this._pendingDisplay ?? this.options.display ?? 1234;
+      this._renderDisplay(display);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

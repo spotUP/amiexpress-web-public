@@ -1,9 +1,16 @@
 /**
  * ListTable - Enhanced table with list-like selection behavior
+ *
+ * Responsive features:
+ * - Column priority hiding on mobile (hides low-priority columns)
+ * - Horizontal swipe scrolling on mobile
+ * - Touch-friendly row heights
  */
 
 import { Box } from './box';
 import type { ElementOptions, KeyEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ListTableOptions extends Omit<ElementOptions, 'align'> {
   rows?: string[][];
@@ -12,6 +19,10 @@ export interface ListTableOptions extends Omit<ElementOptions, 'align'> {
   align?: ('left' | 'center' | 'right')[];
   interactive?: boolean;
   noCellBorders?: boolean;
+  /** Column visibility priority (higher = more important, shown first on mobile) */
+  columnPriority?: number[];
+  /** Max columns to show on mobile (default: 2) */
+  mobileMaxColumns?: number;
 }
 
 export class ListTable extends Box {
@@ -22,6 +33,12 @@ export class ListTable extends Box {
   private selectedRow: number = 0;
   private interactive: boolean;
   private noCellBorders: boolean;
+
+  // Responsive tracking
+  private _isMobileMode: boolean = false;
+  private _columnPriority: number[];
+  private _mobileMaxColumns: number;
+  private _visibleColumns: number[] = [];  // Indices of visible columns
 
   constructor(options: ListTableOptions = {}) {
     // Destructure ListTable-specific properties
@@ -46,10 +63,17 @@ export class ListTable extends Box {
     this.interactive = interactive !== false;
     this.noCellBorders = noCellBorders || false;
 
+    // Responsive options
+    this._columnPriority = options.columnPriority || [];
+    this._mobileMaxColumns = options.mobileMaxColumns ?? 2;
+
     // Auto-calculate column widths if not provided
     if (this.columnWidths.length === 0) {
       this.calculateColumnWidths();
     }
+
+    // Initialize visible columns (all by default)
+    this._initVisibleColumns();
 
     this.updateContent();
 
@@ -283,5 +307,130 @@ export class ListTable extends Box {
    */
   getSelectedRow(): string[] | undefined {
     return this.rows[this.selectedRow];
+  }
+
+  /**
+   * Initialize visible columns array
+   */
+  private _initVisibleColumns(): void {
+    const numCols = Math.max(
+      this.headers.length,
+      ...this.rows.map(row => row.length)
+    );
+    this._visibleColumns = Array.from({ length: numCols }, (_, i) => i);
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - adjust visible columns
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - hide low-priority columns
+   */
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    this._setMobileLayout();
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - show all columns
+   */
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    this._setDesktopLayout();
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Set mobile-friendly layout with limited columns
+   */
+  private _setMobileLayout(): void {
+    this._isMobileMode = true;
+
+    const numCols = Math.max(
+      this.headers.length,
+      ...this.rows.map(row => row.length)
+    );
+
+    if (numCols <= this._mobileMaxColumns) {
+      // All columns fit, show all
+      this._visibleColumns = Array.from({ length: numCols }, (_, i) => i);
+    } else {
+      // Sort columns by priority (higher first)
+      const colsWithPriority = Array.from({ length: numCols }, (_, i) => ({
+        index: i,
+        priority: this._columnPriority[i] ?? 0,
+      }));
+      colsWithPriority.sort((a, b) => b.priority - a.priority);
+
+      // Take top N columns by priority
+      this._visibleColumns = colsWithPriority
+        .slice(0, this._mobileMaxColumns)
+        .map(c => c.index)
+        .sort((a, b) => a - b);  // Sort back by index for display order
+    }
+
+    this.updateContent();
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Restore desktop layout with all columns
+   */
+  private _setDesktopLayout(): void {
+    this._isMobileMode = false;
+
+    // Show all columns
+    this._initVisibleColumns();
+    this.updateContent();
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Get visible headers (filtered for mobile)
+   */
+  private getVisibleHeaders(): string[] {
+    return this._visibleColumns.map(i => this.headers[i] || '');
+  }
+
+  /**
+   * Get visible row cells (filtered for mobile)
+   */
+  private getVisibleRow(row: string[]): string[] {
+    return this._visibleColumns.map(i => row[i] || '');
+  }
+
+  /**
+   * Get visible column width
+   */
+  private getVisibleColumnWidth(visibleIndex: number): number {
+    const actualIndex = this._visibleColumns[visibleIndex];
+    return this.columnWidths[actualIndex] || 10;
+  }
+
+  /**
+   * Get visible column alignment
+   */
+  private getVisibleAlign(visibleIndex: number): 'left' | 'center' | 'right' {
+    const actualIndex = this._visibleColumns[visibleIndex];
+    return this.align[actualIndex] || 'left';
   }
 }

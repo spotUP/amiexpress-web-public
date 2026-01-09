@@ -1,9 +1,14 @@
 /**
  * Log widget - Scrolling log viewer
+ *
+ * Responsive features:
+ * - Touch-friendly scrolling on mobile
  */
 
 import { Element } from '../core/element';
 import type { LogOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class Log extends Element {
   private scrollback: number = 1000;
@@ -116,5 +121,25 @@ export class Log extends Element {
       start: childBase,
       end: childBase + height,
     };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Ensure scroll position is valid after resize
+    const scrollHeight = this.getScrollHeight();
+    const maxScroll = Math.max(0, scrollHeight - ((this.height as number) || 10));
+    const currentScroll = (this as any).childBase || 0;
+    if (currentScroll > maxScroll) {
+      this.setScroll(maxScroll);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

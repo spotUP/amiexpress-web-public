@@ -4,6 +4,8 @@
 
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ANSIImageOptions extends ElementOptions {
   file?: string;
@@ -155,5 +157,19 @@ export class ANSIImage extends Box {
         this.screen.render();
       }
     }
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // ANSI content is fixed-size, just trigger re-render
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

@@ -1,10 +1,15 @@
 /**
  * IFrame - Embedded frame widget for nested screens
+ *
+ * Responsive features:
+ * - Auto-adapts to container on resize
  */
 
 import { Box } from './box';
 import type { Element } from '../core/element';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface IFrameOptions extends ElementOptions {
   detached?: boolean;
@@ -162,5 +167,24 @@ export class IFrame extends Box {
    */
   getFrameCount(): number {
     return this.frameChildren.length;
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Notify children of breakpoint change
+    for (const child of this.frameChildren) {
+      if (typeof (child as any)._handleBreakpointChange === 'function') {
+        (child as any)._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+      }
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

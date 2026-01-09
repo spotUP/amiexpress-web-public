@@ -6,21 +6,30 @@
  *   overlayOpacity: 0.7 (custom opacity)
  *
  * Automatically stays centered in responsive layouts
+ *
+ * Responsive features:
+ * - Full-width on mobile (xs breakpoint)
+ * - Touch-friendly button sizes
+ * - Auto-center on resize
  */
 
-import { Box } from './box';
+import { Box, BoxOptions } from './box';
 import { Textbox } from './textbox';
 import { Button } from './button';
 import { Overlay } from './overlay';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
-import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { calculateDialogWidth, MIN_TOUCH_HEIGHT, DIALOG_EDGE_PADDING } from '../core/responsive-constants';
 
-export interface PromptOptions extends ElementOptions {
+export interface PromptOptions extends BoxOptions {
   text?: string;
   title?: string;
   value?: string;
   overlay?: boolean;
   overlayOpacity?: number;
+  /** Mobile width (default: calculated based on screen) */
+  mobileWidth?: number | string;
 }
 
 export class Prompt extends Box {
@@ -32,6 +41,12 @@ export class Prompt extends Box {
   private _overlay?: Overlay;
   private _responsiveCleanup?: () => void;
   private _trapCleanup?: () => void;
+  private _desktopWidth: number | string | undefined;
+  private _mobileWidth: number | string | undefined;
+  private _desktopButtonWidth: number = 10;
+  private _mobileButtonWidth: number = 12;
+  private _desktopButtonHeight: number = 1;
+  private _mobileButtonHeight: number = 3;
 
   constructor(options: PromptOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -194,6 +209,14 @@ export class Prompt extends Box {
       this.emit('hide');
     });
 
+    // Store desktop dimensions for responsive toggling
+    this._desktopWidth = options.width || 50;
+    this._mobileWidth = options.mobileWidth;
+    this._desktopButtonWidth = 12;
+    this._mobileButtonWidth = 14;
+    this._desktopButtonHeight = 3;
+    this._mobileButtonHeight = MIN_TOUCH_HEIGHT;
+
     // Tab between elements
     this.key(['tab'], () => {
       const focused = this.screen?.getFocused();
@@ -336,5 +359,85 @@ export class Prompt extends Box {
    */
   getValue(): string {
     return this.inputField.getValue();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - adjust width and button sizes
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - full width, larger buttons
+   */
+  protected _enterMobileMode(): void {
+    this._setMobileLayout();
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - restore desktop layout
+   */
+  protected _exitMobileMode(): void {
+    this._setDesktopLayout();
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Set mobile-friendly layout
+   */
+  private _setMobileLayout(): void {
+    if (!this.screen) return;
+
+    // Calculate mobile width (near full-width with padding)
+    const screenWidth = this.screen.width as number;
+    const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
+    this.width = mobileWidth;
+
+    // Larger touch-friendly buttons
+    this.okButton.width = this._mobileButtonWidth;
+    this.okButton.height = this._mobileButtonHeight;
+    this.cancelButton.width = this._mobileButtonWidth;
+    this.cancelButton.height = this._mobileButtonHeight;
+
+    // Adjust button container for larger buttons
+    this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
+
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Restore desktop layout
+   */
+  private _setDesktopLayout(): void {
+    if (this._desktopWidth !== undefined) {
+      this.width = this._desktopWidth;
+    }
+
+    // Restore desktop button sizes
+    this.okButton.width = this._desktopButtonWidth;
+    this.okButton.height = this._desktopButtonHeight;
+    this.cancelButton.width = this._desktopButtonWidth;
+    this.cancelButton.height = this._desktopButtonHeight;
+
+    // Restore button container width
+    this.buttonBox.width = 26;
+
+    if (this.screen) this.screen.render();
   }
 }

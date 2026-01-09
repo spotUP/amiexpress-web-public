@@ -1,10 +1,18 @@
 /**
  * Listbar - Horizontal menu bar widget
+ *
+ * Responsive features:
+ * - Vertical layout on mobile (stacked items)
+ * - Swipe navigation on mobile
+ * - Touch-friendly item heights
  */
 
 import { Box } from './box';
 import { Button } from './button';
 import type { Colors, ElementOptions, KeyEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export interface ListbarOptions extends ElementOptions {
   style?: ElementOptions['style'] & {
@@ -16,6 +24,10 @@ export interface ListbarOptions extends ElementOptions {
   autoCommandKeys?: boolean;
   itemPadding?: number;
   itemGap?: number;
+  /** Enable vertical layout on mobile (default: true) */
+  mobileVertical?: boolean;
+  /** Mobile item height (default: MIN_TOUCH_HEIGHT) */
+  mobileItemHeight?: number;
 }
 
 export interface ListbarItem {
@@ -33,6 +45,13 @@ export class Listbar extends Box {
 
   private itemPadding: number;
   private itemGap: number;
+
+  // Responsive tracking
+  private _isMobileMode: boolean = false;
+  private _mobileVertical: boolean;
+  private _mobileItemHeight: number;
+  private _desktopHeight: number | string | undefined;
+  private _cachedItems: Record<string, ListbarItem> = {};
 
   constructor(options: ListbarOptions = {}) {
     const style = options.style || {};
@@ -69,6 +88,11 @@ export class Listbar extends Box {
     this.activeStyle = activeStyle;
     this.itemPadding = Math.max(0, options.itemPadding ?? 1);
     this.itemGap = Math.max(0, options.itemGap ?? 2);
+
+    // Responsive options
+    this._mobileVertical = options.mobileVertical !== false;
+    this._mobileItemHeight = options.mobileItemHeight ?? MIN_TOUCH_HEIGHT;
+    this._desktopHeight = options.height || 1;
 
     this.enableMouse();
     this.enableKeys();
@@ -287,5 +311,101 @@ export class Listbar extends Box {
       const style = index === this.selectedIndex ? this.activeStyle : this.inactiveStyle;
       entry.button.setStyle(style);
     });
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - switch between horizontal/vertical layouts
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - vertical layout
+   */
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    this._setMobileLayout();
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - horizontal layout
+   */
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    this._setDesktopLayout();
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Set mobile-friendly vertical layout
+   */
+  private _setMobileLayout(): void {
+    if (!this._mobileVertical) return;
+    this._isMobileMode = true;
+
+    // Reconfigure buttons for vertical layout
+    let offset = 0;
+    for (const key of this.itemKeys) {
+      const entry = this.items.get(key);
+      if (!entry) continue;
+
+      entry.button.top = offset;
+      entry.button.left = 0;
+      entry.button.width = '100%';
+      entry.button.height = this._mobileItemHeight;
+
+      offset += this._mobileItemHeight;
+    }
+
+    // Adjust container height
+    this.height = offset;
+
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Restore desktop horizontal layout
+   */
+  private _setDesktopLayout(): void {
+    this._isMobileMode = false;
+
+    // Reconfigure buttons for horizontal layout
+    let offset = 0;
+    for (const key of this.itemKeys) {
+      const entry = this.items.get(key);
+      if (!entry) continue;
+
+      const text = entry.item.text || key;
+      const pad = this.itemPadding;
+      const buttonWidth = text.length + (pad * 2);
+
+      entry.button.top = 0;
+      entry.button.left = offset;
+      entry.button.width = buttonWidth;
+      entry.button.height = 1;
+
+      offset += buttonWidth + this.itemGap;
+    }
+
+    // Restore container height
+    this.height = this._desktopHeight || 1;
+
+    if (this.screen) this.screen.render();
   }
 }

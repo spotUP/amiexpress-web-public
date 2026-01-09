@@ -4,6 +4,8 @@
 
 import { Text } from './text';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ScrollableTextOptions extends ElementOptions {
   alwaysScroll?: boolean;
@@ -47,6 +49,19 @@ export class ScrollableText extends Text {
    */
   setScrollPercent(percent: number): void {
     this.setScrollPerc(percent);
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

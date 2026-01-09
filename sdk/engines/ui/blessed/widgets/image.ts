@@ -1,10 +1,15 @@
 /**
  * Image - Browser-compatible image display widget
  * Note: Uses data URLs or external image sources
+ *
+ * Responsive features:
+ * - Auto-scales placeholder on resize
  */
 
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ImageOptions extends ElementOptions {
   src?: string;
@@ -155,5 +160,23 @@ export class Image extends Box {
       width: typeof this.width === 'number' ? this.width : 0,
       height: typeof this.height === 'number' ? this.height : 0,
     };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Regenerate placeholder with new dimensions
+    if (this.src) {
+      const placeholder = this.generatePlaceholder();
+      this.setContent(placeholder);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

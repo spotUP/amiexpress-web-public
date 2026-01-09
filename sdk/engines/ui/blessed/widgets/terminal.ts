@@ -1,10 +1,15 @@
 /**
  * Terminal - Simple terminal emulator widget
  * Note: This is a simplified browser-compatible version
+ *
+ * Responsive features:
+ * - Auto-updates display on resize
  */
 
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface TerminalOptions extends ElementOptions {
   shell?: string;
@@ -285,5 +290,20 @@ export class Terminal extends Box {
   destroy(): void {
     this.stopCursorBlink();
     super.destroy();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-render display with new dimensions
+    this.updateDisplay();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

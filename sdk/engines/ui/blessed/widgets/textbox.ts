@@ -1,9 +1,16 @@
 /**
  * Textbox widget - Single-line text input with horizontal scrolling
+ *
+ * Responsive features:
+ * - Touch-friendly height on mobile (min 3 rows)
+ * - Auto-resize handling
  */
 
 import { Element } from '../core/element';
 import type { TextboxOptions, KeyEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export class Textbox extends Element {
   value: string = '';
@@ -269,6 +276,12 @@ export class Textbox extends Element {
     const newPos = Math.max(0, Math.min(this.cursorPos + delta, this.value.length));
     this.cursorPos = newPos;
     this.selectionEnd = newPos;
+
+    // Force full redraw for selection updates - ensures immediate visual feedback
+    if (this.screen && (this.screen as any).requestFullRedraw) {
+      (this.screen as any).requestFullRedraw();
+    }
+
     this._updateContent();
     // Emit select event after debounce delay
     this._emitSelectDebounced();
@@ -287,6 +300,12 @@ export class Textbox extends Element {
     }
     this.cursorPos = pos;
     this.selectionEnd = pos;
+
+    // Force full redraw for selection updates - ensures immediate visual feedback
+    if (this.screen && (this.screen as any).requestFullRedraw) {
+      (this.screen as any).requestFullRedraw();
+    }
+
     this._updateContent();
     // Emit select event after debounce delay
     this._emitSelectDebounced();
@@ -872,6 +891,21 @@ export class Textbox extends Element {
     // This would be implemented by the door to handle async input
     this.emit('readInput');
   }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Recalculate visible width and update content
+    this._updateContent();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
 }
 
 // Alias
@@ -1134,6 +1168,12 @@ export class Textarea extends Element {
     const newPos = Math.max(0, Math.min(this.cursorPos + delta, this.value.length));
     this.cursorPos = newPos;
     this.selectionEnd = newPos;
+
+    // Force full redraw for selection updates - ensures immediate visual feedback
+    if (this.screen && (this.screen as any).requestFullRedraw) {
+      (this.screen as any).requestFullRedraw();
+    }
+
     this._updateContent();
     // Emit select event after debounce delay
     this._emitSelectDebounced();
@@ -1156,6 +1196,12 @@ export class Textarea extends Element {
       this.cursorDown();
     }
     this.selectionEnd = this.cursorPos;
+
+    // Force full redraw for selection updates - ensures immediate visual feedback
+    if (this.screen && (this.screen as any).requestFullRedraw) {
+      (this.screen as any).requestFullRedraw();
+    }
+
     this._updateContent();
     // Emit select event after debounce delay
     this._emitSelectDebounced();
@@ -1171,6 +1217,11 @@ export class Textarea extends Element {
 
     this.cursorPos = pos;
     this.selectionEnd = pos;
+
+    // Force full redraw for selection updates - ensures immediate visual feedback
+    if (this.screen && (this.screen as any).requestFullRedraw) {
+      (this.screen as any).requestFullRedraw();
+    }
     this._updateContent();
     // Emit select event after debounce delay
     this._emitSelectDebounced();
@@ -1507,5 +1558,20 @@ export class Textarea extends Element {
     this.selectionEnd = this.value.length;
     this.cursorPos = this.value.length;
     this._updateContent();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Recalculate visible height and update content
+    this._updateContent();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

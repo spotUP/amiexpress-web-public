@@ -1,9 +1,16 @@
 /**
  * ProgressBar widget - Visual progress indicator
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Touch-friendly height on mobile
  */
 
 import { Element } from '../core/element';
 import type { ProgressBarOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export class ProgressBar extends Element {
   private filled: number = 0;
@@ -11,6 +18,8 @@ export class ProgressBar extends Element {
   // Use space character - style.bg provides the fill color (Amiga-safe, no Unicode needed)
   private ch: string = ' ';
   private pch: string = ' ';
+  private _desktopHeight: number | string | undefined;
+  private _isMobileMode: boolean = false;
 
   constructor(options: ProgressBarOptions = {}) {
     super({
@@ -25,8 +34,14 @@ export class ProgressBar extends Element {
     // Space character with background color for Amiga compatibility
     this.ch = options.ch || ' ';
     this.pch = options.pch || ' ';
+    this._desktopHeight = options.height;
 
     this._updateContent();
+
+    // Re-render on resize
+    this.on('resize', () => {
+      this._updateContent();
+    });
   }
 
   private _updateContent(): void {
@@ -86,5 +101,43 @@ export class ProgressBar extends Element {
 
   reset(): void {
     this.setProgress(0);
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._enterMobileMode();
+    } else {
+      this._exitMobileMode();
+    }
+    this._updateContent();
+  }
+
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    // Ensure minimum touch-friendly height for horizontal bars
+    if (this.orientation === 'horizontal') {
+      const currentHeight = typeof this.height === 'number' ? this.height : 1;
+      if (currentHeight < MIN_TOUCH_HEIGHT) {
+        this.height = MIN_TOUCH_HEIGHT;
+      }
+    }
+    this.emit('enter-mobile');
+  }
+
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    if (this._desktopHeight !== undefined) {
+      this.height = this._desktopHeight;
+    }
+    this.emit('exit-mobile');
   }
 }

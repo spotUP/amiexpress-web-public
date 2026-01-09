@@ -6,6 +6,11 @@
  *   overlayOpacity: 0.7 (custom opacity)
  *
  * Automatically stays centered in responsive layouts
+ *
+ * Responsive features:
+ * - Full-width on mobile (xs breakpoint)
+ * - Touch-friendly button sizes (min 3 rows height)
+ * - Auto-center on resize
  */
 
 import { Box } from './box';
@@ -13,12 +18,17 @@ import { Button } from './button';
 import { Overlay } from './overlay';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export interface QuestionOptions extends ElementOptions {
   text?: string;
   title?: string;
   overlay?: boolean;  // Enable overlay dimming (default opacity 0.5)
   overlayOpacity?: number;  // Custom overlay opacity (0-1)
+  /** Mobile width (default: calculated based on screen) */
+  mobileWidth?: number | string;
 }
 
 export class Question extends Box {
@@ -29,6 +39,12 @@ export class Question extends Box {
   private _overlay?: Overlay;
   private _responsiveCleanup?: () => void;
   private _trapCleanup?: () => void;
+  private _desktopWidth: number | string | undefined;
+  private _mobileWidth: number | string | undefined;
+  private _desktopButtonWidth: number = 10;
+  private _mobileButtonWidth: number = 12;
+  private _desktopButtonHeight: number = 3;
+  private _mobileButtonHeight: number = MIN_TOUCH_HEIGHT;
 
   constructor(options: QuestionOptions = {}) {
     // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -207,6 +223,10 @@ export class Question extends Box {
       this.noButton.focus();
       this.screen?.render();
     });
+
+    // Store desktop dimensions for responsive toggling
+    this._desktopWidth = options.width || 40;
+    this._mobileWidth = options.mobileWidth;
   }
 
   /**
@@ -295,5 +315,85 @@ export class Question extends Box {
    */
   getText(): string {
     return this.messageText.getContent();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - adjust width and button sizes
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - full width, larger buttons
+   */
+  protected _enterMobileMode(): void {
+    this._setMobileLayout();
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - restore desktop layout
+   */
+  protected _exitMobileMode(): void {
+    this._setDesktopLayout();
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Set mobile-friendly layout
+   */
+  private _setMobileLayout(): void {
+    if (!this.screen) return;
+
+    // Calculate mobile width (near full-width with padding)
+    const screenWidth = this.screen.width as number;
+    const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
+    this.width = mobileWidth;
+
+    // Larger touch-friendly buttons
+    this.yesButton.width = this._mobileButtonWidth;
+    this.yesButton.height = this._mobileButtonHeight;
+    this.noButton.width = this._mobileButtonWidth;
+    this.noButton.height = this._mobileButtonHeight;
+
+    // Adjust button container for larger buttons
+    this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
+
+    if (this.screen) this.screen.render();
+  }
+
+  /**
+   * Restore desktop layout
+   */
+  private _setDesktopLayout(): void {
+    if (this._desktopWidth !== undefined) {
+      this.width = this._desktopWidth;
+    }
+
+    // Restore desktop button sizes
+    this.yesButton.width = this._desktopButtonWidth;
+    this.yesButton.height = this._desktopButtonHeight;
+    this.noButton.width = this._desktopButtonWidth;
+    this.noButton.height = this._desktopButtonHeight;
+
+    // Restore button container width
+    this.buttonBox.width = 22;
+
+    if (this.screen) this.screen.render();
   }
 }

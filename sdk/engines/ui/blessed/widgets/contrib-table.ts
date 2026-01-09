@@ -3,6 +3,9 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/table.js
  * Data table with headers and selectable rows
+ *
+ * Responsive features:
+ * - Auto-adjusts column layout on resize
  */
 
 import { Box } from './box';
@@ -10,6 +13,8 @@ import { List } from './list';
 import { TableData } from './table';
 import { stripAnsi } from '../core/colors';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ContribTableOptions extends ElementOptions {
   columnWidth: number[];
@@ -160,6 +165,23 @@ export class ContribTable extends Box {
 
   get type(): string {
     return 'table';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-render table with new dimensions
+    if (this.options.data) {
+      this.setData(this.options.data);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

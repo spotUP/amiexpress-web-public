@@ -5,6 +5,8 @@
 import { Box } from './box';
 import { RadioButton, RadioButtonOptions } from './radiobutton';
 import type { ElementOptions, KeyEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface RadioSetOptions extends ElementOptions {
   items?: Array<string | RadioButtonOptions>;
@@ -191,5 +193,19 @@ export class RadioSet extends Box {
     } else if (this.selectedIndex > index) {
       this.selectedIndex--;
     }
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // RadioSet layout is managed by child positions, re-render
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

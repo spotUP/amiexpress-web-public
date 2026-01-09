@@ -4,6 +4,8 @@
 
 import { Element } from '../core/element';
 import type { TableOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface TableData {
   headers: string[];
@@ -104,5 +106,20 @@ export class Table extends Element {
 
   getRows(): string[][] {
     return this.rows.slice();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-render table to adjust column widths
+    this._updateContent();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

@@ -1,10 +1,15 @@
 /**
  * StackedGauge Widget
  * Displays multiple progress segments in a single bar
+ *
+ * Responsive features:
+ * - Auto-updates on resize
  */
 
 import { Box } from './box';
 import type { StackedGaugeOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class StackedGauge extends Box {
   private stack: { percent: number; color: string; label?: string }[] = [];
@@ -74,6 +79,20 @@ export class StackedGauge extends Box {
 
   get type(): string {
     return 'stacked-gauge';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    this.updateContent();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

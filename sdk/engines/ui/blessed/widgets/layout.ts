@@ -1,29 +1,53 @@
 /**
  * Layout - Container widget for arranging children in rows/columns
+ *
+ * Responsive features:
+ * - Automatic vertical stacking on mobile (xs breakpoint)
+ * - Auto-reflow on resize and breakpoint changes
+ * - Configurable mobile layout mode
+ * - Touch-friendly spacing on mobile
  */
 
-import { Box } from './box';
+import { Box, BoxOptions } from './box';
 import type { Element } from '../core/element';
-import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { isMobileWidth, MOBILE_GAP } from '../core/responsive-constants';
 
-export interface LayoutOptions extends ElementOptions {
-  layout?: 'inline' | 'grid';
+export type LayoutType = 'inline' | 'grid' | 'vertical';
+
+export interface LayoutOptions extends BoxOptions {
+  layout?: LayoutType;
   renderer?: (coords: any) => any;
+  /** Layout to use on mobile (default: 'vertical') */
+  mobileLayout?: LayoutType;
+  /** Spacing between children on mobile (default: MOBILE_GAP) */
+  mobileSpacing?: number;
+  /** Whether to auto-switch layout on mobile (default: true) */
+  responsiveLayout?: boolean;
 }
 
 export class Layout extends Box {
-  private layoutType: 'inline' | 'grid';
+  private _desktopLayout: LayoutType;
+  private _mobileLayout: LayoutType;
+  private _currentLayout: LayoutType;
+  private _mobileSpacing: number;
+  private _responsiveLayout: boolean;
   private renderer?: (coords: any) => any;
 
   constructor(options: LayoutOptions = {}) {
-    const { layout, renderer, ...boxOptions } = options;
+    const { layout, renderer, mobileLayout, mobileSpacing, responsiveLayout, ...boxOptions } = options;
 
     super({
       ...boxOptions,
       scrollable: options.scrollable !== false,
     });
 
-    this.layoutType = layout || 'inline';
+    this._desktopLayout = layout || 'inline';
+    this._mobileLayout = mobileLayout || 'vertical';
+    this._currentLayout = this._desktopLayout;
+    this._mobileSpacing = mobileSpacing ?? MOBILE_GAP;
+    this._responsiveLayout = responsiveLayout !== false;  // Default: enabled
     this.renderer = renderer;
 
     // Trigger layout on render
@@ -36,10 +60,16 @@ export class Layout extends Box {
    * Perform layout calculation
    */
   private performLayout(): void {
-    if (this.layoutType === 'inline') {
-      this.layoutInline();
-    } else if (this.layoutType === 'grid') {
-      this.layoutGrid();
+    switch (this._currentLayout) {
+      case 'inline':
+        this.layoutInline();
+        break;
+      case 'grid':
+        this.layoutGrid();
+        break;
+      case 'vertical':
+        this.layoutVertical();
+        break;
     }
 
     if (this.renderer) {
@@ -99,6 +129,27 @@ export class Layout extends Box {
         if (childIndex >= this.children.length) break;
         childIndex++;
       }
+    }
+  }
+
+  /**
+   * Vertical layout - stack children vertically (mobile-friendly)
+   */
+  private layoutVertical(): void {
+    let currentY = 0;
+    const spacing = this.isMobile() ? this._mobileSpacing : 0;
+    const containerWidth = typeof this.width === 'number' ? this.width : 100;
+
+    for (const child of this.children) {
+      const childHeight = this.getChildHeight(child);
+
+      // Position child at current Y, full width
+      // Note: We modify position directly for layout
+      (child as any).position.top = currentY;
+      (child as any).position.left = 0;
+      (child as any).position.width = containerWidth;
+
+      currentY += childHeight + spacing;
     }
   }
 
@@ -166,10 +217,13 @@ export class Layout extends Box {
   }
 
   /**
-   * Set layout type
+   * Set layout type (for desktop mode)
    */
-  setLayout(layout: 'inline' | 'grid'): void {
-    this.layoutType = layout;
+  setLayout(layout: LayoutType): void {
+    this._desktopLayout = layout;
+    if (!this.isMobile() || !this._responsiveLayout) {
+      this._currentLayout = layout;
+    }
     this.performLayout();
     if (this.screen) {
       this.screen.render();
@@ -177,10 +231,53 @@ export class Layout extends Box {
   }
 
   /**
-   * Get layout type
+   * Get current layout type
    */
-  getLayout(): 'inline' | 'grid' {
-    return this.layoutType;
+  getLayout(): LayoutType {
+    return this._currentLayout;
+  }
+
+  /**
+   * Get desktop layout type
+   */
+  getDesktopLayout(): LayoutType {
+    return this._desktopLayout;
+  }
+
+  /**
+   * Set mobile layout type
+   */
+  setMobileLayout(layout: LayoutType): void {
+    this._mobileLayout = layout;
+    if (this.isMobile() && this._responsiveLayout) {
+      this._currentLayout = layout;
+      this.performLayout();
+      if (this.screen) {
+        this.screen.render();
+      }
+    }
+  }
+
+  /**
+   * Get mobile layout type
+   */
+  getMobileLayout(): LayoutType {
+    return this._mobileLayout;
+  }
+
+  /**
+   * Enable/disable responsive layout switching
+   */
+  setResponsiveLayout(enabled: boolean): void {
+    this._responsiveLayout = enabled;
+    if (enabled) {
+      // Apply appropriate layout based on current mode
+      this._currentLayout = this.isMobile() ? this._mobileLayout : this._desktopLayout;
+      this.performLayout();
+      if (this.screen) {
+        this.screen.render();
+      }
+    }
   }
 
   /**
@@ -191,5 +288,68 @@ export class Layout extends Box {
     if (this.screen) {
       this.screen.render();
     }
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle resize - reflow layout
+   */
+  protected _handleResize(width: number, height: number, state: ResponsiveState): void {
+    // Call parent resize handler
+    super._handleResize(width, height, state);
+
+    // Reflow layout on resize
+    this.performLayout();
+  }
+
+  /**
+   * Handle breakpoint change - switch layout if needed
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    // Call parent handler
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+
+    // Switch layout based on breakpoint
+    if (this._responsiveLayout) {
+      const wasMobile = isMobileWidth(state.screenWidth) !== state.isMobile; // Previous mobile state
+      if (state.isMobile) {
+        this._currentLayout = this._mobileLayout;
+      } else {
+        this._currentLayout = this._desktopLayout;
+      }
+      this.performLayout();
+    }
+
+    // Emit for custom handling
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - switch to mobile layout
+   */
+  protected _enterMobileMode(): void {
+    if (this._responsiveLayout) {
+      this._currentLayout = this._mobileLayout;
+      this.performLayout();
+    }
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - switch to desktop layout
+   */
+  protected _exitMobileMode(): void {
+    if (this._responsiveLayout) {
+      this._currentLayout = this._desktopLayout;
+      this.performLayout();
+    }
+    this.emit('exit-mobile');
   }
 }

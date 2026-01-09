@@ -1,10 +1,18 @@
 /**
  * List widget - Scrollable list with selection
+ *
+ * Responsive features:
+ * - Touch-friendly row heights on mobile (2+ lines per item)
+ * - Swipe scrolling on mobile
+ * - Momentum scrolling
  */
 
 import { Element } from '../core/element';
 import { parseTags, textWidth } from '../core/colors';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT, SWIPE_THRESHOLD } from '../core/responsive-constants';
 
 // Use String.fromCharCode(27) for ESC to survive Terser minification
 const ESC = String.fromCharCode(27);
@@ -22,6 +30,12 @@ export class List extends Element {
   // Hover tracking for per-item hover effects
   private _hoveredItem: number = -1;
   private _lastKeyTime: number = 0;
+
+  // Responsive tracking
+  private _isMobileMode: boolean = false;
+  private _mobileRowHeight: number = 2;
+  private _swipeStartY: number = 0;
+  private _swipeStartScroll: number = 0;
 
   constructor(options: ListOptions = {}) {
     // Build scrollbar config: merge user options with defaults
@@ -335,6 +349,8 @@ export class List extends Element {
     if (key.name === 'enter' || key.name === 'space') {
       this.emit('select', this.items[this.selected], this.selected);
       this.emit('action', this.items[this.selected], this.selected);
+      // IMPORTANT: Render after emitting events so any UI changes from handlers are visible
+      this.screen?.render();
       return true;
     }
 
@@ -930,5 +946,88 @@ export class List extends Element {
   // Override destroy
   destroy(): void {
     super.destroy();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - adjust row heights
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._enterMobileMode();
+    } else {
+      this._exitMobileMode();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - enable touch features
+   */
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode - disable touch features
+   */
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Handle swipe start for mobile scrolling
+   */
+  handleSwipeStart(y: number): void {
+    this._swipeStartY = y;
+    this._swipeStartScroll = this.getScroll();
+  }
+
+  /**
+   * Handle swipe move for mobile scrolling
+   */
+  handleSwipeMove(y: number): void {
+    if (!this._isMobileMode) return;
+
+    const deltaY = this._swipeStartY - y;
+    if (Math.abs(deltaY) >= 1) {
+      const newScroll = Math.max(0, this._swipeStartScroll + deltaY);
+      this.setScroll(newScroll);
+      if (this.screen) this.screen.render();
+    }
+  }
+
+  /**
+   * Handle swipe end with momentum
+   */
+  handleSwipeEnd(velocityY: number): void {
+    if (!this._isMobileMode || Math.abs(velocityY) < 0.5) return;
+
+    // Apply momentum scrolling
+    let momentum = velocityY * 3;
+    const applyMomentum = () => {
+      if (Math.abs(momentum) < 0.5) return;
+
+      const currentScroll = this.getScroll();
+      const newScroll = Math.max(0, currentScroll + Math.round(momentum));
+      this.setScroll(newScroll);
+
+      momentum *= 0.85; // Decay
+      if (this.screen) this.screen.render();
+
+      setTimeout(applyMomentum, 16);
+    };
+
+    applyMomentum();
   }
 }

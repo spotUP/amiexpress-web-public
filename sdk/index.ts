@@ -202,6 +202,7 @@ export {
   Panel,
   DockablePanel,
   Autocomplete,
+  AutocompleteTextbox,
   AutocompleteManager,
   UsernameProvider,
   BBSCodeProvider,
@@ -237,6 +238,9 @@ export type {
   ColorPickerOptions,
   FileExplorerOptions,
 } from './engines/ui/blessed/core/types';
+
+// Export AutocompleteTextboxOptions separately (defined in widget file, not core/types)
+export type { AutocompleteTextboxOptions } from './engines/ui/blessed/widgets/autocomplete-textbox';
 
 // ANSI Editor SDK
 export { 

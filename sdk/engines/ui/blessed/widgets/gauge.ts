@@ -3,9 +3,15 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/gauge.js
  * Progress bar gauge with single percent or stacked segments
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Recalculates canvas size on breakpoint change
  */
 
 import { ContribCanvas as Canvas, ContribCanvasOptions as CanvasOptions } from './contrib-canvas';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface GaugeStack {
   percent: number;
@@ -194,6 +200,26 @@ export class Gauge extends Canvas {
 
   getOptionsPrototype(): GaugeOptions {
     return { percent: 10 };
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Recalculate canvas size and re-render
+    this.calcSize();
+    if (this.stack) {
+      this._renderStack(this.stack);
+    } else if (this.percent !== undefined) {
+      this._renderPercent(this.percent);
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

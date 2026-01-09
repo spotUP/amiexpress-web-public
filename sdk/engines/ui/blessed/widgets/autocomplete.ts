@@ -6,13 +6,15 @@
 import { Box } from './box';
 import { List } from './list';
 import { Element } from '../core/element';
-import type { 
-  AutocompleteOptions, 
-  AutocompleteSuggestion, 
+import type {
+  AutocompleteOptions,
+  AutocompleteSuggestion,
   AutocompleteProvider,
   AutocompleteContext
 } from '../core/types';
 import { AutocompleteManager } from '../utils/AutocompleteManager';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class Autocomplete extends Box {
   private list: List;
@@ -233,6 +235,24 @@ export class Autocomplete extends Box {
 
   get type(): string {
     return 'autocomplete';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-position dropdown if visible
+    if (!this.hidden && this._targetElement) {
+      this.top = (this._targetElement.atop + (this._targetElement.height as number)) as number;
+      this.left = this._targetElement.aleft;
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

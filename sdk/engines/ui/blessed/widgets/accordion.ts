@@ -1,12 +1,18 @@
 /**
  * Accordion Widget
  * Manages multiple stacked expandable sections
+ *
+ * Responsive features:
+ * - Touch-friendly header heights on mobile
  */
 
 import { Box } from './box';
 import { Button } from './button';
 import { Element } from '../core/element';
 import type { AccordionOptions, Colors } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 export class Accordion extends Box {
   private items: {
@@ -17,6 +23,8 @@ export class Accordion extends Box {
   private multiple: boolean;
   private headerStyle: Colors;
   private expandedStyle: Colors;
+  private _isMobileMode: boolean = false;
+  private _headerHeight: number = 1;
 
   constructor(options: AccordionOptions) {
     super({
@@ -175,6 +183,46 @@ export class Accordion extends Box {
 
   get type(): string {
     return 'accordion';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+
+    if (state.isMobile && !this._isMobileMode) {
+      this._enterMobileMode();
+    } else if (!state.isMobile && this._isMobileMode) {
+      this._exitMobileMode();
+    }
+
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    // Make headers touch-friendly
+    this._headerHeight = MIN_TOUCH_HEIGHT;
+    this.items.forEach(item => {
+      item.header.height = this._headerHeight;
+    });
+    this.relayout();
+  }
+
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    // Restore compact headers
+    this._headerHeight = 1;
+    this.items.forEach(item => {
+      item.header.height = this._headerHeight;
+    });
+    this.relayout();
   }
 }
 

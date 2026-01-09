@@ -6,6 +6,8 @@
 import { Box } from './box';
 import { Button } from './button';
 import type { ColorPickerOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class ColorPicker extends Box {
   private selectedColor: string = 'white';
@@ -82,6 +84,20 @@ export class ColorPicker extends Box {
 
   get type(): string {
     return 'colorpicker';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Color grid is fixed layout, just trigger re-render
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }
 

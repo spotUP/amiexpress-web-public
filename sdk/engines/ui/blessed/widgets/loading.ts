@@ -5,13 +5,17 @@
  *   overlay: true (uses default 0.5 opacity)
  *   overlayOpacity: 0.7 (custom opacity)
  *
- * Automatically stays centered in responsive layouts
+ * Responsive features:
+ * - Automatically stays centered in responsive layouts
+ * - Uses makeModalResponsive for breakpoint-aware positioning
  */
 
 import { Box } from './box';
 import { Overlay } from './overlay';
 import { makeModalResponsive } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface LoadingOptions extends ElementOptions {
   text?: string;
@@ -212,5 +216,19 @@ export class Loading extends Box {
       this._overlay.destroy();
     }
     super.destroy();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Modal responsiveness already handled by makeModalResponsive
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

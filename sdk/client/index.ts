@@ -149,6 +149,22 @@ export class ClientDoor extends EventEmitter {
         });
       }
 
+      // Listen for custom door events on the Socket.IO socket (audio, etc.)
+      // These are emitted directly by hybrid door servers
+      if (socket && typeof socket.on === 'function') {
+        // Audio events from hybrid doors
+        socket.on('audio:play', (data: any) => {
+          console.log('[ClientDoor] Received audio:play event:', data);
+          this.emit('audio:play', data);
+        });
+        socket.on('audio:set-enabled', (data: any) => {
+          this.emit('audio:set-enabled', data);
+        });
+        socket.on('audio:set-volume', (data: any) => {
+          this.emit('audio:set-volume', data);
+        });
+      }
+
       // Simulate connection established
       // The backend already sent CONNECT message, trigger main loop
       this.mainLoop();
@@ -656,8 +672,7 @@ export { UIEngine } from '../engines/ui/ui-engine';
  */
 export { GraphicsEngine } from '../engines/graphics/graphics-engine';
 export { PhysicsEngine } from '../engines/physics/physics-engine';
-// AudioEngine removed from client export - it uses blessed (server-only)
-// Use Web Audio API directly in browser code instead
+export { AudioEngine } from '../engines/audio/audio-engine';
 export { NetworkEngine } from '../engines/network/network-engine';
 export { AIEngine } from '../engines/ai/ai-engine';
 export { InputEngine } from '../engines/input/input-engine';

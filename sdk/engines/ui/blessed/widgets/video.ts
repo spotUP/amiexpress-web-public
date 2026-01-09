@@ -1,9 +1,14 @@
 /**
  * Video - Video playback widget (browser-compatible placeholder)
+ *
+ * Responsive features:
+ * - Auto-updates display on resize
  */
 
 import { Box } from './box';
 import type { ElementOptions, VideoOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export class Video extends Box {
   private src: string = '';
@@ -281,5 +286,20 @@ export class Video extends Box {
    */
   isLooping(): boolean {
     return this.loop;
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Update display with new dimensions
+    this.updateDisplay();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

@@ -4,6 +4,8 @@
 
 import { Element } from '../core/element';
 import type { Screen } from '../core/screen';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ContextMenuItem {
   label: string;
@@ -193,5 +195,25 @@ export class ContextMenu extends Element {
   hide(): void {
     super.hide();
     this.screen?.render();
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-position menu if visible to ensure it stays on screen
+    if (!this.hidden && this.screen) {
+      const pos = this._getCoords();
+      if (pos) {
+        this.showAt(pos.xi, pos.yi);
+      }
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 }

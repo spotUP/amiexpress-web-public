@@ -3,10 +3,15 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/log.js
  * Scrollable log viewer with buffer management
+ *
+ * Responsive features:
+ * - Auto-adjusts scroll on resize
  */
 
 import { Element } from '../core/element';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 
 export interface ContribLogOptions extends ElementOptions {
 
@@ -126,6 +131,21 @@ export class ContribLog extends Element {
 
     return 'log';
 
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    // Re-render content to fit new dimensions
+    this._updateContent();
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
   }
 
 }

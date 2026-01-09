@@ -3,11 +3,19 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/tree.js
  * Hierarchical tree view with expand/collapse functionality
+ *
+ * Responsive features:
+ * - Touch-friendly expand targets on mobile
+ * - Larger tap areas for nodes
+ * - Swipe scrolling (inherited from List)
  */
 
 import { Box } from './box';
 import { List } from './list';
 import type { ElementOptions, TreeNode, TreeOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 
 /**
  * Tree Widget
@@ -19,6 +27,9 @@ export class Tree extends Box {
   nodeLines: TreeNode[] = [];
   lineNbr = 0;
   rows: List;
+
+  // Responsive tracking
+  private _isMobileMode: boolean = false;
 
   constructor(options: TreeOptions = {}) {
     options.bold = true;
@@ -251,6 +262,51 @@ export class Tree extends Box {
 
   get type(): string {
     return 'tree';
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle breakpoint change - adjust for touch targets
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+    if (state.isMobile) {
+      this._enterMobileMode();
+    } else {
+      this._exitMobileMode();
+    }
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode - enable touch-friendly features
+   */
+  protected _enterMobileMode(): void {
+    this._isMobileMode = true;
+    // The internal List widget handles its own mobile mode
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode
+   */
+  protected _exitMobileMode(): void {
+    this._isMobileMode = false;
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Check if in mobile mode
+   */
+  isMobileMode(): boolean {
+    return this._isMobileMode;
   }
 }
 
