@@ -1,6 +1,6 @@
 import { metadata } from './config';
 import { events } from './services';
-import { createApp } from './app';
+import { createApp } from './server';
 import { runChatOnlyLogin } from './chat-only-login';
 
 export { metadata };

@@ -1,11 +1,20 @@
 {
   "name": "@amiexpress/livechat-door",
-  "version": "2.0.0",
-  "description": "Advanced multi-user chat with channels, DMs, and real-time typing",
-  "main": "dist/doors/livechat/index.js",
-  "types": "dist/doors/livechat/index.d.ts",
+  "version": "3.2.0",
+  "description": "Advanced multi-user chat with channels, DMs, real-time typing, and audio",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./index.ts"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=iife --platform=browser --target=es2020 --minify --external:fs --external:path --external:net --external:child_process --external:crypto",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
   },
@@ -13,7 +22,7 @@
     "name": "LiveChat",
     "command": "LIVECHAT",
     "aliases": ["CHAT", "IRC"],
-    "description": "Multi-user chat with channels and real-time typing",
+    "description": "Multi-user chat with channels, real-time typing, and audio",
     "author": "AmiExpress Team",
     "minSecLevel": 10,
     "category": "Communication"
@@ -22,6 +31,7 @@
     "@amiexpress/bbs-door-sdk": "file:../../sdk"
   },
   "devDependencies": {
+    "esbuild": "^0.19.0",
     "typescript": "^5.0.0"
   }
 }

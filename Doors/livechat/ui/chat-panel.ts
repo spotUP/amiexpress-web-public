@@ -14,7 +14,6 @@ export function chatPanelConfig() {
     tags: true,
     style: {
       fg: 'white',
-      bg: 'black',
       border: { fg: 'cyan' }
     }
   };

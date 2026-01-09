@@ -1,134 +1,53 @@
 /**
- * Search overlay UI component
+ * Search overlay UI component - uses SDK SearchModal widget
  */
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createTextarea, createList, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, SearchModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { SearchResult } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 export function createSearchOverlay(
   screen: Screen,
   onSearch: (query: string, filters: any) => void,
   onClose: () => void
 ) {
-  const overlay = createBox({
+  const modal = new SearchModal({
     parent: screen,
-    top: 'center',
-    left: 'center',
-    width: '90%',
-    height: '90%',
-    border: { type: 'line' },
-    style: { border: { fg: 'green' } },
-    label: ' Message Search ',
-    tags: true,
-    keys: true,
-    mouse: true,
-    hidden: true,
-    trapFocus: true,
-  });
-
-  // Search input
-  const searchInput = createTextarea({
-    parent: overlay,
-    top: 1,
-    left: 2,
-    width: '50%',
-    height: 3,
-    border: { type: 'line' },
-    style: { border: { fg: 'cyan' } },
-    label: ' Query ',
-    inputOnFocus: true,
-    keys: true,
-    mouse: true
-  });
-
-  // Username filter
-  const usernameInput = createTextarea({
-    parent: overlay,
-    top: 1,
-    left: '52%',
-    width: '46%',
-    height: 3,
-    border: { type: 'line' },
-    style: { border: { fg: 'cyan' } },
-    label: ' Username (optional) ',
-    inputOnFocus: true,
-    keys: true,
-    mouse: true
-  });
-
-  // Results list
-  const resultsList = createList({
-    parent: overlay,
-    top: 5,
-    left: 2,
-    width: '96%',
-    height: '100%-8',
-    border: { type: 'line' },
-    style: {
-      border: { fg: 'cyan' },
-      selected: { bg: 'blue', fg: 'white' }
+    title: 'Message Search',
+    searchLabel: 'Query',
+    borderColor: 'green',
+    filters: [
+      { id: 'username', label: 'Username (optional)' }
+    ],
+    helpText: '{cyan-fg}Enter: Search | Tab: Next field | Esc: Close{/cyan-fg}',
+    onSearch: (query, filters) => {
+      onSearch(query, { username: filters.username || undefined });
     },
-    label: ' Results ',
-    tags: true,
-    keys: true,
-    vi: true,
-    mouse: true,
-    scrollable: true,
-    scrollbar: { ch: '█' }
+    onClose: () => {
+      onClose();
+    },
   });
 
-  // Help text
-  const helpText = createText({
-    parent: overlay,
-    bottom: 0,
-    left: 2,
-    width: '96%',
-    height: 1,
-    content: '{cyan-fg}Enter: Search | Tab: Next field | Esc: Close{/cyan-fg}',
-    tags: true
-  });
-
-  // Handle search submit
-  searchInput.on('submit', () => {
-    const query = searchInput.getValue();
-    const username = usernameInput.getValue();
-    onSearch(query, { username: username || undefined });
-  });
-
-  // Handle Tab key to switch fields
-  searchInput.key('tab', () => {
-    usernameInput.focus();
-  });
-
-  usernameInput.key('tab', () => {
-    searchInput.focus();
-  });
-
-  // Handle Escape
-  overlay.key(['escape'], () => {
-    onClose();
-  });
-
-  overlay.show();
-  searchInput.focus();
-  screen.render();
+  modal.display();
 
   return {
-    overlay,
-    searchInput,
-    usernameInput,
-    resultsList,
+    overlay: modal,
+    searchInput: null,  // Not exposed directly, use modal methods
+    usernameInput: null,
+    resultsList: null,
     updateResults: (results: any[]) => {
-      const items = results.map((r, idx) => {
+      const searchResults: SearchResult[] = results.map((r, idx) => {
         const date = new Date(r.created_at * 1000).toLocaleString();
         const highlight = r.highlighted || r.message;
-        return `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${r.sender_username}{/yellow-fg} @ ${date}: ${highlight}`;
+        return {
+          id: String(idx),
+          content: `{cyan-fg}${idx + 1}.{/cyan-fg} {yellow-fg}${r.sender_username}{/yellow-fg} @ ${date}: ${highlight}`,
+          data: r,
+        };
       });
-      resultsList.setItems(items.length > 0 ? items : ['{gray-fg}No results found{/gray-fg}']);
-      screen.render();
+      modal.setResults(searchResults);
     },
     destroy: () => {
-      overlay.hide();
-      overlay.destroy();
+      modal.hide();
+      modal.destroy();
       screen.render();
     }
   };

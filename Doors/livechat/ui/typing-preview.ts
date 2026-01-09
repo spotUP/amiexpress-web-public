@@ -25,7 +25,7 @@ export function createTypingPreview(screen: Screen): Box {
     width: '100%-16',
     height: TYPING_HEIGHT,
     border: { type: 'line' },
-    style: { fg: 'gray', bg: 'black', border: { fg: 'gray' } },
+    style: { fg: 'gray', border: { fg: 'gray' } },
     tags: true,
     content: ''
   });

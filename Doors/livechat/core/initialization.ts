@@ -3,7 +3,6 @@ import { createCommandRegistry } from '../commands';
 import { createCommandContext } from './command-exec';
 import { SocketEmitter, PresenceService, ExtendedEventBus } from '../services';
 import { AudioService } from '../utils/audio';
-import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine';
 import { MessageHandler } from '../handlers/message';
 import { CommandHandler } from '../handlers/command';
 
@@ -24,14 +23,10 @@ export function initializeLiveChat(session: any, screen: any) {
   const socketEmitter = new SocketEmitter(socket);
   const presenceService = new PresenceService();
   const eventBus = new ExtendedEventBus(socket);
-  const audioEngine = new AudioEngine({ enabled: true, sfxVolume: 0.5 }, socket);
-  const audio = new AudioService(audioEngine);
+  // Hybrid door: audio is played client-side, server just emits events via socket
+  const audio = new AudioService(socket);
   const messageHandler = new MessageHandler();
   const commandHandler = new CommandHandler();
-
-  // Unlock audio on first interaction (click or keypress)
-  (screen as any).on('user-interaction', () => {
-  });
 
   presenceService.setStatus(userId, 'online');
 
@@ -41,6 +36,6 @@ export function initializeLiveChat(session: any, screen: any) {
   const cmdCtx = createCommandContext(state, { id: userId, username, securityLevel: secLevel });
 
   return { username, userId, nodeId, secLevel, state, registry, currentRoomLabel,
-    socketEmitter, presenceService, eventBus, audioEngine, audio, messageHandler,
+    socketEmitter, presenceService, eventBus, audio, messageHandler,
     commandHandler, onlineUsers, cmdCtx };
 }

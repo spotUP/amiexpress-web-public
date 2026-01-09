@@ -17,7 +17,7 @@ export function createUserStatus(blessed: any, screen: any) {
     left: 0,
     width: 16,
     height: 1,
-    style: { fg: 'green', bg: 'black' },
+    style: { fg: 'green' },
     content: ''
   });
 }

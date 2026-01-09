@@ -14,7 +14,6 @@ export function createChannelList(screen: Screen): List {
     border: { type: 'line' },
     style: {
       fg: 'white',
-      bg: 'black',
       border: { fg: 'cyan' },
       selected: { bg: 'blue', fg: 'white', bold: true },
       item: { fg: 'white' },

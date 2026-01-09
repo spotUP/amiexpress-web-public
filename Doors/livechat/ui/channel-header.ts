@@ -8,7 +8,7 @@ export function createChannelHeader(blessed: any, screen: any) {
     left: 16,
     width: '100%-16',
     height: 1,
-    style: { fg: 'cyan', bg: 'black', bold: true },
+    style: { fg: 'cyan', bold: true },
     tags: true,
     content: ''
   });

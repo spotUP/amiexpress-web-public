@@ -17,7 +17,6 @@ export function createUserList(screen: Screen): List {
     hidden: true,
     style: {
       fg: 'white',
-      bg: 'black',
       border: { fg: 'magenta' },
       selected: { bg: 'blue', fg: 'white' },
     },

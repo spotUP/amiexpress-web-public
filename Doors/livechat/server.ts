@@ -30,6 +30,7 @@ import blessed, {
   Carousel,
   carousel,
   DockablePanel,
+  MobileCarousel,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
@@ -146,14 +147,27 @@ function invalidateCache(element: any) {
 
 export async function createApp(session: DoorSession) {
   const { bbs, socket } = session;
-  bbs.enableWideMode?.();
+
+  // Only enable wide mode for standalone chat page, not when running inside BBS terminal
+  const chatOnly = session.bbsSession?.tempData?.chatOnly;
+  if (chatOnly) {
+    bbs.enableWideMode?.();
+  }
+
+  // Disable modem emulation for TUI apps - they need instant feedback
+  // Save original speed to restore on exit
+  const originalModemSpeed = bbs.getModemSpeed?.() || 0;
+  if (originalModemSpeed > 0) {
+    bbs.disableModemEmulation?.();
+  }
 
   // ========== CREATE NEO-BLESSED SCREEN ==========
   const screen = createScreen(bbs);
+  // Note: Optimized rendering is now enabled by default in the SDK
 
   const ctx = initializeLiveChat(session, screen);
   const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService,
-    eventBus, audioEngine, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
+    eventBus, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
   let { currentRoomLabel } = ctx;
 
   // Room state
@@ -162,26 +176,14 @@ export async function createApp(session: DoorSession) {
 
   // ========== INPUT HANDLING ==========
   // Wire up terminal input to the blessed screen
-  // Also unlock audio on first interaction
-  screen.on('keypress', () => {
-    if (!(audioEngine as any)._initialized) {
-      audioEngine.init().catch(() => {});
-      (audioEngine as any)._initialized = true;
-    }
-  });
-  
-  screen.on('click', () => {
-    if (!(audioEngine as any)._initialized) {
-      audioEngine.init().catch(() => {});
-      (audioEngine as any)._initialized = true;
-    }
-  });
+  // Audio is now handled client-side in hybrid mode
 
   let showHelpFn: (() => void) | null = null;
 
   if (session.bbsSession) {
-    // CRITICAL: Set BOTH flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
+    // CRITICAL: Set ALL THREE flags for input routing (see TYPESCRIPT_DOOR_TROUBLESHOOTING.md)
     session.bbsSession.inDoorManager = true;
+    session.bbsSession.mouseEventsEnabled = true;  // Enable mouse hover/move events
     session.bbsSession.doorInputHandler = (data: string) => {
       // Handle F1 directly (escape sequences: \x1bOP or \x1b[11~)
       if (data === '\x1bOP' || data === '\x1b[11~') {
@@ -227,6 +229,30 @@ export async function createApp(session: DoorSession) {
 
   // ========== ANIMATION MANAGER ==========
   const animationManager = createAnimationManager({ fps: 10 });
+
+  // ========== CURSOR BLINK STATE ==========
+  // Typing cursors blink like xterm (530ms interval)
+  let cursorBlinkOn = true;
+  let cursorBlinkInterval: ReturnType<typeof setInterval> | null = null;
+
+  function startCursorBlink() {
+    if (cursorBlinkInterval) return;
+    cursorBlinkInterval = setInterval(() => {
+      cursorBlinkOn = !cursorBlinkOn;
+      // Only rebuild if there are typing buffers to show
+      if (state.typingBuffers.size > 0) {
+        rebuildChatContent();
+        screen.render();
+      }
+    }, 530);  // 530ms is standard xterm blink rate
+  }
+
+  function stopCursorBlink() {
+    if (cursorBlinkInterval) {
+      clearInterval(cursorBlinkInterval);
+      cursorBlinkInterval = null;
+    }
+  }
 
   // Connect animation manager to chat log
   animationManager.connect({
@@ -883,18 +909,143 @@ export async function createApp(session: DoorSession) {
   chatPanel.on('minimize', () => audio.playSound('minimize'));
   chatPanel.on('maximize', () => audio.playSound('maximize'));
 
+  // ========== MOBILE CAROUSEL (for small screens) ==========
+  let mobileMode = false;
+
+  // Create mobile carousel for swipe navigation between sidebar and chat
+  const mobileCarousel = new MobileCarousel({
+    parent: screen,
+    top: MENU_HEIGHT,
+    left: 0,
+    width: '100%',
+    height: (screen as any).height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT,
+    tabLabels: ['Sidebar', 'Chat'],  // Tab labels for navigation bar
+    showTabBar: true,      // Show clickable tab bar at top
+    showIndicators: true,  // Show page dots at bottom
+    swipeable: true,
+    controlKeys: true,
+    swipeThreshold: 3,     // Low threshold for easy swiping
+    hidden: true,  // Start hidden, only show on mobile breakpoint
+    style: {
+      fg: 'white',
+      bg: 'black',
+    },
+    onPageChange: (page, _panel) => {
+      audio.playSound('click');
+    },
+  });
+
+  // Track saved panel states for restoring after mobile mode
+  let savedSidebarParent: any = null;
+  let savedChatParent: any = null;
+  let savedSidebarPosition: any = null;
+  let savedChatPosition: any = null;
+
+  function enterMobileMode() {
+    if (mobileMode) return;
+    mobileMode = true;
+
+    // Save current panel parents and positions
+    savedSidebarParent = sidebarPanel.parent;
+    savedChatParent = chatPanel.parent;
+    savedSidebarPosition = {
+      top: sidebarPanel.position.top,
+      left: sidebarPanel.position.left,
+      width: sidebarPanel.position.width,
+      height: sidebarPanel.position.height,
+    };
+    savedChatPosition = {
+      top: chatPanel.position.top,
+      left: chatPanel.position.left,
+      width: chatPanel.position.width,
+      height: chatPanel.position.height,
+    };
+
+    // Detach panels from screen
+    sidebarPanel.detach();
+    chatPanel.detach();
+
+    // Reset panel positions for carousel
+    sidebarPanel.position.top = 0;
+    sidebarPanel.position.left = 0;
+    chatPanel.position.top = 0;
+    chatPanel.position.left = 0;
+
+    // Add panels to carousel with labels
+    mobileCarousel.addPanel(sidebarPanel, 'Sidebar');
+    mobileCarousel.addPanel(chatPanel, 'Chat');
+
+    // Show panels (they were detached, carousel will manage visibility)
+    sidebarPanel.show();
+    chatPanel.show();
+
+    // Show carousel starting on chat page (index 1)
+    mobileCarousel.show();
+    mobileCarousel.showPage(1);  // Start on Chat tab
+
+    // Update carousel height
+    const contentHeight = (screen as any).height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;
+    mobileCarousel.position.height = contentHeight;
+
+    screen.render();
+  }
+
+  function exitMobileMode() {
+    if (!mobileMode) return;
+    mobileMode = false;
+
+    // Hide carousel
+    mobileCarousel.hide();
+
+    // Remove panels from carousel
+    mobileCarousel.removePanel(sidebarPanel);
+    mobileCarousel.removePanel(chatPanel);
+
+    // Re-attach panels to screen
+    screen.append(sidebarPanel);
+    screen.append(chatPanel);
+
+    // Restore saved positions
+    if (savedSidebarPosition) {
+      sidebarPanel.position.top = savedSidebarPosition.top;
+      sidebarPanel.position.left = savedSidebarPosition.left;
+      sidebarPanel.position.width = savedSidebarPosition.width;
+      sidebarPanel.position.height = savedSidebarPosition.height;
+    }
+    if (savedChatPosition) {
+      chatPanel.position.top = savedChatPosition.top;
+      chatPanel.position.left = savedChatPosition.left;
+      chatPanel.position.width = savedChatPosition.width;
+      chatPanel.position.height = savedChatPosition.height;
+    }
+
+    // Show both panels
+    sidebarPanel.show();
+    chatPanel.show();
+
+    // Run normal layout
+    updateLayout();
+  }
+
   // Handle terminal resize
   screen.responsiveLayout.onResize((width, height) => {
     const breakpoint = screen.responsiveLayout.getBreakpoint();
-    
+
     if (breakpoint === 'small') {
-      // Auto-hide sidebar on small screens if it's currently docked
-      if (!sidebarPanel.hidden && sidebarPanel.getDockPosition() !== 'float') {
-        sidebarPanel.hide();
+      // Switch to mobile carousel mode
+      enterMobileMode();
+      // Update carousel dimensions
+      const contentHeight = height - MENU_HEIGHT - STATUS_HEIGHT - INPUT_HEIGHT;
+      mobileCarousel.position.height = contentHeight;
+      screen.render();
+    } else {
+      // Exit mobile mode if we were in it
+      if (mobileMode) {
+        exitMobileMode();
+      } else {
+        updateLayout();
       }
     }
-    
-    updateLayout();
   });
 
   function getChannelDisplayName(channelId?: string): string {
@@ -1329,8 +1480,17 @@ export async function createApp(session: DoorSession) {
     const previewLines = Array.from(state.typingBuffers.values()).map(buf => {
       const color = getUserColor(buf.username);
       const time = formatTime(new Date());
-      return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}█`;
+      // Blinking cursor with user's chat color
+      const cursor = cursorBlinkOn ? `{${color}-fg}{inverse} {/inverse}{/${color}-fg}` : ' ';
+      return `{gray-fg}[${time}]{/gray-fg} <{${color}-fg}${buf.username}{/${color}-fg}> ${buf.buffer}${cursor}`;
     });
+
+    // Start/stop cursor blink interval based on whether there are typing previews
+    if (previewLines.length > 0) {
+      startCursorBlink();
+    } else {
+      stopCursorBlink();
+    }
 
     // CRITICAL: Use CRLF for separation to force margin return
     const fullContent = [...chatMessages, ...previewLines].join('\r\n');
@@ -1967,6 +2127,9 @@ export async function createApp(session: DoorSession) {
   function cleanup() {
     state.running = false;
 
+    // Stop cursor blink interval
+    stopCursorBlink();
+
     // Send leave room only if we are in a room
     if (state.currentChannel) {
       socket.emit('room:leave');
@@ -1982,8 +2145,15 @@ export async function createApp(session: DoorSession) {
 
     screen.destroy();
 
-    // Restore fixed terminal mode for BBS screens
-    bbs.disableWideMode?.();
+    // Restore fixed terminal mode only if we enabled wide mode
+    if (chatOnly) {
+      bbs.disableWideMode?.();
+    }
+
+    // Restore modem emulation if it was enabled before
+    if (originalModemSpeed > 0) {
+      bbs.setModemSpeed?.(originalModemSpeed);
+    }
 
     bbs.write('\x1b[2J\x1b[H');
     bbs.writeLine('\x1b[33mThanks for using LiveChat v3.2! Goodbye.\x1b[0m');

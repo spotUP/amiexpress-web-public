@@ -11,7 +11,6 @@ export function sidebarConfig() {
     scrollable: true,
     style: {
       fg: 'white',
-      bg: 'black',
       border: { fg: 'magenta' }
     }
   };

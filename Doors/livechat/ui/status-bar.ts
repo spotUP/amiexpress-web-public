@@ -1,9 +1,8 @@
 /**
- * Status bar component
- * Shows user info, channel, and status at the bottom
+ * Status bar component - uses SDK StatusBar widget
  */
-import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PRESENCE_INDICATORS } from '../types';
 import type { AppState } from '../core/state';
 import type { PresenceService } from '../services';
@@ -11,19 +10,15 @@ import type { PresenceService } from '../services';
 export const STATUS_HEIGHT = 1;
 
 export function createStatusBar(screen: Screen): Box {
-  return createBox({
+  const bar = new StatusBar({
     parent: screen,
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: STATUS_HEIGHT,
-    tags: true,
-    ch: ' ',
-    style: {
-      fg: 'white',
-      bg: 'blue',
-    },
+    position: 'bottom',
+    fg: 'white',
+    bg: 'blue',
+    separator: ' | ',
   });
+
+  return bar as unknown as Box;
 }
 
 export function updateStatusBar(
@@ -40,10 +35,11 @@ export function updateStatusBar(
   const status = state.prefs.muteAllEvents ? 'MUTED' : 'LIVE';
   const presence = presenceService.get(userId);
   const myStatus = presence?.status || 'online';
-  
-  statusBar.setContent(
+
+  // Use setFullContent for the custom LiveChat format
+  (statusBar as any).setFullContent(
     ` @${username} | Node ${nodeId} | #${ch} | ${PRESENCE_INDICATORS[myStatus]} ${myStatus.toUpperCase()} | [${status}] | F1:Help F4:Emoji `
   );
-  
+
   updateChatHeader();
 }
