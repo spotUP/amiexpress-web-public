@@ -14,6 +14,9 @@ import type {
   KeyEvent,
   MouseEvent,
 } from './types';
+import { applyResponsiveMixin, ResponsiveBehavior, type ResponsiveState } from './responsive-mixin';
+import type { BreakpointName } from './responsive-constants';
+import type { SwipeOptions, LongPressOptions } from './touch-gestures';
 
 // Use String.fromCharCode(27) for ESC to survive Terser minification
 const ESC = String.fromCharCode(27);
@@ -32,9 +35,9 @@ export class Element extends EventEmitter {
   position: Position = { xi: 0, xl: 0, yi: 0, yl: 0 };
   lpos?: Position;  // Last rendered position
 
-  // Coordinate caching (Opt #2: 40-50% reduction in position calculations)
-  private _coordsCache: Position | null = null;
-  private _coordsCacheValid: boolean = false;
+  // Coordinate caching REMOVED - caused more bugs than it was worth
+  // The "40-50% reduction in calculations" was premature optimization
+  // Simple arithmetic is fast; debugging stale cache issues is not
 
   // Content
   content: string = '';
@@ -88,6 +91,9 @@ export class Element extends EventEmitter {
   private _scrollbarDragStartBase: number = 0;
   private _scrollbarMouseMoveHandler?: (data: any) => void;
   private _scrollbarMouseUpHandler?: (data: any) => void;
+
+  // Responsive behavior
+  protected _responsiveBehavior?: ResponsiveBehavior;
 
   /**
    * Draggable property with setter that enables/disables dragging
@@ -195,6 +201,18 @@ export class Element extends EventEmitter {
     // Set up closable feature (X button and ESC key)
     if (this.options.closable) {
       this.setupClosable();
+    }
+
+    // Initialize responsive behavior (default: enabled)
+    // Widgets can override _handleResize, _handleBreakpointChange, _enterMobileMode, _exitMobileMode
+    const enableResponsive = this.options.responsive === undefined || this.options.responsive === true;
+    if (enableResponsive) {
+      this._responsiveBehavior = applyResponsiveMixin(this, {
+        responsive: true,
+        touchFriendly: this.options.touchFriendly,
+        swipeEnabled: this.options.swipeEnabled,
+        mobileBreakpoint: this.options.mobileBreakpoint,
+      });
     }
   }
 
@@ -329,34 +347,24 @@ export class Element extends EventEmitter {
     return { left: 0, right: 0, top: 0, bottom: 0 };
   }
 
-  private hasBorder(): boolean {
+  protected hasBorder(): boolean {
     const border = this.options.border as any;
     if (!border || border === 'none') return false;
     return true;
   }
 
   /**
-   * Invalidate coordinate cache for this element and all its children
-   * MUST be called whenever position or visibility changes
+   * Invalidate coordinates - NO-OP since caching was removed
+   * Kept for API compatibility with existing code that calls it
    */
   _invalidateCoords(): void {
-    this._coordsCacheValid = false;
-    this._coordsCache = null;
-    if (this.children) {
-      for (const child of this.children) {
-        child._invalidateCoords();
-      }
-    }
+    // No-op: coordinate caching removed, calculations are always fresh
   }
 
   _getCoords(get?: boolean, noscroll?: boolean): Position | undefined {
     if (this.destroyed) return undefined;
 
-    // Opt #2: Return cached coords if valid (40-50% reduction in calculations)
-    if (this._coordsCacheValid && this._coordsCache && !get) {
-      return this._coordsCache;
-    }
-
+    // Always calculate fresh coordinates (caching removed - caused bugs)
     const parent = this.parent;
     const parentPos = parent?._getCoords(get, noscroll) || {
       xi: 0,
@@ -482,10 +490,6 @@ export class Element extends EventEmitter {
     this.position.xl = xl;
     this.position.yi = yi;
     this.position.yl = yl;
-
-    // Opt #2: Cache result for next call
-    this._coordsCache = this.position;
-    this._coordsCacheValid = true;
 
     return this.position;
   }
@@ -879,6 +883,11 @@ export class Element extends EventEmitter {
     this.content = content;
     this._contentDirty = true;  // Mark for re-parsing on next render
 
+    // Mark element dirty for optimized rendering
+    if (this.screen && (this.screen as any).markDirtyElement) {
+      (this.screen as any).markDirtyElement(this);
+    }
+
     // Try to parse now if we have valid dimensions
     const width = this.iwidth;
     if (width > 0) {
@@ -1170,11 +1179,12 @@ export class Element extends EventEmitter {
    * This is the main method widgets use to convert style → packed attributes
    */
   sattr(style: any): number {
-    if (!style) return 0x000;
+    // Return transparent (fg=0x1ff, bg=0x1ff) for falsy style - allows parent bg to show through
+    if (!style) return (0x1ff << 9) | 0x1ff;
 
     let flags = 0;
     let fgCode = 0x1ff; // Default: no color (-1)
-    let bgCode = 0; // Default: black (0)
+    let bgCode = 0x1ff; // Default: transparent/inherit (allows parent bg to show through)
 
     // Parse flags
     if (style.bold) flags |= 1;
@@ -1534,6 +1544,10 @@ export class Element extends EventEmitter {
       this.hidden = false;
       this.visible = true;
       this._invalidateCoords();  // Ensure fresh coords when shown
+      // Mark dirty for optimized rendering
+      if (this.screen && (this.screen as any).markDirtyElement) {
+        (this.screen as any).markDirtyElement(this);
+      }
       this.emit('show');
       // Emit overlay event for elements with opacity
       this._emitOverlayEvent(true);
@@ -1547,6 +1561,11 @@ export class Element extends EventEmitter {
     if (this.destroyed) return;
 
     if (!this.hidden) {
+      // Mark dirty BEFORE clearing (so the region is tracked)
+      if (this.screen && (this.screen as any).markDirtyElement) {
+        (this.screen as any).markDirtyElement(this);
+      }
+
       // Clear the element's region BEFORE hiding to prevent visual artifacts
       const pos = this._getCoords();
       if (this.screen && pos) {
@@ -1571,6 +1590,51 @@ export class Element extends EventEmitter {
     } else {
       this.hide();
     }
+  }
+
+  // ============================================================================
+  // Transparency
+  // ============================================================================
+
+  /**
+   * Enable transparency (50% color blending with underlying content)
+   * Similar to CSS opacity but for terminal - blends colors at 50% alpha
+   */
+  setTransparent(enabled: boolean = true): void {
+    // Update both options.style and this.style to ensure consistency
+    // Renderer reads from element.options.style (line 949 in screen.ts)
+    if (!this.options.style) {
+      this.options.style = {};
+    }
+    (this.options.style as any).transparent = enabled;
+
+    // Also update this.style in case any code reads from there
+    if (this.style) {
+      (this.style as any).transparent = enabled;
+    }
+
+    // Emit overlay event for web frontend transparency support
+    if ((this as any)._emitOverlayEvent) {
+      (this as any)._emitOverlayEvent(enabled);
+    }
+
+    if (this.screen) {
+      this.screen.render();
+    }
+  }
+
+  /**
+   * Check if element has transparency enabled
+   */
+  isTransparent(): boolean {
+    return !!(this.options.style as any)?.transparent;
+  }
+
+  /**
+   * Toggle transparency on/off
+   */
+  toggleTransparent(): void {
+    this.setTransparent(!this.isTransparent());
   }
 
   // ============================================================================
@@ -2234,6 +2298,7 @@ export class Element extends EventEmitter {
 
   /**
    * Render border around element
+   * Supports per-edge colors via fgTop, fgBottom, fgLeft, fgRight properties
    */
   renderBorder(): void {
     if (!this.hasBorder() || !this.screen) return;
@@ -2295,39 +2360,61 @@ export class Element extends EventEmitter {
         borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
       }
     }
-    const attr = this.sattr(borderStyle);
 
-    // Top border
+    // Create default attribute (used for edges without specific colors)
+    const defaultAttr = this.sattr(borderStyle);
+
+    // Check for per-edge color overrides from style.border
+    const styleBorder = (this.options.style as any)?.border || {};
+    const optionsBorder = typeof this.options.border === 'object' ? this.options.border : {};
+
+    // Per-edge colors (style.border takes priority over options.border)
+    const fgTop = styleBorder.fgTop || (optionsBorder as any).fgTop;
+    const fgBottom = styleBorder.fgBottom || (optionsBorder as any).fgBottom;
+    const fgLeft = styleBorder.fgLeft || (optionsBorder as any).fgLeft;
+    const fgRight = styleBorder.fgRight || (optionsBorder as any).fgRight;
+
+    // Create per-edge attributes only if edge-specific colors are set
+    const attrTop = fgTop ? this.sattr({ ...borderStyle, fg: fgTop }) : defaultAttr;
+    const attrBottom = fgBottom ? this.sattr({ ...borderStyle, fg: fgBottom }) : defaultAttr;
+    const attrLeft = fgLeft ? this.sattr({ ...borderStyle, fg: fgLeft }) : defaultAttr;
+    const attrRight = fgRight ? this.sattr({ ...borderStyle, fg: fgRight }) : defaultAttr;
+
+    // Top border (uses attrTop)
     (this.screen as any).fillRegion(
-      attr,
+      attrTop,
       chars.horizontal,
       pos.xi + 1,
       pos.xl - 1,
       pos.yi,
       pos.yi + 1
     );
-    (this.screen as any).fillRegion(attr, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
-    (this.screen as any).fillRegion(attr, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
+    // Top-left corner: blend of top and left (use top color for visual consistency)
+    (this.screen as any).fillRegion(attrTop, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
+    // Top-right corner: blend of top and right (use top color for visual consistency)
+    (this.screen as any).fillRegion(attrTop, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
 
-    // Bottom border
+    // Bottom border (uses attrBottom)
     (this.screen as any).fillRegion(
-      attr,
+      attrBottom,
       chars.horizontal,
       pos.xi + 1,
       pos.xl - 1,
       pos.yl - 1,
       pos.yl
     );
+    // Bottom-left corner: blend of bottom and left (use bottom color for visual consistency)
     (this.screen as any).fillRegion(
-      attr,
+      attrBottom,
       chars.bottomLeft,
       pos.xi,
       pos.xi + 1,
       pos.yl - 1,
       pos.yl
     );
+    // Bottom-right corner: blend of bottom and right (use bottom color for visual consistency)
     (this.screen as any).fillRegion(
-      attr,
+      attrBottom,
       chars.bottomRight,
       pos.xl - 1,
       pos.xl,
@@ -2335,14 +2422,14 @@ export class Element extends EventEmitter {
       pos.yl
     );
 
-    // Left border
+    // Left border (uses attrLeft)
     for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-      (this.screen as any).fillRegion(attr, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
+      (this.screen as any).fillRegion(attrLeft, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
     }
 
-    // Right border
+    // Right border (uses attrRight)
     for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-      (this.screen as any).fillRegion(attr, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
+      (this.screen as any).fillRegion(attrRight, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
     }
   }
 
@@ -3358,11 +3445,94 @@ export class Element extends EventEmitter {
   }
 
   // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Called when screen resizes. Override in widgets for custom resize behavior.
+   */
+  protected _handleResize(width: number, height: number, state: ResponsiveState): void {
+    // Default: no-op. Override in widgets.
+  }
+
+  /**
+   * Called when breakpoint changes. Override in widgets for breakpoint-specific behavior.
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    // Default: no-op. Override in widgets.
+  }
+
+  /**
+   * Called when entering mobile mode (xs breakpoint). Override in widgets.
+   */
+  protected _enterMobileMode(): void {
+    // Default: no-op. Override in widgets.
+  }
+
+  /**
+   * Called when exiting mobile mode (leaving xs breakpoint). Override in widgets.
+   */
+  protected _exitMobileMode(): void {
+    // Default: no-op. Override in widgets.
+  }
+
+  /**
+   * Get the current responsive state
+   */
+  getResponsiveState(): ResponsiveState | undefined {
+    return this._responsiveBehavior?.getState();
+  }
+
+  /**
+   * Get the current breakpoint name
+   */
+  getBreakpoint(): BreakpointName | undefined {
+    return this._responsiveBehavior?.getBreakpoint();
+  }
+
+  /**
+   * Check if currently in mobile mode (xs breakpoint)
+   */
+  isMobile(): boolean {
+    return this._responsiveBehavior?.isMobile() ?? false;
+  }
+
+  /**
+   * Enable swipe gestures on this element
+   */
+  enableSwipe(options: SwipeOptions): () => void {
+    if (!this._responsiveBehavior) {
+      this._responsiveBehavior = applyResponsiveMixin(this, { swipeEnabled: true });
+    }
+    return this._responsiveBehavior.enableSwipe(options);
+  }
+
+  /**
+   * Enable long press gesture on this element
+   */
+  enableLongPress(options: LongPressOptions): () => void {
+    if (!this._responsiveBehavior) {
+      this._responsiveBehavior = applyResponsiveMixin(this, {});
+    }
+    return this._responsiveBehavior.enableLongPress(options);
+  }
+
+  // ============================================================================
   // Destruction
   // ============================================================================
 
   destroy(): void {
     if (this.destroyed) return;
+
+    // Cleanup responsive behavior
+    if (this._responsiveBehavior) {
+      this._responsiveBehavior.destroy();
+      this._responsiveBehavior = undefined;
+    }
 
     // Clear the element's region BEFORE destroying to prevent visual artifacts
     const pos = this._getCoords();

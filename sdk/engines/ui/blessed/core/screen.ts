@@ -86,6 +86,13 @@ export class Screen extends Element {
 
   private _locked: boolean = false;
 
+  // Optimized rendering for slow connections (modem/telnet)
+  // When enabled, only redraws changed elements instead of full screen clear
+  // Enabled by default - safe because first render is always full, and elements auto-mark dirty
+  private _optimizedRendering: boolean = true;
+  private _dirtyElements: Set<Element> = new Set();
+  private _fullRedrawNeeded: boolean = true;
+
   constructor(options: ScreenOptions & { output?: (data: string) => void; responsive?: boolean } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
@@ -114,6 +121,8 @@ export class Screen extends Element {
     this._height = bbsHeight;
     this._responsive = options.responsive || false;
     this.screen = this;
+
+    console.log(`[Screen] Created: ${bbsWidth}x${bbsHeight}, responsive=${this._responsive}, options.width=${options.width}, options.height=${options.height}`);
 
     // Set output callback (for backward compatibility)
     this.output = options.output || ((data: string) => {
@@ -548,10 +557,16 @@ export class Screen extends Element {
    * Call this before render() when transitioning between dialogs/overlays.
    */
   forceFullRedraw(): void {
+    // Mark entire screen as dirty so _diff() processes all cells
+    this._markDirty(0, 0, this.width - 1, this.height - 1);
+
     // Set lastBuffer to an impossible state (attr=-1) so _diff will output all cells
-    for (let y = 0; y < this.height; y++) {
+    // Use buffer dimensions to handle any buffer/screen dimension mismatch
+    const bufHeight = this.buffer.length;
+    const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
+    for (let y = 0; y < bufHeight; y++) {
       if (!this.lastBuffer[y]) continue;
-      for (let x = 0; x < this.width; x++) {
+      for (let x = 0; x < bufWidth; x++) {
         // Guard: check cell exists
         if (!this.lastBuffer[y][x]) continue;
         this.lastBuffer[y][x] = [-1, '\x00'];
@@ -605,6 +620,48 @@ export class Screen extends Element {
   unlock(): void {
     this._locked = false;
     this.render();
+  }
+
+  /**
+   * Enable optimized rendering for slow connections (modem/telnet)
+   * This mode only redraws changed elements instead of clearing the full screen
+   */
+  enableOptimizedRendering(): void {
+    this._optimizedRendering = true;
+    this._fullRedrawNeeded = true;  // First render should be full
+  }
+
+  /**
+   * Disable optimized rendering (use full screen redraws)
+   */
+  disableOptimizedRendering(): void {
+    this._optimizedRendering = false;
+  }
+
+  /**
+   * Check if optimized rendering is enabled
+   */
+  isOptimizedRenderingEnabled(): boolean {
+    return this._optimizedRendering;
+  }
+
+  /**
+   * Mark an element as needing redraw (for optimized rendering)
+   */
+  markDirtyElement(element: Element): void {
+    this._dirtyElements.add(element);
+    // Also mark the element's bounding box as dirty
+    const pos = element._getCoords();
+    if (pos) {
+      this._markDirty(pos.xi, pos.yi, pos.xl - 1, pos.yl - 1);
+    }
+  }
+
+  /**
+   * Request a full redraw on next render (for optimized rendering)
+   */
+  requestFullRedraw(): void {
+    this._fullRedrawNeeded = true;
   }
 
   /**
@@ -756,9 +813,12 @@ export class Screen extends Element {
    * Parse style object to attribute code
    */
   private styleToAttr(style: any): number {
+    // Return transparent for falsy style - allows parent bg to show through
+    if (!style) return this.packAttr(0, 0x1ff, 0x1ff);
+
     let flags = 0;
     let fgCode = 0x1ff; // Default: no color
-    let bgCode = 0; // Default background: black
+    let bgCode = 0x1ff; // Default: transparent/inherit (allows parent bg to show through)
 
     if (style.bold) flags |= 1;
     if (style.underline) flags |= 2;
@@ -791,6 +851,20 @@ export class Screen extends Element {
   private _doRender(): void {
     if (this.destroyed) return;
 
+    // CRITICAL: Ensure buffer dimensions match screen dimensions
+    // This can get out of sync if terminal resizes without triggering realloc
+    const expectedHeight = this._height;
+    const expectedWidth = this._width;
+    const actualHeight = this.buffer.length;
+    const actualWidth = actualHeight > 0 ? this.buffer[0].length : 0;
+
+    if (actualHeight !== expectedHeight || actualWidth !== expectedWidth) {
+      // Buffer dimensions mismatch - reallocate
+      console.log(`[Screen] Buffer size mismatch: buffer=${actualWidth}x${actualHeight}, screen=${expectedWidth}x${expectedHeight} - reallocating`);
+      this.clearBuffers();
+      this._fullRedrawNeeded = true;
+    }
+
     // On first render, reset all terminal attributes to ensure clean state
     // This prevents leftover colors from previous screens affecting our output
     if (!(this as any)._hasRendered) {
@@ -799,10 +873,17 @@ export class Screen extends Element {
       this.write(ESC + '[0m');  // Reset all attributes
       this.write(ESC + '[2J');  // Clear screen
       this.write(ESC + '[H');   // Move cursor to home
+      this._fullRedrawNeeded = true;
     }
 
-    // Mark entire screen as dirty since we're clearing the entire buffer
-    this._markDirty(0, 0, this.width - 1, this.height - 1);
+    // Optimized rendering: only clear buffer and mark dirty when full redraw is needed
+    const needsFullRedraw = !this._optimizedRendering || this._fullRedrawNeeded;
+
+    if (needsFullRedraw) {
+      // Mark entire screen as dirty since we're clearing the entire buffer
+      this._markDirty(0, 0, this.width - 1, this.height - 1);
+    }
+    // Note: For optimized rendering, dirty regions are already marked by markDirtyElement()
 
     // Clear buffer with default attribute
     // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
@@ -813,9 +894,40 @@ export class Screen extends Element {
     // Use buffer dimensions, not screen dimensions, to avoid race condition during resize
     const bufHeight = this.buffer.length;
     const bufWidth = bufHeight > 0 ? this.buffer[0].length : 0;
-    for (let y = 0; y < bufHeight; y++) {
-      for (let x = 0; x < bufWidth; x++) {
-        this.buffer[y][x] = [dattr, ' '];
+
+    // Only clear buffer on full redraw (optimized rendering preserves unchanged regions)
+    if (needsFullRedraw) {
+      for (let y = 0; y < bufHeight; y++) {
+        for (let x = 0; x < bufWidth; x++) {
+          this.buffer[y][x] = [dattr, ' '];
+        }
+      }
+    } else {
+      // Optimized: only clear dirty regions
+      const minY = Math.max(0, this._dirtyMinY);
+      const maxY = Math.min(bufHeight - 1, this._dirtyMaxY);
+      const minX = Math.max(0, this._dirtyMinX);
+      const maxX = Math.min(bufWidth - 1, this._dirtyMaxX);
+
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          this.buffer[y][x] = [dattr, ' '];
+        }
+      }
+    }
+
+    // CRITICAL: Invalidate ALL element coordinate caches before rendering
+    // This ensures panels use their NEW positions after resize, not cached old positions
+    if (needsFullRedraw) {
+      this.walk((el) => {
+        (el as any)._coordsCacheValid = false;
+        (el as any)._coordsCache = null;
+      });
+    } else {
+      // Optimized: only invalidate caches for dirty elements
+      for (const el of this._dirtyElements) {
+        (el as any)._coordsCacheValid = false;
+        (el as any)._coordsCache = null;
       }
     }
 
@@ -832,6 +944,8 @@ export class Screen extends Element {
 
     // Mark as clean
     this.dirty = false;
+    this._fullRedrawNeeded = false;
+    this._dirtyElements.clear();
 
     // Opt #7: Rebuild mouse index after rendering
     this._rebuildMouseIndex();
@@ -943,7 +1057,22 @@ export class Screen extends Element {
     this._markDirty(startX, startY, maxX - 1, maxY - 1);
 
     // BBS Constraint: Enforce 80-column width limit (unless responsive mode)
-    const bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
+    let bbsMaxX = this._responsive ? maxX : Math.min(maxX, 80);
+    let bbsMaxY = maxY;
+
+    // CRITICAL FIX: Clamp rendering area to parent bounds to prevent background/content leaking
+    if (element.parent && element.parent !== this) {
+      const parentPos = element.parent._getCoords();
+      if (parentPos) {
+        // Clamp to parent's content area (inside border)
+        const parentHasBorder = element.parent.options?.border && (element.parent.options.border as any)?.type !== 'none';
+        const parentBorder = parentHasBorder ? 1 : 0;
+        const parentMaxX = parentPos.xl - parentBorder;
+        const parentMaxY = parentPos.yl - parentBorder;
+        bbsMaxX = Math.min(bbsMaxX, parentMaxX);
+        bbsMaxY = Math.min(bbsMaxY, parentMaxY);
+      }
+    }
 
     // Get style attribute code with focus/hover/disabled state applied
     let style = element.options.style || {};
@@ -985,8 +1114,8 @@ export class Screen extends Element {
         }
       }
     } else if (!isTransparentBg) {
-      // Normal fill - overwrite buffer
-      for (let y = startY; y < maxY; y++) {
+      // Normal fill - overwrite buffer (now uses clamped bounds from above)
+      for (let y = startY; y < bbsMaxY; y++) {
         if (y < 0 || y >= this.height || !this.buffer[y]) continue;
         for (let x = startX; x < bbsMaxX; x++) {
           if (x < 0 || x >= this.width || !this.buffer[y][x]) continue;
@@ -996,11 +1125,11 @@ export class Screen extends Element {
     }
     // If transparent bg (not blend), skip fill entirely - preserve existing buffer content
 
-    // Render lines
+    // Render lines (using clamped bounds to prevent content leaking outside parent)
     for (let i = 0; i < lines.length; i++) {
       const y = startY + i;
       // Guard: check both this.height AND actual buffer existence to prevent crashes during resize
-      if (y < 0 || y >= this.height || y >= maxY || !this.buffer[y]) continue;
+      if (y < 0 || y >= this.height || y >= bbsMaxY || !this.buffer[y]) continue;
 
       const line = lines[i];
 
@@ -1032,6 +1161,10 @@ export class Screen extends Element {
         // Regular character - write to buffer
         // Guard: check both width bounds AND actual buffer cell existence
         if (x >= 0 && x < this.width && this.buffer[y] && this.buffer[y][x]) {
+          // Check if current character attr has transparent bg (may have been changed by ANSI codes)
+          const charBgColor = currentAttr & 0x1ff;
+          const charHasTransparentBg = charBgColor === 0x1ff;
+
           if (isBlendTransparent) {
             // Blend text color with existing content
             // EXACT from neo-blessed element.js line 2076: colors.blend(attr, lines[y][x][0])
@@ -1039,6 +1172,12 @@ export class Screen extends Element {
             // Two arguments = transparency mode (blends at 50% alpha by default)
             const blendedAttr = blend(currentAttr, existingAttr);
             this.buffer[y][x] = [blendedAttr, line[idx]];
+          } else if (charHasTransparentBg) {
+            // Transparent bg: preserve existing background, update fg and character
+            const existingAttr = this.buffer[y][x][0];
+            const existingBg = existingAttr & 0x1ff;
+            const newAttr = (currentAttr & ~0x1ff) | existingBg;
+            this.buffer[y][x] = [newAttr, line[idx]];
           } else {
             this.buffer[y][x] = [currentAttr, line[idx]];
           }

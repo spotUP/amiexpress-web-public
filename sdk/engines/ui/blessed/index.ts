@@ -15,6 +15,13 @@ export type { LayoutConstraints, ResponsiveConfig, FlexLayoutOptions, GridLayout
 export * as colors from './core/colors';
 export type * from './core/types';
 
+// Responsive/Mobile Support
+export * from './core/responsive-constants';
+export { TouchGestureHandler, createTouchGestureHandler, enableSwipe, enableLongPress, enableDoubleTap } from './core/touch-gestures';
+export type { SwipeDirection, SwipeEvent, SwipeOptions, LongPressOptions, DoubleTapOptions, GestureState } from './core/touch-gestures';
+export { ResponsiveBehavior, applyResponsiveMixin, hasResponsiveBehavior, getResponsiveBehavior } from './core/responsive-mixin';
+export type { ResponsiveOptions, ResponsiveState, BreakpointChangeHandler, ResizeHandler } from './core/responsive-mixin';
+
 // Widgets
 export { Box } from './widgets/box';
 export { Text } from './widgets/text';
@@ -59,7 +66,11 @@ export { Panel } from './widgets/panel';
 export type { PanelOptions } from './widgets/panel';
 export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
+export { MobileCarousel, mobileCarousel } from './widgets/mobile-carousel';
+export type { MobileCarouselOptions } from './widgets/mobile-carousel';
 export { Autocomplete } from './widgets/autocomplete';
+export { AutocompleteTextbox } from './widgets/autocomplete-textbox';
+export type { AutocompleteTextboxOptions } from './widgets/autocomplete-textbox';
 export { AutocompleteManager, UsernameProvider, BBSCodeProvider, WordProvider, TemplateProvider } from './utils/AutocompleteManager';
 export { TabPanel } from './widgets/tabpanel';
 export { Accordion } from './widgets/accordion';
@@ -67,6 +78,20 @@ export { Collapsible } from './widgets/collapsible';
 export { StackedGauge } from './widgets/stacked-gauge';
 export { ColorPicker } from './widgets/colorpicker';
 export { FileExplorer } from './widgets/fileexplorer';
+export { DocModal } from './widgets/doc-modal';
+export type { DocModalOptions } from './widgets/doc-modal';
+export { LoginModal, loginModal } from './widgets/login-modal';
+export type { LoginModalOptions, LoginCredentials } from './widgets/login-modal';
+export { CategoryPicker, categoryPicker } from './widgets/category-picker';
+export type { CategoryPickerOptions, CategoryItem } from './widgets/category-picker';
+export { ConfirmModal, confirmModal } from './widgets/confirm-modal';
+export type { ConfirmModalOptions } from './widgets/confirm-modal';
+export { FKeyBar, fkeyBar } from './widgets/fkey-bar';
+export type { FKeyBarOptions, FKeyItem } from './widgets/fkey-bar';
+export { StatusBar, statusBar } from './widgets/status-bar';
+export type { StatusBarOptions, StatusBarSection } from './widgets/status-bar';
+export { SearchModal, searchModal } from './widgets/search-modal';
+export type { SearchModalOptions, SearchField, SearchResult } from './widgets/search-modal';
 
 // Extended Widgets (Consolidated from Contrib)
 export { Bar, bar } from './widgets/bar';
@@ -152,6 +177,7 @@ import { Canvas, CanvasOptions } from './widgets/canvas';
 import { IFrame, IFrameOptions } from './widgets/iframe';
 import { Video } from './widgets/video';
 import { Autocomplete } from './widgets/autocomplete';
+import { AutocompleteTextbox, AutocompleteTextboxOptions } from './widgets/autocomplete-textbox';
 import { AutocompleteManager, UsernameProvider, BBSCodeProvider, WordProvider, TemplateProvider } from './utils/AutocompleteManager';
 import { TabPanel } from './widgets/tabpanel';
 import { Accordion } from './widgets/accordion';
@@ -326,6 +352,11 @@ export function loading(options?: LoadingOptions): Loading {
 }
 
 /**
+ * Create a documentation modal widget (tags: true forced, cannot be overridden)
+ */
+export { docModal } from './widgets/doc-modal';
+
+/**
  * Create a line widget (tags: true forced, cannot be overridden)
  */
 export function line(options?: LineBaseOptions): LineBaseClass {
@@ -445,10 +476,27 @@ export function video(options?: VideoOptions): Video {
 }
 
 /**
- * Create an autocomplete widget
+ * Create an autocomplete widget (popup list only - use autocompleteTextbox for integrated input)
  */
 export function autocomplete(options?: AutocompleteOptions): Autocomplete {
   return new Autocomplete({ ...options, tags: true });
+}
+
+/**
+ * Create an autocomplete textbox - a textbox with integrated suggestion popup
+ *
+ * Example usage:
+ * ```typescript
+ * const input = blessed.autocompleteTextbox({
+ *   suggestions: ['apple', 'banana', 'cherry'],
+ *   // OR dynamic:
+ *   getSuggestions: async (text) => users.filter(u => u.startsWith(text)),
+ * });
+ * input.on('select', (suggestion) => console.log('Selected:', suggestion));
+ * ```
+ */
+export function autocompleteTextbox(options?: AutocompleteTextboxOptions): AutocompleteTextbox {
+  return new AutocompleteTextbox({ ...options, tags: true });
 }
 
 /**
@@ -543,9 +591,17 @@ import { Collapsible as CollapsibleClass } from './widgets/collapsible';
 import { StackedGauge as StackedGaugeClass } from './widgets/stacked-gauge';
 import { ColorPicker as ColorPickerClass } from './widgets/colorpicker';
 import { FileExplorer as FileExplorerClass } from './widgets/fileexplorer';
+import { DocModal as DocModalClass } from './widgets/doc-modal';
+import { LoginModal as LoginModalClass } from './widgets/login-modal';
+import { CategoryPicker as CategoryPickerClass } from './widgets/category-picker';
+import { ConfirmModal as ConfirmModalClass } from './widgets/confirm-modal';
+import { FKeyBar as FKeyBarClass } from './widgets/fkey-bar';
+import { StatusBar as StatusBarClass } from './widgets/status-bar';
+import { SearchModal as SearchModalClass } from './widgets/search-modal';
 import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
 import { Panel as PanelClass } from './widgets/panel';
 import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
+import { MobileCarousel as MobileCarouselClass } from './widgets/mobile-carousel';
 import { ResponsiveLayoutManager as ResponsiveLayoutManagerClass } from './core/responsive-layout';
 
 // Import extended widgets
@@ -627,9 +683,17 @@ export default {
   StackedGauge: StackedGaugeClass,
   ColorPicker: ColorPickerClass,
   FileExplorer: FileExplorerClass,
+  DocModal: DocModalClass,
+  LoginModal: LoginModalClass,
+  CategoryPicker: CategoryPickerClass,
+  ConfirmModal: ConfirmModalClass,
+  FKeyBar: FKeyBarClass,
+  StatusBar: StatusBarClass,
+  SearchModal: SearchModalClass,
   ContextMenu: ContextMenuClass,
   Panel: PanelClass,
   DockablePanel: DockablePanelClass,
+  MobileCarousel: MobileCarouselClass,
   ResponsiveLayoutManager: ResponsiveLayoutManagerClass,
 
   // Extended Widgets

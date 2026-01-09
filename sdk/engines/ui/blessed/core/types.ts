@@ -29,6 +29,11 @@ export interface Border {
   label?: string;
   labelStyle?: Colors;
   labelPosition?: 'left' | 'center' | 'right';
+  // Per-edge colors (override fg for specific edges)
+  fgTop?: Color;
+  fgBottom?: Color;
+  fgLeft?: Color;
+  fgRight?: Color;
 }
 
 export interface Padding {
@@ -138,6 +143,12 @@ export interface ElementOptions {
   closable?: boolean;  // Add X close button and ESC key binding
   closeOnEscape?: boolean;  // Close on ESC key (default: true when closable)
   trapFocus?: boolean;  // Trap focus and suppress global keys while visible
+
+  // Responsive/Mobile features
+  responsive?: boolean;  // Enable responsive behavior (default: true)
+  touchFriendly?: boolean;  // Enable touch-friendly sizing (min 3 rows height)
+  swipeEnabled?: boolean;  // Enable swipe gesture detection
+  mobileBreakpoint?: number;  // Custom breakpoint for mobile detection (default: 50)
 
   // Label
   label?: string;
