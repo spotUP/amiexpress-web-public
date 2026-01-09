@@ -2626,9 +2626,11 @@ console.log(
       try {
         const execLib = this.libraryManager.execLibrary;
         const doorName = this.config.doorId || path.basename(this.config.executablePath) || "XIM";
-        const nodeId = this.config.bbsSession?.nodeId || 1;
-        // Use node number as the argument (doors expect this)
-        const args = [String(nodeId)];
+        // XIM doors like AquaScan use ReadArgs which may require arguments
+        // When user provides args, use those; otherwise default to "1" (upload directory)
+        const args = Array.isArray(this.config.args) && this.config.args.length > 0
+          ? this.config.args.map(String)
+          : ["1"];
 console.log(`[DoorLifecycleManager] Sending WBStartup message for XIM door: ${doorName} args=[${args.join(", ")}]`);
         const msgAddr = execLib.seedWorkbenchStartup(doorName, args);
         if (msgAddr !== 0) {

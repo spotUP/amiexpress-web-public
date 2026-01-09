@@ -230,22 +230,22 @@ console.log(`[DoorLoader] progName="${progName}" (from sessionCommand="${session
     let customArgs: string[] = [];
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
     if (doorType === "XIM") {
-      // CRITICAL: XIM doors DO receive CLI arguments!
-      // express.e runDoor calls: runSysCommand('N','S U') which results in CLI args: "1 S U"
-      // The first arg is always the node number, followed by any command parameters
-      // Example: confScan calls runSysCommand('N','S U') -> CLI gets "1 S U"
-      customArgs = [nodeId.toString()];
-      // Add any additional parameters (e.g., "S U" for newscan)
-      if (configArgs.length > 1) {
-        // Skip first arg if it's the node number (already added)
-        const additionalArgs = configArgs[0] === nodeId.toString() ? configArgs.slice(1) : configArgs;
-        customArgs.push(...additionalArgs);
-console.log(`[DoorLoader] XIM door with params: node=${nodeId}, additional=${JSON.stringify(additionalArgs)}`);
+      // XIM doors like AquaScan use ReadArgs which may require arguments (e.g., NODE/N/A)
+      // When user provides args (e.g., "FR 2"), use those
+      // When no args provided, default to "1" (directory 1 = upload directory)
+      // This allows: FR → scan Dir1, FR 2 → scan Dir2, FR A → scan all dirs
+      if (configArgs.length > 0) {
+        customArgs = [...configArgs];
+console.log(`[DoorLoader] XIM door with explicit args: ${JSON.stringify(customArgs)}`);
+      } else {
+        // Default to "1" (upload directory) for doors that expect a directory number
+        customArgs = ["1"];
+console.log(`[DoorLoader] XIM door with default args: ["1"] (upload directory)`);
       }
     } else if (configArgs.length > 0) {
       customArgs = configArgs;
     } else {
-      // Default CLI: pass node number to both XIM and non-XIM doors (matches express.e tooling)
+      // Default CLI for non-XIM doors: pass node number (matches express.e tooling)
       customArgs = [nodeId.toString()];
     }
     const argStringBase = customArgs.join(" ").trim();

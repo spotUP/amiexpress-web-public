@@ -205,7 +205,18 @@ console.log(`[XIMBBSInfo] BB_CONFNAME: "${value}"`);
           // Check both currentConference (GlobalStructures) and currentConf (legacy)
           const confId = (this.bbsSession as any)?.currentConference ?? (this.bbsSession as any)?.currentConf ?? this.bbsSession?.conferenceId ?? 1;
           value = `BBS:Conf${confId}/`;
-console.log(`[XIMBBSInfo] BB_CONFLOCAL: "${value}"`);
+
+          // DEBUG: Write to file for visibility
+          const debugLine = `[BB_CONFLOCAL] ${new Date().toISOString()} confId=${confId} value="${value}" incomingString="${msg.string}" msgAddr=0x${msg.msgAddr.toString(16)}\n`;
+          try {
+            fs.appendFileSync('~/Code/amiexpress-web/logs/bb-conflocal-debug.log', debugLine);
+          } catch (e) { /* ignore */ }
+
+          ximLogger.log('info', 'send', 'SYSTEM', this.state.nodeId, {
+            type: 'BB_CONFLOCAL_DEBUG',
+            typeCode: 127,
+            param: 0
+          }, { confId, value, incomingString: msg.string || 'none' });
         }
         break;
 
@@ -312,6 +323,18 @@ console.log(`[XIMBBSInfo] ENVSTAT [WRITE]: ${newStatus}`);
 
     if (isRead && value) {
       this.messageParser.writeMessageString(msg.msgAddr, value);
+      // DEBUG: Verify all path-related writes
+      if (msg.command === XIMCommand.BB_CONFLOCAL || msg.command === XIMCommand.BB_LOCAL) {
+        const verify = this.messageParser.readString(
+          msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+          DoorConstants.MESSAGE_STRING_CAPACITY
+        );
+        // Write to debug file
+        const debugLine = `[BB_CONFLOCAL WRITE] ${new Date().toISOString()} wrote="${value}" verify="${verify}" msgAddr=0x${msg.msgAddr.toString(16)} stringOffset=0x${DoorConstants.MESSAGE_STRING_OFFSET.toString(16)}\n`;
+        try {
+          fs.appendFileSync('~/Code/amiexpress-web/logs/bb-conflocal-debug.log', debugLine);
+        } catch (e) { /* ignore */ }
+      }
       if (msg.command === XIMCommand.BB_CONFNUM) {
         const verify = this.messageParser.readString(
           msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
