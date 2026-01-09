@@ -3,6 +3,10 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/donut.js
  * Displays donut/pie charts with percentage labels
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Adjusts radius/spacing on breakpoint change
  */
 import { ContribCanvas as Canvas } from './contrib-canvas';
 /**
@@ -162,6 +166,18 @@ export class Donut extends Canvas {
                 { color: 'yellow', percent: '80', label: 'c' }
             ]
         };
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Recalculate canvas size and re-render
+        this.calcSize();
+        if (this.currentData) {
+            this.update(this.currentData);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

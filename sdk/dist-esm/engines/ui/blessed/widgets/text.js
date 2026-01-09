@@ -9,4 +9,11 @@ export class Text extends Element {
             border: options.border !== undefined ? options.border : undefined,
         });
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

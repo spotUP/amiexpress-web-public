@@ -81,4 +81,13 @@ export class Form extends Element {
     reset() {
         this.emit('reset');
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-update focusable list in case layout changed
+        this._updateFocusable();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

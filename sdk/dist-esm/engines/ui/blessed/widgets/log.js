@@ -1,5 +1,8 @@
 /**
  * Log widget - Scrolling log viewer
+ *
+ * Responsive features:
+ * - Touch-friendly scrolling on mobile
  */
 import { Element } from '../core/element';
 export class Log extends Element {
@@ -96,5 +99,19 @@ export class Log extends Element {
             start: childBase,
             end: childBase + height,
         };
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Ensure scroll position is valid after resize
+        const scrollHeight = this.getScrollHeight();
+        const maxScroll = Math.max(0, scrollHeight - (this.height || 10));
+        const currentScroll = this.childBase || 0;
+        if (currentScroll > maxScroll) {
+            this.setScroll(maxScroll);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }

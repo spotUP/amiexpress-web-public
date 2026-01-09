@@ -80,4 +80,13 @@ export class Table extends Element {
     getRows() {
         return this.rows.slice();
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render table to adjust column widths
+        this._updateContent();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

@@ -1,5 +1,8 @@
 /**
  * Line - Horizontal or vertical line widget
+ *
+ * Responsive features:
+ * - Auto-updates content on resize
  */
 import { Box } from './box';
 export class Line extends Box {
@@ -78,6 +81,14 @@ export class Line extends Box {
         if (this.screen) {
             this.screen.render();
         }
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.updateContent();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

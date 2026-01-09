@@ -1,6 +1,11 @@
 /**
  * FileManager - Directory browser widget
  * Note: This is a simplified browser-compatible version
+ *
+ * Responsive features (inherited from List):
+ * - Touch-friendly row heights on mobile
+ * - Swipe scrolling on mobile
+ * - Momentum scrolling
  */
 import { List } from './list';
 export class FileManager extends List {
@@ -223,5 +228,13 @@ export class FileManager extends List {
         this.directories = [];
         this.updateItems();
         this.select(0);
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // FileManager inherits touch-friendly scrolling from List
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }

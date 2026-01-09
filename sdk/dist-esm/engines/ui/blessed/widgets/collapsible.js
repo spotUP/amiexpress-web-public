@@ -1,14 +1,20 @@
 /**
  * Collapsible Widget
  * A single expandable section
+ *
+ * Responsive features:
+ * - Touch-friendly header height on mobile
  */
 import { Box } from './box';
 import { Button } from './button';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class Collapsible extends Box {
     constructor(options) {
         super({
             ...options,
         });
+        this._isMobileMode = false;
+        this._headerHeight = 1;
         this.isExpanded = options.expanded !== false;
         this.headerStyle = options.style?.header || { fg: 'white', bg: 'black', bold: true };
         this.originalHeight = options.height || 'shrink';
@@ -96,6 +102,41 @@ export class Collapsible extends Box {
     }
     get type() {
         return 'collapsible';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile && !this._isMobileMode) {
+            this._enterMobileMode();
+        }
+        else if (!state.isMobile && this._isMobileMode) {
+            this._exitMobileMode();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        // Make header touch-friendly
+        this._headerHeight = MIN_TOUCH_HEIGHT;
+        this.header.height = this._headerHeight;
+        this.container.top = this._headerHeight;
+        if (!this.isExpanded) {
+            this.height = this._headerHeight;
+        }
+        this.screen?.render();
+    }
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        // Restore compact header
+        this._headerHeight = 1;
+        this.header.height = this._headerHeight;
+        this.container.top = this._headerHeight;
+        if (!this.isExpanded) {
+            this.height = this._headerHeight;
+        }
+        this.screen?.render();
     }
 }
 /**

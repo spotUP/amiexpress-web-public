@@ -65,12 +65,11 @@ class AudioEngine {
             this.sfxGain = {};
             return;
         }
-        // Initialize Tone.js (browser only)
-        this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
-        this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
-        this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
-        // Build sound library
-        this.buildSoundLibrary();
+        // DEFER Tone.js initialization until init() is called (after user gesture)
+        // This prevents "AudioContext was not allowed to start" errors
+        this.masterGain = null;
+        this.musicGain = null;
+        this.sfxGain = null;
     }
     /**
      * Initialize audio context (must be called after user interaction)
@@ -90,15 +89,79 @@ class AudioEngine {
         const isBrowser = typeof globalThis !== 'undefined' &&
             globalThis.window !== undefined &&
             typeof globalThis.window.AudioContext !== 'undefined';
-        if (isBrowser && Tone.context && Tone.context.state !== 'running') {
+        if (isBrowser) {
+            // Start Tone.js AudioContext (must be after user gesture)
             try {
                 await Tone.start();
+                console.log('[AudioEngine] Tone.js started successfully');
             }
             catch (e) {
-                console.error('Tone.js start failed:', e);
+                console.error('[AudioEngine] Tone.js start failed:', e);
+                return;
+            }
+            // NOW create the gain nodes (AudioContext is running)
+            if (!this.masterGain || !this.masterGain.gain) {
+                this.masterGain = new Tone.Gain(this.config.masterVolume).toDestination();
+                this.musicGain = new Tone.Gain(this.config.musicVolume).connect(this.masterGain);
+                this.sfxGain = new Tone.Gain(this.config.sfxVolume).connect(this.masterGain);
+                // Build sound library after gains are created
+                this.buildSoundLibrary();
+                console.log('[AudioEngine] Audio system initialized');
             }
         }
         this.initialized = true;
+    }
+    /**
+     * Enable or disable UI sounds
+     * When in Node.js with socket, sends command to web client
+     *
+     * @param enabled - Whether UI sounds should be enabled
+     *
+     * @example
+     * ```typescript
+     * // Disable UI sounds for quiet mode
+     * audio.setUISoundsEnabled(false);
+     *
+     * // Re-enable
+     * audio.setUISoundsEnabled(true);
+     * ```
+     */
+    setUISoundsEnabled(enabled) {
+        this.config.enabled = enabled;
+        // If we're in Node.js with a socket, relay to client
+        const isBrowser = typeof globalThis !== 'undefined' && globalThis.window !== undefined;
+        if (!isBrowser && this.socket) {
+            this.socket.emit('audio:set-ui-sounds', { enabled });
+        }
+    }
+    /**
+     * Check if UI sounds are enabled
+     */
+    isUISoundsEnabled() {
+        return this.config.enabled;
+    }
+    /**
+     * Set the SFX volume (0.0 to 1.0)
+     * When in Node.js with socket, sends command to web client
+     *
+     * @param volume - Volume level (0.0 to 1.0)
+     */
+    setSfxVolume(volume) {
+        this.config.sfxVolume = Math.max(0, Math.min(1, volume));
+        // If we're in Node.js with a socket, relay to client
+        const isBrowser = typeof globalThis !== 'undefined' && globalThis.window !== undefined;
+        if (!isBrowser && this.socket) {
+            this.socket.emit('audio:set-volume', { volume: this.config.sfxVolume });
+        }
+        else if (this.sfxGain && this.sfxGain.gain) {
+            this.sfxGain.gain.value = this.config.sfxVolume;
+        }
+    }
+    /**
+     * Get current SFX volume
+     */
+    getSfxVolume() {
+        return this.config.sfxVolume;
     }
     /**
      * Build comprehensive sound effects library
@@ -963,7 +1026,7 @@ class AudioEngine {
             this.socket.emit('audio:play-sfx', { type: 'note', note, duration });
             return;
         }
-        if (!this.config.enabled || !this.initialized)
+        if (!this.config.enabled || !this.initialized || !this.sfxGain?.gain)
             return;
         const synth = new Tone.Synth().connect(this.sfxGain);
         synth.triggerAttackRelease(note, duration);

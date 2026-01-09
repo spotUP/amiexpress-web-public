@@ -4,6 +4,9 @@
  * 1:1 port from blessed-contrib/lib/widget/markdown.js
  * Renders markdown text with formatting
  *
+ * Responsive features:
+ * - Re-renders on resize
+ *
  * Note: Original depends on 'marked' and 'marked-terminal' npm packages.
  * This implementation provides basic markdown rendering without full library support.
  */
@@ -106,6 +109,17 @@ export class Markdown extends Box {
     }
     get type() {
         return 'markdown';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render markdown if content exists
+        if (this.options.markdown) {
+            this.setMarkdown(this.options.markdown);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

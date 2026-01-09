@@ -3,6 +3,9 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/gauge-list.js
  * Multiple gauges displayed in a vertical list
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
  */
 import { ContribCanvas as Canvas } from './contrib-canvas';
 /**
@@ -118,6 +121,17 @@ export class GaugeList extends Canvas {
                     stack: [{ percent: 10, stroke: 'green' }]
                 }]
         };
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.calcSize();
+        if (this.gauges) {
+            this._renderGauges(this.gauges);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

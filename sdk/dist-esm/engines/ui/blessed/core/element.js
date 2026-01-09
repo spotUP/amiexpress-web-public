@@ -3,6 +3,7 @@
  */
 import { EventEmitter } from './events';
 import { parseTags, stripAnsi, textWidth } from './colors';
+import { applyResponsiveMixin } from './responsive-mixin';
 // Use String.fromCharCode(27) for ESC to survive Terser minification
 const ESC = String.fromCharCode(27);
 export class Element extends EventEmitter {
@@ -43,9 +44,9 @@ export class Element extends EventEmitter {
         this.border = null;
         // Position cache
         this.position = { xi: 0, xl: 0, yi: 0, yl: 0 };
-        // Coordinate caching (Opt #2: 40-50% reduction in position calculations)
-        this._coordsCache = null;
-        this._coordsCacheValid = false;
+        // Coordinate caching REMOVED - caused more bugs than it was worth
+        // The "40-50% reduction in calculations" was premature optimization
+        // Simple arithmetic is fast; debugging stale cache issues is not
         // Content
         this.content = '';
         this._lines = [];
@@ -165,6 +166,17 @@ export class Element extends EventEmitter {
         if (this.options.closable) {
             this.setupClosable();
         }
+        // Initialize responsive behavior (default: enabled)
+        // Widgets can override _handleResize, _handleBreakpointChange, _enterMobileMode, _exitMobileMode
+        const enableResponsive = this.options.responsive === undefined || this.options.responsive === true;
+        if (enableResponsive) {
+            this._responsiveBehavior = applyResponsiveMixin(this, {
+                responsive: true,
+                touchFriendly: this.options.touchFriendly,
+                swipeEnabled: this.options.swipeEnabled,
+                mobileBreakpoint: this.options.mobileBreakpoint,
+            });
+        }
     }
     setupClosable() {
         // Create close button when attached to parent
@@ -282,25 +294,16 @@ export class Element extends EventEmitter {
         return true;
     }
     /**
-     * Invalidate coordinate cache for this element and all its children
-     * MUST be called whenever position or visibility changes
+     * Invalidate coordinates - NO-OP since caching was removed
+     * Kept for API compatibility with existing code that calls it
      */
     _invalidateCoords() {
-        this._coordsCacheValid = false;
-        this._coordsCache = null;
-        if (this.children) {
-            for (const child of this.children) {
-                child._invalidateCoords();
-            }
-        }
+        // No-op: coordinate caching removed, calculations are always fresh
     }
     _getCoords(get, noscroll) {
         if (this.destroyed)
             return undefined;
-        // Opt #2: Return cached coords if valid (40-50% reduction in calculations)
-        if (this._coordsCacheValid && this._coordsCache && !get) {
-            return this._coordsCache;
-        }
+        // Always calculate fresh coordinates (caching removed - caused bugs)
         const parent = this.parent;
         const parentPos = parent?._getCoords(get, noscroll) || {
             xi: 0,
@@ -428,9 +431,6 @@ export class Element extends EventEmitter {
         this.position.xl = xl;
         this.position.yi = yi;
         this.position.yl = yl;
-        // Opt #2: Cache result for next call
-        this._coordsCache = this.position;
-        this._coordsCacheValid = true;
         return this.position;
     }
     // ============================================================================
@@ -810,6 +810,10 @@ export class Element extends EventEmitter {
         content = this.processCenterTags(content);
         this.content = content;
         this._contentDirty = true; // Mark for re-parsing on next render
+        // Mark element dirty for optimized rendering
+        if (this.screen && this.screen.markDirtyElement) {
+            this.screen.markDirtyElement(this);
+        }
         // Try to parse now if we have valid dimensions
         const width = this.iwidth;
         if (width > 0) {
@@ -1053,11 +1057,12 @@ export class Element extends EventEmitter {
      * This is the main method widgets use to convert style → packed attributes
      */
     sattr(style) {
+        // Return transparent (fg=0x1ff, bg=0x1ff) for falsy style - allows parent bg to show through
         if (!style)
-            return 0x000;
+            return (0x1ff << 9) | 0x1ff;
         let flags = 0;
         let fgCode = 0x1ff; // Default: no color (-1)
-        let bgCode = 0; // Default: black (0)
+        let bgCode = 0x1ff; // Default: transparent/inherit (allows parent bg to show through)
         // Parse flags
         if (style.bold)
             flags |= 1;
@@ -1361,6 +1366,10 @@ export class Element extends EventEmitter {
             this.hidden = false;
             this.visible = true;
             this._invalidateCoords(); // Ensure fresh coords when shown
+            // Mark dirty for optimized rendering
+            if (this.screen && this.screen.markDirtyElement) {
+                this.screen.markDirtyElement(this);
+            }
             this.emit('show');
             // Emit overlay event for elements with opacity
             this._emitOverlayEvent(true);
@@ -1373,6 +1382,10 @@ export class Element extends EventEmitter {
         if (this.destroyed)
             return;
         if (!this.hidden) {
+            // Mark dirty BEFORE clearing (so the region is tracked)
+            if (this.screen && this.screen.markDirtyElement) {
+                this.screen.markDirtyElement(this);
+            }
             // Clear the element's region BEFORE hiding to prevent visual artifacts
             const pos = this._getCoords();
             if (this.screen && pos) {
@@ -1396,6 +1409,44 @@ export class Element extends EventEmitter {
         else {
             this.hide();
         }
+    }
+    // ============================================================================
+    // Transparency
+    // ============================================================================
+    /**
+     * Enable transparency (50% color blending with underlying content)
+     * Similar to CSS opacity but for terminal - blends colors at 50% alpha
+     */
+    setTransparent(enabled = true) {
+        // Update both options.style and this.style to ensure consistency
+        // Renderer reads from element.options.style (line 949 in screen.ts)
+        if (!this.options.style) {
+            this.options.style = {};
+        }
+        this.options.style.transparent = enabled;
+        // Also update this.style in case any code reads from there
+        if (this.style) {
+            this.style.transparent = enabled;
+        }
+        // Emit overlay event for web frontend transparency support
+        if (this._emitOverlayEvent) {
+            this._emitOverlayEvent(enabled);
+        }
+        if (this.screen) {
+            this.screen.render();
+        }
+    }
+    /**
+     * Check if element has transparency enabled
+     */
+    isTransparent() {
+        return !!this.options.style?.transparent;
+    }
+    /**
+     * Toggle transparency on/off
+     */
+    toggleTransparent() {
+        this.setTransparent(!this.isTransparent());
     }
     // ============================================================================
     // Z-Order
@@ -1963,6 +2014,7 @@ export class Element extends EventEmitter {
     }
     /**
      * Render border around element
+     * Supports per-edge colors via fgTop, fgBottom, fgLeft, fgRight properties
      */
     renderBorder() {
         if (!this.hasBorder() || !this.screen)
@@ -2025,22 +2077,40 @@ export class Element extends EventEmitter {
                 borderStyle = { ...borderStyle, fg: 'cyan', bold: true };
             }
         }
-        const attr = this.sattr(borderStyle);
-        // Top border
-        this.screen.fillRegion(attr, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attr, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attr, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
-        // Bottom border
-        this.screen.fillRegion(attr, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attr, chars.bottomLeft, pos.xi, pos.xi + 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attr, chars.bottomRight, pos.xl - 1, pos.xl, pos.yl - 1, pos.yl);
-        // Left border
+        // Create default attribute (used for edges without specific colors)
+        const defaultAttr = this.sattr(borderStyle);
+        // Check for per-edge color overrides from style.border
+        const styleBorder = this.options.style?.border || {};
+        const optionsBorder = typeof this.options.border === 'object' ? this.options.border : {};
+        // Per-edge colors (style.border takes priority over options.border)
+        const fgTop = styleBorder.fgTop || optionsBorder.fgTop;
+        const fgBottom = styleBorder.fgBottom || optionsBorder.fgBottom;
+        const fgLeft = styleBorder.fgLeft || optionsBorder.fgLeft;
+        const fgRight = styleBorder.fgRight || optionsBorder.fgRight;
+        // Create per-edge attributes only if edge-specific colors are set
+        const attrTop = fgTop ? this.sattr({ ...borderStyle, fg: fgTop }) : defaultAttr;
+        const attrBottom = fgBottom ? this.sattr({ ...borderStyle, fg: fgBottom }) : defaultAttr;
+        const attrLeft = fgLeft ? this.sattr({ ...borderStyle, fg: fgLeft }) : defaultAttr;
+        const attrRight = fgRight ? this.sattr({ ...borderStyle, fg: fgRight }) : defaultAttr;
+        // Top border (uses attrTop)
+        this.screen.fillRegion(attrTop, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yi, pos.yi + 1);
+        // Top-left corner: blend of top and left (use top color for visual consistency)
+        this.screen.fillRegion(attrTop, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
+        // Top-right corner: blend of top and right (use top color for visual consistency)
+        this.screen.fillRegion(attrTop, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
+        // Bottom border (uses attrBottom)
+        this.screen.fillRegion(attrBottom, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yl - 1, pos.yl);
+        // Bottom-left corner: blend of bottom and left (use bottom color for visual consistency)
+        this.screen.fillRegion(attrBottom, chars.bottomLeft, pos.xi, pos.xi + 1, pos.yl - 1, pos.yl);
+        // Bottom-right corner: blend of bottom and right (use bottom color for visual consistency)
+        this.screen.fillRegion(attrBottom, chars.bottomRight, pos.xl - 1, pos.xl, pos.yl - 1, pos.yl);
+        // Left border (uses attrLeft)
         for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-            this.screen.fillRegion(attr, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
+            this.screen.fillRegion(attrLeft, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
         }
-        // Right border
+        // Right border (uses attrRight)
         for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-            this.screen.fillRegion(attr, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
+            this.screen.fillRegion(attrRight, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
         }
     }
     /**
@@ -2940,11 +3010,79 @@ export class Element extends EventEmitter {
         return { line: relY, col };
     }
     // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Called when screen resizes. Override in widgets for custom resize behavior.
+     */
+    _handleResize(width, height, state) {
+        // Default: no-op. Override in widgets.
+    }
+    /**
+     * Called when breakpoint changes. Override in widgets for breakpoint-specific behavior.
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        // Default: no-op. Override in widgets.
+    }
+    /**
+     * Called when entering mobile mode (xs breakpoint). Override in widgets.
+     */
+    _enterMobileMode() {
+        // Default: no-op. Override in widgets.
+    }
+    /**
+     * Called when exiting mobile mode (leaving xs breakpoint). Override in widgets.
+     */
+    _exitMobileMode() {
+        // Default: no-op. Override in widgets.
+    }
+    /**
+     * Get the current responsive state
+     */
+    getResponsiveState() {
+        return this._responsiveBehavior?.getState();
+    }
+    /**
+     * Get the current breakpoint name
+     */
+    getBreakpoint() {
+        return this._responsiveBehavior?.getBreakpoint();
+    }
+    /**
+     * Check if currently in mobile mode (xs breakpoint)
+     */
+    isMobile() {
+        return this._responsiveBehavior?.isMobile() ?? false;
+    }
+    /**
+     * Enable swipe gestures on this element
+     */
+    enableSwipe(options) {
+        if (!this._responsiveBehavior) {
+            this._responsiveBehavior = applyResponsiveMixin(this, { swipeEnabled: true });
+        }
+        return this._responsiveBehavior.enableSwipe(options);
+    }
+    /**
+     * Enable long press gesture on this element
+     */
+    enableLongPress(options) {
+        if (!this._responsiveBehavior) {
+            this._responsiveBehavior = applyResponsiveMixin(this, {});
+        }
+        return this._responsiveBehavior.enableLongPress(options);
+    }
+    // ============================================================================
     // Destruction
     // ============================================================================
     destroy() {
         if (this.destroyed)
             return;
+        // Cleanup responsive behavior
+        if (this._responsiveBehavior) {
+            this._responsiveBehavior.destroy();
+            this._responsiveBehavior = undefined;
+        }
         // Clear the element's region BEFORE destroying to prevent visual artifacts
         const pos = this._getCoords();
         if (this.screen && pos) {

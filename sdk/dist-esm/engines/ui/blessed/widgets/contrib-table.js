@@ -3,6 +3,9 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/table.js
  * Data table with headers and selectable rows
+ *
+ * Responsive features:
+ * - Auto-adjusts column layout on resize
  */
 import { Box } from './box';
 import { List } from './list';
@@ -118,6 +121,17 @@ export class ContribTable extends Box {
     }
     get type() {
         return 'table';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render table with new dimensions
+        if (this.options.data) {
+            this.setData(this.options.data);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

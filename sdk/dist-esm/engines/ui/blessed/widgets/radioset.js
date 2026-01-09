@@ -156,4 +156,12 @@ export class RadioSet extends Box {
             this.selectedIndex--;
         }
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // RadioSet layout is managed by child positions, re-render
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

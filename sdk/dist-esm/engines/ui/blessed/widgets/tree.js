@@ -3,6 +3,11 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/tree.js
  * Hierarchical tree view with expand/collapse functionality
+ *
+ * Responsive features:
+ * - Touch-friendly expand targets on mobile
+ * - Larger tap areas for nodes
+ * - Swipe scrolling (inherited from List)
  */
 import { Box } from './box';
 import { List } from './list';
@@ -19,6 +24,8 @@ export class Tree extends Box {
         this.data = {};
         this.nodeLines = [];
         this.lineNbr = 0;
+        // Responsive tracking
+        this._isMobileMode = false;
         this.options.extended = this.options.extended || false;
         this.options.keys = this.options.keys || ['+', 'space', 'enter'];
         this.options.template = this.options.template || {};
@@ -223,6 +230,43 @@ export class Tree extends Box {
     }
     get type() {
         return 'tree';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - adjust for touch targets
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._enterMobileMode();
+        }
+        else {
+            this._exitMobileMode();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - enable touch-friendly features
+     */
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        // The internal List widget handles its own mobile mode
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode
+     */
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        this.emit('exit-mobile');
+    }
+    /**
+     * Check if in mobile mode
+     */
+    isMobileMode() {
+        return this._isMobileMode;
     }
 }
 /**

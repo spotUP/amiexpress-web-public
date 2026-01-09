@@ -3,6 +3,10 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/charts/line.js
  * Multi-line chart with legend, axes, and labels
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Hides legend on mobile to save space
  */
 import { ContribCanvas as Canvas } from './contrib-canvas';
 import { Box } from './box';
@@ -260,6 +264,24 @@ export class Line extends Canvas {
                 }
             ]
         };
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.calcSize();
+        // Hide legend on mobile to save space
+        if (state.isMobile && this.legend) {
+            this.legend.hide();
+        }
+        else if (!state.isMobile && this.legend && this.lineOptions.showLegend) {
+            this.legend.show();
+        }
+        if (this._pendingData) {
+            this.setData(this._pendingData);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

@@ -1,5 +1,8 @@
 /**
  * BigText - Large ASCII text widget using figlet-style fonts
+ *
+ * Responsive features:
+ * - Switches to simpler font on mobile
  */
 import { Box } from './box';
 export class BigText extends Box {
@@ -10,6 +13,7 @@ export class BigText extends Box {
             height: options.height || 'shrink',
         });
         this.text = '';
+        this._isMobileMode = false;
         this.text = options.text || '';
         this.font = options.font || 'standard';
         this.fch = options.fch || '#';
@@ -173,6 +177,36 @@ export class BigText extends Box {
         this.updateContent();
         if (this.screen) {
             this.screen.render();
+        }
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile && !this._isMobileMode) {
+            this._enterMobileMode();
+        }
+        else if (!state.isMobile && this._isMobileMode) {
+            this._exitMobileMode();
+        }
+        this.updateContent();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        // Save desktop font and switch to simpler font for mobile
+        this._desktopFont = this.font;
+        if (this.font === 'standard' || this.font === 'block') {
+            this.font = 'simple';
+        }
+    }
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        // Restore desktop font
+        if (this._desktopFont) {
+            this.font = this._desktopFont;
+            this._desktopFont = undefined;
         }
     }
 }

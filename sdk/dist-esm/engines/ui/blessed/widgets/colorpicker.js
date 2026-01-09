@@ -64,6 +64,14 @@ export class ColorPicker extends Box {
     get type() {
         return 'colorpicker';
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Color grid is fixed layout, just trigger re-render
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }
 ColorPicker.ANSI_COLORS = [
     'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',

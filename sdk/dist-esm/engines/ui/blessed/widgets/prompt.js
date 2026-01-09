@@ -6,12 +6,18 @@
  *   overlayOpacity: 0.7 (custom opacity)
  *
  * Automatically stays centered in responsive layouts
+ *
+ * Responsive features:
+ * - Full-width on mobile (xs breakpoint)
+ * - Touch-friendly button sizes
+ * - Auto-center on resize
  */
 import { Box } from './box';
 import { Textbox } from './textbox';
 import { Button } from './button';
 import { Overlay } from './overlay';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
+import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class Prompt extends Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -43,6 +49,10 @@ export class Prompt extends Box {
                 },
             },
         });
+        this._desktopButtonWidth = 10;
+        this._mobileButtonWidth = 12;
+        this._desktopButtonHeight = 1;
+        this._mobileButtonHeight = 3;
         if (useOverlay && originalParent) {
             const overlayOpacity = options.overlayOpacity ?? 0.5;
             this._overlay = new Overlay({
@@ -161,6 +171,13 @@ export class Prompt extends Box {
             this.emit('cancel');
             this.emit('hide');
         });
+        // Store desktop dimensions for responsive toggling
+        this._desktopWidth = options.width || 50;
+        this._mobileWidth = options.mobileWidth;
+        this._desktopButtonWidth = 12;
+        this._mobileButtonWidth = 14;
+        this._desktopButtonHeight = 3;
+        this._mobileButtonHeight = MIN_TOUCH_HEIGHT;
         // Tab between elements
         this.key(['tab'], () => {
             const focused = this.screen?.getFocused();
@@ -288,5 +305,72 @@ export class Prompt extends Box {
      */
     getValue() {
         return this.inputField.getValue();
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - adjust width and button sizes
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - full width, larger buttons
+     */
+    _enterMobileMode() {
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore desktop layout
+     */
+    _exitMobileMode() {
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly layout
+     */
+    _setMobileLayout() {
+        if (!this.screen)
+            return;
+        // Calculate mobile width (near full-width with padding)
+        const screenWidth = this.screen.width;
+        const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
+        this.width = mobileWidth;
+        // Larger touch-friendly buttons
+        this.okButton.width = this._mobileButtonWidth;
+        this.okButton.height = this._mobileButtonHeight;
+        this.cancelButton.width = this._mobileButtonWidth;
+        this.cancelButton.height = this._mobileButtonHeight;
+        // Adjust button container for larger buttons
+        this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop layout
+     */
+    _setDesktopLayout() {
+        if (this._desktopWidth !== undefined) {
+            this.width = this._desktopWidth;
+        }
+        // Restore desktop button sizes
+        this.okButton.width = this._desktopButtonWidth;
+        this.okButton.height = this._desktopButtonHeight;
+        this.cancelButton.width = this._desktopButtonWidth;
+        this.cancelButton.height = this._desktopButtonHeight;
+        // Restore button container width
+        this.buttonBox.width = 26;
+        if (this.screen)
+            this.screen.render();
     }
 }

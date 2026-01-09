@@ -1,6 +1,9 @@
 /**
  * StackedGauge Widget
  * Displays multiple progress segments in a single bar
+ *
+ * Responsive features:
+ * - Auto-updates on resize
  */
 import { Box } from './box';
 export class StackedGauge extends Box {
@@ -60,6 +63,14 @@ export class StackedGauge extends Box {
     }
     get type() {
         return 'stacked-gauge';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.updateContent();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

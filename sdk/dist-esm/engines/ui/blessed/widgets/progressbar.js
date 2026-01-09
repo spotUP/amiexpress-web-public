@@ -1,7 +1,12 @@
 /**
  * ProgressBar widget - Visual progress indicator
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Touch-friendly height on mobile
  */
 import { Element } from '../core/element';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class ProgressBar extends Element {
     constructor(options = {}) {
         super({
@@ -15,12 +20,18 @@ export class ProgressBar extends Element {
         // Use space character - style.bg provides the fill color (Amiga-safe, no Unicode needed)
         this.ch = ' ';
         this.pch = ' ';
+        this._isMobileMode = false;
         this.filled = options.filled || options.value || 0;
         this.orientation = options.orientation || 'horizontal';
         // Space character with background color for Amiga compatibility
         this.ch = options.ch || ' ';
         this.pch = options.pch || ' ';
+        this._desktopHeight = options.height;
         this._updateContent();
+        // Re-render on resize
+        this.on('resize', () => {
+            this._updateContent();
+        });
     }
     _updateContent() {
         const pos = this._getCoords();
@@ -71,5 +82,36 @@ export class ProgressBar extends Element {
     }
     reset() {
         this.setProgress(0);
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._enterMobileMode();
+        }
+        else {
+            this._exitMobileMode();
+        }
+        this._updateContent();
+    }
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        // Ensure minimum touch-friendly height for horizontal bars
+        if (this.orientation === 'horizontal') {
+            const currentHeight = typeof this.height === 'number' ? this.height : 1;
+            if (currentHeight < MIN_TOUCH_HEIGHT) {
+                this.height = MIN_TOUCH_HEIGHT;
+            }
+        }
+        this.emit('enter-mobile');
+    }
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        if (this._desktopHeight !== undefined) {
+            this.height = this._desktopHeight;
+        }
+        this.emit('exit-mobile');
     }
 }

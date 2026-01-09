@@ -69,6 +69,13 @@ export class ScrollableBox extends Box {
             this.screen.render();
         }
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }
 /**
  * Factory function

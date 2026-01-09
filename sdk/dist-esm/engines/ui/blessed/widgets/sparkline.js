@@ -3,6 +3,9 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/sparkline.js
  * Displays sparkline charts using Unicode sparkline characters
+ *
+ * Responsive features:
+ * - Auto-adjusts data points displayed based on width
  */
 import { Box } from './box';
 import { sparkline as generateSparkline } from '../utils/contrib-utils/sparkline';
@@ -66,6 +69,17 @@ export class Sparkline extends Box {
     }
     get type() {
         return 'sparkline';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render with new width constraints
+        if (this.options.data) {
+            this.setData(this.options.data.titles, this.options.data.data);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

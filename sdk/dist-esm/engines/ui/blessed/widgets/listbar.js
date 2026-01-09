@@ -1,8 +1,14 @@
 /**
  * Listbar - Horizontal menu bar widget
+ *
+ * Responsive features:
+ * - Vertical layout on mobile (stacked items)
+ * - Swipe navigation on mobile
+ * - Touch-friendly item heights
  */
 import { Box } from './box';
 import { Button } from './button';
+import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class Listbar extends Box {
     constructor(options = {}) {
         const style = options.style || {};
@@ -34,10 +40,17 @@ export class Listbar extends Box {
         this.items = new Map();
         this.selectedIndex = 0;
         this.itemKeys = [];
+        // Responsive tracking
+        this._isMobileMode = false;
+        this._cachedItems = {};
         this.inactiveStyle = inactiveStyle;
         this.activeStyle = activeStyle;
         this.itemPadding = Math.max(0, options.itemPadding ?? 1);
         this.itemGap = Math.max(0, options.itemGap ?? 2);
+        // Responsive options
+        this._mobileVertical = options.mobileVertical !== false;
+        this._mobileItemHeight = options.mobileItemHeight ?? MIN_TOUCH_HEIGHT;
+        this._desktopHeight = options.height || 1;
         this.enableMouse();
         this.enableKeys();
         // Add items - support both 'items' and 'commands' (blessed-contrib compatibility)
@@ -230,5 +243,86 @@ export class Listbar extends Box {
             const style = index === this.selectedIndex ? this.activeStyle : this.inactiveStyle;
             entry.button.setStyle(style);
         });
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - switch between horizontal/vertical layouts
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - vertical layout
+     */
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - horizontal layout
+     */
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly vertical layout
+     */
+    _setMobileLayout() {
+        if (!this._mobileVertical)
+            return;
+        this._isMobileMode = true;
+        // Reconfigure buttons for vertical layout
+        let offset = 0;
+        for (const key of this.itemKeys) {
+            const entry = this.items.get(key);
+            if (!entry)
+                continue;
+            entry.button.top = offset;
+            entry.button.left = 0;
+            entry.button.width = '100%';
+            entry.button.height = this._mobileItemHeight;
+            offset += this._mobileItemHeight;
+        }
+        // Adjust container height
+        this.height = offset;
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop horizontal layout
+     */
+    _setDesktopLayout() {
+        this._isMobileMode = false;
+        // Reconfigure buttons for horizontal layout
+        let offset = 0;
+        for (const key of this.itemKeys) {
+            const entry = this.items.get(key);
+            if (!entry)
+                continue;
+            const text = entry.item.text || key;
+            const pad = this.itemPadding;
+            const buttonWidth = text.length + (pad * 2);
+            entry.button.top = 0;
+            entry.button.left = offset;
+            entry.button.width = buttonWidth;
+            entry.button.height = 1;
+            offset += buttonWidth + this.itemGap;
+        }
+        // Restore container height
+        this.height = this._desktopHeight || 1;
+        if (this.screen)
+            this.screen.render();
     }
 }

@@ -129,4 +129,12 @@ export class ANSIImage extends Box {
             }
         }
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // ANSI content is fixed-size, just trigger re-render
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

@@ -6,11 +6,17 @@
  *   overlayOpacity: 0.7 (custom opacity)
  *
  * Automatically stays centered in responsive layouts
+ *
+ * Responsive features:
+ * - Full-width on mobile (xs breakpoint)
+ * - Touch-friendly button sizes (min 3 rows height)
+ * - Auto-center on resize
  */
 import { Box } from './box';
 import { Button } from './button';
 import { Overlay } from './overlay';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
+import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class Question extends Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -43,6 +49,10 @@ export class Question extends Box {
                 },
             },
         });
+        this._desktopButtonWidth = 10;
+        this._mobileButtonWidth = 12;
+        this._desktopButtonHeight = 3;
+        this._mobileButtonHeight = MIN_TOUCH_HEIGHT;
         // Create overlay if enabled
         if (useOverlay && originalParent) {
             const overlayOpacity = options.overlayOpacity ?? 0.5;
@@ -175,6 +185,9 @@ export class Question extends Box {
             this.noButton.focus();
             this.screen?.render();
         });
+        // Store desktop dimensions for responsive toggling
+        this._desktopWidth = options.width || 40;
+        this._mobileWidth = options.mobileWidth;
     }
     /**
      * Display the question
@@ -251,5 +264,72 @@ export class Question extends Box {
      */
     getText() {
         return this.messageText.getContent();
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - adjust width and button sizes
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - full width, larger buttons
+     */
+    _enterMobileMode() {
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore desktop layout
+     */
+    _exitMobileMode() {
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly layout
+     */
+    _setMobileLayout() {
+        if (!this.screen)
+            return;
+        // Calculate mobile width (near full-width with padding)
+        const screenWidth = this.screen.width;
+        const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
+        this.width = mobileWidth;
+        // Larger touch-friendly buttons
+        this.yesButton.width = this._mobileButtonWidth;
+        this.yesButton.height = this._mobileButtonHeight;
+        this.noButton.width = this._mobileButtonWidth;
+        this.noButton.height = this._mobileButtonHeight;
+        // Adjust button container for larger buttons
+        this.buttonBox.width = (this._mobileButtonWidth * 2) + 2;
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop layout
+     */
+    _setDesktopLayout() {
+        if (this._desktopWidth !== undefined) {
+            this.width = this._desktopWidth;
+        }
+        // Restore desktop button sizes
+        this.yesButton.width = this._desktopButtonWidth;
+        this.yesButton.height = this._desktopButtonHeight;
+        this.noButton.width = this._desktopButtonWidth;
+        this.noButton.height = this._desktopButtonHeight;
+        // Restore button container width
+        this.buttonBox.width = 22;
+        if (this.screen)
+            this.screen.render();
     }
 }

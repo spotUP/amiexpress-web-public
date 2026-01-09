@@ -1,15 +1,26 @@
 /**
  * Layout - Container widget for arranging children in rows/columns
+ *
+ * Responsive features:
+ * - Automatic vertical stacking on mobile (xs breakpoint)
+ * - Auto-reflow on resize and breakpoint changes
+ * - Configurable mobile layout mode
+ * - Touch-friendly spacing on mobile
  */
 import { Box } from './box';
+import { isMobileWidth, MOBILE_GAP } from '../core/responsive-constants';
 export class Layout extends Box {
     constructor(options = {}) {
-        const { layout, renderer, ...boxOptions } = options;
+        const { layout, renderer, mobileLayout, mobileSpacing, responsiveLayout, ...boxOptions } = options;
         super({
             ...boxOptions,
             scrollable: options.scrollable !== false,
         });
-        this.layoutType = layout || 'inline';
+        this._desktopLayout = layout || 'inline';
+        this._mobileLayout = mobileLayout || 'vertical';
+        this._currentLayout = this._desktopLayout;
+        this._mobileSpacing = mobileSpacing ?? MOBILE_GAP;
+        this._responsiveLayout = responsiveLayout !== false; // Default: enabled
         this.renderer = renderer;
         // Trigger layout on render
         this.on('prerender', () => {
@@ -20,11 +31,16 @@ export class Layout extends Box {
      * Perform layout calculation
      */
     performLayout() {
-        if (this.layoutType === 'inline') {
-            this.layoutInline();
-        }
-        else if (this.layoutType === 'grid') {
-            this.layoutGrid();
+        switch (this._currentLayout) {
+            case 'inline':
+                this.layoutInline();
+                break;
+            case 'grid':
+                this.layoutGrid();
+                break;
+            case 'vertical':
+                this.layoutVertical();
+                break;
         }
         if (this.renderer) {
             const coords = this.getLayoutCoords();
@@ -75,6 +91,23 @@ export class Layout extends Box {
                     break;
                 childIndex++;
             }
+        }
+    }
+    /**
+     * Vertical layout - stack children vertically (mobile-friendly)
+     */
+    layoutVertical() {
+        let currentY = 0;
+        const spacing = this.isMobile() ? this._mobileSpacing : 0;
+        const containerWidth = typeof this.width === 'number' ? this.width : 100;
+        for (const child of this.children) {
+            const childHeight = this.getChildHeight(child);
+            // Position child at current Y, full width
+            // Note: We modify position directly for layout
+            child.position.top = currentY;
+            child.position.left = 0;
+            child.position.width = containerWidth;
+            currentY += childHeight + spacing;
         }
     }
     /**
@@ -132,20 +165,62 @@ export class Layout extends Box {
         }));
     }
     /**
-     * Set layout type
+     * Set layout type (for desktop mode)
      */
     setLayout(layout) {
-        this.layoutType = layout;
+        this._desktopLayout = layout;
+        if (!this.isMobile() || !this._responsiveLayout) {
+            this._currentLayout = layout;
+        }
         this.performLayout();
         if (this.screen) {
             this.screen.render();
         }
     }
     /**
-     * Get layout type
+     * Get current layout type
      */
     getLayout() {
-        return this.layoutType;
+        return this._currentLayout;
+    }
+    /**
+     * Get desktop layout type
+     */
+    getDesktopLayout() {
+        return this._desktopLayout;
+    }
+    /**
+     * Set mobile layout type
+     */
+    setMobileLayout(layout) {
+        this._mobileLayout = layout;
+        if (this.isMobile() && this._responsiveLayout) {
+            this._currentLayout = layout;
+            this.performLayout();
+            if (this.screen) {
+                this.screen.render();
+            }
+        }
+    }
+    /**
+     * Get mobile layout type
+     */
+    getMobileLayout() {
+        return this._mobileLayout;
+    }
+    /**
+     * Enable/disable responsive layout switching
+     */
+    setResponsiveLayout(enabled) {
+        this._responsiveLayout = enabled;
+        if (enabled) {
+            // Apply appropriate layout based on current mode
+            this._currentLayout = this.isMobile() ? this._mobileLayout : this._desktopLayout;
+            this.performLayout();
+            if (this.screen) {
+                this.screen.render();
+            }
+        }
     }
     /**
      * Reflow layout (force recalculation)
@@ -155,5 +230,57 @@ export class Layout extends Box {
         if (this.screen) {
             this.screen.render();
         }
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle resize - reflow layout
+     */
+    _handleResize(width, height, state) {
+        // Call parent resize handler
+        super._handleResize(width, height, state);
+        // Reflow layout on resize
+        this.performLayout();
+    }
+    /**
+     * Handle breakpoint change - switch layout if needed
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        // Call parent handler
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Switch layout based on breakpoint
+        if (this._responsiveLayout) {
+            const wasMobile = isMobileWidth(state.screenWidth) !== state.isMobile; // Previous mobile state
+            if (state.isMobile) {
+                this._currentLayout = this._mobileLayout;
+            }
+            else {
+                this._currentLayout = this._desktopLayout;
+            }
+            this.performLayout();
+        }
+        // Emit for custom handling
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - switch to mobile layout
+     */
+    _enterMobileMode() {
+        if (this._responsiveLayout) {
+            this._currentLayout = this._mobileLayout;
+            this.performLayout();
+        }
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - switch to desktop layout
+     */
+    _exitMobileMode() {
+        if (this._responsiveLayout) {
+            this._currentLayout = this._desktopLayout;
+            this.performLayout();
+        }
+        this.emit('exit-mobile');
     }
 }

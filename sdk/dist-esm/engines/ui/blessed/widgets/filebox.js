@@ -1,8 +1,14 @@
 /**
  * FileBox - File/directory selection dialog
+ *
+ * Responsive features:
+ * - Full-screen on mobile (xs breakpoint)
+ * - Touch-friendly row heights
+ * - Swipe navigation
  */
 import { List } from './list';
 import { Box } from './box';
+import { DIALOG_EDGE_PADDING } from '../core/responsive-constants';
 export class FileBox extends Box {
     constructor(options = {}) {
         const { cwd, directory, allowMultiple, ...boxOptions } = options;
@@ -37,6 +43,12 @@ export class FileBox extends Box {
             this.hide();
             return true;
         });
+        // Store desktop dimensions for responsive toggling
+        this._mobileFullScreen = options.mobileFullScreen !== false; // Default: enabled
+        this._desktopWidth = options.width;
+        this._desktopHeight = options.height;
+        this._desktopTop = options.top;
+        this._desktopLeft = options.left;
         // Load initial directory
         this.refresh();
     }
@@ -137,5 +149,69 @@ export class FileBox extends Box {
      */
     focus() {
         this.list.focus();
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - adjust size
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - full screen
+     */
+    _enterMobileMode() {
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore desktop layout
+     */
+    _exitMobileMode() {
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly layout (full-screen)
+     */
+    _setMobileLayout() {
+        if (!this._mobileFullScreen || !this.screen)
+            return;
+        // Full screen with small padding
+        const padding = DIALOG_EDGE_PADDING;
+        this.top = padding;
+        this.left = padding;
+        this.width = this.screen.width - (padding * 2);
+        this.height = this.screen.height - (padding * 2);
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop layout
+     */
+    _setDesktopLayout() {
+        if (this._desktopWidth !== undefined) {
+            this.width = this._desktopWidth;
+        }
+        if (this._desktopHeight !== undefined) {
+            this.height = this._desktopHeight;
+        }
+        if (this._desktopTop !== undefined) {
+            this.top = this._desktopTop;
+        }
+        if (this._desktopLeft !== undefined) {
+            this.left = this._desktopLeft;
+        }
+        if (this.screen)
+            this.screen.render();
     }
 }

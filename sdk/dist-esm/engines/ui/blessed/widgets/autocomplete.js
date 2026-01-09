@@ -196,6 +196,18 @@ export class Autocomplete extends Box {
     get type() {
         return 'autocomplete';
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-position dropdown if visible
+        if (!this.hidden && this._targetElement) {
+            this.top = (this._targetElement.atop + this._targetElement.height);
+            this.left = this._targetElement.aleft;
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }
 /**
  * Factory function

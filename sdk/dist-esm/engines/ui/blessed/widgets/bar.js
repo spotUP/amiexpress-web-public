@@ -3,6 +3,10 @@
  *
  * 1:1 port from blessed-contrib/lib/widget/charts/bar.js
  * Vertical bar chart with labels
+ *
+ * Responsive features:
+ * - Auto-scales to container on resize
+ * - Recalculates bar spacing on breakpoint change
  */
 import { ContribCanvas as Canvas } from './contrib-canvas';
 /**
@@ -121,6 +125,17 @@ export class Bar extends Canvas {
     }
     get type() {
         return 'bar';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        this.calcSize();
+        if (this._pendingData) {
+            this._renderData(this._pendingData);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

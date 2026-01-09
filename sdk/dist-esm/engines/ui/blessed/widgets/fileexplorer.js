@@ -1,6 +1,11 @@
 /**
  * FileExplorer Widget
  * Advanced file browser with tree navigation and preview
+ *
+ * Responsive features:
+ * - Single-column mode on mobile (tree and files stacked)
+ * - Touch-friendly navigation
+ * - Swipe between tree and files on mobile
  */
 import { Box } from './box';
 import { Tree } from './tree';
@@ -11,6 +16,9 @@ export class FileExplorer extends Box {
             ...options,
         });
         this.cwd = '/';
+        // Responsive tracking
+        this._isMobileMode = false;
+        this._mobileView = 'files'; // Current view on mobile
         this.cwd = options.cwd || '/';
         // Left pane: Directory Tree
         this.tree = new Tree({
@@ -120,6 +128,122 @@ export class FileExplorer extends Box {
     }
     get type() {
         return 'fileexplorer';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - switch between multi-pane and single-column
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - single-column layout
+     */
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore multi-pane layout
+     */
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly single-column layout
+     */
+    _setMobileLayout() {
+        this._isMobileMode = true;
+        // Hide preview on mobile
+        this.preview.hide();
+        // Show only one pane at a time (toggle with swipe or tab)
+        if (this._mobileView === 'tree') {
+            this.tree.show();
+            this.tree.top = 0;
+            this.tree.left = 0;
+            this.tree.width = '100%';
+            this.tree.height = '100%';
+            this.fileList.hide();
+        }
+        else {
+            this.fileList.show();
+            this.fileList.top = 0;
+            this.fileList.left = 0;
+            this.fileList.width = '100%';
+            this.fileList.height = '100%';
+            this.tree.hide();
+        }
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop multi-pane layout
+     */
+    _setDesktopLayout() {
+        this._isMobileMode = false;
+        // Show all panes
+        this.tree.show();
+        this.tree.top = 0;
+        this.tree.left = 0;
+        this.tree.width = '30%';
+        this.tree.height = '100%';
+        this.fileList.show();
+        this.fileList.top = 0;
+        this.fileList.left = '30%';
+        this.fileList.width = '70%';
+        this.fileList.height = '60%';
+        this.preview.show();
+        this.preview.top = '60%';
+        this.preview.left = '30%';
+        this.preview.width = '70%';
+        this.preview.height = '40%';
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Switch to tree view on mobile
+     */
+    showTreeView() {
+        if (!this._isMobileMode)
+            return;
+        this._mobileView = 'tree';
+        this._setMobileLayout();
+        this.tree.focus();
+    }
+    /**
+     * Switch to files view on mobile
+     */
+    showFilesView() {
+        if (!this._isMobileMode)
+            return;
+        this._mobileView = 'files';
+        this._setMobileLayout();
+        this.fileList.focus();
+    }
+    /**
+     * Toggle between tree and files view on mobile
+     */
+    toggleMobileView() {
+        if (!this._isMobileMode)
+            return;
+        if (this._mobileView === 'tree') {
+            this.showFilesView();
+        }
+        else {
+            this.showTreeView();
+        }
     }
 }
 /**

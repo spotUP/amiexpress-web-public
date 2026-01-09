@@ -1,5 +1,8 @@
 /**
  * Video - Video playback widget (browser-compatible placeholder)
+ *
+ * Responsive features:
+ * - Auto-updates display on resize
  */
 import { Box } from './box';
 export class Video extends Box {
@@ -237,5 +240,14 @@ export class Video extends Box {
      */
     isLooping() {
         return this.loop;
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Update display with new dimensions
+        this.updateDisplay();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }

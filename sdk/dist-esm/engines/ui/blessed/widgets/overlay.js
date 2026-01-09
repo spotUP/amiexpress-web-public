@@ -3,6 +3,11 @@
  *
  * For web connections: Uses actual CSS transparency via socket events
  * For telnet/SSH: Falls back to solid dark background
+ *
+ * Responsive features:
+ * - Tap-to-dismiss on mobile (tap outside content to close)
+ * - Adjustable mobile opacity
+ * - Touch-friendly dismiss targets
  */
 import { Box } from './box';
 // Use String.fromCharCode(27) for ESC to survive Terser minification
@@ -27,8 +32,11 @@ export class Overlay extends Box {
                 // CSS overlay provides dimming for web, ANSI clients just see the modal on top
             },
         });
-        this._overlayOpacity = options.opacity !== undefined ? options.opacity : 0.5;
+        this._desktopOpacity = options.opacity !== undefined ? options.opacity : 0.5;
+        this._mobileOpacity = options.mobileOpacity !== undefined ? options.mobileOpacity : 0.7;
+        this._overlayOpacity = this._desktopOpacity;
         this._overlayWidgetId = `overlay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this._tapToDismiss = options.tapToDismiss !== false; // Default: enabled
         // Enable key handling
         this.enableKeys();
         // Auto-focus when shown - also emit web transparency event and trap focus (optional)
@@ -54,6 +62,21 @@ export class Overlay extends Box {
             this.emit('cancel');
             if (this.screen) {
                 this.screen.render();
+            }
+        });
+        // Tap-to-dismiss: click on overlay background (not children) to dismiss
+        this.on('click', (data) => {
+            if (!this._tapToDismiss)
+                return;
+            // Check if click was on the overlay itself (not a child)
+            // This allows modal content to be clickable without dismissing
+            const target = data?.el || data?.element;
+            if (target === this || target === undefined) {
+                this.hide();
+                this.emit('dismiss');
+                if (this.screen) {
+                    this.screen.render();
+                }
             }
         });
         // Update overlay position on screen resize (for web clients)
@@ -171,5 +194,91 @@ export class Overlay extends Box {
                 this.screen.render();
             }
         }, stepDuration);
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle resize - update overlay dimensions
+     */
+    _handleResize(width, height, state) {
+        // Call parent resize handler
+        super._handleResize(width, height, state);
+        // Update overlay event for web clients
+        if (!this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+        }
+    }
+    /**
+     * Handle breakpoint change - adjust opacity
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        // Call parent handler
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Update opacity based on breakpoint
+        if (state.isMobile) {
+            this._overlayOpacity = this._mobileOpacity;
+        }
+        else {
+            this._overlayOpacity = this._desktopOpacity;
+        }
+        // Update overlay event if visible
+        if (!this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+        }
+        // Emit for custom handling
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - increase opacity for visibility
+     */
+    _enterMobileMode() {
+        this._overlayOpacity = this._mobileOpacity;
+        if (!this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+        }
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore desktop opacity
+     */
+    _exitMobileMode() {
+        this._overlayOpacity = this._desktopOpacity;
+        if (!this.hidden) {
+            this._emitOverlayWidgetEvent(true);
+        }
+        this.emit('exit-mobile');
+    }
+    /**
+     * Enable/disable tap-to-dismiss
+     */
+    setTapToDismiss(enabled) {
+        this._tapToDismiss = enabled;
+    }
+    /**
+     * Check if tap-to-dismiss is enabled
+     */
+    isTapToDismissEnabled() {
+        return this._tapToDismiss;
+    }
+    /**
+     * Set mobile opacity
+     */
+    setMobileOpacity(opacity) {
+        this._mobileOpacity = Math.max(0, Math.min(1, opacity));
+        if (this.isMobile() && !this.hidden) {
+            this._overlayOpacity = this._mobileOpacity;
+            this._emitOverlayWidgetEvent(true);
+        }
+    }
+    /**
+     * Set desktop opacity
+     */
+    setDesktopOpacity(opacity) {
+        this._desktopOpacity = Math.max(0, Math.min(1, opacity));
+        if (!this.isMobile() && !this.hidden) {
+            this._overlayOpacity = this._desktopOpacity;
+            this._emitOverlayWidgetEvent(true);
+        }
     }
 }

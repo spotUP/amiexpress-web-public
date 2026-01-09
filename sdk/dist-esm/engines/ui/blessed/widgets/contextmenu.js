@@ -159,4 +159,18 @@ export class ContextMenu extends Element {
         super.hide();
         this.screen?.render();
     }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-position menu if visible to ensure it stays on screen
+        if (!this.hidden && this.screen) {
+            const pos = this._getCoords();
+            if (pos) {
+                this.showAt(pos.xi, pos.yi);
+            }
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
 }

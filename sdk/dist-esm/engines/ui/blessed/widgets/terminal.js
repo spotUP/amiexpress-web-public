@@ -1,6 +1,9 @@
 /**
  * Terminal - Simple terminal emulator widget
  * Note: This is a simplified browser-compatible version
+ *
+ * Responsive features:
+ * - Auto-updates display on resize
  */
 import { Box } from './box';
 export class Terminal extends Box {
@@ -246,5 +249,14 @@ export class Terminal extends Box {
     destroy() {
         this.stopCursorBlink();
         super.destroy();
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render display with new dimensions
+        this.updateDisplay();
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }

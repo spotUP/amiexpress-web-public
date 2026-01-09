@@ -4,6 +4,9 @@
  * 1:1 port from blessed-contrib/lib/widget/picture.js
  * Displays images as ASCII art
  *
+ * Responsive features:
+ * - Auto-rescales placeholder on resize
+ *
  * Note: Original depends on 'picture-tuber' npm package for image rendering.
  * This implementation provides the API but displays placeholder text.
  */
@@ -62,6 +65,17 @@ export class Picture extends Box {
     }
     get type() {
         return 'picture';
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        // Re-render image with new dimensions
+        if (this.options.file || this.options.base64) {
+            this.setImage(this.options);
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
     }
 }
 /**

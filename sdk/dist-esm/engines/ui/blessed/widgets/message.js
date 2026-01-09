@@ -6,11 +6,18 @@
  *   overlayOpacity: 0.7 (custom opacity)
  *
  * Automatically stays centered in responsive layouts
+ *
+ * Responsive features:
+ * - Full-width on mobile (xs breakpoint)
+ * - Touch-friendly button sizes (min 3 rows height)
+ * - Tap-to-dismiss on mobile
+ * - Auto-center on resize
  */
 import { Box } from './box';
 import { Button } from './button';
 import { Overlay } from './overlay';
 import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
+import { calculateDialogWidth, MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
 export class Message extends Box {
     constructor(options = {}) {
         // Force fixed height - 'shrink' doesn't work well with nested elements
@@ -43,6 +50,12 @@ export class Message extends Box {
                 },
             },
         });
+        this._desktopButtonWidth = 10;
+        this._mobileButtonWidth = 14;
+        this._desktopButtonHeight = 3;
+        this._mobileButtonHeight = MIN_TOUCH_HEIGHT;
+        this._tapToDismiss = true;
+        this._isMobileMode = false;
         // Create overlay if enabled
         if (useOverlay && originalParent) {
             const overlayOpacity = options.overlayOpacity ?? 0.5;
@@ -108,6 +121,18 @@ export class Message extends Box {
             this.hide();
             this.emit('ok');
             this.emit('hide');
+        });
+        // Store desktop dimensions for responsive toggling
+        this._desktopWidth = options.width || 40;
+        this._mobileWidth = options.mobileWidth;
+        this._tapToDismiss = options.tapToDismiss !== false; // Default: enabled
+        // Tap anywhere to dismiss (on mobile mode only)
+        this.on('click', () => {
+            if (this._isMobileMode && this._tapToDismiss) {
+                this.hide();
+                this.emit('ok');
+                this.emit('hide');
+            }
         });
     }
     /**
@@ -185,5 +210,68 @@ export class Message extends Box {
      */
     getText() {
         return this.messageText.getContent();
+    }
+    // ============================================================================
+    // Responsive Lifecycle Hooks
+    // ============================================================================
+    /**
+     * Handle breakpoint change - adjust width and button sizes
+     */
+    _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
+        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
+        if (state.isMobile) {
+            this._setMobileLayout();
+        }
+        else {
+            this._setDesktopLayout();
+        }
+        this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+    }
+    /**
+     * Called when entering mobile mode - full width, tap-to-dismiss
+     */
+    _enterMobileMode() {
+        this._isMobileMode = true;
+        this._setMobileLayout();
+        this.emit('enter-mobile');
+    }
+    /**
+     * Called when exiting mobile mode - restore desktop layout
+     */
+    _exitMobileMode() {
+        this._isMobileMode = false;
+        this._setDesktopLayout();
+        this.emit('exit-mobile');
+    }
+    /**
+     * Set mobile-friendly layout
+     */
+    _setMobileLayout() {
+        if (!this.screen)
+            return;
+        this._isMobileMode = true;
+        // Calculate mobile width (near full-width with padding)
+        const screenWidth = this.screen.width;
+        const mobileWidth = this._mobileWidth ?? calculateDialogWidth(screenWidth);
+        this.width = mobileWidth;
+        // Larger touch-friendly button
+        this.okButton.width = this._mobileButtonWidth;
+        this.okButton.height = this._mobileButtonHeight;
+        if (this.screen)
+            this.screen.render();
+    }
+    /**
+     * Restore desktop layout
+     */
+    _setDesktopLayout() {
+        this._isMobileMode = false;
+        if (this._desktopWidth !== undefined) {
+            this.width = this._desktopWidth;
+        }
+        // Restore desktop button size
+        this.okButton.width = this._desktopButtonWidth;
+        this.okButton.height = this._desktopButtonHeight;
+        if (this.screen)
+            this.screen.render();
     }
 }
