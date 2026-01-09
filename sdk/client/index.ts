@@ -77,6 +77,40 @@ export class ClientDoor extends EventEmitter {
   }
 
   /**
+   * Events that should be automatically forwarded to the server via Socket.IO
+   * when emitted by client code.
+   */
+  private static readonly SERVER_FORWARD_EVENTS = new Set([
+    // Audio level and status events
+    'audio:levels',
+    'audio:started',
+    'audio:stopped',
+    'audio:error',
+    // Audio data streaming
+    'audio:chunk',
+    'audio:data',
+    // Voice activity detection
+    'voice:speaking',
+  ]);
+
+  /**
+   * Override emit to auto-forward certain events to the server via Socket.IO.
+   * This allows client code to use `door.emit('audio:levels', data)` and have
+   * it automatically sent to the server without requiring a separate method.
+   */
+  public emit(event: string, ...args: any[]): boolean {
+    // Forward to server if this is a server-bound event
+    if (ClientDoor.SERVER_FORWARD_EVENTS.has(event)) {
+      const socketIO = (this as any).socketIO;
+      if (socketIO && typeof socketIO.emit === 'function') {
+        socketIO.emit(event, args[0]); // Send first arg as data
+      }
+    }
+    // Also emit locally for any local listeners
+    return super.emit(event, ...args);
+  }
+
+  /**
    * Initialize door systems
    * @private
    */
@@ -152,7 +186,7 @@ export class ClientDoor extends EventEmitter {
       // Listen for custom door events on the Socket.IO socket (audio, etc.)
       // These are emitted directly by hybrid door servers
       if (socket && typeof socket.on === 'function') {
-        // Audio events from hybrid doors
+        // Audio playback events from hybrid doors
         socket.on('audio:play', (data: any) => {
           console.log('[ClientDoor] Received audio:play event:', data);
           this.emit('audio:play', data);
@@ -162,6 +196,22 @@ export class ClientDoor extends EventEmitter {
         });
         socket.on('audio:set-volume', (data: any) => {
           this.emit('audio:set-volume', data);
+        });
+        // Audio streaming events for mic demos/voice chat
+        socket.on('audio:start-streaming', (data: any) => {
+          console.log('[ClientDoor] Received audio:start-streaming event:', data);
+          this.emit('audio:start-streaming', data);
+        });
+        socket.on('audio:stop-streaming', (data: any) => {
+          console.log('[ClientDoor] Received audio:stop-streaming event:', data);
+          this.emit('audio:stop-streaming', data);
+        });
+        socket.on('audio:mute', (data: any) => {
+          this.emit('audio:mute', data);
+        });
+        // Audio data from other users (for voice chat playback)
+        socket.on('audio:data', (data: any) => {
+          this.emit('audio:data', data);
         });
       }
 
@@ -498,6 +548,31 @@ export class ClientDoor extends EventEmitter {
       this.state = 'running';
       this.emit('resume');
       this.mainLoop();
+    }
+  }
+
+  /**
+   * Emit an event to the server via Socket.IO (for hybrid doors)
+   * Use this to send custom events back to the server-side door code.
+   *
+   * @param event - Event name (e.g., 'audio:levels', 'audio:started')
+   * @param data - Event data to send
+   *
+   * @example
+   * ```typescript
+   * // Send audio levels from browser to server
+   * door.emitToServer('audio:levels', { input: 0.5, output: 0.3 });
+   *
+   * // Notify server that streaming started
+   * door.emitToServer('audio:started');
+   * ```
+   */
+  public emitToServer(event: string, data?: any): void {
+    const socketIO = (this as any).socketIO;
+    if (socketIO && typeof socketIO.emit === 'function') {
+      socketIO.emit(event, data);
+    } else {
+      console.warn('[ClientDoor] Cannot emit to server - no Socket.IO connection');
     }
   }
 

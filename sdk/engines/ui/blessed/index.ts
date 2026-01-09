@@ -92,6 +92,22 @@ export { StatusBar, statusBar } from './widgets/status-bar';
 export type { StatusBarOptions, StatusBarSection } from './widgets/status-bar';
 export { SearchModal, searchModal } from './widgets/search-modal';
 export type { SearchModalOptions, SearchField, SearchResult } from './widgets/search-modal';
+export { AudioLevelBar, audioLevelBar, renderAudioLevel } from './widgets/audio-level-bar';
+export type { AudioLevelBarOptions } from './widgets/audio-level-bar';
+export { MultiplayerLobby, multiplayerLobby } from './widgets/multiplayer-lobby';
+export type {
+  MultiplayerLobbyOptions,
+  LobbyPlayerInfo,
+  LobbyModeConfig,
+  LobbyState,
+  LobbyNetworkAdapter,
+  LobbyEntryMode,
+  LobbyResult,
+  LobbyFeatures,
+  LobbyGameSetting,
+  LobbyChatMessage,
+  LobbyLeaderboardEntry,
+} from './widgets/multiplayer-lobby';
 
 // Extended Widgets (Consolidated from Contrib)
 export { Bar, bar } from './widgets/bar';
@@ -598,6 +614,8 @@ import { ConfirmModal as ConfirmModalClass } from './widgets/confirm-modal';
 import { FKeyBar as FKeyBarClass } from './widgets/fkey-bar';
 import { StatusBar as StatusBarClass } from './widgets/status-bar';
 import { SearchModal as SearchModalClass } from './widgets/search-modal';
+import { AudioLevelBar as AudioLevelBarClass } from './widgets/audio-level-bar';
+import { MultiplayerLobby as MultiplayerLobbyClass, multiplayerLobby } from './widgets/multiplayer-lobby';
 import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
 import { Panel as PanelClass } from './widgets/panel';
 import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
@@ -690,6 +708,8 @@ export default {
   FKeyBar: FKeyBarClass,
   StatusBar: StatusBarClass,
   SearchModal: SearchModalClass,
+  AudioLevelBar: AudioLevelBarClass,
+  MultiplayerLobby: MultiplayerLobbyClass,
   ContextMenu: ContextMenuClass,
   Panel: PanelClass,
   DockablePanel: DockablePanelClass,
@@ -763,6 +783,7 @@ export default {
   stackedgauge,
   colorpicker,
   fileexplorer,
+  multiplayerLobby,
 };
 
 // Modal Helpers - Utilities for centering and managing modals

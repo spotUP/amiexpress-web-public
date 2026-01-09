@@ -854,7 +854,10 @@ export function createScreen(
     ...options
   });
 
-  // Enable mouse toggle (F12/Alt+M) by default for all doors using this helper
+  // Enable mouse support by default for all doors using this helper
+  screen.enableMouse();
+
+  // Enable mouse toggle (F12/Alt+M) to allow users to disable if needed
   screen.enableMouseToggle();
 
   // Auto-join default room 'lobby' if not in a room yet

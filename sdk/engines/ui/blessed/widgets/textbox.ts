@@ -210,6 +210,12 @@ export class Textbox extends Element {
         this.blur();
         this.cancel();
         return true;
+
+      case 'enter':
+      case 'return':
+        // Single-line textbox: Enter submits
+        this.submit();
+        return true;
     }
 
     return false;

@@ -328,7 +328,7 @@ export class DocModal extends Box {
 
     this.show();
     this.setFront();
-    this._contentArea.focus();
+    this._contentArea?.focus();
     this.screen?.render();
   }
 
@@ -407,6 +407,9 @@ export class DocModal extends Box {
    * Set mobile-friendly layout
    */
   private _setMobileLayout(): void {
+    // Guard: only apply layout if children are initialized
+    if (!this._footer || !this._contentArea) return;
+
     this._isMobileMode = true;
 
     // Hide bigtext header on mobile (saves 3 rows of precious screen space)
@@ -435,6 +438,9 @@ export class DocModal extends Box {
    * Set desktop layout
    */
   private _setDesktopLayout(): void {
+    // Guard: only apply layout if children are initialized
+    if (!this._footer || !this._contentArea) return;
+
     this._isMobileMode = false;
 
     // Show bigtext header on desktop
@@ -462,6 +468,7 @@ export class DocModal extends Box {
    * Set content
    */
   setContent(content: string): void {
+    if (!this._contentArea) return;
     this._contentArea.setContent(content);
   }
 
@@ -469,6 +476,7 @@ export class DocModal extends Box {
    * Get content
    */
   getContent(): string {
+    if (!this._contentArea) return '';
     return this._contentArea.getContent();
   }
 
@@ -476,6 +484,7 @@ export class DocModal extends Box {
    * Append content
    */
   appendContent(content: string): void {
+    if (!this._contentArea) return;
     const current = this._contentArea.getContent();
     this._contentArea.setContent(current + content);
   }
@@ -501,7 +510,7 @@ export class DocModal extends Box {
    */
   setFooterText(text: string): void {
     this._desktopFooterText = text;
-    if (!this._isMobileMode) {
+    if (!this._isMobileMode && this._footer) {
       this._footer.setContent(text);
     }
   }
@@ -511,7 +520,7 @@ export class DocModal extends Box {
    */
   setMobileFooterText(text: string): void {
     this._mobileFooterText = text;
-    if (this._isMobileMode) {
+    if (this._isMobileMode && this._footer) {
       this._footer.setContent(text);
     }
   }
@@ -520,6 +529,7 @@ export class DocModal extends Box {
    * Scroll to top
    */
   scrollToTop(): void {
+    if (!this._contentArea) return;
     this._contentArea.setScrollPerc(0);
   }
 
@@ -527,14 +537,15 @@ export class DocModal extends Box {
    * Scroll to bottom
    */
   scrollToBottom(): void {
+    if (!this._contentArea) return;
     this._contentArea.setScrollPerc(100);
   }
 
   /**
    * Get the content area element (for advanced customization)
    */
-  getContentArea(): ScrollableText {
-    return this._contentArea;
+  getContentArea(): ScrollableText | null {
+    return this._contentArea || null;
   }
 
   /**
