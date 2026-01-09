@@ -3097,10 +3097,19 @@ End of sample markdown.`;
   }
 
   // ========== MIC AUDIO DEMO ==========
+  // Uses hybrid door pattern: socket events to browser client for Web Audio
+  let micDemoCleanup: (() => void) | null = null;
+
   function showMicDemo() {
     clearDemo();
+    // Clean up any previous mic demo handlers
+    if (micDemoCleanup) {
+      micDemoCleanup();
+      micDemoCleanup = null;
+    }
+
     currentDemo = 'mic';
-    demoBox.setLabel(' Microphone Audio - Live Input ');
+    demoBox.setLabel(' Microphone Audio - Live Input (Hybrid) ');
 
     const micBox = blessed.box({
       parent: demoBox,
@@ -3115,47 +3124,77 @@ End of sample markdown.`;
     blessed.box({
       parent: demoBox, bottom: 0, left: 0, right: 0, height: 4,
       tags: true,
-      content: '{yellow-fg}Mic Demo:{/}\n' +
-        'Requests microphone access.\n' +
-        '{gray-fg}(Requires "audio" service in door session){/}',
+      content: '{yellow-fg}Mic Demo (Hybrid):{/}\n' +
+        'Web Audio capture runs in browser.\n' +
+        '{gray-fg}(Requires hybrid door with client.ts){/}',
     });
 
-    const audioService = (session as any).audio;
-    if (audioService) {
-      audioService.startStreaming({
-        sampleRate: 44100,
-        channels: 1,
-        testMode: true,  // Enable standalone mic testing without voice channel
-      }).then(() => {
-        // Create VU Meter
-        const vuMeter = new BrailleVUMeter(60, 30);
-        
-        // Update loop
-        const interval = addInterval(() => {
-          const levels = audioService.getAudioLevels();
-          const frame = vuMeter.update(levels.input);
+    // Use socket to communicate with browser-side client.ts
+    const socket = session.socket;
+    if (socket) {
+      // Create VU Meter for visualization
+      const vuMeter = new BrailleVUMeter(60, 30);
 
-          // Manually center text (box width is ~60 chars)
-          const centerText = (text: string, width: number = 60) => {
-            const padding = Math.max(0, Math.floor((width - text.length) / 2));
-            return ' '.repeat(padding) + text;
-          };
+      // Helper to center text
+      const centerText = (text: string, width: number = 60) => {
+        const padding = Math.max(0, Math.floor((width - text.length) / 2));
+        return ' '.repeat(padding) + text;
+      };
 
-          micBox.setContent(
-            centerText('{green-fg}Microphone Active{/green-fg}', 60) + '\n' +
-            centerText(`{cyan-fg}Input Level: ${Math.round(levels.input * 100)}%{/cyan-fg}`, 60) + '\n\n' +
-            frame + '\n\n' +
-            centerText('{gray-fg}(Speaking logic handled by server){/gray-fg}', 60)
-          );
-          screen.render();
-        }, 100); // 10fps update
+      // Listen for audio levels from browser client
+      const levelsHandler = (levels: { input: number; output: number }) => {
+        if (currentDemo !== 'mic') return; // Only update if still in mic demo
 
-      }).catch((err: any) => {
-        micBox.setContent(`{red-fg}Error: ${err.message}{/red-fg}`);
+        const frame = vuMeter.update(levels.input);
+
+        micBox.setContent(
+          centerText('{green-fg}Microphone Active{/green-fg}', 60) + '\n' +
+          centerText(`{cyan-fg}Input Level: ${Math.round(levels.input * 100)}%{/cyan-fg}`, 60) + '\n\n' +
+          frame + '\n\n' +
+          centerText('{gray-fg}(Web Audio in browser via hybrid door){/gray-fg}', 60)
+        );
         screen.render();
+      };
+
+      // Listen for audio started confirmation
+      const startedHandler = () => {
+        micBox.setContent(
+          centerText('{green-fg}Microphone Active{/green-fg}', 60) + '\n' +
+          centerText('{cyan-fg}Waiting for audio...{/cyan-fg}', 60)
+        );
+        screen.render();
+      };
+
+      // Listen for audio errors
+      const errorHandler = (data: { message: string }) => {
+        micBox.setContent(`{red-fg}Error: ${data.message}{/red-fg}`);
+        screen.render();
+      };
+
+      // Register event handlers
+      socket.on('audio:levels', levelsHandler);
+      socket.on('audio:started', startedHandler);
+      socket.on('audio:error', errorHandler);
+
+      // Tell browser client to start audio capture
+      socket.emit('audio:start-streaming', {
+        options: {
+          sampleRate: 44100,
+          channels: 1,
+          testMode: true,
+        }
       });
+
+      // Store cleanup function for when demo changes
+      micDemoCleanup = () => {
+        socket.emit('audio:stop-streaming');
+        socket.off('audio:levels', levelsHandler);
+        socket.off('audio:started', startedHandler);
+        socket.off('audio:error', errorHandler);
+      };
+
     } else {
-      micBox.setContent('{red-fg}Audio service not available in this session.{/red-fg}');
+      micBox.setContent('{red-fg}Socket not available - hybrid door required.{/red-fg}');
     }
 
     screen.render();

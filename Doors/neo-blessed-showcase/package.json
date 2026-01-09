@@ -1,12 +1,31 @@
 {
   "name": "@amiexpress/neo-blessed-showcase",
-  "version": "1.0.0",
-  "description": "Comprehensive interactive showcase of all neo-blessed and blessed-contrib widgets for BBS door developers",
-  "main": "index.ts",
+  "version": "2.0.0",
+  "description": "Comprehensive interactive showcase of all neo-blessed widgets - Hybrid Door with Web Audio",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./index.ts"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --external:net --external:crypto --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
     "dev": "ts-node index.ts",
     "watch": "tsc --watch"
+  },
+  "doorMetadata": {
+    "name": "Neo-Blessed Showcase",
+    "command": "NEOSHOWCASE",
+    "aliases": ["SHOWCASE", "DEMO"],
+    "description": "Interactive showcase of all neo-blessed widgets",
+    "author": "AmiExpress SDK",
+    "minSecLevel": 0,
+    "category": "Utilities"
   },
   "keywords": [
     "bbs",
@@ -24,6 +43,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0"
   }
