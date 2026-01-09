@@ -1,18 +1,38 @@
 {
   "name": "voice-chat-door",
-  "version": "1.0.0",
-  "description": "Multi-party voice chat demonstration for AmiExpress BBS",
+  "version": "2.0.0",
+  "description": "Multi-party voice chat with Web Audio - Hybrid Door",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./src/client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./src/index.ts"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild src/client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --external:net --external:crypto --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist"
+  },
+  "doorMetadata": {
+    "name": "Voice Chat",
+    "command": "VOICECHAT",
+    "aliases": ["VOICE", "VC"],
+    "description": "Multi-party voice chat with real-time audio streaming",
+    "author": "AmiExpress Team",
+    "minSecLevel": 10,
+    "category": "Communication"
   },
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../.."
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
     "typescript": "^5.0.0"
   }
 }

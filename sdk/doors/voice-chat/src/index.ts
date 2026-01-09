@@ -1,24 +1,39 @@
 /**
- * Voice Chat Door
+ * Voice Chat Door - Hybrid Door Server Component
  *
- * Demonstrates real-time audio streaming capabilities:
- * - Multi-party voice chat
- * - Voice activity detection
- * - Audio level visualization
- * - Speaking indicators
- * - Mute/unmute controls
- * - Active speakers list
+ * This is the server-side component that:
+ * - Renders the neo-blessed UI
+ * - Sends audio commands to the browser client
+ * - Receives audio level updates from the client
+ *
+ * The client.ts component handles actual Web Audio:
+ * - Microphone capture via getUserMedia
+ * - Opus encoding via MediaRecorder
+ * - Audio playback of other users
+ *
+ * Communication flow:
+ * - Server emits 'audio:start-streaming' -> Client starts capture
+ * - Server emits 'audio:stop-streaming' -> Client stops capture
+ * - Server emits 'audio:mute' -> Client mutes/unmutes
+ * - Client emits 'audio:levels' -> Server updates UI
+ * - Client emits 'voice:speaking' -> Backend broadcasts to room
  */
 
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import { CoreDoor as Door, createScreen } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { renderAudioLevel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
   NetworkQualityMonitor,
   AdaptiveQualityManager,
   type NetworkMetrics,
   type QualityRecommendation,
 } from '@amiexpress/bbs-door-sdk';
+
+interface AudioLevels {
+  input: number;
+  output: number;
+  waveform?: number[];
+}
 
 interface SpeakerInfo {
   userId: number | string;
@@ -56,13 +71,19 @@ const door = new Door({
 });
 
 door.onStart(async (ctx: DoorContext) => {
-  // Create blessed screen
-  const screen = blessed.screen({
-    smartCSR: true,
-    fullUnicode: true,
-    dockBorders: true,
-    ignoreDockContrast: true,
+  // Create blessed screen using SDK helper (connects output to BBS socket)
+  const screen = createScreen(ctx.bbs, {
+    title: 'Voice Chat',
   });
+
+  // Setup input handler to route terminal input to blessed
+  const bbsSession = (ctx as any).bbsSession;
+  if (bbsSession) {
+    bbsSession.doorInputHandler = (data: string) => {
+      screen.program.emit('data', data);
+      return true;
+    };
+  }
 
   // Main container
   const mainBox = blessed.box({
@@ -306,9 +327,10 @@ door.onStart(async (ctx: DoorContext) => {
     );
   });
 
-  // Handle audio events
-  if (ctx.socket && ctx.audio) {
-    // Stream started
+  // Handle audio events via Socket.IO
+  // In hybrid mode, the client.ts handles Web Audio and emits events back
+  if (ctx.socket) {
+    // Stream started by other users
     ctx.socket.on('audio-stream-started', (data: any) => {
       if (data.userId !== state.myUserId) {
         state.speakers.set(data.userId, {
@@ -323,7 +345,7 @@ door.onStart(async (ctx: DoorContext) => {
       }
     });
 
-    // Stream stopped
+    // Stream stopped by other users
     ctx.socket.on('audio-stream-stopped', (data: any) => {
       if (data.userId !== state.myUserId) {
         const speaker = state.speakers.get(data.userId);
@@ -335,7 +357,7 @@ door.onStart(async (ctx: DoorContext) => {
       }
     });
 
-    // Speaking status updates
+    // Speaking status updates from other users (relayed by backend)
     ctx.socket.on('audio-speaking-status', (data: any) => {
       if (data.userId !== state.myUserId) {
         const speaker = state.speakers.get(data.userId);
@@ -348,20 +370,19 @@ door.onStart(async (ctx: DoorContext) => {
       }
     });
 
-    // Audio chunks (for playback)
-    ctx.socket.on('audio-chunk', (data: any) => {
-      // Audio playback would be handled by AudioPlayer in the SDK
-      // This is just for demonstration
-    });
-
-    // Update my audio levels periodically
-    setInterval(() => {
-      if (state.isStreaming && ctx.audio) {
-        const levels = ctx.audio.getAudioLevels();
+    // Audio levels from OUR client.ts (browser side)
+    // The client calculates RMS from Web Audio and sends it here
+    ctx.socket.on('audio:levels', (levels: AudioLevels) => {
+      if (state.isStreaming) {
         state.myAudioLevel = levels.input;
         updateWaveform(state, levels);
       }
-    }, 50);
+    });
+
+    // Audio error from client
+    ctx.socket.on('audio:error', (data: { message: string }) => {
+      updateStatus(state, `{red-fg}Audio Error: ${data.message}{/red-fg}`);
+    });
 
     // Update speaker list periodically (remove stale entries)
     setInterval(() => {
@@ -401,18 +422,21 @@ door.onStart(async (ctx: DoorContext) => {
   });
 
   screen.key(['q', 'Q', 'escape'], () => {
-    ctx.close();
+    screen.destroy();
   });
 
   // Focus management
-  screen.focusPush(mainBox);
+  screen.focusPush(mainBox as any);
+
+  // Keep the door running until closed
+  await new Promise<void>((resolve) => screen.on('destroy', resolve));
 });
 
 door.onClose(async (ctx: DoorContext) => {
-  // Cleanup: Stop audio streaming
-  if (ctx.audio) {
+  // Cleanup: Stop audio streaming by emitting to client
+  if (ctx.socket) {
     try {
-      await ctx.audio.stopStreaming();
+      ctx.socket.emit('audio:stop-streaming');
     } catch (error) {
       // Ignore cleanup errors
     }
@@ -422,6 +446,12 @@ door.onClose(async (ctx: DoorContext) => {
   const state = (ctx as any).state;
   if (state?.networkMonitor) {
     state.networkMonitor.stop();
+  }
+
+  // Clear input handler
+  const bbsSession = (ctx as any).bbsSession;
+  if (bbsSession) {
+    delete bbsSession.doorInputHandler;
   }
 });
 
@@ -458,26 +488,9 @@ function updateSpeakersList(state: AppState): void {
   state.screen.render();
 }
 
+// Use SDK's renderAudioLevel instead of custom renderAudioBar
 function renderAudioBar(level: number): string {
-  const barWidth = 40;
-  const filled = Math.floor(level * barWidth);
-  const empty = barWidth - filled;
-
-  let bar = '';
-  if (level < 0.3) {
-    bar = '{green-fg}';
-  } else if (level < 0.7) {
-    bar = '{yellow-fg}';
-  } else {
-    bar = '{red-fg}';
-  }
-
-  bar += '='.repeat(filled);
-  bar += '{/}';
-  bar += '-'.repeat(empty);
-  bar += ` ${Math.floor(level * 100)}%`;
-
-  return bar;
+  return renderAudioLevel(level, { barWidth: 40 });
 }
 
 function updateWaveform(state: AppState, levels: any): void {
@@ -524,22 +537,22 @@ function updateWaveform(state: AppState, levels: any): void {
 }
 
 async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void> {
-  if (!ctx.audio) {
-    updateStatus(state, '{red-fg}Error: Audio API not available{/red-fg}');
+  if (!ctx.socket) {
+    updateStatus(state, '{red-fg}Error: Socket not available{/red-fg}');
     return;
   }
 
   try {
     if (state.isStreaming) {
-      // Stop streaming
-      await ctx.audio.stopStreaming();
+      // Stop streaming - emit to client
+      ctx.socket.emit('audio:stop-streaming');
       state.isStreaming = false;
       state.isMuted = false;
       updateStatus(state, '{yellow-fg}Stopped streaming{/yellow-fg}');
-      updateWaveform(state, {});
+      updateWaveform(state, { input: 0, output: 0 });
       updateQualityDisplay(state);
     } else {
-      // Start streaming with quality manager's recommended settings
+      // Start streaming - emit to client with quality settings
       updateStatus(state, '{yellow-fg}Starting audio stream...{/yellow-fg}');
 
       const audioOptions = state.qualityManager?.getAudioStreamOptions() || {
@@ -550,10 +563,12 @@ async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void>
         noiseSuppression: true,
         autoGainControl: true,
         channelCount: 1,
-        visualize: true,
       };
 
-      const streamId = await ctx.audio.startStreaming(audioOptions);
+      const streamId = `audio-${ctx.user.id}-${Date.now()}`;
+
+      // Emit to client (browser) to start Web Audio capture
+      ctx.socket.emit('audio:start-streaming', { options: audioOptions, streamId });
 
       state.isStreaming = true;
       state.isMuted = false;
@@ -573,14 +588,16 @@ async function toggleStreaming(ctx: DoorContext, state: AppState): Promise<void>
 }
 
 async function toggleMute(ctx: DoorContext, state: AppState): Promise<void> {
-  if (!state.isStreaming || !ctx.audio) {
+  if (!state.isStreaming || !ctx.socket) {
     updateStatus(state, '{yellow-fg}Not streaming - cannot mute{/yellow-fg}');
     return;
   }
 
   try {
     state.isMuted = !state.isMuted;
-    ctx.audio.setMuted(state.isMuted);
+
+    // Emit to client (browser) to mute/unmute
+    ctx.socket.emit('audio:mute', { muted: state.isMuted });
 
     if (state.isMuted) {
       updateStatus(state, '{red-fg}Microphone MUTED{/red-fg}');
@@ -588,36 +605,39 @@ async function toggleMute(ctx: DoorContext, state: AppState): Promise<void> {
       updateStatus(state, '{green-fg}Microphone UNMUTED{/green-fg}');
     }
 
-    updateWaveform(state, ctx.audio.getAudioLevels());
+    updateWaveform(state, { input: state.isMuted ? 0 : state.myAudioLevel, output: 0 });
   } catch (error: any) {
     updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
   }
 }
 
 async function listActiveSpeakers(ctx: DoorContext, state: AppState): Promise<void> {
-  if (!ctx.audio) {
-    updateStatus(state, '{red-fg}Error: Audio API not available{/red-fg}');
-    return;
+  // List speakers from our local state (populated by socket events)
+  const speakers = Array.from(state.speakers.values());
+
+  let content = `{cyan-fg}Active Speakers:{/cyan-fg} ${speakers.length + (state.isStreaming ? 1 : 0)}\n\n`;
+
+  // Add self if streaming
+  if (state.isStreaming) {
+    const status = state.myAudioLevel > 0.01 ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+    const level = Math.floor(state.myAudioLevel * 100);
+    content += `{yellow-fg}[YOU]{/yellow-fg} ${ctx.user.username || 'You'} ${status}\n`;
+    content += `  Audio Level: ${level}%\n\n`;
   }
 
-  try {
-    const streams = ctx.audio.getActiveStreams();
-
-    let content = `{cyan-fg}Active Speakers:{/cyan-fg} ${streams.length}\n\n`;
-
-    for (const stream of streams) {
-      const isSelf = stream.userId === state.myUserId;
-      const prefix = isSelf ? '{yellow-fg}[YOU]{/yellow-fg}' : '';
-      const status = stream.isSpeaking ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
-      const level = Math.floor(stream.audioLevel * 100);
-      content += `${prefix} ${stream.username} ${status}\n`;
-      content += `  Audio Level: ${level}%\n\n`;
-    }
-
-    updateStatus(state, content);
-  } catch (error: any) {
-    updateStatus(state, `{red-fg}Error: ${error.message}{/red-fg}`);
+  // Add other speakers
+  for (const speaker of speakers) {
+    const status = speaker.isSpeaking ? '{green-fg}SPEAKING{/green-fg}' : '{gray-fg}IDLE{/gray-fg}';
+    const level = Math.floor(speaker.audioLevel * 100);
+    content += `${speaker.username} ${status}\n`;
+    content += `  Audio Level: ${level}%\n\n`;
   }
+
+  if (speakers.length === 0 && !state.isStreaming) {
+    content += '{yellow-fg}No active speakers{/yellow-fg}\n';
+  }
+
+  updateStatus(state, content);
 }
 
 function updateNetworkDisplay(state: AppState): void {
