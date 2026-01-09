@@ -224,6 +224,7 @@ console.error(`[testFile] Error:`, error);
     }
 
     // Move file to appropriate directory (express.e:19403-19415)
+    // Use file area's dlPath from Conf.info DLPATH.n tooltype
     let finalFilePath = data.path || "";
     if (data.path) {
       try {
@@ -232,7 +233,8 @@ console.error(`[testFile] Error:`, error);
           currentFile.filename,
           fileStatus,
           session.currentConf,
-          config.get("dataDir")
+          config.get("dataDir"),
+          fileArea?.dlPath // Pass dlPath from file area config (express.e:15264)
         );
 console.log(`[Upload] File moved to: ${finalFilePath}`);
       } catch (error: any) {

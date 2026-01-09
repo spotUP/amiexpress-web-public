@@ -241,9 +241,23 @@ console.error(`[FileArea] Error moving file to file area: ${error.message}`);
 export async function moveToFiles(
   sourcePath: string,
   filename: string,
-  conferencePath: string
+  conferencePath: string,
+  dlPath?: string,
+  bbsRoot?: string
 ): Promise<string> {
-  const filesDir = path.join(conferencePath, 'Files');
+  // Use dlPath from file area config if provided, otherwise fall back to Conf{N}/Files/
+  // express.e:15264 - Files go to DLPATH.n from Conf.info
+  let filesDir: string;
+  if (dlPath) {
+    // Resolve Amiga path assigns (BBS:, Work:, etc.) to filesystem paths
+    const { BBSPaths } = require('./bbs-paths.util');
+    const rootPath = bbsRoot || process.env.BBS_ROOT || process.cwd();
+    const paths = new BBSPaths(rootPath);
+    filesDir = paths.resolveAmigaPath(dlPath);
+  } else {
+    filesDir = path.join(conferencePath, 'Files');
+  }
+
   const targetPath = path.join(filesDir, filename);
 
   // Ensure Files directory exists
@@ -276,7 +290,8 @@ export async function moveUploadedFile(
   filename: string,
   status: 'hold' | 'lcfiles' | 'active' | 'private',
   conferenceId: number,
-  bbsDataPath: string
+  bbsDataPath: string,
+  dlPath?: string
 ): Promise<string> {
   const conferenceDir = getConferenceDir(conferenceId, bbsDataPath);
 
@@ -288,6 +303,7 @@ export async function moveUploadedFile(
     return await moveToLCFiles(sourcePath, filename, conferenceDir);
   } else {
     // Move to Files directory (normal active upload)
-    return await moveToFiles(sourcePath, filename, conferenceDir);
+    // Use dlPath from file area config if provided (express.e:15264)
+    return await moveToFiles(sourcePath, filename, conferenceDir, dlPath, bbsDataPath);
   }
 }
