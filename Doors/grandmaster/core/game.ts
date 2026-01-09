@@ -22,6 +22,7 @@ import {
 import type { AttackManager } from '../network/attack-system';
 import { FinesseEvaluator } from './finesse';
 import { ReplayRecorder, type Replay } from '../server/replay-manager';
+import { MedalManager, type Medal } from './medals';
 
 export class GameEngine {
   private state: GameState;
@@ -29,9 +30,15 @@ export class GameEngine {
   private settings: PlayerSettings;
   private sectionManager: SectionManager;
   private gradeManager: GradeManager;
+  private medalManager: MedalManager;  // HeborisCE medal system
   private attackManager?: AttackManager;  // Optional for multiplayer
   private finesseEvaluator: FinesseEvaluator;
   private recorder?: ReplayRecorder;  // Optional replay recording
+
+  // Stats tracking
+  private tetrisCount: number = 0;
+  private tSpinCount: number = 0;
+  private perfectClearCount: number = 0;
 
   // Game loop
   private lastUpdate: number = 0;
@@ -50,6 +57,7 @@ export class GameEngine {
     this.pieceManager = new PieceManager(settings.rotationSystem);
     this.sectionManager = new SectionManager();
     this.gradeManager = new GradeManager();
+    this.medalManager = new MedalManager();  // HeborisCE medal system
     this.finesseEvaluator = new FinesseEvaluator();
     this.attackManager = attackManager;
     this.state = this.createInitialState(mode);
@@ -77,15 +85,28 @@ export class GameEngine {
       combo: 0,
       backToBack: false,
 
-      // T-Spin tracking
+      // T-Spin tracking (HeborisCE tspin_flag system)
       lastMove: null,
       lastTSpin: null,
+      tSpinFlag: 0,
+      rotationCount: 0,
+
+      // GM condition flags
+      gmFlags: { flag1: false, flag2: false, flag3: false },
 
       gravity: speedParams.gravity,
       lockDelay: (speedParams.lockDelay / 60) * 1000,  // Convert frames to ms
       lockDelayRemaining: (speedParams.lockDelay / 60) * 1000,
-      lockResets: 0,
       areRemaining: speedParams.are,
+
+      // Lock delay reset tracking (HeborisCE kickm/kickr/kickc system)
+      moveResetCount: 0,
+      rotationResetCount: 0,
+      floorKickCount: 0,
+      maxMoveResets: 15,       // Ti-style defaults
+      maxRotationResets: 8,    // Ti-style: fewer rotation resets than move resets
+      maxFloorKicks: 1,        // Ti-style: only 1 floor kick allowed
+      lockResets: 0,           // Legacy compatibility
 
       pendingIRS: 0,
       pendingIHS: false,
@@ -113,6 +134,8 @@ export class GameEngine {
     this.state.startTime = Date.now();
     this.sectionManager.reset();
     this.gradeManager.reset();  // Reset grade to 9
+    this.gradeManager.setStartTime(this.state.startTime);  // Set GM flag timer
+    this.medalManager.reset();  // Reset medals
     this.state.section = 0;
     this.state.sectionTime = 0;
     this.state.grade = '9';     // Initialize grade
@@ -164,12 +187,19 @@ export class GameEngine {
     this.state.lockDelayRemaining = this.state.lockDelay;
     this.state.lockResets = 0;
 
+    // Reset lock delay counters (HeborisCE kickc system)
+    this.state.moveResetCount = 0;
+    this.state.rotationResetCount = 0;
+    this.state.floorKickCount = 0;
+
     // Reset gravity accumulator for new piece
     this.gravityAccumulator = 0;
 
-    // Reset T-Spin tracking for new piece
+    // Reset T-Spin tracking for new piece (HeborisCE tspin_flag system)
     this.state.lastMove = null;
     this.state.lastTSpin = null;
+    this.state.tSpinFlag = 0;
+    this.state.rotationCount = 0;
 
     // Check if piece can spawn (game over if not)
     const shape = this.pieceManager.getShape(pieceType, initialRotation);
@@ -307,8 +337,13 @@ export class GameEngine {
     if (!checkCollision(this.state.board, shape, newX, piece.y)) {
       piece.x = newX;
       this.state.lastMove = 'move';
+
+      // HeborisCE behavior: horizontal movement clears T-Spin potential
+      // tspin_flag[player] = 0 when piece moves horizontally
+      this.state.tSpinFlag = 0;
+
       this.finesseEvaluator.trackMovement(piece, false);  // Track horizontal movement
-      this.resetLockDelay();
+      this.resetLockDelay('move');
 
       // Record input for replay
       if (this.recorder) {
@@ -334,17 +369,38 @@ export class GameEngine {
     // Try rotation with wall kicks
     const kicks = this.pieceManager.getKicks(piece.type, piece.rotation, newRotation);
 
-    for (const [offsetX, offsetY] of kicks) {
+    for (let kickIndex = 0; kickIndex < kicks.length; kickIndex++) {
+      const [offsetX, offsetY] = kicks[kickIndex];
       const testX = piece.x + offsetX;
       const testY = piece.y + offsetY;
 
       if (!checkCollision(this.state.board, newShape, testX, testY)) {
+        // Track if this is a floor kick (kick used while grounded)
+        const wasGrounded = this.isPieceGrounded();
+        const isFloorKick = wasGrounded && kickIndex > 0 && offsetY < 0;
+
+        if (isFloorKick) {
+          // Check floor kick limit (Ti-style: only 1 floor kick allowed)
+          if (this.state.floorKickCount >= this.state.maxFloorKicks) {
+            continue;  // Skip this kick, try next one
+          }
+          this.state.floorKickCount++;
+        }
+
         piece.rotation = newRotation;
         piece.x = testX;
         piece.y = testY;
         this.state.lastMove = 'rotate';
+
+        // HeborisCE behavior: rotation sets T-Spin flag to potential (1)
+        // Only for T-piece rotations
+        if (piece.type === 'T') {
+          this.state.tSpinFlag = 1;
+        }
+        this.state.rotationCount++;
+
         this.finesseEvaluator.trackMovement(piece, true);  // Track rotation
-        this.resetLockDelay();
+        this.resetLockDelay('rotate');
 
         // Record input for replay
         if (this.recorder) {
@@ -488,8 +544,13 @@ export class GameEngine {
   }
 
   /**
-   * Detect T-Spin using the 3-corner rule
+   * Detect T-Spin using the 3-corner rule (HeborisCE isTSpin)
    * Returns 'full' for T-Spin, 'mini' for T-Spin Mini, or 'none'
+   *
+   * HeborisCE behavior:
+   * - tspin_flag must be 1 (set by rotation, cleared by horizontal move)
+   * - rotationCount must be > 0 (piece was rotated at least once)
+   * - 3-corner check must pass
    */
   private detectTSpin(): 'full' | 'mini' | 'none' {
     const piece = this.state.currentPiece;
@@ -497,7 +558,11 @@ export class GameEngine {
     // Must be a T-piece
     if (!piece || piece.type !== 'T') return 'none';
 
-    // Last move must have been a rotation
+    // HeborisCE: tspin_flag must be set (rotation without subsequent horizontal move)
+    // and rotationCount > 0 (statusc[player * 10 + 5] > 0 in HeborisCE)
+    if (this.state.tSpinFlag === 0 || this.state.rotationCount === 0) return 'none';
+
+    // Also check lastMove for compatibility
     if (this.state.lastMove !== 'rotate') return 'none';
 
     // Get the center position of the T-piece
@@ -580,9 +645,12 @@ export class GameEngine {
     const piece = this.state.currentPiece;
     const shape = this.pieceManager.getShape(piece.type, piece.rotation);
 
-    // Detect T-Spin before placing piece
+    // Detect T-Spin before placing piece (HeborisCE: confirm tspin_flag = 2)
     const tSpin = this.detectTSpin();
     this.state.lastTSpin = tSpin;
+    if (tSpin !== 'none') {
+      this.state.tSpinFlag = 2;  // Confirmed T-Spin
+    }
 
     // Place piece on board with timestamp for credit roll fade
     const lockTime = Date.now();
@@ -635,11 +703,28 @@ export class GameEngine {
 
       this.state.score += baseScore * (this.state.level + 1);
 
+      // Track stats
+      if (lineCount === 4) {
+        this.tetrisCount++;
+      }
+      if (tSpin !== 'none') {
+        this.tSpinCount++;
+      }
+
       // Check for perfect clear
       const perfectClear = isPerfectClear(this.state.board);
       if (perfectClear) {
         this.state.score += 10000 * (this.state.level + 1);
+        this.perfectClearCount++;
+        // Award AC medal
+        this.medalManager.checkPerfectClear(this.state.level);
       }
+
+      // Award SK medal (Skill - Tetrises and T-Spins)
+      this.medalManager.checkSkill(lineCount, tSpin !== 'none', this.state.level);
+
+      // Award CO medal (Combo)
+      this.medalManager.checkCombo(this.state.combo, this.state.level);
 
       // Process attack (multiplayer)
       if (this.attackManager) {
@@ -658,11 +743,16 @@ export class GameEngine {
       this.state.grade = this.gradeManager.getGrade();
       this.state.internalGrade = this.gradeManager.getInternalGrade();
 
+      // Sync GM flags from grade manager
+      this.state.gmFlags = this.gradeManager.getGMFlags();
+
       // Track section completion
       const sectionResult = this.sectionManager.update(this.state.level, lineCount);
       if (sectionResult !== null) {
         // Section just completed!
         this.state.lastSectionResult = sectionResult;
+        // Award ST medal (Section Time)
+        this.medalManager.checkSectionTime(sectionResult, this.state.level);
       }
     } else {
       // No lines cleared, reset combo
@@ -704,11 +794,30 @@ export class GameEngine {
 
   /**
    * Reset lock delay (when piece moves/rotates)
+   * HeborisCE tracks move and rotation resets separately
    */
-  private resetLockDelay(): void {
-    if (this.state.lockResets < 15) {  // TGM3 limit
-      this.state.lockDelayRemaining = this.state.lockDelay;
-      this.state.lockResets++;
+  private resetLockDelay(type: 'move' | 'rotate'): void {
+    // Only reset if piece is grounded
+    if (!this.isPieceGrounded()) {
+      return;
+    }
+
+    if (type === 'move') {
+      // Check move reset limit (kickc vs kickm)
+      if (this.state.moveResetCount < this.state.maxMoveResets) {
+        this.state.lockDelayRemaining = this.state.lockDelay;
+        this.state.moveResetCount++;
+        this.state.lockResets++;  // Legacy counter
+      }
+      // If move limit exceeded, piece locks immediately (bk[player] = 100 in HeborisCE)
+    } else if (type === 'rotate') {
+      // Check rotation reset limit (kickc3 vs kickr)
+      if (this.state.rotationResetCount < this.state.maxRotationResets) {
+        this.state.lockDelayRemaining = this.state.lockDelay;
+        this.state.rotationResetCount++;
+        this.state.lockResets++;  // Legacy counter
+      }
+      // If rotation limit exceeded, piece locks immediately
     }
   }
 
@@ -717,6 +826,27 @@ export class GameEngine {
    */
   getState(): GameState {
     return this.state;
+  }
+
+  /**
+   * Get current medal state (HeborisCE medal system)
+   */
+  getMedals() {
+    return this.medalManager.getMedals();
+  }
+
+  /**
+   * Get recently awarded medals for display
+   */
+  getRecentMedals(): Medal[] {
+    return this.medalManager.getRecentMedals();
+  }
+
+  /**
+   * Clear recent medals after displaying
+   */
+  clearRecentMedals(): void {
+    this.medalManager.clearRecentMedals();
   }
 
   /**
@@ -738,9 +868,9 @@ export class GameEngine {
       grade: this.state.grade,
       time,
       combo: this.state.combo,
-      tetrisCount: 0,  // TODO: Track
-      tSpinCount: 0,   // TODO: Track
-      perfectClears: 0, // TODO: Track
+      tetrisCount: this.tetrisCount,
+      tSpinCount: this.tSpinCount,
+      perfectClears: this.perfectClearCount,
       completed: this.state.status === 'complete',
       finesseRate: 1 - finesseStats.errorRate,
       finesseErrors: finesseStats.finesseErrors,

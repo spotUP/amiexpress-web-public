@@ -38,6 +38,7 @@ import { HighScoreManager } from './core/high-scores';
 import { GrandmasterNetworkManager } from './network/network-manager';
 import { AttackManager } from './network/attack-system';
 import { MultiplayerServer } from './server/multiplayer-server';
+import { showManual } from './ui/manual';
 
 /**
  * Main application class
@@ -255,6 +256,9 @@ export class GrandmasterApp {
         break;
       case 'stats':
         await this.showStats();
+        break;
+      case 'manual':
+        await this.showManual();
         break;
       case 'quit':
         await this.quit();
@@ -573,6 +577,18 @@ export class GrandmasterApp {
     );
 
     await leaderboardScreen.show();
+  }
+
+  /**
+   * Show player manual
+   */
+  private async showManual(): Promise<void> {
+    return new Promise((resolve) => {
+      showManual(this.screen, () => {
+        this.screen.render();
+        resolve();
+      });
+    });
   }
 
   /**

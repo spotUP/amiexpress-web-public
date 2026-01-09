@@ -75,16 +75,35 @@ export interface GameState {
   combo: number;
   backToBack: boolean;
 
-  // T-Spin tracking
+  // T-Spin tracking (HeborisCE tspin_flag system)
   lastMove: 'rotate' | 'move' | 'drop' | null;
   lastTSpin: 'none' | 'mini' | 'full' | null;
+  tSpinFlag: 0 | 1 | 2;  // 0=none, 1=potential (rotated), 2=confirmed T-Spin
+  rotationCount: number;  // Number of rotations for current piece (for T-Spin detection)
+
+  // GM condition flags
+  gmFlags: {
+    flag1: boolean;  // Level 300 time gate passed
+    flag2: boolean;  // Level 500 time gate passed
+    flag3: boolean;  // Level 700 time gate passed
+  };
 
   // Timing
   gravity: number;
   lockDelay: number;
   lockDelayRemaining: number;
-  lockResets: number;
   areRemaining: number;
+
+  // Lock delay reset tracking (HeborisCE kickm/kickr/kickc system)
+  moveResetCount: number;     // kickc - horizontal moves while grounded
+  rotationResetCount: number; // kickc3 - rotations while grounded
+  floorKickCount: number;     // kickc2 - floor kicks used (limited to 1 for Ti-style)
+  maxMoveResets: number;      // kickm - maximum allowed move resets (typically 15)
+  maxRotationResets: number;  // kickr - maximum allowed rotation resets (typically 8)
+  maxFloorKicks: number;      // Ti-style: typically 1
+
+  // Legacy field for backwards compatibility
+  lockResets: number;
 
   // IRS/IHS (Initial Rotation/Hold System)
   pendingIRS: number;        // Pending rotation direction (-1, 0, 1 for CCW, none, CW)

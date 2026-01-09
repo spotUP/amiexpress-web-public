@@ -6,7 +6,7 @@
 
 import type { GameEngine } from '../core/game';
 import type { Board, Piece, PieceType } from '../core/types';
-import { getGhostY } from '../core/board';
+import { getGhostY, cloneBoard, placePiece, getCompleteLines, clearLines, countHoles, getBumpiness, getBoardHeight } from '../core/board';
 
 /**
  * Bot difficulty level (1-10)
@@ -47,6 +47,9 @@ export class BotPlayer {
    * Update bot AI (called every frame)
    */
   update(deltaTime: number, engine: GameEngine): void {
+    // Store engine reference for piece manager access during evaluation
+    this.lastEngine = engine;
+
     const now = Date.now();
     if (now - this.lastMove < this.thinkDelay) {
       return;  // Not time to move yet
@@ -86,11 +89,35 @@ export class BotPlayer {
       score: -Infinity,
     };
 
+    // Get piece shapes from the engine
+    const engine = this.lastEngine;
+    if (!engine) {
+      return bestEvaluation;
+    }
+
+    const pieceManager = (engine as any).pieceManager;
+    if (!pieceManager) {
+      return bestEvaluation;
+    }
+
     // Try all rotations
     for (let rotation = 0; rotation < 4; rotation++) {
-      // Try all x positions
-      for (let x = 0; x < board.width; x++) {
-        const score = this.evaluatePosition(board, piece.type, x, rotation);
+      const shape = pieceManager.getShape(piece.type, rotation as 0 | 1 | 2 | 3);
+      if (!shape) continue;
+
+      // Calculate piece width for this rotation
+      let pieceWidth = 0;
+      for (let row = 0; row < shape.length; row++) {
+        for (let col = 0; col < shape[row].length; col++) {
+          if (shape[row][col]) {
+            pieceWidth = Math.max(pieceWidth, col + 1);
+          }
+        }
+      }
+
+      // Try all valid x positions
+      for (let x = -2; x < board.width; x++) {
+        const score = this.evaluatePosition(board, piece.type, x, rotation, shape, pieceManager);
 
         if (score > bestEvaluation.score) {
           bestEvaluation = { x, rotation, score };
@@ -101,131 +128,94 @@ export class BotPlayer {
     // Apply error rate - sometimes choose a suboptimal move
     if (Math.random() < this.errorRate) {
       bestEvaluation.x += Math.floor(Math.random() * 3) - 1;  // -1, 0, or 1
-      bestEvaluation.x = Math.max(0, Math.min(board.width - 1, bestEvaluation.x));
+      bestEvaluation.x = Math.max(-2, Math.min(board.width - 1, bestEvaluation.x));
     }
 
     return bestEvaluation;
   }
 
   /**
-   * Evaluate a specific piece placement
+   * Evaluate a specific piece placement by simulating it
    */
   private evaluatePosition(
     board: Board,
     pieceType: PieceType,
     x: number,
-    rotation: number
+    rotation: number,
+    shape: number[][],
+    pieceManager: any
   ): number {
-    // Simplified evaluation heuristic
-    // Real implementation would simulate placement and evaluate board state
+    // Clone the board to simulate placement
+    const testBoard = cloneBoard(board);
 
+    // Find the drop position (ghost Y)
+    const ghostY = getGhostY(testBoard, shape, x, 0);
+
+    // Check if this position is even valid
+    let valid = true;
+    for (let row = 0; row < shape.length && valid; row++) {
+      for (let col = 0; col < shape[row].length && valid; col++) {
+        if (shape[row][col]) {
+          const bx = x + col;
+          const by = ghostY + row;
+          if (bx < 0 || bx >= board.width || by >= board.height) {
+            valid = false;
+          }
+        }
+      }
+    }
+
+    if (!valid) {
+      return -Infinity;
+    }
+
+    // Place the piece on the test board
+    placePiece(testBoard, shape, x, ghostY, pieceType);
+
+    // Check for line clears
+    const clearedLines = getCompleteLines(testBoard);
+    const lineCount = clearedLines.length;
+    if (lineCount > 0) {
+      clearLines(testBoard, clearedLines);
+    }
+
+    // Evaluate the resulting board state
     let score = 0;
 
-    // Prefer center columns (less extreme = better)
-    const centerDistance = Math.abs(x - board.width / 2);
-    score -= centerDistance * 2;
+    // Big bonus for line clears (especially Tetrises)
+    if (lineCount === 4) {
+      score += 1000;  // Tetris bonus
+    } else if (lineCount === 3) {
+      score += 300;   // Triple
+    } else if (lineCount === 2) {
+      score += 150;   // Double
+    } else if (lineCount === 1) {
+      score += 50;    // Single
+    }
 
-    // Prefer placements that create flat top
-    score += this.evaluateFlatTop(board);
+    // Penalize holes heavily
+    const holes = countHoles(testBoard);
+    score -= holes * 50;
 
-    // Avoid creating holes
-    score -= this.countHoles(board) * 10;
+    // Penalize bumpiness (height differences between columns)
+    const bumpiness = getBumpiness(testBoard);
+    score -= bumpiness * 3;
 
-    // Prefer lower placements (higher y = lower on screen)
-    score += this.evaluateHeight(board);
+    // Penalize high stacks
+    const height = getBoardHeight(testBoard);
+    score -= height * 2;
 
-    // Bonus for completing lines
-    score += this.evaluateLineClears(board) * 50;
+    // Prefer lower placements
+    score += ghostY * 0.5;
 
-    // Difficulty scaling - higher difficulty makes better decisions
+    // Difficulty scaling - higher difficulty weights line clears more
     score *= (this.difficulty / 5);
 
     return score;
   }
 
-  /**
-   * Evaluate board for flat top
-   */
-  private evaluateFlatTop(board: Board): number {
-    const heights: number[] = [];
-
-    for (let x = 0; x < board.width; x++) {
-      let height = 0;
-      for (let y = 0; y < board.height; y++) {
-        if (board.grid[y][x].filled) {
-          height = board.height - y;
-          break;
-        }
-      }
-      heights.push(height);
-    }
-
-    // Calculate variance (lower = flatter)
-    const avg = heights.reduce((a, b) => a + b, 0) / heights.length;
-    const variance = heights.reduce((sum, h) => sum + Math.pow(h - avg, 2), 0) / heights.length;
-
-    return -variance;  // Negative because lower variance is better
-  }
-
-  /**
-   * Count holes in board
-   */
-  private countHoles(board: Board): number {
-    let holes = 0;
-
-    for (let x = 0; x < board.width; x++) {
-      let foundBlock = false;
-      for (let y = 0; y < board.height; y++) {
-        if (board.grid[y][x].filled) {
-          foundBlock = true;
-        } else if (foundBlock) {
-          holes++;
-        }
-      }
-    }
-
-    return holes;
-  }
-
-  /**
-   * Evaluate average height
-   */
-  private evaluateHeight(board: Board): number {
-    let totalHeight = 0;
-
-    for (let x = 0; x < board.width; x++) {
-      for (let y = 0; y < board.height; y++) {
-        if (board.grid[y][x].filled) {
-          totalHeight += board.height - y;
-          break;
-        }
-      }
-    }
-
-    // Prefer lower average height
-    return -(totalHeight / board.width);
-  }
-
-  /**
-   * Evaluate potential line clears
-   */
-  private evaluateLineClears(board: Board): number {
-    let lineClears = 0;
-
-    for (let y = 0; y < board.height; y++) {
-      let filled = 0;
-      for (let x = 0; x < board.width; x++) {
-        if (board.grid[y][x].filled) {
-          filled++;
-        }
-      }
-      if (filled === board.width) {
-        lineClears++;
-      }
-    }
-
-    return lineClears;
-  }
+  // Store reference to engine for piece manager access
+  private lastEngine: GameEngine | null = null;
 
   /**
    * Execute moves to reach target placement

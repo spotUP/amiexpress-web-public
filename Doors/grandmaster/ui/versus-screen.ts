@@ -14,6 +14,7 @@ import { MinimapRenderer, OpponentTracker } from './minimap';
 import type { GrandmasterNetworkManager, GameUpdate } from '../network/network-manager';
 import type { AttackManager } from '../network/attack-system';
 import { BotPlayer } from '../ai/bot-player';
+import { getGhostY } from '../core/board';
 
 /**
  * Versus Screen
@@ -81,22 +82,24 @@ export class VersusScreen {
     this.screen.children.forEach(child => child.destroy());
 
     // Main board (left side, smaller to make room for minimaps)
+    // Board: 10 columns × 2 chars = 20, plus 2 for borders = 22 width
+    // Height: 20 visible rows + 2 for borders = 22
     this.boardBox = createBox({
       parent: this.screen,
-      top: 0,
+      top: 1,  // Match game-screen positioning
       left: 0,
-      width: 24,  // 10 columns × 2 chars + borders
+      width: 22,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'white' } },
+      style: { bg: 'black', border: { fg: 'white' } },
     });
 
     // Stats (below board)
     this.statsBox = createBox({
       parent: this.screen,
-      top: 22,
+      top: 23,  // Below board (1 + 22 = 23)
       left: 0,
-      width: 24,
+      width: 22,
       height: 3,
       content: '',
     });
@@ -104,8 +107,8 @@ export class VersusScreen {
     // Garbage queue indicator (right of board)
     this.garbageIndicator = createBox({
       parent: this.screen,
-      top: 0,
-      left: 24,
+      top: 1,
+      left: 22,  // Right edge of board
       width: 6,
       height: 22,
       border: { type: 'line' },
@@ -116,8 +119,8 @@ export class VersusScreen {
     // Attack indicator
     this.attackIndicator = createBox({
       parent: this.screen,
-      top: 22,
-      left: 24,
+      top: 23,
+      left: 22,
       width: 6,
       height: 3,
       border: { type: 'line' },
@@ -128,8 +131,8 @@ export class VersusScreen {
     // Minimap container (right side)
     this.minimapContainer = createBox({
       parent: this.screen,
-      top: 0,
-      left: 30,
+      top: 1,
+      left: 28,  // Right of garbage indicator (22 + 6 = 28)
       width: 50,
       height: 25,
       content: '',
@@ -195,41 +198,46 @@ export class VersusScreen {
     // Start game
     this.engine.start();
 
-    // Main game loop
-    let lastTime = Date.now();
-    const updateInterval = setInterval(() => {
-      if (!this.running) {
-        clearInterval(updateInterval);
-        return;
-      }
+    // Main game loop - returns a promise that resolves when game ends
+    return new Promise((resolve) => {
+      let lastTime = Date.now();
+      const updateInterval = setInterval(() => {
+        if (!this.running) {
+          clearInterval(updateInterval);
+          resolve();
+          return;
+        }
 
-      const now = Date.now();
-      const deltaTime = now - lastTime;
-      lastTime = now;
+        const now = Date.now();
+        const deltaTime = now - lastTime;
+        lastTime = now;
 
-      // Update player's game
-      this.engine.update(deltaTime);
+        // Update player's game
+        this.engine.update(deltaTime);
+        this.inputHandler.update(deltaTime);
 
-      // Update bot AI if in CPU Battle mode
-      if (this.botPlayer) {
-        this.botPlayer.update(deltaTime, this.engine);
-      }
+        // Update bot AI if in CPU Battle mode
+        if (this.botPlayer) {
+          this.botPlayer.update(deltaTime, this.engine);
+        }
 
-      // Send state to opponents (online multiplayer only)
-      if (this.network && now % 100 < deltaTime) {
-        this.network.sendUpdate(this.engine.getState());
-      }
+        // Send state to opponents (online multiplayer only)
+        if (this.network && now % 100 < deltaTime) {
+          this.network.sendUpdate(this.engine.getState());
+        }
 
-      // Render
-      this.render();
+        // Render
+        this.render();
 
-      // Check for game over
-      const gameState = this.engine.getState();
-      if (gameState.status === 'gameover' || gameState.status === 'complete') {
-        this.running = false;
-        clearInterval(updateInterval);
-      }
-    }, 16);  // ~60 FPS
+        // Check for game over
+        const gameState = this.engine.getState();
+        if (gameState.status === 'gameover' || gameState.status === 'complete') {
+          this.running = false;
+          clearInterval(updateInterval);
+          resolve();
+        }
+      }, 16);  // ~60 FPS
+    });
   }
 
   /**
@@ -285,8 +293,8 @@ export class VersusScreen {
   private render(): void {
     const gameState = this.engine.getState();
 
-    // Render board (reuse from GameScreen logic)
-    // ... (similar to game-screen.ts renderBoard)
+    // Render board
+    this.renderBoard(gameState);
 
     // Render stats
     this.statsBox.setContent(
@@ -326,6 +334,87 @@ export class VersusScreen {
     } else if (gameState.status === 'paused') {
       this.engine.resume();
     }
+  }
+
+  /**
+   * Render the game board
+   */
+  private renderBoard(state: any): void {
+    const { board, currentPiece } = state;
+    let content = '';
+
+    // Get piece shape and ghost position
+    let pieceShape: number[][] | null = null;
+    let ghostY: number | null = null;
+
+    if (currentPiece) {
+      const pieceManager = (this.engine as any).pieceManager;
+      const shape = pieceManager?.getShape(currentPiece.type, currentPiece.rotation);
+      if (shape) {
+        pieceShape = shape;
+        // Only show ghost if piece top is visible (entered the playfield at row 4+)
+        if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
+          ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+        }
+      }
+    }
+
+    // Render each row (visible rows 4-23)
+    for (let y = 4; y < 24; y++) {
+      if (y > 4) content += '\n';
+
+      for (let x = 0; x < board.width; x++) {
+        const cell = board.grid[y]?.[x];
+        let char = '  ';  // Empty cell
+
+        // Check if current piece occupies this cell
+        if (currentPiece && pieceShape) {
+          const px = x - currentPiece.x;
+          const py = y - currentPiece.y;
+          if (py >= 0 && py < pieceShape.length &&
+              px >= 0 && px < pieceShape[py].length &&
+              pieceShape[py][px]) {
+            char = this.getBlockChar(currentPiece.type);
+          }
+        }
+
+        // Check if ghost piece occupies this cell
+        if (ghostY !== null && currentPiece && pieceShape && char === '  ') {
+          const px = x - currentPiece.x;
+          const py = y - ghostY;
+          if (py >= 0 && py < pieceShape.length &&
+              px >= 0 && px < pieceShape[py].length &&
+              pieceShape[py][px]) {
+            char = '{gray-fg}░░{/gray-fg}';
+          }
+        }
+
+        // Check if locked cell
+        if (char === '  ' && cell?.filled) {
+          char = this.getBlockChar(cell.color);
+        }
+
+        content += char;
+      }
+    }
+
+    this.boardBox.setContent(content);
+  }
+
+  /**
+   * Get colored block character for piece type
+   */
+  private getBlockChar(type: string): string {
+    const colors: Record<string, string> = {
+      I: '{cyan-fg}██{/cyan-fg}',
+      O: '{yellow-fg}██{/yellow-fg}',
+      T: '{magenta-fg}██{/magenta-fg}',
+      S: '{green-fg}██{/green-fg}',
+      Z: '{red-fg}██{/red-fg}',
+      J: '{blue-fg}██{/blue-fg}',
+      L: '{white-fg}██{/white-fg}',
+    };
+    return colors[type] || '{gray-fg}██{/gray-fg}';
   }
 
   /**

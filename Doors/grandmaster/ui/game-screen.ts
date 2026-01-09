@@ -1110,5 +1110,7 @@ export class GameScreen {
     this.holdBox?.destroy();
     this.statsBox?.destroy();
     this.gradeBox?.destroy();
+    this.sectionBox?.destroy();
+    this.effectsBox?.destroy();
   }
 }

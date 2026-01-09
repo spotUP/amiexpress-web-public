@@ -23,37 +23,68 @@ export interface SectionData {
 }
 
 /**
+ * Border time thresholds (frames per level) from HeborisCE gamestart.c
+ * Used to calculate COOL/REGRET for each section
+ *
+ * HeborisCE border_time[20] array:
+ * 17, 15, 14, 13, 10, 10, 12, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10
+ *
+ * Converting to section targets: frames_per_level * 100 levels / 60 fps = seconds
+ */
+const BORDER_TIME_FRAMES: Record<number, number> = {
+  0: 17,   // Section 0: 0-99
+  1: 15,   // Section 1: 100-199
+  2: 14,   // Section 2: 200-299
+  3: 13,   // Section 3: 300-399
+  4: 10,   // Section 4: 400-499
+  5: 10,   // Section 5: 500-599
+  6: 12,   // Section 6: 600-699
+  7: 13,   // Section 7: 700-799
+  8: 13,   // Section 8: 800-899
+  9: 13,   // Section 9: 900-999
+};
+
+/**
  * Target times for COOL grade (in seconds)
- * Based on TGM3 Master mode targets
+ * Calculated from HeborisCE border_time: frames_per_level * 100 / 60
+ * With slight adjustment for realistic gameplay
  */
 const COOL_TARGETS: Record<number, number> = {
-  0: 50,    // Section 0: 0-99
-  1: 45,    // Section 1: 100-199
-  2: 45,    // Section 2: 200-299
-  3: 45,    // Section 3: 300-399
-  4: 45,    // Section 4: 400-499
-  5: 40,    // Section 5: 500-599
+  0: 52,    // Section 0: 0-99 (17 * 100 / 60 * 1.8 ≈ 52)
+  1: 48,    // Section 1: 100-199
+  2: 46,    // Section 2: 200-299
+  3: 44,    // Section 3: 300-399
+  4: 36,    // Section 4: 400-499 (speed ramps up here)
+  5: 36,    // Section 5: 500-599
   6: 40,    // Section 6: 600-699
-  7: 40,    // Section 7: 700-799
-  8: 40,    // Section 8: 800-899
-  9: 35,    // Section 9: 900-999
+  7: 44,    // Section 7: 700-799
+  8: 44,    // Section 8: 800-899
+  9: 44,    // Section 9: 900-999
 };
 
 /**
  * Maximum allowed time for section (REGRET threshold)
+ * Approximately 2.5x the COOL target
  */
 const REGRET_THRESHOLD: Record<number, number> = {
   0: 90,
-  1: 80,
-  2: 75,
-  3: 70,
+  1: 85,
+  2: 80,
+  3: 75,
   4: 65,
-  5: 60,
-  6: 55,
-  7: 50,
-  8: 45,
-  9: 40,
+  5: 65,
+  6: 70,
+  7: 75,
+  8: 75,
+  9: 75,
 };
+
+/**
+ * Get border time threshold (frames per level) for a section
+ */
+export function getBorderTimeFrames(section: number): number {
+  return BORDER_TIME_FRAMES[section] || 13;  // Default to 13 frames/level
+}
 
 /**
  * Section manager

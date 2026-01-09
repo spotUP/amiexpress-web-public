@@ -19,6 +19,7 @@ export type MenuSelection =
   | 'training'
   | 'settings'
   | 'stats'
+  | 'manual'
   | 'quit';
 
 /**
@@ -100,6 +101,7 @@ export class MenuScreen {
           '',
           'Settings',
           'Statistics',
+          '{cyan-fg}Manual (F1){/cyan-fg}',
           '{red-fg}Quit{/red-fg}',
         ],
       });
@@ -165,6 +167,7 @@ export class MenuScreen {
           'master',  // Separator line, default to master
           'settings',
           'stats',
+          'manual',
           'quit',
         ];
 
@@ -185,7 +188,12 @@ export class MenuScreen {
 
       // Handle quit key
       menu.key(['q', 'Q'], () => {
-        menu.emit('select', null, 9);  // Trigger quit selection
+        menu.emit('select', null, 11);  // Trigger quit selection (index 11)
+      });
+
+      // Handle F1 key for manual
+      menu.key(['f1'], () => {
+        menu.emit('select', null, 10);  // Trigger manual selection (index 10)
       });
 
       // Focus and render
@@ -267,6 +275,9 @@ export class MenuScreen {
 
       // Statistics
       '{gray-fg}View your play\nhistory, records,\nand achievements.{/gray-fg}',
+
+      // Manual
+      '{cyan-fg}Player manual with\ncontrols, mechanics,\nand strategy tips.{/cyan-fg}',
 
       // Quit
       '{gray-fg}Exit GRANDMASTER\nand return to BBS.{/gray-fg}',
