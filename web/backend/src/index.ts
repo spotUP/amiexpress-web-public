@@ -1222,6 +1222,8 @@ console.log(
     };
 
 console.log("[ChatOnly] Executing LiveChat door");
+    // Small delay to ensure client handlers are fully registered
+    await new Promise(resolve => setTimeout(resolve, 100));
     await executeDoor(socket, session, liveChatDoor);
 
     return;

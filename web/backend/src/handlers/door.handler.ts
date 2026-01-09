@@ -2245,10 +2245,13 @@ console.log(`[executeAmigaDoor] No .020 version found for ${doorPath}, using 680
     }
 
 console.log(`[executeAmigaDoor] Starting 68k emulation for: ${doorPath}`);
+console.log(`[executeAmigaDoor] door.type="${door.type}" door.doorType="${(door as any).doorType}"`);
 
     // Create DoorConfig for AmigaDoorSession
-    // TEMPORARY FIX: Force RTW as XIM door (it explicitly declares itself as XIM in banner)
+    // Use door.type from registration (XIM, AIM, SIM, etc.)
+    // The switch statement at line 1331 already matched this type, so door.type MUST be valid
     let doorType = door.type || 'SIM';  // Default to SIM per express.e:4681
+console.log(`[executeAmigaDoor] Resolved doorType="${doorType}"`)
     const lowerDoorPath = doorPath.toLowerCase();
     const isRtwDoor = lowerDoorPath.includes('/rtw/rtw') || lowerDoorPath.includes('\\rtw\\rtw');
     if (isRtwDoor) {

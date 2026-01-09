@@ -75,11 +75,139 @@ export interface CommandDefinition {
 }
 
 /**
- * Parse Amiga .info file tooltypes
+ * Amiga .info file binary parser
  *
- * Native binary parser - no longer relies on external 'strings' command.
- * Scans for the tooltypes section in the binary .info file and extracts strings.
+ * Properly parses the DiskObject structure to find tooltypes at their actual location,
+ * rather than scanning for strings (which picks up garbage from image data).
  *
+ * File format:
+ * - DiskObject header (78 bytes)
+ * - First Image struct (20 bytes) + image data (if GadgetRender != 0)
+ * - Second Image struct (20 bytes) + image data (if SelectRender != 0)
+ * - DrawerData (56 bytes, if type is drawer and do_DrawerData != 0)
+ * - DefaultTool string (null-terminated, if do_DefaultTool != 0)
+ * - ToolTypes (sequential null-terminated strings, if do_ToolTypes != 0)
+ * - ToolWindow string (null-terminated, if do_ToolWindow != 0)
+ */
+
+// DiskObject structure offsets
+const DO_MAGIC = 0;           // UWORD - 0xE310
+const DO_VERSION = 2;         // UWORD
+const DO_GADGET = 4;          // struct Gadget (44 bytes)
+const DO_TYPE = 48;           // UBYTE
+const DO_DEFAULT_TOOL = 50;   // APTR (flag)
+const DO_TOOL_TYPES = 54;     // APTR (flag)
+const DO_CURRENT_X = 58;      // LONG
+const DO_CURRENT_Y = 62;      // LONG
+const DO_DRAWER_DATA = 66;    // APTR (flag)
+const DO_TOOL_WINDOW = 70;    // APTR (flag)
+const DO_STACK_SIZE = 74;     // LONG
+const DISK_OBJECT_SIZE = 78;
+
+// Gadget structure offsets (within DiskObject at offset 4)
+const GG_WIDTH = 12;          // WORD (relative to DO_GADGET)
+const GG_HEIGHT = 14;         // WORD
+const GG_GADGET_RENDER = 22;  // APTR (flag for 1st image)
+const GG_SELECT_RENDER = 26;  // APTR (flag for 2nd image)
+
+// Image structure size
+const IMAGE_STRUCT_SIZE = 20;
+const IMG_WIDTH = 0;          // WORD
+const IMG_HEIGHT = 2;         // WORD
+const IMG_DEPTH = 4;          // WORD
+
+// DrawerData structure size
+const DRAWER_DATA_SIZE = 56;
+
+// Workbench icon types
+const WBDISK = 1;
+const WBDRAWER = 2;
+const WBGARBAGE = 5;
+
+/**
+ * Check if a string looks like a valid tooltype (not image garbage)
+ * Valid tooltypes: KEY=VALUE or just KEY
+ * Invalid: repeated characters, no letters, random binary data
+ */
+function isValidTooltypeString(str: string): boolean {
+  const trimmed = str.trim();
+  if (trimmed.length === 0 || trimmed.length > 200) return false;
+
+  // Must contain at least one letter
+  if (!/[A-Za-z]/.test(trimmed)) return false;
+
+  // Reject strings with too many repeated characters (image data patterns)
+  // e.g., "UUUUUUU" or "EUUPUUX"
+  const letterCount: Record<string, number> = {};
+  let maxRepeat = 0;
+  for (const char of trimmed.toUpperCase()) {
+    if (/[A-Z]/.test(char)) {
+      letterCount[char] = (letterCount[char] || 0) + 1;
+      maxRepeat = Math.max(maxRepeat, letterCount[char]);
+    }
+  }
+  // If one letter appears more than 60% of all letters, it's likely garbage
+  const totalLetters = Object.values(letterCount).reduce((a, b) => a + b, 0);
+  if (totalLetters > 4 && maxRepeat > totalLetters * 0.6) return false;
+
+  // For KEY=VALUE format, validate the key part
+  const eqIdx = trimmed.indexOf('=');
+  if (eqIdx !== -1) {
+    let key = trimmed.substring(0, eqIdx).trim();
+    // Strip leading non-alpha chars (NewIcons length prefixes like '%')
+    const keyMatch = key.match(/[A-Za-z][A-Za-z0-9_.]*/);
+    if (!keyMatch) return false;
+    // Key must be a reasonable tooltype name
+    if (keyMatch[0].length < 2) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Calculate image data size in bytes
+ * RASSIZE(w, h) = ((w + 15) >> 4) << 1 * h bytes per plane
+ */
+function calcImageDataSize(width: number, height: number, depth: number): number {
+  const bytesPerRow = Math.floor((width + 15) / 16) * 2;
+  return bytesPerRow * height * depth;
+}
+
+/**
+ * Read a big-endian 16-bit word from buffer
+ */
+function readWord(buffer: Buffer, offset: number): number {
+  if (offset + 2 > buffer.length) return 0;
+  return (buffer[offset] << 8) | buffer[offset + 1];
+}
+
+/**
+ * Read a big-endian 32-bit long from buffer
+ */
+function readLong(buffer: Buffer, offset: number): number {
+  if (offset + 4 > buffer.length) return 0;
+  return ((buffer[offset] << 24) | (buffer[offset + 1] << 16) |
+          (buffer[offset + 2] << 8) | buffer[offset + 3]) >>> 0;
+}
+
+/**
+ * Read a null-terminated string from buffer
+ * Returns [string, bytesConsumed]
+ */
+function readNullString(buffer: Buffer, offset: number): [string, number] {
+  let str = '';
+  let i = offset;
+  while (i < buffer.length && buffer[i] !== 0) {
+    str += String.fromCharCode(buffer[i]);
+    i++;
+  }
+  return [str, i - offset + 1]; // +1 for null terminator
+}
+
+/**
+ * Parse Amiga .info file tooltypes using proper binary structure parsing
+ *
+ * @param filePath - Path to the .info file
  * @param session - Optional BBS session for sysop debug messages
  * @param socket - Optional socket for sysop debug messages
  */
@@ -87,63 +215,184 @@ export function parseInfoFile(filePath: string, session?: any, socket?: any): Ma
   const tooltypes = new Map<string, string>();
 
   try {
-    // Check if file exists
     if (!fs.existsSync(filePath)) {
       return tooltypes;
     }
 
     const buffer = fs.readFileSync(filePath);
-    if (buffer.length < 40) return tooltypes; // Too small to be a valid .info file
+    if (buffer.length < DISK_OBJECT_SIZE) {
+      return tooltypes; // Too small to be a valid .info file
+    }
 
-    // Amiga .info files are binary. The tooltypes section starts after the 
-    // DiskObject structure. We look for printable strings that look like KEY=VALUE
-    // but a more robust way is to just extract all printable ASCII sequences.
-    const extractedStrings: string[] = [];
-    let currentString = '';
+    // Verify magic number (0xE310)
+    const magic = readWord(buffer, DO_MAGIC);
+    if (magic !== 0xE310) {
+      // Not a valid Workbench icon file, fall back to string extraction
+      return parseInfoFileFallback(buffer, filePath, session, socket);
+    }
 
-    for (let i = 0; i < buffer.length; i++) {
-      const charCode = buffer[i];
-      // Printable ASCII range (including space)
-      if (charCode >= 32 && charCode <= 126) {
-        currentString += String.fromCharCode(charCode);
-      } else {
-        if (currentString.length >= 2) {
-          extractedStrings.push(currentString);
+    // Read key fields from DiskObject header
+    const doType = buffer[DO_TYPE];
+    const hasDefaultTool = readLong(buffer, DO_DEFAULT_TOOL) !== 0;
+    const hasToolTypes = readLong(buffer, DO_TOOL_TYPES) !== 0;
+    const hasDrawerData = readLong(buffer, DO_DRAWER_DATA) !== 0;
+    const hasToolWindow = readLong(buffer, DO_TOOL_WINDOW) !== 0;
+
+    // Check for images in Gadget structure
+    const hasFirstImage = readLong(buffer, DO_GADGET + GG_GADGET_RENDER) !== 0;
+    const hasSecondImage = readLong(buffer, DO_GADGET + GG_SELECT_RENDER) !== 0;
+
+    // Calculate offset to data section (after header and images)
+    let offset = DISK_OBJECT_SIZE;
+
+    // Skip first image if present
+    if (hasFirstImage && offset + IMAGE_STRUCT_SIZE <= buffer.length) {
+      const imgWidth = readWord(buffer, offset + IMG_WIDTH);
+      const imgHeight = readWord(buffer, offset + IMG_HEIGHT);
+      const imgDepth = readWord(buffer, offset + IMG_DEPTH);
+      const imageDataSize = calcImageDataSize(imgWidth, imgHeight, imgDepth);
+      offset += IMAGE_STRUCT_SIZE + imageDataSize;
+    }
+
+    // Skip second image if present
+    if (hasSecondImage && offset + IMAGE_STRUCT_SIZE <= buffer.length) {
+      const imgWidth = readWord(buffer, offset + IMG_WIDTH);
+      const imgHeight = readWord(buffer, offset + IMG_HEIGHT);
+      const imgDepth = readWord(buffer, offset + IMG_DEPTH);
+      const imageDataSize = calcImageDataSize(imgWidth, imgHeight, imgDepth);
+      offset += IMAGE_STRUCT_SIZE + imageDataSize;
+    }
+
+    // Skip DrawerData if present (for drawer/disk/garbage icons)
+    if (hasDrawerData && (doType === WBDISK || doType === WBDRAWER || doType === WBGARBAGE)) {
+      offset += DRAWER_DATA_SIZE;
+    }
+
+    // Skip DefaultTool string if present
+    if (hasDefaultTool && offset < buffer.length) {
+      const [, consumed] = readNullString(buffer, offset);
+      offset += consumed;
+    }
+
+    // Now we're at the ToolTypes section
+    if (hasToolTypes && offset < buffer.length) {
+      // ToolTypes are stored as sequential null-terminated strings
+      // The section ends when we hit an empty string or run out of valid data
+      let tooltypeCount = 0;
+      const maxTooltypes = 500; // Safety limit
+
+      while (offset < buffer.length && tooltypeCount < maxTooltypes) {
+        // Check for null byte at start - end of tooltypes section
+        if (buffer[offset] === 0) {
+          break;
         }
-        currentString = '';
+
+        const [tooltypeStr, consumed] = readNullString(buffer, offset);
+        offset += consumed;
+
+        if (tooltypeStr.length === 0) {
+          break;
+        }
+
+        // Skip strings that look like image/garbage data
+        // Valid tooltypes have recognizable ASCII patterns with letters
+        if (!isValidTooltypeString(tooltypeStr)) {
+          continue;
+        }
+
+        // Parse the tooltype string
+        const trimmed = tooltypeStr.trim();
+
+        // Skip commented-out tooltypes (parenthesized)
+        if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+          tooltypeCount++;
+          continue;
+        }
+
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = trimmed.substring(0, eqIdx).toUpperCase().trim();
+          const value = trimmed.substring(eqIdx + 1);
+          if (key.length > 0) {
+            tooltypes.set(key, value);
+          }
+        } else {
+          // Flag-style tooltype (no value)
+          const key = trimmed.toUpperCase();
+          if (key.length > 0 && /^[A-Z][A-Z0-9_.]*$/.test(key)) {
+            tooltypes.set(key, 'YES');
+          }
+        }
+
+        tooltypeCount++;
       }
     }
-    if (currentString.length >= 2) extractedStrings.push(currentString);
 
-    for (const line of extractedStrings) {
-      const trimmed = line.trim();
-
-      // Commented-out tooltypes
-      if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
-        continue;
-      }
-
-      // Strip leading non-alphanumeric junk from binary buffers (e.g., *LOCATION, $LOCATION)
-      let cleanLine = trimmed.replace(/^[^A-Za-z0-9]+/g, '');
-
-      const eqIdx = cleanLine.indexOf('=');
-      if (eqIdx !== -1) {
-        const key = cleanLine.substring(0, eqIdx).toUpperCase().trim();
-        const value = cleanLine.substring(eqIdx + 1).trim();
-        // Validation: Amiga tooltype keys are usually alphanumeric + underscore, 2-32 chars
-        if (key && /^[A-Z0-9_]{2,32}$/.test(key)) {
-          tooltypes.set(key, value);
-        }
-      } else {
-        // Flag mode: just the key
-        const key = cleanLine.toUpperCase().trim();
-        if (key && /^[A-Z0-9_]{2,32}$/.test(key)) {
-          tooltypes.set(key, 'YES');
-        }
-      }
+    // If we found tooltypes, we're done
+    if (tooltypes.size > 0) {
+      return tooltypes;
     }
+
+    // Fallback: if binary parsing found nothing, try string extraction
+    // This handles non-standard or corrupted .info files
+    return parseInfoFileFallback(buffer, filePath, session, socket);
+
   } catch (error) {
     SysopDebugUtil.debugFileError(socket, session, 'parse', filePath, error as Error, DebugSeverity.WARNING);
+  }
+
+  return tooltypes;
+}
+
+/**
+ * Fallback parser using string extraction for non-standard .info files
+ * Only used when binary parsing fails or finds no tooltypes
+ */
+function parseInfoFileFallback(buffer: Buffer, filePath: string, session?: any, socket?: any): Map<string, string> {
+  const tooltypes = new Map<string, string>();
+
+  // Extract all printable ASCII sequences
+  const extractedStrings: string[] = [];
+  let currentString = '';
+
+  for (let i = 0; i < buffer.length; i++) {
+    const charCode = buffer[i];
+    if (charCode >= 32 && charCode <= 126) {
+      currentString += String.fromCharCode(charCode);
+    } else {
+      if (currentString.length >= 2) {
+        extractedStrings.push(currentString);
+      }
+      currentString = '';
+    }
+  }
+  if (currentString.length >= 2) extractedStrings.push(currentString);
+
+  for (const line of extractedStrings) {
+    const trimmed = line.trim();
+
+    // Skip commented tooltypes
+    if ((trimmed.startsWith('(') && trimmed.endsWith(')')) || trimmed.startsWith('!')) {
+      continue;
+    }
+
+    // Use the same validation as binary parser
+    if (!isValidTooltypeString(trimmed)) {
+      continue;
+    }
+
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx !== -1) {
+      // Strip leading non-alphabetic chars (e.g., '%' from NewIcons length prefix bytes)
+      let rawKey = trimmed.substring(0, eqIdx).toUpperCase().trim();
+      const keyMatch = rawKey.match(/[A-Z][A-Z0-9_.]*/);
+      const key = keyMatch ? keyMatch[0] : '';
+      const value = trimmed.substring(eqIdx + 1).trim();
+      // Accept any reasonable KEY=VALUE pair
+      if (key && key.length >= 2 && key.length <= 32) {
+        tooltypes.set(key, value);
+      }
+    }
   }
 
   return tooltypes;

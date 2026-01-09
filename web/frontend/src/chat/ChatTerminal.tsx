@@ -170,11 +170,14 @@ export default function ChatTerminal() {
     const backendUrl = isDevelopment ? 'http://localhost:3001' : window.location.origin;
 
     // Connect with chatOnly flag - backend will auto-launch LiveChat after login
+    // IMPORTANT: autoConnect: false to ensure handlers are registered before connection
+    // This prevents race condition where backend emits door:load-client before handlers exist
     const socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      autoConnect: false,  // Don't connect until handlers are registered
       query: {
         chatOnly: 'true'  // Signal to backend this is chat-only mode
       }
@@ -224,6 +227,58 @@ export default function ChatTerminal() {
       console.log(`[ChatTerminal] Terminal size after: ${term.cols}x${term.rows}`);
     });
 
+    // Load hybrid door client bundle (for audio support in LiveChat)
+    socket.on('door:load-client', async (data: { doorId: string; sessionId: string; bundleUrl: string; manifest: any }) => {
+      console.log(`[ChatTerminal] Loading client door: ${data.doorId}`);
+
+      // Expose BBS connection to client doors
+      (window as any).__BBS__ = {
+        socket,
+        sessionId: data.sessionId,
+        backendUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
+      };
+
+      // Remove any existing script for this door
+      const scriptId = `door-${data.doorId}`;
+      const existingScript = document.getElementById(scriptId);
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      // Create and load the client bundle script
+      const script = document.createElement('script');
+      script.id = scriptId;
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      script.src = data.bundleUrl.startsWith('http')
+        ? data.bundleUrl
+        : `${backendUrl}${data.bundleUrl}`;
+      script.type = 'text/javascript';
+
+      script.onload = () => {
+        console.log(`[ChatTerminal] Client bundle loaded: ${data.doorId}`);
+      };
+
+      script.onerror = (error) => {
+        console.error(`[ChatTerminal] Failed to load client bundle:`, error);
+        delete (window as any).__BBS__;
+      };
+
+      document.body.appendChild(script);
+    });
+
+    // Unload hybrid door client bundle
+    socket.on('door:unload-client', (data: { doorId: string; sessionId?: string }) => {
+      console.log(`[ChatTerminal] Unloading client door: ${data.doorId}`);
+      const scriptId = `door-${data.doorId}`;
+      const script = document.getElementById(scriptId);
+      if (script && script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+      if ((window as any).__BBS__?.sessionId === data.sessionId) {
+        delete (window as any).__BBS__;
+      }
+    });
+
     // Send ALL input to backend - door handles everything (including login via blessed modal)
     term.onData((data: string) => {
       console.log('[ChatTerminal] onData fired:', JSON.stringify(data), 'charCode:', data.charCodeAt(0));
@@ -236,6 +291,10 @@ export default function ChatTerminal() {
     });
 
     term.focus();
+
+    // NOW connect - all handlers are registered, safe to receive events
+    console.log('[ChatTerminal] All handlers registered, connecting...');
+    socket.connect();
 
     return () => {
       window.removeEventListener('resize', handleResize);

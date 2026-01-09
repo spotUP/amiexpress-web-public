@@ -6,7 +6,7 @@
  */
 
 import { CoreDoor as Door, type DoorContext, type KeyPress } from '@amiexpress/bbs-door-sdk';
-import { Screen, Textbox, Box, Text, Autocomplete, AutocompleteManager, UsernameProvider, BBSCodeProvider } from '@amiexpress/bbs-door-sdk';
+import { Screen, Textbox, Box, Text, Autocomplete, AutocompleteTextbox, AutocompleteManager, UsernameProvider, BBSCodeProvider } from '@amiexpress/bbs-door-sdk';
 import type { AutocompleteContext } from '@amiexpress/bbs-door-sdk';
 import {
   EditorState,
@@ -83,8 +83,19 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
   // Load draft if exists
   const draft = await loadDraft(username, ctx);
 
-  // Show header editor first
-  const headerInfo = await showHeaderEditor(screen, recipient, subject, draft);
+  // Get usernames for autocomplete
+  let usernames: string[] = [];
+  try {
+    if (bbs?.getUserList) {
+      const users = await bbs.getUserList();
+      usernames = users.map((u: any) => u.username || u.name || u).filter(Boolean);
+    }
+  } catch {
+    // Silently fail - autocomplete will just be empty
+  }
+
+  // Show header editor first with username autocomplete
+  const headerInfo = await showHeaderEditor(screen, recipient, subject, draft, usernames);
   if (!headerInfo) {
     // User cancelled
     ctx.close();
@@ -310,7 +321,8 @@ async function showHeaderEditor(
   screen: any,
   initialTo: string,
   initialSubject: string,
-  draft?: MessageDraft
+  draft?: MessageDraft,
+  usernames: string[] = []
 ): Promise<{ to: string; subject: string } | null> {
   return new Promise((resolve) => {
     const container = new Box({
@@ -331,10 +343,11 @@ async function showHeaderEditor(
       parent: container,
       top: 1,
       left: 2,
-      content: '{yellow-fg}To:{/}',
+      content: '{yellow-fg}To:{/}' + (usernames.length > 0 ? ' {gray-fg}(type to search users){/}' : ''),
     });
 
-    const toInput = new Textbox({
+    // Use AutocompleteTextbox for the To field with username suggestions
+    const toInput = new AutocompleteTextbox({
       parent: container,
       top: 2,
       left: 2,
@@ -349,6 +362,18 @@ async function showHeaderEditor(
         bg: 'blue',
         focus: { bg: 'green' },
       },
+      // Autocomplete options
+      suggestions: usernames,
+      minLength: 1,
+      maxSuggestions: 8,
+      caseInsensitive: true,
+      popupHeight: 10,
+    });
+
+    // Handle selection from autocomplete
+    toInput.on('select', (suggestion: string) => {
+      // Value is already set by the autocomplete, just render
+      screen.render();
     });
 
     new Text({
