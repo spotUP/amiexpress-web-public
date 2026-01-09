@@ -313,3 +313,28 @@ Env/
 # BBS door password files
 Doors/Bossnuke/BossNuke.pw
 Commands/BBSCmd/nuke.info
+
+# Reference source directories (large, for local research only)
+HeborisCE-main/
+TetriNET2-master/
+
+# Door runtime date/timestamp files
+Doors/AquaScan/AquaScan.Date.*
+
+# SDK build artifacts (compiled JS in dist-esm)
+sdk/dist-esm/**/*.js
+sdk/dist-esm/**/*.d.ts
+
+# Conference runtime files
+Conf*/Dir1
+Conf*/Dir1.test
+Conf*/NumULs
+Conf*/Files/*.dir
+Conf*/Upload/FILES.BBS
+Conf*/Upload/*.LHA
+
+# Stats runtime files
+SysopStats/
+
+# Node work directories
+Node*/WorkDir/
