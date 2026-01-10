@@ -338,3 +338,4 @@ SysopStats/
 
 # Node work directories
 Node*/WorkDir/
+.watch-doors.pid
