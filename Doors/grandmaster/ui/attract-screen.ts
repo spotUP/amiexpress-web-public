@@ -7,10 +7,17 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import { GameEngine } from '../core/game';
 import type { SoundEngine } from '../audio/sounds';
-import type { AppState } from '../core/types';
+import type { AppState, PieceType } from '../core/types';
 import { BotPlayer } from '../ai/bot-player';
+import { PieceManager, ARS_COLORS, PIECE_COLORS } from '../core/pieces';
+import { getGhostY } from '../core/board';
+import { ScreenShaker } from '../effects/screen-shake';
+import { ParticleSystem } from '../effects/particles';
+import { TransitionManager } from '../effects/transitions';
+import { AnimationManager, AnimationRenderer } from '../effects/animations';
 
 type AttractState = 'boot' | 'demo' | 'leaderboard' | 'tips' | 'credits';
 
@@ -30,23 +37,24 @@ interface LeaderboardEntry {
  */
 export class AttractScreen {
   private screen: Screen;
-  private engine: GameEngine | null = null;
   private sounds: SoundEngine;
   private state: AppState;
   private botPlayer: BotPlayer;
+  private pieceManager: PieceManager;
 
   // UI Elements
   private mainBox: any;
   private demoBox: any;
   private infoBox: any;
+  private effectsBox: any;
 
   // State management
   private attractState: AttractState = 'boot';
   private stateTimer: number = 0;
-  private bootAnimationFrame: number = 0;
   private running: boolean = false;
   private exitCallback: (() => void) | null = null;
   private exitHandler: (() => void) | null = null;
+  private dataHandler: ((data: string) => void) | null = null;
 
   // Rainbow animation
   private rainbowTimer: number = 0;
@@ -55,6 +63,39 @@ export class AttractScreen {
   // Demo game
   private demoEngine: GameEngine | null = null;
   private demoRunning: boolean = false;
+  private lastRenderedAt: number = 0;
+  private updateInterval: NodeJS.Timeout | null = null;
+
+  // Visual effects systems (Parity with GameScreen)
+  private shaker: ScreenShaker;
+  private particles: ParticleSystem;
+  private transitions: TransitionManager;
+  private animations: AnimationManager;
+
+  // Track previous state for detecting changes
+  private lastGrade: string = '9';
+  private lastLines: number = 0;
+  private lastLevel: number = 0;
+  private lastSection: number = 0;
+  private lastPieceExists: boolean = false;
+  private lastBoardHash: string = '';
+  private lastHold: PieceType | null = null;
+  private lastNext: PieceType[] = [];
+  
+  // Animation state
+  private shineTimer: number = 0;
+  private readonly SHINE_INTERVAL = 300;
+  private shineCells: Map<string, number> = new Map();
+  private hardDropTrails: Array<{
+    x: number;
+    y: number;
+    color: string;
+    strength: number;
+    createdAt: number;
+  }> = [];
+
+  private gradeAnimProgress: number = 0;
+  private gradeAnimDirection: number = 1;
 
   constructor(
     screen: Screen,
@@ -64,7 +105,17 @@ export class AttractScreen {
     this.screen = screen;
     this.sounds = sounds;
     this.state = state;
-    this.botPlayer = new BotPlayer(7); // Expert difficulty for demo
+    this.botPlayer = new BotPlayer(9); // Grandmaster difficulty for demo
+    this.pieceManager = new PieceManager(state.settings.rotationSystem);
+
+    // Initialize effect systems
+    this.shaker = new ScreenShaker();
+    this.particles = new ParticleSystem();
+    this.transitions = new TransitionManager();
+    this.animations = new AnimationManager();
+
+    // Enable mouse tracking for attract mode
+    this.screen.program.enableMouse();
 
     this.setupUI();
   }
@@ -92,28 +143,38 @@ export class AttractScreen {
       parent: this.screen,
       top: 2,
       left: 2,
-      width: 26,
+      width: 22,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'cyan' } },
-      align: 'center',
-      content: '',
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      fixed: true,
     });
     this.demoBox.hide();  // Hidden during boot
 
     // Info panel (right side) - hidden initially
-    this.infoBox = createBox({
+    this.infoBox = createDockable({
       parent: this.screen,
       top: 2,
       left: 30,
       width: 50,
       height: 22,
       border: { type: 'line' },
-      style: { border: { fg: 'yellow' } },
+      style: { bg: 'black', border: { fg: 'yellow' } },
       align: 'center',
       content: '',
+      persistenceKey: 'grandmaster.attract.info',
     });
     this.infoBox.hide();  // Hidden during boot
+
+    // Effects overlay
+    this.effectsBox = createBox({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      style: { fg: 'white', bg: 'transparent' },
+    });
   }
 
   /**
@@ -123,24 +184,35 @@ export class AttractScreen {
     this.running = true;
     this.exitCallback = onExit;
 
-    // Setup input to exit on any key
-    this.setupInput();
+    // Start audio engine (tries to resume context)
+    void this.sounds.start();
 
     // Start with boot sequence
     await this.showBootSequence();
+
+    if (!this.running) return; // Exit if interrupted during boot
+
+    // Setup input to exit on any key DURING demo
+    this.setupInput();
 
     // Main attract loop
     this.attractState = 'demo';
     this.startDemo();
 
-    const updateInterval = setInterval(() => {
+    this.updateInterval = setInterval(() => {
       if (!this.running) {
-        clearInterval(updateInterval);
+        if (this.updateInterval) clearInterval(this.updateInterval);
+        this.sounds.stopMusic();
         return;
       }
 
-      this.update(16); // ~60 FPS
-      this.render();
+      this.update(16); // ~60 FPS logic
+      
+      const now = Date.now();
+      if (now - this.lastRenderedAt >= 50) { // ~20 FPS render for BBS
+        this.render();
+        this.lastRenderedAt = now;
+      }
     }, 16);
   }
 
@@ -166,6 +238,7 @@ export class AttractScreen {
 
     // Animate logo line by line
     for (let i = 0; i < logo.length; i++) {
+      if (!this.running) return;
       let content = '{cyan-fg}{bold}\n\n\n\n';
       for (let j = 0; j <= i; j++) {
         content += logo[j] + '\n';
@@ -177,17 +250,28 @@ export class AttractScreen {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
+    if (!this.running) return;
     // Show version and press key message with rainbow animation
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Play ready sound
     this.sounds.playSfx('ready');
+    
+    // Start opening music during rainbow animation
+    this.sounds.playMusic('opening', true);
 
-    // Animate rainbow colors for 2 seconds
+    // Animate rainbow colors and wait for keypress
+    // We wait up to 10 seconds or until keypress
     const startTime = Date.now();
-    const animationDuration = 2000;
+    const maxTitleWait = 10000; 
+    
+    // Internal input listener for the title screen specifically
+    let titleKeyPressed = false;
+    const titleHandler = () => { titleKeyPressed = true; };
+    this.screen.once('keypress', titleHandler);
+    this.screen.on('mouse', titleHandler);
 
-    while (Date.now() - startTime < animationDuration) {
+    while (this.running && !titleKeyPressed && (Date.now() - startTime < maxTitleWait)) {
       this.rainbowTimer++;
       const colorIndex = Math.floor(this.rainbowTimer / 5) % this.RAINBOW_COLORS.length;
 
@@ -200,11 +284,20 @@ export class AttractScreen {
       }
       content += '{/bold}\n{yellow-fg}v1.0.0{/yellow-fg}\n\n';
       content += '{white-fg}A Tetris: The Grand Master 3 Tribute{/white-fg}\n\n';
-      content += '{gray-fg}Press any key...{/gray-fg}';
+      content += '{yellow-fg}{blink}Press Space to Play!{/blink}{/yellow-fg}';
 
       this.mainBox.setContent(content);
       this.screen.render();
       await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Cleanup title listeners
+    this.screen.removeListener('keypress', titleHandler);
+    this.screen.removeListener('mouse', titleHandler);
+    
+    // If key was pressed, exit attract mode immediately to enter game
+    if (titleKeyPressed) {
+        this.exit();
     }
   }
 
@@ -212,12 +305,26 @@ export class AttractScreen {
    * Start demo gameplay
    */
   private startDemo(): void {
-    this.demoEngine = new GameEngine('master', this.state.settings);
+    if (!this.running) return;
+    this.demoEngine = new GameEngine('master', this.state.settings, this.sounds);
 
     if (this.demoEngine) {
       this.demoEngine.start();
       this.demoRunning = true;
       this.stateTimer = 0;
+      this.lastLevel = 0;
+      this.lastGrade = '9';
+      this.lastLines = 0;
+      this.lastBoardHash = '';
+      this.hardDropTrails = [];
+      this.shineCells.clear();
+      this.animations.clear();
+      this.particles.clear();
+
+      // Parity with GameScreen: bot hard drops trigger trails
+      this.demoEngine.onHardDrop(() => {
+        this.addHardDropTrail();
+      });
     }
   }
 
@@ -225,7 +332,16 @@ export class AttractScreen {
    * Update attract mode state
    */
   private update(deltaTime: number): void {
+    if (!this.running) return;
     this.stateTimer += deltaTime;
+
+    // Update effect systems
+    this.shaker.update(deltaTime);
+    this.particles.update(deltaTime);
+    this.transitions.update(deltaTime);
+    this.animations.update(deltaTime);
+    this.updateShineEffect();
+    this.updateGradeAnimation(deltaTime);
 
     switch (this.attractState) {
       case 'demo':
@@ -235,6 +351,9 @@ export class AttractScreen {
 
           // Update bot AI
           this.botPlayer.update(deltaTime, this.demoEngine);
+
+          // Check for game events (Parity with GameScreen)
+          this.checkDemoEvents();
 
           // Check if demo ended
           const gameState = this.demoEngine.getState();
@@ -281,25 +400,315 @@ export class AttractScreen {
   }
 
   /**
+   * Check for demo game events and trigger effects
+   */
+  private checkDemoEvents(): void {
+    if (!this.demoEngine) return;
+    const gameState = this.demoEngine.getState();
+
+    // Check for level change
+    if (gameState.level > this.lastLevel) {
+      const oldSection = Math.floor(this.lastLevel / 100);
+      const newSection = Math.floor(gameState.level / 100);
+      if (newSection > oldSection && gameState.level < 1000) {
+        this.sounds.playSfx('section_up');
+      }
+      this.lastLevel = gameState.level;
+    }
+
+    // Check for grade change
+    if (gameState.grade !== this.lastGrade) {
+      this.animations.gradeUp(this.lastGrade, gameState.grade, 40, 5);
+      this.particles.spawn('gradeUp', 40, 5);
+      this.shaker.shake('lineClear');
+      this.sounds.playSfx('grade_up');
+      this.lastGrade = gameState.grade;
+    }
+
+    // Check for line clear
+    if (gameState.lines > this.lastLines) {
+      const linesCleared = gameState.lines - this.lastLines;
+      if (gameState.lastTSpin === 'full') {
+        this.particles.spawn('tetris', 12, 12);
+        this.shaker.shake('tetris');
+        this.animations.tSpin(12, 12);
+        this.sounds.playSfx('tetris');
+        this.sounds.playVoice('tetris_voice');
+      } else if (linesCleared === 4) {
+        this.particles.spawn('tetris', 12, 12);
+        this.shaker.shake('tetris');
+        this.animations.lineClearFlash([], 4);
+        this.sounds.playSfx('tetris');
+        this.sounds.playVoice('tetris_voice');
+      } else if (linesCleared === 3) {
+        this.particles.spawn('lineClear', 12, 12);
+        this.shaker.shake('lineClear');
+        this.animations.lineClearFlash([], linesCleared);
+        this.sounds.playSfx('line_clear');
+        this.sounds.playVoice('triple');
+      } else if (linesCleared === 2) {
+        this.particles.spawn('lineClear', 12, 12);
+        this.shaker.shake('lineClear');
+        this.animations.lineClearFlash([], linesCleared);
+        this.sounds.playSfx('line_clear');
+        this.sounds.playVoice('double');
+      } else if (linesCleared >= 1) {
+        this.particles.spawn('lineClear', 12, 12);
+        this.shaker.shake('lineClear');
+        this.animations.lineClearFlash([], linesCleared);
+        this.sounds.playSfx('line_clear');
+      }
+      this.lastLines = gameState.lines;
+    }
+
+    // Check for piece spawn
+    if (gameState.currentPiece && !this.lastPieceExists) {
+      this.sounds.playSfx(this.getSpawnSfx(gameState.currentPiece.type));
+      
+      // IRS visual/audio feedback
+      if (gameState.currentPiece.rotation !== 0) {
+        this.animations.tSpin(gameState.currentPiece.x + 1, gameState.currentPiece.y + 1);
+        this.sounds.playSfx('pre_rotate');
+      }
+    }
+
+    // IHS visual feedback
+    if (!gameState.canHold && gameState.holdPiece && this.lastHold !== gameState.holdPiece && !this.lastPieceExists) {
+        this.sounds.playSfx('pre_hold');
+    }
+
+    // Check for piece lock
+    if (!gameState.currentPiece && this.lastPieceExists) {
+      this.triggerLockFlash();
+    }
+
+    this.lastPieceExists = gameState.currentPiece !== null;
+    this.lastHold = gameState.holdPiece;
+  }
+
+  private getSpawnSfx(type: PieceType): any {
+    const map: Record<PieceType, string> = {
+      I: 'spawn_i', J: 'spawn_j', L: 'spawn_l', O: 'spawn_o',
+      S: 'spawn_s', T: 'spawn_t', Z: 'spawn_z'
+    };
+    return map[type] || 'move';
+  }
+
+  private triggerLockFlash(): void {
+    if (!this.demoEngine) return;
+    const gameState = this.demoEngine.getState();
+    const lockTime = Date.now();
+    const cells: Array<{ x: number; y: number }> = [];
+
+    for (let y = 0; y < gameState.board.height; y++) {
+      for (let x = 0; x < gameState.board.width; x++) {
+        const cell = gameState.board.grid[y][x];
+        if (cell.lockTime && (lockTime - cell.lockTime) < 50) {
+          cells.push({ x, y });
+        }
+      }
+    }
+
+    const color = cells.length > 0
+      ? gameState.board.grid[cells[0].y][cells[0].x].color || 'white'
+      : 'white';
+
+    this.animations.lockGlow(cells, color);
+    this.sounds.playSfx('lock');
+  }
+
+  private updateShineEffect(): void {
+    this.shineTimer++;
+    if (this.shineTimer >= this.SHINE_INTERVAL) {
+      this.shineTimer = 0;
+      if (this.demoEngine) {
+        const gameState = this.demoEngine.getState();
+        let delay = 0;
+        for (let y = 4; y < 24; y++) {
+          for (let x = 0; x < gameState.board.width; x++) {
+            const cell = gameState.board.grid[y][x];
+            if (cell.filled && cell.locked) {
+              const key = `${x},${y}`;
+              this.shineCells.set(key, delay + 5);
+              delay += 1;
+            }
+          }
+        }
+      }
+    }
+    for (const [key, frames] of this.shineCells.entries()) {
+      if (frames <= 0) this.shineCells.delete(key);
+      else this.shineCells.set(key, frames - 1);
+    }
+  }
+
+  private hasShineEffect(x: number, y: number): boolean {
+    const key = `${x},${y}`;
+    const frames = this.shineCells.get(key);
+    return frames !== undefined && frames > 0 && frames < 5;
+  }
+
+  private getAnimatedGradeColor(grade: string): string {
+    if (grade === 'GMM' || grade === 'GM') {
+      const colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+      const index = Math.floor(this.gradeAnimProgress * colors.length) % colors.length;
+      return colors[index];
+    }
+    if (grade.startsWith('M')) return 'red';
+    if (grade.startsWith('m')) return 'magenta';
+    if (grade.startsWith('S')) return 'cyan';
+    return 'white';
+  }
+
+  private getAnimatedGradeSize(grade: string): { prefix: string; suffix: string } {
+    const pulse = Math.sin(this.gradeAnimProgress * Math.PI * 2) * 0.5 + 0.5;
+    return pulse > 0.7 ? { prefix: '{bold}', suffix: '{/bold}' } : { prefix: '', suffix: '' };
+  }
+
+  private updateGradeAnimation(deltaTime: number): void {
+    const PULSE_SPEED = 0.001;
+    this.gradeAnimProgress += PULSE_SPEED * deltaTime * this.gradeAnimDirection;
+    if (this.gradeAnimProgress >= 1) {
+      this.gradeAnimProgress = 1;
+      this.gradeAnimDirection = -1;
+    } else if (this.gradeAnimProgress <= 0) {
+      this.gradeAnimProgress = 0;
+      this.gradeAnimDirection = 1;
+    }
+  }
+
+  /**
    * Render attract mode
    */
   private render(): void {
-    switch (this.attractState) {
-      case 'demo':
-        this.renderDemo();
-        break;
-      case 'leaderboard':
-        this.renderLeaderboard();
-        break;
-      case 'tips':
-        this.renderTips();
-        break;
-      case 'credits':
-        this.renderCredits();
-        break;
+    if (!this.running) return;
+    
+    let needsRender = false;
+
+    if (this.attractState === 'demo' && this.demoEngine) {
+        const state = this.demoEngine.getState();
+        const boardHash = this.getBoardHash(state);
+        const isShaking = this.shaker.isShaking();
+
+        if (boardHash !== this.lastBoardHash || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
+            // Apply shake offset
+            if (isShaking) {
+                const offset = this.shaker.getOffset();
+                this.demoBox.top = 2 + offset.y;
+                this.demoBox.left = 2 + offset.x;
+            } else {
+                this.demoBox.top = 2;
+                this.demoBox.left = 2;
+            }
+
+            this.renderDemo();
+            this.lastBoardHash = boardHash;
+            needsRender = true;
+        }
+    } else {
+        switch (this.attractState) {
+            case 'leaderboard':
+                this.renderLeaderboard();
+                break;
+            case 'tips':
+                this.renderTips();
+                break;
+            case 'credits':
+                this.renderCredits();
+                break;
+        }
+        needsRender = true;
     }
 
-    this.screen.render();
+    // Render effects overlay
+    if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0) {
+      this.renderEffects();
+      needsRender = true;
+    }
+
+    if (needsRender) {
+        this.screen.render();
+    }
+  }
+
+  private renderEffects(): void {
+    let effectsContent = '';
+    const screenWidth = this.screen.width;
+    const screenHeight = this.screen.height;
+
+    // Render particles
+    const particles = this.particles.getRenderableParticles();
+    for (const particle of particles) {
+      const x = Math.floor(particle.x);
+      const y = Math.floor(particle.y);
+      if (x >= 0 && x < screenWidth && y >= 0 && y < screenHeight) {
+        if (particle.alpha > 0.7) {
+          effectsContent += `\x1b[${y};${x}H{${particle.color}-fg}${particle.char}{/}`;
+        } else if (particle.alpha > 0.3) {
+          effectsContent += `\x1b[${y};${x}H{gray-fg}${particle.char}{/}`;
+        }
+      }
+    }
+
+    // Render active animations
+    const animations = this.animations.getAnimations();
+    for (const anim of animations) {
+      if (anim.type === 'gradeUp') {
+        const rendered = AnimationRenderer.renderGradeUp(anim);
+        effectsContent += `\x1b[${5};${40}H${rendered}`;
+      } else if (anim.type === 'cool' || anim.type === 'regret') {
+        const rendered = AnimationRenderer.renderSectionResult(anim);
+        effectsContent += `\x1b[${3};${30}H${rendered}`;
+      } else if (anim.type === 'lockGlow') {
+        const intensity = AnimationRenderer.getLockGlowIntensity(anim);
+        if (intensity > 0.3) {
+          const data = anim.data as any;
+          for (const cell of data.cells) {
+            if (cell.y < 4) continue;
+            const x = 4 + cell.x * 2;
+            const y = cell.y + 1;
+            if (intensity > 0.7) {
+              effectsContent += `\x1b[${y};${x}H{white-fg}{bold}██{/bold}{/}`;
+            } else {
+              effectsContent += `\x1b[${y};${x}H{white-fg}░░{/}`;
+            }
+          }
+        }
+      }
+    }
+
+    if (this.effectsBox) {
+      this.effectsBox.setContent(effectsContent);
+    }
+  }
+
+  private getBoardHash(state: any): string {
+    const piece = state.currentPiece ? `${state.currentPiece.x},${state.currentPiece.y},${state.currentPiece.rotation}` : 'null';
+    return `${piece}-${state.lines}-${this.shineTimer}`;
+  }
+
+  private getPieceGlowColor(type: PieceType, rotationSystem: string): string {
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    return (colors as any)[type];
+  }
+
+  private getHardDropTrailChar(color: string, strength: number): string {
+    if (strength > 0.66) {
+      const bright = this.getBrightColor(color);
+      return `{${bright}-bg}  {/${bright}-bg}`;
+    }
+    if (strength > 0.33) {
+      return `{${color}-bg}  {/${color}-bg}`;
+    }
+    return `{${color}-fg}░░{/${color}-fg}`;
+  }
+
+  private getBrightColor(color: string): string {
+    const map: Record<string, string> = {
+      red: 'lightred', green: 'lightgreen', yellow: 'lightyellow', blue: 'lightblue',
+      magenta: 'lightmagenta', cyan: 'lightcyan', white: 'lightwhite', orange: 'yellow'
+    };
+    return map[color] || color;
   }
 
   /**
@@ -316,46 +725,98 @@ export class AttractScreen {
     this.demoBox.show();
     this.infoBox.show();
 
-    // Bring to front
-    this.demoBox.setFront();
-    this.infoBox.setFront();
-
     const gameState = this.demoEngine.getState();
     const board = gameState.board;
     const currentPiece = gameState.currentPiece;
+    const rotationSystem = this.state.settings.rotationSystem;
+    const isMasterRoll = gameState.creditRollActive;
+    const creditRoll = (this.demoEngine as any).creditRollManager;
 
-    // Render board
     let boardContent = '';
-    for (let y = 0; y < board.height; y++) {
+    const now = Date.now();
+
+    let pieceShape: number[][] | null = null;
+    let ghostY: number | null = null;
+
+    if (currentPiece) {
+      const pieceManager = (this.demoEngine as any).pieceManager;
+      const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
+      if (shape) {
+        pieceShape = shape;
+        if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
+          ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+        }
+      }
+    }
+
+    this.hardDropTrails = this.hardDropTrails.filter(trail => now - trail.createdAt < 160);
+
+    for (let y = 4; y < 24; y++) {
+      if (y > 4) boardContent += '\n';
       for (let x = 0; x < board.width; x++) {
         const cell = board.grid[y][x];
         let char = '  ';
 
-        if (cell.filled) {
-          const color = this.getPieceColor(cell.color || 'I');
-          char = `{${color}-fg}██{/${color}-fg}`;
-        } else if (currentPiece) {
-          // Check if current piece cell
-          const shape = this.getPieceShape(currentPiece.type, currentPiece.rotation);
+        if (currentPiece && pieceShape) {
           const px = x - currentPiece.x;
           const py = y - currentPiece.y;
-
-          if (py >= 0 && py < shape.length && px >= 0 && px < shape[py].length && shape[py][px]) {
-            const color = this.getPieceColor(currentPiece.type);
-            char = `{${color}-fg}██{/${color}-fg}`;
+          if (py >= 0 && py < pieceShape.length && px >= 0 && px < pieceShape[py].length && pieceShape[py][px]) {
+            if (currentPiece.invisible) {
+              char = '{black-fg}░░{/black-fg}';
+            } else {
+              char = this.getBlockChar(currentPiece.type, rotationSystem);
+            }
           }
         }
 
+        if (ghostY !== null && currentPiece && pieceShape && char === '  ' && !isMasterRoll) {
+          const px = x - currentPiece.x;
+          const py = y - ghostY;
+          if (py >= 0 && py < pieceShape.length && px >= 0 && px < pieceShape[py].length && pieceShape[py][px]) {
+            char = '{gray-fg}░░{/gray-fg}';
+          }
+        }
+
+        if (char === '  ' && !cell.filled && !isMasterRoll) {
+          const trail = this.hardDropTrails.find(t => t.x === x && t.y === y);
+          if (trail) {
+            const age = now - trail.createdAt;
+            const fade = Math.max(0, 1 - (age / 160));
+            const strength = trail.strength * fade;
+            char = this.getHardDropTrailChar(trail.color, strength);
+          }
+        }
+
+        if (char === '  ' && cell.filled) {
+          if (this.hasShineEffect(x, y) && !isMasterRoll) {
+            char = '{white-bg}{white-fg}██{/white-fg}{/white-bg}';
+          } else if (isMasterRoll && cell.lockTime) {
+            const fadeStage = creditRoll.getFadeStage(cell.lockTime);
+            if (fadeStage === 'full') {
+              char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+            } else if (fadeStage === 'bright') {
+              char = this.getFadedBlockChar(cell.color as PieceType, 'medium', rotationSystem);
+            } else if (fadeStage === 'medium' || fadeStage === 'faint') {
+              char = this.getFadedBlockChar(cell.color as PieceType, 'faint', rotationSystem);
+            } else {
+              char = '  ';
+            }
+          } else if (!isMasterRoll) {
+            char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+          }
+        }
         boardContent += char;
       }
-      boardContent += '\n';
     }
 
     this.demoBox.setContent(boardContent);
 
     // Render info panel
+    const gradeColor = this.getAnimatedGradeColor(gameState.grade);
+    const gradeSize = this.getAnimatedGradeSize(gameState.grade);
+
     let infoContent = '{cyan-fg}{bold}DEMONSTRATION{/bold}{/cyan-fg}\n\n';
-    infoContent += `{white-fg}Grade:{/white-fg} {magenta-fg}{bold}${gameState.grade}{/bold}{/magenta-fg}\n`;
+    infoContent += `{white-fg}Grade:{/white-fg} {${gradeColor}-fg}${gradeSize.prefix}${gameState.grade}${gradeSize.suffix}{/${gradeColor}-fg}\n`;
     infoContent += `{white-fg}Level:{/white-fg} {cyan-fg}${gameState.level}{/cyan-fg}\n`;
     infoContent += `{white-fg}Score:{/white-fg} {yellow-fg}${gameState.score.toLocaleString()}{/yellow-fg}\n`;
     infoContent += `{white-fg}Lines:{/white-fg} {green-fg}${gameState.lines}{/green-fg}\n\n`;
@@ -368,10 +829,67 @@ export class AttractScreen {
       infoContent += `{yellow-fg}{bold}BACK-TO-BACK{/bold}{/yellow-fg}\n`;
     }
 
-    infoContent += '\n\n{gray-fg}CPU Difficulty: Expert (7){/gray-fg}\n\n';
+    infoContent += '\n\n{gray-fg}CPU Difficulty: Grandmaster (9){/gray-fg}\n\n';
     infoContent += '{yellow-fg}Press any key to start{/yellow-fg}';
 
     this.infoBox.setContent(infoContent);
+  }
+
+  private getBlockChar(type: PieceType | null, rotationSystem: string): string {
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    if (type === null) return '{gray-fg}██{/gray-fg}';
+    const color = colors[type] || 'white';
+    if (this.demoEngine?.getState().mode === 'death' && (this.demoEngine?.getState().level || 0) >= 1000) {
+      return `{white-fg}[ ]{/white-fg}`;
+    }
+    return `{${color}-fg}██{/${color}-fg}`;
+  }
+
+  private getFadedBlockChar(type: PieceType, intensity: 'medium' | 'faint', rotationSystem: string): string {
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    const color = colors[type] || 'white';
+    return intensity === 'medium' ? `{${color}-fg}▒▒{/}` : `{${color}-fg}░░{/}`;
+  }
+
+  private getPieceColor(type: string): string {
+    const colors: Record<string, string> = {
+      I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white',
+    };
+    return colors[type] || 'white';
+  }
+
+  private addHardDropTrail(): void {
+    if (!this.demoEngine) return;
+    const state = this.demoEngine.getState();
+    const { board, currentPiece } = state;
+    if (!currentPiece) return;
+
+    const pieceManager = (this.demoEngine as any).pieceManager;
+    const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
+    if (!shape) return;
+
+    const ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+    const dropDistance = ghostY - currentPiece.y;
+    if (dropDistance <= 0) return;
+
+    const color = this.getPieceGlowColor(currentPiece.type, this.state.settings.rotationSystem);
+    const now = Date.now();
+    const maxSteps = Math.max(1, dropDistance);
+
+    for (let py = 0; py < shape.length; py++) {
+      for (let px = 0; px < shape[py].length; px++) {
+        if (!shape[py][px]) continue;
+        const startX = currentPiece.x + px;
+        for (let step = 0; step < dropDistance; step++) {
+          const y = currentPiece.y + step + py;
+          if (y < 4 || y >= 24) continue;
+          const strength = (step + 1) / maxSteps;
+          this.hardDropTrails.push({
+            x: startX, y, color, strength, createdAt: now,
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -501,28 +1019,10 @@ export class AttractScreen {
   }
 
   /**
-   * Get piece color
-   */
-  private getPieceColor(type: string): string {
-    const colors: Record<string, string> = {
-      I: 'cyan',
-      O: 'yellow',
-      T: 'magenta',
-      S: 'green',
-      Z: 'red',
-      J: 'blue',
-      L: 'white',
-    };
-    return colors[type] || 'white';
-  }
-
-  /**
    * Get piece shape
    */
   private getPieceShape(type: string, rotation: number): number[][] {
-    const { PieceManager } = require('../core/pieces');
-    const pieceManager = new PieceManager();
-    return pieceManager.getShape(type as any, rotation);
+    return this.pieceManager.getShape(type as any, rotation as any);
   }
 
   /**
@@ -541,23 +1041,61 @@ export class AttractScreen {
    * Setup input handlers
    */
   private setupInput(): void {
-    this.exitHandler = () => {
+    // Consume-once exit pattern
+    let exited = false;
+    const startTime = Date.now();
+    const inputGuardMs = 500; // Ignore input for first 500ms to avoid handshake garbage
+
+    const handleExit = () => {
+      if (exited) return;
+      if (Date.now() - startTime < inputGuardMs) return;
+      
+      exited = true;
       this.exit();
     };
 
+    this.exitHandler = handleExit;
+
     // Any key exits attract mode
     this.screen.on('keypress', this.exitHandler);
+    
+    // Mouse clicks also exit attract mode
+    this.screen.on('mouse', this.exitHandler);
+    
+    // Remove the raw data listener as it's too sensitive to handshake garbage
   }
 
   /**
    * Exit attract mode
    */
   private exit(): void {
+    if (!this.running) return;
     this.running = false;
     this.demoRunning = false;
+    
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+
+    // Stop music
+    this.sounds.stopMusic();
+
+    // Remove listeners
+    if (this.exitHandler) {
+        this.screen.removeListener('keypress', this.exitHandler);
+        this.screen.removeListener('mouse', this.exitHandler);
+        this.exitHandler = null;
+    }
+    if (this.dataHandler) {
+        this.screen.program.removeListener('data', this.dataHandler);
+        this.dataHandler = null;
+    }
 
     if (this.exitCallback) {
-      this.exitCallback();
+      const cb = this.exitCallback;
+      this.exitCallback = null;
+      cb();
     }
   }
 
@@ -567,10 +1105,30 @@ export class AttractScreen {
   cleanup(): void {
     this.running = false;
     this.demoRunning = false;
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
+    this.sounds.stopMusic();
+
+    // Disable mouse tracking
+    this.screen.program.disableMouse();
+    
+    // Destroy UI elements
+    this.mainBox?.destroy();
+    this.demoBox?.destroy();
+    this.infoBox?.destroy();
+    this.effectsBox?.destroy();
+
     // Only remove our specific handler, not all keypress listeners
     if (this.exitHandler) {
       this.screen.removeListener('keypress', this.exitHandler);
+      this.screen.removeListener('mouse', this.exitHandler);
       this.exitHandler = null;
+    }
+    if (this.dataHandler) {
+        this.screen.program.removeListener('data', this.dataHandler);
+        this.dataHandler = null;
     }
   }
 }

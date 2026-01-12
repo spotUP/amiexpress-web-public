@@ -160,6 +160,9 @@ export class LobbyScreen {
    * Show lobby and wait for result
    */
   async show(mode: LobbyMode, selectedMode?: MultiplayerMode): Promise<LobbyResult> {
+    // Enable mouse control for lobby interaction
+    this.screen.program.enableMouse();
+
     // Create adapter
     const adapter = new GrandmasterLobbyAdapter(this.network);
 

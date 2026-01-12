@@ -275,7 +275,7 @@ export function addGarbage(board: Board, lines: number, holePosition: number): v
       } else {
         garbageLine.push({
           filled: true,
-          color: 'Z',  // Gray garbage blocks
+          color: null,  // Gray garbage blocks (null color renders as gray)
           locked: true,
           lockTime: Date.now(),
         });

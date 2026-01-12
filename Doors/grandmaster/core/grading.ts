@@ -23,6 +23,50 @@ export const GRADE_ORDER: TGMGrade[] = [
 ];
 
 /**
+ * Combo multipliers for singles/doubles (from HeborisCE)
+ * Index = combo count - 1
+ */
+const COMBO_MULTIPLIERS_NORMAL: number[] = [
+  1.0,  // Combo 1 (no combo)
+  1.2,  // Combo 2
+  1.4,  // Combo 3
+  1.6,  // Combo 4
+  1.8,  // Combo 5
+  2.0,  // Combo 6
+  2.2,  // Combo 7
+  2.4,  // Combo 8
+  2.6,  // Combo 9
+  2.8,  // Combo 10
+  3.0,  // Combo 11+
+];
+
+/**
+ * Combo multipliers for triples/tetrises (from HeborisCE)
+ */
+const COMBO_MULTIPLIERS_TRIPLE: number[] = [
+  1.0,  // Combo 1
+  1.4,  // Combo 2
+  1.5,  // Combo 3
+  1.6,  // Combo 4
+  1.7,  // Combo 5
+  1.8,  // Combo 6
+  1.9,  // Combo 7
+  2.0,  // Combo 8
+  2.1,  // Combo 9
+  2.2,  // Combo 10+
+];
+
+/**
+ * GM condition flags - time gates at specific levels
+ * Based on HeborisCE gamestart.c gmflag system
+ */
+export interface GMFlags {
+  flag1: boolean;  // Level 300 gate - must reach in under 4:15
+  flag2: boolean;  // Level 500 gate - must reach in under 7:30
+  flag3: boolean;  // Level 700 gate - must reach in under 11:30
+}
+
+/**
  * Grade requirements table
  * Internal grade points required for each grade
  */
@@ -75,95 +119,58 @@ export const GRADE_REQUIREMENTS: GradeRequirement[] = [
 /**
  * TAP-style grade point table
  * Points awarded based on BOTH current internal grade AND lines cleared
- * Extracted from HeborisCE grade.c
+ * 1:1 with HeborisCE grade.c GradeUp2
  */
 const GRADE_POINT_TABLE: number[][] = [
   // [grade index][lines cleared 1-4]
-  // Grades 9-1 (indices 0-8)
-  [10, 20, 40, 50],   // Grade 9
+  [10, 15, 30, 55],   // Grade 9
   [10, 20, 30, 40],   // Grade 8
   [10, 20, 30, 40],   // Grade 7
-  [10, 15, 30, 40],   // Grade 6
-  [10, 15, 20, 40],   // Grade 5
-  [5,  15, 20, 30],   // Grade 4
-  [5,  10, 20, 30],   // Grade 3
-  [5,  10, 15, 30],   // Grade 2
-  [5,  10, 15, 30],   // Grade 1
-  // S grades (indices 9-21)
-  [4,  10, 12, 26],   // S1
-  [4,  10, 12, 26],   // S2
-  [4,  10, 12, 26],   // S3
-  [4,  10, 12, 26],   // S4
-  [3,   8, 10, 22],   // S5
-  [3,   8, 10, 22],   // S6
-  [3,   8, 10, 22],   // S7
-  [3,   8, 10, 22],   // S8
-  [2,   6,  8, 18],   // S9
-  [2,   6,  8, 18],   // S10
-  [2,   6,  8, 18],   // S11
-  [2,   6,  8, 18],   // S12
-  [2,   6,  8, 18],   // S13
-  // Master grades (indices 22-30)
-  [2,   5,  6, 16],   // m1
-  [2,   5,  6, 16],   // m2
-  [2,   5,  6, 16],   // m3
-  [2,   5,  6, 16],   // m4
-  [2,   5,  6, 16],   // m5
-  [2,   5,  6, 16],   // m6
-  [2,   5,  6, 16],   // m7
-  [2,   5,  6, 16],   // m8
-  [2,   5,  6, 16],   // m9
-  // Grand Master grades (indices 31-35)
-  [1,   4,  5, 12],   // M
-  [1,   4,  5, 12],   // MK
-  [1,   4,  5, 12],   // MV
-  [1,   4,  5, 12],   // MO
-  [1,   4,  5, 12],   // GM
+  [10, 15, 25, 35],   // Grade 6
+  [10, 15, 25, 35],   // Grade 5
+  [10, 15, 25, 35],   // Grade 4
+  [5,  15, 23, 33],   // Grade 3
+  [5,  15, 23, 33],   // Grade 2
+  [5,  15, 23, 33],   // Grade 1
+  [3,  12, 15, 30],   // S1
+  [3,  12, 15, 30],   // S2
+  [3,  12, 15, 30],   // S3
+  [3,  12, 15, 30],   // S4
+  [3,  15, 20, 30],   // S5
+  [3,  15, 20, 30],   // S6
+  [3,  15, 20, 30],   // S7
+  [4,  18, 23, 30],   // S8
+  [4,  18, 23, 30],   // S9
+  [4,  18, 23, 30],   // S10
+  [4,  18, 23, 30],   // S11
+  [4,  18, 23, 30],   // S12
+  [4,  18, 23, 30],   // S13
+  [4,  18, 23, 30],   // m1
+  [4,  18, 23, 30],   // m2
+  [4,  18, 23, 30],   // m3
+  [4,  18, 23, 30],   // m4
+  [4,  18, 23, 30],   // m5
+  [4,  18, 23, 30],   // m6
+  [4,  18, 23, 30],   // m7
+  [4,  18, 23, 30],   // m8
+  [4,  18, 23, 30],   // m9
+  [2,  12, 15, 20],   // M
+  [2,  12, 15, 20],   // MK
+  [2,  12, 15, 20],   // MV
+  [2,  12, 15, 20],   // MO
+  [2,  12, 15, 20],   // GM
 ];
 
 /**
- * Combo multipliers for singles/doubles (from HeborisCE)
- * Index = combo count - 1
+ * Grade decay frames (glimit in HeborisCE)
+ * Points decrease by 1 after this many frames of non-combo play
  */
-const COMBO_MULTIPLIERS_NORMAL: number[] = [
-  1.0,  // Combo 1 (no combo)
-  1.2,  // Combo 2
-  1.4,  // Combo 3
-  1.6,  // Combo 4
-  1.8,  // Combo 5
-  2.0,  // Combo 6
-  2.2,  // Combo 7
-  2.4,  // Combo 8
-  2.6,  // Combo 9
-  2.8,  // Combo 10
-  3.0,  // Combo 11+
+const DECAY_LIMITS: number[] = [
+  100, 80, 80, 60, 50, 50, 40, 40, 40,
+  30, 30, 25, 25, 20, 20, 20, 15, 15,
+  10, 8, 5, 5, 5, 5, 5, 5, 4,
+  5, 5, 4, 3, 2, 1
 ];
-
-/**
- * Combo multipliers for triples/tetrises (from HeborisCE)
- */
-const COMBO_MULTIPLIERS_TRIPLE: number[] = [
-  1.0,  // Combo 1
-  1.4,  // Combo 2
-  1.5,  // Combo 3
-  1.6,  // Combo 4
-  1.7,  // Combo 5
-  1.8,  // Combo 6
-  1.9,  // Combo 7
-  2.0,  // Combo 8
-  2.1,  // Combo 9
-  2.2,  // Combo 10+
-];
-
-/**
- * GM condition flags - time gates at specific levels
- * Based on HeborisCE gamestart.c gmflag system
- */
-interface GMFlags {
-  flag1: boolean;  // Level 300 gate - must reach in under 4:15
-  flag2: boolean;  // Level 500 gate - must reach in under 7:30
-  flag3: boolean;  // Level 700 gate - must reach in under 11:30
-}
 
 /**
  * Grade manager
@@ -177,6 +184,9 @@ export class GradeManager {
   private level300Time: number | null = null;
   private level500Time: number | null = null;
   private level700Time: number | null = null;
+  private coolCount: number = 0;
+  private regretCount: number = 0;
+  private decayTimer: number = 0; // gtime in HeborisCE
 
   /**
    * Get combo multiplier based on combo count and line type
@@ -202,6 +212,12 @@ export class GradeManager {
     const gradeRow = GRADE_POINT_TABLE[Math.min(this.gradeIndex, GRADE_POINT_TABLE.length - 1)];
     let points = gradeRow[Math.min(lineCount - 1, 3)];
 
+    // HeborisCE: points = (points * gbai) / 2
+    // gbai = ((tc / 250) + 1) + (skillbai + 1)
+    const levelMultiplier = Math.floor(level / 250) + 1;
+    const gbai = levelMultiplier + 2; // Default multiplier for simplicity
+    points = Math.floor((points * gbai) / 2);
+
     // Apply combo multiplier
     const comboMultiplier = this.getComboMultiplier(combo, lineCount);
     points = Math.floor(points * comboMultiplier);
@@ -221,6 +237,74 @@ export class GradeManager {
 
     // Update GM flags based on level and time
     this.checkGMFlags(level);
+  }
+
+  /**
+   * Apply decay (called every frame)
+   * HeborisCE: decay happens if combo <= 1
+   */
+  updateDecay(combo: number, level: number, isEnding: boolean): void {
+    if (combo > 1 || isEnding) {
+      this.decayTimer = 0;
+      return;
+    }
+
+    this.decayTimer++;
+    const limit = DECAY_LIMITS[this.gradeIndex] || 100;
+
+    if (this.decayTimer >= limit) {
+      this.decayTimer = 0;
+      if (this.internalGrade > 0 || this.gradeIndex > 0) {
+        this.internalGrade--;
+        
+        // TGM3: Grade demotion on excessive negative points
+        if (this.internalGrade < -50 && this.gradeIndex > 0) {
+          this.internalGrade = 0;
+          this.demoteGrade();
+        }
+      }
+    }
+
+    // Check if grade should decrease
+    this.updateGrade(level);
+  }
+
+  private demoteGrade(): void {
+    const currentIndex = GRADE_ORDER.indexOf(this.currentGrade);
+    if (currentIndex > 0) {
+      this.currentGrade = GRADE_ORDER[currentIndex - 1];
+      this.gradeIndex = GRADE_ORDER.indexOf(this.currentGrade);
+    }
+  }
+
+  /**
+   * Process section evaluation result (COOL!!/REGRET)
+   * COOL!! increases grade and adds bonus internal points
+   * REGRET decreases grade
+   */
+  processSectionResult(result: 'COOL' | 'REGRET' | 'NORMAL', level: number): void {
+    if (result === 'COOL') {
+      this.coolCount++;
+      // Advance to next grade immediately (Grade Skip)
+      const currentIndex = GRADE_ORDER.indexOf(this.currentGrade);
+      if (currentIndex < GRADE_ORDER.indexOf('m9')) {
+        this.currentGrade = GRADE_ORDER[currentIndex + 1];
+        this.gradeIndex = GRADE_ORDER.indexOf(this.currentGrade);
+        // Boost internal points to the start of the new grade
+        const req = GRADE_REQUIREMENTS.find(r => r.grade === this.currentGrade);
+        if (req) {
+          this.internalGrade = Math.max(this.internalGrade, req.internalGradeRequired);
+        }
+      }
+    } else if (result === 'REGRET') {
+      this.regretCount++;
+      this.demoteGrade();
+      // Reset internal points to the start of the demoted grade
+      const req = GRADE_REQUIREMENTS.find(r => r.grade === this.currentGrade);
+      if (req) {
+        this.internalGrade = req.internalGradeRequired;
+      }
+    }
   }
 
   /**
@@ -261,22 +345,6 @@ export class GradeManager {
    */
   getGMFlags(): GMFlags {
     return { ...this.gmFlags };
-  }
-
-  /**
-   * Apply decay (called after each piece)
-   */
-  applyDecay(level: number): void {
-    const requirement = this.getCurrentRequirement();
-    if (requirement && requirement.decayRate > 0) {
-      this.internalGrade -= requirement.decayRate;
-      if (this.internalGrade < 0) {
-        this.internalGrade = 0;
-      }
-    }
-
-    // Check if grade should decrease
-    this.updateGrade(level);
   }
 
   /**

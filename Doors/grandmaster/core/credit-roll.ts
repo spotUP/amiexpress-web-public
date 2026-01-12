@@ -3,9 +3,10 @@
  *
  * Invisible challenge at the end of Master mode
  * - Triggered at level 999
- * - 60-second duration
- * - Must clear 32 lines to qualify for M→GM
- * - Pieces fade to invisible after lock
+ * - TGM3: Total roll time is based on performance, approx 60-90 seconds
+ * - Must clear 32 lines to qualify for GM rank
+ * - Pieces become invisible AFTER locking
+ * - Active piece remains visible but becomes "ghostly" in Master roll
  */
 
 /**
@@ -48,10 +49,13 @@ export class CreditRollManager {
 
   /**
    * Start credit roll
+   * @param level Starting level (999 for Master, 1300 for Shirase)
    */
-  start(): void {
+  start(level: number): void {
     this.state.active = true;
     this.state.startTime = Date.now();
+    // TGM3 roll duration: ~60s for Master, ~90s for Shirase
+    this.state.duration = level >= 1300 ? 90000 : 60000;
     this.state.timeRemaining = this.state.duration;
     this.state.linesCleared = 0;
     this.state.qualified = false;
@@ -66,11 +70,11 @@ export class CreditRollManager {
     }
 
     // Update timer
-    const elapsed = Date.now() - this.state.startTime;
-    this.state.timeRemaining = Math.max(0, this.state.duration - elapsed);
+    this.state.timeRemaining -= deltaTime;
 
     // Check if time ran out
     if (this.state.timeRemaining <= 0) {
+      this.state.timeRemaining = 0;
       this.end();
     }
   }
@@ -85,7 +89,7 @@ export class CreditRollManager {
 
     this.state.linesCleared += count;
 
-    // Check if qualified
+    // TGM3: Pass requirement is 32 lines
     if (this.state.linesCleared >= this.state.linesRequired) {
       this.state.qualified = true;
     }
@@ -95,6 +99,8 @@ export class CreditRollManager {
    * End credit roll
    */
   end(): void {
+    // Note: In real TGM3, pieces become visible again for "EXCELLENT" result
+    // but here we just end the challenge
     this.state.active = false;
   }
 
@@ -121,20 +127,27 @@ export class CreditRollManager {
 
   /**
    * Get fade stage for piece based on lock time
+   * Authentic TGM3: Pieces fade out completely in 72 frames (~1.2s)
    */
   getFadeStage(lockTime: number): FadeStage {
     if (!this.state.active) {
       return 'full';
     }
 
-    const elapsed = Date.now() - lockTime;
+    const elapsedMs = Date.now() - lockTime;
+    const elapsedFrames = (elapsedMs / 1000) * 60;
 
-    // Fade progression (in milliseconds)
-    if (elapsed < 200) return 'full';      // Just locked
-    if (elapsed < 500) return 'bright';    // Fading...
-    if (elapsed < 1000) return 'medium';   // More faded
-    if (elapsed < 1500) return 'faint';    // Almost gone
-    return 'invisible';                     // Fully invisible
+    // 1:1 HeborisCE/TGM3 Fade Stages:
+    // Solid: 0-10 frames
+    // Bright: 11-25 frames
+    // Medium: 26-45 frames
+    // Faint: 46-71 frames
+    // Invisible: 72+ frames
+    if (elapsedFrames < 10) return 'full';
+    if (elapsedFrames < 25) return 'bright';
+    if (elapsedFrames < 45) return 'medium';
+    if (elapsedFrames < 72) return 'faint';
+    return 'invisible';
   }
 
   /**
@@ -143,9 +156,9 @@ export class CreditRollManager {
   getOpacity(stage: FadeStage): number {
     switch (stage) {
       case 'full': return 1.0;
-      case 'bright': return 0.8;
-      case 'medium': return 0.6;
-      case 'faint': return 0.3;
+      case 'bright': return 0.7;
+      case 'medium': return 0.4;
+      case 'faint': return 0.15;
       case 'invisible': return 0.0;
     }
   }
@@ -169,51 +182,52 @@ export class CreditRollManager {
 /**
  * Invisible piece manager
  *
- * Handles piece visibility during credit roll
+ * Handles piece visibility during credit roll and bone blocks
  */
 export class InvisiblePieceManager {
-  private creditRoll: CreditRollManager;
-
-  constructor(creditRollManager: CreditRollManager) {
-    this.creditRoll = creditRollManager;
+  /**
+   * Check if current piece should be invisible (active piece)
+   * TGM3: Active piece is VISIBLE during Master roll, but board is INVISIBLE
+   */
+  shouldActivePieceBeInvisible(): boolean {
+    // Active piece is always visible in standard Master roll
+    return false;
   }
 
   /**
-   * Check if current piece should be invisible
+   * Should board cells be invisible
    */
-  shouldPieceBeInvisible(): boolean {
-    return this.creditRoll.isActive();
+  shouldBoardBeInvisible(active: boolean): boolean {
+    return active;
   }
 
   /**
    * Get visibility level for active piece (0.0 - 1.0)
    */
-  getPieceVisibility(): number {
-    if (!this.creditRoll.isActive()) {
+  getPieceVisibility(active: boolean): number {
+    if (!active) {
       return 1.0;
     }
-
-    // In credit roll, active piece is faintly visible
-    return 0.3;
+    // In credit roll, active piece is slightly transparent
+    return 0.8;
   }
 
   /**
    * Get visibility level for ghost piece (0.0 - 1.0)
    */
-  getGhostVisibility(): number {
-    if (!this.creditRoll.isActive()) {
-      return 0.5;  // Normal ghost visibility
+  getGhostVisibility(active: boolean): number {
+    if (!active) {
+      return 0.5;
     }
-
-    // In credit roll, ghost is barely visible
-    return 0.1;
+    // No ghost during invisible challenge
+    return 0.0;
   }
 
   /**
    * Should show bone blocks (S13+ grades)
    */
   shouldShowBoneBlocks(grade: string): boolean {
-    // Bone blocks appear at S13+ grades
+    // Bone blocks appear at S13+ grades or in Shirase mode
     return grade === 'S13' || grade.startsWith('m') || grade.startsWith('M') || grade === 'GM';
   }
 }

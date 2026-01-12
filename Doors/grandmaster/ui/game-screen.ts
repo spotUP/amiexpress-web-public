@@ -1,16 +1,11 @@
-/**
- * Game Screen
- *
- * Main gameplay screen with board rendering and HUD
- */
-
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, Piece, PieceType } from '../core/types';
-import { PIECE_COLORS } from '../core/pieces';
+import { PIECE_COLORS, ARS_COLORS } from '../core/pieces';
 import { getGhostY } from '../core/board';
 import { ScreenShaker } from '../effects/screen-shake';
 import { ParticleSystem } from '../effects/particles';
@@ -30,7 +25,7 @@ export class GameScreen {
   private sectionBox: any;
   private effectsBox: any;  // Overlay for effects
   private lastRender: number = 0;
-  private readonly RENDER_FPS = 60;
+  private readonly RENDER_FPS = 20; // Reduced for BBS efficiency
   private readonly RENDER_INTERVAL = 1000 / this.RENDER_FPS;
 
   // Visual effects systems
@@ -45,6 +40,11 @@ export class GameScreen {
   private lastLevel: number = 0;
   private lastSection: number = 0;
   private lastPieceExists: boolean = false;
+  private lastScore: number = -1;
+  private lastCombo: number = -1;
+  private lastNext: PieceType[] = [];
+  private lastHold: PieceType | null = null;
+  private lastBoardHash: string = '';
 
   // Animation state
   private gradeAnimProgress: number = 0;
@@ -54,12 +54,21 @@ export class GameScreen {
 
   // Rainbow border animation
   private rainbowTimer: number = 0;
+  private lastRainbowUpdate: number = 0;
+  private readonly RAINBOW_INTERVAL = 100; // Much slower update
   private readonly RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
 
   // Block shine effect (sweep animation like arkanoid2)
   private shineTimer: number = 0;
   private readonly SHINE_INTERVAL = 300;  // Frames between shine sweeps
   private shineCells: Map<string, number> = new Map();  // "x,y" -> frames remaining
+  private hardDropTrails: Array<{
+    x: number;
+    y: number;
+    color: string;
+    strength: number;
+    createdAt: number;
+  }> = [];
 
   constructor(
     private screen: Screen,
@@ -89,7 +98,7 @@ export class GameScreen {
       // Start game
       this.engine.start();
       this.running = true;
-      this.sounds.playMusic('master', true);
+      this.sounds.playMusic('master_1', true);
 
       // Game loop using setInterval
       let lastUpdate = Date.now();
@@ -107,7 +116,7 @@ export class GameScreen {
         const deltaTime = now - lastUpdate;
         lastUpdate = now;
 
-        // Update game
+        // Update game (always at 60Hz logic)
         this.engine.update(deltaTime);
         this.input.update(deltaTime);
 
@@ -122,8 +131,11 @@ export class GameScreen {
         this.updateGradeAnimation(deltaTime);
 
         // Update rainbow border animation
-        this.rainbowTimer++;
-        this.updateRainbowBorders();
+        if (now - this.lastRainbowUpdate >= this.RAINBOW_INTERVAL) {
+          this.rainbowTimer++;
+          this.updateRainbowBorders();
+          this.lastRainbowUpdate = now;
+        }
 
         // Update block shine effect
         this.updateShineEffect();
@@ -148,7 +160,7 @@ export class GameScreen {
         if (gameState.status === 'gameover') {
           this.running = false;
         }
-      }, 16); // ~60 FPS (16ms)
+      }, 16); // Logic at ~60 FPS
     });
   }
 
@@ -160,7 +172,15 @@ export class GameScreen {
 
     // Check for level change
     if (gameState.level > this.lastLevel) {
-      this.sounds.playSfx('level_up');
+      // TGM3 plays level change (section up) every 100 levels
+      const oldSection = Math.floor(this.lastLevel / 100);
+      const newSection = Math.floor(gameState.level / 100);
+      
+      if (newSection > oldSection && gameState.level < 1000) {
+        this.sounds.playSfx('section_up');
+      } else {
+        this.sounds.playSfx('level_up');
+      }
       this.lastLevel = gameState.level;
     }
 
@@ -231,6 +251,15 @@ export class GameScreen {
     }
     if (combo === 0) this.lastComboMilestone = 0;
 
+    // Check for recently awarded medals
+    const recentMedals = this.engine.getRecentMedals();
+    if (recentMedals.length > 0) {
+      for (const medal of recentMedals) {
+        this.triggerMedalAnimation(medal);
+      }
+      this.engine.clearRecentMedals();
+    }
+
     // Check for section completion
     if (gameState.section > this.lastSection) {
       const result = gameState.lastSectionResult;
@@ -240,12 +269,51 @@ export class GameScreen {
       this.lastSection = gameState.section;
     }
 
+    // Check for piece spawn (null -> non-null)
+    if (gameState.currentPiece && !this.lastPieceExists) {
+      this.sounds.playSfx(this.getSpawnSfx(gameState.currentPiece.type));
+      
+      // IRS visual/audio feedback
+      if (gameState.currentPiece.rotation !== 0) {
+        this.animations.tSpin(gameState.currentPiece.x + 1, gameState.currentPiece.y + 1); // Use tspin flash for IRS
+        this.sounds.playSfx('pre_rotate');
+      }
+    }
+
+    // IHS visual feedback
+    if (!gameState.canHold && gameState.holdPiece && this.lastHold !== gameState.holdPiece && !this.lastPieceExists) {
+        this.sounds.playSfx('pre_hold');
+    }
+
     // Check for piece lock (detect when currentPiece becomes null after being non-null)
     if (!gameState.currentPiece && this.lastPieceExists) {
       // Piece just locked - trigger lock flash
       this.triggerLockFlash();
     }
     this.lastPieceExists = gameState.currentPiece !== null;
+    this.lastHold = gameState.holdPiece;
+  }
+
+  /**
+   * Trigger medal award animation
+   */
+  private triggerMedalAnimation(medal: any): void {
+    const color = (medal.tier === 3) ? 'cyan' : (medal.tier === 2) ? 'yellow' : (medal.tier === 1) ? 'white' : 'yellow';
+    const tierName = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'][medal.tier];
+    
+    this.animations.gradeUp('', `${tierName} ${medal.type}`, 40, 10);
+    this.sounds.playSfx('grade_up');
+  }
+
+  /**
+   * Get spawn sound for piece type
+   */
+  private getSpawnSfx(type: PieceType): any {
+    const map: Record<PieceType, string> = {
+      I: 'spawn_i', J: 'spawn_j', L: 'spawn_l', O: 'spawn_o',
+      S: 'spawn_s', T: 'spawn_t', Z: 'spawn_z'
+    };
+    return map[type] || 'move';
   }
 
   /**
@@ -308,8 +376,6 @@ export class GameScreen {
       this.sounds.playSfx('section_regret');
       this.sounds.playVoice('regret');  // Voice callout
     }
-
-    // Note: lastSectionResult is already stored in GameState
   }
 
   /**
@@ -319,47 +385,42 @@ export class GameScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
-    // Board playfield:
-    // - Board logic: 24 rows (0-23), rows 0-3 are spawn buffer (hidden)
-    // - Visible rows: 4-23 (20 rows) displayed in the box
-    // - Box: width 22 (10 cells x 2 chars + 2 border), height 22 (20 content + 2 border)
-    // - Content area: 20 chars x 20 rows for the playfield
     this.boardBox = createBox({
       parent: this.screen,
-      top: 1,  // Leave row 0 for padding, helps prevent top clipping
+      top: 1,
       left: 2,
       width: 22,
       height: 22,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
+      fixed: true,
     });
 
-    // Next queue (aligned with board at top:1)
-    this.nextBox = createBox({
+    this.nextBox = createDockable({
       parent: this.screen,
       top: 1,
       left: 25,
-      width: 12,
+      width: 14,
       height: 12,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' NEXT ',
+      persistenceKey: 'grandmaster.game.next',
     });
 
-    // Hold piece
-    this.holdBox = createBox({
+    this.holdBox = createDockable({
       parent: this.screen,
       top: 14,
       left: 25,
-      width: 12,
+      width: 14,
       height: 6,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'magenta' } },
       label: ' HOLD ',
+      persistenceKey: 'grandmaster.game.hold',
     });
 
-    // Grade display
-    this.gradeBox = createBox({
+    this.gradeBox = createDockable({
       parent: this.screen,
       top: 1,
       left: 38,
@@ -368,10 +429,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },
       label: ' GRADE ',
+      persistenceKey: 'grandmaster.game.grade',
     });
 
-    // Stats
-    this.statsBox = createBox({
+    this.statsBox = createDockable({
       parent: this.screen,
       top: 9,
       left: 38,
@@ -380,10 +441,10 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'green' } },
       label: ' STATS ',
+      persistenceKey: 'grandmaster.game.stats',
     });
 
-    // Section tracking
-    this.sectionBox = createBox({
+    this.sectionBox = createDockable({
       parent: this.screen,
       top: 17,
       left: 38,
@@ -392,9 +453,9 @@ export class GameScreen {
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
       label: ' SECTION ',
+      persistenceKey: 'grandmaster.game.section',
     });
 
-    // Instructions
     createBox({
       parent: this.screen,
       bottom: 0,
@@ -406,7 +467,6 @@ export class GameScreen {
       content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
     });
 
-    // Effects overlay (for particles and animations) - must be transparent!
     this.effectsBox = createBox({
       parent: this.screen,
       top: 0,
@@ -436,12 +496,20 @@ export class GameScreen {
     this.input.on('rotate_cw', () => {
       if (this.engine.rotate(1)) {
         this.sounds.playSfx('rotate');
+      } else {
+        if (this.engine.setIRS(1)) {
+          this.sounds.playSfx('pre_rotate');
+        }
       }
     });
 
     this.input.on('rotate_ccw', () => {
       if (this.engine.rotate(-1)) {
         this.sounds.playSfx('rotate');
+      } else {
+        if (this.engine.setIRS(-1)) {
+          this.sounds.playSfx('pre_rotate');
+        }
       }
     });
 
@@ -452,6 +520,7 @@ export class GameScreen {
     });
 
     this.input.on('hard_drop', () => {
+      this.addHardDropTrail();
       this.engine.hardDrop();
       this.sounds.playSfx('hard_drop');
     });
@@ -459,6 +528,10 @@ export class GameScreen {
     this.input.on('hold', () => {
       if (this.engine.hold()) {
         this.sounds.playSfx('hold');
+      } else {
+        if (this.engine.setIHS()) {
+          this.sounds.playSfx('pre_hold');
+        }
       }
     });
 
@@ -475,40 +548,88 @@ export class GameScreen {
    */
   private render(): void {
     const state = this.engine.getState();
+    let needsRender = false;
 
-    // Update board border color for 20G warning
-    if (state.gravity >= 20) {
-      const flash = Math.floor(this.twentyGFlashTimer / 250) % 2 === 0;
-      if (this.boardBox.style && this.boardBox.style.border) {
-        this.boardBox.style.border.fg = flash ? 'red' : 'white';
+    // Detect board changes via hash
+    const boardHash = this.getBoardHash(state);
+    const isShaking = this.shaker.isShaking();
+    
+    if (boardHash !== this.lastBoardHash || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
+      // Apply shake offset
+      if (isShaking) {
+        const offset = this.shaker.getOffset();
+        this.boardBox.top = 1 + offset.y;
+        this.boardBox.left = 2 + offset.x;
+      } else {
+        this.boardBox.top = 1;
+        this.boardBox.left = 2;
       }
-    } else {
-      if (this.boardBox.style && this.boardBox.style.border) {
-        this.boardBox.style.border.fg = 'white';
-      }
+
+      this.renderBoard(state);
+      this.lastBoardHash = boardHash;
+      needsRender = true;
     }
 
-    // Render board
-    this.renderBoard(state);
+    // Update next/hold if changed
+    if (JSON.stringify(state.nextQueue.slice(0, 3)) !== JSON.stringify(this.lastNext)) {
+      this.renderNext(state.nextQueue.slice(0, 3));
+      this.lastNext = [...state.nextQueue.slice(0, 3)];
+      needsRender = true;
+    }
 
-    // Render next queue
-    this.renderNext(state.nextQueue.slice(0, 3));
+    if (state.holdPiece !== this.lastHold) {
+      this.renderHold(state.holdPiece);
+      this.lastHold = state.holdPiece;
+      needsRender = true;
+    }
 
-    // Render hold piece
-    this.renderHold(state.holdPiece);
+    // Stats update (always update if lines/score changed)
+    if (state.score !== this.lastScore || state.level !== this.lastLevel || state.combo !== this.lastCombo) {
+      this.renderStats(state);
+      this.lastScore = state.score;
+      this.lastLevel = state.level;
+      this.lastCombo = state.combo;
+      needsRender = true;
+    }
 
-    // Render grade
-    const gradeColor = this.getAnimatedGradeColor(state.grade);
-    const gradeSize = this.getAnimatedGradeSize(state.grade);
-    const gradePadding = ' '.repeat(Math.floor((13 - state.grade.length) / 2));
-    this.gradeBox.setContent(
-      `\n\n${gradePadding}{${gradeColor}-fg}${gradeSize.prefix}${state.grade}${gradeSize.suffix}{/${gradeColor}-fg}`
-    );
+    // Grade and Section (always updated)
+    if (state.grade !== this.lastGrade || this.gradeAnimProgress > 0) {
+      const gradeColor = this.getAnimatedGradeColor(state.grade);
+      const gradeSize = this.getAnimatedGradeSize(state.grade);
+      const gradePadding = ' '.repeat(Math.floor((13 - state.grade.length) / 2));
+      this.gradeBox.setContent(
+        `\n\n${gradePadding}{${gradeColor}-fg}${gradeSize.prefix}${state.grade}${gradeSize.suffix}{/${gradeColor}-fg}`
+      );
+      this.lastGrade = state.grade;
+      needsRender = true;
+    }
 
-    // Render stats
+    if (state.section !== this.lastSection || state.sectionTime !== 0) {
+      this.renderSectionInfo(state);
+      this.lastSection = state.section;
+      needsRender = true;
+    }
+
+    // Render effects overlay if any effects active
+    if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0) {
+      this.renderEffects();
+      needsRender = true;
+    }
+
+    // Only render to screen if content changed
+    if (needsRender) {
+      this.screen.render();
+    }
+  }
+
+  private getBoardHash(state: any): string {
+    const piece = state.currentPiece ? `${state.currentPiece.x},${state.currentPiece.y},${state.currentPiece.rotation}` : 'null';
+    // Simplified hash for board
+    return `${piece}-${state.lines}-${this.shineTimer}`;
+  }
+
+  private renderStats(state: any): void {
     const comboDisplay = this.getAnimatedComboDisplay(state.combo);
-
-    // Format gravity display with 20G warning
     let gravDisplay: string;
     if (state.gravity >= 20) {
       const flash = Math.floor(this.twentyGFlashTimer / 250) % 2 === 0;
@@ -524,19 +645,16 @@ export class GameScreen {
       `  Combo: ${comboDisplay}\n` +
       `  Grav:  ${gravDisplay}G`;
 
-    // T-Spin indicator
     if (state.lastTSpin === 'full') {
       statsContent += `\n\n  {magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}`;
     } else if (state.lastTSpin === 'mini') {
       statsContent += `\n\n  {cyan-fg}T-SPIN MINI{/cyan-fg}`;
     }
 
-    // Back-to-Back indicator
     if (state.backToBack) {
       statsContent += `\n  {yellow-fg}{bold}B2B{/bold}{/yellow-fg}`;
     }
 
-    // Credit roll timer
     if (state.creditRollActive) {
       const timeLeft = Math.ceil(state.creditRollTimeRemaining / 1000);
       const color = timeLeft < 30 ? 'red' : 'yellow';
@@ -545,14 +663,6 @@ export class GameScreen {
     }
 
     this.statsBox.setContent(statsContent);
-
-    // Render section info
-    this.renderSectionInfo(state);
-
-    // Render effects overlay (particles and animations)
-    this.renderEffects();
-
-    this.screen.render();
   }
 
   /**
@@ -598,16 +708,9 @@ export class GameScreen {
         if (intensity > 0.3) {
           const data = anim.data as any;
           for (const cell of data.cells) {
-            // Only render for visible rows (board rows 4-23)
             if (cell.y < 4) continue;
-            // Convert board coordinates to ANSI screen coordinates:
-            // BoardBox at blessed top:1 (blessed 0-indexed) = ANSI row 2 (ANSI 1-indexed)
-            // Border at ANSI row 2, content starts at ANSI row 3
-            // Board row 4 (first visible) should appear at ANSI row 3
-            // Formula: ANSI_y = blessed_top + 1 (border) + (cell.y - 4) + 1 (ANSI offset)
-            //                 = 1 + 1 + cell.y - 4 + 1 = cell.y - 1
             const x = 4 + cell.x * 2;
-            const y = cell.y + 1;  // Board row + offset for box border + ANSI 1-indexing
+            const y = cell.y + 1;
             if (intensity > 0.7) {
               effectsContent += `\x1b[${y};${x}H{white-fg}{bold}██{/bold}{/white-fg}`;
             } else {
@@ -618,11 +721,6 @@ export class GameScreen {
       }
     }
 
-    // Screen shake is tracked but not visually applied in terminal
-    // (Terminal elements can't be repositioned after creation in blessed)
-    // The shake effect is still calculated for potential future use
-    const shakeOffset = this.shaker.getOffset();
-
     if (this.effectsBox) {
       this.effectsBox.setContent(effectsContent);
     }
@@ -632,7 +730,7 @@ export class GameScreen {
    * Update grade display animation
    */
   private updateGradeAnimation(deltaTime: number): void {
-    const PULSE_SPEED = 0.003;
+    const PULSE_SPEED = 0.001; // Slower
     this.gradeAnimProgress += PULSE_SPEED * deltaTime * this.gradeAnimDirection;
     if (this.gradeAnimProgress >= 1) {
       this.gradeAnimProgress = 1;
@@ -647,8 +745,21 @@ export class GameScreen {
    * Update rainbow border colors for all panels
    */
   private updateRainbowBorders(): void {
-    const speed = 8;  // Lower = faster color cycling
-    const baseIndex = Math.floor(this.rainbowTimer / speed) % this.RAINBOW_COLORS.length;
+    const baseIndex = this.rainbowTimer % this.RAINBOW_COLORS.length;
+
+    // Only update if grade is high enough to justify the distraction
+    const state = this.engine.getState();
+    const isRainbowMode = state.grade === 'GM' || state.grade === 'GMM' || state.creditRollActive;
+    
+    if (!isRainbowMode) {
+        if (this.boardBox?.style?.border) this.boardBox.style.border.fg = 'white';
+        if (this.nextBox?.style?.border) this.nextBox.style.border.fg = 'cyan';
+        if (this.holdBox?.style?.border) this.holdBox.style.border.fg = 'magenta';
+        if (this.gradeBox?.style?.border) this.gradeBox.style.border.fg = 'yellow';
+        if (this.statsBox?.style?.border) this.statsBox.style.border.fg = 'green';
+        if (this.sectionBox?.style?.border) this.sectionBox.style.border.fg = 'cyan';
+        return;
+    }
 
     // Each panel gets a different offset for a wave effect
     if (this.boardBox?.style?.border) {
@@ -690,16 +801,14 @@ export class GameScreen {
         for (let x = 0; x < board.width; x++) {
           const cell = board.grid[y][x];
           if (cell.filled && cell.locked) {
-            // Stagger delay based on position (diagonal sweep)
             const key = `${x},${y}`;
-            this.shineCells.set(key, delay + 5);  // 5 frames of shine
-            delay += 1;  // Each cell starts 1 frame later
+            this.shineCells.set(key, delay + 5);
+            delay += 1;
           }
         }
       }
     }
 
-    // Decrement all shine timers
     for (const [key, frames] of this.shineCells.entries()) {
       if (frames <= 0) {
         this.shineCells.delete(key);
@@ -760,37 +869,25 @@ export class GameScreen {
   private renderSectionInfo(state: any): void {
     // COOL targets (seconds) - from TGM3 Master mode
     const COOL_TARGETS: Record<number, number> = {
-      0: 50, 1: 45, 2: 45, 3: 45, 4: 45,
-      5: 40, 6: 40, 7: 40, 8: 40, 9: 35,
-    };
-
-    // REGRET thresholds (seconds)
-    const REGRET_THRESHOLD: Record<number, number> = {
-      0: 90, 1: 80, 2: 75, 3: 70, 4: 65,
-      5: 60, 6: 55, 7: 50, 8: 45, 9: 40,
+      0: 52, 1: 48, 2: 46, 3: 44, 4: 36,
+      5: 36, 6: 40, 7: 44, 8: 44, 9: 44,
     };
 
     const section = state.section;
-    const sectionTime = state.sectionTime / 1000; // Convert ms to seconds
+    const sectionTime = state.sectionTime / 1000;
     const coolTarget = COOL_TARGETS[section] || 45;
-    const regretThreshold = REGRET_THRESHOLD[section] || 90;
 
-    // Determine time color
     let timeColor = 'white';
     if (sectionTime < coolTarget) {
       timeColor = 'green';
-    } else if (sectionTime < regretThreshold) {
-      timeColor = 'yellow';
     } else {
-      timeColor = 'red';
+      timeColor = 'yellow';
     }
 
-    // Build content
     let content = `\n {cyan-fg}SEC:{/cyan-fg} ${section}\n`;
     content += ` {${timeColor}-fg}${sectionTime.toFixed(1)}s{/${timeColor}-fg}\n`;
     content += ` {green-fg}${coolTarget}s{/green-fg}`;
 
-    // Show last section result if available
     if (state.lastSectionResult) {
       const resultColor = state.lastSectionResult === 'COOL' ? 'green'
         : state.lastSectionResult === 'REGRET' ? 'red' : 'yellow';
@@ -805,9 +902,15 @@ export class GameScreen {
    */
   private renderBoard(state: any): void {
     const { board, currentPiece } = state;
+    const rotationSystem = this.state.settings.rotationSystem;
+    const creditRoll = (this.engine as any).creditRollManager;
+    const invisibleManager = (this.engine as any).invisiblePieceManager;
+    const isMasterRoll = state.creditRollActive;
+    
     let content = '';
+    const now = Date.now();
+    this.hardDropTrails = this.hardDropTrails.filter(trail => now - trail.createdAt < 160);
 
-    // Get piece shape and ghost position
     let pieceShape: number[][] | null = null;
     let ghostY: number | null = null;
 
@@ -816,76 +919,73 @@ export class GameScreen {
       const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
       if (shape) {
         pieceShape = shape;
-
-        // Only show ghost if piece top is visible (entered the playfield at row 4+)
         if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
           ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
         }
       }
     }
 
-    // Render each row (visible rows 4-23, rows 0-3 are spawn buffer zone)
-    // Board coordinates: 0-23 (24 total), visible: 4-23 (20 rows)
-    // Visual coordinates: 0-19 (20 rows), maps to board rows 4-23
-    // Box has height 22 (2 border + 20 content rows)
     for (let y = 4; y < 24; y++) {
-      // Add newline before rows (except first) to avoid trailing newline
       if (y > 4) content += '\n';
 
       for (let x = 0; x < board.width; x++) {
         const cell = board.grid[y][x];
-        let char = '  ';  // Empty cell (2 chars)
+        let char = '  ';
 
-        // Check if current piece occupies this cell
         if (currentPiece && pieceShape) {
           const px = x - currentPiece.x;
           const py = y - currentPiece.y;
           if (py >= 0 && py < pieceShape.length &&
               px >= 0 && px < pieceShape[py].length &&
               pieceShape[py][px]) {
-            // Render bone blocks differently (invisible/faded)
             if (currentPiece.invisible) {
-              char = '{black-fg}░░{/black-fg}';  // Bone block (faint)
+              char = '{black-fg}░░{/black-fg}';
             } else {
-              char = this.getBlockChar(currentPiece.type);  // Normal block
+              // TGM3: In Master Roll, board is invisible, but active piece is visible
+              char = this.getBlockChar(currentPiece.type, rotationSystem);
             }
           }
         }
 
-        // Check if ghost piece occupies this cell
-        if (ghostY !== null && currentPiece && pieceShape && char === '  ') {
+        if (ghostY !== null && currentPiece && pieceShape && char === '  ' && !isMasterRoll) {
           const px = x - currentPiece.x;
           const py = y - ghostY;
           if (py >= 0 && py < pieceShape.length &&
               px >= 0 && px < pieceShape[py].length &&
               pieceShape[py][px]) {
-            // Ghost is always grayscale, no colored blocks
             char = '{gray-fg}░░{/gray-fg}';
           }
         }
 
-        // Check if locked cell
-        if (char === '  ' && cell.filled) {
-          // Check for shine effect (sweeping glare)
-          if (this.hasShineEffect(x, y)) {
-            char = '{white-bg}{white-fg}██{/white-fg}{/white-bg}';  // Bright white shine
-          } else if (state.creditRollActive && cell.lockTime) {
-            // Apply credit roll fade
-            const age = Date.now() - cell.lockTime;
-            const opacity = this.getCreditRollOpacity(age);
+        if (char === '  ' && !cell.filled && !isMasterRoll) {
+          const trail = this.hardDropTrails.find(t => t.x === x && t.y === y);
+          if (trail) {
+            const age = now - trail.createdAt;
+            const fade = Math.max(0, 1 - (age / 160));
+            const strength = trail.strength * fade;
+            char = this.getHardDropTrailChar(trail.color, strength);
+          }
+        }
 
-            if (opacity > 0.7) {
-              char = this.getBlockChar(cell.color as PieceType);  // Full brightness
-            } else if (opacity > 0.4) {
-              char = this.getFadedBlockChar(cell.color as PieceType, 'medium');
-            } else if (opacity > 0.2) {
-              char = this.getFadedBlockChar(cell.color as PieceType, 'faint');
+        if (char === '  ' && cell.filled) {
+          if (this.hasShineEffect(x, y) && !isMasterRoll) {
+            char = '{white-bg}{white-fg}██{/white-fg}{/white-bg}';
+          } else if (isMasterRoll && cell.lockTime) {
+            // Apply TGM3 authentic credit roll fade
+            const age = Date.now() - cell.lockTime;
+            const fadeStage = creditRoll.getFadeStage(cell.lockTime);
+            
+            if (fadeStage === 'full') {
+              char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+            } else if (fadeStage === 'bright') {
+              char = this.getFadedBlockChar(cell.color as PieceType, 'medium', rotationSystem);
+            } else if (fadeStage === 'medium' || fadeStage === 'faint') {
+              char = this.getFadedBlockChar(cell.color as PieceType, 'faint', rotationSystem);
             } else {
-              char = '{black-fg}░░{/black-fg}';  // Nearly invisible
+              char = '  '; // Fully invisible
             }
-          } else {
-            // Normal rendering
-            char = this.getBlockChar(cell.color as PieceType);
+          } else if (!isMasterRoll) {
+            char = this.getBlockChar(cell.color as PieceType, rotationSystem);
           }
         }
 
@@ -897,15 +997,95 @@ export class GameScreen {
   }
 
   /**
+   * Get ANSI block character for piece type
+   */
+  private getBlockChar(type: PieceType | null, rotationSystem: string): string {
+    const gameState = this.engine.getState();
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    
+    // Handle garbage blocks (type is null)
+    if (type === null) {
+      return '{gray-fg}██{/gray-fg}';
+    }
+
+    const color = colors[type] || 'white';
+    
+    // TGM3 Shirase: Bone blocks at level 1000+
+    if (gameState.mode === 'death' && gameState.level >= 1000) {
+      return `{white-fg}[ ]{/white-fg}`;
+    }
+    
+    return `{${color}-fg}██{/${color}-fg}`;
+  }
+
+  /**
+   * Get faded block character for credit roll
+   */
+  private getFadedBlockChar(type: PieceType, intensity: 'medium' | 'faint', rotationSystem: string): string {
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    const color = colors[type] || 'white';
+
+    if (intensity === 'medium') {
+      return `{${color}-fg}▒▒{/${color}-fg}`;
+    } else {
+      return `{${color}-fg}░░{/${color}-fg}`;
+    }
+  }
+
+  private addHardDropTrail(): void {
+    const state = this.engine.getState();
+    const { board, currentPiece } = state;
+    if (!currentPiece) {
+      return;
+    }
+
+    const pieceManager = (this.engine as any).pieceManager;
+    const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
+    if (!shape) {
+      return;
+    }
+
+    const ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+    const dropDistance = ghostY - currentPiece.y;
+    if (dropDistance <= 0) {
+      return;
+    }
+
+    const color = this.getPieceGlowColor(currentPiece.type, this.state.settings.rotationSystem);
+    const now = Date.now();
+    const maxSteps = Math.max(1, dropDistance);
+
+    for (let py = 0; py < shape.length; py++) {
+      for (let px = 0; px < shape[py].length; px++) {
+        if (!shape[py][px]) continue;
+        const startX = currentPiece.x + px;
+        for (let step = 0; step < dropDistance; step++) {
+          const y = currentPiece.y + step + py;
+          if (y < 4 || y >= 24) continue;
+          const strength = (step + 1) / maxSteps;
+          this.hardDropTrails.push({
+            x: startX,
+            y,
+            color,
+            strength,
+            createdAt: now,
+          });
+        }
+      }
+    }
+  }
+
+  /**
    * Render next queue
    */
   private renderNext(queue: PieceType[]): void {
     let content = '\n';
+    const rotationSystem = this.state.settings.rotationSystem;
 
     for (let i = 0; i < Math.min(3, queue.length); i++) {
       const piece = queue[i];
-      const mini = this.getMiniPiece(piece);
-      content += mini + '\n';
+      const mini = this.getMiniPiece(piece, rotationSystem);
+      content += mini + (i < 2 ? '\n\n' : '\n');
     }
 
     this.nextBox.setContent(content);
@@ -920,91 +1100,67 @@ export class GameScreen {
       return;
     }
 
-    const mini = this.getMiniPiece(piece);
+    const mini = this.getMiniPiece(piece, this.state.settings.rotationSystem);
     this.holdBox.setContent('\n' + mini);
-  }
-
-  /**
-   * Get ANSI block character for piece type
-   */
-  private getBlockChar(type: PieceType): string {
-    const colors: Record<PieceType, string> = {
-      I: '{cyan-fg}██{/cyan-fg}',
-      O: '{yellow-fg}██{/yellow-fg}',
-      T: '{magenta-fg}██{/magenta-fg}',
-      S: '{green-fg}██{/green-fg}',
-      Z: '{red-fg}██{/red-fg}',
-      J: '{blue-fg}██{/blue-fg}',
-      L: '{white-fg}██{/white-fg}',
-    };
-    return colors[type] || '  ';
-  }
-
-  /**
-   * Calculate credit roll opacity based on block age
-   * Exponential decay: opacity = e^(-age/5000)
-   * Half-life = 5 seconds
-   */
-  private getCreditRollOpacity(age: number): number {
-    const HALF_LIFE = 5000;  // 5 seconds in milliseconds
-    return Math.exp(-age / HALF_LIFE);
-  }
-
-  /**
-   * Get color for piece type (used by ghost gradient)
-   */
-  private getPieceGlowColor(type: PieceType): string {
-    const colors: Record<PieceType, string> = {
-      I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white'
-    };
-    return colors[type];
-  }
-
-  /**
-   * Get faded block character for credit roll
-   */
-  private getFadedBlockChar(type: PieceType, intensity: 'medium' | 'faint'): string {
-    const colors: Record<PieceType, string> = {
-      I: 'cyan',
-      O: 'yellow',
-      T: 'magenta',
-      S: 'green',
-      Z: 'red',
-      J: 'blue',
-      L: 'white',
-    };
-
-    const color = colors[type] || 'white';
-
-    if (intensity === 'medium') {
-      return `{${color}-fg}▒▒{/${color}-fg}`;  // Medium fade
-    } else {
-      return `{${color}-fg}░░{/${color}-fg}`;  // Faint
-    }
   }
 
   /**
    * Get mini piece preview
    */
-  private getMiniPiece(type: PieceType): string {
-    const block = this.getBlockChar(type);
+  private getMiniPiece(type: PieceType, rotationSystem: string): string {
+    const block = this.getBlockChar(type, rotationSystem);
     const patterns: Record<PieceType, string> = {
       I: `  ${block}${block}${block}${block}`,
-      O: `  ${block}${block}\n  ${block}${block}`,
-      T: `   ${block}\n  ${block}${block}${block}`,
-      S: `   ${block}${block}\n  ${block}${block}`,
-      Z: `  ${block}${block}\n   ${block}${block}`,
-      J: `  ${block}\n  ${block}${block}${block}`,
-      L: `     ${block}\n  ${block}${block}${block}`,
+      O: `    ${block}${block}\n    ${block}${block}`,
+      T: `      ${block}\n    ${block}${block}${block}`,
+      S: `      ${block}${block}\n    ${block}${block}`,
+      Z: `    ${block}${block}\n      ${block}${block}`,
+      J: `    ${block}\n    ${block}${block}${block}`,
+      L: `        ${block}\n    ${block}${block}${block}`,
     };
     return patterns[type] || '';
+  }
+
+  /**
+   * Calculate credit roll opacity based on block age
+   */
+  private getCreditRollOpacity(age: number): number {
+    const HALF_LIFE = 5000;
+    return Math.exp(-age / HALF_LIFE);
+  }
+
+  /**
+   * Get color for piece type
+   */
+  private getPieceGlowColor(type: PieceType, rotationSystem: string): string {
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    return colors[type];
+  }
+
+  private getHardDropTrailChar(color: string, strength: number): string {
+    if (strength > 0.66) {
+      const bright = this.getBrightColor(color);
+      return `{${bright}-bg}  {/${bright}-bg}`;
+    }
+    if (strength > 0.33) {
+      return `{${color}-bg}  {/${color}-bg}`;
+    }
+    return `{${color}-fg}░░{/${color}-fg}`;
+  }
+
+  private getBrightColor(color: string): string {
+    const map: Record<string, string> = {
+      red: 'lightred', green: 'lightgreen', yellow: 'lightyellow', blue: 'lightblue',
+      magenta: 'lightmagenta', cyan: 'lightcyan', white: 'lightwhite', orange: 'yellow'
+    };
+    return map[color] || color;
   }
 
   /**
    * Show pause menu
    */
   private showPauseMenu(): void {
-    const pauseBox = createBox({
+    const pauseBox = createDockable({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -1014,6 +1170,7 @@ export class GameScreen {
       style: { bg: 'black', border: { fg: 'yellow' } },
       align: 'center',
       content: '\n{bold}PAUSED{/bold}\n\nPress ESC to resume\nPress Q to quit',
+      persistenceKey: 'grandmaster.game.pause',
     });
 
     this.screen.render();
@@ -1040,8 +1197,6 @@ export class GameScreen {
    */
   private async showGameOver(): Promise<void> {
     const result = this.engine.getResult();
-
-    // Check for GMM completion
     let gameOverTitle = '{bold}{red-fg}GAME OVER{/red-fg}{/bold}';
     let gameOverColor = 'red';
 
@@ -1050,10 +1205,10 @@ export class GameScreen {
         ? '{bold}{yellow-fg}GRAND MASTER MARU!{/yellow-fg}{/bold}'
         : '{bold}{yellow-fg}GRAND MASTER!{/yellow-fg}{/bold}';
       gameOverColor = 'yellow';
-      this.sounds.playVoice('bravo');  // Victory voice
+      this.sounds.playVoice('bravo');
     }
 
-    const gameOverBox = createBox({
+    const gameOverBox = createDockable({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -1069,19 +1224,17 @@ export class GameScreen {
         `Score:  ${result.score.toLocaleString()}\n` +
         `Combo:  ${result.combo}x\n\n` +
         '{gray-fg}Press any key to continue{/gray-fg}',
+      persistenceKey: 'grandmaster.game.over',
     });
 
     this.screen.render();
     this.sounds.playSfx('game_over');
-    this.sounds.playMusic('game_over', false);  // Play game over music (no loop)
+    this.sounds.playMusic('game_over', false);
 
     await this.waitForKey();
     gameOverBox.destroy();
   }
 
-  /**
-   * Wait for any keypress
-   */
   private waitForKey(): Promise<void> {
     return new Promise((resolve) => {
       const handler = () => {
@@ -1092,16 +1245,6 @@ export class GameScreen {
     });
   }
 
-  /**
-   * Sleep helper
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Clean up resources
-   */
   private cleanup(): void {
     this.input.reset();
     this.sounds.stopMusic();

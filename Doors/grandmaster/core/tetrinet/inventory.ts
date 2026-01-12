@@ -24,7 +24,7 @@ export class SpecialInventory {
   private maxSize: number;
 
   constructor(maxSize: number = 10) {
-    this.maxSize = Math.max(1, Math.min(15, maxSize));  // Clamp 1-15
+    this.maxSize = Math.max(1, Math.min(256, maxSize));
   }
 
   /**
@@ -33,13 +33,11 @@ export class SpecialInventory {
    */
   add(special: SpecialType): boolean {
     if (this.specials.length >= this.maxSize) {
-      // Drop oldest (front) to make room
-      this.specials.shift();
-      this.specials.push(special);
-      return false;  // Indicates overflow
+      return false;
     }
 
-    this.specials.push(special);
+    const insertIndex = Math.floor(Math.random() * (this.specials.length + 1));
+    this.specials.splice(insertIndex, 0, special);
     return true;
   }
 
@@ -128,10 +126,9 @@ export class SpecialInventory {
    * Set maximum inventory size
    */
   setMaxSize(size: number): void {
-    this.maxSize = Math.max(1, Math.min(15, size));
-    // Trim if needed
+    this.maxSize = Math.max(1, Math.min(256, size));
     while (this.specials.length > this.maxSize) {
-      this.specials.shift();
+      this.specials.pop();
     }
   }
 

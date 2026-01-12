@@ -6,6 +6,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { AppState } from '../core/types';
 import type { SoundEngine } from '../audio/sounds';
 
@@ -37,6 +38,9 @@ export class MenuScreen {
    * Show menu and wait for selection
    */
   async show(): Promise<MenuSelection> {
+    // Enable mouse control for menu navigation
+    this.screen.program.enableMouse();
+
     return new Promise((resolve) => {
       // Play menu music
       this.sounds.playMusic('menu', true);
@@ -75,7 +79,7 @@ export class MenuScreen {
       const leftMargin = 4;
 
       // Mode selection list - left panel
-      const menu = createList({
+      const menuPanel = createDockable({
         parent: this.screen,
         top: 9,
         left: leftMargin,
@@ -83,6 +87,18 @@ export class MenuScreen {
         height: 12,
         border: { type: 'line' },
         label: ' SELECT MODE ',
+        style: {
+          border: { fg: 'cyan' },
+        },
+        persistenceKey: 'grandmaster.menu.modes',
+      });
+
+      const menu = createList({
+        parent: menuPanel,
+        top: 1,
+        left: 1,
+        width: 22,
+        height: 10,
         style: {
           border: { fg: 'cyan' },
           selected: { bg: 'cyan', fg: 'black' },
@@ -109,7 +125,7 @@ export class MenuScreen {
       });
 
       // Mode description box - middle panel
-      const descBox = createBox({
+      const descBox = createDockable({
         parent: this.screen,
         top: 9,
         left: leftMargin + 25,  // After menu + 1 gap
@@ -119,6 +135,7 @@ export class MenuScreen {
         label: ' DESCRIPTION ',
         style: { border: { fg: 'gray' } },
         content: this.getModeDescription(0),
+        persistenceKey: 'grandmaster.menu.description',
       });
 
       // Update description when selection changes
@@ -128,7 +145,7 @@ export class MenuScreen {
       });
 
       // Info box - right panel
-      const info = createBox({
+      const info = createDockable({
         parent: this.screen,
         top: 9,
         left: leftMargin + 54,  // After menu + descBox + gaps
@@ -138,6 +155,7 @@ export class MenuScreen {
         label: ' PLAYER ',
         style: { border: { fg: 'gray' } },
         content: this.getPlayerInfo(),
+        persistenceKey: 'grandmaster.menu.player',
       });
 
       // Instructions

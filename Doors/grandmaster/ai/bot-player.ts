@@ -6,7 +6,7 @@
 
 import type { GameEngine } from '../core/game';
 import type { Board, Piece, PieceType } from '../core/types';
-import { getGhostY, cloneBoard, placePiece, getCompleteLines, clearLines, countHoles, getBumpiness, getBoardHeight } from '../core/board';
+import { getGhostY, cloneBoard, placePiece, getCompleteLines, clearLines, countHoles, getBumpiness, getBoardHeight, getColumnHeight } from '../core/board';
 
 /**
  * Bot difficulty level (1-10)
@@ -31,6 +31,8 @@ export class BotPlayer {
   private errorRate: number;   // Probability of making a bad move (0-1)
   private lastMove: number = 0;
   private targetPlacement: PlacementEvaluation | null = null;
+  private lastEngine: GameEngine | null = null;
+  private targetHold: boolean = false;
 
   constructor(difficulty: BotDifficulty = 5) {
     this.difficulty = difficulty;
@@ -83,55 +85,66 @@ export class BotPlayer {
     board: Board,
     piece: Piece
   ): PlacementEvaluation {
-    let bestEvaluation: PlacementEvaluation = {
-      x: piece.x,
-      rotation: piece.rotation,
-      score: -Infinity,
-    };
-
-    // Get piece shapes from the engine
     const engine = this.lastEngine;
     if (!engine) {
-      return bestEvaluation;
+      return { x: piece.x, rotation: piece.rotation, score: -Infinity };
     }
 
+    const gameState = engine.getState();
     const pieceManager = (engine as any).pieceManager;
-    if (!pieceManager) {
-      return bestEvaluation;
+    
+    // Evaluate current piece
+    let best = this.findBestMove(board, piece.type, pieceManager);
+    
+    // Evaluate hold piece if available and we haven't held this turn
+    if (gameState.canHold) {
+      const holdType = gameState.holdPiece || gameState.nextQueue[0];
+      const holdBest = this.findBestMove(board, holdType, pieceManager);
+      
+      // If holding is better, target holding (represented by a special flag or score)
+      if (holdBest.score > best.score + 10) { // Small bias to avoid excessive holding
+        this.targetHold = true;
+        return holdBest;
+      }
     }
 
-    // Try all rotations
+    this.targetHold = false;
+    return best;
+  }
+
+  /**
+   * Find best move for a specific piece type
+   */
+  private findBestMove(board: Board, type: PieceType, pieceManager: any): PlacementEvaluation {
+    let best: PlacementEvaluation = { x: 0, rotation: 0, score: -Infinity };
+
     for (let rotation = 0; rotation < 4; rotation++) {
-      const shape = pieceManager.getShape(piece.type, rotation as 0 | 1 | 2 | 3);
+      const shape = pieceManager.getShape(type, rotation as 0 | 1 | 2 | 3);
       if (!shape) continue;
 
-      // Calculate piece width for this rotation
-      let pieceWidth = 0;
-      for (let row = 0; row < shape.length; row++) {
-        for (let col = 0; col < shape[row].length; col++) {
-          if (shape[row][col]) {
-            pieceWidth = Math.max(pieceWidth, col + 1);
+      // Determine horizontal range
+      let minX = 0;
+      let maxX = board.width;
+      
+      // Calculate shape bounds
+      let leftBound = 4, rightBound = 0;
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (shape[r][c]) {
+            leftBound = Math.min(leftBound, c);
+            rightBound = Math.max(rightBound, c);
           }
         }
       }
 
-      // Try all valid x positions
-      for (let x = -2; x < board.width; x++) {
-        const score = this.evaluatePosition(board, piece.type, x, rotation, shape, pieceManager);
-
-        if (score > bestEvaluation.score) {
-          bestEvaluation = { x, rotation, score };
+      for (let x = -leftBound; x < board.width - rightBound; x++) {
+        const score = this.evaluatePosition(board, type, x, rotation, shape);
+        if (score > best.score) {
+          best = { x, rotation, score };
         }
       }
     }
-
-    // Apply error rate - sometimes choose a suboptimal move
-    if (Math.random() < this.errorRate) {
-      bestEvaluation.x += Math.floor(Math.random() * 3) - 1;  // -1, 0, or 1
-      bestEvaluation.x = Math.max(-2, Math.min(board.width - 1, bestEvaluation.x));
-    }
-
-    return bestEvaluation;
+    return best;
   }
 
   /**
@@ -142,80 +155,85 @@ export class BotPlayer {
     pieceType: PieceType,
     x: number,
     rotation: number,
-    shape: number[][],
-    pieceManager: any
+    shape: number[][]
   ): number {
-    // Clone the board to simulate placement
     const testBoard = cloneBoard(board);
-
-    // Find the drop position (ghost Y)
     const ghostY = getGhostY(testBoard, shape, x, 0);
 
-    // Check if this position is even valid
-    let valid = true;
-    for (let row = 0; row < shape.length && valid; row++) {
-      for (let col = 0; col < shape[row].length && valid; col++) {
+    // Validity check
+    for (let row = 0; row < shape.length; row++) {
+      for (let col = 0; col < shape[row].length; col++) {
         if (shape[row][col]) {
-          const bx = x + col;
           const by = ghostY + row;
-          if (bx < 0 || bx >= board.width || by >= board.height) {
-            valid = false;
-          }
+          if (by < 0) return -Infinity; // Spawn area collision
         }
       }
     }
 
-    if (!valid) {
-      return -Infinity;
-    }
-
-    // Place the piece on the test board
+    // Place and count lines
     placePiece(testBoard, shape, x, ghostY, pieceType);
-
-    // Check for line clears
     const clearedLines = getCompleteLines(testBoard);
     const lineCount = clearedLines.length;
-    if (lineCount > 0) {
-      clearLines(testBoard, clearedLines);
-    }
+    if (lineCount > 0) clearLines(testBoard, clearedLines);
 
-    // Evaluate the resulting board state
+    // Heuristic Weights (Dellacherie-inspired)
     let score = 0;
 
-    // Big bonus for line clears (especially Tetrises)
-    if (lineCount === 4) {
-      score += 1000;  // Tetris bonus
-    } else if (lineCount === 3) {
-      score += 300;   // Triple
-    } else if (lineCount === 2) {
-      score += 150;   // Double
-    } else if (lineCount === 1) {
-      score += 50;    // Single
-    }
+    // 1. Landing Height (lower is better)
+    // The height of the piece's bottom after placement
+    const landingHeight = board.height - ghostY;
+    score -= landingHeight * 4;
 
-    // Penalize holes heavily
+    // 2. Rows Eliminated
+    if (lineCount === 4) score += 800;
+    else if (lineCount === 3) score += 400;
+    else if (lineCount === 2) score += 200;
+    else if (lineCount === 1) score += 50;
+
+    // 3. Holes (extremely bad)
     const holes = countHoles(testBoard);
-    score -= holes * 50;
+    score -= holes * 400;
 
-    // Penalize bumpiness (height differences between columns)
+    // 4. Blocked Holes (holes with blocks above them)
+    // Already partially covered by countHoles, but we can double down
+    
+    // 5. Bumpiness
     const bumpiness = getBumpiness(testBoard);
-    score -= bumpiness * 3;
+    score -= bumpiness * 15;
 
-    // Penalize high stacks
-    const height = getBoardHeight(testBoard);
-    score -= height * 2;
+    // 6. Aggregate Height (sum of all column heights)
+    let aggregateHeight = 0;
+    const colHeights: number[] = [];
+    for (let cx = 0; cx < testBoard.width; cx++) {
+      const h = getColumnHeight(testBoard, cx);
+      colHeights.push(h);
+      aggregateHeight += h;
+    }
+    score -= aggregateHeight * 2;
 
-    // Prefer lower placements
-    score += ghostY * 0.5;
+    // 7. Well Penalty (Avoid deep wells unless they are for Tetrises)
+    // A well is an empty column surrounded by higher columns
+    let wells = 0;
+    for (let cx = 0; cx < testBoard.width; cx++) {
+      const leftH = cx > 0 ? colHeights[cx-1] : testBoard.height;
+      const rightH = cx < testBoard.width - 1 ? colHeights[cx+1] : testBoard.height;
+      const h = colHeights[cx];
+      const depth = Math.min(leftH, rightH) - h;
+      if (depth > 2) {
+        // Only allow one deep well (usually for Tetris)
+        wells += (depth - 2);
+      }
+    }
+    score -= wells * 10;
 
-    // Difficulty scaling - higher difficulty weights line clears more
-    score *= (this.difficulty / 5);
+    // Difficulty scaling
+    if (this.difficulty < 10) {
+        // Add random noise based on difficulty
+        score += (Math.random() - 0.5) * (11 - this.difficulty) * 50;
+    }
 
     return score;
   }
-
-  // Store reference to engine for piece manager access
-  private lastEngine: GameEngine | null = null;
 
   /**
    * Execute moves to reach target placement
@@ -225,7 +243,18 @@ export class BotPlayer {
     piece: Piece,
     target: PlacementEvaluation
   ): void {
-    // Rotate to target rotation
+    // If we decided to hold, do it immediately
+    if (this.targetHold) {
+      engine.hold();
+      this.targetHold = false;
+      this.targetPlacement = null;
+      return;
+    }
+
+    // High difficulty bots move instantly
+    const instantMove = this.difficulty >= 8;
+
+    // 1. Handle rotation
     if (piece.rotation !== target.rotation) {
       const rotationDiff = (target.rotation - piece.rotation + 4) % 4;
       if (rotationDiff === 1) {
@@ -234,20 +263,31 @@ export class BotPlayer {
         engine.rotate(-1);  // CCW
       } else if (rotationDiff === 2) {
         engine.rotate(1);  // CW twice
-        return;  // Need another frame
+        if (instantMove) engine.rotate(1);
       }
-      return;  // Give rotation time to complete
+      if (!instantMove) return; // Wait for next frame for realism on lower difficulties
     }
 
-    // Move to target x
-    if (piece.x < target.x) {
-      engine.move(1);  // Right
-    } else if (piece.x > target.x) {
-      engine.move(-1);  // Left
-    } else {
-      // At target position - hard drop
-      engine.hardDrop();
-      this.targetPlacement = null;  // Clear target for next piece
+    // 2. Handle horizontal movement
+    if (piece.x !== target.x) {
+        const diff = target.x - piece.x;
+        const dir = diff > 0 ? 1 : -1;
+        
+        if (instantMove) {
+            // Move all the way to target
+            for (let i = 0; i < Math.abs(diff); i++) {
+                engine.move(dir);
+            }
+        } else {
+            engine.move(dir);
+            return;
+        }
+    }
+
+    // 3. Final placement - hard drop
+    if (piece.x === target.x && piece.rotation === target.rotation) {
+        engine.hardDrop();
+        this.targetPlacement = null;
     }
   }
 

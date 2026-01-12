@@ -38,9 +38,21 @@ export interface TetriNetGameOptions {
   specialsAddedEachTime: number;        // 1-4 (specials added per clear, default 1)
   specialOccurancies: SpecialOccurancy[]; // Custom spawn rates
 
+  // TetriNET 1.x options (from newgame)
+  startingHeight: number;               // Initial garbage stack height
+  linesPerLevel: number;                // Lines needed per level
+  levelIncrement: number;               // Level increment per advance
+  pieceFrequency: number[];             // Cumulative piece frequency (7 values)
+  specialFrequency: number[];           // Cumulative special frequency (9 values)
+  levelAverage: boolean;                // Average levels across players
+  classicMode: boolean;                 // Classic mode (line clears send cs1/cs2/cs4)
+
   // Game settings
   startingLevel: number;                // 0-100 (default 0)
   classicStyleMultiplayer: boolean;     // Line clear multipliers for garbage
+  nextPieceDelayMs: number;             // Delay before next piece spawns (ms)
+  useSameBlocks?: boolean;              // TetriNET 1.14 shared block sequence
+  randomSeed?: number;                  // Seed for 1.14 RNG (32-bit)
 
   // Sudden death settings
   delayBeforeSuddenDeath: number;       // 0-15 minutes (0 = disabled)
@@ -57,8 +69,16 @@ export const CLASSIC_OPTIONS: TetriNetGameOptions = {
   linesToMakeForSpecials: 1,
   specialsAddedEachTime: 0,
   specialOccurancies: [],
+  startingHeight: 0,
+  linesPerLevel: 2,
+  levelIncrement: 1,
+  pieceFrequency: [14, 28, 42, 56, 70, 84, 100],
+  specialFrequency: [11, 22, 33, 44, 55, 66, 77, 88, 100],
+  levelAverage: false,
+  classicMode: true,
   startingLevel: 0,
   classicStyleMultiplayer: true,
+  nextPieceDelayMs: 1000,
   delayBeforeSuddenDeath: 3,
   suddenDeathTick: 5,
 };
@@ -83,8 +103,16 @@ export const STANDARD_OPTIONS: TetriNetGameOptions = {
     { type: 'quake', rate: 15 },
     { type: 'block_bomb', rate: 15 },
   ],
+  startingHeight: 0,
+  linesPerLevel: 2,
+  levelIncrement: 1,
+  pieceFrequency: [14, 28, 42, 56, 70, 84, 100],
+  specialFrequency: [11, 22, 33, 44, 55, 66, 77, 88, 100],
+  levelAverage: false,
+  classicMode: false,
   startingLevel: 0,
   classicStyleMultiplayer: true,
+  nextPieceDelayMs: 1000,
   delayBeforeSuddenDeath: 2,
   suddenDeathTick: 5,
 };
@@ -118,8 +146,16 @@ export const EXTENDED_OPTIONS: TetriNetGameOptions = {
     { type: 'zebra', rate: 3 },
     { type: 'left_gravity', rate: 3 },
   ],
+  startingHeight: 0,
+  linesPerLevel: 2,
+  levelIncrement: 1,
+  pieceFrequency: [14, 28, 42, 56, 70, 84, 100],
+  specialFrequency: [11, 22, 33, 44, 55, 66, 77, 88, 100],
+  levelAverage: false,
+  classicMode: false,
   startingLevel: 0,
   classicStyleMultiplayer: true,
+  nextPieceDelayMs: 1000,
   delayBeforeSuddenDeath: 2,
   suddenDeathTick: 5,
 };
@@ -182,8 +218,20 @@ export function validateOptions(options: TetriNetGameOptions): string[] {
     errors.push('Sudden death delay must be 0-15 minutes');
   }
 
+  if (options.nextPieceDelayMs < 0 || options.nextPieceDelayMs > 5000) {
+    errors.push('Next piece delay must be 0-5000 ms');
+  }
+
   if (options.suddenDeathTick < 1 || options.suddenDeathTick > 30) {
     errors.push('Sudden death tick must be 1-30 seconds');
+  }
+
+  if (options.pieceFrequency.length !== 7) {
+    errors.push('Piece frequency must have 7 values');
+  }
+
+  if (options.specialFrequency.length !== 9) {
+    errors.push('Special frequency must have 9 values');
   }
 
   // Validate special rates total

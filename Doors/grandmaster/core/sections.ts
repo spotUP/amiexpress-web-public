@@ -23,68 +23,15 @@ export interface SectionData {
 }
 
 /**
- * Border time thresholds (frames per level) from HeborisCE gamestart.c
- * Used to calculate COOL/REGRET for each section
- *
- * HeborisCE border_time[20] array:
- * 17, 15, 14, 13, 10, 10, 12, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10
- *
- * Converting to section targets: frames_per_level * 100 levels / 60 fps = seconds
+ * Border time thresholds (average frames per level) from HeborisCE gamestart.c
+ * Used to calculate COOL!! for each section (80-98 level check)
  */
 const BORDER_TIME_FRAMES: Record<number, number> = {
-  0: 17,   // Section 0: 0-99
-  1: 15,   // Section 1: 100-199
-  2: 14,   // Section 2: 200-299
-  3: 13,   // Section 3: 300-399
-  4: 10,   // Section 4: 400-499
-  5: 10,   // Section 5: 500-599
-  6: 12,   // Section 6: 600-699
-  7: 13,   // Section 7: 700-799
-  8: 13,   // Section 8: 800-899
-  9: 13,   // Section 9: 900-999
+  0: 17, 1: 15, 2: 14, 3: 13, 4: 10, 
+  5: 10, 6: 12, 7: 13, 8: 13, 9: 13,
+  10: 13, 11: 13, 12: 13, 13: 13, 14: 13,
+  15: 12, 16: 12, 17: 11, 18: 11, 19: 10
 };
-
-/**
- * Target times for COOL grade (in seconds)
- * Calculated from HeborisCE border_time: frames_per_level * 100 / 60
- * With slight adjustment for realistic gameplay
- */
-const COOL_TARGETS: Record<number, number> = {
-  0: 52,    // Section 0: 0-99 (17 * 100 / 60 * 1.8 ≈ 52)
-  1: 48,    // Section 1: 100-199
-  2: 46,    // Section 2: 200-299
-  3: 44,    // Section 3: 300-399
-  4: 36,    // Section 4: 400-499 (speed ramps up here)
-  5: 36,    // Section 5: 500-599
-  6: 40,    // Section 6: 600-699
-  7: 44,    // Section 7: 700-799
-  8: 44,    // Section 8: 800-899
-  9: 44,    // Section 9: 900-999
-};
-
-/**
- * Maximum allowed time for section (REGRET threshold)
- * Approximately 2.5x the COOL target
- */
-const REGRET_THRESHOLD: Record<number, number> = {
-  0: 90,
-  1: 85,
-  2: 80,
-  3: 75,
-  4: 65,
-  5: 65,
-  6: 70,
-  7: 75,
-  8: 75,
-  9: 75,
-};
-
-/**
- * Get border time threshold (frames per level) for a section
- */
-export function getBorderTimeFrames(section: number): number {
-  return BORDER_TIME_FRAMES[section] || 13;  // Default to 13 frames/level
-}
 
 /**
  * Section manager
@@ -93,6 +40,7 @@ export class SectionManager {
   private sections: SectionData[] = [];
   private currentSection: SectionData;
   private startTime: number;
+  private borderRank: number = 0; // border_rank in HeborisCE
 
   constructor() {
     this.startTime = Date.now();
@@ -118,11 +66,25 @@ export class SectionManager {
    */
   update(currentLevel: number, linesCleared: number): SectionResult | null {
     const sectionNumber = Math.floor(currentLevel / 100);
+    const levelInSection = currentLevel % 100;
+
+    // HeborisCE: Quality COOL check between level 80 and 98
+    if (levelInSection >= 80 && levelInSection <= 98 && this.currentSection.result === null) {
+      const elapsedFrames = ((Date.now() - this.currentSection.startTime) / 1000) * 60;
+      const avgFramesPerLevel = elapsedFrames / levelInSection;
+      
+      const targetFrames = BORDER_TIME_FRAMES[this.borderRank] || 13;
+      if (avgFramesPerLevel < targetFrames) {
+        this.currentSection.result = 'COOL';
+        this.borderRank = Math.min(19, this.borderRank + 1);
+        return 'COOL';
+      }
+    }
 
     // Check if we've moved to a new section
     if (sectionNumber > this.currentSection.section) {
       // Complete current section
-      const result = this.completeSection();
+      const result = this.completeSection(currentLevel);
 
       // Start new section
       this.currentSection = this.createSection(sectionNumber);
@@ -137,41 +99,30 @@ export class SectionManager {
   }
 
   /**
-   * Complete current section
+   * Complete current section and check for REGRET
    */
-  private completeSection(): SectionResult {
+  private completeSection(currentLevel: number): SectionResult {
     const endTime = Date.now();
-    const duration = (endTime - this.currentSection.startTime) / 1000; // Convert to seconds
+    const duration = (endTime - this.currentSection.startTime) / 1000;
+    const frames = duration * 60;
+    const avgFramesPerLevel = frames / 100;
 
     this.currentSection.endTime = endTime;
     this.currentSection.duration = duration;
 
-    // Determine result
-    const result = this.evaluateSection(this.currentSection.section, duration);
-    this.currentSection.result = result;
+    // Check for REGRET
+    // border_time[rank] + 6 + (tr2/40)
+    const targetFrames = (BORDER_TIME_FRAMES[this.borderRank] || 13) + 6;
+    
+    if (avgFramesPerLevel > targetFrames && this.currentSection.result !== 'COOL') {
+      this.currentSection.result = 'REGRET';
+      this.borderRank = Math.max(0, this.borderRank - 1);
+    } else if (this.currentSection.result === null) {
+      this.currentSection.result = 'NORMAL';
+    }
 
-    // Add to history
     this.sections.push(this.currentSection);
-
-    return result;
-  }
-
-  /**
-   * Evaluate section performance
-   */
-  private evaluateSection(sectionNumber: number, duration: number): SectionResult {
-    const coolTarget = COOL_TARGETS[sectionNumber];
-    const regretThreshold = REGRET_THRESHOLD[sectionNumber];
-
-    if (coolTarget && duration <= coolTarget) {
-      return 'COOL';
-    }
-
-    if (regretThreshold && duration >= regretThreshold) {
-      return 'REGRET';
-    }
-
-    return 'NORMAL';
+    return this.currentSection.result;
   }
 
   /**
@@ -186,13 +137,6 @@ export class SectionManager {
    */
   getCurrentSectionTime(): number {
     return (Date.now() - this.currentSection.startTime) / 1000;
-  }
-
-  /**
-   * Get target time for current section
-   */
-  getTargetTime(): number | null {
-    return COOL_TARGETS[this.currentSection.section] || null;
   }
 
   /**

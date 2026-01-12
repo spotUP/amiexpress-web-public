@@ -238,7 +238,7 @@ Each sound effect has a carefully crafted tone.js approximation:
 socket.emit('audio:sfx', {
   effect: 'tetris',
   volume: 0.8,
-  file: '/doors/grandmaster/sounds/tetris.wav'
+  file: '/api/doors/grandmaster/assets/sounds/tetris.wav'
 });
 ```
 
@@ -248,7 +248,7 @@ socket.emit('audio:music', {
   track: 'master',
   loop: true,
   volume: 0.8,
-  file: '/doors/grandmaster/music/master.mod'
+  file: '/api/doors/grandmaster/assets/music/master.mod'
 });
 ```
 

@@ -8,7 +8,7 @@
  */
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from '../dockable';
 import type { SpecialInventory } from '../../core/tetrinet/inventory';
 import type { SpecialType } from '../../core/tetrinet/specials';
 import { getSpecialColor, getSpecialDisplayChar } from '../../core/tetrinet/specials';
@@ -38,7 +38,7 @@ export class InventoryPanel {
     // Calculate width: each slot is 2 chars + 1 space, plus borders
     const width = options.width || (this.maxSlots * 3 + 4);
 
-    this.box = createBox({
+    this.box = createDockable({
       parent: options.parent,
       top: options.top,
       left: options.left,
@@ -48,6 +48,7 @@ export class InventoryPanel {
       style: { border: { fg: 'cyan' } },
       label: ' Inventory ',
       content: this.renderEmpty(),
+      persistenceKey: 'grandmaster.tnet.inventory',
     });
   }
 

@@ -6,6 +6,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -92,6 +93,7 @@ export class VersusScreen {
       height: 22,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
+      fixed: true,
     });
 
     // Stats (below board)
@@ -105,7 +107,7 @@ export class VersusScreen {
     });
 
     // Garbage queue indicator (right of board)
-    this.garbageIndicator = createBox({
+    this.garbageIndicator = createDockable({
       parent: this.screen,
       top: 1,
       left: 22,  // Right edge of board
@@ -114,10 +116,11 @@ export class VersusScreen {
       border: { type: 'line' },
       style: { border: { fg: 'red' } },
       content: '{red-fg}GARBAGE{/red-fg}',
+      persistenceKey: 'grandmaster.versus.garbage',
     });
 
     // Attack indicator
-    this.attackIndicator = createBox({
+    this.attackIndicator = createDockable({
       parent: this.screen,
       top: 23,
       left: 22,
@@ -126,15 +129,28 @@ export class VersusScreen {
       border: { type: 'line' },
       style: { border: { fg: 'yellow' } },
       content: '',
+      persistenceKey: 'grandmaster.versus.attack',
     });
 
     // Minimap container (right side)
-    this.minimapContainer = createBox({
+    const minimapPanel = createDockable({
       parent: this.screen,
       top: 1,
       left: 28,  // Right of garbage indicator (22 + 6 = 28)
       width: 50,
       height: 25,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      label: ' Opponents ',
+      persistenceKey: 'grandmaster.versus.minimap',
+    });
+
+    this.minimapContainer = createBox({
+      parent: minimapPanel,
+      top: 1,
+      left: 1,
+      width: 48,
+      height: 23,
       content: '',
     });
   }
@@ -316,7 +332,7 @@ export class VersusScreen {
 
     // Render opponent minimaps
     this.minimapRenderer.renderMinimapGrid(
-      this.screen,
+      this.minimapContainer,
       this.opponentTracker.getAliveOpponents(),
       6  // Show up to 6 opponents
     );

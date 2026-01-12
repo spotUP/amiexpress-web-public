@@ -11,6 +11,19 @@
 
 ---
 
+## TetriNET Protocol Parity (External Servers)
+
+**Goal**: 1:1 TetriNET 1.x protocol and gameplay parity (no per-door hacks).
+
+- [x] TetriFast command variants (`tetrifaster`, obfuscated `playernum`/`newgame`)
+- [x] Next-block delay: 1000ms standard, 0ms TetriFast
+- [x] Parse v1.14 seed string in `newgame`
+- [x] Seed-driven RNG parity for TetriNET 1.14 (LCG, big-endian seed)
+- [ ] External game screen uses engine (piece sync, fields, specials, targets)
+- [ ] Jetrix-parity server plan (see `Doors/grandmaster/TETRINET_SERVER_IMPLEMENTATION_PROMPT.md`)
+
+---
+
 ## Phase 1: Core Engine ✅ COMPLETED
 
 **Status**: Done (3,200 lines)

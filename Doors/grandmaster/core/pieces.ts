@@ -24,6 +24,17 @@ export const PIECE_COLORS: Record<PieceType, string> = {
   L: 'white',
 };
 
+// TGM3 ARS Colors (Authentic)
+export const ARS_COLORS: Record<PieceType, string> = {
+  I: 'red',
+  J: 'blue',
+  L: 'orange',
+  O: 'yellow',
+  S: 'magenta',
+  Z: 'green',
+  T: 'cyan',
+};
+
 // ============================================================================
 // SRS Rotation Data
 // ============================================================================
@@ -150,8 +161,8 @@ const SRS_SHAPES: Record<PieceType, number[][][]> = {
     // 180°
     [[0, 0, 0, 0],
      [1, 1, 1, 0],
-     [0, 0, 1, 0],
-     [0, 0, 0, 0]],
+     [0, 1, 0, 0],
+     [0, 0, 1, 0]],
     // 270°
     [[0, 1, 0, 0],
      [0, 1, 0, 0],
@@ -183,268 +194,996 @@ const SRS_SHAPES: Record<PieceType, number[][][]> = {
 };
 
 // SRS Wall Kick Data (5 tests per rotation)
+
 const SRS_KICKS: Record<string, KickTable> = {
+
   // JLSTZ pieces
+
   'JLSTZ_0->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+
   'JLSTZ_1->0': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+
   'JLSTZ_1->2': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+
   'JLSTZ_2->1': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+
   'JLSTZ_2->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+
   'JLSTZ_3->2': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+
   'JLSTZ_3->0': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+
   'JLSTZ_0->3': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
 
+
+
   // I piece (different kicks)
+
   'I_0->1': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+
   'I_1->0': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+
   'I_1->2': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+
   'I_2->1': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+
   'I_2->3': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+
   'I_3->2': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+
   'I_3->0': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+
   'I_0->3': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
 
+
+
   // O piece (no kicks)
+
   'O_0->1': [[0, 0]],
+
   'O_1->0': [[0, 0]],
+
   'O_1->2': [[0, 0]],
+
   'O_2->1': [[0, 0]],
+
   'O_2->3': [[0, 0]],
+
   'O_3->2': [[0, 0]],
+
   'O_3->0': [[0, 0]],
+
   'O_0->3': [[0, 0]],
+
 };
 
+
+
 // ============================================================================
+
 // ARS (Arika Rotation System) - TGM Classic
+
 // ============================================================================
+
+
 
 const ARS_SHAPES: Record<PieceType, number[][][]> = {
-  // ARS uses same shapes as SRS for most pieces
-  I: SRS_SHAPES.I,
+
+  I: [
+
+    [[0, 0, 0, 0],
+
+     [1, 1, 1, 1],
+
+     [0, 0, 0, 0],
+
+     [0, 0, 0, 0]],
+
+    [[0, 0, 1, 0],
+
+     [0, 0, 1, 0],
+
+     [0, 0, 1, 0],
+
+     [0, 0, 1, 0]],
+
+    [[0, 0, 0, 0],
+
+     [1, 1, 1, 1],
+
+     [0, 0, 0, 0],
+
+     [0, 0, 0, 0]],
+
+    [[0, 0, 1, 0],
+
+     [0, 0, 1, 0],
+
+     [0, 0, 1, 0],
+
+     [0, 0, 1, 0]],
+
+  ],
+
   O: SRS_SHAPES.O,
-  T: SRS_SHAPES.T,
-  S: SRS_SHAPES.S,
-  Z: SRS_SHAPES.Z,
-  J: SRS_SHAPES.J,
-  L: SRS_SHAPES.L,
+
+  T: [
+
+    [[0, 1, 0],
+
+     [1, 1, 1],
+
+     [0, 0, 0]],
+
+    [[0, 1, 0],
+
+     [0, 1, 1],
+
+     [0, 1, 0]],
+
+    [[0, 0, 0],
+
+     [1, 1, 1],
+
+     [0, 1, 0]],
+
+    [[0, 1, 0],
+
+     [1, 1, 0],
+
+     [0, 1, 0]],
+
+  ],
+
+  S: [
+
+    [[0, 1, 1],
+
+     [1, 1, 0],
+
+     [0, 0, 0]],
+
+    [[0, 1, 0],
+
+     [0, 1, 1],
+
+     [0, 0, 1]],
+
+    [[0, 0, 0],
+
+     [0, 1, 1],
+
+     [1, 1, 0]],
+
+    [[1, 0, 0],
+
+     [1, 1, 0],
+
+     [0, 1, 0]],
+
+  ],
+
+  Z: [
+
+    [[1, 1, 0],
+
+     [0, 1, 1],
+
+     [0, 0, 0]],
+
+    [[0, 0, 1],
+
+     [0, 1, 1],
+
+     [0, 1, 0]],
+
+    [[0, 0, 0],
+
+     [1, 1, 0],
+
+     [0, 1, 1]],
+
+    [[0, 1, 0],
+
+     [1, 1, 0],
+
+     [1, 0, 0]],
+
+  ],
+
+  J: [
+
+    [[1, 0, 0],
+
+     [1, 1, 1],
+
+     [0, 0, 0]],
+
+    [[0, 1, 1],
+
+     [0, 1, 0],
+
+     [0, 1, 0]],
+
+    [[0, 0, 0],
+
+     [1, 1, 1],
+
+     [0, 0, 1]],
+
+    [[0, 1, 0],
+
+     [0, 1, 0],
+
+     [1, 1, 0]],
+
+  ],
+
+  L: [
+
+    [[0, 0, 1],
+
+     [1, 1, 1],
+
+     [0, 0, 0]],
+
+    [[0, 1, 0],
+
+     [0, 1, 0],
+
+     [0, 1, 1]],
+
+    [[0, 0, 0],
+
+     [1, 1, 1],
+
+     [1, 0, 0]],
+
+    [[1, 1, 0],
+
+     [0, 1, 0],
+
+     [0, 1, 0]],
+
+  ],
+
 };
 
-// ARS Wall Kicks (simpler than SRS)
+
+
+// ARS Wall Kicks (Authentic)
+
 const ARS_KICKS: Record<string, KickTable> = {
-  // ARS has minimal wall kicks - only basic shifts
+
   'JLSTZ_0->1': [[0, 0], [-1, 0], [1, 0]],
+
   'JLSTZ_1->0': [[0, 0], [1, 0], [-1, 0]],
+
   'JLSTZ_1->2': [[0, 0], [1, 0], [-1, 0]],
+
   'JLSTZ_2->1': [[0, 0], [-1, 0], [1, 0]],
+
   'JLSTZ_2->3': [[0, 0], [1, 0], [-1, 0]],
+
   'JLSTZ_3->2': [[0, 0], [-1, 0], [1, 0]],
+
   'JLSTZ_3->0': [[0, 0], [-1, 0], [1, 0]],
+
   'JLSTZ_0->3': [[0, 0], [1, 0], [-1, 0]],
 
-  // I piece
-  'I_0->1': [[0, 0], [-1, 0], [1, 0]],
-  'I_1->0': [[0, 0], [1, 0], [-1, 0]],
-  'I_1->2': [[0, 0], [1, 0], [-1, 0]],
-  'I_2->1': [[0, 0], [-1, 0], [1, 0]],
-  'I_2->3': [[0, 0], [1, 0], [-1, 0]],
-  'I_3->2': [[0, 0], [-1, 0], [1, 0]],
-  'I_3->0': [[0, 0], [-1, 0], [1, 0]],
-  'I_0->3': [[0, 0], [1, 0], [-1, 0]],
 
-  // O piece (no kicks)
+
+  // I piece (TGM3 ARS floor kicks)
+
+  'I_0->1': [[0, 0]],
+
+  'I_1->0': [[0, 0], [0, -1], [0, -2]],
+
+  'I_1->2': [[0, 0], [0, -1], [0, -2]],
+
+  'I_2->1': [[0, 0]],
+
+  'I_2->3': [[0, 0], [0, -1], [0, -2]],
+
+  'I_3->2': [[0, 0], [0, -1], [0, -2]],
+
+  'I_3->0': [[0, 0]],
+
+  'I_0->3': [[0, 0], [0, -1], [0, -2]],
+
+
+
   'O_0->1': [[0, 0]],
+
   'O_1->0': [[0, 0]],
+
   'O_1->2': [[0, 0]],
+
   'O_2->1': [[0, 0]],
+
   'O_2->3': [[0, 0]],
+
   'O_3->2': [[0, 0]],
+
   'O_3->0': [[0, 0]],
+
   'O_0->3': [[0, 0]],
+
 };
 
-// ============================================================================
+
+
+// ================= ===========================================================
+
 // NRS (Nintendo Rotation System) - Classic NES Tetris
+
 // ============================================================================
+
+
 
 const NRS_SHAPES: Record<PieceType, number[][][]> = {
+
   I: [
+
     // 0° - Horizontal
+
     [[0, 0, 0, 0],
+
      [1, 1, 1, 1],
+
      [0, 0, 0, 0],
+
      [0, 0, 0, 0]],
+
     // 90° - Vertical
+
     [[0, 1, 0, 0],
+
      [0, 1, 0, 0],
+
      [0, 1, 0, 0],
+
      [0, 1, 0, 0]],
+
     // 180° - Same as 0°
+
     [[0, 0, 0, 0],
+
      [1, 1, 1, 1],
+
      [0, 0, 0, 0],
+
      [0, 0, 0, 0]],
+
     // 270° - Same as 90°
+
     [[0, 1, 0, 0],
+
      [0, 1, 0, 0],
+
      [0, 1, 0, 0],
+
      [0, 1, 0, 0]],
+
   ],
+
   O: SRS_SHAPES.O, // Same as SRS
+
   T: SRS_SHAPES.T, // Same as SRS
+
   S: SRS_SHAPES.S, // Same as SRS
+
   Z: SRS_SHAPES.Z, // Same as SRS
+
   J: SRS_SHAPES.J, // Same as SRS
+
   L: SRS_SHAPES.L, // Same as SRS
+
 };
+
+
 
 // NRS has NO wall kicks - pure rotation
+
 const NRS_KICKS: Record<string, KickTable> = {
+
   'JLSTZ_0->1': [[0, 0]],
+
   'JLSTZ_1->0': [[0, 0]],
+
   'JLSTZ_1->2': [[0, 0]],
+
   'JLSTZ_2->1': [[0, 0]],
+
   'JLSTZ_2->3': [[0, 0]],
+
   'JLSTZ_3->2': [[0, 0]],
+
   'JLSTZ_3->0': [[0, 0]],
+
   'JLSTZ_0->3': [[0, 0]],
+
   'I_0->1': [[0, 0]],
+
   'I_1->0': [[0, 0]],
+
   'I_1->2': [[0, 0]],
+
   'I_2->1': [[0, 0]],
+
   'I_2->3': [[0, 0]],
+
   'I_3->2': [[0, 0]],
+
   'I_3->0': [[0, 0]],
+
   'I_0->3': [[0, 0]],
+
   'O_0->1': [[0, 0]],
+
   'O_1->0': [[0, 0]],
+
   'O_1->2': [[0, 0]],
+
   'O_2->1': [[0, 0]],
+
   'O_2->3': [[0, 0]],
+
   'O_3->2': [[0, 0]],
+
   'O_3->0': [[0, 0]],
+
   'O_0->3': [[0, 0]],
+
 };
 
+
+
 // ============================================================================
+
 // BARS (Big Arika Rotation System) - Hybrid
+
 // ============================================================================
+
+
 
 const BARS_SHAPES: Record<PieceType, number[][][]> = {
+
   // BARS uses SRS shapes
+
   I: SRS_SHAPES.I,
+
   O: SRS_SHAPES.O,
+
   T: SRS_SHAPES.T,
+
   S: SRS_SHAPES.S,
+
   Z: SRS_SHAPES.Z,
+
   J: SRS_SHAPES.J,
+
   L: SRS_SHAPES.L,
+
 };
+
+
 
 // BARS has moderate wall kicks (between ARS and SRS)
+
 const BARS_KICKS: Record<string, KickTable> = {
+
   // JLSTZ pieces - 3 tests
+
   'JLSTZ_0->1': [[0, 0], [-1, 0], [-1, 1]],
+
   'JLSTZ_1->0': [[0, 0], [1, 0], [1, -1]],
+
   'JLSTZ_1->2': [[0, 0], [1, 0], [1, -1]],
+
   'JLSTZ_2->1': [[0, 0], [-1, 0], [-1, 1]],
+
   'JLSTZ_2->3': [[0, 0], [1, 0], [1, 1]],
+
   'JLSTZ_3->2': [[0, 0], [-1, 0], [-1, -1]],
+
   'JLSTZ_3->0': [[0, 0], [-1, 0], [-1, -1]],
+
   'JLSTZ_0->3': [[0, 0], [1, 0], [1, 1]],
 
+
+
   // I piece - 4 tests
+
   'I_0->1': [[0, 0], [-2, 0], [1, 0], [-2, -1]],
+
   'I_1->0': [[0, 0], [2, 0], [-1, 0], [2, 1]],
+
   'I_1->2': [[0, 0], [-1, 0], [2, 0], [-1, 2]],
+
   'I_2->1': [[0, 0], [1, 0], [-2, 0], [1, -2]],
+
   'I_2->3': [[0, 0], [2, 0], [-1, 0], [2, 1]],
+
   'I_3->2': [[0, 0], [-2, 0], [1, 0], [-2, -1]],
+
   'I_3->0': [[0, 0], [1, 0], [-2, 0], [1, -2]],
+
   'I_0->3': [[0, 0], [-1, 0], [2, 0], [-1, 2]],
 
+
+
   // O piece (no kicks)
+
   'O_0->1': [[0, 0]],
+
   'O_1->0': [[0, 0]],
+
   'O_1->2': [[0, 0]],
+
   'O_2->1': [[0, 0]],
+
   'O_2->3': [[0, 0]],
+
   'O_3->2': [[0, 0]],
+
   'O_3->0': [[0, 0]],
+
   'O_0->3': [[0, 0]],
+
 };
 
-// ============================================================================
+
+
+// ================= ===========================================================
+
 // Rotation System Data
+
 // ============================================================================
+
+
 
 export class PieceManager {
+
   private rotationSystem: RotationSystem;
 
+  private pool: PieceType[] = [];
+
+  private history: PieceType[] = [];
+
+  private readonly POOL_SIZE = 35;
+
+  private readonly HISTORY_SIZE = 4;
+
+
+
   constructor(rotationSystem: RotationSystem = 'SRS') {
+
     this.rotationSystem = rotationSystem;
+
+    this.initPool();
+
   }
 
+
+
   /**
+
+   * Initialize TGM3 piece pool
+
+   */
+
+  private initPool(): void {
+
+    this.pool = [];
+
+    const pieces: PieceType[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+
+    // Fill pool with 5 of each piece
+
+    for (let i = 0; i < 5; i++) {
+
+      this.pool.push(...pieces);
+
+    }
+
+    this.shuffle(this.pool);
+
+    // History starts with Z, S, Z, S to prevent early S/Z droughts (authentic TGM behavior)
+
+    this.history = ['Z', 'S', 'Z', 'S'];
+
+  }
+
+
+
+  /**
+
    * Get piece shape at specified rotation
+
    */
+
   getShape(type: PieceType, rotation: 0 | 1 | 2 | 3): number[][] {
+
     switch (this.rotationSystem) {
+
       case 'SRS':
+
         return SRS_SHAPES[type][rotation];
+
       case 'ARS':
+
         return ARS_SHAPES[type][rotation];
+
       case 'NRS':
+
         return NRS_SHAPES[type][rotation];
+
       case 'BARS':
+
         return BARS_SHAPES[type][rotation];
+
       default:
+
         return SRS_SHAPES[type][rotation];
+
     }
+
   }
 
-  /**
-   * Get wall kick offsets for rotation
-   */
-  getKicks(type: PieceType, fromRotation: number, toRotation: number): KickTable {
-    const piece = (type === 'I') ? 'I' : (type === 'O') ? 'O' : 'JLSTZ';
-    const key = `${piece}_${fromRotation}->${toRotation}`;
 
-    switch (this.rotationSystem) {
-      case 'SRS':
-        return SRS_KICKS[key] || [[0, 0]];
-      case 'ARS':
-        return ARS_KICKS[key] || [[0, 0]];
-      case 'NRS':
-        return NRS_KICKS[key] || [[0, 0]];
-      case 'BARS':
-        return BARS_KICKS[key] || [[0, 0]];
-      default:
-        return SRS_KICKS[key] || [[0, 0]];
+
+    /**
+
+
+
+     * Get wall kick offsets for rotation
+
+
+
+     */
+
+
+
+    getKicks(type: PieceType, fromRotation: number, toRotation: number): KickTable {
+
+
+
+      const piece = (type === 'I') ? 'I' : (type === 'O') ? 'O' : 'JLSTZ';
+
+
+
+      const key = `${piece}_${fromRotation}->${toRotation}`;
+
+
+
+  
+
+
+
+      switch (this.rotationSystem) {
+
+
+
+        case 'SRS':
+
+
+
+          return SRS_KICKS[key] || [[0, 0]];
+
+
+
+        case 'ARS':
+
+
+
+          // TGM3 ARS has specific kicks for I and others
+
+
+
+          return ARS_KICKS[key] || [[0, 0]];
+
+
+
+        case 'NRS':
+
+
+
+          return NRS_KICKS[key] || [[0, 0]];
+
+
+
+        case 'BARS':
+
+
+
+          return BARS_KICKS[key] || [[0, 0]];
+
+
+
+        default:
+
+
+
+          return SRS_KICKS[key] || [[0, 0]];
+
+
+
+      }
+
+
+
     }
-  }
 
-  /**
-   * Get spawn position for piece type
-   */
-  getSpawnPosition(type: PieceType, boardWidth: number): { x: number; y: number } {
-    // Standard SRS spawn: centered horizontally, top of playfield
-    const x = Math.floor((boardWidth - 4) / 2);
-    const y = type === 'I' ? -1 : 0;  // I piece spawns higher
-    return { x, y };
-  }
 
-  /**
-   * Generate random piece using 7-bag randomizer
-   */
+
+  
+
+
+
+    /**
+
+
+
+     * Get spawn position for piece type
+
+
+
+     */
+
+
+
+    getSpawnPosition(type: PieceType, boardWidth: number): { x: number; y: number } {
+
+
+
+      if (this.rotationSystem === 'ARS') {
+
+
+
+        // ARS spawn: centered horizontally, fixed Y
+
+
+
+        const x = type === 'O' ? 4 : 3;
+
+
+
+        const y = 2; // TGM pieces spawn in the vanish zone
+
+
+
+        return { x, y };
+
+
+
+      }
+
+
+
+      
+
+
+
+      // Standard SRS spawn: centered horizontally, top of playfield
+
+
+
+      const x = Math.floor((boardWidth - 4) / 2);
+
+
+
+      const y = type === 'I' ? -1 : 0;  // I piece spawns higher
+
+
+
+      return { x, y };
+
+
+
+    }
+
+
+
+  
+
+
+
+    /**
+
+
+
+     * Generate random piece using TGM3 Pool Randomizer
+
+
+
+     * 1:1 with HeborisCE random.c
+
+
+
+     */
+
+
+
+    getRandomPiece(): PieceType {
+
+
+
+      if (this.rotationSystem === 'SRS' || this.rotationSystem === 'NRS') {
+
+
+
+        // Use 7-bag for modern/retro modes
+
+
+
+        if (this.bag.length === 0) {
+
+
+
+          this.bag = this.shuffle(['I', 'O', 'T', 'S', 'Z', 'J', 'L']);
+
+
+
+        }
+
+
+
+        return this.bag.pop()!;
+
+
+
+      }
+
+
+
+  
+
+
+
+      // TGM3 Pool Randomizer (35-piece pool, 4-piece history)
+
+
+
+      const pieces: PieceType[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+
+
+
+      let piece: PieceType;
+
+
+
+      let index: number;
+
+
+
+      let tries = 0;
+
+
+
+  
+
+
+
+      // First piece restriction: TGM3 prevents Z, S, O as first piece
+
+
+
+      const isFirstPiece = this.history.every(p => p === 'Z' || p === 'S');
+
+
+
+  
+
+
+
+      do {
+
+
+
+        index = Math.floor(Math.random() * this.pool.length);
+
+
+
+        piece = this.pool[index];
+
+
+
+        tries++;
+
+
+
+  
+
+
+
+        // TGM3 Rules:
+
+
+
+        // 1. Piece not in history (max 6 tries)
+
+
+
+        // 2. First piece cannot be Z, S, or O
+
+
+
+        if (isFirstPiece && (piece === 'Z' || piece === 'S' || piece === 'O')) {
+
+
+
+          continue;
+
+
+
+        }
+
+
+
+  
+
+
+
+        if (!this.history.includes(piece)) {
+
+
+
+          break;
+
+
+
+        }
+
+
+
+      } while (tries < 6);
+
+
+
+  
+
+
+
+      // Update pool: replace chosen piece with a random piece
+
+
+
+      this.pool[index] = pieces[Math.floor(Math.random() * pieces.length)];
+
+
+
+  
+
+
+
+      // Update history
+
+
+
+      this.history.shift();
+
+
+
+      this.history.push(piece);
+
+
+
+  
+
+
+
+      return piece;
+
+
+
+    }
+
+
+
+  
+
   private bag: PieceType[] = [];
-
-  getRandomPiece(): PieceType {
-    if (this.bag.length === 0) {
-      this.bag = this.shuffle(['I', 'O', 'T', 'S', 'Z', 'J', 'L']);
-    }
-    return this.bag.pop()!;
-  }
 
   /**
    * Fill initial queue
@@ -473,6 +1212,9 @@ export class PieceManager {
    * Get piece color for rendering
    */
   getPieceColor(type: PieceType): string {
+    if (this.rotationSystem === 'ARS') {
+      return ARS_COLORS[type];
+    }
     return PIECE_COLORS[type];
   }
 }

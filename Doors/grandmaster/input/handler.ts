@@ -27,6 +27,7 @@ export class InputHandler {
   private state: InputState;
   private config: KeyConfig;
   private lastUpdate: number = 0;
+  private enabled: boolean = true;
 
   // Directional state (for DAS/ARR)
   private leftPressed: boolean = false;
@@ -39,10 +40,14 @@ export class InputHandler {
   private lastLeftPress: number = 0;
   private lastRightPress: number = 0;
   private lastDownPress: number = 0;
-  private readonly KEY_RELEASE_TIMEOUT = 50; // ms to assume key released (fast for game mode)
+  private readonly KEY_RELEASE_TIMEOUT = 100; // Increased from 50ms to 100ms to better simulate key release
 
   // Action callbacks
   private actionHandlers: Map<GameAction, () => void> = new Map();
+
+  // Debounce for non-directional keys (rotation, hold, hard drop)
+  private lastActionTime: Map<GameAction, number> = new Map();
+  private readonly ACTION_DEBOUNCE = 100; // ms
 
   constructor(
     private screen: Screen,
@@ -64,10 +69,14 @@ export class InputHandler {
    * Setup keyboard event handlers
    */
   private setupEventHandlers(): void {
+    console.log('[InputHandler] Setting up keypress handler on screen');
     this.screen.on('keypress', (ch: string | undefined, key: any) => {
+      if (!this.enabled) return;
+      console.log('[InputHandler] keypress event:', { ch, key });
       if (!key) return;
 
       const keyName = key.full || key.name;
+      console.log('[InputHandler] keyName:', keyName);
       if (!keyName) return;
 
       // Add to held keys
@@ -94,16 +103,28 @@ export class InputHandler {
         this.lastDownPress = now;
         this.triggerAction('soft_drop');
       } else {
-        // Non-directional actions (trigger once on press)
+        // Non-directional actions (trigger once on press with debounce)
         const action = keyToAction(keyName, this.config);
         if (action && action !== 'left' && action !== 'right' && action !== 'soft_drop') {
-          this.triggerAction(action);
+          const now = Date.now();
+          const lastTime = this.lastActionTime.get(action) || 0;
+          if (now - lastTime >= this.ACTION_DEBOUNCE) {
+            this.lastActionTime.set(action, now);
+            this.triggerAction(action);
+          }
         }
       }
     });
 
     // Note: blessed doesn't emit keyrelease, so we need to track this differently
     // For now, we'll assume keys are released after a short time
+  }
+
+  /**
+   * Enable or disable input handling (keeps screen input active).
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
   }
 
   /**

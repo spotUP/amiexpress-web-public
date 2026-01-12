@@ -49,10 +49,19 @@ export type TetriNetMessageType =
   // Lobby messages
   | 'tetrinet:join'           // Player joins room
   | 'tetrinet:leave'          // Player leaves room
+  | 'tetrinet:connect'        // Server acknowledged connection
+  | 'tetrinet:disconnect'     // Server disconnected
+  | 'tetrinet:connect_error'  // Connection rejected
+  | 'tetrinet:kick'           // Server kicked client
   | 'tetrinet:player_list'    // Current player list
   | 'tetrinet:player_joined'  // Player joined notification
   | 'tetrinet:player_left'    // Player left notification
   | 'tetrinet:chat'           // Chat message
+  | 'tetrinet:winlist'        // Winlist update
+  | 'tetrinet:spectator_list' // Spectator list update
+  | 'tetrinet:spectator_joined' // Spectator joined
+  | 'tetrinet:spectator_left' // Spectator left
+  | 'tetrinet:spectator_chat' // Spectator chat
   // Game state messages
   | 'tetrinet:game_start'     // Game starting
   | 'tetrinet:countdown'      // Countdown update
@@ -82,6 +91,37 @@ export interface JoinMessage extends TetriNetMessage {
   roomId: string;
   playerName: string;
   team?: string;
+}
+
+/**
+ * Server acknowledged connection
+ */
+export interface ConnectMessage extends TetriNetMessage {
+  type: 'tetrinet:connect';
+}
+
+/**
+ * Server disconnected
+ */
+export interface DisconnectMessage extends TetriNetMessage {
+  type: 'tetrinet:disconnect';
+  reason?: string;
+}
+
+/**
+ * Connection rejected
+ */
+export interface ConnectErrorMessage extends TetriNetMessage {
+  type: 'tetrinet:connect_error';
+  reason: string;
+}
+
+/**
+ * Kicked from server
+ */
+export interface KickMessage extends TetriNetMessage {
+  type: 'tetrinet:kick';
+  reason?: string;
 }
 
 /**
@@ -125,6 +165,62 @@ export interface ChatMessage extends TetriNetMessage {
   senderId: string;
   senderName: string;
   text: string;
+}
+
+/**
+ * Winlist entry
+ */
+export interface WinlistEntry {
+  type: 't' | 'p';
+  name: string;
+  points: number;
+  games?: number;
+}
+
+/**
+ * Winlist update
+ */
+export interface WinlistMessage extends TetriNetMessage {
+  type: 'tetrinet:winlist';
+  entries: WinlistEntry[];
+  raw: string;
+}
+
+/**
+ * Spectator list update
+ */
+export interface SpectatorListMessage extends TetriNetMessage {
+  type: 'tetrinet:spectator_list';
+  channel?: string;
+  names: string[];
+}
+
+/**
+ * Spectator joined
+ */
+export interface SpectatorJoinedMessage extends TetriNetMessage {
+  type: 'tetrinet:spectator_joined';
+  name: string;
+  info?: string;
+}
+
+/**
+ * Spectator left
+ */
+export interface SpectatorLeftMessage extends TetriNetMessage {
+  type: 'tetrinet:spectator_left';
+  name: string;
+  info?: string;
+}
+
+/**
+ * Spectator chat
+ */
+export interface SpectatorChatMessage extends TetriNetMessage {
+  type: 'tetrinet:spectator_chat';
+  name: string;
+  text: string;
+  isAction?: boolean;
 }
 
 /**
@@ -265,25 +361,28 @@ export interface StartGameMessage extends TetriNetMessage {
  * TetriNET only has 5 colors, so we map our 7 piece types to them.
  */
 const PIECE_TO_COLOR: Record<string, string> = {
-  I: '1',  // Blue
-  J: '2',  // Yellow
-  L: '3',  // Green
-  O: '4',  // Purple
-  S: '5',  // Red
-  T: '1',  // Blue (maps to same as I)
-  Z: '2',  // Yellow (maps to same as J)
+  I: '1',
+  O: '2',
+  J: '3',
+  L: '4',
+  S: '5',
+  Z: '1',
+  T: '2',
 };
 
 /**
  * Map TetriNET colors back to piece types (for display).
  */
 const COLOR_TO_PIECE: Record<string, string> = {
-  '1': 'I',  // Blue -> I
-  '2': 'J',  // Yellow -> J
-  '3': 'L',  // Green -> L
-  '4': 'O',  // Purple -> O
-  '5': 'S',  // Red -> S
+  '1': 'I',
+  '2': 'O',
+  '3': 'J',
+  '4': 'L',
+  '5': 'S',
 };
+
+// TetriNET field encoding block order (official client)
+const TETRINET_BLOCKS = '012345acnrsbgqo';
 
 /**
  * Standard TetriNET special block characters (9 specials).
@@ -481,7 +580,8 @@ export function encodeFieldDifferential(
   // Format: <offset from '!'><tile value><x offset from '3'><y offset from '3'>...
   let encoded = '';
   for (const change of changes) {
-    const tileValue = change.char.charCodeAt(0) - '0'.charCodeAt(0);
+    const tileValue = TETRINET_BLOCKS.indexOf(change.char);
+    if (tileValue < 0) continue;
     const offsetChar = String.fromCharCode('!'.charCodeAt(0) + tileValue);
     const xOffset = String.fromCharCode('3'.charCodeAt(0) + change.x);
     const yOffset = String.fromCharCode('3'.charCodeAt(0) + change.y);
@@ -491,6 +591,81 @@ export function encodeFieldDifferential(
   // If differential is longer than full encoding, use full
   const fullEncoded = encodeField(newGrid, width, height);
   return encoded.length < fullEncoded.length ? encoded : fullEncoded;
+}
+
+/**
+ * Apply a TetriNET field update (full or differential) to a grid.
+ */
+export function applyFieldUpdate(
+  encoded: string,
+  grid?: any[][],
+  width: number = 12,
+  height: number = 22
+): any[][] {
+  if (!grid) {
+    grid = decodeField('0'.repeat(width * height), width, height);
+  }
+
+  if (!encoded) {
+    return grid;
+  }
+
+  const first = encoded.charCodeAt(0);
+  const isDifferential = first >= 0x21 && first <= 0x2F;
+  if (!isDifferential) {
+    return decodeField(encoded, width, height);
+  }
+
+  let currentBlock = -1;
+  for (let i = 0; i < encoded.length; i++) {
+    const ch = encoded[i];
+    const code = ch.charCodeAt(0);
+    if (code >= 0x21 && code <= 0x2F) {
+      currentBlock = code - 0x21;
+      continue;
+    }
+
+    const xChar = encoded[i];
+    const yChar = encoded[i + 1];
+    if (!yChar || currentBlock < 0) {
+      break;
+    }
+    i++;
+
+    const x = xChar.charCodeAt(0) - 0x33;
+    const y = yChar.charCodeAt(0) - 0x33;
+    if (x < 0 || x >= width || y < 0 || y >= height) {
+      continue;
+    }
+
+    const blockChar = TETRINET_BLOCKS[currentBlock] || '0';
+    applyFieldChar(grid, x, y, blockChar);
+  }
+
+  return grid;
+}
+
+function applyFieldChar(grid: any[][], x: number, y: number, char: string): void {
+  if (char === '0') {
+    grid[y][x] = { filled: false, color: null, locked: false };
+    return;
+  }
+  if (char >= '1' && char <= '5') {
+    grid[y][x] = {
+      filled: true,
+      color: COLOR_TO_PIECE[char] || 'I',
+      locked: true,
+    };
+    return;
+  }
+  if (CHAR_TO_SPECIAL[char]) {
+    grid[y][x] = {
+      filled: true,
+      color: 'I',
+      locked: true,
+      special: CHAR_TO_SPECIAL[char],
+    };
+  }
 }
 
 // ============================================================================
@@ -508,7 +683,7 @@ export function encodeFieldDifferential(
 /**
  * Protocol mode (standard or TetriFast)
  */
-export type TetriFastMode = 'standard' | 'tetrifast';
+export type TetriFastMode = 'standard' | 'tetrifast' | 'tspec';
 
 /**
  * TetriNET 1.x newgame options parsed from server
@@ -521,10 +696,13 @@ export interface TetriNet1xGameOptions {
   linesForSpecials: number;      // Lines to clear for specials
   specialsAdded: number;         // Specials added per clear
   specialCapacity: number;       // Maximum inventory size
-  pieceFrequency: number[];      // 7 values (0-100) for piece spawn rates
-  specialFrequency: number[];    // 9 values (0-100) for special spawn rates
+  pieceFrequency: number[];      // 7 cumulative values (0-100)
+  specialFrequency: number[];    // 9 cumulative values (0-100)
   averageHeight: boolean;        // Use average levels
   classicMode: boolean;          // Classic mode (no specials)
+  seedString?: string;           // v1.14 seed string (8 hex chars)
+  seed?: number;                 // Parsed seed value for 1.14 (32-bit)
+  fastMode?: boolean;            // TetriFast mode (no next-block delay)
 }
 
 /**
@@ -540,23 +718,25 @@ export function calculateIpHash(ipAddress: string): number {
 }
 
 /**
- * Encode login message using TetriNET XOR encryption.
- * Each byte is XORed with a rolling hash derived from the IP.
+ * Encode login message using Jetrix (server) TetriNET 1.x encoding.
+ * Uses initial byte 0x80, then prev+plain mod 255 XOR hash digit.
  */
 export function encodeLoginMessage(message: string, ipAddress: string): string {
-  const ipHash = calculateIpHash(ipAddress);
+  const ipHashStr = String(calculateIpHash(ipAddress) || 0);
+  const ipHashBytes = Buffer.from(ipHashStr, 'ascii');
   const bytes: number[] = [];
-  let hash = ipHash;
+
+  // Initial byte is a random salt (0-255) per protocol spec
+  bytes.push(Math.floor(Math.random() * 256));
 
   for (let i = 0; i < message.length; i++) {
-    const charCode = message.charCodeAt(i);
-    // XOR with running hash, then update hash
-    const encoded = (charCode + hash) & 0xFF;
+    const prev = bytes[i] & 0xFF;
+    const charCode = message.charCodeAt(i) & 0xFF;
+    const key = ipHashBytes[i % ipHashBytes.length] & 0xFF;
+    const encoded = (((prev + charCode) % 255) ^ key) & 0xFF;
     bytes.push(encoded);
-    hash = ((hash + encoded) % 255) + 1;
   }
 
-  // Convert to hex string (2 chars per byte)
   return bytes.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
@@ -564,16 +744,22 @@ export function encodeLoginMessage(message: string, ipAddress: string): string {
  * Decode login message (for debugging/testing)
  */
 export function decodeLoginMessage(encoded: string, ipAddress: string): string {
-  const ipHash = calculateIpHash(ipAddress);
-  let decoded = '';
-  let hash = ipHash;
-
-  // Parse hex string
+  const ipHashStr = String(calculateIpHash(ipAddress) || 0);
+  const ipHashBytes = Buffer.from(ipHashStr, 'ascii');
+  const bytes: number[] = [];
   for (let i = 0; i < encoded.length; i += 2) {
-    const byte = parseInt(encoded.substring(i, i + 2), 16);
-    const charCode = (byte - hash + 256) & 0xFF;
+    bytes.push(parseInt(encoded.substring(i, i + 2), 16) & 0xFF);
+  }
+
+  let decoded = '';
+  for (let i = 0; i < bytes.length - 1; i++) {
+    const prev = bytes[i] & 0xFF;
+    const cur = bytes[i + 1] & 0xFF;
+    const key = ipHashBytes[i % ipHashBytes.length] & 0xFF;
+    const temp = (cur ^ key) & 0xFF;
+    let charCode = (temp - prev) % 255;
+    if (charCode < 0) charCode += 255;
     decoded += String.fromCharCode(charCode);
-    hash = ((hash + byte) % 255) + 1;
   }
 
   return decoded;
@@ -581,21 +767,26 @@ export function decodeLoginMessage(encoded: string, ipAddress: string): string {
 
 /**
  * Format TetriNET 1.x login message (encrypted).
- * Format: "tetrisstart <nickname> 1.13" (or "tetrifast" for TetriFast mode)
- * The entire message is XOR encrypted using the IP hash.
+ * Format: "tetrisstart <nickname> 1.13" (or "tetrifaster" for TetriFast mode)
+ * The entire message is encrypted using the IP-based rolling hash.
  *
  * @param nickname - Player nickname
  * @param ipAddress - Client IP address (for encryption)
- * @param mode - 'standard' or 'tetrifast'
+ * @param mode - 'standard', 'tetrifast', or 'tspec'
+ * @param token - Version string for standard/tetrifast, password for TSpec
  */
 export function formatTetrenetLogin(
   nickname: string,
   ipAddress: string,
-  mode: TetriFastMode = 'standard'
+  mode: TetriFastMode = 'standard',
+  token = '1.13'
 ): string {
-  const prefix = mode === 'tetrifast' ? 'tetrifast' : 'tetrisstart';
-  const plainMessage = `${prefix} ${nickname} 1.13`;
-  return encodeLoginMessage(plainMessage, ipAddress);
+  const prefix = mode === 'tetrifast' ? 'tetrifaster' : 'tetrisstart';
+  const plainMessage = `${prefix} ${nickname} ${token}`;
+  console.log(`[TetriNet Protocol] Plain login: "${plainMessage}", IP: ${ipAddress}`);
+  const encoded = encodeLoginMessage(plainMessage, ipAddress);
+  console.log(`[TetriNet Protocol] Encoded login (${encoded.length / 2} bytes): ${encoded.substring(0, 40)}...`);
+  return encoded;
 }
 
 /**
@@ -645,6 +836,15 @@ export function formatTetrenetChat(slot: PlayerSlot, message: string): string {
 }
 
 /**
+ * Format TSpec spectator chat message.
+ * Private: "pline 0 <message>"
+ * Public:  "pline 0 //<message>"
+ */
+export function formatTspecChat(message: string, isPublic = false): string {
+  return isPublic ? `pline 0 //${message}` : `pline 0 ${message}`;
+}
+
+/**
  * Format: "plineact <slot> <action>"
  * Sends partyline /me action message
  */
@@ -666,6 +866,22 @@ export function formatTetrenetGameMessage(message: string): string {
  */
 export function formatTetrenetTeam(slot: PlayerSlot, teamName: string): string {
   return `team ${slot} ${teamName}`;
+}
+
+/**
+ * Format: "connected"
+ * Acknowledges slot assignment
+ */
+export function formatTetrenetConnected(): string {
+  return 'connected';
+}
+
+/**
+ * Format: "version <client>"
+ * Sends client version (used by some servers/spectators)
+ */
+export function formatTetrenetVersion(version: string): string {
+  return `version ${version}`;
 }
 
 /**
@@ -712,8 +928,7 @@ export function formatTetrenetClassicLines(lineCount: 1 | 2 | 4, slot: PlayerSlo
  * Parse TetriNET 1.x newgame rules string.
  * Format: "newgame [stack] [level] [lines_per_level] [level_inc] [special_lines] [special_count] [capacity] [piece_freq(7)] [special_freq(9)] [avg] [mode]"
  */
-export function parseNewgameOptions(parts: string[]): TetriNet1xGameOptions {
-  // Parse the numeric values
+export function parseNewgameOptions(parts: string[], fastMode = false): TetriNet1xGameOptions {
   const startingHeight = parseInt(parts[1]) || 0;
   const startingLevel = parseInt(parts[2]) || 1;
   const linesPerLevel = parseInt(parts[3]) || 2;
@@ -722,21 +937,16 @@ export function parseNewgameOptions(parts: string[]): TetriNet1xGameOptions {
   const specialsAdded = parseInt(parts[6]) || 1;
   const specialCapacity = parseInt(parts[7]) || 18;
 
-  // Parse 7 piece frequency values (one for each tetromino)
-  const pieceFrequency: number[] = [];
-  for (let i = 0; i < 7; i++) {
-    pieceFrequency.push(parseInt(parts[8 + i]) || 14);  // Default ~14% each
-  }
+  const pieceFreqStr = parts[8] || '';
+  const specialFreqStr = parts[9] || '';
 
-  // Parse 9 special frequency values
-  const specialFrequency: number[] = [];
-  for (let i = 0; i < 9; i++) {
-    specialFrequency.push(parseInt(parts[15 + i]) || 11);  // Default ~11% each
-  }
+  const pieceFrequency = buildCumulativeFrequency(pieceFreqStr, 7, [14, 28, 42, 56, 70, 84, 100]);
+  const specialFrequency = buildCumulativeFrequency(specialFreqStr, 9, [11, 22, 33, 44, 55, 66, 77, 88, 100]);
 
-  // Parse boolean flags
-  const averageHeight = parts[24] === '1';
-  const classicMode = parts[25] === '1';
+  const averageHeight = parts[10] === '1';
+  const classicMode = parts[11] === '1';
+  const seedString = parts[12] || undefined;
+  const seed = seedString ? parseSeedString(seedString) : undefined;
 
   return {
     startingHeight,
@@ -750,7 +960,66 @@ export function parseNewgameOptions(parts: string[]): TetriNet1xGameOptions {
     specialFrequency,
     averageHeight,
     classicMode,
+    seedString,
+    seed,
+    fastMode,
   };
+}
+
+function buildCumulativeFrequency(raw: string, size: number, fallback: number[]): number[] {
+  const counts = new Array<number>(size).fill(0);
+  for (const ch of raw) {
+    const idx = ch.charCodeAt(0) - '1'.charCodeAt(0);
+    if (idx >= 0 && idx < size) {
+      counts[idx] += 1;
+    }
+  }
+
+  if (counts.every(count => count === 0)) {
+    return [...fallback];
+  }
+
+  const cumulative: number[] = [];
+  let total = 0;
+  for (let i = 0; i < counts.length; i++) {
+    total += counts[i];
+    cumulative.push(total);
+  }
+
+  if (cumulative[cumulative.length - 1] < 100) {
+    cumulative[cumulative.length - 1] = 100;
+  }
+
+  return cumulative;
+}
+
+function parseSeedString(seedString: string): number {
+  const normalized = seedString.trim();
+  if (!/^[0-9A-Fa-f]+$/.test(normalized)) {
+    return 0;
+  }
+  return parseInt(normalized, 16) >>> 0;
+}
+
+function parseWinlistEntries(tokens: string[]): WinlistEntry[] {
+  const entries: WinlistEntry[] = [];
+  for (const token of tokens) {
+    if (!token) continue;
+    const typeChar = token[0];
+    if (typeChar !== 't' && typeChar !== 'p') continue;
+    const rest = token.slice(1);
+    const parts = rest.split(';');
+    const name = parts[0] || '';
+    const points = parseInt(parts[1] || '0', 10) || 0;
+    const games = parts[2] ? parseInt(parts[2], 10) || 0 : undefined;
+    entries.push({
+      type: typeChar,
+      name,
+      points,
+      games,
+    });
+  }
+  return entries;
 }
 
 /**
@@ -765,7 +1034,9 @@ export function convertToGameOptions(options: TetriNet1xGameOptions): TetriNetGa
 
   const specialOccurancies = standardSpecials.map((type, i) => ({
     type,
-    rate: options.specialFrequency[i] || 0,
+    rate: i === 0
+      ? (options.specialFrequency[0] || 0)
+      : Math.max(0, (options.specialFrequency[i] || 0) - (options.specialFrequency[i - 1] || 0)),
   }));
 
   return {
@@ -775,8 +1046,18 @@ export function convertToGameOptions(options: TetriNet1xGameOptions): TetriNetGa
     linesToMakeForSpecials: options.linesForSpecials,
     specialsAddedEachTime: options.specialsAdded,
     specialOccurancies,
+    startingHeight: options.startingHeight,
+    linesPerLevel: options.linesPerLevel,
+    levelIncrement: options.levelIncrement,
+    pieceFrequency: options.pieceFrequency,
+    specialFrequency: options.specialFrequency,
+    levelAverage: options.averageHeight,
+    classicMode: options.classicMode,
     startingLevel: options.startingLevel,
     classicStyleMultiplayer: true,
+    nextPieceDelayMs: options.fastMode ? 0 : 1000,
+    useSameBlocks: Boolean(options.seedString),
+    randomSeed: options.seed ?? undefined,
     delayBeforeSuddenDeath: 0,  // Not in TetriNET 1.x protocol
     suddenDeathTick: 5,
   };
@@ -789,19 +1070,81 @@ export function convertToGameOptions(options: TetriNet1xGameOptions): TetriNetGa
  * Handles both standard TetriNET and TetriFast protocol variations.
  */
 export function parseTetrenetMessage(line: string): TetriNetMessage | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
+  const sanitized = line.replace(/\r/g, '');
+  if (!sanitized.length) return null;
 
-  const parts = trimmed.split(' ');
+  const parts = sanitized.split(' ');
   let cmd = parts[0];
   const timestamp = Date.now();
+  const isTetrifastPlayernum = cmd === ')#)(!@(*3';
+  const isTetrifastNewgame = cmd === '*******';
 
   // TetriFast uses obfuscated playernum: ")#)(!@(*3" instead of "playernum"
-  if (cmd === ')#)(!@(*3') {
+  if (isTetrifastPlayernum) {
     cmd = 'playernum';
+  }
+  // TetriFast uses obfuscated newgame: "*******" instead of "newgame"
+  if (isTetrifastNewgame) {
+    cmd = 'newgame';
+  }
+
+  if (cmd.startsWith('smsg') && cmd !== 'smsg') {
+    const name = cmd.substring(4);
+    const text = parts.slice(1).join(' ');
+    return {
+      type: 'tetrinet:spectator_chat',
+      timestamp,
+      name,
+      text,
+    } as SpectatorChatMessage;
+  }
+
+  if (cmd.startsWith('specjoin') && cmd !== 'specjoin') {
+    const name = cmd.substring(8);
+    return {
+      type: 'tetrinet:spectator_joined',
+      timestamp,
+      name: name || '',
+    } as SpectatorJoinedMessage;
+  }
+
+  if (cmd.startsWith('specleave') && cmd !== 'specleave') {
+    const name = cmd.substring(9);
+    return {
+      type: 'tetrinet:spectator_left',
+      timestamp,
+      name: name || '',
+    } as SpectatorLeftMessage;
   }
 
   switch (cmd) {
+    case 'connect':
+      return {
+        type: 'tetrinet:connect',
+        timestamp,
+      } as ConnectMessage;
+
+    case 'disconnect':
+      return {
+        type: 'tetrinet:disconnect',
+        timestamp,
+        reason: parts.slice(1).join(' ') || undefined,
+      } as DisconnectMessage;
+
+    case 'noconnecting':
+      return {
+        type: 'tetrinet:connect_error',
+        timestamp,
+        reason: parts.slice(1).join(' ') || 'Connection rejected',
+      } as ConnectErrorMessage;
+
+    case 'kick':
+      return {
+        type: 'tetrinet:kick',
+        timestamp,
+        reason: parts.slice(1).join(' ') || undefined,
+      } as KickMessage;
+
     case 'playernum':
       // Format: "playernum <slot>" - Initial slot assignment
       return {
@@ -889,17 +1232,20 @@ export function parseTetrenetMessage(line: string): TetriNetMessage | null {
       } as SpecialUsedMessage & { classicLines?: number };
     }
 
+    case 'btrixnewgame':
     case 'newgame': {
       // Format: "newgame [stack] [level] [lines_per_level] [level_inc] [special_lines] [special_count] [capacity] [piece_freq(7)] [special_freq(9)] [avg] [mode]"
-      const parsedOptions = parseNewgameOptions(parts);
+      const parsedOptions = parseNewgameOptions(parts, isTetrifastNewgame);
       const gameOptions = convertToGameOptions(parsedOptions);
+      const seedValue = parsedOptions.seed ?? Date.now();
 
       return {
         type: 'tetrinet:game_start',
         timestamp,
         options: gameOptions,
-        seed: Date.now(),  // Use timestamp as pseudo-seed
+        seed: seedValue,
         serverOptions: parsedOptions,  // Include raw server options
+        btrix: cmd === 'btrixnewgame',
       } as GameStartMessage & { serverOptions: TetriNet1xGameOptions };
     }
 
@@ -929,6 +1275,17 @@ export function parseTetrenetMessage(line: string): TetriNetMessage | null {
         timestamp,
         options: { paused: parts[1] === '1' },
       } as OptionsUpdateMessage & { options: { paused: boolean } };
+
+    case 'startgame': {
+      // Format: "startgame <0|1> <slot>"
+      const start = parts[1] === '1';
+      return {
+        type: 'tetrinet:start_game',
+        timestamp,
+        start,
+        slot: parseInt(parts[2]) as PlayerSlot,
+      } as StartGameMessage & { start: boolean; slot: PlayerSlot };
+    }
 
     case 'playerlost':
       // Format: "playerlost <slot>"
@@ -1005,23 +1362,71 @@ export function parseTetrenetMessage(line: string): TetriNetMessage | null {
       } as ChatMessage & { isGameMessage: boolean };
 
     case 'winlist':
-      // Format: "winlist <type><name>;<score> <type><name>;<score> ..."
-      // type: 't' = team, 'p' = player
-      // We don't have a dedicated message type for this, return as options update
+      // Format: "winlist <type><name>;<score>[;<games>] ..."
       return {
-        type: 'tetrinet:options_update',
+        type: 'tetrinet:winlist',
         timestamp,
-        options: { winlist: parts.slice(1).join(' ') },
-      } as OptionsUpdateMessage & { options: { winlist: string } };
+        entries: parseWinlistEntries(parts.slice(1)),
+        raw: parts.slice(1).join(' '),
+      } as WinlistMessage;
 
-    case 'noconnecting':
-      // Format: "noconnecting <reason>" - Connection rejected
+    case 'speclist': {
+      // Format: "speclist #<channel> <name> <name> ..."
+      const rawChannel = parts[1] || '';
+      const channel = rawChannel.startsWith('#') ? rawChannel.substring(1) : rawChannel;
+      const names = parts.slice(2);
       return {
-        type: 'tetrinet:leave',
+        type: 'tetrinet:spectator_list',
         timestamp,
-        playerId: '',
-        reason: parts.slice(1).join(' '),
-      } as LeaveMessage & { reason: string };
+        channel,
+        names,
+      } as SpectatorListMessage;
+    }
+
+    case 'specjoin': {
+      // Format: "specjoin<name>" (no space) or "specjoin <name> <info...>"
+      const name = parts[1] || '';
+      const info = parts.slice(2).join(' ');
+      return {
+        type: 'tetrinet:spectator_joined',
+        timestamp,
+        name,
+        info: info || undefined,
+      } as SpectatorJoinedMessage;
+    }
+
+    case 'specleave': {
+      // Format: "specleave<name>" (no space) or "specleave <name> <info...>"
+      const name = parts[1] || '';
+      const info = parts.slice(2).join(' ');
+      return {
+        type: 'tetrinet:spectator_left',
+        timestamp,
+        name,
+        info: info || undefined,
+      } as SpectatorLeftMessage;
+    }
+
+    case 'smsg': {
+      // Format: "smsg<name> <text>" or "smsg <name> <text>"
+      return {
+        type: 'tetrinet:spectator_chat',
+        timestamp,
+        name: parts[1] || '',
+        text: parts.slice(2).join(' '),
+      } as SpectatorChatMessage;
+    }
+
+    case 'sact': {
+      // Format: "sact <name> <text>"
+      return {
+        type: 'tetrinet:spectator_chat',
+        timestamp,
+        name: parts[1] || '',
+        text: parts.slice(2).join(' '),
+        isAction: true,
+      } as SpectatorChatMessage & { isAction: boolean };
+    }
 
     default:
       // Unknown message type

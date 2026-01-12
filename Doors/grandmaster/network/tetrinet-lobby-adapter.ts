@@ -298,6 +298,12 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
 
     // Send newgame command with current options
     this.network.emit('tetrinet:startgame', this.state.gameOptions);
+
+    // Local fallback: start immediately when no server echoes newgame
+    this.emit('match:starting');
+    setTimeout(() => {
+      this.emit('match:started');
+    }, 1000);
   }
 
   /**
@@ -382,8 +388,16 @@ export class TetriNetLobbyAdapter extends EventEmitter implements LobbyNetworkAd
       linesToMakeForSpecials: 1,
       specialsAddedEachTime: 1,
       specialOccurancies: [],  // Use default rates from rule set
+      startingHeight: 0,
+      linesPerLevel: 2,
+      levelIncrement: 1,
+      pieceFrequency: [14, 28, 42, 56, 70, 84, 100],
+      specialFrequency: [11, 22, 33, 44, 55, 66, 77, 88, 100],
+      levelAverage: false,
+      classicMode: mode === 'classic',
       startingLevel: 1,
       classicStyleMultiplayer: false,
+      nextPieceDelayMs: 1000,
       delayBeforeSuddenDeath: 2,
       suddenDeathTick: 10,
     };

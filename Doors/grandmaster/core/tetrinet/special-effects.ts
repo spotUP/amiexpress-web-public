@@ -6,6 +6,7 @@
  */
 
 import type { TetriNetBoard, TetriNetCell } from './tetrinet-board';
+import type { PieceType } from '../types';
 import { cloneTetriNetBoard, clearAllSpecialBlocks, addGarbageLines } from './tetrinet-board';
 import type { SpecialType } from './specials';
 
@@ -23,7 +24,8 @@ export interface EffectResult {
  * Apply Add Line effect - adds a garbage line to the board
  */
 export function applyAddLine(board: TetriNetBoard, holeColumn?: number): EffectResult {
-  addGarbageLines(board, 1, holeColumn);
+  holeColumn;
+  addGarbageLines(board, 1, 'addline');
   return {
     success: true,
     message: 'Added 1 garbage line',
@@ -35,32 +37,11 @@ export function applyAddLine(board: TetriNetBoard, holeColumn?: number): EffectR
  * Apply Clear Line effect - removes the bottom line
  */
 export function applyClearLine(board: TetriNetBoard): EffectResult {
-  // Find the lowest line with blocks
-  let lowestLine = -1;
-  for (let y = board.height - 1; y >= 0; y--) {
-    for (let x = 0; x < board.width; x++) {
-      if (board.grid[y][x].filled) {
-        lowestLine = y;
-        break;
-      }
-    }
-    if (lowestLine >= 0) break;
-  }
-
-  if (lowestLine < 0) {
-    return {
-      success: false,
-      message: 'No lines to clear',
-      linesAffected: 0,
-    };
-  }
-
-  // Clear the line and shift down
-  for (let y = lowestLine; y > 0; y--) {
+  // Clear bottom line and shift everything down
+  for (let y = board.height - 1; y > 0; y--) {
     board.grid[y] = board.grid[y - 1];
   }
 
-  // Create empty top row
   board.grid[0] = [];
   for (let x = 0; x < board.width; x++) {
     board.grid[0][x] = {
@@ -73,7 +54,7 @@ export function applyClearLine(board: TetriNetBoard): EffectResult {
 
   return {
     success: true,
-    message: 'Cleared bottom line',
+    message: 'Cleared line',
     linesAffected: 1,
   };
 }
@@ -109,7 +90,6 @@ export function applyNuke(board: TetriNetBoard): EffectResult {
  * Apply Random Clear effect - removes 10-25% of random blocks
  */
 export function applyRandomClear(board: TetriNetBoard): EffectResult {
-  // Find all filled cells
   const filledCells: Array<{ x: number; y: number }> = [];
   for (let y = 0; y < board.height; y++) {
     for (let x = 0; x < board.width; x++) {
@@ -127,11 +107,8 @@ export function applyRandomClear(board: TetriNetBoard): EffectResult {
     };
   }
 
-  // Calculate 10-25% to clear
-  const percentage = 0.10 + Math.random() * 0.15;
-  const countToClear = Math.max(1, Math.floor(filledCells.length * percentage));
+  const countToClear = Math.min(10, filledCells.length);
 
-  // Shuffle and clear random cells
   for (let i = filledCells.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [filledCells[i], filledCells[j]] = [filledCells[j], filledCells[i]];
@@ -188,7 +165,21 @@ export function applySwitchFields(
  * Apply Clear Specials effect - removes all special blocks from board
  */
 export function applyClearSpecials(board: TetriNetBoard): EffectResult {
-  const cleared = clearAllSpecialBlocks(board);
+  let cleared = 0;
+  const colors: PieceType[] = ['I', 'J', 'L', 'O', 'S'];
+
+  for (let y = 0; y < board.height; y++) {
+    for (let x = 0; x < board.width; x++) {
+      const cell = board.grid[y][x];
+      if (cell.special) {
+        cell.special = undefined;
+        cell.filled = true;
+        cell.color = colors[Math.floor(Math.random() * colors.length)];
+        cell.locked = true;
+        cleared++;
+      }
+    }
+  }
 
   return {
     success: true,
@@ -248,7 +239,6 @@ export function applyQuake(board: TetriNetBoard): EffectResult {
   let rowsAffected = 0;
 
   for (let y = 0; y < board.height; y++) {
-    // Check if row has any blocks
     let hasBlocks = false;
     for (let x = 0; x < board.width; x++) {
       if (board.grid[y][x].filled) {
@@ -259,22 +249,31 @@ export function applyQuake(board: TetriNetBoard): EffectResult {
 
     if (!hasBlocks) continue;
 
-    // Random shift -2 to +2
-    const shift = Math.floor(Math.random() * 5) - 2;
+    let shift = 0;
+    const roll = Math.floor(Math.random() * 22);
+    if (roll < 1) shift++;
+    if (roll < 4) shift++;
+    if (roll < 11) shift++;
+    if (Math.floor(Math.random() * 2)) shift = -shift;
     if (shift === 0) continue;
 
     rowsAffected++;
-
-    // Save the row
     const originalRow = [...board.grid[y]];
-
-    // Apply shift with wrapping
-    for (let x = 0; x < board.width; x++) {
-      let srcX = x - shift;
-      // Wrap around
-      while (srcX < 0) srcX += board.width;
-      while (srcX >= board.width) srcX -= board.width;
-      board.grid[y][x] = originalRow[srcX];
+    if (shift > 0) {
+      for (let x = board.width - 1; x >= shift; x--) {
+        board.grid[y][x] = originalRow[x - shift];
+      }
+      for (let x = 0; x < shift; x++) {
+        board.grid[y][x] = { filled: false, color: null, locked: false, special: undefined };
+      }
+    } else {
+      const offset = Math.abs(shift);
+      for (let x = 0; x < board.width - offset; x++) {
+        board.grid[y][x] = originalRow[x + offset];
+      }
+      for (let x = board.width - offset; x < board.width; x++) {
+        board.grid[y][x] = { filled: false, color: null, locked: false, special: undefined };
+      }
     }
   }
 
@@ -290,7 +289,6 @@ export function applyQuake(board: TetriNetBoard): EffectResult {
  * In TetriNET, bomb blocks explode in a cross pattern
  */
 export function applyBlockBomb(board: TetriNetBoard): EffectResult {
-  // Find all bomb blocks (block_bomb special cells)
   const bombs: Array<{ x: number; y: number }> = [];
   for (let y = 0; y < board.height; y++) {
     for (let x = 0; x < board.width; x++) {
@@ -301,44 +299,43 @@ export function applyBlockBomb(board: TetriNetBoard): EffectResult {
   }
 
   if (bombs.length === 0) {
-    // No bombs - create an explosion at a random filled cell
-    const filledCells: Array<{ x: number; y: number }> = [];
-    for (let y = 0; y < board.height; y++) {
-      for (let x = 0; x < board.width; x++) {
-        if (board.grid[y][x].filled) {
-          filledCells.push({ x, y });
-        }
-      }
-    }
-
-    if (filledCells.length > 0) {
-      const randomCell = filledCells[Math.floor(Math.random() * filledCells.length)];
-      bombs.push(randomCell);
-    }
+    return {
+      success: false,
+      message: 'No bomb blocks to detonate',
+      cellsAffected: 0,
+    };
   }
 
   let cellsCleared = 0;
+  const scattered: TetriNetCell[] = [];
 
-  // Explode each bomb in a cross pattern (3x3 area)
   for (const bomb of bombs) {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const x = bomb.x + dx;
-        const y = bomb.y + dy;
-
-        if (x >= 0 && x < board.width && y >= 0 && y < board.height) {
-          if (board.grid[y][x].filled) {
-            cellsCleared++;
-            board.grid[y][x] = {
-              filled: false,
-              color: null,
-              locked: false,
-              special: undefined,
-            };
-          }
-        }
-      }
+    const ax = [-1, 0, 1, 1, 1, 0, -1, -1];
+    const ay = [-1, -1, -1, 0, 1, 1, 1, 0];
+    if (board.grid[bomb.y][bomb.x].filled) {
+      board.grid[bomb.y][bomb.x] = { filled: false, color: null, locked: false, special: undefined };
+      cellsCleared++;
     }
+    for (let i = 0; i < 8; i++) {
+      const x = bomb.x + ax[i];
+      const y = bomb.y + ay[i];
+      if (x < 0 || x >= board.width || y < 0 || y >= board.height) continue;
+      const cell = board.grid[y][x];
+      if (!cell.filled) continue;
+      if (cell.special === 'block_bomb') {
+        board.grid[y][x] = { filled: false, color: null, locked: false, special: undefined };
+      } else {
+        scattered.push({ ...cell, special: undefined });
+        board.grid[y][x] = { filled: false, color: null, locked: false, special: undefined };
+      }
+      cellsCleared++;
+    }
+  }
+
+  for (const cell of scattered) {
+    const y = Math.floor(Math.random() * (board.height - 6)) + 6;
+    const x = Math.floor(Math.random() * board.width);
+    board.grid[y][x] = { ...cell, special: undefined };
   }
 
   return {

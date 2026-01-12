@@ -27,7 +27,7 @@ export interface TetriNetBoard extends Board {
 /**
  * Create an empty TetriNET board
  */
-export function createTetriNetBoard(width: number = 10, height: number = 24): TetriNetBoard {
+export function createTetriNetBoard(width: number = 12, height: number = 22): TetriNetBoard {
   const baseBoard = createBoard(width, height);
   return baseBoard as TetriNetBoard;
 }
@@ -197,48 +197,7 @@ export function addRandomSpecials(
     return [];
   }
 
-  // Find all filled cells without specials
-  const eligibleCells: Array<{ x: number; y: number }> = [];
-  for (let y = 4; y < board.height; y++) {  // Start from visible area
-    for (let x = 0; x < board.width; x++) {
-      const cell = board.grid[y][x];
-      if (cell.filled && !cell.special) {
-        eligibleCells.push({ x, y });
-      }
-    }
-  }
-
-  if (eligibleCells.length === 0) {
-    return [];
-  }
-
-  // Add specials to random cells
-  const addedSpecials: SpecialType[] = [];
-  const usedPositions = new Set<string>();
-
-  for (let i = 0; i < count && eligibleCells.length > 0; i++) {
-    // Pick random cell
-    const randomIndex = Math.floor(Math.random() * eligibleCells.length);
-    const cell = eligibleCells[randomIndex];
-    const posKey = `${cell.x},${cell.y}`;
-
-    if (usedPositions.has(posKey)) {
-      continue;
-    }
-
-    // Pick random special
-    const special = selectRandomSpecial(availableSpecials);
-
-    // Place it
-    placeSpecialBlock(board, cell.x, cell.y, special);
-    addedSpecials.push(special);
-    usedPositions.add(posKey);
-
-    // Remove from eligible list
-    eligibleCells.splice(randomIndex, 1);
-  }
-
-  return addedSpecials;
+  return addSpecialsToField(board, count, availableSpecials);
 }
 
 /**
@@ -247,23 +206,40 @@ export function addRandomSpecials(
 export function addGarbageLines(
   board: TetriNetBoard,
   lineCount: number,
-  holeColumn?: number
-): void {
-  // Shift all rows up
-  for (let y = 0; y < board.height - lineCount; y++) {
-    board.grid[y] = board.grid[y + lineCount];
-  }
+  lineType: 'addline' | 'classic' = 'addline'
+): boolean {
+  const colorMap: PieceType[] = ['I', 'J', 'L', 'O', 'S'];
 
-  // Add garbage lines at bottom
   for (let i = 0; i < lineCount; i++) {
-    const y = board.height - 1 - i;
-    board.grid[y] = [];
-
-    // Random hole position if not specified
-    const hole = holeColumn ?? Math.floor(Math.random() * board.width);
-
+    // Check top row for any blocks (top out)
     for (let x = 0; x < board.width; x++) {
+      if (board.grid[0][x].filled) {
+        return true;
+      }
+    }
+
+    // Shift all rows up by one
+    for (let y = 0; y < board.height - 1; y++) {
+      board.grid[y] = board.grid[y + 1];
+    }
+
+    // Generate a random line at the bottom
+    const y = board.height - 1;
+    board.grid[y] = [];
+    const hole = Math.floor(Math.random() * board.width);
+    for (let x = 0; x < board.width; x++) {
+      const value = lineType === 'classic'
+        ? (Math.floor(Math.random() * 5) + 1)
+        : Math.floor(Math.random() * 6);
+
       if (x === hole) {
+        board.grid[y][x] = {
+          filled: false,
+          color: null,
+          locked: false,
+          special: undefined,
+        };
+      } else if (value === 0) {
         board.grid[y][x] = {
           filled: false,
           color: null,
@@ -273,13 +249,15 @@ export function addGarbageLines(
       } else {
         board.grid[y][x] = {
           filled: true,
-          color: 'I' as PieceType,  // Gray garbage color
+          color: colorMap[value - 1] ?? 'I',
           locked: true,
           special: undefined,
         };
       }
     }
   }
+
+  return false;
 }
 
 /**
@@ -338,7 +316,7 @@ export function encodeBoard(board: TetriNetBoard): string {
 /**
  * Decode board from network transmission
  */
-export function decodeBoard(encoded: string, width: number = 10, height: number = 24): TetriNetBoard {
+export function decodeBoard(encoded: string, width: number = 12, height: number = 22): TetriNetBoard {
   const PIECE_COLORS: PieceType[] = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
 
   const SPECIAL_TYPES: SpecialType[] = [
@@ -385,6 +363,71 @@ export function decodeBoard(encoded: string, width: number = 10, height: number 
   }
 
   return board;
+}
+
+export function addSpecialsToField(
+  board: TetriNetBoard,
+  count: number,
+  availableSpecials: SpecialType[],
+  pickSpecial?: () => SpecialType
+): SpecialType[] {
+  if (count <= 0 || availableSpecials.length === 0) {
+    return [];
+  }
+
+  const added: SpecialType[] = [];
+  for (let i = 0; i < count; i++) {
+    const special = pickSpecial ? pickSpecial() : selectRandomSpecial(availableSpecials);
+
+    // Count non-special filled cells
+    const normalCells: Array<{ x: number; y: number }> = [];
+    for (let y = 0; y < board.height; y++) {
+      for (let x = 0; x < board.width; x++) {
+        const cell = board.grid[y][x];
+        if (cell.filled && !cell.special) {
+          normalCells.push({ x, y });
+        }
+      }
+    }
+
+    if (normalCells.length === 0) {
+      // Drop a special near the top of a random column
+      let placed = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const col = Math.floor(Math.random() * board.width);
+        let y = 0;
+        for (; y < board.height; y++) {
+          if (board.grid[y][col].filled) {
+            break;
+          }
+        }
+
+        if (y === board.height || !board.grid[y][col].special) {
+          const targetY = y - 1;
+          if (targetY >= 0) {
+            board.grid[targetY][col] = {
+              filled: true,
+              color: 'I',
+              locked: true,
+              special,
+            };
+            added.push(special);
+            placed = true;
+            break;
+          }
+        }
+      }
+      if (!placed) {
+        break;
+      }
+    } else {
+      const pick = normalCells[Math.floor(Math.random() * normalCells.length)];
+      placeSpecialBlock(board, pick.x, pick.y, special);
+      added.push(special);
+    }
+  }
+
+  return added;
 }
 
 /**

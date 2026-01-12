@@ -13,6 +13,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
@@ -22,7 +23,6 @@ import { InventoryPanel } from './tetrinet/inventory-panel';
 import { TargetSelector, type TargetInfo } from './tetrinet/target-selector';
 import { OpponentBoards, type OpponentBoardData } from './tetrinet/opponent-boards';
 import { EffectOverlay } from './tetrinet/effect-overlay';
-import { getGhostY } from '../core/board';
 import type { SpecialType } from '../core/tetrinet/specials';
 import type { TetriNetBoard } from '../core/tetrinet/tetrinet-board';
 
@@ -54,7 +54,6 @@ export class TetriNetScreen {
   // UI Elements
   private boardBox: any;
   private previewBox: any;
-  private holdBox: any;
   private statsBox: any;
   private suddenDeathBox: any;
 
@@ -92,19 +91,20 @@ export class TetriNetScreen {
 
     // Main board (left side)
     // Board: 12 columns x 2 chars = 24, plus 2 for borders = 26 width
-    // Height: 20 visible rows + 2 for borders = 22
+    // Height: 22 rows + 2 for borders = 24
     this.boardBox = createBox({
       parent: this.screen,
       top: 1,
       left: 0,
       width: 26,
-      height: 22,
+      height: 24,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
+      fixed: true,
     });
 
     // Preview box (right of board)
-    this.previewBox = createBox({
+    this.previewBox = createDockable({
       parent: this.screen,
       top: 1,
       left: 26,
@@ -113,24 +113,13 @@ export class TetriNetScreen {
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       label: ' Next ',
+      persistenceKey: 'grandmaster.tnet.preview',
     });
 
-    // Hold box (below preview)
-    this.holdBox = createBox({
-      parent: this.screen,
-      top: 7,
-      left: 26,
-      width: 12,
-      height: 6,
-      border: { type: 'line' },
-      style: { border: { fg: 'magenta' } },
-      label: ' Hold ',
-    });
-
-    // Inventory panel (below hold)
+    // Inventory panel (below preview)
     this.inventoryPanel = new InventoryPanel({
       parent: this.screen,
-      top: 13,
+      top: 7,
       left: 26,
       maxSlots: 10,
     });
@@ -138,7 +127,7 @@ export class TetriNetScreen {
     // Target selector (below inventory)
     this.targetSelector = new TargetSelector({
       parent: this.screen,
-      top: 16,
+      top: 10,
       left: 26,
       width: 25,
     });
@@ -177,7 +166,7 @@ export class TetriNetScreen {
       boardTop: 1,
       boardLeft: 0,
       boardWidth: 26,
-      boardHeight: 22,
+      boardHeight: 24,
     });
   }
 
@@ -198,7 +187,17 @@ export class TetriNetScreen {
 
     // Lines added (garbage to send)
     this.engine.onLinesAdded((count) => {
-      this.sounds.playSfx('line_clear');
+      if (count === 4) {
+        this.sounds.playSfx('tetris');
+      } else {
+        this.sounds.playSfx('line_clear');
+      }
+      
+      const state = this.engine.getState();
+      if (state.combo > 1) {
+        this.sounds.playSfx('combo');
+      }
+
       // Notify network of outgoing garbage
       if (this.network) {
         const target = this.targetSelector.getSelectedTarget();
@@ -414,9 +413,6 @@ export class TetriNetScreen {
       this.previewBox.setContent('{gray-fg}  ???{/gray-fg}');
     }
 
-    // Render hold
-    this.renderHold(gameState);
-
     // Update inventory
     this.inventoryPanel.updateFromArray(gameState.inventory || []);
 
@@ -446,24 +442,15 @@ export class TetriNetScreen {
     const { board, currentPiece } = state;
     let content = '';
 
-    // Get piece shape and ghost position
+    // Get piece shape
     let pieceShape: number[][] | null = null;
-    let ghostY: number | null = null;
-
     if (currentPiece) {
-      const pieceManager = (this.engine as any).pieceManager;
-      const shape = pieceManager?.getShape(currentPiece.type, currentPiece.rotation);
-      if (shape) {
-        pieceShape = shape;
-        if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
-          ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
-        }
-      }
+      pieceShape = this.engine.getPieceShape(currentPiece.type, currentPiece.rotation);
     }
 
-    // Render each row (visible rows 4-23 for TetriNET's 22-row board)
-    for (let y = 4; y < 24; y++) {
-      if (y > 4) content += '\n';
+    // Render each row (TetriNET 12x22 board)
+    for (let y = 0; y < board.height; y++) {
+      if (y > 0) content += '\n';
 
       for (let x = 0; x < board.width; x++) {
         const cell = board.grid[y]?.[x];
@@ -477,17 +464,6 @@ export class TetriNetScreen {
               px >= 0 && px < pieceShape[py].length &&
               pieceShape[py][px]) {
             char = this.getBlockChar(currentPiece.type);
-          }
-        }
-
-        // Check if ghost piece occupies this cell
-        if (ghostY !== null && currentPiece && pieceShape && char === '  ') {
-          const px = x - currentPiece.x;
-          const py = y - ghostY;
-          if (py >= 0 && py < pieceShape.length &&
-              px >= 0 && px < pieceShape[py].length &&
-              pieceShape[py][px]) {
-            char = '{gray-fg}░░{/gray-fg}';
           }
         }
 
@@ -512,58 +488,38 @@ export class TetriNetScreen {
    * Render piece preview
    */
   private renderPreview(state: any): void {
-    const nextPieces = state.preview || [];
+    const nextPieces = state.nextQueue || [];
     if (nextPieces.length === 0) {
       this.previewBox.setContent('');
       return;
     }
 
-    // Show first 3 preview pieces
+    const pieceType = nextPieces[0];
+    const shape = this.engine.getPieceShape(pieceType, 0);
     let content = '';
-    const pieceManager = (this.engine as any).pieceManager;
-
-    for (let i = 0; i < Math.min(3, nextPieces.length); i++) {
-      const pieceType = nextPieces[i];
-      const shape = pieceManager?.getShape(pieceType, 0);
-      if (shape) {
-        for (const row of shape) {
-          for (const cell of row) {
-            content += cell ? this.getBlockChar(pieceType) : '  ';
-          }
-          content += '\n';
-        }
+    for (const row of shape) {
+      for (const cell of row) {
+        content += cell ? this.getBlockChar(pieceType) : '  ';
       }
+      content += '\n';
     }
 
     this.previewBox.setContent(content);
   }
 
   /**
-   * Render hold piece
+   * Update opponent list (external server adapter).
    */
-  private renderHold(state: any): void {
-    const holdPiece = state.holdPiece;
-    if (!holdPiece) {
-      this.holdBox.setContent('{gray-fg}Empty{/gray-fg}');
-      return;
-    }
-
-    const pieceManager = (this.engine as any).pieceManager;
-    const shape = pieceManager?.getShape(holdPiece, 0);
-    if (!shape) {
-      this.holdBox.setContent('');
-      return;
-    }
-
-    let content = '';
-    for (const row of shape) {
-      for (const cell of row) {
-        content += cell ? this.getBlockChar(holdPiece) : '  ';
-      }
-      content += '\n';
-    }
-
-    this.holdBox.setContent(content);
+  updateOpponents(opponents: OpponentBoardData[]): void {
+    this.opponentBoards.updateBoards(opponents);
+    const targets: TargetInfo[] = opponents.map(opponent => ({
+      id: opponent.id,
+      name: opponent.name,
+      level: opponent.level,
+      alive: opponent.alive,
+      hasImmunity: opponent.hasImmunity,
+    }));
+    this.targetSelector.setOpponents(targets);
   }
 
   /**
@@ -631,6 +587,10 @@ export class TetriNetScreen {
    */
   cleanup(): void {
     this.running = false;
+
+    // Disable mouse tracking
+    this.screen.program.disableMouse();
+
     this.unsubscribers.forEach(unsub => unsub());
     this.unsubscribers = [];
     this.inventoryPanel.destroy();

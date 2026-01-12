@@ -334,6 +334,9 @@ Press {cyan-fg}ESC{/cyan-fg}, {cyan-fg}Q{/cyan-fg}, or {cyan-fg}F1{/cyan-fg} to 
  * Show the manual in a DocModal
  */
 export function showManual(screen: Screen, onClose?: () => void): DocModal {
+  // Enable mouse control for manual scrolling
+  screen.program.enableMouse();
+
   const modal = new DocModal({
     parent: screen,
     title: 'GRANDMASTER Manual',

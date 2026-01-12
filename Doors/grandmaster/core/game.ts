@@ -23,6 +23,8 @@ import type { AttackManager } from '../network/attack-system';
 import { FinesseEvaluator } from './finesse';
 import { ReplayRecorder, type Replay } from '../server/replay-manager';
 import { MedalManager, type Medal } from './medals';
+import { CreditRollManager, InvisiblePieceManager } from './credit-roll';
+import type { SoundEngine } from '../audio/sounds';
 
 export class GameEngine {
   private state: GameState;
@@ -31,9 +33,12 @@ export class GameEngine {
   private sectionManager: SectionManager;
   private gradeManager: GradeManager;
   private medalManager: MedalManager;  // HeborisCE medal system
+  private creditRollManager: CreditRollManager;
+  private invisiblePieceManager: InvisiblePieceManager;
   private attackManager?: AttackManager;  // Optional for multiplayer
   private finesseEvaluator: FinesseEvaluator;
   private recorder?: ReplayRecorder;  // Optional replay recording
+  private onHardDropCallback?: () => void;
 
   // Stats tracking
   private tetrisCount: number = 0;
@@ -52,12 +57,28 @@ export class GameEngine {
   // Credit roll pause tracking
   private pauseTime: number | null = null;
 
-  constructor(mode: GameMode, settings: PlayerSettings, attackManager?: AttackManager) {
+  // Shirase garbage tracking
+  private devilNextRise: number = 0;
+  private readonly SHIRASE_RISE_MIN: Record<number, number> = {
+    5: 25, 6: 20, 7: 10, 8: 8, 9: 5
+  };
+  private readonly SHIRASE_RISE_MAX: Record<number, number> = {
+    5: 35, 6: 30, 7: 20, 8: 18, 9: 15
+  };
+
+  constructor(
+    mode: GameMode, 
+    settings: PlayerSettings, 
+    private sounds: SoundEngine,
+    attackManager?: AttackManager
+  ) {
     this.settings = settings;
     this.pieceManager = new PieceManager(settings.rotationSystem);
     this.sectionManager = new SectionManager();
     this.gradeManager = new GradeManager();
     this.medalManager = new MedalManager();  // HeborisCE medal system
+    this.creditRollManager = new CreditRollManager();
+    this.invisiblePieceManager = new InvisiblePieceManager();
     this.finesseEvaluator = new FinesseEvaluator();
     this.attackManager = attackManager;
     this.state = this.createInitialState(mode);
@@ -201,6 +222,22 @@ export class GameEngine {
     this.state.tSpinFlag = 0;
     this.state.rotationCount = 0;
 
+    // Apply level stop logic: Level increases by 1 upon piece spawn
+    // unless it's a level stop (xx9)
+    // TGM3: Level pauses at 99, 199... 999 until piece locks
+    if (this.state.level % 100 !== 99 && (this.state.mode !== 'master' || this.state.level < 999)) {
+      this.state.level++;
+    }
+
+    // HeborisCE Shirase Piece-Spawn Garbage Rising
+    if (this.state.mode === 'death' && this.state.level >= 500) {
+      this.devilNextRise--;
+      if (this.devilNextRise <= 0) {
+        this.applyShiraseGarbage();
+        this.resetDevilNextRise();
+      }
+    }
+
     // Check if piece can spawn (game over if not)
     const shape = this.pieceManager.getShape(pieceType, initialRotation);
     if (checkCollision(this.state.board, shape, spawnPos.x, spawnPos.y)) {
@@ -252,9 +289,20 @@ export class GameEngine {
     // Apply gravity
     this.applyGravity();
 
+    // HeborisCE: update decay every frame
+    this.gradeManager.updateDecay(this.state.combo, this.state.level, this.state.creditRollActive);
+    this.state.grade = this.gradeManager.getGrade();
+    this.state.internalGrade = this.gradeManager.getInternalGrade();
+
     // Update credit roll timer
     if (this.state.creditRollActive) {
-      this.updateCreditRoll(this.FRAME_TIME);
+      this.creditRollManager.update(this.FRAME_TIME);
+      const crState = this.creditRollManager.getState();
+      this.state.creditRollTimeRemaining = crState.timeRemaining;
+      
+      if (!crState.active) {
+        this.completeCreditRoll();
+      }
     }
 
     // Check for credit roll trigger
@@ -455,6 +503,11 @@ export class GameEngine {
     piece.y = ghostY;
     this.state.lastMove = 'drop';
 
+    // Trigger callback for visual effects (like trails)
+    if (this.onHardDropCallback) {
+      this.onHardDropCallback();
+    }
+
     // Record input for replay
     if (this.recorder) {
       this.recorder.recordInput('hard_drop', piece.type);
@@ -582,16 +635,27 @@ export class GameEngine {
     let filledCorners = 0;
     const board = this.state.board;
 
-    for (const corner of corners) {
+    for (let i = 0; i < corners.length; i++) {
+      const corner = corners[i];
+      let cx = corner.x;
+      let cy = corner.y;
+      
+      // TGM3/HeborisCE ARS: if T is up-facing (flat side down), 
+      // the detection area shifts for specific corners
+      if (this.settings.rotationSystem === 'ARS' && piece.rotation === 2) {
+          // HeborisCE gamestart.c: if(rt == 2) tmp_y = tmp_y + 1;
+          cy += 1;
+      }
+
       // Out of bounds counts as filled
-      if (corner.x < 0 || corner.x >= board.width ||
-          corner.y < 0 || corner.y >= board.height) {
+      if (cx < 0 || cx >= board.width ||
+          cy < 0 || cy >= board.height) {
         filledCorners++;
         continue;
       }
 
       // Check if cell is filled
-      if (board.grid[corner.y][corner.x].filled) {
+      if (board.grid[cy][cx].filled) {
         filledCorners++;
       }
     }
@@ -663,16 +727,38 @@ export class GameEngine {
     const clearedLines = getCompleteLines(this.state.board);
     const lineCount = clearedLines.length;
 
+    // TGM Level Stop Logic:
+    // Level stops at xx9 (99, 199, etc.) and only advances when a piece locks.
+    // If lines were cleared, level advances by lines.
+    // If no lines were cleared, we ensure the level reaches the next section if it was stopped.
+    if (lineCount > 0) {
+      this.state.level += lineCount;
+    } else {
+      // If we were at xx9, move to x00
+      if (this.state.level % 100 === 99) {
+        this.state.level += 1;
+      }
+    }
+
+    // Cap level at 999 for Master mode (unless in credit roll)
+    if (this.state.mode === 'master' && this.state.level > 999 && !this.state.creditRollActive) {
+      this.state.level = 999;
+    }
+
+    const newSection = Math.floor(this.state.level / 100);
+
     if (lineCount > 0) {
       // Clear lines
       clearLines(this.state.board, clearedLines);
 
+      // Record lines for credit roll qualification
+      if (this.state.creditRollActive) {
+        this.creditRollManager.addLines(lineCount);
+      }
+
       // Update stats
       this.state.lines += lineCount;
       this.state.combo++;
-
-      // Level progression (TGM3 style: +1 per line)
-      this.state.level += lineCount;
 
       // Update speed parameters based on new level
       const speedParams = getSpeedParams(this.state.level, this.state.mode);
@@ -751,25 +837,34 @@ export class GameEngine {
       if (sectionResult !== null) {
         // Section just completed!
         this.state.lastSectionResult = sectionResult;
+        
         // Award ST medal (Section Time)
         this.medalManager.checkSectionTime(sectionResult, this.state.level);
+
+        // HeborisCE/TGM3: Process evaluation (COOL!!/REGRET)
+        // This can trigger Grade Skips and speed increases
+        this.gradeManager.processSectionResult(sectionResult, this.state.level);
+        this.state.grade = this.gradeManager.getGrade();
+        this.state.internalGrade = this.gradeManager.getInternalGrade();
       }
     } else {
       // No lines cleared, reset combo
       this.state.combo = 0;
     }
 
-    // Check for game over
-    if (isTopOut(this.state.board)) {
-      this.state.status = 'gameover';
-      this.state.endTime = Date.now();
-      return;
-    }
-
-    // Apply grade decay (happens after every piece)
-    this.gradeManager.applyDecay(this.state.level);
+    // Apply grade decay (handled per-frame now)
+    // this.gradeManager.applyDecay(this.state.level); // Removed legacy call
     this.state.grade = this.gradeManager.getGrade();
     this.state.internalGrade = this.gradeManager.getInternalGrade();
+
+    // HeborisCE Shirase Garbage Rising
+    if (this.state.mode === 'death' && this.state.level >= 500) {
+      this.devilNextRise--;
+      if (this.devilNextRise <= 0) {
+        this.applyShiraseGarbage();
+        this.resetDevilNextRise();
+      }
+    }
 
     // Apply incoming garbage (multiplayer)
     if (this.attackManager) {
@@ -779,6 +874,8 @@ export class GameEngine {
     // Reset ARE delay for next piece
     const speedParams = getSpeedParams(this.state.level, this.state.mode);
     this.state.areRemaining = speedParams.are;
+    this.state.gravity = speedParams.gravity;
+    this.state.lockDelay = (speedParams.lockDelay / 60) * 1000;
 
     // Spawn next piece (will happen after ARE delay)
     this.state.currentPiece = null;
@@ -850,6 +947,43 @@ export class GameEngine {
   }
 
   /**
+   * Reset the Shirase garbage counter
+   */
+  private resetDevilNextRise(): void {
+    const section = Math.floor(this.state.level / 100);
+    const min = this.SHIRASE_RISE_MIN[section] || 0;
+    const max = this.SHIRASE_RISE_MAX[section] || 0;
+    
+    if (min > 0 && max > 0) {
+      this.devilNextRise = Math.floor(Math.random() * (max - min + 1)) + min;
+    } else {
+      this.devilNextRise = 0;
+    }
+  }
+
+  /**
+   * Apply a line of garbage for Shirase mode
+   */
+  private applyShiraseGarbage(): void {
+    const board = this.state.board;
+    const holePosition = Math.floor(Math.random() * board.width);
+    
+    // Shift board up
+    for (let y = 0; y < board.height - 1; y++) {
+      board.grid[y] = board.grid[y + 1];
+    }
+    
+    // Add new garbage line
+    board.grid[board.height - 1] = Array(board.width).fill(0).map((_, x) => ({
+      filled: x !== holePosition,
+      color: null,
+      locked: true,
+    }));
+    
+    this.sounds.playSfx('garbage');
+  }
+
+  /**
    * Get game result
    */
   getResult(): GameResult {
@@ -918,29 +1052,25 @@ export class GameEngine {
    */
   private startCreditRoll(): void {
     this.state.creditRollActive = true;
-    this.state.creditRollStartTime = Date.now();
-    this.state.creditRollTimeRemaining = 180000;  // 3 minutes
+    this.creditRollManager.start(this.state.level);
+    const crState = this.creditRollManager.getState();
+    this.state.creditRollStartTime = crState.startTime;
+    this.state.creditRollTimeRemaining = crState.timeRemaining;
   }
 
   /**
-   * Update credit roll timer and check completion
-   */
-  private updateCreditRoll(deltaTime: number): void {
-    this.state.creditRollTimeRemaining -= deltaTime;
-
-    // Credit roll completed successfully!
-    if (this.state.creditRollTimeRemaining <= 0) {
-      this.completeCreditRoll();
-    }
-  }
-
-  /**
-   * Complete credit roll and award GMM
+   * Complete credit roll and award rank based on qualification
    */
   private completeCreditRoll(): void {
-    this.state.grade = 'GMM';
+    if (this.creditRollManager.isQualified()) {
+      this.state.grade = 'GM';  // Qualified for Grand Master
+    } else {
+      this.state.grade = 'M';   // Failed invisible challenge, stay at Master
+    }
+    
     this.state.status = 'complete';
     this.state.endTime = Date.now();
+    this.state.creditRollActive = false;
   }
 
   /**
@@ -1022,5 +1152,12 @@ export class GameEngine {
    */
   isRecording(): boolean {
     return this.recorder !== undefined;
+  }
+
+  /**
+   * Set callback for hard drop event
+   */
+  onHardDrop(callback: () => void): void {
+    this.onHardDropCallback = callback;
   }
 }

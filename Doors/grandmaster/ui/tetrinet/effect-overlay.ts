@@ -8,8 +8,7 @@
  * - Mutation: Shows piece randomization warning
  */
 
-import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Box, Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { ContinuousEffectManager } from '../../core/tetrinet/continuous-effects';
 
 /**
@@ -28,11 +27,11 @@ export interface EffectOverlayOptions {
  */
 export class EffectOverlay {
   private parent: Screen;
-  private darknessOverlay: any;
-  private confusionIndicator: any;
-  private immunityBorder: any;
-  private mutationIndicator: any;
-  private statusBar: any;
+  private darknessOverlay!: Box;
+  private confusionIndicator!: Box;
+  private immunityBorder!: Box;
+  private mutationIndicator!: Box;
+  private statusBar!: Box;
 
   private boardTop: number;
   private boardLeft: number;
@@ -54,7 +53,7 @@ export class EffectOverlay {
    */
   private createOverlays(): void {
     // Darkness overlay - covers piece preview area
-    this.darknessOverlay = createBox({
+    this.darknessOverlay = new Box({
       parent: this.parent,
       top: this.boardTop,
       right: 0,
@@ -63,10 +62,11 @@ export class EffectOverlay {
       hidden: true,
       style: { bg: 'black' },
       content: '{gray-fg}\n  DARKNESS\n\n  Preview\n  Hidden{/gray-fg}',
+      tags: true
     });
 
     // Confusion indicator - shows reversed controls warning
-    this.confusionIndicator = createBox({
+    this.confusionIndicator = new Box({
       parent: this.parent,
       top: 0,
       left: 'center',
@@ -74,10 +74,11 @@ export class EffectOverlay {
       height: 1,
       hidden: true,
       content: '{magenta-fg}{bold}CONTROLS REVERSED{/bold}{/magenta-fg}',
+      tags: true
     });
 
     // Immunity border - glowing border around board
-    this.immunityBorder = createBox({
+    this.immunityBorder = new Box({
       parent: this.parent,
       top: this.boardTop - 1,
       left: this.boardLeft - 1,
@@ -89,7 +90,7 @@ export class EffectOverlay {
     });
 
     // Mutation indicator - shows remaining pieces
-    this.mutationIndicator = createBox({
+    this.mutationIndicator = new Box({
       parent: this.parent,
       top: 0,
       right: 0,
@@ -97,10 +98,11 @@ export class EffectOverlay {
       height: 1,
       hidden: true,
       content: '{red-fg}MUTATION: 5{/red-fg}',
+      tags: true
     });
 
     // Status bar for all active effects
-    this.statusBar = createBox({
+    this.statusBar = new Box({
       parent: this.parent,
       bottom: 0,
       left: 0,
@@ -108,6 +110,7 @@ export class EffectOverlay {
       height: 1,
       hidden: true,
       content: '',
+      tags: true
     });
   }
 
@@ -143,7 +146,9 @@ export class EffectOverlay {
       // Animate border color
       const time = Date.now() % 1000;
       const color = time < 500 ? 'cyan' : 'white';
-      this.immunityBorder.style.border.fg = color;
+      if (this.immunityBorder.style.border) {
+          this.immunityBorder.style.border.fg = color;
+      }
     } else {
       this.immunityBorder.hide();
     }
@@ -201,7 +206,7 @@ export class EffectOverlay {
    * Show incoming attack warning
    */
   showIncomingWarning(attackType: string): void {
-    const warningBox = createBox({
+    const warningBox = new Box({
       parent: this.parent,
       top: 'center',
       left: 'center',
@@ -210,6 +215,7 @@ export class EffectOverlay {
       border: { type: 'line' },
       style: { border: { fg: 'red' }, bg: 'black' },
       content: `{red-fg}{bold}INCOMING ATTACK!\n\n${attackType.toUpperCase()}{/bold}{/red-fg}`,
+      tags: true
     });
 
     // Remove after animation
@@ -222,7 +228,7 @@ export class EffectOverlay {
    * Show immunity blocked message
    */
   showImmunityBlocked(): void {
-    const messageBox = createBox({
+    const messageBox = new Box({
       parent: this.parent,
       top: 'center',
       left: 'center',
@@ -231,6 +237,7 @@ export class EffectOverlay {
       border: { type: 'line' },
       style: { border: { fg: 'cyan' }, bg: 'black' },
       content: '{cyan-fg}{bold}BLOCKED!{/bold}{/cyan-fg}',
+      tags: true
     });
 
     setTimeout(() => {
@@ -242,7 +249,7 @@ export class EffectOverlay {
    * Show sudden death warning
    */
   showSuddenDeathWarning(): void {
-    const warningBox = createBox({
+    const warningBox = new Box({
       parent: this.parent,
       top: 2,
       left: 'center',
@@ -251,6 +258,7 @@ export class EffectOverlay {
       border: { type: 'line' },
       style: { border: { fg: 'red' }, bg: 'black' },
       content: '{red-fg}{bold}SUDDEN DEATH ACTIVE!{/bold}{/red-fg}',
+      tags: true
     });
 
     // Flash and then hide
@@ -270,13 +278,14 @@ export class EffectOverlay {
    * Show sudden death line addition
    */
   showSuddenDeathLine(totalLines: number): void {
-    const messageBox = createBox({
+    const messageBox = new Box({
       parent: this.parent,
       top: 5,
       left: 'center',
       width: 20,
       height: 1,
       content: `{red-fg}+1 LINE (${totalLines} total){/red-fg}`,
+      tags: true
     });
 
     setTimeout(() => {

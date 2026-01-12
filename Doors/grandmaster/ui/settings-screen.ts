@@ -6,6 +6,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { AppState, PlayerSettings, RotationSystem, KeyBindings } from '../core/types';
 
 /**
@@ -53,6 +54,9 @@ export class SettingsScreen {
    * Show settings editor and wait for exit
    */
   async show(): Promise<void> {
+    // Enable mouse control for settings interaction
+    this.screen.program.enableMouse();
+
     return new Promise((resolve) => {
       // Clear screen
       this.screen.children.forEach(child => child.destroy());
@@ -69,7 +73,7 @@ export class SettingsScreen {
       });
 
       // Settings menu
-      const menu = createList({
+      const menuPanel = createDockable({
         parent: this.screen,
         top: 3,
         left: 10,
@@ -78,6 +82,18 @@ export class SettingsScreen {
         border: { type: 'line' },
         style: {
           border: { fg: 'cyan' },
+        },
+        label: ' Settings ',
+        persistenceKey: 'grandmaster.settings.menu',
+      });
+
+      const menu = createList({
+        parent: menuPanel,
+        top: 1,
+        left: 1,
+        width: 58,
+        height: 13,
+        style: {
           selected: { bg: 'cyan', fg: 'black' },
           item: { fg: 'white' },
         },
@@ -88,7 +104,7 @@ export class SettingsScreen {
       });
 
       // Description box
-      const descBox = createBox({
+      const descBox = createDockable({
         parent: this.screen,
         top: 18,
         left: 10,
@@ -97,6 +113,7 @@ export class SettingsScreen {
         border: { type: 'line' },
         style: { border: { fg: 'gray' }, fg: 'gray' },
         content: this.getDescription(0),
+        persistenceKey: 'grandmaster.settings.description',
       });
 
       // Update description on selection change
@@ -284,7 +301,7 @@ export class SettingsScreen {
     const current = this.state.settings[key] as number;
 
     // Show input dialog
-    const inputBox = createBox({
+    const inputBox = createDockable({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -297,6 +314,7 @@ export class SettingsScreen {
         `Range: ${min} - ${max}\n\n` +
         `{gray-fg}Use Left/Right arrows to adjust{/gray-fg}\n` +
         `{gray-fg}Press Enter to confirm{/gray-fg}`,
+      persistenceKey: `grandmaster.settings.adjust.${key}`,
     });
 
     let newValue = current;
@@ -345,7 +363,7 @@ export class SettingsScreen {
     const current = Math.floor(this.state.settings[settingKey] * 100);
 
     // Show volume bar
-    const volumeBox = createBox({
+    const volumeBox = createDockable({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -354,6 +372,7 @@ export class SettingsScreen {
       border: { type: 'line' },
       style: { border: { fg: 'yellow' } },
       content: '',
+      persistenceKey: `grandmaster.settings.volume.${settingKey}`,
     });
 
     let volume = current;
@@ -404,7 +423,7 @@ export class SettingsScreen {
     const currentKeys = kb[bindingKey];
 
     // Show key binding dialog
-    const bindingBox = createBox({
+    const bindingBox = createDockable({
       parent: this.screen,
       top: 'center',
       left: 'center',
@@ -413,6 +432,7 @@ export class SettingsScreen {
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       content: '',
+      persistenceKey: `grandmaster.settings.binding.${bindingKey}`,
     });
 
     const keys = [...currentKeys];

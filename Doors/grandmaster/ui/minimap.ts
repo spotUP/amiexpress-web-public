@@ -7,7 +7,9 @@
 
 import type { Board, PieceType } from '../core/types';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from './dockable';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/widgets/box';
 
 /**
  * Opponent state for minimap
@@ -100,12 +102,12 @@ export class MinimapRenderer {
    * Render multiple opponent minimaps in a grid layout
    */
   renderMinimapGrid(
-    screen: Screen,
+    parent: Screen | Box,
     opponents: OpponentState[],
     maxVisible: number = 6
   ): void {
     // Clear existing minimaps
-    screen.children
+    parent.children
       .filter(c => (c as any).minimapId)
       .forEach(c => c.destroy());
 
@@ -131,9 +133,9 @@ export class MinimapRenderer {
       const row = Math.floor(index / cols);
 
       const minimapBox = createBox({
-        parent: screen,
+        parent,
         top: row * minimapHeight,
-        left: 58 + (col * minimapWidth),  // Start after main board (56 chars)
+        left: col * minimapWidth,
         width: minimapWidth,
         height: minimapHeight,
         border: {
@@ -151,7 +153,7 @@ export class MinimapRenderer {
       (minimapBox as any).minimapId = opponent.id;
     });
 
-    screen.render();
+    parent.screen?.render();
   }
 
   /**
@@ -163,7 +165,7 @@ export class MinimapRenderer {
     aliveCount: number,
     totalPlayers: number
   ): void {
-    const hudBox = createBox({
+    const hudBox = createDockable({
       parent: screen,
       top: 0,
       right: 0,
@@ -177,6 +179,7 @@ export class MinimapRenderer {
         `{bold}BATTLE ROYALE{/bold}\n\n` +
         `  Rank:  {yellow-fg}#${rank}{/yellow-fg}\n` +
         `  Alive: {green-fg}${aliveCount}{/green-fg}/{gray-fg}${totalPlayers}{/gray-fg}`,
+      persistenceKey: 'grandmaster.versus.battle-hud',
     });
 
     (hudBox as any).isBattleRoyaleHUD = true;

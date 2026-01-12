@@ -4,11 +4,20 @@
   "description": "GRANDMASTER - TGM3-Inspired Multiplayer Tetris for BBS",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./index.ts"
+  },
   "scripts": {
-    "build": "tsc && npm run copy-assets",
+    "build": "tsc && npm run copy-assets && npm run bundle:client",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",
-    "copy-assets": "mkdir -p dist/server/database && cp server/database/schema.sql dist/server/database/"
+    "copy-assets": "mkdir -p dist/server/database && cp server/database/schema.sql dist/server/database/",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=iife --platform=browser --target=es2020 --minify --external:fs --external:path --external:net --external:child_process --external:crypto"
   },
   "keywords": [
     "tetris",
@@ -27,6 +36,7 @@
     "tone": "^15.0.4"
   },
   "devDependencies": {
+    "esbuild": "^0.19.0",
     "typescript": "^5.3.0"
   },
   "door": {

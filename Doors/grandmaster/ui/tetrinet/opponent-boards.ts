@@ -10,6 +10,7 @@
 
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createDockable } from '../dockable';
 import type { TetriNetBoard } from '../../core/tetrinet/tetrinet-board';
 
 /**
@@ -62,13 +63,17 @@ export class OpponentBoards {
     const width = options.width || (this.boardWidth * 3 + 4);  // 3 boards per row
     const height = options.height || (this.boardHeight * 2 + 2); // 2 rows
 
-    this.container = createBox({
+    this.container = createDockable({
       parent: options.parent,
       top: options.top,
       left: options.left,
       width,
       height,
+      border: { type: 'line' },
+      style: { border: { fg: 'cyan' } },
+      label: ' Opponents ',
       content: '',
+      persistenceKey: 'grandmaster.tnet.opponents',
     });
   }
 
@@ -115,8 +120,8 @@ export class OpponentBoards {
     // Calculate position (3 columns, 2 rows layout)
     const col = index % 3;
     const row = Math.floor(index / 3);
-    const left = col * (this.boardWidth + 1);
-    const top = row * this.boardHeight;
+    const left = 1 + col * (this.boardWidth + 1);
+    const top = 1 + row * this.boardHeight;
 
     const container = createBox({
       parent: this.container,
