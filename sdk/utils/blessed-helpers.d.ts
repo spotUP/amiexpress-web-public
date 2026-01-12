@@ -39,6 +39,8 @@ import type { Textarea } from '../engines/ui/blessed/widgets/textbox';
 import type { Button } from '../engines/ui/blessed/widgets/button';
 import type { Table } from '../engines/ui/blessed/widgets/table';
 import type { Log } from '../engines/ui/blessed/widgets/log';
+import type { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
+import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
 /**
  * Convert ANSI escape codes to blessed tags
  *
@@ -74,7 +76,13 @@ export declare function createScreen(options?: ScreenOptions & {
  * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export declare function createBox(options?: ElementOptions): Box;
+export declare function createBox(options?: DockablePanelOptions): DockablePanel;
+/**
+ * Create a dockable panel with tags ALWAYS enabled
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ */
+export declare function createDockablePanel(options?: DockablePanelOptions): DockablePanel;
 /**
  * Create a blessed list with tags ALWAYS enabled
  *

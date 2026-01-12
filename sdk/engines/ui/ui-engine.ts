@@ -73,11 +73,13 @@ import type {
   TableOptions,
   LogOptions,
 } from './blessed/core/types';
+import { DockablePanel } from './blessed/widgets/dockable-panel';
+import type { DockablePanelOptions } from './blessed/widgets/dockable-panel';
 
 // Type aliases for backward compatibility with neo-blessed API
 // TODO: Full neo-blessed API compatibility layer
 type WidgetNode = Element;
-type BoxOptions = ElementOptions;
+type BoxOptions = DockablePanelOptions;
 type TextOptions = ElementOptions;
 
 /**
@@ -197,9 +199,12 @@ export class UIEngine {
    * ```
    */
   createBox(options: BoxOptions & { parent?: WidgetNode; id?: string }): Element {
-    const box = blessed.box({
+    const fixedDefault = options.fixed ?? (options.parent instanceof DockablePanel);
+    const box = new DockablePanel({
       ...options,
+      fixed: fixedDefault,
       parent: options.parent || this.screen,
+      useTitleBar: false,
     });
 
     if (options.id) {
@@ -232,6 +237,7 @@ export class UIEngine {
     // TODO: Implement line widget in blessed port
     const line = blessed.box({
       ...options,
+      fixed: true,
       parent: options.parent || this.screen,
     });
 
@@ -289,6 +295,7 @@ export class UIEngine {
     // TODO: Implement FileManager widget in blessed port
     const fm = blessed.box({
       ...options,
+      fixed: true,
       parent: options.parent || this.screen,
     });
 
@@ -450,6 +457,7 @@ export class UIEngine {
     // TODO: Implement Prompt widget in blessed port
     const prompt = blessed.box({
       ...options,
+      fixed: true,
       parent: options.parent || this.screen,
     });
 
@@ -467,6 +475,7 @@ export class UIEngine {
     // TODO: Implement Message widget in blessed port
     const message = blessed.box({
       ...options,
+      fixed: true,
       parent: options.parent || this.screen,
     });
 
@@ -484,6 +493,7 @@ export class UIEngine {
     // TODO: Implement Loading widget in blessed port
     const loading = blessed.box({
       ...options,
+      fixed: true,
       parent: options.parent || this.screen,
     });
 

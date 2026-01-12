@@ -191,6 +191,7 @@ export type EventHandler = (...args: any[]) => void;
 
 export interface ScreenOptions {
   program?: any;
+  input?: any;
   smartCSR?: boolean;
   fastCSR?: boolean;
   resizeTimeout?: number;
@@ -218,6 +219,7 @@ export interface ScreenOptions {
   terminal?: string;
   tput?: boolean;
   responsive?: boolean;
+  focusKeys?: boolean;
   breakpoints?: {
     small?: number;
     medium?: number;

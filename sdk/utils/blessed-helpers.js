@@ -31,6 +31,7 @@
  *   box.setContent(sanitizeContent('\x1b[32mSuccess!\x1b[0m'));
  */
 import blessed from '../engines/ui/blessed';
+import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
 // Track if we've already warned to avoid spam
 const warnedAbout = new Set();
 /**
@@ -176,10 +177,25 @@ export function createScreen(options) {
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
 export function createBox(options) {
-    const processedOptions = processElementOptions(options, 'createBox');
-    return blessed.box({
+    return createDockablePanel({
+        useTitleBar: false,
+        ...options,
+    });
+}
+/**
+ * Create a dockable panel with tags ALWAYS enabled
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ */
+export function createDockablePanel(options) {
+    const fixedDefault = (options === null || options === void 0 ? void 0 : options.fixed) !== undefined ? options.fixed : ((options === null || options === void 0 ? void 0 : options.parent) instanceof DockablePanel);
+    const processedOptions = processElementOptions({
+        ...options,
+        fixed: fixedDefault,
+    }, 'createDockablePanel');
+    return new DockablePanel({
         ...processedOptions,
-        tags: true, // FORCED AFTER spread - cannot be overridden
+        tags: true,
     });
 }
 /**

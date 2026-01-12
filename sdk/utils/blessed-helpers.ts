@@ -43,6 +43,8 @@ import type {
 } from '../engines/ui/blessed/core/types';
 import type { Screen } from '../engines/ui/blessed/core/screen';
 import type { Box } from '../engines/ui/blessed/widgets/box';
+import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
+import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
 import type { List } from '../engines/ui/blessed/widgets/list';
 import type { Text } from '../engines/ui/blessed/widgets/text';
 import type { Textbox, Textarea } from '../engines/ui/blessed/widgets/textbox';
@@ -247,18 +249,33 @@ export function ansiToTags(text: string): string {
  * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
  * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
  */
-export function createBox(options?: ElementOptions): Box {
-  const processedOptions = processElementOptions(options, 'createBox');
-
-  const box = blessed.box({
-    ...processedOptions,
-    tags: true,  // FORCED AFTER spread - cannot be overridden
+export function createBox(options?: DockablePanelOptions): DockablePanel {
+  return createDockablePanel({
+    useTitleBar: false,
+    ...options,
   });
+}
 
-  // Auto-handle percentage widths/heights on screen resize
-  setupAutoResize(box, options);
+/**
+ * Create a dockable panel with tags ALWAYS enabled
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ */
+export function createDockablePanel(options?: DockablePanelOptions): DockablePanel {
+  const fixedDefault = options?.fixed ?? (options?.parent instanceof DockablePanel);
+  const processedOptions = processElementOptions({
+    ...options,
+    fixed: fixedDefault,
+  } as ElementOptions, 'createDockablePanel');
 
-  return box;
+  const panel = new DockablePanel({
+    ...processedOptions,
+    tags: true,
+  } as DockablePanelOptions);
+
+  setupAutoResize(panel, options);
+
+  return panel;
 }
 
 /**
@@ -924,23 +941,62 @@ export function createScreen(
  *
  * @example
  * const screen = createScreen(bbs);
- * setupInputHandler(session, screen, showHelpFn);
+ * setupInputHandler(session, screen, {
+ *   onF1Help: showHelpFn,
+ *   debug: true
+ * });
  */
-export function setupInputHandler(session: any, screen: Screen, onF1Help?: () => void) {
+export function setupInputHandler(
+  session: any,
+  screen: Screen,
+  options?: {
+    onF1Help?: () => void;
+    debug?: boolean;
+    debugName?: string;
+    onData?: (data: string) => boolean | void;
+  } | (() => void) // Backward compatibility for onF1Help as 3rd param
+) {
   if (!session.bbsSession) return;
 
+  // Handle backward compatibility: if options is a function, treat it as onF1Help
+  const config = typeof options === 'function'
+    ? { onF1Help: options }
+    : (options || {});
+
+  const debugName = config.debugName || 'Door';
+
   session.bbsSession.doorInputHandler = (data: string) => {
-    // Check for F1 key (help)
-    // Use ESC constant to survive minification
-    if (onF1Help && (data === ESC + 'OP' || data === ESC + '[11~')) {
-      onF1Help();
+    // 1. Debug logging if enabled
+    if (config.debug) {
+      const hexData = Buffer.from(data).toString('hex');
+      console.log(`[${debugName}] doorInputHandler raw:`, hexData, 'text:', JSON.stringify(data));
+    }
+
+    // 2. Custom data handler (can swallow event)
+    if (config.onData && config.onData(data) === true) {
       return;
     }
-    // Pass input to blessed screen's program
+
+    // 3. Check for F1 key (help)
+    if (config.onF1Help && (data === ESC + 'OP' || data === ESC + '[11~')) {
+      config.onF1Help();
+      return;
+    }
+
+    // 4. Pass input to blessed screen's program
     if (screen.program) {
       screen.program.emit('data', data);
     }
   };
+}
+
+/**
+ * Remove input handler from BBS session
+ */
+export function removeInputHandler(session: any) {
+  if (session?.bbsSession) {
+    session.bbsSession.doorInputHandler = null;
+  }
 }
 
 /**
@@ -1071,6 +1127,7 @@ export function createModalManager(screen: Screen, returnFocusElement?: any) {
     left: 0,
     width: '100%',
     height: '100%',
+    fixed: true,
     hidden: true,
     zIndex: 500, // Above normal UI
     ch: ' ',     // Fill with spaces to ensure opacity

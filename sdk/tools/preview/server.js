@@ -267,7 +267,8 @@ async function compileExamples() {
       return { name: exampleName, success: true };
     } catch (error) {
       // Type errors are non-fatal
-      broadcast(`  [WARNING]  ${exampleName} has type errors (non-fatal)`);
+      broadcast(`  [WARNING]  ${exampleName} has type errors (non-fatal):`);
+      broadcast(error.stdout || error.message);
       broadcast('');
       return { name: exampleName, success: false };
     }

@@ -66,6 +66,8 @@ export { Panel } from './widgets/panel';
 export type { PanelOptions } from './widgets/panel';
 export { DockablePanel } from './widgets/dockable-panel';
 export type { DockablePanelOptions, DockPosition, PanelState } from './widgets/dockable-panel';
+export { DropdownMenu, dropdownMenu } from './widgets/dropdown-menu';
+export type { DropdownMenuOptions, DropdownMenuItem } from './widgets/dropdown-menu';
 export { MobileCarousel, mobileCarousel } from './widgets/mobile-carousel';
 export type { MobileCarouselOptions } from './widgets/mobile-carousel';
 export { Autocomplete } from './widgets/autocomplete';
@@ -158,6 +160,8 @@ export {
 import { Screen } from './core/screen';
 import { Program } from './core/program';
 import { Box } from './widgets/box';
+import { DockablePanel } from './widgets/dockable-panel';
+import type { DockablePanelOptions } from './widgets/dockable-panel';
 import { Text } from './widgets/text';
 import { List } from './widgets/list';
 import { Form } from './widgets/form';
@@ -236,8 +240,9 @@ export function screen(options?: ScreenOptions & { output?: (data: string) => vo
 /**
  * Create a box widget (tags: true by default, cannot be overridden)
  */
-export function box(options?: ElementOptions): Box {
-  return new Box({ ...options, tags: true });
+export function box(options?: DockablePanelOptions): DockablePanel {
+  const fixedDefault = options?.fixed ?? (options?.parent instanceof DockablePanel);
+  return new DockablePanel({ ...options, fixed: fixedDefault, useTitleBar: false, tags: true });
 }
 
 /**
@@ -619,6 +624,7 @@ import { MultiplayerLobby as MultiplayerLobbyClass, multiplayerLobby } from './w
 import { ContextMenu as ContextMenuClass } from './widgets/contextmenu';
 import { Panel as PanelClass } from './widgets/panel';
 import { DockablePanel as DockablePanelClass } from './widgets/dockable-panel';
+import { DropdownMenu as DropdownMenuClass, dropdownMenu as dropdownMenuFactory } from './widgets/dropdown-menu';
 import { MobileCarousel as MobileCarouselClass } from './widgets/mobile-carousel';
 import { ResponsiveLayoutManager as ResponsiveLayoutManagerClass } from './core/responsive-layout';
 
@@ -713,6 +719,8 @@ export default {
   ContextMenu: ContextMenuClass,
   Panel: PanelClass,
   DockablePanel: DockablePanelClass,
+  DropdownMenu: DropdownMenuClass,
+  dropdownMenu: dropdownMenuFactory,
   MobileCarousel: MobileCarouselClass,
   ResponsiveLayoutManager: ResponsiveLayoutManagerClass,
 

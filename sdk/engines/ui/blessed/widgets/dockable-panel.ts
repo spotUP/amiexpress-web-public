@@ -23,6 +23,8 @@ export type DockPosition = 'top' | 'bottom' | 'left' | 'right' | 'center' | 'flo
 
 export interface DockablePanelOptions extends PanelOptions {
   dockPosition?: DockPosition;
+  useTitleBar?: boolean;
+  fixed?: boolean;
   allowFloat?: boolean;
   allowResize?: boolean;
   allowMinimize?: boolean;
@@ -110,6 +112,8 @@ export class DockablePanel extends Panel {
   private fitContentSettings: { width: boolean; height: boolean };
   private _swipeUndock: boolean;
   private _unsubscribeSwipeUndock?: () => void;
+  private useTitleBar: boolean;
+  private fixed: boolean;
 
   private screenListenersBound: boolean = false;
 
@@ -118,64 +122,78 @@ export class DockablePanel extends Panel {
   private static activeDropZone: DockPosition | null = null;
 
   constructor(options: DockablePanelOptions = {}) {
+    const fixed = options.fixed === true;
+    const normalizedOptions: DockablePanelOptions = {
+      ...options,
+      draggable: fixed ? false : options.draggable,
+      resizable: fixed ? false : options.resizable,
+      allowAutoDock: fixed ? false : options.allowAutoDock,
+      allowFloat: fixed ? false : options.allowFloat,
+      allowResize: fixed ? false : options.allowResize,
+      allowMinimize: fixed ? false : options.allowMinimize,
+    };
     // Merge hover style for resize edge indication (orange border on hover)
     const mergedStyle = {
-      ...options.style,
+      ...normalizedOptions.style,
       hover: {
         border: { fg: 'yellow' },  // Yellow/orange border on resize edge hover
-        ...(options.style as any)?.hover,
+        ...(normalizedOptions.style as any)?.hover,
       },
     };
 
     super({
-      ...options,
+      ...normalizedOptions,
       style: mergedStyle,
-      draggable: options.draggable !== false,
+      draggable: normalizedOptions.draggable !== false,
       mouse: true,
       keys: true,
       clickable: true,  // Enable click events for panel activation
     });
 
-    this.dockPosition = options.dockPosition || 'float';
+    this.dockPosition = normalizedOptions.dockPosition || 'float';
+    this.useTitleBar = normalizedOptions.useTitleBar !== false;
+    this.fixed = fixed;
     this.panelState = {
       position: this.dockPosition,
-      minimized: options.minimized || false,
+      minimized: normalizedOptions.minimized || false,
       x: typeof this.left === 'number' ? this.left : 0,
       y: typeof this.top === 'number' ? this.top : 0,
       width: typeof this.width === 'number' ? this.width : 40,
       height: typeof this.height === 'number' ? this.height : 20,
-      zIndex: options.zIndex || 100,
+      zIndex: normalizedOptions.zIndex || 100,
     };
 
     // Store min/max constraints locally (not in ElementOptions)
     // These are used in resize handling
-    this.minWidth = options.minWidth;
-    this.maxWidth = options.maxWidth;
-    this.minHeight = options.minHeight;
-    this.maxHeight = options.maxHeight;
-    this.resizable = options.resizable !== false;
-    this.allowAutoDock = options.allowAutoDock !== false;  // Default: true (enabled)
-    this.persistenceKey = options.persistenceKey;
-    this.topConstraint = options.topConstraint || 0;
-    this.bottomConstraint = options.bottomConstraint || 0;
-    this._swipeUndock = options.swipeUndock !== false;  // Default: enabled
+    this.minWidth = normalizedOptions.minWidth;
+    this.maxWidth = normalizedOptions.maxWidth;
+    this.minHeight = normalizedOptions.minHeight;
+    this.maxHeight = normalizedOptions.maxHeight;
+    this.resizable = normalizedOptions.resizable !== false;
+    this.allowAutoDock = normalizedOptions.allowAutoDock !== false;  // Default: true (enabled)
+    this.persistenceKey = normalizedOptions.persistenceKey;
+    this.topConstraint = normalizedOptions.topConstraint || 0;
+    this.bottomConstraint = normalizedOptions.bottomConstraint || 0;
+    this._swipeUndock = normalizedOptions.swipeUndock !== false;  // Default: enabled
 
     // Initialize fitContent settings (default: enabled for both width and height)
-    if (options.fitContent === false) {
+    if (normalizedOptions.fitContent === false) {
       this.fitContentSettings = { width: false, height: false };
-    } else if (typeof options.fitContent === 'object') {
+    } else if (typeof normalizedOptions.fitContent === 'object') {
       this.fitContentSettings = {
-        width: options.fitContent.width !== false,  // default true
-        height: options.fitContent.height !== false,  // default true
+        width: normalizedOptions.fitContent.width !== false,  // default true
+        height: normalizedOptions.fitContent.height !== false,  // default true
       };
     } else {
       // Default: enabled for both
       this.fitContentSettings = { width: true, height: true };
     }
 
-    // Suppress the border label from the base Panel/Box class
-    // DockablePanel uses its own titleBar widget for the title
-    this.options.label = undefined;
+    // Suppress the border label when using a title bar
+    if (this.useTitleBar) {
+      // DockablePanel uses its own titleBar widget for the title
+      this.options.label = undefined;
+    }
 
     // Store original border color for hover state restoration
     // Check multiple locations where border color can be defined
@@ -187,7 +205,9 @@ export class DockablePanel extends Panel {
       (this as any)._originalBorderColor = borderFg;
     }
 
-    this.setupTitleBar(options);
+    if (this.useTitleBar) {
+      this.setupTitleBar(normalizedOptions);
+    }
     this.setupDocking();
     this.setupDragging();
     this.setupResizing();
@@ -549,6 +569,7 @@ export class DockablePanel extends Panel {
    * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
    */
   private setupDragging(): void {
+    if (this.fixed) return;
     this.on('mousedown', (data: any) => {
       // Don't start drag if clicking on a resize edge (handled by setupResizing)
       if (this.resizable) {
@@ -559,6 +580,11 @@ export class DockablePanel extends Panel {
       }
 
       // Only start drag from title bar or if no title bar exists
+      if (!this.titleBar) {
+        if (!this.isOnTopBorder(data.x, data.y)) {
+          return;
+        }
+      }
       if (!this.titleBar || data.y === 0) {
         this.startDrag(data.x, data.y);
       }
@@ -571,7 +597,7 @@ export class DockablePanel extends Panel {
    * Top row is reserved for title bar (drag to move)
    */
   private setupResizing(): void {
-    if (!this.resizable) return;
+    if (this.fixed || !this.resizable) return;
 
     // Handle mousedown on panel - detect if click is on border edge/corner
     this.on('mousedown', (data: any) => {
@@ -601,6 +627,7 @@ export class DockablePanel extends Panel {
     // Panel must be focused to receive key events
     this.on('keypress', (_ch: string, key: any) => {
       if (!key) return;
+      if (this.fixed) return;
 
       const ctrl = key.ctrl;
       const shift = key.shift;
@@ -696,6 +723,9 @@ export class DockablePanel extends Panel {
     const onBottom = relY === panelHeight - 1;
 
     // Detect corners (high priority)
+    if (!this.useTitleBar && onTop) {
+      return null;
+    }
     if (onTop && onLeft) return 'nw';
     if (onTop && onRight) return 'ne';
     if (onBottom && onLeft) return 'sw';
@@ -708,6 +738,24 @@ export class DockablePanel extends Panel {
     if (onRight) return 'e';
 
     return null;
+  }
+
+  private isOnTopBorder(mouseX: number, mouseY: number): boolean {
+    const coords = this._getCoords();
+    if (!coords) return false;
+
+    const panelLeft = coords.xi;
+    const panelTop = coords.yi;
+    const panelRight = coords.xl - 1;
+    const panelBottom = coords.yl - 1;
+
+    if (mouseX < panelLeft || mouseX > panelRight ||
+        mouseY < panelTop || mouseY > panelBottom) {
+      return false;
+    }
+
+    const relY = mouseY - panelTop;
+    return relY === 0;
   }
 
   /**

@@ -321,6 +321,10 @@ TetriNET2-master/
 # Door runtime date/timestamp files
 Doors/AquaScan/AquaScan.Date.*
 
+# GMaster binary assets (large audio files)
+Doors/grandmaster/assets/music/
+Doors/grandmaster/assets/sounds/
+
 # SDK build artifacts (compiled JS in dist-esm)
 sdk/dist-esm/**/*.js
 sdk/dist-esm/**/*.d.ts

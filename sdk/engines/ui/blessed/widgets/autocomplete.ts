@@ -19,7 +19,7 @@ import type { BreakpointName } from '../core/responsive-constants';
 export class Autocomplete extends Box {
   private list: List;
   private suggestions: AutocompleteSuggestion[] = [];
-  private manager: AutocompleteManager;
+  public manager: AutocompleteManager;
   private selectedIndex = 0;
   private _targetElement: Element | null = null;
 

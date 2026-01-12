@@ -65,7 +65,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UIEngine = void 0;
-const neo_blessed_1 = __importDefault(require("neo-blessed"));
+const blessed_1 = __importDefault(require("./blessed/index"));
+const dockable_panel_1 = require("./blessed/widgets/dockable-panel");
 /**
  * UI Engine - Neo-Blessed Integration
  *
@@ -77,7 +78,7 @@ class UIEngine {
         this.elements = new Map();
         this.focusStack = [];
         // Create blessed screen with optimizations
-        this.screen = neo_blessed_1.default.screen({
+        this.screen = blessed_1.default.screen({
             width: options.width || 80,
             height: options.height || 24,
             smartCSR: options.smartCSR !== false,
@@ -123,9 +124,12 @@ class UIEngine {
      * ```
      */
     createBox(options) {
-        const box = neo_blessed_1.default.box({
+        const fixedDefault = options.fixed !== undefined ? options.fixed : (options.parent instanceof dockable_panel_1.DockablePanel);
+        const box = new dockable_panel_1.DockablePanel({
             ...options,
+            fixed: fixedDefault,
             parent: options.parent || this.screen,
+            useTitleBar: false,
         });
         if (options.id) {
             this.elements.set(options.id, box);
@@ -136,7 +140,7 @@ class UIEngine {
      * Create a text element - optimized for simple text display
      */
     createText(options) {
-        const text = neo_blessed_1.default.text({
+        const text = blessed_1.default.text({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -149,7 +153,7 @@ class UIEngine {
      * Create a line element - for dividers
      */
     createLine(options) {
-        const line = neo_blessed_1.default.line({
+        const line = blessed_1.default.line({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -182,7 +186,7 @@ class UIEngine {
      * ```
      */
     createList(options) {
-        const list = neo_blessed_1.default.list({
+        const list = blessed_1.default.list({
             ...options,
             parent: options.parent || this.screen,
             keys: true,
@@ -207,7 +211,7 @@ class UIEngine {
      * Create a file manager widget for directory browsing
      */
     createFileManager(options) {
-        const fm = neo_blessed_1.default.filemanager({
+        const fm = blessed_1.default.filemanager({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -220,7 +224,7 @@ class UIEngine {
      * Create a table with rows and columns
      */
     createListTable(options) {
-        const table = neo_blessed_1.default.listtable({
+        const table = blessed_1.default.listtable({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -251,7 +255,7 @@ class UIEngine {
      * ```
      */
     createForm(options) {
-        const form = neo_blessed_1.default.form({
+        const form = blessed_1.default.form({
             ...options,
             parent: options.parent || this.screen,
             keys: true,
@@ -265,7 +269,7 @@ class UIEngine {
      * Create a single-line text input
      */
     createTextbox(options) {
-        const textbox = neo_blessed_1.default.textbox({
+        const textbox = blessed_1.default.textbox({
             ...options,
             parent: options.parent || this.screen,
             inputOnFocus: true,
@@ -279,7 +283,7 @@ class UIEngine {
      * Create a multi-line text input
      */
     createTextarea(options) {
-        const textarea = neo_blessed_1.default.textarea({
+        const textarea = blessed_1.default.textarea({
             ...options,
             parent: options.parent || this.screen,
             inputOnFocus: true,
@@ -293,7 +297,7 @@ class UIEngine {
      * Create a button
      */
     createButton(options) {
-        const button = neo_blessed_1.default.button({
+        const button = blessed_1.default.button({
             ...options,
             parent: options.parent || this.screen,
             mouse: true,
@@ -308,7 +312,7 @@ class UIEngine {
      * Create a checkbox
      */
     createCheckbox(options) {
-        const checkbox = neo_blessed_1.default.checkbox({
+        const checkbox = blessed_1.default.checkbox({
             ...options,
             parent: options.parent || this.screen,
             mouse: true,
@@ -323,7 +327,7 @@ class UIEngine {
      * Create a radio button set
      */
     createRadioSet(options) {
-        const radioSet = neo_blessed_1.default.radioset({
+        const radioSet = blessed_1.default.radioset({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -339,7 +343,7 @@ class UIEngine {
      * Create a prompt dialog
      */
     createPrompt(options) {
-        const prompt = neo_blessed_1.default.prompt({
+        const prompt = blessed_1.default.prompt({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -352,7 +356,7 @@ class UIEngine {
      * Create a message dialog
      */
     createMessage(options) {
-        const message = neo_blessed_1.default.message({
+        const message = blessed_1.default.message({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -365,7 +369,7 @@ class UIEngine {
      * Create a loading spinner
      */
     createLoading(options) {
-        const loading = neo_blessed_1.default.loading({
+        const loading = blessed_1.default.loading({
             ...options,
             parent: options.parent || this.screen,
         });
@@ -395,7 +399,7 @@ class UIEngine {
      * ```
      */
     createProgressBar(options) {
-        const progressBar = neo_blessed_1.default.progressbar({
+        const progressBar = blessed_1.default.progressbar({
             ...options,
             parent: options.parent || this.screen,
             style: {
@@ -414,7 +418,7 @@ class UIEngine {
      * Create a scrollable log display
      */
     createLog(options) {
-        const log = neo_blessed_1.default.log({
+        const log = blessed_1.default.log({
             ...options,
             parent: options.parent || this.screen,
             scrollable: true,
@@ -437,7 +441,7 @@ class UIEngine {
      * Create a table
      */
     createTable(options) {
-        const table = neo_blessed_1.default.table({
+        const table = blessed_1.default.table({
             ...options,
             parent: options.parent || this.screen,
         });

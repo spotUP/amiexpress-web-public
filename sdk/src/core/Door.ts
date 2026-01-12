@@ -148,6 +148,9 @@ export class Door {
       storage,
       params,
       bbs,
+      close: async () => {
+        this.isRunning = false;
+      },
     };
   }
 

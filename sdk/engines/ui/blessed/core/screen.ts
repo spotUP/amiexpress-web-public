@@ -14,6 +14,7 @@ import type { ScreenOptions, KeyEvent, MouseEvent } from './types';
 const ESC = String.fromCharCode(27);
 
 export class Screen extends Element {
+  declare options: ScreenOptions;
   private _width: number;
   private _height: number;
   declare focused: boolean;
@@ -93,7 +94,7 @@ export class Screen extends Element {
   private _dirtyElements: Set<Element> = new Set();
   private _fullRedrawNeeded: boolean = true;
 
-  constructor(options: ScreenOptions & { output?: (data: string) => void; responsive?: boolean } = {}) {
+  constructor(options: ScreenOptions & { input?: any; output?: (data: string) => void; responsive?: boolean } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
     // - Height: 24 rows (classic BBS standard)
@@ -133,6 +134,7 @@ export class Screen extends Element {
 
     // Create Program instance
     this.program = new Program({
+      input: options.input,
       output: this.output,
       terminal: options.terminal || 'ansi',
       buffer: true,
@@ -2007,7 +2009,7 @@ export class Screen extends Element {
     }
 
     // Default Tab/Shift-Tab and Arrow keys for focus navigation (only if not handled by widget)
-    if (!handled) {
+    if (!handled && this.options.focusKeys !== false) {
       const keyName = key.name;
       if (keyName === 'tab') {
         if (key.shift) {
@@ -2019,16 +2021,22 @@ export class Screen extends Element {
         return;
       }
       
-      // Arrow keys for focus navigation (when not handled by widget)
+      // Arrow keys for focus navigation (only if not handled by widget)
       if (!key.shift && (keyName === 'up' || keyName === 'left')) {
+        const prev = this._focused;
         this.focusPrevious();
-        this.render();
-        return;
+        if (this._focused !== prev) {
+          this.render();
+          return;
+        }
       }
       if (!key.shift && (keyName === 'down' || keyName === 'right')) {
+        const prev = this._focused;
         this.focusNext();
-        this.render();
-        return;
+        if (this._focused !== prev) {
+          this.render();
+          return;
+        }
       }
     }
 

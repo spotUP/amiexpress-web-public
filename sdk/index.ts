@@ -109,7 +109,7 @@ export { CardEngine } from './engines/cards/card-engine';
 export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';
-export { convertUnicodeBoxToACS, createScreen } from './utils/blessed-helpers';
+export * from './utils/blessed-helpers';
 export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialogOptions, ConfirmDialogOptions, ListSelectionOptions, StatusBarOptions } from './engines/ui';
 export type {
   BackStyle,
@@ -201,6 +201,8 @@ export {
   ContextMenu,
   Panel,
   DockablePanel,
+  DropdownMenu,
+  dropdownMenu,
   Autocomplete,
   AutocompleteTextbox,
   AutocompleteManager,
@@ -238,6 +240,8 @@ export type {
   ColorPickerOptions,
   FileExplorerOptions,
 } from './engines/ui/blessed/core/types';
+
+export type { DropdownMenuOptions, DropdownMenuItem } from './engines/ui/blessed/widgets/dropdown-menu';
 
 // Export AutocompleteTextboxOptions separately (defined in widget file, not core/types)
 export type { AutocompleteTextboxOptions } from './engines/ui/blessed/widgets/autocomplete-textbox';

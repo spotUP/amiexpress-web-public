@@ -1379,6 +1379,7 @@ export class Program extends EventEmitter {
   }
 
   private _inputBuffer: string = '';
+  private _escTimer: any = null;
 
   /**
    * Handle input data
@@ -1386,10 +1387,17 @@ export class Program extends EventEmitter {
   _handleData(data: string): void {
     if (this._paused) return;
 
+    // Clear escape timer if more data arrives
+    if (this._escTimer) {
+      clearTimeout(this._escTimer);
+      this._escTimer = null;
+    }
+
     this._inputBuffer += data;
 
     while (this._inputBuffer.length > 0) {
       let processed = false;
+      // ... (rest of method remains mostly same but handles break differently)
 
       // 1. Check for JSON mouse events from web frontend (Socket.IO)
       if (this._inputBuffer.startsWith('{')) {
@@ -1399,7 +1407,20 @@ export class Program extends EventEmitter {
           try {
             const json = JSON.parse(chunk);
             console.log(`[Program._handleData] JSON parsed: type=${json.type} mouseEnabled=${this._mouseEnabled}`);
-            if (json.type && this._mouseEnabled) {
+            
+            if (json.type === 'key' || (json.name && !json.type)) {
+              // Handle JSON key event
+              const keyEvent: KeyEvent = {
+                name: json.name || '',
+                ctrl: json.ctrl || false,
+                meta: json.meta || json.alt || false,
+                shift: json.shift || false,
+                sequence: json.sequence || json.raw || '',
+                full: json.full || json.name || '',
+              };
+              this._emitKey(keyEvent.sequence, keyEvent);
+              processed = true;
+            } else if (json.type && this._mouseEnabled) {
               const mouseEvent = this.parseJsonMouseEvent(json);
               console.log(`[Program._handleData] mouseEvent=${JSON.stringify(mouseEvent)}`);
               if (mouseEvent) {
@@ -1410,12 +1431,14 @@ export class Program extends EventEmitter {
                 this.emit('mouse', mouseEvent);
                 console.log(`[Program._handleData] Emitted mouse event`);
               }
+              processed = true;
             } else if (json.type && !this._mouseEnabled) {
               console.log(`[Program._handleData] Mouse NOT enabled, ignoring JSON mouse event`);
+              processed = true;
             }
+            
             this._inputBuffer = this._inputBuffer.slice(endIdx + 1);
-            processed = true;
-            continue;
+            if (processed) continue;
           } catch (e) {
             // Not valid JSON yet or ever, fall through to normal parsing if it's not JSON
           }
@@ -1494,7 +1517,16 @@ export class Program extends EventEmitter {
         if (singleByte === ESC && this._inputBuffer.length === 1) {
           // Wait to see if more comes
           // But after a short timeout we should treat it as Esc
-          // For now, let's just break and wait
+          this._escTimer = setTimeout(() => {
+            this._escTimer = null;
+            if (this._inputBuffer === ESC) {
+              const key = this.parseKey(ESC);
+              if (key) {
+                this._emitKey(ESC, key);
+              }
+              this._inputBuffer = '';
+            }
+          }, 100);
           break;
         }
 

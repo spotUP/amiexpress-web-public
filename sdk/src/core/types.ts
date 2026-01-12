@@ -131,6 +131,9 @@ export interface DoorContext {
 
   /** BBS session (for advanced use cases like blessed) */
   bbsSession?: any;
+
+  /** Close the door and return to BBS */
+  close(): Promise<void>;
 }
 
 // ===== Output API =====

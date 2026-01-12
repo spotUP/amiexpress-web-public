@@ -39,6 +39,7 @@ import { Box } from './box';
 import { List } from './list';
 import { Button } from './button';
 import { Textbox } from './textbox';
+import { DockablePanel } from './dockable-panel';
 import { EventEmitter } from '../core/events';
 import type { Screen } from '../core/screen';
 import type { ElementOptions } from '../core/types';
@@ -338,49 +339,79 @@ export class MultiplayerLobby extends EventEmitter {
     // Calculate heights for right panels to fit in available space
     const startRow = 1; // Start panels immediately below title
     let roomSettingsHeight = 6;
-    let settingsEditorHeight = hasSettingsEditor ? Math.min(this.gameSettings.length + 2, 8) : 0;
+    let settingsEditorHeight = hasSettingsEditor ? Math.min(this.gameSettings.length + 2, 6) : 0;
     let chatHeight = hasChat ? 6 : 0;
     let leaderboardHeight = hasLeaderboard ? 4 : 0;
+    const teamSelectorHeight = hasTeams ? 6 : 0;
+    const playerListHeight = this.features.slotBased ? 6 : (hasTeams ? 12 : 14);
+    const panelContentTop = 1;
+    const panelContentWidth = (panelWidth: number) => Math.max(1, panelWidth - 2);
+    const panelContentHeight = (panelHeight: number) => Math.max(1, panelHeight - 3);
 
     // Player list (left side) - reasonable height for typical lobbies
-    const playerListHeight = hasTeams ? 12 : 14;
-    this.playerList = new List({
+    const playerPanel = new DockablePanel({
       parent: this.container,
       top: startRow,
       left: 2,
       width: playerListWidth,
       height: playerListHeight,
-      border: { type: 'line' },
-      label: this.features.slotBased ? ' Players (Slots) ' : ' Players ',
-      style: {
-        border: { fg: 'cyan' },
-        selected: { bg: 'blue', fg: 'white' },
-      },
+      label: this.features.slotBased ? 'Players (Slots)' : 'Players',
+      style: { border: { fg: 'cyan' }, bg: 'black' },
+      fitContent: false,
+      allowAutoDock: true,
+      resizable: true,
+      draggable: true,
+      dockPosition: 'float',
+      persistenceKey: 'multiplayer-lobby.players',
+    });
+    this.playerList = new List({
+      parent: playerPanel,
+      top: panelContentTop,
+      left: 0,
+      width: panelContentWidth(playerListWidth),
+      height: panelContentHeight(playerListHeight),
       items: [],
       mouse: true,
       keys: true,
       vi: true,
       tags: true,
+      style: {
+        fg: 'white',
+        selected: { bg: 'blue', fg: 'white' },
+      },
     });
 
     // Team selector (below player list, if teams enabled)
     if (hasTeams) {
-      this.teamSelector = new List({
+      const teamPanel = new DockablePanel({
         parent: this.container,
         top: startRow + playerListHeight,
         left: 2,
         width: playerListWidth,
-        height: 6,
-        border: { type: 'line' },
-        label: ' Select Team ',
-        style: {
-          border: { fg: 'magenta' },
-          selected: { bg: 'magenta', fg: 'white' },
-        },
+        height: teamSelectorHeight,
+        label: 'Select Team',
+        style: { border: { fg: 'magenta' }, bg: 'black' },
+        fitContent: false,
+        allowAutoDock: true,
+        resizable: true,
+        draggable: true,
+        dockPosition: 'float',
+        persistenceKey: 'multiplayer-lobby.teams',
+      });
+      this.teamSelector = new List({
+        parent: teamPanel,
+        top: panelContentTop,
+        left: 0,
+        width: panelContentWidth(playerListWidth),
+        height: panelContentHeight(teamSelectorHeight),
         items: ['No Team'],
         mouse: true,
         keys: true,
         tags: true,
+        style: {
+          fg: 'white',
+          selected: { bg: 'magenta', fg: 'white' },
+        },
       });
 
       this.teamSelector.on('select', (_item: unknown, index: number) => {
@@ -388,46 +419,65 @@ export class MultiplayerLobby extends EventEmitter {
       });
     }
 
+    // Left column stack offset for panels below player list
+    let leftTop = startRow + playerListHeight + teamSelectorHeight;
+
     // Right side panels - stack vertically (aligned with player list)
     let rightTop = startRow;
     const rightLeft = playerListWidth + 4;
 
-    // Room settings panel (always visible)
-    this.settingsBox = new Box({
+    // Room settings panel (always visible) - move to left column
+    const settingsPanel = new DockablePanel({
       parent: this.container,
-      top: rightTop,
-      left: rightLeft,
-      width: rightPanelWidth,
+      top: leftTop,
+      left: 2,
+      width: playerListWidth,
       height: roomSettingsHeight,
-      border: { type: 'line' },
-      label: ' Room Settings ',
-      style: { border: { fg: 'green' } },
+      label: 'Room Settings',
+      style: { border: { fg: 'green' }, bg: 'black' },
+      fitContent: false,
+      allowAutoDock: true,
+      resizable: true,
+      draggable: true,
+      dockPosition: 'float',
+      persistenceKey: 'multiplayer-lobby.room-settings',
+    });
+    this.settingsBox = new Box({
+      parent: settingsPanel,
+      top: panelContentTop,
+      left: 0,
+      width: panelContentWidth(playerListWidth),
+      height: panelContentHeight(roomSettingsHeight),
       content: '',
       tags: true,
     });
-    rightTop += roomSettingsHeight;
+    leftTop += roomSettingsHeight;
 
     // Settings editor (if enabled) - uses a List for keyboard navigation
     if (hasSettingsEditor) {
-      this.settingsEditorBox = new Box({
+      this.settingsEditorBox = new DockablePanel({
         parent: this.container,
-        top: rightTop,
-        left: rightLeft,
-        width: rightPanelWidth,
+        top: leftTop,
+        left: 2,
+        width: playerListWidth,
         height: settingsEditorHeight,
-        border: { type: 'line' },
-        label: ' Game Options (O) ',
-        style: { border: { fg: 'yellow' } },
-        tags: true,
+        label: 'Game Options (O)',
+        style: { border: { fg: 'yellow' }, bg: 'black' },
+        fitContent: false,
+        allowAutoDock: true,
+        resizable: true,
+        draggable: true,
+        dockPosition: 'float',
+        persistenceKey: 'multiplayer-lobby.game-options',
       });
 
       // Create list for settings navigation
       this.settingsEditorList = new List({
         parent: this.settingsEditorBox,
-        top: 0,
+        top: panelContentTop,
         left: 0,
-        width: rightPanelWidth - 4,
-        height: settingsEditorHeight - 2,
+        width: panelContentWidth(playerListWidth),
+        height: panelContentHeight(settingsEditorHeight),
         items: [],
         mouse: true,
         keys: true,
@@ -448,53 +498,76 @@ export class MultiplayerLobby extends EventEmitter {
         this.selectedSettingIndex = index;
       });
 
-      rightTop += settingsEditorHeight;
+      leftTop += settingsEditorHeight;
       this.updateSettingsEditor();
     }
 
-    // Chat panel (if enabled) - contains leaderboard as sub-panel
+    const screenHeight = typeof this.parent.height === 'number' ? this.parent.height : 24;
+    const rightAvailableHeight = screenHeight - 2 - startRow;
+
+    // Leaderboard panel (if enabled) - standalone panel above chat
+    if (hasLeaderboard) {
+      const preferredLeaderboardHeight = Math.min(8, Math.max(4, Math.floor(rightAvailableHeight * 0.35)));
+      leaderboardHeight = preferredLeaderboardHeight;
+      const leaderboardPanel = new DockablePanel({
+        parent: this.container,
+        top: rightTop,
+        left: rightLeft,
+        width: rightPanelWidth,
+        height: leaderboardHeight,
+        label: 'Leaderboard',
+        style: { border: { fg: 'cyan' }, bg: 'black' },
+        fitContent: false,
+        allowAutoDock: true,
+        resizable: true,
+        draggable: true,
+        dockPosition: 'float',
+        persistenceKey: 'multiplayer-lobby.leaderboard',
+      });
+      this.leaderboardBox = new Box({
+        parent: leaderboardPanel,
+        top: panelContentTop,
+        left: 0,
+        width: panelContentWidth(rightPanelWidth),
+        height: panelContentHeight(leaderboardHeight),
+        content: '{gray-fg}No data{/gray-fg}',
+        tags: true,
+      });
+      rightTop += leaderboardHeight;
+    }
+
+    // Chat panel (if enabled)
     if (hasChat) {
-      // Calculate remaining space for chat (leave room for buttons at row 23)
-      const remainingHeight = 22 - rightTop;
+      // Fill remaining space in right column
+      const remainingHeight = rightAvailableHeight - (rightTop - startRow);
       chatHeight = Math.max(6, remainingHeight);
 
-      this.chatBox = new Box({
+      this.chatBox = new DockablePanel({
         parent: this.container,
         top: rightTop,
         left: rightLeft,
         width: rightPanelWidth,
         height: chatHeight,
-        border: { type: 'line' },
-        label: ' Chat ',
-        style: { border: { fg: 'white' } },
-        tags: true,
+        label: 'Chat',
+        style: { border: { fg: 'white' }, bg: 'black' },
+        fitContent: false,
+        allowAutoDock: true,
+        resizable: true,
+        draggable: true,
+        dockPosition: 'float',
+        persistenceKey: 'multiplayer-lobby.chat',
       });
 
-      // If leaderboard is enabled, show it as a sub-section inside chat area
-      if (hasLeaderboard) {
-        this.leaderboardBox = new Box({
-          parent: this.chatBox,
-          top: 0,
-          left: 0,
-          width: rightPanelWidth - 2,
-          height: leaderboardHeight,
-          border: { type: 'line' },
-          label: ' Leaderboard ',
-          style: { border: { fg: 'cyan' } },
-          content: '{gray-fg}No data{/gray-fg}',
-          tags: true,
-        });
-      }
-
-      // Chat message log (below leaderboard if present)
-      const chatLogTop = hasLeaderboard ? leaderboardHeight : 0;
-      const chatLogHeight = chatHeight - 4 - chatLogTop;
+      // Chat message log
+      const chatContentHeight = panelContentHeight(chatHeight);
+      const chatLogTop = panelContentTop;
+      const chatLogHeight = Math.max(1, chatContentHeight - 1);
       this.chatLog = new List({
         parent: this.chatBox,
         top: chatLogTop,
         left: 0,
-        width: rightPanelWidth - 4,
-        height: Math.max(2, chatLogHeight),
+        width: panelContentWidth(rightPanelWidth),
+        height: chatLogHeight,
         items: [],
         mouse: true,
         scrollable: true,
@@ -506,7 +579,7 @@ export class MultiplayerLobby extends EventEmitter {
         parent: this.chatBox,
         bottom: 0,
         left: 0,
-        width: rightPanelWidth - 4,
+        width: panelContentWidth(rightPanelWidth),
         height: 1,
         style: {
           fg: 'white',
@@ -526,23 +599,6 @@ export class MultiplayerLobby extends EventEmitter {
       });
 
       rightTop += chatHeight;
-    } else {
-      // No chat - show leaderboard as standalone panel
-      if (hasLeaderboard) {
-        this.leaderboardBox = new Box({
-          parent: this.container,
-          top: rightTop,
-          left: rightLeft,
-          width: rightPanelWidth,
-          height: leaderboardHeight + 2,
-          border: { type: 'line' },
-          label: ' Leaderboard ',
-          style: { border: { fg: 'cyan' } },
-          content: '{gray-fg}No data{/gray-fg}',
-          tags: true,
-        });
-        rightTop += leaderboardHeight + 2;
-      }
     }
 
     // Status box - hidden when chat is enabled (use chat for status messages)
@@ -561,8 +617,8 @@ export class MultiplayerLobby extends EventEmitter {
     });
 
     // Buttons row - position below the tallest panel
-    const leftPanelBottom = startRow + playerListHeight + (hasTeams ? 6 : 0);
-    const buttonTop = Math.max(leftPanelBottom, rightTop) + 1;
+    const leftPanelBottom = leftTop;
+    const buttonTop = Math.max(leftPanelBottom, rightTop);
     let buttonLeft = 2;
 
     // Ready button
