@@ -107,6 +107,7 @@ function initScreen(): void {
   });
 
   gameArea = blessed.box({
+    fixed: true,
     parent: screen,
     top: 1,
     left: 0,
@@ -168,6 +169,7 @@ function showMenu(): void {
   });
 
   menuBox = blessed.box({
+    fixed: true,
     parent: gameArea,
     top: "center",
     left: "center",
@@ -213,6 +215,7 @@ async function showHighscores(): Promise<void> {
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
+    fixed: true,
     parent: gameArea,
     top: "center",
     left: "center",
@@ -256,6 +259,7 @@ function showHelp(): void {
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
+    fixed: true,
     parent: gameArea,
     top: "center",
     left: "center",
@@ -412,6 +416,7 @@ function showPauseScreen(): void {
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
+    fixed: true,
     parent: gameArea,
     top: "center",
     left: "center",
@@ -477,6 +482,7 @@ function showNameEntry(): void {
   if (menuBox) menuBox.destroy();
 
   menuBox = blessed.box({
+    fixed: true,
     parent: gameArea,
     top: "center",
     left: "center",

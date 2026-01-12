@@ -2,7 +2,9 @@ import {
   blessed,
   UIHelpers,
   AnsiColor,
-  convertUnicodeBoxToACS
+  convertUnicodeBoxToACS,
+  setupInputHandler,
+  removeInputHandler
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -38,12 +40,7 @@ export async function execute(session: any) {
   screen.clear();
 
   // Connect input
-  if (bbsSession) {
-    bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
+  setupInputHandler(session, screen);
 
   // ========== UI COMPONENTS ========== 
   // ... (rest of the component setup code)
@@ -232,9 +229,7 @@ export async function execute(session: any) {
     console.log('[RIP Browser] Entering event loop promise');
     screen.on('destroy', () => {
       console.log('[RIP Browser] Screen destroyed, resolving promise');
-      if (bbsSession) {
-        bbsSession.doorInputHandler = null;
-      }
+      removeInputHandler(session);
       resolve();
     });
   });

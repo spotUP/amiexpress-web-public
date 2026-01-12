@@ -4,7 +4,7 @@
  * Professional UI overlays using SDK UI engine
  */
 
-import { UIEngine, UIHelpers } from '@amiexpress/bbs-door-sdk';
+import { UIEngine, UIHelpers, List, Box, Button, ScrollableBox, Message, ConfirmModal, ColorPicker } from '@amiexpress/bbs-door-sdk';
 import { Tool, COLOR_NAMES, DRAW_CHARS, SHORTCUTS } from './types.js';
 
 // Use any for blessed elements to avoid type conflicts between SDK and @types/blessed
@@ -62,7 +62,8 @@ export class ToolSelectorModal extends BaseModal {
         { label: 'Shifter', value: 'shifter' as Tool, icon: '<', desc: 'Shift half-blocks' },
       ];
 
-      this.container = this.ui.createBox({
+      const list = new List({
+        parent: this.ui.screen,
         top: 'center',
         left: 'center',
         width: 55,
@@ -73,28 +74,20 @@ export class ToolSelectorModal extends BaseModal {
           fg: 'white',
           bg: 'blue',
           border: { fg: 'cyan' },
-        },
-        shadow: true,
-      });
-
-      const list = this.ui.createList({
-        parent: this.container,
-        top: 0,
-        left: 0,
-        width: 53,
-        height: 14,
-        wrapItems: false,
-        items: toolOptions.map(t => ` ${t.icon}  ${t.label.padEnd(12)} ${t.desc}`),
-        keys: true,
-        vi: true,
-        mouse: true,
-        style: {
           selected: {
             bg: 'cyan',
             fg: 'black',
           },
         },
+        shadow: true,
+        wrapItems: false,
+        items: toolOptions.map(t => ` ${t.icon}  ${t.label.padEnd(12)} ${t.desc}`),
+        keys: true,
+        vi: true,
+        mouse: true,
       });
+
+      this.container = list; // For close() cleanup
 
       // Set selected index to current tool
       const currentIndex = toolOptions.findIndex(t => t.value === this.currentTool);
@@ -117,12 +110,15 @@ export class ToolSelectorModal extends BaseModal {
       });
 
       // Show help
-      this.ui.createText({
-        parent: this.container,
-        bottom: 0,
-        left: 1,
-        content: 'ARROWS: Navigate | ENTER: Select | ESC: Cancel',
-        style: { fg: 'yellow' },
+      const footer = new Box({ // Text widget doesn't have parent-relative width easily without box
+          parent: list,
+          bottom: 0,
+          left: 0,
+          height: 1,
+          width: '100%-2',
+          content: ' ARROWS: Navigate | ENTER: Select | ESC: Cancel',
+          style: { fg: 'yellow' },
+          tags: true
       });
 
       list.focus();
@@ -147,7 +143,8 @@ export class ColorPickerModal extends BaseModal {
 
   async show(): Promise<{ fg: number; bg: number } | null> {
     return new Promise((resolve) => {
-      this.container = this.ui.createBox({
+      this.container = new Box({
+        parent: this.ui.screen,
         top: 'center',
         left: 'center',
         width: 72,
@@ -167,7 +164,7 @@ export class ColorPickerModal extends BaseModal {
       let mode: 'fg' | 'bg' = 'fg';
 
       // Foreground color list (all 16 colors)
-      const fgList = this.ui.createList({
+      const fgList = new List({
         parent: this.container,
         top: 2,
         left: 2,
@@ -187,7 +184,7 @@ export class ColorPickerModal extends BaseModal {
 
       // Background color list (8 or 16 depending on iCE mode)
       const bgColorCount = this.iceColorsEnabled ? 16 : 8;
-      const bgList = this.ui.createList({
+      const bgList = new List({
         parent: this.container,
         top: 2,
         right: 2,
@@ -212,7 +209,7 @@ export class ColorPickerModal extends BaseModal {
       bgList.select(selectedBg);
 
       // Preview box
-      const preview = this.ui.createBox({
+      const preview = new Box({
         parent: this.container,
         bottom: 0,
         left: 2,
@@ -230,8 +227,7 @@ export class ColorPickerModal extends BaseModal {
         content += ' ';
         preview.setContent(content);
 
-        // Update preview colors (this is simplified - in real implementation
-        // would use proper ANSI codes)
+        // Update preview colors
         preview.style.fg = COLOR_NAMES[selectedFg].toLowerCase();
         preview.style.bg = COLOR_NAMES[selectedBg].toLowerCase();
       };
@@ -240,14 +236,14 @@ export class ColorPickerModal extends BaseModal {
       fgList.on('select', (_: any, index: number) => {
         selectedFg = index;
         updatePreview();
-        this.ui.render();
+        this.ui.render(true);
       });
 
       // Handle background selection
       bgList.on('select', (_: any, index: number) => {
         selectedBg = index;
         updatePreview();
-        this.ui.render();
+        this.ui.render(true);
       });
 
       // Tab to switch between fg/bg
@@ -263,7 +259,7 @@ export class ColorPickerModal extends BaseModal {
           fgList.style.border!.fg = 'green';
           bgList.style.border!.fg = 'white';
         }
-        this.ui.render();
+        this.ui.render(true);
       };
 
       fgList.key(['tab'], switchFocus);
@@ -313,6 +309,7 @@ export class FileDialogModal extends BaseModal {
   async show(): Promise<string | null> {
     return new Promise((resolve) => {
       this.container = this.ui.createBox({
+        fixed: true,
         top: 'center',
         left: 'center',
         width: 60,
@@ -417,68 +414,25 @@ export class ConfirmDialog extends BaseModal {
 
   async show(): Promise<boolean> {
     return new Promise((resolve) => {
-      this.container = this.ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 50,
-        height: 10,
-        label: ` ${this.title} `,
-        border: { type: 'line' },
-        content: `\n  ${this.message}\n`,
-        style: {
-          fg: 'white',
-          bg: 'blue',
-          border: { fg: 'yellow' },
+      const modal = new ConfirmModal({
+        parent: this.ui.screen,
+        title: this.title,
+        message: this.message,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        confirmColor: 'green',
+        cancelColor: 'red',
+        onConfirm: () => {
+          this.result = true;
+          resolve(true);
         },
-        shadow: true,
+        onCancel: () => {
+          this.result = false;
+          resolve(false);
+        }
       });
 
-      const yesButton = this.ui.createButton({
-        parent: this.container,
-        bottom: 1,
-        left: 8,
-        width: 10,
-        height: 3,
-        content: ' Yes ',
-        border: { type: 'line' },
-        style: {
-          fg: 'white',
-          bg: 'green',
-          focus: { bg: 'cyan' },
-        },
-      });
-
-      const noButton = this.ui.createButton({
-        parent: this.container,
-        bottom: 1,
-        right: 8,
-        width: 10,
-        height: 3,
-        content: ' No ',
-        border: { type: 'line' },
-        style: {
-          fg: 'white',
-          bg: 'red',
-          focus: { bg: 'cyan' },
-        },
-      });
-
-      yesButton.on('press', () => {
-        this.result = true;
-        this.close();
-        resolve(true);
-      });
-
-      noButton.on('press', () => {
-        this.result = false;
-        this.close();
-        resolve(false);
-      });
-
-      yesButton.key(['enter', 'y'], () => yesButton.press());
-      noButton.key(['escape', 'n'], () => noButton.press());
-
-      yesButton.focus();
+      modal.display();
       this.ui.render(true);
     });
   }
@@ -502,45 +456,20 @@ export class MessageDialog extends BaseModal {
     return new Promise((resolve) => {
       const borderColor = this.type === 'error' ? 'red' : this.type === 'warning' ? 'yellow' : 'cyan';
 
-      this.container = this.ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 50,
-        height: 10,
-        label: ` ${this.title} `,
-        border: { type: 'line' },
-        content: `\n  ${this.message}\n`,
+      const modal = new Message({
+        parent: this.ui.screen,
+        title: this.title,
         style: {
-          fg: 'white',
-          bg: 'blue',
-          border: { fg: borderColor },
-        },
-        shadow: true,
+          border: { fg: borderColor }
+        }
       });
 
-      const okButton = this.ui.createButton({
-        parent: this.container,
-        bottom: 1,
-        left: 'center',
-        width: 10,
-        height: 3,
-        content: ' OK ',
-        border: { type: 'line' },
-        style: {
-          fg: 'white',
-          bg: 'blue',
-          focus: { bg: 'cyan' },
-        },
-      });
-
-      okButton.on('press', () => {
-        this.close();
+      modal.display(this.message, () => {
+        modal.destroy();
+        this.ui.render(true);
         resolve();
       });
-
-      okButton.key(['enter', 'escape'], () => okButton.press());
-
-      okButton.focus();
+      
       this.ui.render(true);
     });
   }
@@ -553,26 +482,6 @@ export class MessageDialog extends BaseModal {
 export class HelpDialog extends BaseModal {
   async show(): Promise<void> {
     return new Promise((resolve) => {
-      this.container = this.ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 75,
-        height: 22,
-        label: ' ANSI EDITOR HELP ',
-        border: { type: 'line' },
-        style: {
-          fg: 'white',
-          bg: 'blue',
-          border: { fg: 'cyan' },
-        },
-        shadow: true,
-        scrollable: true,
-        alwaysScroll: true,
-        keys: true,
-        vi: true,
-        mouse: true,
-      });
-
       const helpText = `
                      ANSI EDITOR - COMPLETE REFERENCE GUIDE
 
@@ -700,7 +609,27 @@ export class HelpDialog extends BaseModal {
             Use Arrow Up/Down to scroll - ESC or ENTER to close
       `;
 
-      this.container.setContent(helpText);
+      this.container = new ScrollableBox({
+        parent: this.ui.screen,
+        top: 'center',
+        left: 'center',
+        width: 75,
+        height: 22,
+        label: ' ANSI EDITOR HELP ',
+        border: { type: 'line' },
+        style: {
+          fg: 'white',
+          bg: 'blue',
+          border: { fg: 'cyan' },
+        },
+        shadow: true,
+        scrollable: true,
+        alwaysScroll: true,
+        keys: true,
+        vi: true,
+        mouse: true,
+        content: helpText
+      });
 
       this.container.key(['escape', 'enter', 'q'], () => {
         this.close();
@@ -724,7 +653,15 @@ export class GalleryBrowserModal extends BaseModal {
 
   async show(): Promise<string | null> {
     return new Promise((resolve) => {
-      this.container = this.ui.createBox({
+      // Format file list with nice display names
+      const fileItems = this.files.map(f => {
+        const name = f.replace(/\.(txt|ans|asc|bin|xb)$/i, '');
+        const ext = f.split('.').pop()?.toUpperCase() || '';
+        return `${name.padEnd(40)} [${ext}]`;
+      });
+
+      const list = new List({
+        parent: this.ui.screen,
         top: 'center',
         left: 'center',
         width: 70,
@@ -735,23 +672,12 @@ export class GalleryBrowserModal extends BaseModal {
           fg: 'white',
           bg: 'blue',
           border: { fg: 'cyan' },
+          selected: {
+            bg: 'cyan',
+            fg: 'black',
+          },
         },
         shadow: true,
-      });
-
-      // Format file list with nice display names
-      const fileItems = this.files.map(f => {
-        const name = f.replace(/\.(txt|ans|asc|bin|xb)$/i, '');
-        const ext = f.split('.').pop()?.toUpperCase() || '';
-        return `${name.padEnd(40)} [${ext}]`;
-      });
-
-      const list = this.ui.createList({
-        parent: this.container,
-        top: 1,
-        left: 1,
-        width: 66,
-        height: 14,
         wrapItems: false,
         items: fileItems,
         keys: true,
@@ -764,23 +690,22 @@ export class GalleryBrowserModal extends BaseModal {
             bg: 'blue',
           },
         },
-        style: {
-          selected: {
-            bg: 'cyan',
-            fg: 'black',
-          },
-        },
       });
 
+      this.container = list;
+
       // Instructions
-      const instructions = this.ui.createText({
-        parent: this.container,
-        bottom: 1,
-        left: 2,
-        content: 'Enter - Load and edit | Esc - Cancel',
+      new Box({
+        parent: list,
+        bottom: 0,
+        left: 0,
+        width: '100%-2',
+        height: 1,
+        content: ' Enter - Load and edit | Esc - Cancel',
         style: {
           fg: 'yellow',
         },
+        tags: false
       });
 
       // Handle selection
@@ -811,39 +736,22 @@ export class RecentFilesModal extends BaseModal {
 
   async show(): Promise<string | null> {
     return new Promise((resolve) => {
-      this.container = this.ui.createBox({
-        top: 'center',
-        left: 'center',
-        width: 60,
-        height: 16,
-        label: ' RECENT FILES ',
-        border: { type: 'line' },
-        style: {
-          fg: 'white',
-          bg: 'blue',
-          border: { fg: 'cyan' },
-        },
-        shadow: true,
-      });
-
       // If no recent files, show empty message
       if (this.recentFiles.length === 0) {
-        const emptyMsg = this.ui.createText({
-          parent: this.container,
-          top: 'center',
-          left: 'center',
-          content: 'No recent files',
+        const msg = new Message({
+          parent: this.ui.screen,
+          title: ' RECENT FILES ',
           style: {
-            fg: 'gray',
-          },
+            border: { fg: 'cyan' }
+          }
         });
-
-        this.container.key(['escape', 'enter', 'q'], () => {
-          this.close();
+        
+        msg.display('No recent files', () => {
+          msg.destroy();
+          this.ui.render(true);
           resolve(null);
         });
-
-        this.container.focus();
+        
         this.ui.render(true);
         return;
       }
@@ -855,12 +763,24 @@ export class RecentFilesModal extends BaseModal {
         return `${name.padEnd(35)} [${ext}]`;
       });
 
-      const list = this.ui.createList({
-        parent: this.container,
-        top: 1,
-        left: 1,
-        width: 56,
-        height: 10,
+      const list = new List({
+        parent: this.ui.screen,
+        top: 'center',
+        left: 'center',
+        width: 60,
+        height: 16,
+        label: ' RECENT FILES ',
+        border: { type: 'line' },
+        style: {
+          fg: 'white',
+          bg: 'blue',
+          border: { fg: 'cyan' },
+          selected: {
+            bg: 'cyan',
+            fg: 'black',
+          },
+        },
+        shadow: true,
         wrapItems: false,
         items: fileItems,
         keys: true,
@@ -873,23 +793,22 @@ export class RecentFilesModal extends BaseModal {
             bg: 'blue',
           },
         },
-        style: {
-          selected: {
-            bg: 'cyan',
-            fg: 'black',
-          },
-        },
       });
 
+      this.container = list;
+
       // Instructions
-      const instructions = this.ui.createText({
-        parent: this.container,
-        bottom: 1,
-        left: 2,
-        content: 'Enter - Load file | Esc - Cancel',
+      new Box({
+        parent: list,
+        bottom: 0,
+        left: 0,
+        width: '100%-2',
+        height: 1,
+        content: ' Enter - Load file | Esc - Cancel',
         style: {
           fg: 'yellow',
         },
+        tags: false
       });
 
       // Handle selection

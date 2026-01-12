@@ -3,7 +3,7 @@
  * Handles all modal dialogs, windows, and prompts
  */
 
-import blessed, { Screen, Box, Button, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, Button, List, ScrollableBox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import {
   type DoorSession,
@@ -163,7 +163,8 @@ export class DialogManager {
     this.modalActive = true;
 
     this.overlayShade.show();
-    const modal = createBox({
+    
+    const container = new Box({
       parent: this.overlayShade,
       top: 'center',
       left: 'center',
@@ -174,12 +175,12 @@ export class DialogManager {
       style: { border: UI_THEME.windowBorder, bg: 'black' },
     });
 
-    const textBottom = opts?.footer ? 4 : 3;
-    const text = blessed.scrollabletext({
-      parent: modal,
-      top: 1,
-      left: 1,
-      right: 1,
+    const textBottom = opts?.footer ? 2 : 1;
+    const text = new ScrollableBox({
+      parent: container,
+      top: 0,
+      left: 0,
+      right: 0,
       bottom: textBottom,
       tags: true,
       scrollable: true,
@@ -187,42 +188,37 @@ export class DialogManager {
       keys: true,
       mouse: true,
       content,
-      style: { fg: 'white' },
+      style: { fg: 'white', bg: 'black' },
+      scrollbar: {
+        ch: ' ',
+        style: { bg: 'blue' }
+      }
     });
 
     if (opts?.footer) {
-      createText({
-        parent: modal,
-        bottom: 3,
-        left: 1,
-        right: 1,
+      new Box({
+        parent: container,
+        bottom: 0,
+        left: 0,
+        right: 0,
         height: 1,
         content: opts.footer,
         style: { fg: UI_THEME.accent },
+        tags: true
       });
     }
 
-    const backButton = createButton({
-      parent: modal,
-      bottom: 0,
-      right: 2,
-      width: 10,
-      height: 3,
-      content: '[Back]',
-      mouse: true,
-      style: { fg: 'white', bg: 'blue', border: { fg: 'blue' } },
-    });
-
     const cleanup = (): void => {
-      modal.destroy();
+      container.destroy();
       this.overlayShade.hide();
       this.modalActive = false;
       this.screen.render();
     };
 
-    backButton.on('press', cleanup);
-    modal.key(['escape', 'q'], cleanup);
-    modal.key(['1', '2', '3'], (ch: string) => {
+    container.key(['escape', 'q'], cleanup);
+    text.key(['escape', 'q'], cleanup); // Ensure text widget also handles it
+    
+    container.key(['1', '2', '3'], (ch: string) => {
       if (!opts?.onKey) return;
       const next = opts.onKey(ch);
       if (typeof next === 'string') {
@@ -242,7 +238,7 @@ export class DialogManager {
     this.overlayShade.show();
 
     return new Promise((resolve) => {
-      const modal = createBox({
+      const list = new List({
         parent: this.overlayShade,
         top: 'center',
         left: 'center',
@@ -250,27 +246,20 @@ export class DialogManager {
         height: 16,
         border: { type: 'ascii' },
         label: ` ${title} `,
-        style: { border: UI_THEME.windowBorder, bg: 'black' },
-      });
-
-      const list = createList({
-        parent: modal,
-        top: 1,
-        left: 1,
-        right: 1,
-        bottom: 1,
+        style: {
+          border: UI_THEME.windowBorder,
+          bg: 'black',
+          fg: 'white',
+          selected: { fg: 'black', bg: UI_THEME.highlightBg },
+        } as any,
         items,
         keys: true,
         mouse: true,
         vi: true,
-        style: {
-          fg: 'white',
-          selected: { fg: 'black', bg: UI_THEME.highlightBg },
-        } as any,
       });
 
       const cleanup = (value: number | null): void => {
-        modal.destroy();
+        list.destroy();
         this.overlayShade.hide();
         this.modalActive = false;
         this.screen.render();
@@ -278,7 +267,7 @@ export class DialogManager {
       };
 
       list.on('select', (_: any, index: number) => cleanup(index));
-      modal.key(['escape', 'q'], () => cleanup(null));
+      list.key(['escape', 'q'], () => cleanup(null));
       list.focus();
       this.screen.render();
     });

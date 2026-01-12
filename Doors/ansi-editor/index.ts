@@ -215,7 +215,9 @@ class ANSIEditor {
     // Instead, we let it run in the background
     this.showWelcome().then(() => {
         // Enable mouse support after welcome modal is closed
-        this.ctx.socket.emit('enableMouseEvents', true);
+        if ((this.ctx.bbs as any)?.enableMouseEvents) {
+          (this.ctx.bbs as any).enableMouseEvents();
+        }
     });
 
     // Handle mouse events from socket
@@ -231,7 +233,7 @@ class ANSIEditor {
     if (!this.running) return;
 
     // 1. Feed to UIEngine for modals/blessed widgets
-    this.ui.getScreen().program.emit('data', key.raw);
+    this.ui.getScreen()._handleData(key.raw);
     
     // 2. Handle canvas drawing if no modal is active
     const focused = this.ui.getScreen().getFocused();
@@ -508,7 +510,7 @@ class ANSIEditor {
   }
 
   private emit(data: string): void {
-    this.ctx.socket.emit('data', data);
+    void this.ctx.output.write(data);
   }
 
   // ===========================================================================

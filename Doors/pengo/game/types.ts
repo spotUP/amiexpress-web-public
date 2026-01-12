@@ -11,7 +11,8 @@ export type GameState =
   | "gameover"
   | "highscores"
   | "enterName"
-  | "paused";
+  | "paused"
+  | "help";
 
 export type Direction = "up" | "down" | "left" | "right";
 

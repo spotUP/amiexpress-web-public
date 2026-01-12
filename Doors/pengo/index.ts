@@ -4,7 +4,7 @@
  */
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
-import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { Screen, Box, List, ScrollableBox, Message, Prompt } from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { PengoGame } from "./game/pengo-game";
 import { rpcHandlers } from "./server";
 import { PengoData, InputKey, Direction } from "./game/types";
@@ -60,17 +60,17 @@ const door = new Door({
 });
 
 let gameData: PengoData;
-let screen: ReturnType<typeof blessed.screen>;
-let gameArea: ReturnType<typeof blessed.box>;
-let hudBox: ReturnType<typeof blessed.box>;
-let footerBox: ReturnType<typeof blessed.box>;
-let menuBox: ReturnType<typeof blessed.box> | null = null;
+let screen: Screen;
+let gameArea: Box;
+let hudBox: Box;
+let footerBox: Box;
+let menuBox: any = null; // Can be List, Box, etc.
 let gameLoop: ReturnType<typeof setInterval> | null = null;
 let game: PengoGame | null = null;
 let doorContext: any; // Will be set on start
 
 function initScreen(): void {
-  screen = blessed.screen({
+  screen = new Screen({
     smartCSR: true,
     dockBorders: true,
     title: "Pengo",
@@ -79,7 +79,7 @@ function initScreen(): void {
     input: null as any,
   } as any);
 
-  hudBox = blessed.box({
+  hudBox = new Box({
     parent: screen,
     top: 0,
     left: 0,
@@ -89,17 +89,18 @@ function initScreen(): void {
     content: formatHUD(),
   });
 
-  gameArea = blessed.box({
+  gameArea = new Box({
     parent: screen,
     top: 1,
     left: 0,
     width: GRID_WIDTH * 2,
     height: GRID_HEIGHT + 2,
+    fixed: true,
     tags: true,
     style: { bg: "black" },
   });
 
-  footerBox = blessed.box({
+  footerBox = new Box({
     parent: screen,
     bottom: 0,
     left: 0,
@@ -126,41 +127,44 @@ function showMenu(): void {
 
   if (menuBox) menuBox.destroy();
 
-  const menuContent = [
-    "{cyan-fg}",
-    "  ____                       ",
-    " |  _ \\ ___ _ __   __ _  ___ ",
-    " | |_) / _ \\ '_ \\ / _` |/ _ \\",
-    " |  __/  __/ | | | (_| | (_) |",
-    " |_|   \\___|_| |_|\\__, |\\___/",
-    "                  |___/      ",
-    "{/}",
-    "",
-    "{white-fg}Classic 1982 Sega Puzzle Game{/}",
-    "",
-  ];
-
-  MENU_OPTIONS.forEach((option, index) => {
-    const selected = index === gameData.menuSelection;
-    menuContent.push(
-      `{${selected ? "yellow" : "white"}-fg}${
-        selected ? "> " : "  "
-      }${option}{/}`
-    );
-  });
-
-  menuBox = blessed.box({
+  const menuList = new List({
     parent: gameArea,
     top: "center",
     left: "center",
     width: 40,
-    height: menuContent.length + 2,
+    height: MENU_OPTIONS.length + 4,
     tags: true,
     border: { type: "line" },
-    style: { fg: "white", bg: "black", border: { fg: "cyan" } },
-    content: menuContent.join("\n"),
+    style: {
+      fg: "white",
+      bg: "black",
+      border: { fg: "cyan" },
+      selected: { bg: "blue", fg: "white" }
+    },
+    label: " Pengo ",
+    items: MENU_OPTIONS,
+    keys: true,
+    vi: true,
+    mouse: true
   });
 
+  menuList.on('select', (item: any, index: number) => {
+    if (index === 0) startGame();
+    else if (index === 1) showHighscores();
+    else if (index === 2) showHelp();
+    else {
+      cleanup();
+      doorContext?.close();
+    }
+  });
+
+  menuList.key(['escape', 'q'], () => {
+    cleanup();
+    doorContext?.close();
+  });
+
+  menuList.focus();
+  menuBox = menuList;
   screen.render();
 }
 
@@ -172,14 +176,13 @@ async function showHighscores(): Promise<void> {
     /* cached */
   }
 
-  const content = [
-    "{yellow-fg}HIGH SCORES{/}",
-    "",
+  const items = [
     "{white-fg}RANK  NAME   SCORE     LEVEL{/}",
     "{gray-fg}----  ----  --------   -----{/}",
   ];
+  
   gameData.highscores.slice(0, 10).forEach((score, i) => {
-    content.push(
+    items.push(
       `{cyan-fg}${(i + 1)
         .toString()
         .padStart(2)}.{/}   {white-fg}${score.name.padEnd(
@@ -189,24 +192,44 @@ async function showHighscores(): Promise<void> {
         .padStart(8)}{/}   {green-fg}${score.level.toString().padStart(2)}{/}`
     );
   });
-  content.push("", "{gray-fg}Press any key to return{/}");
 
   if (menuBox) menuBox.destroy();
-  menuBox = blessed.box({
+  
+  const list = new List({
     parent: gameArea,
     top: "center",
     left: "center",
     width: 40,
-    height: content.length + 2,
+    height: items.length + 4,
     tags: true,
     border: { type: "line" },
-    style: { border: { fg: "yellow" } },
-    content: content.join("\n"),
+    style: { border: { fg: "yellow" }, bg: "black", fg: "white" },
+    label: " HIGH SCORES ",
+    items: items,
+    interactive: false // Just display
   });
+
+  // Footer
+  new Box({
+    parent: list,
+    bottom: 0,
+    width: "100%-2",
+    height: 1,
+    content: "{gray-fg}Press any key to return{/}",
+    tags: true
+  });
+
+  list.on('keypress', () => {
+    showMenu();
+  });
+
+  menuBox = list;
+  list.focus(); // Focus to catch keys
   screen.render();
 }
 
 function showHelp(): void {
+  gameData.state = "help"; // Ensure state is set
   const content = [
     "{yellow-fg}HOW TO PLAY{/}",
     "",
@@ -220,22 +243,50 @@ function showHelp(): void {
     "{magenta-fg}TIPS:{/}",
     "Push blocks against wall to stun enemies",
     "Line up diamond blocks for bonus!",
-    "",
-    "{gray-fg}Press any key to return{/}",
-  ];
+  ].join("\n");
 
   if (menuBox) menuBox.destroy();
-  menuBox = blessed.box({
+  
+  const box = new ScrollableBox({
     parent: gameArea,
     top: "center",
     left: "center",
     width: 45,
-    height: content.length + 2,
+    height: 16,
     tags: true,
     border: { type: "line" },
-    style: { border: { fg: "cyan" } },
-    content: content.join("\n"),
+    style: { border: { fg: "cyan" }, bg: "black", fg: "white" },
+    content: content,
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: { ch: " " },
+    keys: true,
+    vi: true,
+    mouse: true
   });
+
+  // Footer
+  new Box({
+    parent: box,
+    bottom: 0,
+    width: "100%-2",
+    height: 1,
+    content: "{gray-fg}Press any key to return{/}",
+    tags: true
+  });
+
+  box.on('keypress', (_ch, key) => {
+    // ScrollableBox uses keys for scrolling. Only exit on specific keys or non-nav keys?
+    // "Press any key to return" implies any.
+    // But we want scrolling.
+    // Let's exit on Enter, Space, Escape.
+    if (['enter', 'space', 'escape'].includes(key.name)) {
+        showMenu();
+    }
+  });
+
+  menuBox = box;
+  box.focus();
   screen.render();
 }
 
@@ -261,9 +312,23 @@ function startGame(): void {
 
 function handleInput(key: string): void {
   const inputKey = normalizeKey(key);
+
+  // Route to widgets for UI states
+  if (["menu", "highscores", "help", "paused", "enterName"].includes(gameData.state)) {
+     const k = { name: inputKey, full: inputKey, shift: false, ctrl: false, meta: false };
+     screen.emit('keypress', key, k);
+     // Fallthrough to manual handlers if widgets don't consume it?
+     // Actually, if using Widgets, we shouldn't call manual handlers.
+     // But we haven't refactored all states yet.
+     // 'menu' is refactored. 'highscores' and 'help' will be.
+     // 'paused' and 'enterName' are next.
+     // For now, let's only return for 'menu'.
+     if (gameData.state === "menu") return;
+  }
+
   switch (gameData.state) {
     case "menu":
-      handleMenuInput(inputKey);
+      // Handled by widget
       break;
     case "highscores":
       showMenu();
@@ -341,7 +406,8 @@ function handleGameInput(key: InputKey): void {
 function showPauseScreen(): void {
   gameData.state = "paused";
   if (menuBox) menuBox.destroy();
-  menuBox = blessed.box({
+  
+  const box = new Box({
     parent: gameArea,
     top: "center",
     left: "center",
@@ -350,8 +416,27 @@ function showPauseScreen(): void {
     tags: true,
     border: { type: "line" },
     style: { border: { fg: "yellow" }, bg: "black" },
-    content: "{yellow-fg}PAUSED{/}\n\n{white-fg}Press P to resume{/}",
+    content: "{center}{yellow-fg}PAUSED{/}\n\n{white-fg}Press P to resume{/}{/center}",
+    keys: true,
+    mouse: true,
+    vi: true
   });
+
+  box.key(['p', 'P'], () => {
+     box.destroy();
+     menuBox = null;
+     gameData.state = "playing";
+     game?.render();
+  });
+
+  box.key(['q', 'escape'], () => {
+     gameData.state = "menu";
+     if (gameLoop) { clearInterval(gameLoop); gameLoop = null; }
+     showMenu();
+  });
+
+  menuBox = box;
+  box.focus();
   screen.render();
 }
 
@@ -387,22 +472,41 @@ function handleGameOverInput(key: InputKey): void {
 
 function showNameEntry(): void {
   if (menuBox) menuBox.destroy();
-  menuBox = blessed.box({
+  
+  const prompt = new Prompt({
     parent: gameArea,
     top: "center",
     left: "center",
-    width: 35,
-    height: 11,
-    tags: true,
+    width: 40,
+    height: 12,
     border: { type: "line" },
     style: { border: { fg: "yellow" }, bg: "black" },
-    content: `{yellow-fg}NEW HIGH SCORE!{/}\n\n{white-fg}Score: {yellow-fg}${
-      gameData.score
-    }{/}\n\n{cyan-fg}Enter initials:{/}\n\n{white-fg}[ ${gameData.playerName.padEnd(
-      3,
-      "_"
-    )} ]{/}\n\n{gray-fg}ENTER when done{/}`,
+    label: " NEW HIGH SCORE! ",
+    text: `Score: {yellow-fg}${gameData.score}{/}\n\nEnter initials:`,
+    value: gameData.playerName,
+    tags: true
   });
+
+  prompt.showInput(undefined, undefined, async (err, value) => {
+      // Prompt destroys itself on submit/cancel
+      menuBox = null;
+      
+      if (!err && value) {
+          gameData.playerName = value.toUpperCase().slice(0, 3);
+          try {
+            await rpcHandlers.saveHighscore({
+                name: gameData.playerName,
+                score: gameData.score,
+                level: gameData.level,
+            });
+          } catch { /* ignore */ }
+          showMenu();
+      } else {
+          showMenu();
+      }
+  });
+
+  menuBox = prompt;
   screen.render();
 }
 

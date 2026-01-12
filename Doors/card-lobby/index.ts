@@ -1214,8 +1214,8 @@ class CardLobbyApp {
       this.tableWindow.options.width = width;
       this.tableWindow.options.height = tableHeight;
       this.logWindow.hide();
-      this.topBar.hide();
-      this.topInfoBar.show();
+      this.topBar.show();
+      this.topInfoBar.hide();
     } else {
       this.lobbyWindow.show();
       this.lobbyWindow.options.width = leftWidth;
@@ -1224,8 +1224,8 @@ class CardLobbyApp {
       this.tableWindow.options.width = rightWidth;
       this.tableWindow.options.height = mainHeight;
       this.logWindow.show();
-      this.topBar.hide();
-      this.topInfoBar.show();
+      this.topBar.show();
+      this.topInfoBar.hide();
     }
 
     this.layoutTablePanels();

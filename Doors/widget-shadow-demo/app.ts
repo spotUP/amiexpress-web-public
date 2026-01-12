@@ -8,7 +8,7 @@
  */
 
 import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, setupInputHandler, removeInputHandler } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
   socket: any;
@@ -83,12 +83,7 @@ export async function createApp(session: DoorSession) {
   }
 
   // Connect input from BBS to screen
-  if (bbsSession) {
-    bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
+  setupInputHandler(session, screen);
 
   // Enable mouse for dragging
   screen.enableMouse();
@@ -266,10 +261,8 @@ export async function createApp(session: DoorSession) {
           bbs.disableMouseEvents();
         }
 
-        // Restore previous input handler
-        if (bbsSession) {
-          bbsSession.doorInputHandler = previousHandler;
-        }
+        // Remove input handler
+        removeInputHandler(session);
       } catch (error) {
         // Silently handle cleanup errors
       }

@@ -75,7 +75,11 @@ import {
   WordProvider,
   type AutocompleteContext,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
-import { createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import {
+  createScreen,
+  setupInputHandler,
+  removeInputHandler
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 /**
  * Global canvas rendering mode for all chart widgets
@@ -123,13 +127,11 @@ export async function createApp(session: DoorSession) {
     fastCSR: false,    // Disable fast CSR as well - forces full redraws instead of scroll optimizations
   });
 
+  // ========== CONNECT INPUT ==========
   if (session.bbsSession) {
     session.bbsSession.inDoorManager = true;
-    session.bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
   }
+  setupInputHandler(session, screen);
 
   // Enable mouse support and standardized toggle (F12/Alt+M)
   screen.enableMouse();
@@ -3501,7 +3503,7 @@ End of sample markdown.`;
     timeouts.forEach(t => clearTimeout(t));
     timeouts.length = 0;
     screen.disableMouse();
-    if (session.bbsSession) delete session.bbsSession.doorInputHandler;
+    removeInputHandler(session);
     screen.destroy();
     if (bbs) {
       bbs.write('\x1b[2J\x1b[H');

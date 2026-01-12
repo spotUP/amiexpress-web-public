@@ -6,7 +6,12 @@
  */
 
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import {
+  createBox,
+  createList,
+  setupInputHandler,
+  removeInputHandler
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
   socket: any;
@@ -158,7 +163,7 @@ export async function createApp(session: DoorSession) {
     bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
     return new Promise<void>((resolve) => {
       const handler = () => {
-        session.bbsSession.doorInputHandler = null;
+        removeInputHandler(session);
         resolve();
       };
       session.bbsSession.doorInputHandler = handler;
@@ -213,12 +218,7 @@ export async function createApp(session: DoorSession) {
   }
 
   // Connect input
-  if (session.bbsSession) {
-    session.bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
+  setupInputHandler(session, screen);
 
   // Create header
   const header = createBox({
@@ -499,9 +499,7 @@ export async function createApp(session: DoorSession) {
 
   // Handle screen destroy
   screen.on('destroy', () => {
-    if (session.bbsSession) {
-      session.bbsSession.doorInputHandler = null;
-    }
+    removeInputHandler(session);
   });
 
   // Initial render

@@ -13,8 +13,7 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { Screen, DockablePanel, Box, Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface BBSStats {
   totalUsers: number;
@@ -38,10 +37,10 @@ class BBSDashboard {
   private systemPanel!: DockablePanel;
   private statsPanel!: DockablePanel;
   private nodesPanel!: DockablePanel;
-  private systemText: any;  // TODO: Type as Box when SDK types are exported
-  private statsText: any;
-  private nodesText: any;
-  private statusText: any;
+  private systemText!: Text;
+  private statsText!: Text;
+  private nodesText!: Text;
+  private statusText!: Text;
   private updateInterval: NodeJS.Timeout | null = null;
   private exitResolve: (() => void) | null = null;
   private resizeHandler: ((width: number, height: number) => void) | null = null;
@@ -109,7 +108,7 @@ class BBSDashboard {
       style: { border: { fg: 'yellow' } },
     });
 
-    this.systemText = createText({
+    this.systemText = new Text({
       parent: this.systemPanel,
       top: 1,
       left: 1,
@@ -137,7 +136,7 @@ class BBSDashboard {
       style: { border: { fg: 'cyan' } },
     });
 
-    this.statsText = createText({
+    this.statsText = new Text({
       parent: this.statsPanel,
       top: 1,
       left: 1,
@@ -165,7 +164,7 @@ class BBSDashboard {
       style: { border: { fg: 'green' } },
     });
 
-    this.nodesText = createText({
+    this.nodesText = new Text({
       parent: this.nodesPanel,
       top: 1,
       left: 1,
@@ -176,7 +175,7 @@ class BBSDashboard {
     });
 
     // Status bar at the bottom
-    this.statusText = createText({
+    this.statusText = new Text({
       parent: this.screen,
       bottom: 0,
       left: 0,

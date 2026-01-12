@@ -9,8 +9,25 @@
  * - Upload new doors
  */
 
-import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList, createText } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import {
+  Screen,
+  DockablePanel,
+  List,
+  Box,
+  Text,
+  ScrollableBox,
+  Prompt,
+  Question,
+  Message,
+  ConfirmModal
+} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import {
+  createBox,
+  createList,
+  createText,
+  setupInputHandler,
+  removeInputHandler
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
   socket: any;
@@ -101,11 +118,9 @@ export async function createApp(session: DoorSession) {
 
   // Only sysops can use door manager
   if (!isSysop) {
-    bbs.write('\r\n\x1b[31mAccess Denied: SysOp access required.\x1b[0m\r\n');
-    bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
     return new Promise<void>((resolve) => {
       const handler = () => {
-        session.bbsSession.doorInputHandler = null;
+        removeInputHandler(session);
         resolve();
       };
       session.bbsSession.doorInputHandler = handler;
@@ -120,7 +135,7 @@ export async function createApp(session: DoorSession) {
     bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
     return new Promise<void>((resolve) => {
       const handler = () => {
-        session.bbsSession.doorInputHandler = null;
+        removeInputHandler(session);
         resolve();
       };
       session.bbsSession.doorInputHandler = handler;
@@ -138,12 +153,7 @@ export async function createApp(session: DoorSession) {
   });
 
   // Connect input
-  if (session.bbsSession) {
-    session.bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
+  setupInputHandler(session, screen);
 
   // Create header
   const header = createBox({
@@ -419,9 +429,7 @@ export async function createApp(session: DoorSession) {
 
   // Handle screen destroy
   screen.on('destroy', () => {
-    if (session.bbsSession) {
-      session.bbsSession.doorInputHandler = null;
-    }
+    removeInputHandler(session);
   });
 
   // Initial render
@@ -469,8 +477,8 @@ export async function createApp(session: DoorSession) {
  * Show door management menu
  */
 function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => Promise<void>) {
-  // Create overlay menu
-  const menuBox = createBox({
+  // Create overlay menu using SDK List widget
+  const menuList = new List({
     parent: screen,
     top: 'center',
     left: 'center',
@@ -478,22 +486,8 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
     height: 12,
     border: { type: 'line' },
     style: {
-      bg: 'black',  // Opaque background for overlay
-      border: { fg: 'cyan' }
-    },
-    label: ` ${door.name} `
-  });
-
-  const menuList = createList({
-    parent: menuBox,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%-3',
-    keys: true,
-    vi: true,
-    mouse: true,
-    style: {
+      bg: 'black',
+      border: { fg: 'cyan' },
       selected: {
         bg: 'blue',
         fg: 'white'
@@ -501,22 +495,24 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
       item: {
         fg: 'white'
       }
-    }
+    },
+    label: ` ${door.name} `,
+    keys: true,
+    vi: true,
+    mouse: true,
+    items: [
+      'View Detailed Info',
+      'Test Door',
+      'Edit .info File',
+      'Browse Archive (TODO)',
+      '{red-fg}Delete Door{/red-fg}',
+      'Cancel'
+    ]
   });
 
-  menuList.setItems([
-    'View Detailed Info',
-    'Test Door',
-    'Edit .info File',
-    'Browse Archive (TODO)',
-    '{red-fg}Delete Door{/red-fg}',
-    'Cancel'
-  ]);
-
-  menuList.focus();
-
-  const footer = createText({
-    parent: menuBox,
+  // Footer help text
+  new Text({
+    parent: menuList,
     bottom: 0,
     left: 1,
     right: 1,
@@ -525,14 +521,10 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
     tags: true
   });
 
-  const escHandler = () => {
-    menuBox.destroy();
-    screen.render();
-  };
+  menuList.focus();
 
   menuList.on('select', (item: any, index: number) => {
-    screen.unkey(['escape'], escHandler);
-    menuBox.destroy();
+    menuList.destroy();
     screen.render();
 
     if (index === 0) {
@@ -553,7 +545,10 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
     // Other options are TODOs for now
   });
 
-  screen.key(['escape'], escHandler);
+  menuList.key(['escape'], () => {
+    menuList.destroy();
+    screen.render();
+  });
 
   screen.render();
 }
@@ -562,165 +557,137 @@ function showDoorMenu(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => P
  * Show delete confirmation dialog
  */
 function showDeleteConfirmation(screen: any, door: DoorInfo, bbs: any, onRefresh?: () => Promise<void>) {
-  const confirmBox = createBox({
+  const modal = new ConfirmModal({
     parent: screen,
-    top: 'center',
-    left: 'center',
-    width: 60,
-    height: 10,
-    border: { type: 'line' },
-    style: {
-      bg: 'black',
-      border: { fg: 'red' }
-    },
-    label: ' {red-fg}Delete Door{/red-fg} ',
-    tags: true
-  });
-
-  const message = createText({
-    parent: confirmBox,
-    top: 1,
-    left: 2,
-    right: 2,
-    height: 4,
+    title: ' Delete Door ',
     content: `{bold}Are you sure you want to delete:{/bold}\n\n` +
              `  {yellow-fg}${door.name}{/yellow-fg} (${door.command})\n\n` +
              `{red-fg}This will delete the door directory and .info files!{/red-fg}`,
-    tags: true
-  });
-
-  const buttonBox = createBox({
-    parent: confirmBox,
-    bottom: 1,
-    left: 'center',
-    width: 30,
-    height: 1,
-    content: '{red-fg}[Y]{/red-fg} Delete  {green-fg}[N]{/green-fg} Cancel',
-    tags: true
-  });
-
-  screen.render();
-
-  const cleanup = () => {
-    screen.unkey(['y', 'Y', 'n', 'N', 'escape']);
-    confirmBox.destroy();
-    screen.render();
-  };
-
-  screen.key(['n', 'N', 'escape'], () => {
-    cleanup();
-  });
-
-  screen.key(['y', 'Y'], async () => {
-    cleanup();
-
-    // Show deleting message
-    const statusBox = createBox({
-      parent: screen,
-      top: 'center',
-      left: 'center',
-      width: 40,
-      height: 5,
-      border: { type: 'line' },
-      style: {
-        bg: 'black',
-        border: { fg: 'yellow' }
-      },
-      content: '\n  {yellow-fg}Deleting door...{/yellow-fg}',
-      tags: true
-    });
-    screen.render();
-
-    try {
-      let result: { success: boolean; message: string } | undefined;
-
-      // Try to use the BBS deleteDoor API
-      if (bbs.deleteDoor) {
-        // Determine if this is a TypeScript door
-        const isTS = door.type === 'TS' || door.type === 'typescript' || door.type === 'SDK';
-        // Use location to get the door name (e.g., "Doors/arkanoid" -> "arkanoid")
-        // For TypeScript doors, location is like "Doors/door-name"
-        // For Amiga doors, we use the command name
-        let doorName: string;
-        if (door.location && door.location.includes('/')) {
-          doorName = door.location.split('/').pop() || door.command;
-        } else if (door.location) {
-          doorName = door.location;
-        } else {
-          doorName = door.command;
-        }
-
-        // For Amiga doors, use the command name directly
-        if (!isTS) {
-          doorName = door.command;
-        }
-
-        result = await bbs.deleteDoor(doorName, isTS);
-      } else {
-        result = { success: false, message: 'Delete API not available' };
-      }
-
-      statusBox.destroy();
-
-      // Show result
-      const resultBox = createBox({
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    confirmColor: 'red',
+    cancelColor: 'green',
+    style: {
+      border: { fg: 'red' }
+    },
+    onConfirm: async () => {
+      // Show deleting message
+      const statusMsg = new Message({
         parent: screen,
         top: 'center',
         left: 'center',
-        width: 50,
-        height: 6,
-        border: { type: 'line' },
-        style: {
-          bg: 'black',
-          border: { fg: result?.success ? 'green' : 'red' }
-        },
-        content: result?.success
-          ? `\n  {green-fg}Door deleted successfully!{/green-fg}\n\n  ${result.message}`
-          : `\n  {red-fg}Delete failed:{/red-fg}\n\n  ${result?.message || 'Unknown error'}`,
-        tags: true
-      });
-      screen.render();
-
-      // Auto-close after 2 seconds and refresh list
-      setTimeout(async () => {
-        try {
-          resultBox.destroy();
-          if (result?.success && onRefresh) {
-            await onRefresh();
-          } else {
-            screen.render();
-          }
-        } catch (error) {
-          console.error('[door-manager] Error after delete:', error);
-          screen.render();
-        }
-      }, 2000);
-
-    } catch (error) {
-      statusBox.destroy();
-
-      const errorBox = createBox({
-        parent: screen,
-        top: 'center',
-        left: 'center',
-        width: 50,
+        width: 40,
         height: 5,
         border: { type: 'line' },
         style: {
           bg: 'black',
-          border: { fg: 'red' }
+          border: { fg: 'yellow' }
         },
-        content: `\n  {red-fg}Error:{/red-fg} ${(error as Error).message}`,
+        label: ' Status ',
+        content: '\n  {yellow-fg}Deleting door...{/yellow-fg}',
         tags: true
       });
+      statusMsg.display('\n  {yellow-fg}Deleting door...{/yellow-fg}'); 
       screen.render();
 
-      setTimeout(() => {
-        errorBox.destroy();
+      try {
+        let result: { success: boolean; message: string } | undefined;
+
+        // Try to use the BBS deleteDoor API
+        if (bbs.deleteDoor) {
+          const isTS = door.type === 'TS' || door.type === 'typescript' || door.type === 'SDK';
+          let doorName: string;
+          if (door.location && door.location.includes('/')) {
+            doorName = door.location.split('/').pop() || door.command;
+          } else if (door.location) {
+            doorName = door.location;
+          } else {
+            doorName = door.command;
+          }
+
+          if (!isTS) {
+            doorName = door.command;
+          }
+
+          result = await bbs.deleteDoor(doorName, isTS);
+        } else {
+          result = { success: false, message: 'Delete API not available' };
+        }
+
+        statusMsg.destroy();
+
+        // Show result
+        const resultMsg = new Message({
+          parent: screen,
+          top: 'center',
+          left: 'center',
+          width: 50,
+          height: 8,
+          border: { type: 'line' },
+          style: {
+            bg: 'black',
+            border: { fg: result?.success ? 'green' : 'red' }
+          },
+          label: result?.success ? ' Success ' : ' Error ',
+          tags: true
+        });
+
+        const msgText = result?.success
+          ? `\n{green-fg}Door deleted successfully!{/green-fg}\n${result.message}`
+          : `\n{red-fg}Delete failed:{/red-fg}\n${result?.message || 'Unknown error'}`;
+
+        resultMsg.display(msgText, async () => {
+           if (result?.success && onRefresh) {
+             await onRefresh();
+           } else {
+             screen.render();
+           }
+           resultMsg.destroy();
+        });
+        
+        // Auto-hide after 2 seconds
+        setTimeout(() => {
+            if (!resultMsg.hidden && !resultMsg.destroyed) {
+                resultMsg.hide();
+            }
+        }, 2000);
+        
         screen.render();
-      }, 3000);
+
+      } catch (error) {
+        statusMsg.destroy();
+
+        const errorMsg = new Message({
+          parent: screen,
+          top: 'center',
+          left: 'center',
+          width: 50,
+          height: 6,
+          border: { type: 'line' },
+          style: {
+            bg: 'black',
+            border: { fg: 'red' }
+          },
+          label: ' Error ',
+          tags: true
+        });
+        
+        errorMsg.display(`\n{red-fg}Error:{/red-fg} ${(error as Error).message}`);
+        
+        setTimeout(() => {
+            if (!errorMsg.hidden && !errorMsg.destroyed) {
+                errorMsg.hide();
+                errorMsg.destroy();
+            }
+        }, 3000);
+        
+        screen.render();
+      }
     }
   });
+  
+  modal.display(); // Changed from show() to display() which sets up overlay/responsive
+  screen.render();
 }
 
 /**
@@ -1015,12 +982,12 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
 
   // Show edit input dialog
   const showEditInput = (label: string, initialValue: string) => {
-    const inputBox = createBox({
+    const prompt = new Prompt({
       parent: screen,
       top: 'center',
       left: 'center',
       width: 60,
-      height: 7,
+      height: 10,
       border: { type: 'line' },
       style: {
         bg: 'black',
@@ -1030,87 +997,31 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
       tags: true
     });
 
-    createText({
-      parent: inputBox,
-      top: 1,
-      left: 2,
-      content: `${label}:`,
-      tags: true
-    });
-
-    const inputField = createBox({
-      parent: inputBox,
-      top: 2,
-      left: 2,
-      width: '100%-6',
-      height: 1,
-      content: state.editBuffer + '_',
-      style: {
-        fg: 'white',
-        bg: 'blue'
-      }
-    });
-
-    createText({
-      parent: inputBox,
-      bottom: 0,
-      left: 2,
-      content: '{yellow-fg}Enter:{/yellow-fg} Save  {yellow-fg}Esc:{/yellow-fg} Cancel',
-      tags: true
-    });
-
-    screen.render();
-
-    // Handle input
-    const handleKey = (ch: string, key: any) => {
-      if (key.name === 'escape') {
-        // Cancel edit
-        state.editingIndex = -1;
-        state.editBuffer = '';
-        screen.removeListener('keypress', handleKey);
-        inputBox.destroy();
-        screen.render();
-        return;
-      }
-
-      if (key.name === 'enter' || key.name === 'return') {
+    prompt.showInput(`${label}:`, initialValue, (err: Error | null, value?: string) => {
+      if (!err && value !== undefined && value !== null) {
         // Save edit
         if (state.editingIndex >= 0 && state.editingIndex < state.entries.length) {
           const entry = state.entries[state.editingIndex];
           if (state.editingKey) {
-            entry.key = state.editBuffer;
+            entry.key = value;
           } else {
-            entry.value = state.editBuffer;
+            entry.value = value;
           }
           state.hasChanges = true;
         }
         state.editingIndex = -1;
         state.editBuffer = '';
-        screen.removeListener('keypress', handleKey);
-        inputBox.destroy();
+        prompt.destroy();
         updateEntryList();
         updateStatus('');
-        return;
-      }
-
-      if (key.name === 'backspace') {
-        if (state.editBuffer.length > 0) {
-          state.editBuffer = state.editBuffer.slice(0, -1);
-          inputField.setContent(state.editBuffer + '_');
-          screen.render();
-        }
-        return;
-      }
-
-      // Regular character
-      if (ch && ch.length === 1 && ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127) {
-        state.editBuffer += ch;
-        inputField.setContent(state.editBuffer + '_');
+      } else {
+        // Cancel
+        state.editingIndex = -1;
+        state.editBuffer = '';
+        prompt.destroy();
         screen.render();
       }
-    };
-
-    screen.on('keypress', handleKey);
+    });
   };
 
   // Add new entry
@@ -1249,7 +1160,8 @@ function showInfoEditor(screen: any, door: DoorInfo, bbs: any) {
  * Show detailed door information overlay
  */
 function showDoorDetails(screen: any, door: DoorInfo, bbs: any) {
-  const detailsBox = createBox({
+  // Container box
+  const container = new Box({
     parent: screen,
     top: 'center',
     left: 'center',
@@ -1257,10 +1169,19 @@ function showDoorDetails(screen: any, door: DoorInfo, bbs: any) {
     height: '80%',
     border: { type: 'line' },
     style: {
-      bg: 'black',  // Opaque background for overlay
+      bg: 'black',
       border: { fg: 'cyan' }
     },
-    label: ` ${door.name} - Details `,
+    label: ` ${door.name} - Details `
+  });
+
+  // Scrollable details content
+  const detailsBox = new ScrollableBox({
+    parent: container,
+    top: 0,
+    left: 0,
+    width: '100%-2',
+    height: '100%-3', // Leave room for footer
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
@@ -1271,7 +1192,12 @@ function showDoorDetails(screen: any, door: DoorInfo, bbs: any) {
     },
     keys: true,
     vi: true,
-    mouse: true
+    mouse: true,
+    tags: true,
+    style: {
+      bg: 'black',
+      fg: 'white'
+    }
   });
 
   // Build details content
@@ -1300,19 +1226,22 @@ function showDoorDetails(screen: any, door: DoorInfo, bbs: any) {
   content += 'door management features.\n';
 
   detailsBox.setContent(content);
-  detailsBox.focus();
-
-  const footer = createText({
-    parent: detailsBox,
+  
+  // Footer
+  new Text({
+    parent: container,
     bottom: 0,
-    left: 1,
-    right: 1,
+    left: 0,
+    width: '100%',
     height: 1,
-    content: '{yellow-fg}Arrows/PgUp/PgDn:{/yellow-fg} Scroll  {yellow-fg}Q/Esc:{/yellow-fg} Close'
+    content: '{yellow-fg}Arrows/PgUp/PgDn:{/yellow-fg} Scroll  {yellow-fg}Q/Esc:{/yellow-fg} Close',
+    tags: true
   });
 
-  screen.key(['q', 'Q', 'escape'], () => {
-    detailsBox.destroy();
+  detailsBox.focus();
+
+  detailsBox.key(['q', 'Q', 'escape'], () => {
+    container.destroy();
     screen.render();
   });
 

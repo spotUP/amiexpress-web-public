@@ -3,7 +3,7 @@
  * Handles all UI building, layout, and rendering operations
  */
 
-import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
@@ -26,7 +26,7 @@ export interface LayoutMetrics {
 export class UIManager {
   private screen: Screen;
   private desktop: Box;
-  public topBar!: Listbar;
+  public topBar!: Box;
   public topInfoBar!: Box;
   public statusBar!: Box;
   public lobbyWindow!: Box;
@@ -48,6 +48,8 @@ export class UIManager {
   public overlayShade!: Box;
   public layout!: LayoutMetrics;
   private dealAnimationInProgress = false;
+  private menuButtons: Box[] = [];
+  private menus: DropdownMenu[] = [];
 
   constructor(screen: Screen, desktop: Box) {
     this.screen = screen;
@@ -70,23 +72,16 @@ export class UIManager {
   }): void {
     const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, exitDoor, runAction } = callbacks;
 
-    this.topBar = blessed.listbar({
+    this.topBar = createBox({
       parent: this.desktop,
       top: 0,
       left: 0,
       width: '100%',
       height: 1,
-      hidden: true,
-      style: UI_THEME.topBar,
-      commands: {
-        Lobby: { callback: () => runAction(focusLobby) },
-        Table: { callback: () => runAction(focusTable) },
-        Profile: { callback: () => runAction(showProfileWindow) },
-        Leaders: { callback: () => runAction(showLeaderboardWindow) },
-        Achieve: { callback: () => runAction(showAchievementsWindow) },
-        Bulls: { callback: () => runAction(showBulletinsWindow) },
-        Quit: { callback: () => runAction(exitDoor) },
-      },
+      fixed: true,
+      hidden: false,
+      style: { fg: 'white', bg: 'blue' },
+      content: '',
     });
 
     this.topInfoBar = createBox({
@@ -96,9 +91,79 @@ export class UIManager {
       width: '100%',
       height: 1,
       tags: true,
-      hidden: false,
+      hidden: true,
       style: { fg: 'white', bg: 'blue' },
       content: ' Card Lobby ',
+    });
+
+    const menuDefs = [
+      {
+        label: 'Lobby',
+        items: [
+          { label: 'Focus Lobby', action: () => runAction(focusLobby) },
+        ],
+      },
+      {
+        label: 'Table',
+        items: [
+          { label: 'Focus Table', action: () => runAction(focusTable) },
+        ],
+      },
+      {
+        label: 'Views',
+        items: [
+          { label: 'Profile', action: () => runAction(showProfileWindow) },
+          { label: 'Leaders', action: () => runAction(showLeaderboardWindow) },
+          { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
+          { label: 'Bulletins', action: () => runAction(showBulletinsWindow) },
+        ],
+      },
+      {
+        label: 'System',
+        items: [
+          { label: 'Quit', action: () => runAction(exitDoor) },
+        ],
+      },
+    ];
+
+    this.menuButtons = [];
+    this.menus = [];
+
+    menuDefs.forEach((menu) => {
+      this.menus.push(new DropdownMenu({ parent: this.screen, label: menu.label, items: menu.items }));
+    });
+
+    const openMenu = (index: number) => {
+      this.menus.forEach((menu, i) => {
+        if (i !== index) menu.close();
+      });
+      this.menus[index].openFor(this.menuButtons[index]);
+    };
+
+    let left = 1;
+    menuDefs.forEach((menu, index) => {
+      const button = createBox({
+        parent: this.topBar,
+        top: 0,
+        left,
+        width: menu.label.length + 2,
+        height: 1,
+        content: `{bold}${menu.label}{/bold}`,
+        style: { fg: 'white', bg: 'blue', focus: { fg: 'black', bg: 'cyan' } },
+        mouse: true,
+        keys: true,
+        clickable: true,
+        fixed: true,
+      });
+
+      button.on('click', () => openMenu(index));
+      button.key(['enter', 'space', 'down'], () => openMenu(index));
+
+      this.menus[index].on('tab-next', () => openMenu((index + 1) % this.menus.length));
+      this.menus[index].on('tab-prev', () => openMenu((index - 1 + this.menus.length) % this.menus.length));
+
+      this.menuButtons.push(button);
+      left += menu.label.length + 3;
     });
   }
 

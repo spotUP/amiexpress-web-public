@@ -33,35 +33,29 @@ export function createDialogs(s: Screen, ib: any) {
     s.render();
   }
 
-  const md = blessed.message({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } } });
-  const pd = blessed.prompt({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
-  const qd = blessed.question({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', trapFocus: true, style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } } });
+  const md = new (require('@amiexpress/bbs-door-sdk').Message)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } } });
+  const pd = new (require('@amiexpress/bbs-door-sdk').Prompt)({ parent: s, top: 'center', left: 'center', width: 50, trapFocus: true, overlay: true, style: { fg: 'white', bg: 'black', border: { fg: 'green' } } });
+  const qd = new (require('@amiexpress/bbs-door-sdk').Question)({ parent: s, top: 'center', left: 'center', width: 45, title: ' Confirm ', trapFocus: true, overlay: true, style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } } });
 
   function showMessageDialog(t: string, cb?: () => void) {
-    mo.position.width = s.width;
-    mo.position.height = s.height;
-    invalidateCache(mo);
-    mo.show();
-    md.once('hide', () => { mo.hide(); ib.focus(); s.render(); });
-    md.display(t, () => { if (cb) cb(); });
+    md.display(t, () => {
+        if (cb) cb();
+        ib.focus(); // Restore focus to input bar
+    });
   }
 
   function showPromptDialog(t: string, v: string, cb: (e: Error | null, val?: string) => void) {
-    mo.position.width = s.width;
-    mo.position.height = s.height;
-    invalidateCache(mo);
-    mo.show();
-    pd.once('hide', () => { mo.hide(); ib.focus(); s.render(); });
-    pd.showInput(t, v, (e, val) => { cb(e, val); });
+    pd.showInput(t, v, (e: Error | null, val?: string) => {
+        cb(e, val);
+        ib.focus();
+    });
   }
 
   function showConfirmDialog(t: string, cb: (a: boolean) => void) {
-    mo.position.width = s.width;
-    mo.position.height = s.height;
-    invalidateCache(mo);
-    mo.show();
-    qd.once('hide', () => { mo.hide(); ib.focus(); s.render(); });
-    qd.ask(t, (a: boolean) => { cb(a); });
+    qd.ask(t, (a: boolean) => {
+        cb(a);
+        ib.focus();
+    });
   }
 
   return { modalOverlay: mo, showModal, hideModal, messageDialog: md, promptDialog: pd, questionDialog: qd, showMessageDialog, showPromptDialog, showConfirmDialog };

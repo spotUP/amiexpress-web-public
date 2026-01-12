@@ -8,6 +8,7 @@
 import { CoreDoor as Door, type DoorContext, type KeyPress } from '@amiexpress/bbs-door-sdk';
 import { Screen, Textbox, Box, Text, Autocomplete, AutocompleteTextbox, AutocompleteManager, UsernameProvider, BBSCodeProvider } from '@amiexpress/bbs-door-sdk';
 import type { AutocompleteContext } from '@amiexpress/bbs-door-sdk';
+import { PassThrough } from 'stream';
 import {
   EditorState,
   Viewport,
@@ -34,27 +35,32 @@ const door = new Door({
   description: 'Full-featured ANSI editor for composing BBS messages',
 });
 
+let activeScreen: Screen | null = null;
+let activeInput: PassThrough | null = null;
+
 door.onStart(async (ctx: DoorContext) => {
   const { bbs, user, output, input } = ctx;
   const username = user?.username || 'Guest';
+
+  if ((bbs as any)?.disableGameMode) {
+    (bbs as any).disableGameMode();
+  }
+
+  // Create input stream to decouple from process.stdin
+  // This prevents double/triple input handling (stdin + door.onInput)
+  const inputThrough = new PassThrough();
+  activeInput = inputThrough;
 
   // Create main screen
   const screen = new Screen({
     smartCSR: true,
     fullUnicode: true,
+    input: inputThrough,
     title: 'Mail Composer',
     output: (data: string) => output.write(data),
   });
 
-  // CRITICAL: Set up input handler to route keyboard events to the screen
-  // Without this, the screen never receives keyboard input!
-  const bbsSession = (ctx as any).bbsSession;
-  if (bbsSession) {
-    bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
+  activeScreen = screen;
 
   // Enable mouse events
   screen.enableMouse();
@@ -62,12 +68,25 @@ door.onStart(async (ctx: DoorContext) => {
     (bbs as any).enableMouseEvents();
   }
 
-  try {
-    // Show composer
-    await showComposer(screen, bbs, username, ctx);
-  } finally {
-    // Cleanup
-    screen.destroy();
+  // Clear screen to remove any previous BBS output
+  output.write('\x1b[2J\x1b[H');
+
+  const runComposer = async () => {
+    try {
+      await showComposer(screen, bbs, username, ctx);
+    } finally {
+      activeScreen = null;
+      activeInput = null;
+      screen.destroy();
+    }
+  };
+
+  void runComposer();
+});
+
+door.onInput(async (_ctx: DoorContext, key: KeyPress) => {
+  if (activeInput && key.raw) {
+    activeInput.write(key.raw);
   }
 });
 
@@ -132,21 +151,27 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
   // Create search manager
   const searchManager = new SearchManager(state.getLines());
 
-  // Create autocomplete manager with providers
-  const autocompleteManager = new AutocompleteManager([
-    new UsernameProvider([]), // TODO: Get usernames from BBS
-    new BBSCodeProvider()
-  ]);
-
   // Create autocomplete widget
   const ac = new Autocomplete({
     parent: screen,
+    providers: [
+      new UsernameProvider(usernames),
+      new BBSCodeProvider()
+    ]
   });
 
+  let acClosedTimestamp = 0;
+
   ac.on('select', (suggestion) => {
+    acClosedTimestamp = Date.now();
     state.insertText(suggestion.insertText);
     viewport.update();
     statusBar.update();
+    screen.render();
+  });
+
+  ac.on('cancel', () => {
+    acClosedTimestamp = Date.now();
     screen.render();
   });
 
@@ -211,10 +236,7 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
         lineNumber: cursor.line,
       };
 
-      if (!autocompleteManager.shouldTrigger(context)) return;
-      
-      // Update widget's manager providers if they were changed
-      (ac as any).manager = autocompleteManager;
+      if (!ac.manager.shouldTrigger(context)) return;
       
       // Trigger suggestions
       await ac.suggest(context);
@@ -239,79 +261,133 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
     },
   });
 
-  // Handle keyboard input
-  screen.on('keypress', (ch: string, key: any) => {
-    if (!key) return;
-
-    const handled = keyboard.handleKey(
-      key.name || ch,
-      key.shift || false,
-      key.ctrl || false,
-      key.meta || false
-    );
-
-    if (handled) {
-      viewport.update();
-      statusBar.update();
-      screen.render();
-    }
-
-    if (exitRequested) {
-      handleExit();
-      exitRequested = false;
-    }
-  });
-
   // Initial render
   viewport.update();
   statusBar.update();
   screen.render();
 
-  // Handle exit logic
-  async function handleExit() {
-    // Clear autosave interval
-    clearInterval(autosaveInterval);
+  // Return a promise that resolves when the editor is closed
+  return new Promise((resolve) => {
+    // Handle exit logic
+    async function handleExit() {
+      // Clear autosave interval
+      clearInterval(autosaveInterval);
 
-    const content = state.getContent();
-    if (state.isModified() || content.trim()) {
-      const action = await confirmExitAction(screen);
-      if (action === 'send') {
-        const success = await sendMessage(bbs, {
-          from: username,
-          to: headerInfo.to,
-          subject: headerInfo.subject,
-          content,
-        });
-        if (success) {
-          await showMessage(screen, 'Message Sent!', 'Your message has been sent successfully.');
-          await clearDraft(username, ctx);
-        } else {
-          await showMessage(screen, 'Send Failed', 'Failed to send message. Draft has been saved.');
+      const content = state.getContent();
+      if (state.isModified() || content.trim()) {
+        const action = await confirmExitAction(screen);
+        if (action === 'send') {
+          const success = await sendMessage(bbs, {
+            from: username,
+            to: headerInfo.to,
+            subject: headerInfo.subject,
+            content,
+          });
+          if (success) {
+            await showMessage(screen, 'Message Sent!', 'Your message has been sent successfully.');
+            await clearDraft(username, ctx);
+          } else {
+            await showMessage(screen, 'Send Failed', 'Failed to send message. Draft has been saved.');
+            await saveDraft(username, {
+              to: headerInfo.to,
+              subject: headerInfo.subject,
+              content,
+              savedAt: new Date(),
+            }, ctx);
+          }
+          ctx.close();
+          resolve();
+        } else if (action === 'draft') {
           await saveDraft(username, {
             to: headerInfo.to,
             subject: headerInfo.subject,
             content,
             savedAt: new Date(),
           }, ctx);
+          await showMessage(screen, 'Draft Saved', 'Your message has been saved as a draft.');
+          ctx.close();
+          resolve();
+        } else if (action === 'discard') {
+          await clearDraft(username, ctx);
+          ctx.close();
+          resolve();
         }
+      } else {
         ctx.close();
-      } else if (action === 'draft') {
-        await saveDraft(username, {
-          to: headerInfo.to,
-          subject: headerInfo.subject,
-          content,
-          savedAt: new Date(),
-        }, ctx);
-        await showMessage(screen, 'Draft Saved', 'Your message has been saved as a draft.');
-        ctx.close();
-      } else if (action === 'discard') {
-        await clearDraft(username, ctx);
-        ctx.close();
+        resolve();
       }
-    } else {
-      ctx.close();
     }
-  }
+
+    // Handle keyboard input
+    screen.on('keypress', (ch: string, key: any) => {
+      if (!key) return;
+
+      // If autocomplete is visible OR was just closed (to prevent double Escape handling),
+      // prevent editor from handling navigation keys.
+      if (ac.isVisible() || (Date.now() - acClosedTimestamp < 50)) {
+        if (['up', 'down', 'enter', 'tab', 'escape'].includes(key.name)) {
+          return;
+        }
+      }
+
+      const handled = keyboard.handleKey(
+        key.name || ch,
+        key.shift || false,
+        key.ctrl || false,
+        key.meta || false
+      );
+
+      if (handled) {
+        // Auto-trigger or update autocomplete
+        if (!key.ctrl && !key.meta && !key.alt) {
+           const cursor = state.getCursor();
+           const currentLine = state.getLine(cursor.line) || '';
+           const context: AutocompleteContext = {
+             currentLine,
+             cursorPosition: cursor.col,
+             documentContent: [...state.getLines()],
+             lineNumber: cursor.line,
+           };
+           
+           const isVisible = ac.isVisible();
+           const shouldTrigger = ac.manager.shouldTrigger(context);
+
+           if (isVisible || shouldTrigger) {
+             ac.suggest(context).then(() => {
+               if (ac.isVisible()) {
+                 // Automatically position relative to the cursor in the viewport
+                 const toolbarHeight = toolbar.getHeight();
+                 const lineNumberWidth = 4;
+                 const scroll = state.getScroll();
+                 const visualRow = toolbarHeight + (cursor.line - scroll.top);
+                 const visualCol = lineNumberWidth + cursor.col;
+
+                 // Position ac box
+                 ac.top = visualRow + 1;
+                 ac.left = visualCol;
+                 
+                 ac.setFront();
+                 ac.focus();
+                 screen.render();
+               } else if (isVisible) {
+                 // It was visible but now isn't (filtered to 0 results), render to clear
+                 screen.render();
+               }
+             });
+           }
+        }
+
+        viewport.update();
+        statusBar.update();
+        screen.render();
+      }
+
+      if (exitRequested) {
+        handleExit();
+        exitRequested = false;
+      }
+    });
+  });
 }
 
 /**
@@ -455,7 +531,7 @@ async function confirmExitAction(
       top: 'center',
       left: 'center',
       width: 60,
-      height: 11,
+      height: 12,
       border: 'line',
       style: {
         border: { fg: 'yellow' },
@@ -469,26 +545,51 @@ async function confirmExitAction(
       top: 1,
       left: 2,
       right: 2,
-      content: [
-        '{cyan-fg}What would you like to do?{/}',
-        '',
-        '{green-fg}[S]{/} Send message',
-        '{yellow-fg}[D]{/} Save as draft',
-        '{red-fg}[X]{/} Discard',
-        '{gray-fg}[ESC]{/} Cancel (return to editor)',
-      ].join('\n'),
+      content: '{cyan-fg}What would you like to do?{/}',
     });
 
-    box.key(['s', 'd', 'x', 'escape'], (ch, key) => {
-        box.destroy();
-        screen.render();
-        if (key.name === 's') resolve('send');
-        else if (key.name === 'd') resolve('draft');
-        else if (key.name === 'x') resolve('discard');
-        else resolve('cancel');
+    const list = new (require('@amiexpress/bbs-door-sdk').List)({
+      parent: box,
+      top: 3,
+      left: 2,
+      right: 2,
+      height: 4,
+      items: [
+        'Send message',
+        'Save as draft',
+        'Discard changes',
+        'Cancel'
+      ],
+      keys: true,
+      mouse: true,
+      vi: true,
+      style: {
+        selected: {
+          bg: 'blue',
+          fg: 'white',
+          bold: true
+        },
+        item: {
+          fg: 'white'
+        }
+      }
+    });
+
+    list.on('select', (_item: any, index: number) => {
+      box.destroy();
+      screen.render();
+      const actions = ['send', 'draft', 'discard', 'cancel'] as const;
+      resolve(actions[index]);
+    });
+
+    list.key(['escape'], () => {
+      box.destroy();
+      screen.render();
+      resolve('cancel');
     });
 
     box.focus();
+    list.focus();
     screen.render();
   });
 }
@@ -497,7 +598,7 @@ async function confirmExitAction(
  * Show help dialog
  */
 function showHelpDialog(screen: any): void {
-  const box = new Box({
+  const box = new (require('@amiexpress/bbs-door-sdk').ScrollableBox)({
     parent: screen,
     top: 'center',
     left: 'center',
@@ -506,16 +607,10 @@ function showHelpDialog(screen: any): void {
     border: 'line',
     style: {
       border: { fg: 'cyan' },
+      scrollbar: { bg: 'cyan' },
     },
     label: ' {cyan-fg}Mail Composer Help{/} ',
     shadow: true,
-  });
-
-  new Text({
-    parent: box,
-    top: 0,
-    left: 2,
-    right: 2,
     content: [
       '{cyan-fg}Navigation:{/}',
       '  Arrow Keys    Move cursor',
@@ -542,8 +637,16 @@ function showHelpDialog(screen: any): void {
       '  Ctrl+S        Save draft',
       '  ESC           Exit/Send',
       '',
-      '{yellow-fg}Press any key to close...{/}',
+      '{yellow-fg}Press ESC to close...{/}',
     ].join('\n'),
+    keys: true,
+    mouse: true,
+    vi: true,
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: ' '
+    }
   });
 
   box.key(['escape', 'enter', 'space'], () => {
@@ -690,12 +793,12 @@ async function showMessage(
   message: string
 ): Promise<void> {
   return new Promise((resolve) => {
-    const box = new Box({
+    const msg = new (require('@amiexpress/bbs-door-sdk').Message)({
       parent: screen,
       top: 'center',
       left: 'center',
-      width: 60,
-      height: 8,
+      width: '50%',
+      height: 'shrink',
       border: 'line',
       style: {
         border: { fg: 'cyan' },
@@ -704,21 +807,12 @@ async function showMessage(
       shadow: true,
     });
 
-    new Text({
-      parent: box,
-      top: 1,
-      left: 2,
-      right: 2,
-      content: `${message}\n\n{gray-fg}Press any key to continue...{/}`,
-    });
-
-    box.key(['escape', 'enter', 'space'], () => {
-      box.destroy();
+    msg.display(message + '\n\n{gray-fg}Press any key to continue...{/}', 0, () => {
+      msg.destroy();
       screen.render();
       resolve();
     });
-
-    box.focus();
+    
     screen.render();
   });
 }
@@ -756,4 +850,3 @@ async function sendMessage(
 }
 
 export default door;
-
