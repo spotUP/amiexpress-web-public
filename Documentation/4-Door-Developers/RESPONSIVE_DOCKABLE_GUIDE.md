@@ -4,7 +4,7 @@
 
 AmiExpress SDK v2.0 includes a comprehensive responsive layout system and dockable panel system that automatically makes your doors adapt to different terminal sizes and provides desktop-like window management.
 
-All neo-blessed components are now **responsive and dockable by default** at the SDK level.
+All neo-blessed components are now **responsive and dockable by default** at the SDK level. `createBox()` returns a `DockablePanel` with a border label (no title bar) unless you opt into the title bar.
 
 ## Features
 
@@ -16,7 +16,7 @@ All neo-blessed components are now **responsive and dockable by default** at the
 - **Flex & Grid layouts** - Modern layout engines
 
 ### Dockable Panel System
-- **Drag and drop** - Move panels by dragging title bar
+- **Drag and drop** - Move panels by dragging the top border (or title bar when enabled)
 - **Edge docking** - Snap to top, bottom, left, right, or center
 - **Floating panels** - Free-form positioning
 - **Minimize/maximize** - Collapse panels to title bar
@@ -115,6 +115,15 @@ const panel = new DockablePanel({
   minWidth: 20,
   minHeight: 10,
   border: { type: 'line', fg: 'cyan' },
+});
+
+// If you want a border-label panel without a title bar:
+const infoPanel = new DockablePanel({
+  parent: screen,
+  label: ' Info ',
+  useTitleBar: false,
+  width: '40%',
+  height: '100%-3',
 });
 
 // Listen to panel events
@@ -612,7 +621,8 @@ class DockablePanel extends Panel {
 ### Panel Not Dragging
 
 - Ensure `draggable: true` is set
-- Check that title bar exists (set `title` or `label`)
+- If you want the title bar, set `title` and leave `useTitleBar` as true.
+- For border labels only, set `useTitleBar: false` and use `label`.
 - Verify mouse events are enabled on screen
 
 ### Resize Not Working
@@ -650,6 +660,21 @@ const panel = new DockablePanel({
   dockPosition: 'float',
   // ... other options
 });
+
+### Fixed Panels (No Drag/Resize/Dock)
+
+Use `fixed: true` for playfields or any UI that must not move:
+
+```typescript
+const playfield = new DockablePanel({
+  parent: screen,
+  top: 1,
+  left: 0,
+  width: 22,
+  height: 22,
+  fixed: true
+});
+```
 
 // IMPORTANT: Explicitly set position after creation
 (panel as any).position.left = 20;

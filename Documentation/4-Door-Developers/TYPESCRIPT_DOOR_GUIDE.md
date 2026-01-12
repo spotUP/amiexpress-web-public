@@ -1268,12 +1268,48 @@ const box = createBox({
 });
 ```
 
+**Dockable Defaults + Fixed Playfields**:
+```typescript
+// createBox returns a DockablePanel with useTitleBar=false by default
+const infoPanel = createBox({
+  parent: screen,
+  label: ' Info ',
+  width: '40%',
+  height: '100%-3'
+});
+
+// Use fixed: true for gameplay fields (no drag/resize/dock)
+const playfield = createBox({
+  parent: screen,
+  top: 1,
+  left: 0,
+  width: 22,
+  height: 22,
+  fixed: true
+});
+```
+
+**Dropdown Menus (SDK Widget)**:
+```typescript
+import { DropdownMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+
+const menu = new DropdownMenu({
+  parent: screen,
+  label: 'File',
+  items: [
+    { label: 'Open', action: () => openDialog() },
+    { label: 'Quit', action: () => quitDoor() }
+  ]
+});
+```
+
 **Available Helpers**:
 
 ```typescript
 // All helpers from @amiexpress/bbs-door-sdk/utils/blessed-helpers
 import {
-  createBox,       // Box widget with auto tags:true
+  createBox,       // Dockable panel (border label, no title bar)
+  createDockablePanel, // Dockable panel with full options
   createList,      // List widget with auto tags:true
   createText,      // Text widget with auto tags:true
   createTextarea,  // Textarea widget with auto tags:true

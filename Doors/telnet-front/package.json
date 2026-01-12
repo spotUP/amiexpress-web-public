@@ -1,0 +1,31 @@
+{
+  "name": "telnet-front-door",
+  "version": "1.0.0",
+  "description": "Telnet Frontend - Who's Online Login Display",
+  "bbsCommand": "FRONTEND",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "utility",
+  "doorPattern": "runDoor",
+  "doorType": "TS",
+  "buildable": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "bbs",
+    "door",
+    "telnet",
+    "frontend",
+    "runDoor"
+  ],
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

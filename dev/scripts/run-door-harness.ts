@@ -31,12 +31,12 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const doorType = (pkg.doorType || pkg.type || '').toUpperCase();
 const main = pkg.main || 'dist/index.js';
 
-function run(cmd, args, opts = {}) {
+function run(cmd: string, args: string[], opts: any = {}): Promise<number> {
   return new Promise((resolve) => {
     const proc = spawn(cmd, args, { cwd: doorRoot, ...opts });
-    proc.stdout?.on('data', d => process.stdout.write(d));
-    proc.stderr?.on('data', d => process.stderr.write(d));
-    proc.on('error', err => {
+    proc.stdout?.on('data', (d: any) => process.stdout.write(d));
+    proc.stderr?.on('data', (d: any) => process.stderr.write(d));
+    proc.on('error', (err: any) => {
       if (err && err.code === 'ENOENT') {
         resolve(127);
       } else {
@@ -44,7 +44,7 @@ function run(cmd, args, opts = {}) {
         resolve(1);
       }
     });
-    proc.on('exit', code => resolve(code));
+    proc.on('exit', (code: number | null) => resolve(code ?? 0));
   });
 }
 
@@ -52,7 +52,7 @@ async function mainRun() {
   const input = process.env.BBS_INPUT || DEFAULT_INPUT;
   if (doorType === 'PY' || doorType === 'PYTHON') {
     const interpreter = process.env.PYTHON || 'python3';
-    let rc = 0;
+    let rc: number = 0;
     try {
       rc = await run(interpreter, [main], {
         env: {
@@ -79,7 +79,7 @@ async function mainRun() {
       console.error('AREXX door missing npm run "run" script');
       process.exit(1);
     }
-    let rc = 0;
+    let rc: number = 0;
     try {
       rc = await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'run'], {
         env: {

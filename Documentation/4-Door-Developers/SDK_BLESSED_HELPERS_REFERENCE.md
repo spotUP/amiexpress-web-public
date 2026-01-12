@@ -1,10 +1,10 @@
 # SDK Blessed Helpers - Quick Reference
 
-**Last Updated:** December 24, 2024
+**Last Updated:** January 12, 2026
 
 ## Purpose
 
-The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs.
+The SDK blessed-helpers module provides wrapper functions for neo-blessed widgets that automatically add `tags: true` to prevent tag rendering bugs. `createBox()` now returns a `DockablePanel` (border label, no title bar) to make layouts dockable by default.
 
 ## The Problem
 
@@ -44,7 +44,8 @@ Import from `@amiexpress/bbs-door-sdk/utils/blessed-helpers`:
 
 ```typescript
 import {
-  createBox,       // Box widget (containers, panels)
+  createBox,       // Dockable panel (no title bar; border label)
+  createDockablePanel, // Dockable panel with full options
   createList,      // List widget (selectable items)
   createText,      // Text widget (labels, headers)
   createTextarea,  // Textarea widget (multi-line input)
@@ -158,7 +159,29 @@ const box = createBox({
 });
 ```
 
-### 4. Tag Syntax Reference
+### 4. Dockable Defaults and Fixed Panels
+
+```typescript
+// createBox returns a DockablePanel with useTitleBar=false (border label only)
+const panel = createBox({
+  parent: screen,
+  label: ' Info ',
+  width: '40%',
+  height: '100%-3'
+});
+
+// Use fixed: true for gameplay fields or other non-dockable areas
+const playfield = createBox({
+  parent: screen,
+  top: 1,
+  left: 0,
+  width: 22,
+  height: 22,
+  fixed: true
+});
+```
+
+### 5. Tag Syntax Reference
 
 Common blessed tags (work automatically with SDK helpers):
 

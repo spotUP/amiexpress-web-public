@@ -1237,7 +1237,7 @@ const doorList = createList({
 });
 ```
 
-**GOOD:**
+**GOOD (Title Bar Enabled):**
 ```typescript
 // Account for DockablePanel's internal title bar (2 rows)
 const doorPanel = new DockablePanel({
@@ -1252,6 +1252,23 @@ const doorList = createList({
   left: 0,      // No horizontal offset
   width: '100%-2',   // Account for left/right borders
   height: '100%-2',  // Account for borders only (top:2 already handles title bar)
+});
+```
+
+**GOOD (Border Label Only):**
+```typescript
+// createBox() uses DockablePanel with useTitleBar=false by default
+const doorPanel = createBox({
+  parent: screen,
+  label: ' Installed Doors ',
+});
+
+const doorList = createList({
+  parent: doorPanel,
+  top: 0,              // No title bar
+  left: 0,
+  width: '100%-2',     // Account for borders
+  height: '100%-2',    // Account for borders
 });
 ```
 
@@ -1437,16 +1454,15 @@ list.on('wheelup', () => {
 | Component | Height Consumed |
 |-----------|-----------------|
 | Border (top) | 1 row |
-| Title bar | 1 row |
+| Title bar (if enabled) | 1 row |
 | Content area | Variable |
 | Border (bottom) | 1 row |
-| **Total overhead** | **~3-4 rows** |
+| **Total overhead** | **~2 rows without title bar; ~3-4 with title bar** |
 
 **Child positioning inside DockablePanel:**
-- `top: 2` - Start below title bar
-- `left: 0` - Align with content area
-- `height: '100%-4'` - Leave room for title bar (2) + borders (2)
-- `width: '100%-2'` - Leave room for left/right borders
+- `useTitleBar: true`: `top: 2`, `height: '100%-4'`
+- `useTitleBar: false`: `top: 0`, `height: '100%-2'`
+- `left: 0`, `width: '100%-2'` for borders
 
 ---
 
@@ -1486,5 +1502,5 @@ Based on fixes across 5+ production doors:
 
 ---
 
-**Last Updated:** 2025-12-30
+**Last Updated:** 2026-01-12
 **Based On:** 58+ fixes across 5+ production doors, including focus/input routing, mouse hover modes, coordinate cache invalidation, and inline button styling from livechat development
