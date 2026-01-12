@@ -25,6 +25,7 @@ import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
+import { debugLog } from '../utils/debug-log';
 
 export { XIMCommand } from './xim/types';
 
@@ -64,9 +65,9 @@ export class XIMProtocol {
     this.bbsSession = bbsSession || {};
     // Extract door command name (e.g., "FR" for AquaScan running in FR mode)
     // Check multiple possible locations where doorId/doorCommand might be set
-console.log(`[XIMProtocol] CONSTRUCTOR CALLED - bbsSession type: ${typeof bbsSession}, has doorCommand: ${!!bbsSession?.doorCommand}, has doorId: ${!!bbsSession?.doorId}`);
+debugLog(`[XIMProtocol] CONSTRUCTOR CALLED - bbsSession type: ${typeof bbsSession}, has doorCommand: ${!!bbsSession?.doorCommand}, has doorId: ${!!bbsSession?.doorId}`);
     this.doorCommand = bbsSession?.doorCommand || bbsSession?.doorId || bbsSession?.doorName || '';
-console.log(`[XIMProtocol] doorCommand="${this.doorCommand}" (from: doorCommand=${bbsSession?.doorCommand}, doorId=${bbsSession?.doorId}, doorName=${bbsSession?.doorName})`);
+debugLog(`[XIMProtocol] doorCommand="${this.doorCommand}" (from: doorCommand=${bbsSession?.doorCommand}, doorId=${bbsSession?.doorId}, doorName=${bbsSession?.doorName})`);
 
     // Allocate persistent memory for door command string in a high memory region
     // Use a fixed high address that won't conflict with door's memory
@@ -83,8 +84,8 @@ console.log(`[XIMProtocol] doorCommand="${this.doorCommand}" (from: doorCommand=
 
       // Verify immediately
       const verifyStr = this.emulator.readString(this.doorCommandAddr, bufferSize);
-console.log(`[XIMProtocol] Wrote door command to fixed address 0x${this.doorCommandAddr.toString(16)}`);
-console.log(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verifyStr}"`);
+debugLog(`[XIMProtocol] Wrote door command to fixed address 0x${this.doorCommandAddr.toString(16)}`);
+debugLog(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verifyStr}"`);
     }
 
     // Store iconLibrary for command .info file loading
@@ -106,7 +107,7 @@ console.log(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verif
 
     // Generate unique debug ID to track state object identity
     const stateDebugId = `state_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-console.log(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`);
+debugLog(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`);
 
     this.state = {
       registered: false,
@@ -178,11 +179,11 @@ console.log(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`)
     const nodeId = bbsSession?.nodeId || 1;
     this.doorLogger = getDoorLogger(doorName, nodeId);
 
-console.log('[XIMProtocol] Initialized');
-console.log(`  Door Port: 0x${doorPort.toString(16)}`);
-console.log(`  BBS Session: ${bbsSession ? 'Provided' : 'None'}`);
+debugLog('[XIMProtocol] Initialized');
+debugLog(`  Door Port: 0x${doorPort.toString(16)}`);
+debugLog(`  BBS Session: ${bbsSession ? 'Provided' : 'None'}`);
     if (bbsSession?.user) {
-console.log(`  User: ${bbsSession.user.username || 'Unknown'}`);
+debugLog(`  User: ${bbsSession.user.username || 'Unknown'}`);
     }
   }
 
@@ -197,7 +198,7 @@ console.log(`  User: ${bbsSession.user.username || 'Unknown'}`);
    * different from the AEServer.{nodeId} we pre-created.
    */
   setXimPortAddress(addr: number): void {
-console.log(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16)} to 0x${addr.toString(16)}`);
+debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16)} to 0x${addr.toString(16)}`);
     this.doorPort = addr;
     this.state.ximPortAddr = addr;
     this.state.aePortAddr = addr;
@@ -233,16 +234,16 @@ console.log(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString
    */
   injectInputToNativeDoor(keyChar: string): void {
     if (!this.state.registered) {
-console.log('[XIMProtocol] Cannot inject input - door not registered');
+debugLog('[XIMProtocol] Cannot inject input - door not registered');
       return;
     }
 
     if (this.doorPort === 0) {
-console.log('[XIMProtocol] Cannot inject input - no door port address');
+debugLog('[XIMProtocol] Cannot inject input - no door port address');
       return;
     }
 
-console.log(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
+debugLog(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
 
     // Allocate memory for jhMessage structure
     const MEMF_PUBLIC_CLEAR = 0x10001;
@@ -254,7 +255,7 @@ console.error('[XIMProtocol] Failed to allocate message for input injection');
       return;
     }
 
-console.log(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
+debugLog(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
 
     // Set up Exec message header (mn_Node + mn_ReplyPort + mn_Length)
     // Message header: offsets 0-19
@@ -301,10 +302,10 @@ console.log(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
     });
 
     // Send the message to AEDoorPort via PutMsg
-console.log(`[XIMProtocol] Calling PutMsg(0x${this.doorPort.toString(16)}, 0x${msgAddr.toString(16)})`);
+debugLog(`[XIMProtocol] Calling PutMsg(0x${this.doorPort.toString(16)}, 0x${msgAddr.toString(16)})`);
     this.execLibrary.putMsg(this.doorPort, msgAddr, { suppressDoorCallback: true });
 
-console.log(`[XIMProtocol] Input injected successfully`);
+debugLog(`[XIMProtocol] Input injected successfully`);
   }
 
   /**
@@ -322,7 +323,7 @@ console.log(`[XIMProtocol] Input injected successfully`);
     const isWaiting = this.ioHandler.isWaitingForLineInput();
     const isNativeDoor = this.state.isNativeDoor === true;
 
-    console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor}`);
+    debugLog(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor}`);
 
     // Must be registered
     if (!isRegistered) {
@@ -384,7 +385,7 @@ console.log(`[XIMProtocol] Input injected successfully`);
     // Save door's reply port for future responses
     if (msg.replyPort !== 0 && this.doorReplyPort === 0) {
       this.doorReplyPort = msg.replyPort;
-console.log('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString(16));
+debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString(16));
     }
 
     return msg;
@@ -418,7 +419,7 @@ console.log('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toStr
       port: this.doorReplyPort ? `0x${this.doorReplyPort.toString(16)}` : undefined,
     });
 
-console.log(
+debugLog(
       `[XIMProtocol] <<< XIM Command: ${msg.command} (${humanName}) data=${msg.data} string="${msg.string || ''}"`
     );
 
@@ -450,13 +451,13 @@ console.log(
       initString.includes('STATUS');
     if (isAedoorInit || isAedoorStat) {
       const label = isAedoorInit ? 'JH_INIT' : 'JH_STAT';
-console.log(`[XIMProtocol] AEDoor handshake detected: ${label} (no reply needed)`);
+debugLog(`[XIMProtocol] AEDoor handshake detected: ${label} (no reply needed)`);
       // CRITICAL: INIT/STAT messages have NULL reply port (mn_ReplyPort=0)
       // Door just reads them and continues - no reply needed
       // Calling ReplyMsg with NULL port causes errors
       const replyPort = this.emulator.readMemory32(msg.msgAddr + 14); // mn_ReplyPort at offset 14
       if (replyPort === 0) {
-console.log(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (correct behavior)`);
+debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (correct behavior)`);
         return;
       }
       // Log outgoing reply to XIM structured logger
@@ -593,8 +594,8 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     }
 
     // Unknown command
-console.log(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
-console.log(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
+debugLog(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
+debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
     // Return 1 for unknown commands (0 might signal "not supported" to some doors)
     // cmd=23 specifically is used by AquaScan right after JH_REGISTER
     this.sendReply(msg, 1);
@@ -609,14 +610,14 @@ console.log(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(1
     const is605 = command === XIMCommand.GET_CUSTOM_MSGBASE_MENUCMD;
     const is551 = command === 551;
     if (is605 || is551) {
-console.log(
+debugLog(
         `[XIMProtocol] isCommandInfoRequest(${command}) -> TRUE (is605=${is605}, is551=${is551})`
       );
       return true;
     }
     // Debug: log ALL commands in the 500-610 range to catch any we might be missing
     if (command >= 500 && command <= 610) {
-console.log(
+debugLog(
         `[XIMProtocol] isCommandInfoRequest(${command}) -> FALSE (command in 500-610 range but NOT GET_CUSTOM_MSGBASE_MENUCMD/551)`
       );
     }
@@ -636,7 +637,7 @@ console.log(
       // e.g., if user typed "FR" which launched AquaScan, return "FR"
       // Doors use this to look up DOORUSE.FR in their .info tooltypes
       const cmdName = this.doorCommand || '';
-console.log(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
+debugLog(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
 
       // Always populate embedded buffer for doors without StringPtr.
       this.messageParser.writeMessageString(msg.msgAddr, cmdName);
@@ -653,16 +654,16 @@ console.log(`[XIMProtocol] GET_CUSTOM_MSGBASE_MENUCMD: "${cmdName}"`);
         pointerSet = this.messageParser.writeStringPointer(msg.msgAddr, this.doorCommandAddr);
         if (pointerSet) {
           const stringContent = this.emulator.readString(this.doorCommandAddr, cmdName.length + 1);
-console.log(`[XIMProtocol]   StringPtr=0x${this.doorCommandAddr.toString(16)} (fixed) -> "${stringContent}"`);
+debugLog(`[XIMProtocol]   StringPtr=0x${this.doorCommandAddr.toString(16)} (fixed) -> "${stringContent}"`);
         }
       }
 
       if (!pointerSet) {
         const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
         if (this.messageParser.writeStringPointer(msg.msgAddr, stringAddr)) {
-console.log(`[XIMProtocol]   StringPtr=0x${stringAddr.toString(16)} (message buffer)`);
+debugLog(`[XIMProtocol]   StringPtr=0x${stringAddr.toString(16)} (message buffer)`);
         } else {
-console.log('[XIMProtocol]   StringPtr not available; using embedded buffer');
+debugLog('[XIMProtocol]   StringPtr not available; using embedded buffer');
         }
       }
 
@@ -673,7 +674,7 @@ console.log('[XIMProtocol]   StringPtr not available; using embedded buffer');
       // Returns the tooltype value from the .info file
       const tooltypeKey = (msg.string || '').toUpperCase();
       const cmdName = this.doorCommand || '';
-console.log(`[XIMProtocol] GET_CMD_TOOLTYPE: key="${tooltypeKey}" cmd="${cmdName}"`);
+debugLog(`[XIMProtocol] GET_CMD_TOOLTYPE: key="${tooltypeKey}" cmd="${cmdName}"`);
 
       // Look up the tooltype in command's .info file
       const fs = require('fs');
@@ -696,14 +697,14 @@ console.log(`[XIMProtocol] GET_CMD_TOOLTYPE: key="${tooltypeKey}" cmd="${cmdName
           if (tooltypes.has(tooltypeKey)) {
             tooltypeValue = tooltypes.get(tooltypeKey) || '';
             found = 1;
-console.log(`[XIMProtocol]   Found "${tooltypeKey}"="${tooltypeValue}" in ${infoPath}`);
+debugLog(`[XIMProtocol]   Found "${tooltypeKey}"="${tooltypeValue}" in ${infoPath}`);
             break;
           }
         }
       }
 
       if (!found) {
-console.log(`[XIMProtocol]   Tooltype "${tooltypeKey}" not found`);
+debugLog(`[XIMProtocol]   Tooltype "${tooltypeKey}" not found`);
       }
 
       // Write string to embedded buffer
@@ -712,9 +713,9 @@ console.log(`[XIMProtocol]   Tooltype "${tooltypeKey}" not found`);
       // Write pointer to the embedded string buffer (if field exists)
       const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
       if (this.messageParser.writeStringPointer(msg.msgAddr, stringAddr)) {
-console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr=0x${stringAddr.toString(16)}`);
+debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr=0x${stringAddr.toString(16)}`);
       } else {
-console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not available`);
+debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not available`);
       }
 
       this.messageParser.writeData(msg.msgAddr, found);
@@ -749,7 +750,7 @@ console.log(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr 
       // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-console.log(
+debugLog(
         `[XIMProtocol][IOCheckDebug] command=${command} inIO=${ioList.includes(
           command
         )}`
@@ -872,7 +873,7 @@ console.log(
       (command >= 900 && command <= 906) ||   // DT_CONFACCESS2, DT_CBYTESUPLOAD, DT_CBYTESDOWNLOAD, DT_CFILESUPLOAD, DT_CFILESDOWNLOAD, DT_CALLEDTODAY
       (command >= 1000 && command <= 1002);   // DT_ADDBIT, DT_REMBIT, DT_QUERYBIT
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-console.log(
+debugLog(
         `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`
       );
     }
@@ -939,7 +940,7 @@ console.log(
       XIMCommand.PASSWORD_HASH,
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-console.log(
+debugLog(
         `[XIMProtocol][BBSCheckDebug] command=${command} inBBS=${bbsList.includes(
           command
         )}`
@@ -952,7 +953,7 @@ console.log(
    * Handle BBS info commands
    */
   private handleBBSInfoCommand(msg: any): void {
-console.log(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorParams="${(this.bbsSession as any)?.doorParams}"`);
+debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorParams="${(this.bbsSession as any)?.doorParams}"`);
     switch (msg.command) {
       case XIMCommand.JH_BBSNAME:
         this.bbsInfoHandler.handleBBSName(msg);
@@ -1154,7 +1155,7 @@ console.log(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorP
 
     // Debug: log once to confirm runtime list
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
-console.log(
+debugLog(
         `[XIMProtocol][SystemListDebug] command=${command} RAWARROW=${XIMCommand.RAWARROW} SV_NEWMSG=${XIMCommand.SV_NEWMSG} inList=${systemList.includes(
           command
         )} list=${systemList.join(',')}`
@@ -1347,7 +1348,7 @@ console.log(
    */
   getStateSnapshot(): XIMState {
     const debugId = (this.state as any)._debugId || 'UNKNOWN';
-console.log(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCommand="${this.state.returnCommand || 'NONE'}", chainCommand="${this.state.chainCommand || 'NONE'}"`);
+debugLog(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCommand="${this.state.returnCommand || 'NONE'}", chainCommand="${this.state.chainCommand || 'NONE'}"`);
     return { ...this.state };
   }
 
@@ -1371,13 +1372,13 @@ console.log(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" return
     const path = require('path');
     const fs = require('fs');
 
-console.log(`[XIMProtocol] Pre-loading command .info file for door: ${this.doorCommand}`);
+debugLog(`[XIMProtocol] Pre-loading command .info file for door: ${this.doorCommand}`);
 
     // Try to find the command's .info file
     const bbsPath = (this.bbsSession as any)?.dataDir || (this.bbsSession as any)?.bbsRoot || process.cwd();
-console.log(`[XIMProtocol]   Using bbsPath: ${bbsPath}`);
-console.log(`[XIMProtocol]   bbsSession.dataDir: ${(this.bbsSession as any)?.dataDir}`);
-console.log(`[XIMProtocol]   bbsSession.bbsRoot: ${(this.bbsSession as any)?.bbsRoot}`);
+debugLog(`[XIMProtocol]   Using bbsPath: ${bbsPath}`);
+debugLog(`[XIMProtocol]   bbsSession.dataDir: ${(this.bbsSession as any)?.dataDir}`);
+debugLog(`[XIMProtocol]   bbsSession.bbsRoot: ${(this.bbsSession as any)?.bbsRoot}`);
 
     const possiblePaths = [
       path.join(bbsPath, 'Commands', 'BBSCmd', `${this.doorCommand}.info`),
@@ -1387,16 +1388,16 @@ console.log(`[XIMProtocol]   bbsSession.bbsRoot: ${(this.bbsSession as any)?.bbs
 
     let infoPath = '';
     for (const p of possiblePaths) {
-console.log(`[XIMProtocol]   Checking: ${p} -> ${fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND'}`);
+debugLog(`[XIMProtocol]   Checking: ${p} -> ${fs.existsSync(p) ? 'EXISTS' : 'NOT FOUND'}`);
       if (fs.existsSync(p)) {
         infoPath = p;
-console.log(`[XIMProtocol]   ✓ Found .info file: ${infoPath}`);
+debugLog(`[XIMProtocol]   ✓ Found .info file: ${infoPath}`);
         break;
       }
     }
 
     if (!infoPath) {
-console.log(`[XIMProtocol]   No .info file found for command: ${this.doorCommand}`);
+debugLog(`[XIMProtocol]   No .info file found for command: ${this.doorCommand}`);
       return;
     }
 
@@ -1415,37 +1416,37 @@ console.log(`[XIMProtocol]   No .info file found for command: ${this.doorCommand
     this.emulator.setRegister(CPURegister.A0, pathAddr);
 
     // Call GetDiskObject
-console.log(`[XIMProtocol]   Calling GetDiskObject("${infoPath}")`);
+debugLog(`[XIMProtocol]   Calling GetDiskObject("${infoPath}")`);
     this.iconLibrary.GetDiskObject();
 
     // GetDiskObject returns DiskObject pointer in D0
     const diskObjPtr = this.emulator.getRegister(CPURegister.D0);
-console.log(`[XIMProtocol]   GetDiskObject returned: 0x${diskObjPtr.toString(16)}`);
+debugLog(`[XIMProtocol]   GetDiskObject returned: 0x${diskObjPtr.toString(16)}`);
 
     if (diskObjPtr === 0) {
-console.log(`[XIMProtocol]   Failed to load DiskObject`);
+debugLog(`[XIMProtocol]   Failed to load DiskObject`);
       return;
     }
 
     // Extract do_ToolTypes pointer from DiskObject
     // DiskObject structure: do_ToolTypes is at offset 53 (0x35)
     const toolTypesPtr = this.emulator.readMemory32(diskObjPtr + 53);
-console.log(`[XIMProtocol]   DiskObject->do_ToolTypes = 0x${toolTypesPtr.toString(16)}`);
+debugLog(`[XIMProtocol]   DiskObject->do_ToolTypes = 0x${toolTypesPtr.toString(16)}`);
 
     // CRITICAL: Write tooltype array pointer to memory address 0x100e5c
     // This is where AquaScan (and likely other doors) expect to find it
     const TOOLTYPE_PTR_ADDR = 0x100e5c;
     this.emulator.writeMemory32(TOOLTYPE_PTR_ADDR, toolTypesPtr);
-console.log(`[XIMProtocol]   ✅ Wrote tooltype pointer to 0x${TOOLTYPE_PTR_ADDR.toString(16)}`);
+debugLog(`[XIMProtocol]   ✅ Wrote tooltype pointer to 0x${TOOLTYPE_PTR_ADDR.toString(16)}`);
 
     // Verify the write
     const verifyPtr = this.emulator.readMemory32(TOOLTYPE_PTR_ADDR);
-console.log(`[XIMProtocol]   Verification: Memory at 0x${TOOLTYPE_PTR_ADDR.toString(16)} = 0x${verifyPtr.toString(16)}`);
+debugLog(`[XIMProtocol]   Verification: Memory at 0x${TOOLTYPE_PTR_ADDR.toString(16)} = 0x${verifyPtr.toString(16)}`);
 
     if (verifyPtr === toolTypesPtr) {
-console.log(`[XIMProtocol]   ✅ SUCCESS: Door can now call FindToolType(0x100e5c, ...) and it will work!`);
+debugLog(`[XIMProtocol]   ✅ SUCCESS: Door can now call FindToolType(0x100e5c, ...) and it will work!`);
     } else {
-console.log(`[XIMProtocol]   ❌ ERROR: Verification failed!`);
+debugLog(`[XIMProtocol]   ❌ ERROR: Verification failed!`);
     }
   }
 }

@@ -20,6 +20,7 @@ import { TIMDoorMessageHandler } from "./session/TIMDoorMessageHandler.js";
 import { DoorLogger, getDoorLogger, removeDoorLogger } from "./DoorLogger.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { parseInfoFile } from "../utils/amiga-command-parser.util";
+import { debugLog } from '../utils/debug-log';
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -129,11 +130,11 @@ export class AmigaDoorSession {
     // Create per-door logger
     const doorName = path.basename(this.config.executablePath);
     const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber;
-console.log(`[AmigaDoorSession] About to create logger for: ${doorName} node: ${nodeId}`);
+debugLog(`[AmigaDoorSession] About to create logger for: ${doorName} node: ${nodeId}`);
     this.logger = getDoorLogger(doorName, nodeId);
-console.log(`[AmigaDoorSession] Logger created, path: ${this.logger.getLogPath()}`);
+debugLog(`[AmigaDoorSession] Logger created, path: ${this.logger.getLogPath()}`);
 
-console.log(
+debugLog(
       `[AmigaDoorSession] Initializing refactored session for: ${doorName}`
     );
     this.logger.info(`Session initialized for ${this.config.executablePath}`);
@@ -147,18 +148,18 @@ console.log(
    * Set up Socket.io event handlers for user input
    */
   private setupSocketHandlers(): void {
-console.log(
+debugLog(
       "[AmigaDoorSession] Setting up socket handlers for door:input and keys:state"
     );
 
     // Handle user input (keystrokes)
     this.onDoorInput = (data: string) => {
-console.log(
+debugLog(
         `[AmigaDoorSession] 🎹 door:input event received: "${data}" isRunning=${this.isRunning}`
       );
 
       if (!this.isRunning || !this.sharedState.dosLibrary) {
-console.log(
+debugLog(
           "[AmigaDoorSession] ❌ Input ignored: door not running or DOS library not available"
         );
         return;
@@ -175,7 +176,7 @@ console.log(
 
       // Route to XIM protocol if active
       if (this.sharedState.ximProtocol) {
-console.log(
+debugLog(
           `[AmigaDoorSession] Forwarding input to XIM queue: "${data}" (ximWaiting=${ximWaitingForInput})`
         );
         this.sharedState.ximProtocol.queueInput(data);
@@ -189,7 +190,7 @@ console.log(
         //   - Door is registered (handshake complete)
         //   - NOT waiting for line input/hotkey (not using XIM input commands)
         if (this.sharedState.ximProtocol.shouldInjectNativeInput()) {
-console.log(
+debugLog(
             `[AmigaDoorSession] Native door detected - injecting input via PutMsg`
           );
           // Inject each character separately for native door
@@ -201,7 +202,7 @@ console.log(
 
       // Route to TIM handler if active and waiting
       if (this.timHandler && timWaitingForInput) {
-console.log(
+debugLog(
           `[AmigaDoorSession] Forwarding input to TIM handler: "${data}"`
         );
         this.timHandler.queueInput(data);
@@ -210,12 +211,12 @@ console.log(
       // Route to DOS stdin ONLY when no protocol handler consumed the input
       // This prevents double-delivery: once via XIM/TIM and once via DOS
       if ((!this.sharedState.ximProtocol || !ximWaitingForInput) && !timWaitingForInput) {
-console.log(
+debugLog(
           `[AmigaDoorSession] Queueing input for DOS stdin: "${data}"`
         );
         this.sharedState.dosLibrary.queueInput(data);
       } else {
-console.log(
+debugLog(
           `[AmigaDoorSession] Skipping DOS queue - input was consumed by protocol handler`
         );
       }
@@ -228,7 +229,7 @@ console.log(
       pressed: boolean;
       keyState: Record<string, boolean>;
     }) => {
-console.log(
+debugLog(
         `[AmigaDoorSession] 🎮 keys:state event received: ${data.key} = ${data.pressed}`
       );
 
@@ -236,7 +237,7 @@ console.log(
         // Update XIM protocol with key state
         this.sharedState.ximProtocol.updateKeyState(data);
       } else {
-console.log(
+debugLog(
           `[AmigaDoorSession] ❌ Key state update ignored: isRunning=${
             this.isRunning
           } hasXIM=${!!this.sharedState.ximProtocol}`
@@ -247,7 +248,7 @@ console.log(
 
     // Handle disconnection
     this.onSocketDisconnect = () => {
-console.log("[AmigaDoorSession] Socket disconnected, terminating door");
+debugLog("[AmigaDoorSession] Socket disconnected, terminating door");
       if (this.sharedState.ximProtocol) {
         this.sharedState.ximProtocol.markCarrierDropped();
       }
@@ -257,7 +258,7 @@ console.log("[AmigaDoorSession] Socket disconnected, terminating door");
 
     // Handle explicit termination request
     this.onDoorTerminate = () => {
-console.log("[AmigaDoorSession] Termination requested by user");
+debugLog("[AmigaDoorSession] Termination requested by user");
       if (this.sharedState.ximProtocol) {
         this.sharedState.ximProtocol.markCarrierDropped();
       }
@@ -271,7 +272,7 @@ console.log("[AmigaDoorSession] Termination requested by user");
    */
   async start(): Promise<void> {
     try {
-console.log(
+debugLog(
         `[AmigaDoorSession] 🚀 Starting refactored door: ${this.config.executablePath}`
       );
       this.socket.emit("door:status", { status: "initializing" });
@@ -291,10 +292,10 @@ console.log(
       // Initialize emulator (16MB for full 24-bit address space)
       this.emulator = new MoiraEmulator(16 * 1024 * 1024);
       await this.emulator.initialize();
-console.log("[AmigaDoorSession] ✅ Emulator initialized");
+debugLog("[AmigaDoorSession] ✅ Emulator initialized");
 
       // Load Kickstart ROM (CRITICAL - must load before libraries)
-console.log("[AmigaDoorSession] Loading Kickstart ROM...");
+debugLog("[AmigaDoorSession] Loading Kickstart ROM...");
       this.sharedState.kickstartRom = new KickstartRom();
       this.sharedState.kickstartRom.dumpInfo();
 
@@ -308,7 +309,7 @@ console.log("[AmigaDoorSession] Loading Kickstart ROM...");
         const parsedPath = path.parse(this.config.executablePath);
         const baseName = parsedPath.name.split('.')[0];
         const fallbackInfoPath = path.join(parsedPath.dir, `${baseName}.info`);
-console.log(`[AmigaDoorSession] Tooltypes not found at ${infoPath}, trying fallback: ${fallbackInfoPath}`);
+debugLog(`[AmigaDoorSession] Tooltypes not found at ${infoPath}, trying fallback: ${fallbackInfoPath}`);
         tooltypes = parseInfoFile(fallbackInfoPath);
         if (tooltypes.size > 0) {
           infoPath = fallbackInfoPath;
@@ -316,13 +317,13 @@ console.log(`[AmigaDoorSession] Tooltypes not found at ${infoPath}, trying fallb
       }
 
       if (tooltypes.size > 0) {
-console.log(`[AmigaDoorSession] Loaded ${tooltypes.size} tooltypes from ${infoPath}`);
+debugLog(`[AmigaDoorSession] Loaded ${tooltypes.size} tooltypes from ${infoPath}`);
         this.config.toolTypes = { ...this.config.toolTypes, ...Object.fromEntries(tooltypes) };
         
         // Update doorType if specified in tooltypes
         const typeTooltype = tooltypes.get('TYPE');
         if (typeTooltype) {
-console.log(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeTooltype}`);
+debugLog(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeTooltype}`);
           this.config.doorType = typeTooltype.toUpperCase();
         }
       }
@@ -330,7 +331,7 @@ console.log(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeTo
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
       this.emulator.loadROM(romData);
-console.log("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
+debugLog("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
 
       // Initialize Library Manager (Phase 2)
       this.libraryManager = new LibraryManager(
@@ -362,7 +363,7 @@ console.log("[AmigaDoorSession] ✅ Kickstart ROM loaded and mapped to memory");
         this.emulator.writeMemory32(taskAddr + 0xac, 0);
         // Disable pr_CLI restore callback so later CreatePort calls do not reassert CLI mode
         this.sharedState.execLibrary.setDoorInitCallback(() => {});
-console.log(
+debugLog(
           `[AmigaDoorSession] DOOR_FORCE_WB_STARTUP=1 -> seeded WBStartup (0x${msgAddr.toString(
             16
           )}) and cleared pr_CLI`
@@ -377,7 +378,7 @@ console.log(
         this.logger
       );
       await this.doorLoader.loadDoor();
-console.log(
+debugLog(
         "[AmigaDoorSession] ✅ Door binary loaded and CPU configured"
       );
 
@@ -438,7 +439,7 @@ console.log(
       const logPath = process.env.DOOR_WATCH_LOG || "/tmp/door-watch.log";
       if (addrs.length > 0 || offs.length > 0) {
         this.emulator.setWatchpoints(addrs, logPath, offs);
-console.log(
+debugLog(
           `[AmigaDoorSession] Watchpoints enabled at ${[
             ...addrs.map((a) => "0x" + a.toString(16)),
             ...offs.map((o) => "A4+0x" + o.toString(16)),
@@ -451,11 +452,11 @@ console.log(
       if (process.env.DEBUG_68K_NATIVE === '1') {
         const cpu = this.emulator['cpu'];
         if (cpu?.nativeEnableLogging) {
-console.log('[AmigaDoorSession] [NATIVE DEBUG] Enabling Moira native debugger...');
+debugLog('[AmigaDoorSession] [NATIVE DEBUG] Enabling Moira native debugger...');
 
           // Enable instruction logging (256-entry circular buffer)
           cpu.nativeEnableLogging();
-console.log('[AmigaDoorSession] [NATIVE DEBUG] Instruction logging enabled');
+debugLog('[AmigaDoorSession] [NATIVE DEBUG] Instruction logging enabled');
 
           // Set watchpoints on DiskObject/tooltypes memory regions
           // These addresses are used by icon.library for ConfConfig.info
@@ -471,11 +472,11 @@ console.log('[AmigaDoorSession] [NATIVE DEBUG] Instruction logging enabled');
           for (const addr of nativeWatchAddrs) {
             cpu?.nativeSetWatchpoint?.(addr);
           }
-console.log(`[AmigaDoorSession] [NATIVE DEBUG] Watchpoints set on: ${nativeWatchAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
+debugLog(`[AmigaDoorSession] [NATIVE DEBUG] Watchpoints set on: ${nativeWatchAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
 
           // Set catchpoint for illegal instructions
           cpu?.nativeSetCatchpoint?.(4); // Vector 4 = Illegal instruction
-console.log('[AmigaDoorSession] [NATIVE DEBUG] Catchpoint set for illegal instructions');
+debugLog('[AmigaDoorSession] [NATIVE DEBUG] Catchpoint set for illegal instructions');
         } else {
 console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger not available');
         }
@@ -514,21 +515,21 @@ console.warn('[AmigaDoorSession] [NATIVE DEBUG] WARNING: Moira native debugger n
           this.config
         );
         this.lifecycleManager.setTIMHandler(this.timHandler);
-console.log(`[AmigaDoorSession] DoorControl handler initialized for ${effectiveDoorType} door`);
+debugLog(`[AmigaDoorSession] DoorControl handler initialized for ${effectiveDoorType} door`);
       }
 
-console.log("[AmigaDoorSession] All modular components initialized");
-console.log(`[AmigaDoorSession] 📊 Architecture:`);
-console.log(
+debugLog("[AmigaDoorSession] All modular components initialized");
+debugLog(`[AmigaDoorSession] 📊 Architecture:`);
+debugLog(
         `[AmigaDoorSession]   - LibraryManager: Library initialization and traps`
       );
-console.log(
+debugLog(
         `[AmigaDoorSession]   - DoorLoader: Binary loading and CPU setup`
       );
-console.log(
+debugLog(
         `[AmigaDoorSession]   - DoorLifecycleManager: Execution loop management`
       );
-console.log(
+debugLog(
         `[AmigaDoorSession]   - DoorMessageHandler: IPC and message processing`
       );
 
@@ -538,7 +539,7 @@ console.log(
 
       // Start door execution via Lifecycle Manager
       this.isRunning = true;
-console.log("[AmigaDoorSession] 🚪 Emitting door:status = running");
+debugLog("[AmigaDoorSession] 🚪 Emitting door:status = running");
       this.socket.emit("door:status", { status: "running" });
 
       // Start the lifecycle management
@@ -562,7 +563,7 @@ console.error("[AmigaDoorSession] Error starting door:", error);
       throw new Error("LibraryManager not initialized");
     }
 
-console.log(
+debugLog(
       "[AmigaDoorSession] 🔄 Initializing libraries via LibraryManager..."
     );
 
@@ -586,17 +587,17 @@ console.log(
     // during initialization. We must create it BEFORE any door code can execute.
     // express.e creates port at lines 4316-4328 BEFORE startProcess() at line 4336.
     const doorType = (this.config.doorType || "").toUpperCase();
-console.log(`[AmigaDoorSession][DEBUG] About to check doorType: "${doorType}" (XIM=${doorType === "XIM"}, AIM=${doorType === "AIM"})`);
+debugLog(`[AmigaDoorSession][DEBUG] About to check doorType: "${doorType}" (XIM=${doorType === "XIM"}, AIM=${doorType === "AIM"})`);
     if (doorType === "XIM" || doorType === "AIM") {
       const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
       const portName = `AEDoorPort${nodeId}`;
       this.doorPortName = portName;
-console.log(`[AmigaDoorSession][DEBUG] Creating port: ${portName} for nodeId=${nodeId}`);
+debugLog(`[AmigaDoorSession][DEBUG] Creating port: ${portName} for nodeId=${nodeId}`);
       const portAddr = this.sharedState.execLibrary?.createLightweightPort(portName);
-console.log(`[AmigaDoorSession] ✅ Created ${portName} at 0x${portAddr?.toString(16)} EARLY (before door load)`);
+debugLog(`[AmigaDoorSession] ✅ Created ${portName} at 0x${portAddr?.toString(16)} EARLY (before door load)`);
       this.createdDoorPort = true; // Delete on cleanup
     } else {
-console.log(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM or AIM`);
+debugLog(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${doorType}", not XIM or AIM`);
     }
 
     // Set up sysop debug callback for file errors
@@ -613,10 +614,10 @@ console.log(`[AmigaDoorSession][DEBUG] NOT creating AEDoorPort - doorType is "${
     // Set up callbacks between components
     this.setupComponentCallbacks();
 
-console.log(
+debugLog(
       "[AmigaDoorSession] ✅ Libraries initialized via LibraryManager"
     );
-console.log(
+debugLog(
       `[AmigaDoorSession]   ExecBase: 0x${this.sharedState.execLibrary
         .getExecBaseAddress()
         .toString(16)}`
@@ -632,17 +633,17 @@ console.log(
     }
 
     // Set up library opened callback
-console.log("[AmigaDoorSession] Setting library opened callback");
+debugLog("[AmigaDoorSession] Setting library opened callback");
     this.sharedState.execLibrary.setLibraryOpenedCallback(
       (name: string, addr: number) => {
         if (name.toLowerCase() === "dos.library") {
-console.log(
+debugLog(
             "[AmigaDoorSession] dos.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installDOSVectors();
         }
         if (name.toLowerCase() === "aedoor.library") {
-console.log(
+debugLog(
             "[AmigaDoorSession] AEDoor.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installAEDoorVectors();
@@ -654,14 +655,14 @@ console.log(
           // express.e:4352-4369 shows BBS waits for door to send JH_REGISTER, but doors like
           // AquaScan use pr_MsgPort messages for BBS mode detection before sending JH_REGISTER.
           if (this.messageHandler && !this.sharedState.sentInitialMessage) {
-console.log(
+debugLog(
               "[AmigaDoorSession] Sending INIT/STAT messages after AEDoor.library open"
             );
             this.sendStartupMessage();
           }
         }
         if (name.toLowerCase() === "icon.library") {
-console.log(
+debugLog(
             "[AmigaDoorSession] icon.library opened, installing vectors..."
           );
           this.sharedState.libraryTraps.installIconVectors();
@@ -681,12 +682,12 @@ console.log(
         if (this.sharedState.sentInitialMessage && this.lifecycleManager) {
           const state = this.lifecycleManager.getExecutionState();
           if (state.iterationCount >= 1000) {
-console.log(
+debugLog(
               `[AmigaDoorSession] *** LIBRARY CALL IN POLLING LOOP ***`
             );
-console.log(`[AmigaDoorSession]   Function: ${functionName}`);
-console.log(`[AmigaDoorSession]   PC: 0x${pc.toString(16)}`);
-console.log(
+debugLog(`[AmigaDoorSession]   Function: ${functionName}`);
+debugLog(`[AmigaDoorSession]   PC: 0x${pc.toString(16)}`);
+debugLog(
               `[AmigaDoorSession]   Iteration: ${state.iterationCount}`
             );
           }
@@ -725,7 +726,7 @@ console.log(
     const progName = (sessionCommand && typeof sessionCommand === 'string')
       ? sessionCommand.toUpperCase()
       : path.basename(this.config.executablePath);
-console.log(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sessionCommand}" or basename)`);
+debugLog(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sessionCommand}" or basename)`);
     // CRITICAL: Default to 1, not 0, to match port creation at line 437
     // This ensures the door's first argument matches the AEDoorPort name
     const nodeId =
@@ -801,12 +802,12 @@ console.log(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sess
     // DoorLoader will write pr_CLI after allocating the Task structure
     const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
 
-console.log(
+debugLog(
       `[AmigaDoorSession] Created CLI struct at 0x${cliStructAddr.toString(
         16
       )} (cliBPTR=0x${cliBPTR.toString(16)}${isXimDoor ? " - XIM door, pr_CLI depends on CLI_REQUIRED tooltype" : " - will be written to pr_CLI by DoorLoader"})`
     );
-console.log(
+debugLog(
       `[AmigaDoorSession]   Command BSTR len=${cmdLine.length} at 0x${cmdLineAddr.toString(
         16
       )} "${cmdLine}"`
@@ -818,7 +819,7 @@ console.log(
     let cliArgs: string[] = [];
     if (isXimDoor) {
       if (cliArgsRaw.length > 0) {
-console.log(
+debugLog(
           `[AmigaDoorSession] XIM doors ignore config.args for CLI (express.e runDoor); using node only`
         );
       }
@@ -834,7 +835,7 @@ console.log(
       this.emulator.writeMemory(argStringAddr + i, argStringPlain.charCodeAt(i));
     }
     this.emulator.writeMemory(argStringAddr + argStringPlain.length, 0);
-console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
+debugLog(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
 
     // Restore pr_CLI if a door CreatePort() overwrites it
@@ -851,7 +852,7 @@ console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
       // Get CURRENT task address (may have been allocated by DoorLoader after this callback was set)
       const currentTaskAddr = this.sharedState.execLibrary?.getCurrentTaskAddress() ?? 0;
       if (currentTaskAddr === 0) {
-        console.log("[AmigaDoorSession] pr_CLI restore callback: task not allocated yet, skipping");
+        debugLog("[AmigaDoorSession] pr_CLI restore callback: task not allocated yet, skipping");
         return;
       }
       const currentValue = this.emulator?.readMemory32(currentTaskAddr + prCliOffset) ?? 0;
@@ -860,7 +861,7 @@ console.log(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
         // This is the CLI structure that DoorLoader populates with correct values
         const doorLoaderCliBptr = 0xa0000 >> 2; // 0x28000
         this.emulator?.writeMemory32(currentTaskAddr + prCliOffset, doorLoaderCliBptr);
-console.log(
+debugLog(
           `[AmigaDoorSession] pr_CLI was cleared during CreatePort; restored to 0x${doorLoaderCliBptr.toString(16)} at task 0x${currentTaskAddr.toString(16)}`
         );
       }
@@ -881,7 +882,7 @@ console.log(
    * Terminate the door session - REFACTORED
    */
   terminate(): void {
-console.log("[AmigaDoorSession] Terminating refactored door session...");
+debugLog("[AmigaDoorSession] Terminating refactored door session...");
     this.logger.info("Terminating session...");
 
     this.isRunning = false;
@@ -905,7 +906,7 @@ console.log("[AmigaDoorSession] Terminating refactored door session...");
         const portAddr = this.sharedState.execLibrary.findPort(portNameAddr);
         if (portAddr && portAddr !== 0) {
           this.sharedState.execLibrary.deletePort(portAddr);
-console.log(`[AmigaDoorSession] Deleted ${this.doorPortName} at 0x${portAddr.toString(16)} (cleanup)`);
+debugLog(`[AmigaDoorSession] Deleted ${this.doorPortName} at 0x${portAddr.toString(16)} (cleanup)`);
         }
       } catch (err) {
 console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, err);
@@ -937,7 +938,7 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     this.lifecycleManager = null;
     this.messageHandler = null;
 
-console.log("[AmigaDoorSession] Refactored door session terminated");
+debugLog("[AmigaDoorSession] Refactored door session terminated");
   }
 
   private removeSocketHandlers(): void {
@@ -981,7 +982,7 @@ console.log("[AmigaDoorSession] Refactored door session terminated");
    */
   getExitState() {
     const ximState = this.sharedState.ximProtocol?.getStateSnapshot();
-console.log(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximProtocol}, returnCommand="${ximState?.returnCommand || 'NONE'}"`);
+debugLog(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximProtocol}, returnCommand="${ximState?.returnCommand || 'NONE'}"`);
     return {
       ximState,
       bbsSession: this.config.bbsSession,

@@ -1459,6 +1459,8 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
  * Dynamically imports the door module and calls its runDoor() function
  */
 async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession, hybridSessionId?: string | null): Promise<void> {
+  const execId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+console.log(`[executeTypeScriptDoor] ===== EXEC ID: ${execId} =====`);
 console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
 console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
   let wrappedSocket: any;
@@ -3525,6 +3527,7 @@ console.log(`[executeClientDoor] Starting client door: ${door.name}`);
     // Set door active flag
     session.inDoorManager = true;
 console.log(`[executeClientDoor] Set inDoorManager=true for session`);
+    session.clientDoorActive = true;
 
     // Enable mouse events for client doors (needed for games like Arkanoid)
     session.mouseEventsEnabled = true;

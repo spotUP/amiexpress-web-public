@@ -83,8 +83,8 @@ export function findAssign(assignName: string): string | null {
     // T: points to temp directory
     'T:': process.env.TEMP_DIR || '/tmp',
 
-    // RAM: points to ram disk (use temp)
-    'RAM:': process.env.RAM_DIR || '/tmp',
+    // RAM: points to ram disk (use temp) - consistent with PathManager
+    'RAM:': process.env.RAM_DIR || '/tmp/ram',
 
     // ENV: points to environment variables
     'ENV:': process.env.ENV_DIR || '/tmp/ENV',

@@ -14,6 +14,7 @@ import { notifySysop } from "../utils/sysop-alert.util.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { DoorLogger } from "./DoorLogger.js";
 import { SharedBBSData } from "./structures/GlobalStructures.js";
+import { debugLog } from '../utils/debug-log';
 
 export class DoorLoader {
   private emulator: MoiraEmulator;
@@ -79,7 +80,7 @@ export class DoorLoader {
           if (amigafs.existsSync(candidate)) {
             const candidateStats = amigafs.statSync(candidate);
             if (candidateStats.isFile()) {
-              console.log(`[DoorLoader] Resolved directory ${executablePath} to executable: ${candidate}`);
+              debugLog(`[DoorLoader] Resolved directory ${executablePath} to executable: ${candidate}`);
               executablePath = candidate;
               found = true;
               break;
@@ -118,19 +119,19 @@ export class DoorLoader {
       this.logger?.error(`Failed to read binary: ${executablePath}`);
       throw error;
     }
-console.log(`[DoorLoader] Door binary size: ${binary.length} bytes`);
+debugLog(`[DoorLoader] Door binary size: ${binary.length} bytes`);
     this.logger?.info(`Binary loaded: ${binary.length} bytes`);
 
     // Parse Amiga HUNK format
     const hunkLoader = new HunkLoader();
     const hunkFile = hunkLoader.parse(Buffer.from(binary));
 
-console.log(`[DoorLoader] Parsed ${hunkFile.segments.length} segments:`);
+debugLog(`[DoorLoader] Parsed ${hunkFile.segments.length} segments:`);
     this.logger?.info(`Parsed ${hunkFile.segments.length} segments`);
     for (let i = 0; i < hunkFile.segments.length; i++) {
       const seg = hunkFile.segments[i];
       const segInfo = `Segment ${i}: ${seg.type.toUpperCase()} at 0x${seg.address.toString(16)}, size=${seg.size} bytes`;
-console.log(`  ${segInfo}`);
+debugLog(`  ${segInfo}`);
       this.logger?.log('HUNK', segInfo);
 
       // Register CODE segments for self-modifying code detection
@@ -155,7 +156,7 @@ console.log(`  ${segInfo}`);
     // Allocate Task structure dynamically after door segments
     this.execLibrary.allocateDoorTask(highestSegmentEnd);
 
-console.log(
+debugLog(
       `[DoorLoader] Door loaded at entry point: 0x${hunkFile.entryPoint.toString(
         16
       )}`
@@ -166,10 +167,20 @@ console.log(
     // RTW and other XIM doors expect A5-88 to point to CommandsStructure
     this.sharedBBSData = new SharedBBSData(this.emulator, 0xF00300);
     this.sharedBBSData.writeBBSData(this.config.bbsSession || {});
-console.log(`[DoorLoader] SharedBBSData initialized at 0x${this.sharedBBSData.getCmdsAddr().toString(16)}`);
+debugLog(`[DoorLoader] SharedBBSData initialized at 0x${this.sharedBBSData.getCmdsAddr().toString(16)}`);
 
     // Set up CPU for door execution
     this.setupCpuRegisters(hunkFile);
+
+    // CRITICAL: Enable 100x overclocking for door execution speed
+    // Without this, doors run at native 68000 speed (~1-2 seconds per XIM message)
+    const overclockFactor = this.config.overclockFactor ?? 100;
+    if (this.emulator.setOverclocking) {
+      this.emulator.setOverclocking(overclockFactor);
+debugLog(`[DoorLoader] Overclocking set to ${overclockFactor}x`);
+    } else {
+debugLog(`[DoorLoader] WARNING: setOverclocking not available - door will run at native speed`);
+    }
 
     // Prefill the 68000 instruction queue
     this.emulator.refillPrefetch();
@@ -179,7 +190,7 @@ console.log(`[DoorLoader] SharedBBSData initialized at 0x${this.sharedBBSData.ge
    * Set up CPU registers for door execution
    */
   private setupCpuRegisters(hunkFile: any): void {
-console.log("[DoorLoader] Setting up CPU registers...");
+debugLog("[DoorLoader] Setting up CPU registers...");
 
     // Cache segment metadata up front for SAS/C style setup
     const codeSegment = hunkFile.segments.find(
@@ -201,16 +212,16 @@ console.log("[DoorLoader] Setting up CPU registers...");
     }
     // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
     this.stackBaseAddr = ((lastSegmentEnd + 32) + 7) & ~7;
-console.log(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after segment end 0x${lastSegmentEnd.toString(16)})`);
+debugLog(`  Stack: lower=0x${this.stackBaseAddr.toString(16)}, upper=0x${(this.stackBaseAddr + this.stackSizeBytes).toString(16)} (after segment end 0x${lastSegmentEnd.toString(16)})`);
 
     // Match vamos startup: user mode, Z flag set from zeroed D registers
     this.emulator.setRegister(17, 0x0000); // SR (Status Register)
-console.log(`  SR: 0x0000 (user mode)`);
+debugLog(`  SR: 0x0000 (user mode)`);
 
     // Set up A6 register with ExecBase (standard Amiga convention)
     const execBaseAddr = this.execLibrary.getExecBaseAddress();
     this.emulator.setRegister(14, execBaseAddr); // A6 = ExecBase
-console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
+debugLog(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
 
     // Set up CLI/argument string similar to AmigaDOS
     // CRITICAL: Default to 1, not 0, to match AEDoorPort naming convention
@@ -221,39 +232,31 @@ console.log(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
     // as the program name so doors like AquaScan can detect which command invoked them.
     // Otherwise fallback to executable basename.
     const sessionCommand = this.config.bbsSession?.doorCommand;
-console.log(`[DoorLoader] sessionCommand="${sessionCommand}" type=${typeof sessionCommand} bbsSession=${!!this.config.bbsSession}`);
+debugLog(`[DoorLoader] sessionCommand="${sessionCommand}" type=${typeof sessionCommand} bbsSession=${!!this.config.bbsSession}`);
     const progName = (sessionCommand && typeof sessionCommand === 'string')
       ? sessionCommand.toUpperCase()
       : path.basename(this.config.executablePath);
-console.log(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCommand}" or basename)`);
+debugLog(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCommand}" or basename)`);
 
     let customArgs: string[] = [];
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];
-    if (doorType === "XIM") {
-      // XIM doors like AquaScan use ReadArgs which may require arguments (e.g., NODE/N/A)
-      // When user provides args (e.g., "FR 2"), use those
-      // When no args provided, default to "1" (directory 1 = upload directory)
-      // This allows: FR → scan Dir1, FR 2 → scan Dir2, FR A → scan all dirs
-      if (configArgs.length > 0) {
-        customArgs = [...configArgs];
-console.log(`[DoorLoader] XIM door with explicit args: ${JSON.stringify(customArgs)}`);
-      } else {
-        // Default to "1" (upload directory) for doors that expect a directory number
-        customArgs = ["1"];
-console.log(`[DoorLoader] XIM door with default args: ["1"] (upload directory)`);
-      }
-    } else if (configArgs.length > 0) {
-      customArgs = configArgs;
+    if (configArgs.length > 0) {
+      // User provided explicit args - use those for any door type
+      customArgs = [...configArgs];
+debugLog(`[DoorLoader] Door with explicit args: ${JSON.stringify(customArgs)}`);
     } else {
-      // Default CLI for non-XIM doors: pass node number (matches express.e tooling)
+      // Default CLI for all doors: pass node number (matches express.e tooling)
+      // This is critical for XIM doors which use the node number to find AEDoorPort{node}
+      // express.e: StringF(doorPort,'\s\d','AEDoorPort',node)
       customArgs = [nodeId.toString()];
+debugLog(`[DoorLoader] Door with default args: ["${nodeId}"] (node number for AEDoorPort${nodeId})`);
     }
     const argStringBase = customArgs.join(" ").trim();
     // AmigaDOS requires argument string to be terminated with newline (0x0A), NOT null
     // This is critical - many doors check the argument length and parse differently
     // vamos shows: args: '1' (2) - the newline is INCLUDED in the length
     const argString = argStringBase + "\n";
-console.log(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argStringBase}" (len=${argString.length} with newline)`);
+debugLog(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argStringBase}" (len=${argString.length} with newline)`);
     const ARG_STRING_ADDR = 0x0f0100;
     const ARG_BSTR_ADDR = ARG_STRING_ADDR + 0x100;
 
@@ -279,7 +282,7 @@ console.log(`[DoorLoader] Building CLI args for doorType=${doorType} from config
     this.emulator.setRegister(0, argLen); // D0 = length of arg string
     this.emulator.setRegister(1, 0); // D1 = 0 at startup
     this.emulator.setRegister(2, this.stackSizeBytes); // D2 = stack size
-console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)}`);
+debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)}`);
 
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
     // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
@@ -455,10 +458,10 @@ console.log(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toS
 
     // DEBUG: Verify what's actually at 0xf0081 after initialization
     const verify0xf0081 = this.emulator.readMemory32(0xf0081);
-console.log(`[DoorLoader] DEBUG: Memory at 0xf0081 = 0x${verify0xf0081.toString(16).padStart(8, '0')}`);
-console.log(`[DoorLoader] DEBUG: Expected 'who' = 0x77686f00, CLI at 0x${cliAddr.toString(16)}`);
+debugLog(`[DoorLoader] DEBUG: Memory at 0xf0081 = 0x${verify0xf0081.toString(16).padStart(8, '0')}`);
+debugLog(`[DoorLoader] DEBUG: Expected 'who' = 0x77686f00, CLI at 0x${cliAddr.toString(16)}`);
 
-console.log(
+debugLog(
       `[DoorLoader] CLI set: BPTR=0x${cliBptr.toString(
         16
       )} cmdNameBPTR=0x${cmdNameBptr.toString(
@@ -471,20 +474,20 @@ console.log(
     const thisTaskPtr = this.emulator.readMemory32(execBase + 0x114); // pr_CurrentTask
     const prCLIOffset = 0xac;
     const finalPrCLI = useCliPtr ? cliBptr : 0;
-    console.log(`[DoorLoader] DEBUG: thisTaskPtr=0x${thisTaskPtr.toString(16)} writing pr_CLI to 0x${(thisTaskPtr + prCLIOffset).toString(16)}`);
+    debugLog(`[DoorLoader] DEBUG: thisTaskPtr=0x${thisTaskPtr.toString(16)} writing pr_CLI to 0x${(thisTaskPtr + prCLIOffset).toString(16)}`);
     this.emulator.writeMemory32(thisTaskPtr + prCLIOffset, finalPrCLI);
     // Verify the write
     const verifyPrCLI = this.emulator.readMemory32(thisTaskPtr + prCLIOffset);
-    console.log(`[DoorLoader] DEBUG: Verified pr_CLI at 0x${(thisTaskPtr + prCLIOffset).toString(16)} = 0x${verifyPrCLI.toString(16)}`);
+    debugLog(`[DoorLoader] DEBUG: Verified pr_CLI at 0x${(thisTaskPtr + prCLIOffset).toString(16)} = 0x${verifyPrCLI.toString(16)}`);
     // Also verify ExecBase->ThisTask
     const verifyThisTask = this.emulator.readMemory32(execBase + 0x114);
-    console.log(`[DoorLoader] DEBUG: ExecBase->ThisTask at 0x${(execBase + 0x114).toString(16)} = 0x${verifyThisTask.toString(16)}`);
+    debugLog(`[DoorLoader] DEBUG: ExecBase->ThisTask at 0x${(execBase + 0x114).toString(16)} = 0x${verifyThisTask.toString(16)}`);
     if (cliRequired) {
-      console.log(`[DoorLoader] CLI_REQUIRED=YES - pr_CLI set to 0x${cliBptr.toString(16)}`);
+      debugLog(`[DoorLoader] CLI_REQUIRED=YES - pr_CLI set to 0x${cliBptr.toString(16)}`);
     } else if (doorType === "XIM") {
-      console.log(`[DoorLoader] XIM door - pr_CLI set to 0x${cliBptr.toString(16)} (BBS shell mode)`);
+      debugLog(`[DoorLoader] XIM door - pr_CLI set to 0x${cliBptr.toString(16)} (BBS shell mode)`);
     }
-console.log(
+debugLog(
       `[DoorLoader] Process set: pr_CLI=0x${finalPrCLI.toString(
         16
       )} pr_SegList=0x${segListBptr.toString(
@@ -499,7 +502,7 @@ console.log(
     // The arg string is at ARG_STRING_ADDR (0x0f0100)
     const stackTop = this.stackBaseAddr + this.stackSizeBytes;
     this.emulator.setRegister(8, ARG_STRING_ADDR); // A0 = arg string pointer
-console.log(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} "${argString}"`);
+debugLog(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} "${argString}"`);
 
     // CRITICAL FIX: A4 must point to DATA segment + 0x7FFE for small data model
     // SAS/C and similar compilers use 16-bit signed A4-relative addressing
@@ -520,7 +523,7 @@ console.warn(`[DoorLoader] Segment types: ${hunkFile.segments.map((s: any) => s.
         // Let's try pointing A4 to the code segment itself, which is a common convention for
         // single-hunk executables that have data merged into the code segment.
         a4Value = codeSegment.address + 0x7FFE;
-console.log(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${a4Value.toString(16)}`);
+debugLog(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${a4Value.toString(16)}`);
 
         // Allocate BSS after CODE segment
         // SAS/C programs typically need 64KB-128KB for BSS (globals, static data, heap)
@@ -528,7 +531,7 @@ console.log(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${
         const bssBase = codeSegment.address + codeSegment.size;
 
         // Clear BSS to zero (critical for uninitialized globals)
-console.log(`[DoorLoader] Allocating BSS: base=0x${bssBase.toString(16)}, size=0x${bssSize.toString(16)} (${bssSize} bytes)`);
+debugLog(`[DoorLoader] Allocating BSS: base=0x${bssBase.toString(16)}, size=0x${bssSize.toString(16)} (${bssSize} bytes)`);
         for (let i = 0; i < bssSize; i++) {
           this.emulator.writeMemory(bssBase + i, 0);
         }
@@ -545,7 +548,7 @@ console.error(`[DoorLoader] ERROR: No CODE segment found! Cannot allocate BSS.`)
     this.emulator.setRegister(13, stackTop); // A5 = stack top (vamos)
     const a4Now = this.emulator.getRegister(12);
     const a5Now = this.emulator.getRegister(13);
-console.log(
+debugLog(
       `  A4=0x${a4Now.toString(16)} (DATA segment), A5=0x${a5Now.toString(
         16
       )} (stack top), stackTop=0x${stackTop.toString(16)}`
@@ -587,9 +590,9 @@ console.log(
     // A5-88: Pointer to CommandsStructure (cmds) - XIM doors like RTW read BBS config from here
     // NOT the saved A5 value - that was incorrect and caused RTW to exit with code 30
     const cmdsAddr = this.sharedBBSData?.getCmdsAddr() || 0xF00300;
-console.log(`[DoorLoader] DEBUG A5-88: sharedBBSData=${!!this.sharedBBSData}, cmdsAddr=0x${cmdsAddr.toString(16)}, frameBase=0x${frameBase.toString(16)}, A5=0x${a5Now.toString(16)}`);
+debugLog(`[DoorLoader] DEBUG A5-88: sharedBBSData=${!!this.sharedBBSData}, cmdsAddr=0x${cmdsAddr.toString(16)}, frameBase=0x${frameBase.toString(16)}, A5=0x${a5Now.toString(16)}`);
     writeFrame32(-88, cmdsAddr);
-console.log(`[DoorLoader] DEBUG A5-88: Wrote 0x${cmdsAddr.toString(16)} to address 0x${(frameBase - 88).toString(16)}, verify: 0x${this.emulator.readMemory32(frameBase - 88).toString(16)}`);
+debugLog(`[DoorLoader] DEBUG A5-88: Wrote 0x${cmdsAddr.toString(16)} to address 0x${(frameBase - 88).toString(16)}, verify: 0x${this.emulator.readMemory32(frameBase - 88).toString(16)}`);
     writeFrame32(-92, 1); // stdin (BPTR)
     writeFrame32(-120, taskAddr); // thistask
     writeFrame32(-128, 0); // opened files list (empty)
@@ -600,7 +603,7 @@ console.log(`[DoorLoader] DEBUG A5-88: Wrote 0x${cmdsAddr.toString(16)} to addre
     if (codeSegment) {
       const codeEnd = codeSegment.address + codeSegment.size;
     this.emulator.setRegister(9, codeEnd); // A1 = end of CODE
-console.log(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
+debugLog(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
     }
 
     // Configure stack FIRST (before setting PC)
@@ -620,17 +623,17 @@ console.log(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
     // Some doors save/restore SP and expect this value to be correct
     this.emulator.writeMemory32(currentSP + 4, newSP);
 
-console.log(
+debugLog(
       `[DoorLoader] Simulated JSR: Pushed return address 0x${this.exitTrapAddress.toString(
         16
       )} at SP=0x${newSP.toString(16)}`
     );
-console.log(
+debugLog(
       `[DoorLoader] Updated saved SP at 0x${(currentSP + 4).toString(16)} to 0x${newSP.toString(16)}`
     );
 
     // Set PC to REAL HUNK ENTRY POINT
-console.log(
+debugLog(
       `[DoorLoader] Setting PC to HUNK entry point 0x${hunkFile.entryPoint.toString(
         16
       )}`
@@ -644,7 +647,7 @@ console.log(
       prSegListVal !== 0 ? this.emulator.readMemory32(prSegListVal << 2) : 0;
     const segHeaderNext =
       prSegListVal !== 0 ? this.emulator.readMemory32((prSegListVal << 2) + 4) : 0;
-console.log(
+debugLog(
       `[DoorLoader] Preload state: A4=0x${this.emulator
         .getRegister(12)
         .toString(16)} A5=0x${this.emulator.getRegister(13).toString(16)} SP=0x${this.emulator
@@ -667,7 +670,7 @@ console.log(
 
     // CRITICAL DEBUG: Verify ExecBase pointer at 0x4 is set correctly
     const verifyExecBase = this.emulator.readMemory32(0x4);
-console.log(`[DoorLoader] VERIFY: Memory[0x4]=0x${verifyExecBase.toString(16)} (expected 0x${execBaseAddr.toString(16)})`);
+debugLog(`[DoorLoader] VERIFY: Memory[0x4]=0x${verifyExecBase.toString(16)} (expected 0x${execBaseAddr.toString(16)})`);
     if (verifyExecBase !== execBaseAddr) {
 console.error(`[DoorLoader] CRITICAL ERROR: Memory[0x4] is NOT ExecBase! Expected 0x${execBaseAddr.toString(16)}, got 0x${verifyExecBase.toString(16)}`);
     }
@@ -705,15 +708,15 @@ console.error(`[DoorLoader] CRITICAL ERROR: Memory[0x4] is NOT ExecBase! Expecte
     // Set SP
     this.emulator.setRegister(15, finalSP); // A7 (SP)
     this.execLibrary.setStackBounds(stackBase, stackSize);
-console.log(`  SP: 0x${finalSP.toString(16)} (stackBase=0x${stackBase.toString(16)})`);
+debugLog(`  SP: 0x${finalSP.toString(16)} (stackBase=0x${stackBase.toString(16)})`);
 
     const currentPC = this.emulator.getRegister(16);
-console.log(`[PC-DEBUG] PC after setup: 0x${currentPC.toString(16)}`);
+debugLog(`[PC-DEBUG] PC after setup: 0x${currentPC.toString(16)}`);
 
     const verifyFinalSP = this.emulator.getRegister(15);
     const verifyFinalPC = this.emulator.getRegister(16);
     const verifyFinalA0 = this.emulator.getRegister(8);
-console.log(
+debugLog(
       `[DoorLoader] Door ready: SP=0x${verifyFinalSP.toString(
         16
       )}, PC=0x${verifyFinalPC.toString(16)}, A0=0x${verifyFinalA0.toString(

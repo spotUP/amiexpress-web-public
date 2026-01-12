@@ -12,6 +12,7 @@ import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
+import { debugLog } from "../../utils/debug-log";
 import { notifySysop } from "../../utils/sysop-alert.util";
 import { getSystemTime } from '../../utils/date-time.util';
 
@@ -190,7 +191,7 @@ export class ExecLibrary {
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
     this.instanceId = ++ExecLibrary.instanceCounter;
-    console.log(`[ExecLibrary] Created instance #${this.instanceId}`);
+    debugLog(`[ExecLibrary] Created instance #${this.instanceId}`);
 
     // Initialize ExecBase structure
     this.execBase = {
@@ -245,8 +246,8 @@ export class ExecLibrary {
     };
     this.execBase.thisTask = 0; // Will be set by allocateDoorTask()
 
-console.log("[ExecLibrary] Initialized");
-console.log(
+debugLog("[ExecLibrary] Initialized");
+debugLog(
       `[ExecLibrary] ExecBase at 0x${this.execBase.address.toString(16)}`
     );
   }
@@ -275,7 +276,7 @@ console.error(`[ExecDebug] Failed to write log: ${e}`);
   setStackBounds(lower: number, size: number): void {
     this.currentStackLower = lower >>> 0;
     this.currentStackUpper = (lower + size) >>> 0;
-console.log(
+debugLog(
       `[ExecLibrary] Stack bounds set: lower=0x${this.currentStackLower.toString(
         16
       )} upper=0x${this.currentStackUpper.toString(16)}`
@@ -323,7 +324,7 @@ console.log(
     // Write the Task/Process structure to memory
     this.writeTaskToMemory(this.currentTask);
 
-console.log(
+debugLog(
       `[ExecLibrary] *** DYNAMIC TASK ALLOCATION ***\n` +
       `  Door segments end at: 0x${doorSegmentEnd.toString(16)}\n` +
       `  Task structure allocated at: 0x${taskAddr.toString(16)}\n` +
@@ -350,7 +351,7 @@ console.log(
   getNeedsXIMPoll(): boolean {
     // Debug: Log which instance is being checked
     if (this.needsXIMPoll) {
-      console.log(`[ExecLibrary] getNeedsXIMPoll() returning TRUE (instance=${this.instanceId})`);
+      debugLog(`[ExecLibrary] getNeedsXIMPoll() returning TRUE (instance=${this.instanceId})`);
     }
     return this.needsXIMPoll;
   }
@@ -373,7 +374,7 @@ console.log(
   }
 
   recordWaitPortReturn(returnAddr: number): void {
-console.log(
+debugLog(
       `[ExecLibrary] Storing WaitPort return address 0x${returnAddr.toString(
         16
       )}`
@@ -415,7 +416,7 @@ console.log(
       return;
     }
     if (!this.protectedMessages.has(msgAddr)) {
-console.log(
+debugLog(
         `[ExecLibrary] Protecting message from ${context}: 0x${msgAddr.toString(
           16
         )}`
@@ -440,7 +441,7 @@ console.log(
    * - Override ROM exception vectors with simple handlers
    */
   initialize(): void {
-console.log("[ExecLibrary] Creating ExecBase structure...");
+debugLog("[ExecLibrary] Creating ExecBase structure...");
 
     // ROM loaded but its exception handlers expect fully booted system
     // Override with our simple handlers that skip instructions
@@ -448,7 +449,7 @@ console.log("[ExecLibrary] Creating ExecBase structure...");
 
     // Write ExecBase pointer at 0x000004 (absolute address 4)
     this.emulator.writeMemory32(0x000004, this.execBase.address);
-console.log(
+debugLog(
       `[ExecLibrary] Wrote ExecBase pointer at 0x000004 -> 0x${this.execBase.address.toString(
         16
       )}`
@@ -458,7 +459,7 @@ console.log(
     // The DIAGNOSTIC door does: movea.l 0xc.l, a6 to get ExecBase
     // Write ExecBase at 0xC as well to support this pattern
     this.emulator.writeMemory32(0x00000c, this.execBase.address);
-console.log(
+debugLog(
       `[ExecLibrary] Wrote ExecBase pointer at 0x00000C -> 0x${this.execBase.address.toString(
         16
       )} (SAS/C pattern)`
@@ -470,7 +471,7 @@ console.log(
     // MUST be in chip RAM (0x000000-0x1FFFFF) - using area after exception handlers
     const STUB_FUNCTION_ADDR = 0x180f00; // After exception handlers (0x180000-0x180800)
     this.emulator.writeMemory16(STUB_FUNCTION_ADDR, 0x4e75); // RTS instruction
-console.log(
+debugLog(
       `[ExecLibrary] Created stub function at 0x${STUB_FUNCTION_ADDR.toString(
         16
       )}`
@@ -486,7 +487,7 @@ console.log(
 
     for (const addr of LOW_MEMORY_VECTORS) {
       this.emulator.writeMemory32(addr, STUB_FUNCTION_ADDR);
-console.log(
+debugLog(
         `[ExecLibrary] Stub vector at 0x${addr
           .toString(16)
           .padStart(4, "0")} -> 0x${STUB_FUNCTION_ADDR.toString(16)}`
@@ -499,7 +500,7 @@ console.log(
     // NOTE: Task structure will be written by allocateDoorTask() after door segments load
     // This avoids overlapping with door's BSS/DATA segments
 
-console.log("[ExecLibrary] ExecBase initialized successfully");
+debugLog("[ExecLibrary] ExecBase initialized successfully");
   }
 
   /**
@@ -511,7 +512,7 @@ console.log("[ExecLibrary] ExecBase initialized successfully");
    * We create handlers that skip the offending instruction to prevent infinite loops.
    */
   private setupExceptionVectors(): void {
-console.log("[ExecLibrary] Setting up exception vectors...");
+debugLog("[ExecLibrary] Setting up exception vectors...");
 
     // Exception handler code location - MUST be within chip RAM (0x000000-0x1FFFFF)
     // The vAmiga-style WASM memory only maps chip RAM (2MB) and ROM (512KB at 0xF80000)
@@ -546,7 +547,7 @@ console.log("[ExecLibrary] Setting up exception vectors...");
     const verifyWord0 = this.emulator.readMemory16(handler4Addr);
     const verifyWord1 = this.emulator.readMemory16(handler4Addr + 2);
     const verifyWord2 = this.emulator.readMemory16(handler4Addr + 4);
-console.log(
+debugLog(
       `[ExecLibrary] Handler 4 at 0x${handler4Addr.toString(
         16
       )}: [${verifyWord0.toString(16)}, ${verifyWord1.toString(
@@ -554,13 +555,13 @@ console.log(
       )}, ${verifyWord2.toString(16)}] (expected: 5aaf, 2, 4e73)`
     );
 
-console.log("[ExecLibrary] Exception vectors initialized (0x00-0xFF)");
-console.log(
+debugLog("[ExecLibrary] Exception vectors initialized (0x00-0xFF)");
+debugLog(
       `[ExecLibrary] Exception handlers at 0x${EXCEPTION_HANDLER_BASE.toString(
         16
       )}`
     );
-console.log(
+debugLog(
       "[ExecLibrary] Handlers skip offending instruction (+2 bytes) and RTE"
     );
   }
@@ -587,13 +588,13 @@ console.log(
     // V36 additions
     this.emulator.writeMemory32(addr + 568, this.execBase.eclockFrequency); // ex_EClockFrequency
 
-console.log(
+debugLog(
       `[ExecLibrary] ExecBase structure written to 0x${addr.toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   Version: ${this.execBase.version}.${this.execBase.revision}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   ThisTask: 0x${this.execBase.thisTask.toString(16)}`
     );
   }
@@ -712,13 +713,13 @@ console.log(
     this.emulator.writeMemory32(addr + 0xb8, 0); // pr_CIS = NULL (no CLI input stream)
     this.emulator.writeMemory32(addr + 0xbc, 0); // pr_COS = NULL (no CLI output stream)
 
-console.log(
+debugLog(
       `[ExecLibrary] Task/Process structure written to 0x${task.address.toString(
         16
       )}`
     );
-console.log(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
-console.log(`[ExecLibrary]   pr_CLI at 0x${(addr + 0xac).toString(16)} = 0 (BBS door, not CLI)`);
+debugLog(`[ExecLibrary]   pr_MsgPort at 0x${msgPortAddr.toString(16)}`);
+debugLog(`[ExecLibrary]   pr_CLI at 0x${(addr + 0xac).toString(16)} = 0 (BBS door, not CLI)`);
   }
 
   /**
@@ -765,7 +766,7 @@ console.log(`[ExecLibrary]   pr_CLI at 0x${(addr + 0xac).toString(16)} = 0 (BBS 
   setLibraryLoader(libraryLoader: any, useNativeLibraries: boolean): void {
     this.libraryLoader = libraryLoader;
     this.useNativeLibraries = useNativeLibraries;
-console.log(
+debugLog(
       `[ExecLibrary] Library loader set - native libraries: ${
         useNativeLibraries ? "enabled" : "disabled"
       }`
@@ -780,7 +781,7 @@ console.log(
     minVersion: number,
     allowTrapJump: boolean = false
   ): { success: boolean; address: number; isNative: boolean } {
-console.log(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
+debugLog(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
 
     // Try ROM resident modules (e.g. Kickstart/AROS residents) first so InitResident runs
     if (this.useNativeLibraries) {
@@ -797,7 +798,7 @@ console.log(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
       // disk/stub libraries. The trap will execute later. We do NOT return address 0
       // here because that breaks doors expecting a valid library base immediately.
       if (this.hasPendingTrapJump()) {
-console.log(
+debugLog(
           `[ExecLibrary] InitResident trap scheduled for ${name}, continuing with disk/stub loading`
         );
         // Fall through to try disk libraries or stubs
@@ -811,7 +812,7 @@ console.log(
       const existingCheck =
         this.libraries.get(name) || this.libraries.get(name.toLowerCase());
       if (existingCheck && name.toLowerCase() === "aedoor.library") {
-console.log(
+debugLog(
           `[ExecLibrary] AEDoor.library already loaded at 0x${existingCheck.address.toString(
             16
           )} - using existing (has JMP table)`
@@ -835,7 +836,7 @@ console.log(
 
       const realLibrary = this.libraryLoader.loadLibrary(name, minVersion);
       if (realLibrary) {
-console.log(
+debugLog(
           `[ExecLibrary] ✅ Loaded REAL ${name} at 0x${realLibrary.baseAddress.toString(
             16
           )}`
@@ -850,7 +851,7 @@ console.log(
           existing.revision = 0;
           existing.openCount = (existing.openCount || 0) + 1;
           this.writeLibraryToMemory(existing);
-console.log(
+debugLog(
             `[ExecLibrary]   Upgraded placeholder for ${name} -> real base 0x${existing.address.toString(
               16
             )}, count=${existing.openCount}`
@@ -898,7 +899,7 @@ console.log(
           isNative: true,
         };
       } else {
-console.log(`[ExecLibrary] ⚠️ Real library not found, using stub`);
+debugLog(`[ExecLibrary] ⚠️ Real library not found, using stub`);
       }
     }
 
@@ -909,7 +910,7 @@ console.log(`[ExecLibrary] ⚠️ Real library not found, using stub`);
       return { success: true, address: stubAddr, isNative: false };
     }
 
-console.log(`[ExecLibrary] ❌ Failed to open ${name}`);
+debugLog(`[ExecLibrary] ❌ Failed to open ${name}`);
     this.setLibraryNativeFlag(name, false);
     return { success: false, address: 0, isNative: false };
   }
@@ -933,7 +934,7 @@ console.log(`[ExecLibrary] ❌ Failed to open ${name}`);
         if (fixed.stubJumpTableEntries) {
           this.fillStubJumpTable(existing.address, fixed.stubJumpTableEntries);
         }
-console.log(
+debugLog(
           `[ExecLibrary]   Reusing registered ${name} at 0x${existing.address.toString(
             16
           )}, count=${existing.openCount}`
@@ -963,7 +964,7 @@ console.log(
       if (fixed.stubJumpTableEntries) {
         this.fillStubJumpTable(lib.address, fixed.stubJumpTableEntries);
       }
-console.log(
+debugLog(
         `[ExecLibrary]   Opened STUB ${name} at 0x${fixed.address.toString(
           16
         )}, v${lib.version}.${lib.revision}`
@@ -983,7 +984,7 @@ console.log(
         existing.revision = 0;
         this.writeLibraryToMemory(existing);
       }
-console.log(
+debugLog(
         `[ExecLibrary]   Reusing registered ${name} at 0x${existing.address.toString(
           16
         )}, count=${existing.openCount}`
@@ -1012,7 +1013,7 @@ console.log(
         this.nextStubLibraryAddr += 0x010000;
         libVersion = version;
         libRevision = 0;
-console.log(
+debugLog(
           `[ExecLibrary]   Opened generic stub library "${name}" at 0x${libAddr.toString(
             16
           )}`
@@ -1022,7 +1023,7 @@ console.log(
 
     // Check version requirement (allow graceful upgrade for stubs)
     if (version > libVersion) {
-console.log(
+debugLog(
         `[ExecLibrary]   Version ${version} > available ${libVersion}, proceeding with stub (compat mode)`
       );
       libVersion = version;
@@ -1047,7 +1048,7 @@ console.log(
     // Write library structure to memory
     this.writeLibraryToMemory(lib);
 
-console.log(
+debugLog(
       `[ExecLibrary]   Opened STUB ${name} at 0x${libAddr.toString(
         16
       )}, v${libVersion}.${libRevision}`
@@ -1107,15 +1108,15 @@ console.log(
     minVersion: number,
     allowTrapJump: boolean
   ): number | null {
-console.log(`[ExecLibrary] Looking for ROM resident: ${name}`);
+debugLog(`[ExecLibrary] Looking for ROM resident: ${name}`);
     const residentAddr = this.findRomResidentByName(name);
     if (!residentAddr) {
-console.log(`[ExecLibrary]   ROM resident ${name} not found in ROM`);
+debugLog(`[ExecLibrary]   ROM resident ${name} not found in ROM`);
       return null;
     }
     const version = this.emulator.readMemory(residentAddr + 11);
     if (version < minVersion) {
-console.log(
+debugLog(
         `[ExecLibrary]   ROM resident ${name} v${version} < required ${minVersion}`
       );
       return null;
@@ -1124,7 +1125,7 @@ console.log(
     if (!libBase) {
       return null;
     }
-console.log(
+debugLog(
       `[ExecLibrary]   Opened ROM resident ${name} at 0x${libBase.toString(16)}`
     );
     return libBase;
@@ -1140,7 +1141,7 @@ console.log(
   }
 
   private scanRomResidents(): Map<string, number> {
-console.log(
+debugLog(
       `[ExecLibrary] Scanning ROM for resident modules (0x${ExecLibrary.ROM_START.toString(
         16
       )} - 0x${ExecLibrary.ROM_END.toString(16)})...`
@@ -1160,7 +1161,7 @@ console.log(
       if (namePtr) {
         const name = this.emulator.readString(namePtr, 128);
         if (name) {
-console.log(
+debugLog(
             `[ExecLibrary]   Found ROM resident: ${name} at 0x${addr.toString(
               16
             )}`
@@ -1173,11 +1174,11 @@ console.log(
         addr = (endSkip & ~1) - 2;
       }
     }
-console.log(
+debugLog(
       `[ExecLibrary] ROM resident scan complete: ${map.size} modules found`
     );
     if (map.size > 0) {
-console.log(
+debugLog(
         `[ExecLibrary] ROM modules: ${Array.from(map.keys()).join(", ")}`
       );
     }
@@ -1292,7 +1293,7 @@ console.warn(`[ExecLibrary] No functions found for ${name}`);
       this.initStruct(initStructAddr, libBase, posSize);
     }
     if (initFuncAddr) {
-console.log(
+debugLog(
         `[ExecLibrary] NOTE: Init function for ${name} at 0x${initFuncAddr.toString(
           16
         )} not executed`
@@ -1349,7 +1350,7 @@ console.log(
     this.emulator.setRegister(0, 0);
     this.emulator.setRegister(8, segList); // A0
     this.emulator.setRegister(14, this.execBase.address); // A6
-console.log(
+debugLog(
       `[ExecLibrary] Scheduled InitResident jump to 0x${targetPc.toString(
         16
       )} for ${name}`
@@ -1632,12 +1633,12 @@ console.warn(
    * This allows ExecLibrary to be called from AmigaDosEnvironment trap handler
    */
   handleCall(offset: number): boolean {
-console.log(`[ExecLibrary] handleCall(offset=${offset})`);
+debugLog(`[ExecLibrary] handleCall(offset=${offset})`);
 
     // Handle common Exec.library functions - CORRECTED LVOs from exec.library.lvos.i
     switch (offset) {
       case -552: // _LVOOpenLibrary
-console.log(
+debugLog(
           `[ExecLibrary]   *** OpenLibrary trap called (LVO -552) ***`
         );
         // CORRECT: A1 = library name (register 9), D0 = version (register 0)
@@ -1650,7 +1651,7 @@ console.log(
         return true;
 
       case -414: // _LVOCloseLibrary (CORRECTED from wrong -36)
-console.log(
+debugLog(
           `[ExecLibrary]   *** CloseLibrary trap called (LVO -414) ***`
         );
         // FIXED: A1 = register 9 (not 13 which is A5)
@@ -1662,7 +1663,7 @@ console.log(
         return true;
 
       case -294: // _LVOFindTask ✓
-console.log(`[ExecLibrary]   FindTask trap called`);
+debugLog(`[ExecLibrary]   FindTask trap called`);
         // FIXED: A1 = register 9 (not 13 which is A5)
         const nameAddr2 = this.emulator.getRegister(9); // A1
         const result = this.findTask(nameAddr2);
@@ -1670,7 +1671,7 @@ console.log(`[ExecLibrary]   FindTask trap called`);
         return true;
 
       case -198: // _LVOAllocMem ✓
-console.log(`[ExecLibrary]   AllocMem trap called`);
+debugLog(`[ExecLibrary]   AllocMem trap called`);
         const size = this.emulator.getRegister(0); // D0
         const flags = this.emulator.getRegister(1); // D1
         const allocResult = this.allocMem(size, flags);
@@ -1678,7 +1679,7 @@ console.log(`[ExecLibrary]   AllocMem trap called`);
         return true;
 
       case -210: // _LVOFreeMem ✓
-console.log(`[ExecLibrary]   FreeMem trap called`);
+debugLog(`[ExecLibrary]   FreeMem trap called`);
         // Note: FreeMem uses A1 for address, D0 for size per AmigaOS spec
         const addr = this.emulator.getRegister(9); // A1 = memory block
         const freeSize = this.emulator.getRegister(0); // D0 = size
@@ -1687,13 +1688,13 @@ console.log(`[ExecLibrary]   FreeMem trap called`);
         return true;
 
       case -390: // _LVOFindPort ✓
-console.log(`[ExecLibrary]   FindPort trap called`);
+debugLog(`[ExecLibrary]   FindPort trap called`);
         // FIXED: A1 = register 9 (not 13 which is A5)
         const portNameAddr = this.emulator.getRegister(9); // A1
         const portNameStr = portNameAddr
           ? this.emulator.readString(portNameAddr)
           : "<null>";
-console.log(
+debugLog(
           `[ExecLibrary][Trap][FindPort] A1=0x${portNameAddr.toString(
             16
           )} "${portNameStr}"`
@@ -1703,7 +1704,7 @@ console.log(
         return true;
 
       case -300: // _LVOSetTaskPri - CORRECTED from -282 (off by 18!)
-console.log(
+debugLog(
           `[ExecLibrary]   *** SetTaskPri trap called (LVO -300 CORRECTED) ***`
         );
         // FIXED: A1 = register 9 (not 13 which is A5)
@@ -1714,7 +1715,7 @@ console.log(
         return true;
 
       case -96: // _LVOFindResident
-console.log(`[ExecLibrary]   FindResident trap called`);
+debugLog(`[ExecLibrary]   FindResident trap called`);
         const resNameAddr = this.emulator.getRegister(9); // A1
         const resName = resNameAddr
           ? this.emulator.readString(resNameAddr, 128)
@@ -1724,7 +1725,7 @@ console.log(`[ExecLibrary]   FindResident trap called`);
         return true;
 
       case -102: // _LVOInitResident
-console.log(`[ExecLibrary]   InitResident trap called`);
+debugLog(`[ExecLibrary]   InitResident trap called`);
         const residentAddr = this.emulator.getRegister(9); // A1
         const segList = this.emulator.getRegister(1); // D1
         const libBase = this.initResidentTrap(residentAddr, segList);
@@ -1733,7 +1734,7 @@ console.log(`[ExecLibrary]   InitResident trap called`);
 
       // *** SEMAPHORE FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
       case -558: // _LVOInitSemaphore - CORRECTED from -348 (off by 210!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: InitSemaphore() (LVO -558 CORRECTED) ***`
         );
         const initSemAddr = this.emulator.getRegister(8); // A0
@@ -1741,7 +1742,7 @@ console.log(
         return true;
 
       case -564: // _LVOObtainSemaphore - CORRECTED from -300 (off by 264!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: ObtainSemaphore() (LVO -564 CORRECTED) ***`
         );
         const obtainSemAddr = this.emulator.getRegister(8); // A0
@@ -1749,7 +1750,7 @@ console.log(
         return true;
 
       case -570: // _LVOReleaseSemaphore - CORRECTED from -312 (off by 258!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: ReleaseSemaphore() (LVO -570 CORRECTED) ***`
         );
         const releaseSemAddr = this.emulator.getRegister(8); // A0
@@ -1757,7 +1758,7 @@ console.log(
         return true;
 
       case -576: // _LVOAttemptSemaphore - CORRECTED from -588 (off by 12)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: AttemptSemaphore() (LVO -576 CORRECTED) ***`
         );
         const attemptSemAddr = this.emulator.getRegister(8); // A0
@@ -1766,7 +1767,7 @@ console.log(
         return true;
 
       case -594: // _LVOFindSemaphore - CORRECTED from -432 (off by 162!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: FindSemaphore() (LVO -594 CORRECTED) ***`
         );
         const findSemNameAddr = this.emulator.getRegister(9); // A1
@@ -1775,7 +1776,7 @@ console.log(
         return true;
 
       case -600: // _LVOAddSemaphore - CORRECTED from -438 (off by 162!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: AddSemaphore() (LVO -600 CORRECTED) ***`
         );
         const addSemAddr = this.emulator.getRegister(9); // A1
@@ -1783,7 +1784,7 @@ console.log(
         return true;
 
       case -606: // _LVORemSemaphore - CORRECTED from -444 (off by 162!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: RemSemaphore() (LVO -606 CORRECTED) ***`
         );
         const remSemAddr = this.emulator.getRegister(9); // A1
@@ -1791,20 +1792,20 @@ console.log(
         return true;
 
       case -330: // _LVOAllocSignal
-console.log(`[ExecLibrary]   AllocSignal trap called`);
+debugLog(`[ExecLibrary]   AllocSignal trap called`);
         const sigNum = this.emulator.getRegister(0); // D0
         const sigResult = this.AllocSignal(sigNum);
         this.emulator.setRegister(0, sigResult);
         return true;
 
       case -336: // _LVOFreeSignal
-console.log(`[ExecLibrary]   FreeSignal trap called`);
+debugLog(`[ExecLibrary]   FreeSignal trap called`);
         const freeSigNum = this.emulator.getRegister(0); // D0 = signal number to free
         this.freeSignal(freeSigNum);
         return true;
 
       case -306: // _LVOSetSignal
-console.log(`[ExecLibrary]   SetSignal trap called`);
+debugLog(`[ExecLibrary]   SetSignal trap called`);
         const newSignals = this.emulator.getRegister(0); // D0
         const signalMask = this.emulator.getRegister(1); // D1
         const oldSignals = this.setSignal(newSignals, signalMask);
@@ -1812,14 +1813,14 @@ console.log(`[ExecLibrary]   SetSignal trap called`);
         return true;
 
       case -318: // _LVOWait - Wait for signals (blocks until signal received)
-console.log(`[ExecLibrary] *** INTERCEPTED: Wait() (LVO -318) ***`);
+debugLog(`[ExecLibrary] *** INTERCEPTED: Wait() (LVO -318) ***`);
         const waitSignalMask = this.emulator.getRegister(0); // D0 = signal mask to wait for
         const waitResult = this.wait(waitSignalMask);
         this.emulator.setRegister(0, waitResult); // Return received signals in D0
         return true;
 
       case -324: // _LVOSignal - Send signals to a task (wakes waiting task)
-console.log(`[ExecLibrary] *** INTERCEPTED: Signal() (LVO -324) ***`);
+debugLog(`[ExecLibrary] *** INTERCEPTED: Signal() (LVO -324) ***`);
         const signalTaskAddr = this.emulator.getRegister(9); // A1 = task address
         const signalBits = this.emulator.getRegister(0); // D0 = signal bits to send
         this.signal(signalTaskAddr, signalBits);
@@ -1827,7 +1828,7 @@ console.log(`[ExecLibrary] *** INTERCEPTED: Signal() (LVO -324) ***`);
 
       // *** I/O REQUEST FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
       case -456: // _LVODoIO - CORRECTED from -516 (off by 60!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: DoIO() (LVO -456 CORRECTED) ***`
         );
         const doIOAddr = this.emulator.getRegister(9); // A1
@@ -1836,7 +1837,7 @@ console.log(
         return true;
 
       case -462: // _LVOSendIO - CORRECTED from -522 (off by 60!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: SendIO() (LVO -462 CORRECTED) ***`
         );
         const sendIOAddr = this.emulator.getRegister(9); // A1
@@ -1844,7 +1845,7 @@ console.log(
         return true;
 
       case -468: // _LVOCheckIO - CORRECTED from -528 (off by 60!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: CheckIO() (LVO -468 CORRECTED) ***`
         );
         const checkIOAddr = this.emulator.getRegister(9); // A1
@@ -1853,7 +1854,7 @@ console.log(
         return true;
 
       case -654: // _LVOCreateIORequest - CORRECTED from -504 (off by 150!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: CreateIORequest() (LVO -654 CORRECTED) ***`
         );
         const createIOPort = this.emulator.getRegister(8); // A0
@@ -1863,7 +1864,7 @@ console.log(
         return true;
 
       case -660: // _LVODeleteIORequest - CORRECTED from -510 (off by 150!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: DeleteIORequest() (LVO -660 CORRECTED) ***`
         );
         const deleteIOAddr = this.emulator.getRegister(8); // A0
@@ -1872,7 +1873,7 @@ console.log(
 
       // *** LIST OPERATIONS - CORRECTED LVO OFFSETS ***
       case -234: // _LVOInsert - CORRECTED from -252 (REVERSED with Remove!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Insert() (LVO -234 CORRECTED) ***`
         );
         const insertList = this.emulator.getRegister(8); // A0
@@ -1882,7 +1883,7 @@ console.log(
         return true;
 
       case -240: // _LVOAddHead - CORRECTED from -258 (off by 18!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: AddHead() (LVO -240 CORRECTED) ***`
         );
         const addHeadList = this.emulator.getRegister(8); // A0
@@ -1891,7 +1892,7 @@ console.log(
         return true;
 
       case -246: // _LVOAddTail - CORRECTED from -264 (off by 18!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: AddTail() (LVO -246 CORRECTED) ***`
         );
         const addTailList = this.emulator.getRegister(8); // A0
@@ -1900,7 +1901,7 @@ console.log(
         return true;
 
       case -252: // _LVORemove - CORRECTED from -246 (off by 6)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Remove() (LVO -252 CORRECTED) ***`
         );
         const removeNode = this.emulator.getRegister(9); // A1
@@ -1908,7 +1909,7 @@ console.log(
         return true;
 
       case -258: // _LVORemHead - CORRECTED from -234 (off by 24!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: RemHead() (LVO -258 CORRECTED) ***`
         );
         const remHeadList = this.emulator.getRegister(8); // A0
@@ -1917,7 +1918,7 @@ console.log(
         return true;
 
       case -264: // _LVORemTail - CORRECTED from -240 (off by 24!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: RemTail() (LVO -264 CORRECTED) ***`
         );
         const remTailList = this.emulator.getRegister(8); // A0
@@ -1927,35 +1928,35 @@ console.log(
 
       // *** INTERRUPT CONTROL & MEMORY - CORRECTED LVO OFFSETS ***
       case -120: // _LVODisable - CORRECTED from -162 (off by 42!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Disable() (LVO -120 CORRECTED) ***`
         );
         this.disable();
         return true;
 
       case -126: // _LVOEnable - CORRECTED from -168 (off by 42!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Enable() (LVO -126 CORRECTED) ***`
         );
         this.enable();
         return true;
 
       case -132: // _LVOForbid - CORRECTED from -174 (off by 42!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Forbid() (LVO -132 CORRECTED) ***`
         );
         this.forbid();
         return true;
 
       case -138: // _LVOPermit - CORRECTED from -180 (off by 42!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: Permit() (LVO -138 CORRECTED) ***`
         );
         this.permit();
         return true;
 
       case -216: // _LVOAvailMem - CORRECTED from -210 (off by 6, was conflicting with FreeMem!)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: AvailMem() (LVO -216 CORRECTED) ***`
         );
         const availMemReq = this.emulator.getRegister(1); // D1
@@ -1970,7 +1971,7 @@ console.log(
 
       // *** MEMORY COPY FUNCTIONS (V36+) - CORRECTED LVO OFFSETS ***
       case -624: // _LVOCopyMem - CORRECTED from -474 (duplicate removed)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: CopyMem() (LVO -624 CORRECT) ***`
         );
         const copySource624 = this.emulator.getRegister(8); // A0
@@ -1980,7 +1981,7 @@ console.log(
         return true;
 
       case -630: // _LVOCopyMemQuick - CORRECTED from -480 (duplicate removed)
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: CopyMemQuick() (LVO -630 CORRECT) ***`
         );
         const quickSource630 = this.emulator.getRegister(8); // A0
@@ -1990,7 +1991,7 @@ console.log(
         return true;
 
       case -684: // _LVOAllocVec - P0 CRITICAL (CORRECTED from -552)
-console.log(`[ExecLibrary] *** INTERCEPTED: AllocVec() (LVO -684) ***`);
+debugLog(`[ExecLibrary] *** INTERCEPTED: AllocVec() (LVO -684) ***`);
         const vecSize = this.emulator.getRegister(0); // D0
         const vecFlags = this.emulator.getRegister(1); // D1
         const vecResult = this.allocVec(vecSize, vecFlags);
@@ -1998,13 +1999,13 @@ console.log(`[ExecLibrary] *** INTERCEPTED: AllocVec() (LVO -684) ***`);
         return true;
 
       case -690: // _LVOFreeVec - P0 CRITICAL (CORRECTED from -558)
-console.log(`[ExecLibrary] *** INTERCEPTED: FreeVec() (LVO -690) ***`);
+debugLog(`[ExecLibrary] *** INTERCEPTED: FreeVec() (LVO -690) ***`);
         const vecAddr = this.emulator.getRegister(9); // A1
         this.freeVec(vecAddr);
         return true;
 
       case -732: // _LVOStackSwap
-console.log(
+debugLog(
           `[ExecLibrary] *** INTERCEPTED: StackSwap() (LVO -732) ***`
         );
         const stackSwapStructAddr = this.emulator.getRegister(8); // A0
@@ -2042,7 +2043,7 @@ console.warn(
     // Read library name from memory
     const name = this.emulator.readString(nameAddr);
     const pc = this.emulator.getRegister(CPURegister.PC);
-console.log(
+debugLog(
       `[ExecLibrary][OpenLibrary] pc=0x${pc.toString(16)} "${name}" v${version}`
     );
 
@@ -2050,7 +2051,7 @@ console.log(
     const result = this.openLibraryHybrid(name, version, true);
 
     if (result.success) {
-console.log(
+debugLog(
         `[ExecLibrary]   Hybrid OpenLibrary SUCCESS - ${
           result.isNative ? "NATIVE" : "STUB"
         } library at 0x${result.address.toString(16)}`
@@ -2058,7 +2059,7 @@ console.log(
 
       return result.address;
     } else {
-console.log(`[ExecLibrary]   Hybrid OpenLibrary FAILED - returning NULL`);
+debugLog(`[ExecLibrary]   Hybrid OpenLibrary FAILED - returning NULL`);
       return 0;
     }
   }
@@ -2083,7 +2084,7 @@ console.log(`[ExecLibrary]   Hybrid OpenLibrary FAILED - returning NULL`);
       this.libraries.get(libraryName) ||
       this.libraries.get(libraryName.toLowerCase());
     if (!lib || lib.openCount <= 1) {
-console.log(
+debugLog(
         `[ExecLibrary]   Skipping AEDoorPort creation on pre-open (openCount=${
           lib?.openCount || 0
         })`
@@ -2111,7 +2112,7 @@ console.log(
       // Use sigBit=12 because doors hardcode 0x1000 in Wait() mask
       const AEDOORPORT_SIGBIT = 12;
       const portAddr = this.createPublicPort(portName, this.currentTask, AEDOORPORT_SIGBIT);
-console.log(
+debugLog(
         `[ExecLibrary]   Created ${portName} at 0x${portAddr.toString(
           16
         )} owned by Door Task (0x${this.currentTask.address.toString(
@@ -2119,7 +2120,7 @@ console.log(
         )}, sigBit=${AEDOORPORT_SIGBIT}) - (dynamic XIM port on door's OpenLibrary call)`
       );
     } else {
-console.log(
+debugLog(
         `[ExecLibrary]   ${portName} already exists at 0x${existingPortAddr.toString(
           16
         )} (reusing)`
@@ -2147,26 +2148,26 @@ console.log(
           lower === "aedoor.library" ||
           lower === "icon.library"
         ) {
-console.log(
+debugLog(
             `[ExecLibrary] CloseLibrary(${name}) ignored (kept resident)`
           );
           return;
         }
 
         lib.openCount--;
-console.log(
+debugLog(
           `[ExecLibrary] CloseLibrary(${name}), count=${lib.openCount}`
         );
 
         if (lib.openCount <= 0) {
           this.libraries.delete(name);
-console.log(`[ExecLibrary]   Library ${name} fully closed`);
+debugLog(`[ExecLibrary]   Library ${name} fully closed`);
         }
         return;
       }
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] CloseLibrary(0x${libAddr.toString(16)}) - unknown library`
     );
   }
@@ -2177,31 +2178,31 @@ console.log(
    */
   loadRealAEDoorLibrary(): boolean {
     try {
-console.log(`[ExecLibrary] ============================================`);
-console.log(`[ExecLibrary] Loading REAL AEDoor.library binary`);
-console.log(`[ExecLibrary] Using LibraryLoader for proper HUNK parsing`);
-console.log(`[ExecLibrary] ============================================`);
+debugLog(`[ExecLibrary] ============================================`);
+debugLog(`[ExecLibrary] Loading REAL AEDoor.library binary`);
+debugLog(`[ExecLibrary] Using LibraryLoader for proper HUNK parsing`);
+debugLog(`[ExecLibrary] ============================================`);
 
       // Use LibraryLoader if available, fall back to manual load
       if (this.libraryLoader) {
         const loadedLib = this.libraryLoader.loadLibrary("AEDoor.library", 0);
 
         if (loadedLib) {
-console.log(
+debugLog(
             `[ExecLibrary] ✅ AEDoor.library loaded via LibraryLoader`
           );
-console.log(
+debugLog(
             `[ExecLibrary]   Base address: 0x${loadedLib.baseAddress.toString(
               16
             )}`
           );
-console.log(
+debugLog(
             `[ExecLibrary]   Jump table entries: ${loadedLib.jumpTable.size}`
           );
-console.log(
+debugLog(
             `[ExecLibrary]   Code segments: ${loadedLib.codeSegments.length}`
           );
-console.log(
+debugLog(
             `[ExecLibrary]   Data segments: ${loadedLib.dataSegments.length}`
           );
 
@@ -2237,7 +2238,7 @@ console.log(
                 `+0x${off.toString(16)}=0x${b0.toString(16).padStart(2,'0')}${b1.toString(16).padStart(2,'0')}${b2.toString(16).padStart(2,'0')}${b3.toString(16).padStart(2,'0')}`
               );
             }
-console.log(
+debugLog(
               `[ExecLibrary] AEDoor mem probe @0x${baseAddr.toString(
                 16
               )}: ${probeBytes.join(' ')}`
@@ -2260,12 +2261,12 @@ console.log(
             dosBase || 0
           );
 
-console.log(
+debugLog(
             `[ExecLibrary] CRITICAL: Set lib+0x22 = ExecBase 0x${execBaseAddr.toString(
               16
             )}`
           );
-console.log(
+debugLog(
             `[ExecLibrary] CRITICAL: Set lib+0x26 = dos.library 0x${(
               dosBase || 0
             ).toString(16)}`
@@ -2303,7 +2304,7 @@ console.log(
             { lvo: -138, fileOffset: 0x278, name: "PostDeleteComm" },
           ];
 
-console.log(
+debugLog(
             `[ExecLibrary] Creating JMP table for AEDoor.library at 0x${baseAddr.toString(
               16
             )}:`
@@ -2316,7 +2317,7 @@ console.log(
             this.emulator.writeMemory16(jmpAddr, 0x4ef9);
             this.emulator.writeMemory32(jmpAddr + 2, targetAddr);
 
-console.log(
+debugLog(
               `[ExecLibrary]   LVO ${func.lvo} (${
                 func.name
               }): JMP at 0x${jmpAddr.toString(16)} -> 0x${targetAddr.toString(
@@ -2325,22 +2326,22 @@ console.log(
             );
           }
 
-console.log(
+debugLog(
             `[ExecLibrary] AEDoor.library registered in library list`
           );
-console.log(
+debugLog(
             `[ExecLibrary] ============================================`
           );
           return true;
         } else {
-console.log(
+debugLog(
             `[ExecLibrary] ⚠️  LibraryLoader failed, trying fallback`
           );
         }
       }
 
       // Fallback: Manual load (basic, for compatibility)
-console.log(`[ExecLibrary] Using fallback manual loader`);
+debugLog(`[ExecLibrary] Using fallback manual loader`);
 
       const candidates: string[] = [];
       try {
@@ -2359,8 +2360,8 @@ console.log(`[ExecLibrary] Using fallback manual loader`);
 
       if (!libPath) {
         const msg = `[ExecLibrary] ❌ ERROR: AEDoor.library not found`;
-console.log(msg);
-console.log(`[ExecLibrary] Searched: ${candidates.join(", ")}`);
+debugLog(msg);
+debugLog(`[ExecLibrary] Searched: ${candidates.join(", ")}`);
         try {
           const globalAny: any = global as any;
           const session = globalAny?.currentBbsSession;
@@ -2371,9 +2372,9 @@ console.log(`[ExecLibrary] Searched: ${candidates.join(", ")}`);
         return false;
       }
 
-console.log(`[ExecLibrary] Found: ${libPath}`);
+debugLog(`[ExecLibrary] Found: ${libPath}`);
       const binary = amigafs.readFileSync(libPath) as Buffer;
-console.log(`[ExecLibrary] Read ${binary.length} bytes`);
+debugLog(`[ExecLibrary] Read ${binary.length} bytes`);
 
       // Manual HUNK load (basic - just copy code section)
       // NOTE: This doesn't handle relocations properly!
@@ -2423,7 +2424,7 @@ console.log(`[ExecLibrary] Read ${binary.length} bytes`);
         { lvo: -138, fileOffset: 0x278, name: "PostDeleteComm" }, // same as DeleteComm
       ];
 
-console.log(
+debugLog(
         `[ExecLibrary] Creating native JMP table at negative offsets:`
       );
       for (const func of aedoorFunctionTable) {
@@ -2434,7 +2435,7 @@ console.log(
         this.emulator.writeMemory16(jmpAddr, 0x4ef9);
         this.emulator.writeMemory32(jmpAddr + 2, targetAddr);
 
-console.log(
+debugLog(
           `[ExecLibrary]   LVO ${func.lvo} (${
             func.name
           }): JMP at 0x${jmpAddr.toString(16)} -> 0x${targetAddr.toString(16)}`
@@ -2465,29 +2466,29 @@ console.log(
       // lib+0x26 (38) = dos.library base
       this.emulator.writeMemory32(destAddr + 0x26, dosBase || 0);
 
-console.log(
+debugLog(
         `[ExecLibrary] CRITICAL: Set lib+0x22 = ExecBase 0x${execBaseAddr.toString(
           16
         )}`
       );
-console.log(
+debugLog(
         `[ExecLibrary] CRITICAL: Set lib+0x26 = dos.library 0x${(
           dosBase || 0
         ).toString(16)}`
       );
 
-console.log(
+debugLog(
         `[ExecLibrary] Fallback load complete (basic, no relocations)`
       );
-console.log(
+debugLog(
         `[ExecLibrary]   Base: 0x${destAddr.toString(
           16
         )}, Size: ${codeSize} bytes`
       );
-console.log(`[ExecLibrary] ============================================`);
+debugLog(`[ExecLibrary] ============================================`);
       return true;
     } catch (error) {
-console.log(`[ExecLibrary] ❌ ERROR loading AEDoor.library:`, error);
+debugLog(`[ExecLibrary] ❌ ERROR loading AEDoor.library:`, error);
       return false;
     }
   }
@@ -2501,7 +2502,7 @@ console.log(`[ExecLibrary] ❌ ERROR loading AEDoor.library:`, error);
   findTask(nameAddr: number): number {
     if (nameAddr === 0) {
       // NULL name = return current task
-console.log(
+debugLog(
         `[ExecLibrary] FindTask(NULL) -> 0x${this.currentTask.address.toString(
           16
         )} (current task)`
@@ -2510,14 +2511,14 @@ console.log(
     }
 
     const name = this.emulator.readString(nameAddr);
-console.log(`[ExecLibrary] FindTask("${name}")`);
+debugLog(`[ExecLibrary] FindTask("${name}")`);
 
     // For now, only support finding current task
     if (name === this.currentTask.name) {
       return this.currentTask.address;
     }
 
-console.log(`[ExecLibrary]   Task not found`);
+debugLog(`[ExecLibrary]   Task not found`);
     return 0; // NULL
   }
 
@@ -2530,7 +2531,7 @@ console.log(`[ExecLibrary]   Task not found`);
   allocMem(size: number, flags: number): number {
     // Bounds check: reject zero or negative sizes
     if (size <= 0) {
-console.log(
+debugLog(
         `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(
           16
         )}) - FAILED: invalid size`
@@ -2540,7 +2541,7 @@ console.log(
 
     // Bounds check: reject unreasonably large single allocations
     if (size > ExecLibrary.MAX_SINGLE_ALLOC) {
-console.log(
+debugLog(
         `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(
           16
         )}) - FAILED: exceeds max single allocation (${
@@ -2588,7 +2589,7 @@ console.log(
     if (addr === 0) {
       // Check if allocation would exceed memory limit
       if (this.nextFreeMemory + alignedSize > ExecLibrary.MAX_MEMORY) {
-console.log(
+debugLog(
           `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(
             16
           )}) - FAILED: would exceed ${ExecLibrary.MAX_MEMORY} (16MB) limit`
@@ -2601,7 +2602,7 @@ console.log(
 
       // Warn if approaching memory limit
       if (this.nextFreeMemory > ExecLibrary.MEMORY_WARNING_THRESHOLD) {
-console.log(
+debugLog(
           `[ExecLibrary] WARNING: Memory usage at ${(
             (this.nextFreeMemory / ExecLibrary.MAX_MEMORY) *
             100
@@ -2620,7 +2621,7 @@ console.log(
       }
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(
         16
       )}) -> 0x${addr.toString(16)}`
@@ -2638,7 +2639,7 @@ console.log(
     try {
       // Generic protection: skip freeing host-owned jhMessage buffers
       if (this.protectedMessages.has(addr)) {
-console.log(
+debugLog(
           `[ExecLibrary] FreeMem(0x${addr.toString(
             16
           )}, ${size}) - skipped (protected message buffer)`
@@ -2652,7 +2653,7 @@ console.log(
     const allocation = this.allocations.get(addr);
     if (allocation) {
       this.allocations.delete(addr);
-console.log(
+debugLog(
         `[ExecLibrary] FreeMem(0x${addr.toString(
           16
         )}, ${size}) - freed ${allocation} bytes`
@@ -2720,7 +2721,7 @@ console.log(
         }
       }
     } else {
-console.log(
+debugLog(
         `[ExecLibrary] FreeMem(0x${addr.toString(16)}, ${size}) - not tracked`
       );
     }
@@ -2733,7 +2734,7 @@ console.log(
     this.nextFreeMemory = addr >>> 0;
     this.freeList = [];
     this.allocations.clear();
-console.log(
+debugLog(
       `[ExecLibrary] Allocator base reset to 0x${this.nextFreeMemory.toString(
         16
       )}`
@@ -2753,7 +2754,7 @@ console.log(
     this.emulator.writeMemory16(addr + 22, lib.revision); // lib_Revision
     this.emulator.writeMemory16(addr + 32, lib.openCount); // lib_OpenCnt
 
-console.log(
+debugLog(
       `[ExecLibrary]   Library structure written: ${lib.name} v${lib.version}.${lib.revision}`
     );
   }
@@ -2814,7 +2815,7 @@ console.log(
       this.libraries.set(lower, lib);
     }
     this.writeLibraryToMemory(lib);
-console.log(
+debugLog(
       `[ExecLibrary]   Registered library placeholder "${name}" at 0x${libAddr.toString(
         16
       )}`
@@ -2836,17 +2837,17 @@ console.log(
   }
 
   private autoRegisterPort(portAddr: number): MessagePort | null {
-console.log(`[ExecLibrary][autoRegisterPort] Called for port=0x${portAddr.toString(16)}`);
+debugLog(`[ExecLibrary][autoRegisterPort] Called for port=0x${portAddr.toString(16)}`);
     if (portAddr === 0) {
       return null;
     }
 
     const existing = this.messagePorts.get(portAddr);
     if (existing) {
-console.log(`[ExecLibrary][autoRegisterPort] Port already exists, returning existing`);
+debugLog(`[ExecLibrary][autoRegisterPort] Port already exists, returning existing`);
       return existing;
     }
-console.log(`[ExecLibrary][autoRegisterPort] Port not found, registering new port...`);
+debugLog(`[ExecLibrary][autoRegisterPort] Port not found, registering new port...`);
 
 
     try {
@@ -2872,7 +2873,7 @@ console.log(`[ExecLibrary][autoRegisterPort] Port not found, registering new por
       const PA_SIGNAL = 0x02;
       const existingFlags = this.emulator.readMemory(portAddr + 14);
       this.emulator.writeMemory(portAddr + 14, existingFlags | PA_SIGNAL);
-console.log(`[ExecLibrary][autoRegisterPort] Set PA_SIGNAL for port "${name}": 0x${existingFlags.toString(16)} -> 0x${(existingFlags | PA_SIGNAL).toString(16)}`);
+debugLog(`[ExecLibrary][autoRegisterPort] Set PA_SIGNAL for port "${name}": 0x${existingFlags.toString(16)} -> 0x${(existingFlags | PA_SIGNAL).toString(16)}`);
 
       // Read the signal bit the door already set - DON'T allocate a new one!
       // The door's CreatePort() already called AllocSignal() and set mp_SigBit.
@@ -2906,7 +2907,7 @@ console.log(`[ExecLibrary][autoRegisterPort] Set PA_SIGNAL for port "${name}": 0
         nameLower.startsWith("aedoorrp") ||
         nameLower.startsWith("aeserver");
       if (isDoorReplyPort && sigTask !== this.currentTask.address) {
-console.log(
+debugLog(
           `[ExecLibrary]   FIXING door reply port sigTask: 0x${sigTask.toString(
             16
           )} -> 0x${this.currentTask.address.toString(16)}`
@@ -2932,7 +2933,7 @@ console.log(
       };
 
       this.messagePorts.set(portAddr, port);
-console.log(
+debugLog(
         `[ExecLibrary]   Auto-registered port at 0x${portAddr.toString(16)} (${
           name || "private"
         }), sigBit=${sigBit}, sigTask=0x${sigTask.toString(16)}`
@@ -2967,7 +2968,7 @@ console.error(
       taskAddr = this.currentTask.address;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] SetTaskPri(task=0x${taskAddr.toString(
         16
       )}, newPri=${newPri})`
@@ -2979,7 +2980,7 @@ console.log(
     // Write new priority
     this.emulator.writeMemory(taskAddr + 9, newPri & 0xff);
 
-console.log(`  Old priority: ${oldPri}, New priority: ${newPri}`);
+debugLog(`  Old priority: ${oldPri}, New priority: ${newPri}`);
 
     return oldPri;
   }
@@ -3004,7 +3005,7 @@ console.log(`  Old priority: ${oldPri}, New priority: ${newPri}`);
     // Convert from signed byte (-1 = 0xFFFFFFFF in 32-bit register)
     const requestedSignal = signalNum < 0 ? -1 : signalNum & 0xff;
 
-console.log(`[ExecLibrary] AllocSignal(${requestedSignal})`);
+debugLog(`[ExecLibrary] AllocSignal(${requestedSignal})`);
 
     // If specific signal requested
     if (requestedSignal >= 0 && requestedSignal < 32) {
@@ -3012,13 +3013,13 @@ console.log(`[ExecLibrary] AllocSignal(${requestedSignal})`);
 
       // Check if already allocated
       if (this.allocatedSignals & mask) {
-console.log(`  Signal ${requestedSignal} already allocated!`);
+debugLog(`  Signal ${requestedSignal} already allocated!`);
         return -1; // Already allocated
       }
 
       // Allocate the requested signal
       this.allocatedSignals |= mask;
-console.log(
+debugLog(
         `  Allocated signal ${requestedSignal}, mask=0x${this.allocatedSignals.toString(
           16
         )}`
@@ -3033,7 +3034,7 @@ console.log(
       if (!(this.allocatedSignals & mask)) {
         // Found a free signal
         this.allocatedSignals |= mask;
-console.log(
+debugLog(
           `  Allocated signal ${i}, mask=0x${this.allocatedSignals.toString(
             16
           )}`
@@ -3047,7 +3048,7 @@ console.log(
       const mask = 1 << i;
       if (!(this.allocatedSignals & mask)) {
         this.allocatedSignals |= mask;
-console.log(
+debugLog(
           `  Allocated system signal ${i} (fallback), mask=0x${this.allocatedSignals.toString(
             16
           )}`
@@ -3057,7 +3058,7 @@ console.log(
     }
 
     // No free signals
-console.log(`  No free signals available!`);
+debugLog(`  No free signals available!`);
     return -1;
   }
 
@@ -3071,7 +3072,7 @@ console.log(`  No free signals available!`);
     const mask = 1 << signalBit;
     if (this.allocatedSignals & mask) {
       this.allocatedSignals &= ~mask;
-console.log(
+debugLog(
         `[ExecLibrary]   Freed signal ${signalBit}, mask=0x${this.allocatedSignals.toString(
           16
         )}`
@@ -3087,7 +3088,7 @@ console.log(
    * but our emulator uses a shared pool. This resets it for each door.
    */
   resetSignalsForDoor(): void {
-console.log(
+debugLog(
       `[ExecLibrary] Resetting signals for door execution (was 0x${this.allocatedSignals.toString(
         16
       )})`
@@ -3113,7 +3114,7 @@ console.log(
    * XIM doors use this to clear signals after processing messages.
    */
   setSignal(newSignals: number, signalMask: number): number {
-console.log(
+debugLog(
       `[ExecLibrary] SetSignal(newSignals=0x${newSignals.toString(
         16
       )}, signalMask=0x${signalMask.toString(16)})`
@@ -3123,7 +3124,7 @@ console.log(
     // In our simplified model, we track signals in currentTask.sigRecvd
     const oldSignals = this.currentTask.sigRecvd;
 
-console.log(`  Old signals: 0x${oldSignals.toString(16)} (before changes)`);
+debugLog(`  Old signals: 0x${oldSignals.toString(16)} (before changes)`);
 
     // Apply changes: clear bits in mask, then set new bits
     const clearedSignals = oldSignals & ~signalMask;
@@ -3131,7 +3132,7 @@ console.log(`  Old signals: 0x${oldSignals.toString(16)} (before changes)`);
 
     this.currentTask.sigRecvd = newSignalState;
 
-console.log(
+debugLog(
       `  New signals: 0x${newSignalState.toString(16)} (after changes)`
     );
 
@@ -3158,7 +3159,7 @@ console.log(
     const name = this.emulator.readString(nameAddr);
     const pc = this.emulator.getRegister(CPURegister.PC);
     const debugFindPort = process.env.DEBUG_FINDPORT === "1";
-console.log(`[ExecLibrary][FindPort] pc=0x${pc.toString(16)} "${name}"`);
+debugLog(`[ExecLibrary][FindPort] pc=0x${pc.toString(16)} "${name}"`);
 
     // CORRECT IMPLEMENTATION: Search for port in public registry
     // FindPort() should NOT create ports - it only searches for existing ones
@@ -3190,7 +3191,7 @@ console.log(`[ExecLibrary][FindPort] pc=0x${pc.toString(16)} "${name}"`);
       for (const candidate of candidates) {
         const addr = this.publicPorts.get(candidate.toLowerCase());
         if (addr !== undefined) {
-console.log(
+debugLog(
             `[ExecLibrary]   Fallback matched "${candidate}" at 0x${addr.toString(
               16
             )} (empty/generic search)`
@@ -3202,7 +3203,7 @@ console.log(
     }
 
     if (portAddr !== undefined) {
-console.log(
+debugLog(
         `[ExecLibrary]   Found "${name}" at 0x${portAddr.toString(16)}`
       );
       if (debugFindPort) {
@@ -3215,7 +3216,7 @@ console.log(
     if (name.toLowerCase() === "dos.library") {
       const dosLib = this.libraries.get("dos.library");
       if (dosLib) {
-console.log(
+debugLog(
           `[ExecLibrary]   Returning dos.library at 0x${dosLib.address.toString(
             16
           )}`
@@ -3224,7 +3225,7 @@ console.log(
       }
     }
 
-console.log(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
+debugLog(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
     return 0;
   }
 
@@ -3246,7 +3247,7 @@ console.log(`[ExecLibrary]   Port "${name}" not found - returning NULL`);
       lh_Type: this.emulator.readMemory(portAddr + 32),
       l_Pad: this.emulator.readMemory(portAddr + 33),
     };
-console.log(
+debugLog(
       `[ExecLibrary]   MsgPort layout for "${label}" @0x${portAddr.toString(
         16
       )}:`,
@@ -3305,19 +3306,19 @@ console.log(
    */
   findSemaphore(nameAddr: number): number {
     const name = this.emulator.readString(nameAddr);
-console.log(`[ExecLibrary] FindSemaphore("${name}")`);
+debugLog(`[ExecLibrary] FindSemaphore("${name}")`);
 
     // Search for semaphore in public registry
     const semaAddr = this.publicSemaphores.get(name);
 
     if (semaAddr !== undefined) {
-console.log(
+debugLog(
         `[ExecLibrary]   Found "${name}" at 0x${semaAddr.toString(16)}`
       );
       return semaAddr;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary]   Semaphore "${name}" not found - returning NULL`
     );
     return 0;
@@ -3340,7 +3341,7 @@ console.log(
     const nameAddr = this.emulator.readMemory32(semaphoreAddr + 8);
     const name = this.emulator.readString(nameAddr);
 
-console.log(
+debugLog(
       `[ExecLibrary] AddSemaphore(0x${semaphoreAddr.toString(
         16
       )}) name="${name}"`
@@ -3349,7 +3350,7 @@ console.log(
     // Add to public semaphores registry
     this.publicSemaphores.set(name, semaphoreAddr);
 
-console.log(`[ExecLibrary]   Semaphore "${name}" added to public list`);
+debugLog(`[ExecLibrary]   Semaphore "${name}" added to public list`);
   }
 
   /**
@@ -3373,11 +3374,11 @@ console.log(`[ExecLibrary]   Semaphore "${name}" added to public list`);
    */
   initSemaphore(semaphoreAddr: number): void {
     if (semaphoreAddr === 0) {
-console.log("[ExecLibrary] InitSemaphore(NULL) - ignoring");
+debugLog("[ExecLibrary] InitSemaphore(NULL) - ignoring");
       return;
     }
 
-console.log(`[ExecLibrary] InitSemaphore(0x${semaphoreAddr.toString(16)})`);
+debugLog(`[ExecLibrary] InitSemaphore(0x${semaphoreAddr.toString(16)})`);
 
     // Initialize Node header (ss_Link)
     this.emulator.writeMemory32(semaphoreAddr + 0, 0); // ln_Succ
@@ -3408,7 +3409,7 @@ console.log(`[ExecLibrary] InitSemaphore(0x${semaphoreAddr.toString(16)})`);
     // Initialize ss_QueueCount
     this.emulator.writeMemory16(semaphoreAddr + 46, 0);
 
-console.log(`[ExecLibrary]   Semaphore initialized`);
+debugLog(`[ExecLibrary]   Semaphore initialized`);
   }
 
   /**
@@ -3427,7 +3428,7 @@ console.log(`[ExecLibrary]   Semaphore initialized`);
    */
   obtainSemaphore(semaphoreAddr: number): void {
     if (semaphoreAddr === 0) {
-console.log("[ExecLibrary] ObtainSemaphore(NULL) - ignoring");
+debugLog("[ExecLibrary] ObtainSemaphore(NULL) - ignoring");
       return;
     }
 
@@ -3436,7 +3437,7 @@ console.log("[ExecLibrary] ObtainSemaphore(NULL) - ignoring");
     const owner = this.emulator.readMemory32(semaphoreAddr + 42);
     const currentTask = this.findTask(0); // 0 = FindTask(NULL) = current task
 
-console.log(
+debugLog(
       `[ExecLibrary] ObtainSemaphore(0x${semaphoreAddr.toString(
         16
       )}) nestCount=${nestCount} owner=0x${owner.toString(16)}`
@@ -3446,7 +3447,7 @@ console.log(
     if (owner === 0 || owner === currentTask) {
       this.emulator.writeMemory16(semaphoreAddr + 14, nestCount + 1);
       this.emulator.writeMemory32(semaphoreAddr + 42, currentTask);
-console.log(
+debugLog(
         `[ExecLibrary]   Semaphore obtained, new nestCount=${nestCount + 1}`
       );
     } else {
@@ -3474,14 +3475,14 @@ console.warn(
    */
   releaseSemaphore(semaphoreAddr: number): void {
     if (semaphoreAddr === 0) {
-console.log("[ExecLibrary] ReleaseSemaphore(NULL) - ignoring");
+debugLog("[ExecLibrary] ReleaseSemaphore(NULL) - ignoring");
       return;
     }
 
     // Read current state
     const nestCount = this.emulator.readMemory16(semaphoreAddr + 14);
 
-console.log(
+debugLog(
       `[ExecLibrary] ReleaseSemaphore(0x${semaphoreAddr.toString(
         16
       )}) nestCount=${nestCount}`
@@ -3494,9 +3495,9 @@ console.log(
       if (newNestCount === 0) {
         // Fully released, clear owner
         this.emulator.writeMemory32(semaphoreAddr + 42, 0);
-console.log(`[ExecLibrary]   Semaphore fully released`);
+debugLog(`[ExecLibrary]   Semaphore fully released`);
       } else {
-console.log(
+debugLog(
           `[ExecLibrary]   Semaphore released, new nestCount=${newNestCount}`
         );
       }
@@ -3520,7 +3521,7 @@ console.warn(
    */
   attemptSemaphore(semaphoreAddr: number): number {
     if (semaphoreAddr === 0) {
-console.log("[ExecLibrary] AttemptSemaphore(NULL) - returning FALSE");
+debugLog("[ExecLibrary] AttemptSemaphore(NULL) - returning FALSE");
       return 0;
     }
 
@@ -3529,7 +3530,7 @@ console.log("[ExecLibrary] AttemptSemaphore(NULL) - returning FALSE");
     const owner = this.emulator.readMemory32(semaphoreAddr + 42);
     const currentTask = this.findTask(0);
 
-console.log(
+debugLog(
       `[ExecLibrary] AttemptSemaphore(0x${semaphoreAddr.toString(
         16
       )}) nestCount=${nestCount} owner=0x${owner.toString(16)}`
@@ -3539,7 +3540,7 @@ console.log(
     if (owner === 0 || owner === currentTask) {
       this.emulator.writeMemory16(semaphoreAddr + 14, nestCount + 1);
       this.emulator.writeMemory32(semaphoreAddr + 42, currentTask);
-console.log(
+debugLog(
         `[ExecLibrary]   Semaphore obtained, new nestCount=${
           nestCount + 1
         }, returning TRUE`
@@ -3547,7 +3548,7 @@ console.log(
       return -1; // TRUE
     } else {
       // Owned by different task - return FALSE (don't block)
-console.log(`[ExecLibrary]   Semaphore unavailable, returning FALSE`);
+debugLog(`[ExecLibrary]   Semaphore unavailable, returning FALSE`);
       return 0; // FALSE
     }
   }
@@ -3565,14 +3566,14 @@ console.log(`[ExecLibrary]   Semaphore unavailable, returning FALSE`);
    */
   remSemaphore(semaphoreAddr: number): void {
     if (semaphoreAddr === 0) {
-console.log("[ExecLibrary] RemSemaphore(NULL) - ignoring");
+debugLog("[ExecLibrary] RemSemaphore(NULL) - ignoring");
       return;
     }
 
     // Read semaphore name from ln_Name field (offset +10 in Node header)
     const nameAddr = this.emulator.readMemory32(semaphoreAddr + 10);
     if (nameAddr === 0) {
-console.log(
+debugLog(
         `[ExecLibrary] RemSemaphore(0x${semaphoreAddr.toString(
           16
         )}) - no name, not in public list`
@@ -3581,16 +3582,16 @@ console.log(
     }
 
     const name = this.emulator.readString(nameAddr);
-console.log(`[ExecLibrary] RemSemaphore("${name}")`);
+debugLog(`[ExecLibrary] RemSemaphore("${name}")`);
 
     // Remove from public registry
     if (this.publicSemaphores.has(name)) {
       this.publicSemaphores.delete(name);
-console.log(
+debugLog(
         `[ExecLibrary]   Semaphore "${name}" removed from public list`
       );
     } else {
-console.log(
+debugLog(
         `[ExecLibrary]   Semaphore "${name}" not found in public list`
       );
     }
@@ -3622,18 +3623,18 @@ console.log(
    */
   createIORequest(portAddr: number, size: number): number {
     if (portAddr === 0) {
-console.log("[ExecLibrary] CreateIORequest(NULL port) - returning NULL");
+debugLog("[ExecLibrary] CreateIORequest(NULL port) - returning NULL");
       return 0;
     }
 
     if (size < 48) {
-console.log(
+debugLog(
         `[ExecLibrary] CreateIORequest: size ${size} too small (minimum 48 bytes) - returning NULL`
       );
       return 0;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] CreateIORequest(port=0x${portAddr.toString(
         16
       )}, size=${size})`
@@ -3680,7 +3681,7 @@ console.error(`[ExecLibrary]   CreateIORequest: AllocMem failed`);
       this.emulator.writeMemory32(ioReqAddr + 44, 0); // io_Offset
     }
 
-console.log(
+debugLog(
       `[ExecLibrary]   IORequest created at 0x${ioReqAddr.toString(16)}`
     );
     return ioReqAddr;
@@ -3699,18 +3700,18 @@ console.log(
    */
   deleteIORequest(ioReqAddr: number): void {
     if (ioReqAddr === 0) {
-console.log("[ExecLibrary] DeleteIORequest(NULL) - ignoring");
+debugLog("[ExecLibrary] DeleteIORequest(NULL) - ignoring");
       return;
     }
 
-console.log(`[ExecLibrary] DeleteIORequest(0x${ioReqAddr.toString(16)})`);
+debugLog(`[ExecLibrary] DeleteIORequest(0x${ioReqAddr.toString(16)})`);
 
     // Read size from mn_Length field
     const size = this.emulator.readMemory16(ioReqAddr + 18);
 
     // Free memory
     this.freeMem(ioReqAddr, size);
-console.log(`[ExecLibrary]   IORequest deleted`);
+debugLog(`[ExecLibrary]   IORequest deleted`);
   }
 
   /**
@@ -3729,7 +3730,7 @@ console.log(`[ExecLibrary]   IORequest deleted`);
    */
   doIO(ioReqAddr: number): number {
     if (ioReqAddr === 0) {
-console.log("[ExecLibrary] DoIO(NULL) - returning error");
+debugLog("[ExecLibrary] DoIO(NULL) - returning error");
       return -1; // IOERR_OPENFAIL
     }
 
@@ -3737,7 +3738,7 @@ console.log("[ExecLibrary] DoIO(NULL) - returning error");
     const command = this.emulator.readMemory16(ioReqAddr + 28);
     const device = this.emulator.readMemory32(ioReqAddr + 20);
 
-console.log(
+debugLog(
       `[ExecLibrary] DoIO(0x${ioReqAddr.toString(
         16
       )}) command=${command} device=0x${device.toString(16)}`
@@ -3745,7 +3746,7 @@ console.log(
 
     // In a real system, would dispatch to device driver
     // For BBS emulator, most devices don't exist, so we stub this
-console.log(`[ExecLibrary]   DoIO: Stubbed - returning success`);
+debugLog(`[ExecLibrary]   DoIO: Stubbed - returning success`);
 
     // Set io_Error to 0 (success)
     this.emulator.writeMemory(ioReqAddr + 31, 0);
@@ -3768,7 +3769,7 @@ console.log(`[ExecLibrary]   DoIO: Stubbed - returning success`);
    */
   sendIO(ioReqAddr: number): void {
     if (ioReqAddr === 0) {
-console.log("[ExecLibrary] SendIO(NULL) - ignoring");
+debugLog("[ExecLibrary] SendIO(NULL) - ignoring");
       return;
     }
 
@@ -3776,7 +3777,7 @@ console.log("[ExecLibrary] SendIO(NULL) - ignoring");
     const command = this.emulator.readMemory16(ioReqAddr + 28);
     const device = this.emulator.readMemory32(ioReqAddr + 20);
 
-console.log(
+debugLog(
       `[ExecLibrary] SendIO(0x${ioReqAddr.toString(
         16
       )}) command=${command} device=0x${device.toString(16)}`
@@ -3790,7 +3791,7 @@ console.log(
 
     // In a real system, would send reply message to port when complete
     // For now, we just mark as complete
-console.log(
+debugLog(
       `[ExecLibrary]   SendIO: Stubbed - simulating immediate completion`
     );
   }
@@ -3808,15 +3809,15 @@ console.log(
    */
   checkIO(ioReqAddr: number): number {
     if (ioReqAddr === 0) {
-console.log("[ExecLibrary] CheckIO(NULL) - returning completed");
+debugLog("[ExecLibrary] CheckIO(NULL) - returning completed");
       return -1; // Consider NULL as completed
     }
 
-console.log(`[ExecLibrary] CheckIO(0x${ioReqAddr.toString(16)})`);
+debugLog(`[ExecLibrary] CheckIO(0x${ioReqAddr.toString(16)})`);
 
     // In our BBS emulator, I/O completes synchronously
     // So CheckIO always returns "completed"
-console.log(`[ExecLibrary]   CheckIO: Stubbed - returning completed`);
+debugLog(`[ExecLibrary]   CheckIO: Stubbed - returning completed`);
     return -1; // Non-zero = completed
   }
 
@@ -3841,11 +3842,11 @@ console.log(`[ExecLibrary]   CheckIO: Stubbed - returning completed`);
    */
   addHead(listAddr: number, nodeAddr: number): void {
     if (listAddr === 0 || nodeAddr === 0) {
-console.log("[ExecLibrary] AddHead(NULL) - ignoring");
+debugLog("[ExecLibrary] AddHead(NULL) - ignoring");
       return;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] AddHead(list=0x${listAddr.toString(
         16
       )}, node=0x${nodeAddr.toString(16)})`
@@ -3864,7 +3865,7 @@ console.log(
     // Update list head
     this.emulator.writeMemory32(listAddr + 0, nodeAddr);
 
-console.log(`[ExecLibrary]   Node added to head`);
+debugLog(`[ExecLibrary]   Node added to head`);
   }
 
   /**
@@ -3881,7 +3882,7 @@ console.log(`[ExecLibrary]   Node added to head`);
    */
   addTail(listAddr: number, nodeAddr: number): void {
     if (listAddr === 0 || nodeAddr === 0) {
-console.log("[ExecLibrary] AddTail(NULL) - ignoring");
+debugLog("[ExecLibrary] AddTail(NULL) - ignoring");
       return;
     }
 
@@ -3899,7 +3900,7 @@ console.log("[ExecLibrary] AddTail(NULL) - ignoring");
       tailPredAddr < 0x1000 ||
       (tailPredAddr & 1) !== 0;  // Odd address = not aligned
     if (isTailPredInvalid) {
-      console.log(`[ExecLibrary] AddTail: FIXING corrupted list at 0x${listAddr.toString(16)} (tailPred was 0x${tailPredAddr.toString(16)}, invalid=${tailPredAddr === 0 ? 'null' : tailPredAddr < 0x1000 ? 'low' : 'odd'})`);
+      debugLog(`[ExecLibrary] AddTail: FIXING corrupted list at 0x${listAddr.toString(16)} (tailPred was 0x${tailPredAddr.toString(16)}, invalid=${tailPredAddr === 0 ? 'null' : tailPredAddr < 0x1000 ? 'low' : 'odd'})`);
       // Initialize empty list: head -> tail, tailPred -> head location
       this.emulator.writeMemory32(listAddr + 0, tailAddr); // lh_Head -> lh_Tail
       this.emulator.writeMemory32(listAddr + 4, 0); // lh_Tail = NULL
@@ -3909,7 +3910,7 @@ console.log("[ExecLibrary] AddTail(NULL) - ignoring");
 
     this.logExecDebug(`AddTail: BEFORE list=0x${listAddr.toString(16)} head=0x${oldHead.toString(16)} tailPred=0x${tailPredAddr.toString(16)}`);
 
-console.log(
+debugLog(
       `[ExecLibrary] AddTail(list=0x${listAddr.toString(
         16
       )}, node=0x${nodeAddr.toString(16)}) tailPred=0x${tailPredAddr.toString(16)}`
@@ -3931,7 +3932,7 @@ console.log(
     const newHead = this.emulator.readMemory32(listAddr + 0);
     this.logExecDebug(`AddTail: AFTER list=0x${listAddr.toString(16)} head=0x${newHead.toString(16)} tailPred=0x${nodeAddr.toString(16)}`);
 
-console.log(`[ExecLibrary]   Node added to tail (head now 0x${newHead.toString(16)})`);
+debugLog(`[ExecLibrary]   Node added to tail (head now 0x${newHead.toString(16)})`);
   }
 
   /**
@@ -3947,7 +3948,7 @@ console.log(`[ExecLibrary]   Node added to tail (head now 0x${newHead.toString(1
    */
   remHead(listAddr: number): number {
     if (listAddr === 0) {
-console.log("[ExecLibrary] RemHead(NULL) - returning NULL");
+debugLog("[ExecLibrary] RemHead(NULL) - returning NULL");
       return 0;
     }
 
@@ -3961,11 +3962,11 @@ console.log("[ExecLibrary] RemHead(NULL) - returning NULL");
 
     // Check if list is empty (head points to tail)
     if (headAddr === tailAddr) {
-console.log(`[ExecLibrary] RemHead: List empty (head=0x${headAddr.toString(16)} == tail=0x${tailAddr.toString(16)})`);
+debugLog(`[ExecLibrary] RemHead: List empty (head=0x${headAddr.toString(16)} == tail=0x${tailAddr.toString(16)})`);
       return 0;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] RemHead(list=0x${listAddr.toString(
         16
       )}) → node=0x${headAddr.toString(16)}`
@@ -3980,7 +3981,7 @@ console.log(
     // Update new head's predecessor
     this.emulator.writeMemory32(newHeadAddr + 4, listAddr + 0);
 
-console.log(`[ExecLibrary]   Node removed from head`);
+debugLog(`[ExecLibrary]   Node removed from head`);
     return headAddr;
   }
 
@@ -3997,7 +3998,7 @@ console.log(`[ExecLibrary]   Node removed from head`);
    */
   remTail(listAddr: number): number {
     if (listAddr === 0) {
-console.log("[ExecLibrary] RemTail(NULL) - returning NULL");
+debugLog("[ExecLibrary] RemTail(NULL) - returning NULL");
       return 0;
     }
 
@@ -4007,11 +4008,11 @@ console.log("[ExecLibrary] RemTail(NULL) - returning NULL");
 
     // Check if list is empty (tailPred points to head)
     if (tailPredAddr === headAddr) {
-console.log(`[ExecLibrary] RemTail: List empty`);
+debugLog(`[ExecLibrary] RemTail: List empty`);
       return 0;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] RemTail(list=0x${listAddr.toString(
         16
       )}) → node=0x${tailPredAddr.toString(16)}`
@@ -4027,7 +4028,7 @@ console.log(
     const tailAddr = listAddr + 4;
     this.emulator.writeMemory32(newTailPredAddr + 0, tailAddr);
 
-console.log(`[ExecLibrary]   Node removed from tail`);
+debugLog(`[ExecLibrary]   Node removed from tail`);
     return tailPredAddr;
   }
 
@@ -4044,11 +4045,11 @@ console.log(`[ExecLibrary]   Node removed from tail`);
    */
   remove(nodeAddr: number): void {
     if (nodeAddr === 0) {
-console.log("[ExecLibrary] Remove(NULL) - ignoring");
+debugLog("[ExecLibrary] Remove(NULL) - ignoring");
       return;
     }
 
-console.log(`[ExecLibrary] Remove(node=0x${nodeAddr.toString(16)})`);
+debugLog(`[ExecLibrary] Remove(node=0x${nodeAddr.toString(16)})`);
 
     // Read node links
     const succAddr = this.emulator.readMemory32(nodeAddr + 0); // ln_Succ
@@ -4060,7 +4061,7 @@ console.log(`[ExecLibrary] Remove(node=0x${nodeAddr.toString(16)})`);
     // Link successor to predecessor
     this.emulator.writeMemory32(succAddr + 4, predAddr);
 
-console.log(`[ExecLibrary]   Node removed from list`);
+debugLog(`[ExecLibrary]   Node removed from list`);
   }
 
   /**
@@ -4078,11 +4079,11 @@ console.log(`[ExecLibrary]   Node removed from list`);
    */
   insert(listAddr: number, nodeAddr: number, afterAddr: number): void {
     if (listAddr === 0 || nodeAddr === 0) {
-console.log("[ExecLibrary] Insert(NULL) - ignoring");
+debugLog("[ExecLibrary] Insert(NULL) - ignoring");
       return;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary] Insert(list=0x${listAddr.toString(
         16
       )}, node=0x${nodeAddr.toString(16)}, after=0x${afterAddr.toString(16)})`
@@ -4107,7 +4108,7 @@ console.log(
     // Update successor's predecessor
     this.emulator.writeMemory32(succAddr + 4, nodeAddr);
 
-console.log(`[ExecLibrary]   Node inserted`);
+debugLog(`[ExecLibrary]   Node inserted`);
   }
 
   /**
@@ -4124,7 +4125,7 @@ console.log(`[ExecLibrary]   Node inserted`);
    * In BBS emulator, this is a no-op.
    */
   disable(): void {
-console.log("[ExecLibrary] Disable() - no-op in emulated environment");
+debugLog("[ExecLibrary] Disable() - no-op in emulated environment");
   }
 
   /**
@@ -4141,7 +4142,7 @@ console.log("[ExecLibrary] Disable() - no-op in emulated environment");
    * In BBS emulator, this is a no-op.
    */
   enable(): void {
-console.log("[ExecLibrary] Enable() - no-op in emulated environment");
+debugLog("[ExecLibrary] Enable() - no-op in emulated environment");
   }
 
   /**
@@ -4162,7 +4163,7 @@ console.log("[ExecLibrary] Enable() - no-op in emulated environment");
    * Returns 64MB for web environment (plenty for any door).
    */
   availMem(requirements: number): number {
-console.log(
+debugLog(
       `[ExecLibrary] AvailMem(requirements=0x${requirements.toString(16)})`
     );
 
@@ -4170,7 +4171,7 @@ console.log(
     // This signals to doors that memory is not a constraint
     const availableMemory = 64 * 1024 * 1024;
 
-console.log(
+debugLog(
       `[ExecLibrary]   Returning ${availableMemory} bytes (64MB) available`
     );
     return availableMemory;
@@ -4196,14 +4197,14 @@ console.log(
    * P0 function - Critical for memory operations
    */
   copyMem(sourceAddr: number, destAddr: number, size: number): void {
-console.log(
+debugLog(
       `[ExecLibrary] CopyMem(src=0x${sourceAddr.toString(
         16
       )}, dest=0x${destAddr.toString(16)}, size=${size})`
     );
 
     if (size === 0 || sourceAddr === 0 || destAddr === 0) {
-console.log(`[ExecLibrary]   Invalid parameters, skipping`);
+debugLog(`[ExecLibrary]   Invalid parameters, skipping`);
       return;
     }
 
@@ -4213,7 +4214,7 @@ console.log(`[ExecLibrary]   Invalid parameters, skipping`);
       this.emulator.writeMemory(destAddr + i, byte);
     }
 
-console.log(`[ExecLibrary]   Copied ${size} bytes`);
+debugLog(`[ExecLibrary]   Copied ${size} bytes`);
   }
 
   /**
@@ -4232,14 +4233,14 @@ console.log(`[ExecLibrary]   Copied ${size} bytes`);
    * P0 function - Critical for fast memory operations
    */
   copyMemQuick(sourceAddr: number, destAddr: number, size: number): void {
-console.log(
+debugLog(
       `[ExecLibrary] CopyMemQuick(src=0x${sourceAddr.toString(
         16
       )}, dest=0x${destAddr.toString(16)}, size=${size})`
     );
 
     if (size === 0 || sourceAddr === 0 || destAddr === 0) {
-console.log(`[ExecLibrary]   Invalid parameters, skipping`);
+debugLog(`[ExecLibrary]   Invalid parameters, skipping`);
       return;
     }
 
@@ -4250,7 +4251,7 @@ console.log(`[ExecLibrary]   Invalid parameters, skipping`);
       this.emulator.writeMemory32(destAddr + i * 4, longword);
     }
 
-console.log(`[ExecLibrary]   Copied ${numLongs} longwords (${size} bytes)`);
+debugLog(`[ExecLibrary]   Copied ${numLongs} longwords (${size} bytes)`);
   }
 
   /**
@@ -4271,14 +4272,14 @@ console.log(`[ExecLibrary]   Copied ${numLongs} longwords (${size} bytes)`);
    * so FreeVec can free without knowing the size.
    */
   allocVec(byteSize: number, requirements: number): number {
-console.log(
+debugLog(
       `[ExecLibrary] AllocVec(size=${byteSize}, requirements=0x${requirements.toString(
         16
       )})`
     );
 
     if (byteSize === 0) {
-console.log(`[ExecLibrary]   Zero size requested, returning NULL`);
+debugLog(`[ExecLibrary]   Zero size requested, returning NULL`);
       return 0;
     }
 
@@ -4287,7 +4288,7 @@ console.log(`[ExecLibrary]   Zero size requested, returning NULL`);
     const memAddr = this.allocMem(totalSize, requirements);
 
     if (memAddr === 0) {
-console.log(`[ExecLibrary]   Allocation failed`);
+debugLog(`[ExecLibrary]   Allocation failed`);
       return 0;
     }
 
@@ -4296,7 +4297,7 @@ console.log(`[ExecLibrary]   Allocation failed`);
 
     // Return pointer after size header
     const userAddr = memAddr + 4;
-console.log(
+debugLog(
       `[ExecLibrary]   AllocVec → 0x${userAddr.toString(
         16
       )} (${byteSize} bytes)`
@@ -4319,7 +4320,7 @@ console.log(
    */
   freeVec(memoryBlock: number): void {
     if (memoryBlock === 0) {
-console.log(`[ExecLibrary] FreeVec(NULL) - ignoring`);
+debugLog(`[ExecLibrary] FreeVec(NULL) - ignoring`);
       return;
     }
 
@@ -4327,7 +4328,7 @@ console.log(`[ExecLibrary] FreeVec(NULL) - ignoring`);
     const headerAddr = memoryBlock - 4;
     const size = this.emulator.readMemory32(headerAddr);
 
-console.log(
+debugLog(
       `[ExecLibrary] FreeVec(0x${memoryBlock.toString(16)}) - size=${size}`
     );
 
@@ -4335,7 +4336,7 @@ console.log(
     const totalSize = size + 4;
     this.freeMem(headerAddr, totalSize);
 
-console.log(`[ExecLibrary]   Freed ${totalSize} bytes`);
+debugLog(`[ExecLibrary]   Freed ${totalSize} bytes`);
   }
 
   /**
@@ -4354,7 +4355,7 @@ console.log(`[ExecLibrary]   Freed ${totalSize} bytes`);
    */
   addPort(portAddr: number): void {
     if (portAddr === 0) {
-console.log("[ExecLibrary] AddPort(NULL) - ignoring");
+debugLog("[ExecLibrary] AddPort(NULL) - ignoring");
       return;
     }
 
@@ -4369,7 +4370,7 @@ console.log("[ExecLibrary] AddPort(NULL) - ignoring");
     const namePtr = this.emulator.readMemory32(portAddr + 10);
 
     if (namePtr === 0) {
-console.log(
+debugLog(
         `[ExecLibrary] AddPort(0x${portAddr.toString(
           16
         )}) - port has no name, not making public`
@@ -4378,7 +4379,7 @@ console.log(
     }
 
     const name = this.emulator.readString(namePtr);
-console.log(
+debugLog(
       `[ExecLibrary] AddPort(0x${portAddr.toString(
         16
       )}) - adding public port "${name}"`
@@ -4401,7 +4402,7 @@ console.log(
     if (isDoorReplyPort) {
       // Fix sigTask if needed
       if (sigTask !== this.currentTask.address) {
-console.log(
+debugLog(
           `[ExecLibrary]   FIXING door reply port sigTask: 0x${sigTask.toString(
             16
           )} -> 0x${this.currentTask.address.toString(16)}`
@@ -4419,7 +4420,7 @@ console.log(
     const PA_SIGNAL = 0x02;
     const currentFlags = this.emulator.readMemory(portAddr + 14);
     if ((currentFlags & PA_SIGNAL) === 0) {
-console.log(
+debugLog(
         `[ExecLibrary]   FIXING port "${name}" flags: adding PA_SIGNAL (0x${currentFlags.toString(
           16
         )} -> 0x${(currentFlags | PA_SIGNAL).toString(16)})`
@@ -4427,7 +4428,7 @@ console.log(
       this.emulator.writeMemory(portAddr + 14, currentFlags | PA_SIGNAL);
     }
 
-console.log(
+debugLog(
       `[ExecLibrary]   Port sigTask: 0x${sigTask.toString(
         16
       )}, sigBit: ${sigBit}`
@@ -4449,7 +4450,7 @@ console.log(
     // Register for FindPort lookups and Exec port list traversal
     this.registerPublicPort(name, portAddr);
 
-console.log(
+debugLog(
       `[ExecLibrary]   Port "${name}" is now public and registered for messaging`
     );
   }
@@ -4470,13 +4471,13 @@ console.log(
    */
   createMsgPort(ownerTask?: Task, forceSigBit?: number): number {
     const owner = ownerTask || this.currentTask;
-console.log("[ExecLibrary] CreateMsgPort() called");
-console.log(
+debugLog("[ExecLibrary] CreateMsgPort() called");
+debugLog(
       `[ExecLibrary]   Owner task: 0x${owner.address.toString(16)} (${
         owner.name
       })`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   DEBUG: ownerTask passed=${
         ownerTask ? "yes" : "no"
       }, this.currentTask.address=0x${this.currentTask.address.toString(
@@ -4515,7 +4516,7 @@ console.warn("[ExecLibrary]   CreateMsgPort failed: AllocMem returned 0");
     let signalBit: number;
     if (forceSigBit !== undefined && forceSigBit >= 0 && forceSigBit <= 31) {
       signalBit = forceSigBit;
-console.log(
+debugLog(
         `[ExecLibrary]   Using forced sigBit=${signalBit} (0x${(
           1 << signalBit
         ).toString(16)})`
@@ -4553,23 +4554,23 @@ console.warn(
     };
     this.messagePorts.set(portAddr, port);
 
-console.log(
+debugLog(
       `[ExecLibrary] ✅ Created MsgPort at 0x${portAddr.toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    mp_Flags: 0x${this.emulator
         .readMemory(portAddr + 14)
         .toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    mp_SigBit: ${this.emulator.readMemory(portAddr + 15)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    mp_SigTask: 0x${this.emulator
         .readMemory32(portAddr + 16)
         .toString(16)}`
     );
-console.log(`[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)}`);
+debugLog(`[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)}`);
     return portAddr;
   }
 
@@ -4588,10 +4589,10 @@ console.log(`[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)}`);
    *   D0 = MsgPort address (or 0 if failed)
    */
   createPort(nameAddr: number, priority: number): number {
-console.log("[ExecLibrary] CreatePort() called (AmigaOS 1.x API)");
-console.log(`[ExecLibrary]   name: 0x${nameAddr.toString(16)}`);
-console.log(`[ExecLibrary]   priority: ${priority}`);
-console.log(
+debugLog("[ExecLibrary] CreatePort() called (AmigaOS 1.x API)");
+debugLog(`[ExecLibrary]   name: 0x${nameAddr.toString(16)}`);
+debugLog(`[ExecLibrary]   priority: ${priority}`);
+debugLog(
       `[ExecLibrary]   Current task: 0x${this.currentTask.address.toString(16)}`
     );
     // Allocate memory for MsgPort structure (34 bytes)
@@ -4605,9 +4606,9 @@ console.warn("[ExecLibrary]   CreatePort failed: AllocMem returned 0");
     let portName = "";
     if (nameAddr !== 0) {
       portName = this.emulator.readString(nameAddr);
-console.log(`[ExecLibrary]   Port name: "${portName}"`);
+debugLog(`[ExecLibrary]   Port name: "${portName}"`);
     } else {
-console.log(`[ExecLibrary]   Port name: (NULL - private port)`);
+debugLog(`[ExecLibrary]   Port name: (NULL - private port)`);
     }
 
     // CRITICAL: Notify door session that CreatePort was called (initialization complete)
@@ -4660,27 +4661,27 @@ console.log(`[ExecLibrary]   Port name: (NULL - private port)`);
     };
     this.messagePorts.set(portAddr, port);
 
-console.log(
+debugLog(
       `[ExecLibrary] ✅ Created MsgPort at 0x${portAddr.toString(
         16
       )} (via CreatePort)`
     );
-console.log(`[ExecLibrary]    mp_Node.ln_Name: "${portName}"`);
-console.log(`[ExecLibrary]    mp_Node.ln_Pri: ${priority}`);
-console.log(
+debugLog(`[ExecLibrary]    mp_Node.ln_Name: "${portName}"`);
+debugLog(`[ExecLibrary]    mp_Node.ln_Pri: ${priority}`);
+debugLog(
       `[ExecLibrary]    mp_Flags: 0x${this.emulator
         .readMemory(portAddr + 14)
         .toString(16)} (PA_SIGNAL)`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    mp_SigBit: ${this.emulator.readMemory(portAddr + 15)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    mp_SigTask: 0x${this.emulator
         .readMemory32(portAddr + 16)
         .toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]    Returning D0 = 0x${portAddr.toString(16)} (success)`
     );
     return portAddr;
@@ -4698,25 +4699,25 @@ console.log(
    *   Nothing
    */
   deleteMsgPort(portAddr: number): void {
-console.log(`[ExecLibrary] DeleteMsgPort(port=0x${portAddr.toString(16)})`);
+debugLog(`[ExecLibrary] DeleteMsgPort(port=0x${portAddr.toString(16)})`);
 
     // CRITICAL INSIGHT: portAddr might be in data segment (0x4000-0x5000 range)
     // If so, we need to READ THE POINTER from that address, not use the address directly!
     if (portAddr >= 0x4000 && portAddr < 0x5000) {
       const actualPortAddr = this.emulator.readMemory32(portAddr);
-console.log(
+debugLog(
         `[ExecLibrary]   Detected data segment address 0x${portAddr.toString(
           16
         )}`
       );
-console.log(
+debugLog(
         `[ExecLibrary]   Reading port pointer from memory: 0x${actualPortAddr.toString(
           16
         )}`
       );
 
       if (actualPortAddr === 0) {
-console.log(
+debugLog(
           `[ExecLibrary]   Port pointer is NULL - DoorStart() never initialized it`
         );
         return;
@@ -4728,7 +4729,7 @@ console.log(
 
     // Check if portAddr is NULL (0) or very small (likely NULL)
     if (portAddr === 0 || portAddr < 0x1000) {
-console.log(
+debugLog(
         `[ExecLibrary]   NULL or invalid port address: 0x${portAddr.toString(
           16
         )} - ignoring`
@@ -4744,7 +4745,7 @@ console.log(
       mp_Flags: this.emulator.readMemory(portAddr + 14),
       mp_SigBit: this.emulator.readMemory(portAddr + 15),
     };
-console.log(
+debugLog(
       `[ExecLibrary]   Port structure at 0x${portAddr.toString(16)}:`,
       portData
     );
@@ -4768,7 +4769,7 @@ console.error(
     // Remove from public registry if it has a name
     if (port.name) {
       this.publicPorts.delete(port.name.toLowerCase());
-console.log(`[ExecLibrary]   Removed public port "${port.name}"`);
+debugLog(`[ExecLibrary]   Removed public port "${port.name}"`);
     }
 
     this.removePortFromExecList(portAddr);
@@ -4778,7 +4779,7 @@ console.log(`[ExecLibrary]   Removed public port "${port.name}"`);
 
     // Remove from port registry
     this.messagePorts.delete(portAddr);
-console.log(`[ExecLibrary]   Deleted port at 0x${portAddr.toString(16)}`);
+debugLog(`[ExecLibrary]   Deleted port at 0x${portAddr.toString(16)}`);
   }
 
   /**
@@ -4800,7 +4801,7 @@ console.log(`[ExecLibrary]   Deleted port at 0x${portAddr.toString(16)}`);
     ownerTask?: Task,
     forceSigBit?: number
   ): number {
-console.log(`[ExecLibrary] Creating public port: "${name}"`);
+debugLog(`[ExecLibrary] Creating public port: "${name}"`);
 
     // Create port using standard CreateMsgPort
     // Pass forceSigBit if specified (e.g., 12 for AEDoorPort to match door expectations)
@@ -4819,7 +4820,7 @@ console.log(`[ExecLibrary] Creating public port: "${name}"`);
     // Add to public registry
     this.registerPublicPort(name, portAddr);
 
-console.log(
+debugLog(
       `[ExecLibrary]   Public port "${name}" created at 0x${portAddr.toString(
         16
       )}`
@@ -4850,7 +4851,7 @@ console.log(
   createAEDoorPort(name: string): number {
     const existing = this.publicPorts.get(name.toLowerCase());
     if (existing !== undefined) {
-console.log(
+debugLog(
         `[ExecLibrary] AEDoorPort "${name}" already exists at 0x${existing.toString(
           16
         )}`
@@ -4873,7 +4874,7 @@ console.log(
       AEDOORPORT_SIGBIT
     );
 
-console.log(
+debugLog(
       `[ExecLibrary] Created AEDoorPort "${name}" at 0x${portAddr.toString(
         16
       )} ` +
@@ -4962,7 +4963,7 @@ console.error(
   ): void {
     const suppressDoorCallback = options?.suppressDoorCallback ?? false;
 
-console.log(
+debugLog(
       `[ExecLibrary] PutMsg(port=0x${portAddr.toString(
         16
       )}, msg=0x${msgAddr.toString(16)})`
@@ -4991,9 +4992,9 @@ console.error(
 
     // If door is sending a message (not suppressed), clear from repliedMessages
     // This handles when door reuses a message buffer for a new command
-console.log(`[ExecLibrary][PutMsg] DEBUG: suppressDoorCallback=${suppressDoorCallback}, has(0x${msgAddr.toString(16)})=${this.repliedMessages.has(msgAddr)}, repliedMessages.size=${this.repliedMessages.size}`);
+debugLog(`[ExecLibrary][PutMsg] DEBUG: suppressDoorCallback=${suppressDoorCallback}, has(0x${msgAddr.toString(16)})=${this.repliedMessages.has(msgAddr)}, repliedMessages.size=${this.repliedMessages.size}`);
     if (!suppressDoorCallback && this.repliedMessages.has(msgAddr)) {
-console.log(
+debugLog(
         `[ExecLibrary][PutMsg] Door reusing replied message 0x${msgAddr.toString(
           16
         )} - clearing from repliedMessages`
@@ -5001,7 +5002,7 @@ console.log(
       this.repliedMessages.delete(msgAddr);
     }
 
-console.log(
+debugLog(
       `[ExecLibrary][PutMsg] port=0x${portAddr.toString(16)} name=${
         port.name ?? "<unnamed>"
       } msg=0x${msgAddr.toString(16)} suppress=${
@@ -5031,8 +5032,8 @@ console.log(
     const msgListAddr = portAddr + 20; // mp_MsgList offset
     this.addTail(msgListAddr, msgAddr);
 
-console.log(`[ExecLibrary]   ✓ Message added to port list via AddTail()`);
-console.log(
+debugLog(`[ExecLibrary]   ✓ Message added to port list via AddTail()`);
+debugLog(
       `[ExecLibrary]   Port now has ${port.messages.length} message(s) in queue`
     );
 
@@ -5048,7 +5049,7 @@ console.log(
       // This port has no PA_SIGNAL - check if it needs it
       const needsSignaling = port.sigTask !== 0 || suppressDoorCallback;
       if (needsSignaling) {
-console.log(
+debugLog(
           `[ExecLibrary]   UPGRADING lightweight port "${port.name}" to signaling port`
         );
         mp_Flags = mp_Flags | PA_SIGNAL;
@@ -5068,7 +5069,7 @@ console.log(
         if (existingSigBit > 0 && existingSigBit <= 31) {
           // Port already has a valid signal bit - use it!
           port.sigBit = existingSigBit;
-console.log(
+debugLog(
             `[ExecLibrary]   Using existing sigBit ${existingSigBit} from port structure`
           );
         } else if (port.sigBit === 0) {
@@ -5083,8 +5084,8 @@ console.log(
     }
 
     if (mp_Flags & PA_SIGNAL) {
-console.log(`[ExecLibrary]   Port has PA_SIGNAL flag - signaling task`);
-console.log(
+debugLog(`[ExecLibrary]   Port has PA_SIGNAL flag - signaling task`);
+debugLog(
         `[ExecLibrary]   Port sigTask: 0x${port.sigTask.toString(
           16
         )}, sigBit: ${port.sigBit}`
@@ -5093,7 +5094,7 @@ console.log(
       // Signal the task that owns this port
       if (port.sigTask !== 0) {
         const signalMask = 1 << port.sigBit; // Convert bit number to mask
-console.log(
+debugLog(
           `[ExecLibrary]   *** Calling Signal() to wake waiting task ***`
         );
         this.signal(port.sigTask, signalMask);
@@ -5101,7 +5102,7 @@ console.log(
 console.warn(`[ExecLibrary]   WARNING: Port has no sigTask set!`);
       }
     } else {
-console.log(
+debugLog(
         `[ExecLibrary]   Port does not have PA_SIGNAL flag (no task to signal)`
       );
     }
@@ -5119,7 +5120,7 @@ console.log(
       (isAEDoorPort || isDoorTaskPort || isDoorReplyPort)
     ) {
       const label = isAEDoorPort ? port.name ?? "AEDoorPort" : "Door Task Port";
-console.log(
+debugLog(
         `[ExecLibrary]   *** Invoking door message callback for port 0x${originalPortAddr.toString(
           16
         )} (${label}) ***`
@@ -5151,7 +5152,7 @@ console.log(
         options?.skipReplies || false
       }`
     );
-console.log(`[ExecLibrary] >>> GetMsg(port=0x${portAddr.toString(16)})`);
+debugLog(`[ExecLibrary] >>> GetMsg(port=0x${portAddr.toString(16)})`);
 
     const port = this.messagePorts.get(portAddr);
     if (!port) {
@@ -5169,11 +5170,11 @@ console.error(
     // Check if port has messages
     if (port.messages.length === 0) {
       this.logExecDebug(`GetMsg: No messages, returning 0`);
-console.log(`[ExecLibrary]   No messages in port`);
+debugLog(`[ExecLibrary]   No messages in port`);
       // Set flag to trigger XIM polling - doors may be waiting for BBS reply while polling GetMsg
       // This is critical for XIM doors that poll GetMsg instead of using Wait()
       this.needsXIMPoll = true;
-      console.log(`[ExecLibrary]   SET needsXIMPoll=true (instance=${this.instanceId})`);
+      debugLog(`[ExecLibrary]   SET needsXIMPoll=true (instance=${this.instanceId})`);
       return 0;
     }
 
@@ -5189,7 +5190,7 @@ console.log(`[ExecLibrary]   No messages in port`);
         if (!this.repliedMessages.has(msgAddr)) {
           // This is a new message from the door, not a reply we sent
           port.messages.splice(i, 1);
-console.log(
+debugLog(
             `[ExecLibrary]   Returning door message at 0x${msgAddr.toString(
               16
             )} (skipped ${i} replies), ${port.messages.length} remaining`
@@ -5205,7 +5206,7 @@ console.log(
         }
       }
       // All messages are our replies, return 0
-console.log(
+debugLog(
         `[ExecLibrary]   No door messages in port (${port.messages.length} replies waiting for door)`
       );
       // Set flag to trigger XIM polling - door is waiting for reply processing
@@ -5230,12 +5231,12 @@ console.log(
       port.messages.splice(arrayIndex, 1);
     }
 
-console.log(
+debugLog(
       `[ExecLibrary]   Returned message 0x${msgAddr.toString(16)} via remHead(), ${
         port.messages.length
       } remaining`
     );
-console.log(
+debugLog(
       `[ExecLibrary] GetMsg returning msg=0x${msgAddr.toString(16)} queueLen=${
         port.messages.length
       }`
@@ -5274,7 +5275,7 @@ console.log(
   waitPort(portAddr: number): number {
     let port: MessagePort | undefined = this.messagePorts.get(portAddr);
     if (!port) {
-console.log(
+debugLog(
         `[ExecLibrary] >>> WaitPort(port=0x${portAddr.toString(
           16
         )}) - not in registry, auto-registering`
@@ -5305,24 +5306,24 @@ console.error(
     // MESSAGE FOUND! Return the head message without removing it.
     // Real WaitPort waits on the signal and returns the first message; GetMsg removes it.
     const msgAddr = port.messages[0];
-console.log(
+debugLog(
       `[ExecLibrary] WaitPort returning msg=0x${msgAddr.toString(
         16
       )} queueLen=${port.messages.length}`
     );
     // Clear signaled bit like Exec's Wait would do
     port.signaled = false;
-console.log(
+debugLog(
       `[ExecLibrary] ===============================================`
     );
-console.log(`[ExecLibrary] *** WaitPort RETURNS MESSAGE! ***`);
-console.log(
+debugLog(`[ExecLibrary] *** WaitPort RETURNS MESSAGE! ***`);
+debugLog(
       `[ExecLibrary] ===============================================`
     );
-console.log(`[ExecLibrary]   Port: 0x${portAddr.toString(16)}`);
-console.log(`[ExecLibrary]   Message: 0x${msgAddr.toString(16)}`);
-console.log(`[ExecLibrary]   Queue length: ${port.messages.length}`);
-console.log(
+debugLog(`[ExecLibrary]   Port: 0x${portAddr.toString(16)}`);
+debugLog(`[ExecLibrary]   Message: 0x${msgAddr.toString(16)}`);
+debugLog(`[ExecLibrary]   Queue length: ${port.messages.length}`);
+debugLog(
       `[ExecLibrary] ===============================================`
     );
     this.protectReturnedMessage(
@@ -5392,7 +5393,7 @@ console.warn(
     this.emulator.writeMemory32(msgAddr + 0x24, argListAddr); // sm_ArgList
 
     this.putMsg(portAddr, msgAddr);
-console.log(
+debugLog(
       `[ExecLibrary] Seeded WBStartup message 0x${msgAddr.toString(
         16
       )} -> pr_MsgPort=0x${portAddr.toString(16)} args=[${safeArgs.join(", ")}]`
@@ -5422,7 +5423,7 @@ console.log(
 
     if (replyPortAddr === 0) {
       this.logExecDebug(`ReplyMsg: No reply port in message`);
-console.log(
+debugLog(
         `[ExecLibrary] ReplyMsg: No reply port in message 0x${msgAddr.toString(
           16
         )}`
@@ -5434,7 +5435,7 @@ console.log(
 
     if (!this.messagePorts.get(replyPortAddr)) {
       this.logExecDebug(`ReplyMsg: Auto-registering reply port`);
-console.log(
+debugLog(
         `[ExecLibrary] ReplyMsg: Auto-registering reply port 0x${replyPortAddr.toString(
           16
         )}`
@@ -5450,7 +5451,7 @@ console.error(
       return;
     }
 
-console.log(
+debugLog(
       `[ExecLibrary][ReplyMsg] msg=0x${msgAddr.toString(
         16
       )} replyPort=0x${replyPortAddr.toString(16)}`
@@ -5479,7 +5480,7 @@ console.log(
     // - Copies were being consumed by XIM polling instead of door's GetMsg
     // - Created message clutter without benefiting the door
 
-console.log(
+debugLog(
       `[ExecLibrary] Reply sent to port 0x${replyPortAddr.toString(16)}`
     );
   }
@@ -5505,12 +5506,12 @@ console.log(
       str += String.fromCharCode(ch);
     }
 
-console.log(`[ExecLibrary] AEDoor Message dump (jhMessage):`);
-console.log(`  mn_ReplyPort: 0x${mn_ReplyPort.toString(16)}`);
-console.log(`  mn_Length: ${mn_Length}`);
-console.log(`  Command (0xE0): ${command}`);
-console.log(`  Data (0xDC): ${data}`);
-console.log(`  String (0x14): "${str}"`);
+debugLog(`[ExecLibrary] AEDoor Message dump (jhMessage):`);
+debugLog(`  mn_ReplyPort: 0x${mn_ReplyPort.toString(16)}`);
+debugLog(`  mn_Length: ${mn_Length}`);
+debugLog(`  Command (0xE0): ${command}`);
+debugLog(`  Data (0xDC): ${data}`);
+debugLog(`  String (0x14): "${str}"`);
   }
 
   /**
@@ -5534,15 +5535,15 @@ console.log(`  String (0x14): "${str}"`);
    * allowing restoration by calling StackSwap again with the same structure.
    */
   stackSwap(structAddr: number): void {
-console.log(`[ExecLibrary] StackSwap(struct=0x${structAddr.toString(16)})`);
+debugLog(`[ExecLibrary] StackSwap(struct=0x${structAddr.toString(16)})`);
     const callerPC = this.emulator.getRegister(CPURegister.PC);
-console.log(`[ExecLibrary]   Called from PC=0x${callerPC.toString(16)}`);
+debugLog(`[ExecLibrary]   Called from PC=0x${callerPC.toString(16)}`);
     const rawWords: string[] = [];
     for (let offset = 0; offset < 12; offset += 4) {
       const word = this.emulator.readMemory32(structAddr + offset);
       rawWords.push(`0x${word.toString(16)}`);
     }
-console.log(`[ExecLibrary]   Raw struct dump: [${rawWords.join(", ")}]`);
+debugLog(`[ExecLibrary]   Raw struct dump: [${rawWords.join(", ")}]`);
 
     // Per Amiga NDK docs: "This function will swap the stack of your task with
     // the given values in StackSwap. The StackSwapStruct structure will then
@@ -5558,12 +5559,12 @@ console.log(`[ExecLibrary]   Raw struct dump: [${rawWords.join(", ")}]`);
     const oldLower = this.currentStackLower || newLower;
     const oldUpper = this.currentStackUpper || newUpper;
 
-console.log(
+debugLog(
       `[ExecLibrary]   OLD: Lower=0x${oldLower.toString(
         16
       )}, Upper=0x${oldUpper.toString(16)}, SP=0x${oldPointer.toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   NEW: Lower=0x${newLower.toString(
         16
       )}, Upper=0x${newUpper.toString(16)}, SP=0x${newPointer.toString(16)}`
@@ -5583,7 +5584,7 @@ console.log(
     this.currentStackLower = newLower;
     this.currentStackUpper = newUpper;
 
-console.log(
+debugLog(
       `[ExecLibrary]   Stack swapped! SP now 0x${newPointer.toString(16)}`
     );
   }
@@ -5607,43 +5608,43 @@ console.log(
    * return 0 so the door keeps polling without thinking a signal fired.
    */
   wait(signalMask: number): number {
-console.log(`[ExecLibrary] Wait(signalMask=0x${signalMask.toString(16)})`);
-console.log(
+debugLog(`[ExecLibrary] Wait(signalMask=0x${signalMask.toString(16)})`);
+debugLog(
       `[ExecLibrary]   Current sigRecvd: 0x${this.currentTask.sigRecvd.toString(
         16
       )}`
     );
 
     if (signalMask === 0) {
-console.log("[ExecLibrary]   Wait(0) called, returning immediately");
+debugLog("[ExecLibrary]   Wait(0) called, returning immediately");
       return 0;
     }
 
     const mask = signalMask >>> 0;
 
     // Check if any requested signals are already received
-console.log(
+debugLog(
       `[ExecLibrary]   Wait: checking sigRecvd=0x${this.currentTask.sigRecvd.toString(
         16
       )} & mask=0x${mask.toString(16)}`
     );
     const receivedSignals = this.currentTask.sigRecvd & mask;
-console.log(
+debugLog(
       `[ExecLibrary]   Wait: receivedSignals=0x${receivedSignals.toString(16)}`
     );
 
     if (receivedSignals !== 0) {
       // Signals already present - return immediately
-console.log(
+debugLog(
         `[ExecLibrary]   *** Signals already received: 0x${receivedSignals.toString(
           16
         )} ***`
       );
-console.log(`[ExecLibrary]   Returning immediately (no need to wait)`);
+debugLog(`[ExecLibrary]   Returning immediately (no need to wait)`);
 
       // Clear the returned signals from sigRecvd
       this.currentTask.sigRecvd &= ~receivedSignals;
-console.log(
+debugLog(
         `[ExecLibrary]   Cleared signals from sigRecvd, new value: 0x${this.currentTask.sigRecvd.toString(
           16
         )}`
@@ -5655,8 +5656,8 @@ console.log(
     }
 
     // No signals present - BLOCK the task until signals arrive
-console.log(`[ExecLibrary]   No signals present - BLOCKING task execution`);
-console.log(
+debugLog(`[ExecLibrary]   No signals present - BLOCKING task execution`);
+debugLog(
       `[ExecLibrary]   Setting sigWait=0x${mask.toString(
         16
       )} (task is now waiting)`
@@ -5677,24 +5678,24 @@ console.log(
     //   3. handleTrap sees isWaitBlocking=true, pushes returnAddr back, keeps PC at trap
     //   4. Next iteration re-executes Wait() trap
     //   5. Wait() finds signals in sigRecvd and returns them
-console.log(
+debugLog(
       "[ExecLibrary]   *** PAUSING EMULATOR - waiting for signals ***"
     );
-console.log(
+debugLog(
       `[ExecLibrary]   sigWait=0x${mask.toString(
         16
       )} isWaiting=true - Signal() will wake us`
     );
 
     this.emulator.pause(() => {
-console.log(
+debugLog(
         "[ExecLibrary]   *** RESUMED from Wait() - continuing execution ***"
       );
     });
 
     // Return 0 to indicate no signals yet - door will poll again after resume
     // Don't clear sigWait here - Signal() checks it to know we're waiting
-console.log(`[ExecLibrary]   Returning 0 (waiting for Signal)`);
+debugLog(`[ExecLibrary]   Returning 0 (waiting for Signal)`);
     return 0;
   }
 
@@ -5718,7 +5719,7 @@ console.log(`[ExecLibrary]   Returning 0 (waiting for Signal)`);
    * 4. Clears sigWait and sets task state to TS_READY
    */
   signal(taskAddr: number, signals: number): void {
-console.log(
+debugLog(
       `[ExecLibrary] Signal(task=0x${taskAddr.toString(
         16
       )}, signals=0x${signals.toString(16)})`
@@ -5735,12 +5736,12 @@ console.log(
     // -> Signal(0x88000) was setting door's sigRecvd to 0x1000 -> Wait() returned
     // immediately with 0x1000 -> door thought AEDoorPort had message -> wrong code path
     if (taskAddr !== 0 && taskAddr !== this.currentTask.address) {
-console.log(
+debugLog(
         `[ExecLibrary]   Signal to non-door task 0x${taskAddr.toString(
           16
         )} (BBS task) - skipping door signal`
       );
-console.log(
+debugLog(
         `[ExecLibrary]   (Door task is 0x${this.currentTask.address.toString(
           16
         )}, BBS-side handlers will process)`
@@ -5748,15 +5749,15 @@ console.log(
       return; // Don't signal the door when target is BBS task
     }
 
-console.log(
+debugLog(
       `[ExecLibrary]   Target task: 0x${this.currentTask.address.toString(
         16
       )} (${this.currentTask.name})`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   Signal bits to set: 0x${signals.toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   Current sigRecvd: 0x${this.currentTask.sigRecvd.toString(
         16
       )}`
@@ -5765,12 +5766,12 @@ console.log(
     // 1. OR signals into task's tc_SigRecvd field
     const oldSigRecvd = this.currentTask.sigRecvd;
     this.currentTask.sigRecvd |= signals;
-console.log(
+debugLog(
       `[ExecLibrary]   sigRecvd: 0x${oldSigRecvd.toString(
         16
       )} -> 0x${this.currentTask.sigRecvd.toString(16)}`
     );
-console.log(
+debugLog(
       `[ExecLibrary]   currentTask.sigWait: 0x${this.currentTask.sigWait.toString(
         16
       )}, isWaiting: ${this.currentTask.isWaiting}`
@@ -5778,7 +5779,7 @@ console.log(
 
     // 2. Check if task is waiting (sigWait != 0 means TS_WAIT)
     if (this.currentTask.sigWait !== 0) {
-console.log(
+debugLog(
         `[ExecLibrary]   Task is waiting for signals: 0x${this.currentTask.sigWait.toString(
           16
         )}`
@@ -5788,12 +5789,12 @@ console.log(
       const matchedSignals =
         this.currentTask.sigRecvd & this.currentTask.sigWait;
       if (matchedSignals !== 0) {
-console.log(
+debugLog(
           `[ExecLibrary]   *** SIGNAL MATCH! Matched bits: 0x${matchedSignals.toString(
             16
           )} ***`
         );
-console.log(
+debugLog(
           `[ExecLibrary]   *** RESUMING EMULATOR - waking task from Wait() ***`
         );
 
@@ -5805,7 +5806,7 @@ console.log(
           // With the new blocking fix, Wait() will be re-executed after resume.
           // Wait() will find signals in sigRecvd, return them in D0, and clear them.
           // If we did it here, Wait() would see sigRecvd=0 and block again.
-console.log(
+debugLog(
             `[ExecLibrary]   *** Wait() will re-execute and find signals in sigRecvd=0x${this.currentTask.sigRecvd.toString(16)} ***`
           );
 
@@ -5815,15 +5816,15 @@ console.log(
         this.currentTask.sigWait = 0;
         this.currentTask.state = 0; // TS_READY
       } else {
-console.log(`[ExecLibrary]   No match yet - task still waiting`);
+debugLog(`[ExecLibrary]   No match yet - task still waiting`);
       }
     } else {
-console.log(
+debugLog(
         `[ExecLibrary]   Task not waiting (will receive signal when it calls Wait())`
       );
     }
 
-console.log(`[ExecLibrary]   Signal operation complete`);
+debugLog(`[ExecLibrary]   Signal operation complete`);
   }
 
   // ============================================================================
@@ -5842,7 +5843,7 @@ console.log(`[ExecLibrary]   Signal operation complete`);
    */
   forbid(): void {
     this.forbidNest++;
-console.log(`[ExecLibrary] Forbid() - nest level now: ${this.forbidNest}`);
+debugLog(`[ExecLibrary] Forbid() - nest level now: ${this.forbidNest}`);
   }
 
   /**
@@ -5855,7 +5856,7 @@ console.log(`[ExecLibrary] Forbid() - nest level now: ${this.forbidNest}`);
     if (this.forbidNest > 0) {
       this.forbidNest--;
     }
-console.log(`[ExecLibrary] Permit() - nest level now: ${this.forbidNest}`);
+debugLog(`[ExecLibrary] Permit() - nest level now: ${this.forbidNest}`);
   }
 
   private registerPublicPort(name: string, portAddr: number): void {
@@ -5872,7 +5873,7 @@ console.log(`[ExecLibrary] Permit() - nest level now: ${this.forbidNest}`);
     const listAddr = this.getPortListAddr();
     const headPtr = this.emulator.readMemory32(listAddr);
     const tailPred = this.emulator.readMemory32(listAddr + 8);
-console.log(
+debugLog(
       `[ExecLibrary]   PortList head=0x${headPtr.toString(
         16
       )} tailPred=0x${tailPred.toString(16)}`
@@ -5939,7 +5940,7 @@ console.log(
 
     const headPtr = this.emulator.readMemory32(headAddr);
     const newTailPred = this.emulator.readMemory32(tailPredAddr);
-console.log(
+debugLog(
       `[ExecLibrary]   PortList updated: head=0x${headPtr.toString(
         16
       )} tailPred=0x${newTailPred.toString(16)}`
@@ -5971,7 +5972,7 @@ console.log(
       const strVal = strPtr
         ? this.emulator.readString(strPtr).substring(0, 40)
         : "";
-console.log(
+debugLog(
         `[ExecLibrary] RawDoFmt #${this.rawDoFmtCount} fmt="${fmt.substring(
           0,
           30
@@ -6091,7 +6092,7 @@ console.log(
       // Check for ILLEGAL instruction (0x4afc) which indicates library trap
       if (instrWord === 0x4afc) {
         if (DEBUG_CALLBACK) {
-console.log(
+debugLog(
             `[ExecLibrary] RawDoFmt callback hit ILLEGAL at pc=0x${pcBefore.toString(
               16
             )} - library trap!`
@@ -6106,7 +6107,7 @@ console.log(
       const pcNow = this.emulator.getRegister(CPURegister.PC);
 
       if (DEBUG_CALLBACK && steps < 5) {
-console.log(
+debugLog(
           `[ExecLibrary] RawDoFmt callback step ${steps}: pc 0x${pcBefore.toString(
             16
           )} -> 0x${pcNow.toString(16)} instr=0x${instrWord.toString(16)}`
@@ -6131,7 +6132,7 @@ console.warn(
     // Capture A3 after callback (it may have been incremented by move.b d0,(a3)+)
     const a3After = this.emulator.getRegister(CPURegister.A3);
     if (DEBUG_CALLBACK) {
-console.log(
+debugLog(
         `[ExecLibrary] RawDoFmt callback: char='${String.fromCharCode(
           charCode
         )}' (0x${charCode.toString(16)}) A3 0x${putChDataPtr.toString(

@@ -264,6 +264,7 @@ const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.EXEC_QUICKNEW,
   LoggedOnSubState.CONF_SCAN,
   LoggedOnSubState.DISPLAY_CONF_BULL,
+  LoggedOnSubState.AUTO_REJOIN,  // express.e:5066-5088 - auto-rejoin with S stats
   LoggedOnSubState.DISPLAY_MENU,
 ]);
 console.log('[command.handler] displayFlowStates:', Array.from(displayFlowStates));
@@ -592,26 +593,33 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           displayFlowLog('showing CONF_BULL');
           const displayed = await displayConferenceBulletins(socket, session);
           if (displayed && pauseDisplayFlow(socket, session)) {
-            // Keep next state queued for when pause finishes
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            displayFlowLog('pause after CONF_BULL');
+            // Keep next state queued for when pause finishes - will continue to auto-rejoin
+            session.subState = LoggedOnSubState.AUTO_REJOIN;
+            displayFlowLog('pause after CONF_BULL, will auto-rejoin');
             return;
           }
         }
-        displayFlowLog('skip CONF_BULL (toolFlags or not shown)');
-        // express.e: join default conference/message base without triggering mail scan again
-        // NOTE: session.currentConf and session.currentMsgBase are now initialized at the start
-        // of the display flow loop (line 526-531), so we don't need to initialize them here
+        displayFlowLog('no CONF_BULL pause, proceeding to auto-rejoin');
+        session.subState = LoggedOnSubState.AUTO_REJOIN;
+        continue;
+      }
+
+      // express.e:28573-28574 - After CONF_BULL, auto-rejoin with user stats
+      if (session.subState === LoggedOnSubState.AUTO_REJOIN) {
+        displayFlowLog('AUTO_REJOIN: calling joinConference with auto=true');
+        const confId = session.currentConf || session.user?.confRJoin || 1;
+        const msgBaseId = session.currentMsgBase || session.user?.msgBaseRJoin || 1;
+
+        // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
+        // The auto=true parameter triggers S command and Auto-ReJoined message display
+        await joinConference(socket, session, confId, msgBaseId, false, true);
+
         session.blockOLM = false;
-        try {
-          const { loadFlagged, loadHistory } = require('../server/database-helpers');
-          await loadFlagged(socket, session);
-          await loadHistory(session);
-        } catch (error) {
-console.error('[display flow] Error loading flagged/history:', error);
+        // joinConference sets subState to DISPLAY_MENU and menuPause to true
+        if (pauseDisplayFlow(socket, session)) {
+          displayFlowLog('pause after auto-rejoin');
+          return;
         }
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
         continue;
       }
 

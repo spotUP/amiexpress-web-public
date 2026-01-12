@@ -52,6 +52,13 @@ export class FileHandle {
   /** Track open mode to guard invalid seeks */
   private openMode: 'r' | 'w' | 'rw' | null = null;
 
+  /**
+   * Snapshot of file size at open time (for read-only files).
+   * This prevents infinite loops when reading files that grow during read
+   * (e.g., CallersLog being appended while ByteKillHandler reads it).
+   */
+  private snapshotSize: number | null = null;
+
   constructor(
     amiPath: string,
     sysPath: string,
@@ -114,6 +121,15 @@ console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" f
 
       this.fd = fs.openSync(this.sysPath, flags, 0o666);
       this.position = 0;
+
+      // For read-only files, snapshot the file size at open time.
+      // This prevents infinite loops when reading files that grow during read
+      // (e.g., CallersLog being appended to while ByteKillHandler reads it).
+      if (mode === 'r') {
+        const stats = fs.fstatSync(this.fd);
+        this.snapshotSize = stats.size;
+      }
+
       return true;
     } catch (error) {
 console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
@@ -148,8 +164,20 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
     }
 
     try {
-      const buffer = Buffer.alloc(length);
-      const bytesRead = fs.readSync(this.fd, buffer, 0, length, this.position);
+      // For read-only files with a snapshot size, limit reads to the original file size.
+      // This prevents infinite loops when reading files that grow during read.
+      let effectiveLength = length;
+      if (this.snapshotSize !== null) {
+        const available = this.snapshotSize - this.position;
+        if (available <= 0) {
+          // Already at or past the snapshot EOF - return empty (EOF)
+          return Buffer.alloc(0);
+        }
+        effectiveLength = Math.min(length, available);
+      }
+
+      const buffer = Buffer.alloc(effectiveLength);
+      const bytesRead = fs.readSync(this.fd, buffer, 0, effectiveLength, this.position);
       this.position += bytesRead;
       return buffer.slice(0, bytesRead);
     } catch (error) {

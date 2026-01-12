@@ -2091,6 +2091,22 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     let commands: any[] = [];
     let inlineEmitted = false;  // Track if parseMciCodes already emitted content inline
 
+    // === Screen Wipe Detection (BEFORE MCI parsing) ===
+    // Must detect wipe codes before parseMciCodes runs in inline mode,
+    // because inline mode emits content directly and sets parsed='',
+    // preventing later wipe detection.
+    const earlyWipeResult = parseWipeMCI(content);
+    const hasEarlyWipeAnimation = earlyWipeResult.wipeType !== null;
+    // Use content without wipe code for MCI processing
+    let contentForMci = content;
+    // When wipe is detected, disable inline mode so parsed contains full content for animation
+    // (inline mode emits content directly and sets parsed='', breaking wipe animation)
+    const mciSocket = hasEarlyWipeAnimation ? undefined : socket;
+    if (hasEarlyWipeAnimation) {
+      contentForMci = earlyWipeResult.content; // Remove wipe code from content before MCI processing
+      console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`);
+    }
+
     // === ~SP (Soft Pause) Segment Processing ===
     // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
     // Split content at ~SP boundaries and process one segment at a time
@@ -2100,13 +2116,13 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // Check if raw content has ~SP codes (before parsing removes them)
     // express.e:5455-5461 - ~SP causes immediate pause when followed by terminator
     // Terminators: whitespace, | (mciterminator), . (SP.), or end of string
-    const hasSoftPauses = /~SP(?:\s|\||\.|$)/.test(content);
+    const hasSoftPauses = /~SP(?:\s|\||\.|$)/.test(contentForMci);
 
     if (isFlowScreen && hasSoftPauses && !session.screenSegments) {
       // Split content at ~SP boundaries
       // express.e parses synchronously and calls doPause() at each ~SP
       // We achieve the same by splitting into segments and processing with pauses between
-      const segments = content.split(/~SP(?:\s|\||\.)/)
+      const segments = contentForMci.split(/~SP(?:\s|\||\.)/)
         .map(s => s.trim())
         .filter(s => s.length > 0);
 
@@ -2127,7 +2143,7 @@ console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
 
         // Process only the first segment now
         screenDebug(`[displayScreen] Processing segment 0/${segments.length}: ${segments[0].substring(0, 50)}...`);
-        const segmentResult = await parseMciCodes(segments[0], session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+        const segmentResult = await parseMciCodes(segments[0], session, 'AmiExpress-Web', 'Sysop', 'The Internet', mciSocket);
         parsed = segmentResult.parsed;
         commands = segmentResult.commands;
         if (segmentResult.slowmo !== undefined) session.slowmo = segmentResult.slowmo;
@@ -2148,7 +2164,7 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} byt
         // Fall through to normal display logic below
       } else {
         // Only one segment (or ~SP at end), process normally
-        const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+        const result = await parseMciCodes(contentForMci, session, 'AmiExpress-Web', 'Sysop', 'The Internet', mciSocket);
         parsed = result.parsed;
         commands = result.commands;
         if (result.slowmo !== undefined) session.slowmo = result.slowmo;
@@ -2164,8 +2180,8 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes,
     } else {
       // Normal processing (no ~SP segments or not a flow screen)
       // Always parse MCI so ~SS_ and other codes work even in PETSCII screens
-      // Pass socket to enable inline mode (express.e outdata=NIL): execute ~SS_/~SR_/~CC_ immediately
-      const result = await parseMciCodes(content, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
+      // Pass mciSocket (undefined when wipe detected) to control inline mode
+      const result = await parseMciCodes(contentForMci, session, 'AmiExpress-Web', 'Sysop', 'The Internet', mciSocket);
       parsed = result.parsed;
       commands = result.commands;
       if (result.slowmo !== undefined) {
@@ -2215,14 +2231,14 @@ console.log(`[NEWLINE-DEBUG] AFTER NORMALIZE: ${parsed.length} bytes, ${afterNor
     }
 
     // Screen Wipe Animations (~WM, ~WH, ~WV, ~WS, ~WC, ~WR, ~WB, ~WN, ~WT, ~WE, ~WX)
-    // Detect and apply screen wipe animations before displaying content
-    const wipeResult = parseWipeMCI(parsed);
-    const hasWipeAnimation = wipeResult.wipeType !== null;
+    // Use early detection result (detected BEFORE MCI parsing to handle inline mode)
+    const hasWipeAnimation = hasEarlyWipeAnimation;
+    const wipeType = earlyWipeResult.wipeType;
+console.log(`[WIPE-DEBUG] Screen: ${screenName}, hasWipeAnimation: ${hasWipeAnimation}, wipeType: ${wipeType}`);
     if (hasWipeAnimation) {
-      parsed = wipeResult.content; // Remove wipe MCI code from content
-      screenDebug(`[displayScreen] Screen wipe detected: ${wipeResult.wipeType}`);
-      DebugLogger.mci(socket.id, `Screen wipe animation: ~W${wipeResult.wipeType?.toUpperCase().charAt(0)}`, {
-        wipeType: wipeResult.wipeType
+      screenDebug(`[displayScreen] Screen wipe detected: ${wipeType}`);
+      DebugLogger.mci(socket.id, `Screen wipe animation: ~W${wipeType?.toUpperCase().charAt(0)}`, {
+        wipeType: wipeType
       });
     }
 
@@ -2500,12 +2516,13 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
 
     // Screen Wipe Animation Playback
     // If a wipe animation is detected, generate and send frames instead of direct output
-    if (hasWipeAnimation && wipeResult.wipeType) {
-console.log(`[WIPE] Starting wipe animation: ${wipeResult.wipeType}`);
-      screenDebug(`[displayScreen] Playing wipe animation: ${wipeResult.wipeType}`);
+console.log(`[WIPE-CHECK] hasWipeAnimation=${hasWipeAnimation}, wipeType=${wipeType}, screenName=${screenName}`);
+    if (hasWipeAnimation && wipeType) {
+console.log(`[WIPE] Starting wipe animation: ${wipeType}`);
+      screenDebug(`[displayScreen] Playing wipe animation: ${wipeType}`);
 
       // Generate animation frames
-      const wipeFrames = getWipeFrames(wipeResult.wipeType, parsed);
+      const wipeFrames = getWipeFrames(wipeType, parsed);
 console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
 
       // Get direct socket emit (bypasses modem emulator wrapper if installed)

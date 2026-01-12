@@ -15,6 +15,7 @@ import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
+import { debugLog } from '../../utils/debug-log';
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
@@ -45,12 +46,12 @@ export class XIMDataQueryHandler {
    *   - IF msg.data == 0: WRITE mode - copy msg.string TO user data
    */
   handleDataQuery(msg: XIMMessage): void {
-console.log(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
-console.log(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
+debugLog(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
+debugLog(`  msg.data (direction): ${msg.data} (${msg.data !== 0 ? 'READ' : 'WRITE'})`);
 
     // CRITICAL FIX: string[200] is embedded in jhMessage at offset 20, NOT a pointer
     const stringAddr = msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
-console.log(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
+debugLog(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`);
 
     const isRead = msg.data !== 0;
     const user = this.bbsSession?.user;
@@ -83,20 +84,20 @@ console.error(`  [READ] DT_NAME: Failed to read NumULs from ${numULsPath}:`, err
 
             this.messageParser.writeString(stringAddr, fileCount, 31);
             const verify = this.messageParser.readString(stringAddr, 31);
-console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
-console.log(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
+debugLog(`  [READ] DT_NAME verify buffer: "${verify}"`);
+debugLog(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${confNum}`);
           } else {
             // Normal context: return username
             const username = user?.username || 'Guest';
             this.messageParser.writeString(stringAddr, username, 31);
             const verify = this.messageParser.readString(stringAddr, 31);
-console.log(`  [READ] DT_NAME verify buffer: "${verify}"`);
-console.log(`  [READ] DT_NAME: "${username}"`);
+debugLog(`  [READ] DT_NAME verify buffer: "${verify}"`);
+debugLog(`  [READ] DT_NAME: "${username}"`);
           }
         } else {
           const newName = this.messageParser.readString(stringAddr, 31);
           if (user) user.username = newName;
-console.log(`  [WRITE] DT_NAME: "${newName}"`);
+debugLog(`  [WRITE] DT_NAME: "${newName}"`);
         }
         break;
 
@@ -104,7 +105,7 @@ console.log(`  [WRITE] DT_NAME: "${newName}"`);
         if (isRead) {
           // express.e: doors cannot read passwords; return empty
           this.messageParser.writeString(stringAddr, '', 40);
-console.log(`  [READ] DT_PASSWORD: (blocked)`);
+debugLog(`  [READ] DT_PASSWORD: (blocked)`);
         } else {
           const newPwd = this.messageParser.readString(stringAddr, 40);
           if (user) {
@@ -130,7 +131,7 @@ console.error('[XIMDataQuery] Failed to hash password:', err);
               );
             }
           }
-console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
+debugLog(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
         }
         break;
 
@@ -138,11 +139,11 @@ console.log(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
         if (isRead) {
           const location = user?.location || 'Unknown';
           this.messageParser.writeString(stringAddr, location, 30);
-console.log(`  [READ] DT_LOCATION: "${location}"`);
+debugLog(`  [READ] DT_LOCATION: "${location}"`);
         } else {
           const newLocation = this.messageParser.readString(stringAddr, 30);
           if (user) user.location = newLocation;
-console.log(`  [WRITE] DT_LOCATION: "${newLocation}"`);
+debugLog(`  [WRITE] DT_LOCATION: "${newLocation}"`);
         }
         break;
 
@@ -150,11 +151,11 @@ console.log(`  [WRITE] DT_LOCATION: "${newLocation}"`);
         if (isRead) {
           const phone = user?.phone || '';
           this.messageParser.writeString(stringAddr, phone, 13);
-console.log(`  [READ] DT_PHONENUMBER: "${phone}"`);
+debugLog(`  [READ] DT_PHONENUMBER: "${phone}"`);
         } else {
           const newPhone = this.messageParser.readString(stringAddr, 13);
           if (user) user.phone = newPhone;
-console.log(`  [WRITE] DT_PHONENUMBER: "${newPhone}"`);
+debugLog(`  [WRITE] DT_PHONENUMBER: "${newPhone}"`);
         }
         break;
 
@@ -162,11 +163,11 @@ console.log(`  [WRITE] DT_PHONENUMBER: "${newPhone}"`);
         if (isRead) {
           const realname = user?.realname || '';
           this.messageParser.writeString(stringAddr, realname, 26);
-console.log(`  [READ] DT_REALNAME: "${realname}"`);
+debugLog(`  [READ] DT_REALNAME: "${realname}"`);
         } else {
           const newRealname = this.messageParser.readString(stringAddr, 26);
           if (user) user.realname = newRealname;
-console.log(`  [WRITE] DT_REALNAME: "${newRealname}"`);
+debugLog(`  [WRITE] DT_REALNAME: "${newRealname}"`);
         }
         break;
 
@@ -183,7 +184,7 @@ console.log(`  [WRITE] DT_REALNAME: "${newRealname}"`);
                 ? userSlot
                 : 0;
           this.messageParser.writeString(stringAddr, slotNum.toString(), 200);
-console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
+debugLog(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
         } else {
           // Extended: allow write for compatibility with later AmiExpress versions
           const newSlot = parseInt(this.messageParser.readString(stringAddr, 200));
@@ -191,7 +192,7 @@ console.log(`  [READ] DT_SLOTNUMBER: ${slotNum}`);
             if (user) (user as any).slotNumber = newSlot;
             (this.bbsSession as any).userSlotNumber = newSlot;
           }
-console.log(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
+debugLog(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
         }
         break;
 
@@ -199,11 +200,11 @@ console.log(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
         if (isRead) {
           const secLevel = user?.secLevel || 10;
           this.messageParser.writeString(stringAddr, secLevel.toString(), 200);
-console.log(`  [READ] DT_SECSTATUS: ${secLevel}`);
+debugLog(`  [READ] DT_SECSTATUS: ${secLevel}`);
         } else {
           const newLevel = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) user.secLevel = newLevel;
-console.log(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
+debugLog(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
         }
         break;
 
@@ -214,16 +215,16 @@ console.log(`  [WRITE] DT_SECSTATUS: ${newLevel}`);
         if (isRead) {
           if (this.state.carrierDropped) {
             this.messageParser.writeString(stringAddr, ENVStatus.ENV_DROPPED.toString(), 200);
-console.log(`  [READ] ENVSTAT: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
+debugLog(`  [READ] ENVSTAT: ${ENVStatus.ENV_DROPPED} (carrier dropped)`);
           } else {
             const envStat = (this.bbsSession as any).currentStat || ENVStatus.ENV_IDLE;
             this.messageParser.writeString(stringAddr, envStat.toString(), 200);
-console.log(`  [READ] ENVSTAT: ${envStat}`);
+debugLog(`  [READ] ENVSTAT: ${envStat}`);
           }
         } else {
           const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || ENVStatus.ENV_IDLE;
           (this.bbsSession as any).currentStat = newStat;
-console.log(`  [WRITE] ENVSTAT: ${newStat}`);
+debugLog(`  [WRITE] ENVSTAT: ${newStat}`);
         }
         break;
 
@@ -231,11 +232,11 @@ console.log(`  [WRITE] ENVSTAT: ${newStat}`);
         if (isRead) {
           const secBoard = user?.secBoard || 0;
           this.messageParser.writeString(stringAddr, secBoard.toString(), 200);
-console.log(`  [READ] DT_SECBOARD: ${secBoard}`);
+debugLog(`  [READ] DT_SECBOARD: ${secBoard}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secBoard = newSec;
-console.log(`  [WRITE] DT_SECBOARD: ${newSec}`);
+debugLog(`  [WRITE] DT_SECBOARD: ${newSec}`);
         }
         break;
 
@@ -243,11 +244,11 @@ console.log(`  [WRITE] DT_SECBOARD: ${newSec}`);
         if (isRead) {
           const secLibrary = user?.secLibrary || 0;
           this.messageParser.writeString(stringAddr, secLibrary.toString(), 200);
-console.log(`  [READ] DT_SECLIBRARY: ${secLibrary}`);
+debugLog(`  [READ] DT_SECLIBRARY: ${secLibrary}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secLibrary = newSec;
-console.log(`  [WRITE] DT_SECLIBRARY: ${newSec}`);
+debugLog(`  [WRITE] DT_SECLIBRARY: ${newSec}`);
         }
         break;
 
@@ -255,11 +256,11 @@ console.log(`  [WRITE] DT_SECLIBRARY: ${newSec}`);
         if (isRead) {
           const secBulletin = user?.secBulletin || 0;
           this.messageParser.writeString(stringAddr, secBulletin.toString(), 200);
-console.log(`  [READ] DT_SECBULLETIN: ${secBulletin}`);
+debugLog(`  [READ] DT_SECBULLETIN: ${secBulletin}`);
         } else {
           const newSec = parseInt(this.messageParser.readString(stringAddr));
           if (user && !isNaN(newSec)) user.secBulletin = newSec;
-console.log(`  [WRITE] DT_SECBULLETIN: ${newSec}`);
+debugLog(`  [WRITE] DT_SECBULLETIN: ${newSec}`);
         }
         break;
 
@@ -267,11 +268,11 @@ console.log(`  [WRITE] DT_SECBULLETIN: ${newSec}`);
         if (isRead) {
           const timeLimit = user?.timeLimit || 60;
           this.messageParser.writeString(stringAddr, timeLimit.toString(), 200);
-console.log(`  [READ] DT_TIMELIMIT: ${timeLimit}`);
+debugLog(`  [READ] DT_TIMELIMIT: ${timeLimit}`);
         } else {
           const newLimit = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) user.timeLimit = newLimit;
-console.log(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
+debugLog(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
         }
         break;
 
@@ -286,8 +287,8 @@ console.log(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
                           24;
           this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
           const verify = this.messageParser.readString(stringAddr, 200);
-console.log(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
-console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
+debugLog(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
+debugLog(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
         } else {
           const newLen = parseInt(this.messageParser.readString(stringAddr, 200));
           if (user) {
@@ -295,7 +296,7 @@ console.log(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
             (user as any).pageLength = newLen;
           }
           this.state.pauseLines = Number.isFinite(newLen) ? newLen : this.state.pauseLines;
-console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
+debugLog(`  [WRITE] DT_LINELENGTH: ${newLen}`);
         }
         break;
 
@@ -303,11 +304,11 @@ console.log(`  [WRITE] DT_LINELENGTH: ${newLen}`);
         if (isRead) {
           const expert = user?.expert === 'X' ? 'X' : 'N';
           this.messageParser.writeString(stringAddr, expert, 200);
-console.log(`  [READ] DT_EXPERT: ${expert}`);
+debugLog(`  [READ] DT_EXPERT: ${expert}`);
         } else {
           const expertStr = this.messageParser.readString(stringAddr, 1);
           if (user) user.expert = (expertStr === 'X' || expertStr === 'x') ? 'X' : 'N';
-console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
+debugLog(`  [WRITE] DT_EXPERT: ${expertStr}`);
         }
         break;
 
@@ -319,14 +320,14 @@ console.log(`  [WRITE] DT_EXPERT: ${expertStr}`);
           if (isRead) {
             const msgs = diskStats?.messagesPosted ?? user?.messagesPosted ?? 0;
             this.messageParser.writeString(stringAddr, msgs.toString(), 200);
-console.log(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_MESSAGESPOSTED: ${msgs} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newMsgs = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newMsgs)) {
               if (user) user.messagesPosted = newMsgs;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'messagesPosted', newMsgs);
             }
-console.log(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
+debugLog(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
           }
         }
         break;
@@ -338,14 +339,14 @@ console.log(`  [WRITE] DT_MESSAGESPOSTED: ${newMsgs}`);
           if (isRead) {
             const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
             this.messageParser.writeString(stringAddr, uploads.toString(), 200);
-console.log(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_UPLOADS: ${uploads} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newUploads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newUploads)) {
               if (user) user.uploads = newUploads;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'uploads', newUploads);
             }
-console.log(`  [WRITE] DT_UPLOADS: ${newUploads}`);
+debugLog(`  [WRITE] DT_UPLOADS: ${newUploads}`);
           }
         }
         break;
@@ -357,14 +358,14 @@ console.log(`  [WRITE] DT_UPLOADS: ${newUploads}`);
           if (isRead) {
             const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
             this.messageParser.writeString(stringAddr, downloads.toString(), 200);
-console.log(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_DOWNLOADS: ${downloads} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newDownloads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDownloads)) {
               if (user) user.downloads = newDownloads;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'downloads', newDownloads);
             }
-console.log(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
+debugLog(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
           }
         }
         break;
@@ -376,14 +377,14 @@ console.log(`  [WRITE] DT_DOWNLOADS: ${newDownloads}`);
           if (isRead) {
             const calls = diskStats?.timesCalled ?? user?.timesCalled ?? 0;
             this.messageParser.writeString(stringAddr, calls.toString(), 200);
-console.log(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_TIMESCALLED: ${calls} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newCalls = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCalls)) {
               if (user) user.timesCalled = newCalls;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timesCalled', newCalls);
             }
-console.log(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
+debugLog(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           }
         }
         break;
@@ -395,13 +396,13 @@ console.log(`  [WRITE] DT_TIMESCALLED: ${newCalls}`);
           if (isRead) {
             const lastOn = diskStats?.timeLastOn ?? (user?.lastLoginAt ? Math.floor(new Date(user.lastLoginAt).getTime() / 1000) : 0);
             this.messageParser.writeString(stringAddr, lastOn.toString(), 200);
-console.log(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_TIMELASTON: ${lastOn} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newLastOn = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLastOn)) {
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeLastOn', newLastOn);
             }
-console.log(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
+debugLog(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
           }
         }
         break;
@@ -413,14 +414,14 @@ console.log(`  [WRITE] DT_TIMELASTON: ${newLastOn}`);
           if (isRead) {
             const timeUsed = diskStats?.timeUsed ?? user?.timeUsed ?? 0;
             this.messageParser.writeString(stringAddr, timeUsed.toString(), 200);
-console.log(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_TIMEUSED: ${timeUsed} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newTimeUsed = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeUsed)) {
               if (user) user.timeUsed = newTimeUsed;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeUsed', newTimeUsed);
             }
-console.log(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
+debugLog(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
           }
         }
         break;
@@ -432,14 +433,14 @@ console.log(`  [WRITE] DT_TIMEUSED: ${newTimeUsed}`);
           if (isRead) {
             const timeTotal = diskStats?.timeTotal ?? user?.timeTotal ?? 0;
             this.messageParser.writeString(stringAddr, timeTotal.toString(), 200);
-console.log(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_TIMETOTAL: ${timeTotal} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newTimeTotal = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newTimeTotal)) {
               if (user) user.timeTotal = newTimeTotal;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'timeTotal', newTimeTotal);
             }
-console.log(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
+debugLog(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
           }
         }
         break;
@@ -451,14 +452,14 @@ console.log(`  [WRITE] DT_TIMETOTAL: ${newTimeTotal}`);
           if (isRead) {
             const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
             this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
-console.log(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_BYTESUPLOAD: ${bytesUp} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesUpload = newBytes;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesUpload', newBytes);
             }
-console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
+debugLog(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
           }
         }
         break;
@@ -470,14 +471,14 @@ console.log(`  [WRITE] DT_BYTESUPLOAD: ${newBytes}`);
           if (isRead) {
             const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
             this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
-console.log(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_BYTEDOWNLOAD: ${bytesDown} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes)) {
               if (user) user.bytesDownload = newBytes;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'bytesDownload', newBytes);
             }
-console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
+debugLog(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
           }
         }
         break;
@@ -489,14 +490,14 @@ console.log(`  [WRITE] DT_BYTEDOWNLOAD: ${newBytes}`);
           if (isRead) {
             const limit = diskStats?.dailyBytesLimit ?? user?.dailyBytesLimit ?? 0;
             this.messageParser.writeString(stringAddr, limit.toString(), 200);
-console.log(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_DAILYBYTELIMIT: ${limit} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newLimit = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newLimit)) {
               if (user) user.dailyBytesLimit = newLimit;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesLimit', newLimit);
             }
-console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
+debugLog(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
           }
         }
         break;
@@ -508,14 +509,14 @@ console.log(`  [WRITE] DT_DAILYBYTELIMIT: ${newLimit}`);
           if (isRead) {
             const dailyDld = diskStats?.dailyBytesDld ?? user?.dailyBytesDld ?? 0;
             this.messageParser.writeString(stringAddr, dailyDld.toString(), 200);
-console.log(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'session'})`);
+debugLog(`  [READ] DT_DAILYBYTEDLD: ${dailyDld} (from ${diskStats ? 'disk' : 'session'})`);
           } else {
             const newDld = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDld)) {
               if (user) user.dailyBytesDld = newDld;
               if (userSlot >= 0) userDatabaseManager.writeUserStatToDisk(userSlot, 'dailyBytesDld', newDld);
             }
-console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
+debugLog(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
           }
         }
         break;
@@ -524,7 +525,7 @@ console.log(`  [WRITE] DT_DAILYBYTEDLD: ${newDld}`);
         if (isRead) {
           const hostname = this.bbsSession?.hostname || 'localhost';
           this.messageParser.writeString(stringAddr, hostname, 200);
-console.log(`  [READ] DT_HOSTNAME: "${hostname}"`);
+debugLog(`  [READ] DT_HOSTNAME: "${hostname}"`);
         }
         break;
 
@@ -532,7 +533,7 @@ console.log(`  [READ] DT_HOSTNAME: "${hostname}"`);
         if (isRead) {
           const hostip = this.bbsSession?.hostip || '127.0.0.1';
           this.messageParser.writeString(stringAddr, hostip, 200);
-console.log(`  [READ] DT_HOSTIP: "${hostip}"`);
+debugLog(`  [READ] DT_HOSTIP: "${hostip}"`);
         }
         break;
 
@@ -551,10 +552,10 @@ console.log(`  [READ] DT_HOSTIP: "${hostip}"`);
             const seconds = lastOn.getSeconds().toString().padStart(2, '0');
             const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
             this.messageParser.writeString(stringAddr, amigaDate, 200);
-console.log(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
+debugLog(`  [READ] DT_STAMP_LASTON: "${amigaDate}"`);
           } else {
             this.messageParser.writeString(stringAddr, '01-Jan-70 00:00:00', 200);
-console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
+debugLog(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
           }
         }
         break;
@@ -573,7 +574,7 @@ console.log(`  [READ] DT_STAMP_LASTON: "01-Jan-70 00:00:00" (never logged in)`);
           const seconds = now.getSeconds().toString().padStart(2, '0');
           const amigaDate = `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
           this.messageParser.writeString(stringAddr, amigaDate, 200);
-console.log(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
+debugLog(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
         }
         break;
 
@@ -581,7 +582,7 @@ console.log(`  [READ] DT_STAMP_CTIME: "${amigaDate}"`);
         if (isRead) {
           const currTime = Math.floor(Date.now() / 1000);
           this.messageParser.writeString(stringAddr, currTime.toString(), 200);
-console.log(`  [READ] DT_CURR_TIME: ${currTime}`);
+debugLog(`  [READ] DT_CURR_TIME: ${currTime}`);
         }
         break;
 
@@ -589,11 +590,11 @@ console.log(`  [READ] DT_CURR_TIME: ${currTime}`);
         if (isRead) {
           const timeout = (this.state as any).doorTimeout || (this.state as any).timeoutSeconds || 300;
           this.messageParser.writeString(stringAddr, timeout.toString(), 200);
-console.log(`  [READ] DT_TIMEOUT: ${timeout}`);
+debugLog(`  [READ] DT_TIMEOUT: ${timeout}`);
         } else {
           const newTimeout = parseInt(this.messageParser.readString(stringAddr, 200));
           (this.state as any).doorTimeout = newTimeout;
-console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
+debugLog(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
         }
         break;
 
@@ -612,13 +613,13 @@ console.log(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
           // Truncate to 10 bytes (conferences 1-10 only)
           const confAccess10 = confAccess.slice(0, 10).padEnd(10, 'X');
           this.messageParser.writeString(stringAddr, confAccess10, 10);
-console.log(`  [READ] DT_CONFACCESS: "${confAccess10}" (10 chars, confs 1-10)`);
+debugLog(`  [READ] DT_CONFACCESS: "${confAccess10}" (10 chars, confs 1-10)`);
         } else {
           // Write operation - accept 10 characters
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
           (this.bbsSession as any).confAccess = newAccess;
-console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}" (10 chars)`);
+debugLog(`  [WRITE] DT_CONFACCESS: "${newAccess}" (10 chars)`);
         }
         break;
 
@@ -626,12 +627,12 @@ console.log(`  [WRITE] DT_CONFACCESS: "${newAccess}" (10 chars)`);
         if (isRead) {
           const language = this.state.language || 'txt';
           this.messageParser.writeString(stringAddr, language, 200);
-console.log(`  [READ] DT_LANGUAGE: "${language}"`);
+debugLog(`  [READ] DT_LANGUAGE: "${language}"`);
         } else {
           const newLang = this.messageParser.readString(stringAddr, 200);
           this.state.language = newLang || 'txt';
           if (user) (user as any).language = newLang;
-console.log(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
+debugLog(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
         }
         break;
 
@@ -640,18 +641,18 @@ console.log(`  [WRITE] DT_LANGUAGE: "${newLang}"`);
         if (isRead) {
           const isAnsi = user?.ansi || true;
           this.messageParser.writeString(stringAddr, isAnsi ? '1' : '0', 200);
-console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${isAnsi}`);
+debugLog(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${isAnsi}`);
         }
         break;
 
       case XIMCommand.DT_MSGCODE:
         replyData = 0;
-console.log('  DT_MSGCODE: 0');
+debugLog('  DT_MSGCODE: 0');
         break;
 
       case XIMCommand.DT_FILECODE:
         replyData = 0;
-console.log('  DT_FILECODE: 0');
+debugLog('  DT_FILECODE: 0');
         break;
 
       case XIMCommand.DT_QUICKFLAG:
@@ -661,11 +662,11 @@ console.log('  DT_FILECODE: 0');
         if (isRead) {
           const val = (this.state as any)[msg.command] ?? 0;
           this.messageParser.writeString(stringAddr, String(val), 200);
-console.log(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${val}`);
+debugLog(`  [READ] ${this.messageParser.getCommandName(msg.command)}: ${val}`);
         } else {
           const newVal = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
           (this.state as any)[msg.command] = newVal;
-console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}`);
+debugLog(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}`);
         }
         break;
 
@@ -681,7 +682,7 @@ console.log(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newV
               const fullPath = path.resolve(bbsRoot, filename);
               const userData = JSON.stringify(user || {}, null, 2);
               fs.writeFileSync(fullPath, userData, 'utf8');
-console.log(`  [WRITE] DT_DUMP: Saved user data to ${fullPath}`);
+debugLog(`  [WRITE] DT_DUMP: Saved user data to ${fullPath}`);
             } catch (err) {
 console.error(`  [WRITE] DT_DUMP: Failed to save to ${filename}:`, err);
             }
@@ -704,7 +705,7 @@ console.error(`  [WRITE] DT_DUMP: Failed to save to ${filename}:`, err);
           // Pad to 10 bytes total
           nodesStatus += '_';
           this.messageParser.writeString(stringAddr, nodesStatus, 10);
-console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
+debugLog(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
         }
         break;
 
@@ -721,7 +722,7 @@ console.log(`  [READ] ACTIVE_NODES: "${nodesStatus}" (10 bytes)`);
             updated = currentFlags | bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
-console.log(
+debugLog(
               `  [WRITE] DT_ADDBIT: mask=0x${bitMask.toString(
                 16
               )}, flags=0x${updated.toString(16)}`
@@ -731,7 +732,7 @@ console.log(
             updated = currentFlags & ~bitMask;
             if (user) user.userFlags = updated;
             replyData = updated;
-console.log(
+debugLog(
               `  [WRITE] DT_REMBIT: mask=0x${bitMask.toString(
                 16
               )}, flags=0x${updated.toString(16)}`
@@ -741,7 +742,7 @@ console.log(
             // CRITICAL: Result goes in msg.command field, NOT msg.data!
             const result = (currentFlags & bitMask) !== 0 ? 1 : 0;
             this.messageParser.writeCommand(msg.msgAddr, result);
-console.log(
+debugLog(
               `  [READ] DT_QUERYBIT: mask=0x${bitMask.toString(
                 16
               )}, result=${result} (in msg.command)`
@@ -756,18 +757,18 @@ console.log(
         // Module type indicator - return 0 for standard
         if (isRead) {
           this.messageParser.writeString(stringAddr, '0', 200);
-console.log(`  [READ] MOD_TYPE: 0`);
+debugLog(`  [READ] MOD_TYPE: 0`);
         } else {
           const modType = this.messageParser.readString(stringAddr, 200);
           (this.state as any).modType = parseInt(modType) || 0;
-console.log(`  [WRITE] MOD_TYPE: ${modType}`);
+debugLog(`  [WRITE] MOD_TYPE: ${modType}`);
         }
         break;
 
       case XIMCommand.EDITOR_STRUCT:
         // Editor structure pointer - return 0 (no editor struct)
         replyData = 0;
-console.log(`  EDITOR_STRUCT: 0 (no editor struct)`);
+debugLog(`  EDITOR_STRUCT: 0 (no editor struct)`);
         break;
 
       case XIMCommand.BYPASS_CSI_CHECK:
@@ -775,11 +776,11 @@ console.log(`  EDITOR_STRUCT: 0 (no editor struct)`);
         if (isRead) {
           const bypass = (this.state as any).bypassCSICheck || 0;
           this.messageParser.writeString(stringAddr, bypass.toString(), 200);
-console.log(`  [READ] BYPASS_CSI_CHECK: ${bypass}`);
+debugLog(`  [READ] BYPASS_CSI_CHECK: ${bypass}`);
         } else {
           const newBypass = parseInt(this.messageParser.readString(stringAddr, 200)) || 0;
           (this.state as any).bypassCSICheck = newBypass;
-console.log(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
+debugLog(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
         }
         break;
 
@@ -788,11 +789,11 @@ console.log(`  [WRITE] BYPASS_CSI_CHECK: ${newBypass}`);
         if (isRead) {
           const sentBy = (this.state as any).sentBy || '';
           this.messageParser.writeString(stringAddr, sentBy, 200);
-console.log(`  [READ] SENTBY: "${sentBy}"`);
+debugLog(`  [READ] SENTBY: "${sentBy}"`);
         } else {
           const newSentBy = this.messageParser.readString(stringAddr, 200);
           (this.state as any).sentBy = newSentBy;
-console.log(`  [WRITE] SENTBY: "${newSentBy}"`);
+debugLog(`  [WRITE] SENTBY: "${newSentBy}"`);
         }
         break;
 
@@ -804,11 +805,11 @@ console.log(`  [WRITE] SENTBY: "${newSentBy}"`);
         if (isRead) {
           const internetName = (user as any)?.internetName || user?.email || '';
           this.messageParser.writeString(stringAddr, internetName, 10);
-console.log(`  [READ] DT_INTERNETNAME: "${internetName}"`);
+debugLog(`  [READ] DT_INTERNETNAME: "${internetName}"`);
         } else {
           const newName = this.messageParser.readString(stringAddr, 10);
           if (user) (user as any).internetName = newName;
-console.log(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
+debugLog(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
         }
         break;
 
@@ -817,11 +818,11 @@ console.log(`  [WRITE] DT_INTERNETNAME: "${newName}"`);
         if (isRead) {
           const translator = (this.state as any).userLanguage || '';
           this.messageParser.writeString(stringAddr, translator, 200);
-console.log(`  [READ] DT_TRANSLATOR: "${translator}"`);
+debugLog(`  [READ] DT_TRANSLATOR: "${translator}"`);
         } else {
           const newTranslator = this.messageParser.readString(stringAddr, 200);
           (this.state as any).userLanguage = newTranslator;
-console.log(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
+debugLog(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
         }
         break;
 
@@ -830,11 +831,11 @@ console.log(`  [WRITE] DT_TRANSLATOR: "${newTranslator}"`);
         if (isRead) {
           const hostLang = (this.state as any).hostLanguage || 'English';
           this.messageParser.writeString(stringAddr, hostLang, 200);
-console.log(`  [READ] DT_HOST_LANGUAGE: "${hostLang}"`);
+debugLog(`  [READ] DT_HOST_LANGUAGE: "${hostLang}"`);
         } else {
           const newLang = this.messageParser.readString(stringAddr, 200);
           (this.state as any).hostLanguage = newLang;
-console.log(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
+debugLog(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
         }
         break;
 
@@ -843,7 +844,7 @@ console.log(`  [WRITE] DT_HOST_LANGUAGE: "${newLang}"`);
         if (isRead) {
           const geo = (this.bbsSession as any)?.bbsLocation || 'The Internet';
           this.messageParser.writeString(stringAddr, geo, 200);
-console.log(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
+debugLog(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
         }
         break;
 
@@ -853,7 +854,7 @@ console.log(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
           const bytesUp = user?.bytesUpload || 0;
           const sizeText = this.formatSizeText(bytesUp);
           this.messageParser.writeString(stringAddr, sizeText, 200);
-console.log(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
+debugLog(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
         }
         break;
 
@@ -863,7 +864,7 @@ console.log(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
           const bytesDown = user?.bytesDownload || 0;
           const sizeText = this.formatSizeText(bytesDown);
           this.messageParser.writeString(stringAddr, sizeText, 200);
-console.log(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
+debugLog(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
         }
         break;
 
@@ -878,13 +879,13 @@ console.log(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
             confAccess2 += hasAccess ? 'X' : '_';
           }
           this.messageParser.writeString(stringAddr, confAccess2, 200);
-console.log(`  [READ] DT_CONFACCESS2: "${confAccess2}"`);
+debugLog(`  [READ] DT_CONFACCESS2: "${confAccess2}"`);
         } else {
           const newAccess = this.messageParser.readString(stringAddr, 25);
           // Update the first 10 chars to main confAccess, store full in confAccess2
           this.state.confAccess = newAccess.slice(0, 10);
           (this.state as any).confAccess2 = newAccess;
-console.log(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
+debugLog(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
         }
         break;
 
@@ -895,11 +896,11 @@ console.log(`  [WRITE] DT_CONFACCESS2: "${newAccess}"`);
           if (isRead) {
             const bytesUp = diskStats?.bytesUpload ?? user?.bytesUpload ?? 0;
             this.messageParser.writeString(stringAddr, bytesUp.toString(), 200);
-console.log(`  [READ] DT_CBYTESUPLOAD: ${bytesUp}`);
+debugLog(`  [READ] DT_CBYTESUPLOAD: ${bytesUp}`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes) && user) user.bytesUpload = newBytes;
-console.log(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
+debugLog(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
           }
         }
         break;
@@ -911,11 +912,11 @@ console.log(`  [WRITE] DT_CBYTESUPLOAD: ${newBytes}`);
           if (isRead) {
             const bytesDown = diskStats?.bytesDownload ?? user?.bytesDownload ?? 0;
             this.messageParser.writeString(stringAddr, bytesDown.toString(), 200);
-console.log(`  [READ] DT_CBYTESDOWNLOAD: ${bytesDown}`);
+debugLog(`  [READ] DT_CBYTESDOWNLOAD: ${bytesDown}`);
           } else {
             const newBytes = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newBytes) && user) user.bytesDownload = newBytes;
-console.log(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
+debugLog(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
           }
         }
         break;
@@ -927,11 +928,11 @@ console.log(`  [WRITE] DT_CBYTESDOWNLOAD: ${newBytes}`);
           if (isRead) {
             const uploads = diskStats?.uploads ?? user?.uploads ?? 0;
             this.messageParser.writeString(stringAddr, uploads.toString(), 200);
-console.log(`  [READ] DT_CFILESUPLOAD: ${uploads}`);
+debugLog(`  [READ] DT_CFILESUPLOAD: ${uploads}`);
           } else {
             const newUploads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newUploads) && user) user.uploads = newUploads;
-console.log(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
+debugLog(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
           }
         }
         break;
@@ -943,11 +944,11 @@ console.log(`  [WRITE] DT_CFILESUPLOAD: ${newUploads}`);
           if (isRead) {
             const downloads = diskStats?.downloads ?? user?.downloads ?? 0;
             this.messageParser.writeString(stringAddr, downloads.toString(), 200);
-console.log(`  [READ] DT_CFILESDOWNLOAD: ${downloads}`);
+debugLog(`  [READ] DT_CFILESDOWNLOAD: ${downloads}`);
           } else {
             const newDownloads = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newDownloads) && user) user.downloads = newDownloads;
-console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
+debugLog(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
           }
         }
         break;
@@ -966,17 +967,17 @@ console.log(`  [WRITE] DT_CFILESDOWNLOAD: ${newDownloads}`);
             // If different day, return 0; otherwise return timesOnToday
             const timesOnToday = (currDay !== lastDay) ? 0 : ((user as any)?.timesOnToday ?? 0);
             this.messageParser.writeString(stringAddr, timesOnToday.toString(), 200);
-console.log(`  [READ] DT_CALLEDTODAY: ${timesOnToday} (currDay=${currDay}, lastDay=${lastDay})`);
+debugLog(`  [READ] DT_CALLEDTODAY: ${timesOnToday} (currDay=${currDay}, lastDay=${lastDay})`);
           } else {
             const newCount = parseInt(this.messageParser.readString(stringAddr));
             if (!isNaN(newCount) && user) (user as any).timesOnToday = newCount;
-console.log(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
+debugLog(`  [WRITE] DT_CALLEDTODAY: ${newCount}`);
           }
         }
         break;
 
       default:
-console.log(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
+debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }
 
     this.reply(msg, replyData);

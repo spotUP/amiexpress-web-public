@@ -577,6 +577,29 @@ console.log('[BBSApi] Mouse events disabled');
   }
 
   /**
+   * Get list of users (for autocomplete / directory UIs)
+   */
+  async getUserList(limit: number = 1000): Promise<BBSUser[]> {
+    const users = await db.getUsers({ limit });
+    return users.map((user: any) => ({
+      id: user.id,
+      username: user.username,
+      realname: user.realname,
+      location: user.location,
+      phone: user.phone,
+      email: user.email,
+      secLevel: user.secLevel || 0,
+      downloads: user.downloads || 0,
+      uploads: user.uploads || 0,
+      timeToday: user.timeToday || 0,
+      lastCall: user.lastCall,
+      numCalls: user.numCalls || 0,
+      birthday: user.birthday,
+      gender: user.gender,
+    }));
+  }
+
+  /**
    * Get user's security level
    */
   getUserSecLevel(): number {

@@ -364,9 +364,12 @@ console.warn(`[HunkLoader] Unknown hunk 0x${hunkType.toString(16)} treated as de
       const bssSegment = hunkFile.segments[1];
 
       if (codeSegment && bssSegment) {
-        // LEA.L $0FE0, A3 is at segment offset 0x12
-        // The 32-bit address operand starts at offset 0x14
-        const patchOffset = 0x14;
+        // From JOINCNF_ROOT_CAUSE_2026-01-07.md:
+        // - LEA.L $0FE0, A3 at PC 0x2032 when loaded at base 0x2008
+        // - Segment offset = 0x2032 - 0x2008 = 0x2A
+        // - LEA.L opcode is 2 bytes, 32-bit operand follows at offset 0x2C
+        // The operand (0x0FE0) needs relocation to BSS+0xFE0
+        const patchOffset = 0x2C;
         const patchAddress = codeSegment.address + patchOffset;
         const beforeValue = emulator.readMemory32(patchAddress);
         const correctValue = (bssSegment.address + 0xFE0) >>> 0;
@@ -375,9 +378,9 @@ console.log(
           `[HunkLoader] *** SYNTHETIC RELOCATION (BEFORE normal relocations) ***\n` +
           `  Binary: ${fileName}\n` +
           `  Issue: Missing BSS relocation at segment offset 0x${patchOffset.toString(16)}\n` +
-          `  LEA.L instruction at offset 0x12, operand at 0x14\n` +
+          `  LEA.L instruction at offset 0x2A, operand at 0x2C (PC 0x2032/0x2034)\n` +
           `  Patching address 0x${patchAddress.toString(16)}\n` +
-          `  Before: 0x${beforeValue.toString(16)}\n` +
+          `  Before: 0x${beforeValue.toString(16)} (should be 0xFE0 if correct location)\n` +
           `  After:  0x${correctValue.toString(16)} (BSS+0xFE0)\n` +
           `  BSS segment: 0x${bssSegment.address.toString(16)}`
         );

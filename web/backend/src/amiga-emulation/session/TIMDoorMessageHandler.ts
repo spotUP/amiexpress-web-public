@@ -14,6 +14,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as amigafs from "../../utils/amigafs.js";
 import { getSystemTime } from '../../utils/date-time.util';
+import { debugLog } from '../../utils/debug-log';
 
 export class TIMDoorMessageHandler {
   private emulator: MoiraEmulator;
@@ -69,7 +70,7 @@ export class TIMDoorMessageHandler {
       }
       this.waitingForPause = false;
       this.socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Clear pause prompt
-console.log(`[TIMDoorHandler] Pause input received: "${data}"`);
+debugLog(`[TIMDoorHandler] Pause input received: "${data}"`);
       return;
     }
 
@@ -81,7 +82,7 @@ console.log(`[TIMDoorHandler] Pause input received: "${data}"`);
         this.setCarrier(this.pendingMsgAddr, false);
       }
       this.waitingForHotkey = false;
-console.log(`[TIMDoorHandler] Hotkey input received: "${char}"`);
+debugLog(`[TIMDoorHandler] Hotkey input received: "${char}"`);
       return;
     }
 
@@ -96,7 +97,7 @@ console.log(`[TIMDoorHandler] Hotkey input received: "${char}"`);
         }
         this.waitingForLineInput = false;
         this.lineInputBuffer = '';
-console.log(`[TIMDoorHandler] Line input completed: "${input}"`);
+debugLog(`[TIMDoorHandler] Line input completed: "${input}"`);
       } else {
         // Accumulate input
         this.lineInputBuffer += data;
@@ -107,7 +108,7 @@ console.log(`[TIMDoorHandler] Line input completed: "${input}"`);
 
     // Not waiting for anything special - queue for later
     this.inputQueue.push(data);
-console.log(`[TIMDoorHandler] Input queued: "${data}"`);
+debugLog(`[TIMDoorHandler] Input queued: "${data}"`);
   }
 
   /**
@@ -230,7 +231,7 @@ console.log(`[TIMDoorHandler] Input queued: "${data}"`);
       if (Date.now() - startTime > timeout) {
         // Timeout - auto-continue
         this.waitingForPause = false;
-console.log('[TIMDoorHandler] Pause timeout - auto-continuing');
+debugLog('[TIMDoorHandler] Pause timeout - auto-continuing');
         break;
       }
       // Yield to event loop to allow input processing
@@ -254,7 +255,7 @@ console.log('[TIMDoorHandler] Pause timeout - auto-continuing');
           this.setCarrier(this.pendingMsgAddr, true); // Carrier lost = timeout
           this.setString(this.pendingMsgAddr, this.lineInputBuffer);
         }
-console.log('[TIMDoorHandler] Line input timeout');
+debugLog('[TIMDoorHandler] Line input timeout');
         break;
       }
       // Yield to event loop to allow input processing
@@ -278,7 +279,7 @@ console.log('[TIMDoorHandler] Line input timeout');
           this.setCarrier(this.pendingMsgAddr, true); // Carrier lost = timeout
           this.setString(this.pendingMsgAddr, '');
         }
-console.log('[TIMDoorHandler] Hotkey timeout');
+debugLog('[TIMDoorHandler] Hotkey timeout');
         break;
       }
       // Yield to event loop to allow input processing
@@ -292,7 +293,7 @@ console.log('[TIMDoorHandler] Hotkey timeout');
    */
   async handleMessage(msgAddr: number): Promise<{ exit: boolean }> {
     const msg = this.readDoorMsg(msgAddr);
-console.log(`[TIMDoorHandler] PG_* command: ${msg.command}, data: ${msg.data}, str: "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_* command: ${msg.command}, data: ${msg.data}, str: "${msg.str}"`);
 
     // Initialize carrier to false (express.e:4375)
     this.setCarrier(msgAddr, false);
@@ -302,7 +303,7 @@ console.log(`[TIMDoorHandler] PG_* command: ${msg.command}, data: ${msg.data}, s
     switch (msg.command) {
       case TIMDoorCommand.PG_SHUTDOWN:
         // express.e:4378-4382: Shutdown door
-console.log(`[TIMDoorHandler] PG_SHUTDOWN: Exiting door`);
+debugLog(`[TIMDoorHandler] PG_SHUTDOWN: Exiting door`);
         this.socket.emit('ansi-output', '\r\n');
         this.rawArrow = false;
         exit = true;
@@ -310,7 +311,7 @@ console.log(`[TIMDoorHandler] PG_SHUTDOWN: Exiting door`);
 
       case TIMDoorCommand.PG_SO:
         // express.e:4384-4385: Serial output (character)
-console.log(`[TIMDoorHandler] PG_SO: Serial char ${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_SO: Serial char ${msg.data}`);
         if (msg.data >= 0 && msg.data <= 255) {
           this.socket.emit('ansi-output', String.fromCharCode(msg.data));
         }
@@ -318,7 +319,7 @@ console.log(`[TIMDoorHandler] PG_SO: Serial char ${msg.data}`);
 
       case TIMDoorCommand.PG_CC:
         // express.e:4386-4387: Console output (character)
-console.log(`[TIMDoorHandler] PG_CC: Console char ${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_CC: Console char ${msg.data}`);
         if (msg.data >= 0 && msg.data <= 255) {
           this.socket.emit('ansi-output', String.fromCharCode(msg.data));
         }
@@ -326,7 +327,7 @@ console.log(`[TIMDoorHandler] PG_CC: Console char ${msg.data}`);
 
       case TIMDoorCommand.PG_CH:
         // express.e:4388-4390: Both serial and console output (character)
-console.log(`[TIMDoorHandler] PG_CH: Both char ${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_CH: Both char ${msg.data}`);
         if (msg.data >= 0 && msg.data <= 255) {
           this.socket.emit('ansi-output', String.fromCharCode(msg.data));
         }
@@ -334,7 +335,7 @@ console.log(`[TIMDoorHandler] PG_CH: Both char ${msg.data}`);
 
       case TIMDoorCommand.PG_CO:
         // express.e:4391-4394: Console puts (string)
-console.log(`[TIMDoorHandler] PG_CO: Console puts "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_CO: Console puts "${msg.str}"`);
         this.socket.emit('ansi-output', msg.str);
         if (msg.data) {
           this.socket.emit('ansi-output', '\r\n');
@@ -344,7 +345,7 @@ console.log(`[TIMDoorHandler] PG_CO: Console puts "${msg.str}"`);
 
       case TIMDoorCommand.PG_SM:
         // express.e:4396-4399: Send message (string) - both serial and console
-console.log(`[TIMDoorHandler] PG_SM: Send message "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_SM: Send message "${msg.str}"`);
         this.socket.emit('ansi-output', msg.str);
         if (msg.data) {
           this.socket.emit('ansi-output', '\r\n');
@@ -355,7 +356,7 @@ console.log(`[TIMDoorHandler] PG_SM: Send message "${msg.str}"`);
       case TIMDoorCommand.PG_PM:
         // express.e:4401-4408: Prompt message (with input)
         // lineInput(msg.string,'',msg.data,doorTimeout,tempstring)
-console.log(`[TIMDoorHandler] PG_PM: Prompt "${msg.str}" maxlen=${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_PM: Prompt "${msg.str}" maxlen=${msg.data}`);
         this.socket.emit('ansi-output', msg.str);
 
         // Check if we have queued input
@@ -364,7 +365,7 @@ console.log(`[TIMDoorHandler] PG_PM: Prompt "${msg.str}" maxlen=${msg.data}`);
           const trimmed = input.replace(/[\r\n]+$/, '').slice(0, msg.data);
           this.setString(msgAddr, trimmed);
           this.setCarrier(msgAddr, false);
-console.log(`[TIMDoorHandler] PG_PM: Immediate input "${trimmed}"`);
+debugLog(`[TIMDoorHandler] PG_PM: Immediate input "${trimmed}"`);
         } else {
           // Wait for line input
           this.waitingForLineInput = true;
@@ -378,7 +379,7 @@ console.log(`[TIMDoorHandler] PG_PM: Immediate input "${trimmed}"`);
       case TIMDoorCommand.PG_SC:
         // express.e:4409-4416: Serial input
         // Similar to PG_PM but for serial-only
-console.log(`[TIMDoorHandler] PG_SC: Serial input "${msg.str}" maxlen=${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_SC: Serial input "${msg.str}" maxlen=${msg.data}`);
         this.socket.emit('ansi-output', msg.str);
 
         // Check if we have queued input
@@ -387,7 +388,7 @@ console.log(`[TIMDoorHandler] PG_SC: Serial input "${msg.str}" maxlen=${msg.data
           const trimmed = input.replace(/[\r\n]+$/, '').slice(0, msg.data);
           this.setString(msgAddr, trimmed);
           this.setCarrier(msgAddr, false);
-console.log(`[TIMDoorHandler] PG_SC: Immediate input "${trimmed}"`);
+debugLog(`[TIMDoorHandler] PG_SC: Immediate input "${trimmed}"`);
         } else {
           // Wait for line input
           this.waitingForLineInput = true;
@@ -401,7 +402,7 @@ console.log(`[TIMDoorHandler] PG_SC: Immediate input "${trimmed}"`);
       case TIMDoorCommand.PG_HK:
         // express.e:4417-4427: Hot key
         // readChar(doorTimeout) - single character input
-console.log(`[TIMDoorHandler] PG_HK: Hot key "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_HK: Hot key "${msg.str}"`);
         this.lineCount = 0;
         this.socket.emit('ansi-output', msg.str);
 
@@ -411,7 +412,7 @@ console.log(`[TIMDoorHandler] PG_HK: Hot key "${msg.str}"`);
           const char = input.charAt(0);
           this.setString(msgAddr, char);
           this.setCarrier(msgAddr, false);
-console.log(`[TIMDoorHandler] PG_HK: Immediate key "${char}"`);
+debugLog(`[TIMDoorHandler] PG_HK: Immediate key "${char}"`);
         } else {
           // Wait for single key
           this.waitingForHotkey = true;
@@ -422,7 +423,7 @@ console.log(`[TIMDoorHandler] PG_HK: Immediate key "${char}"`);
 
       case TIMDoorCommand.PG_SG:
         // express.e:4428-4432: Security screen (display screen file)
-console.log(`[TIMDoorHandler] PG_SG: Security screen "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_SG: Security screen "${msg.str}"`);
         this.nonStopDisplayFlag = false;
         // Find and display security screen
         await this.displaySecurityScreen(msg.str);
@@ -430,32 +431,32 @@ console.log(`[TIMDoorHandler] PG_SG: Security screen "${msg.str}"`);
 
       case TIMDoorCommand.PG_SF:
         // express.e:4433-4437: Show file
-console.log(`[TIMDoorHandler] PG_SF: Show file "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_SF: Show file "${msg.str}"`);
         this.nonStopDisplayFlag = false;
         await this.displayFile(msg.str);
         break;
 
       case TIMDoorCommand.PG_EF:
         // express.e:4438-4443: Edit file
-console.log(`[TIMDoorHandler] PG_EF: Edit file "${msg.str}" (not fully implemented)`);
+debugLog(`[TIMDoorHandler] PG_EF: Edit file "${msg.str}" (not fully implemented)`);
         // File editing requires full editor integration
         break;
 
       case TIMDoorCommand.PG_UD:
         // express.e:4444-4463: User data (numeric)
-console.log(`[TIMDoorHandler] PG_UD: User data request ${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_UD: User data request ${msg.data}`);
         this.handleUserDataRequest(msgAddr, msg.data);
         break;
 
       case TIMDoorCommand.PG_US:
         // express.e:4464-4494: User string
-console.log(`[TIMDoorHandler] PG_US: User string request ${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_US: User string request ${msg.data}`);
         this.handleUserStringRequest(msgAddr, msg.data);
         break;
 
       case TIMDoorCommand.PG_RD:
         // express.e:4499-4502: Random number
-console.log(`[TIMDoorHandler] PG_RD: Random number max=${msg.data}`);
+debugLog(`[TIMDoorHandler] PG_RD: Random number max=${msg.data}`);
         if (msg.data !== 0) {
           this.setData(msgAddr, Math.floor(Math.random() * msg.data));
         }
@@ -463,7 +464,7 @@ console.log(`[TIMDoorHandler] PG_RD: Random number max=${msg.data}`);
 
       case TIMDoorCommand.PG_TM:
         // express.e:4505-4509: Time modify
-console.log(`[TIMDoorHandler] PG_TM: Time modify ${msg.data} minutes`);
+debugLog(`[TIMDoorHandler] PG_TM: Time modify ${msg.data} minutes`);
         if (this.config.bbsSession?.user) {
           const minutes = msg.data;
           // Adjust time used/limit
@@ -476,7 +477,7 @@ console.log(`[TIMDoorHandler] PG_TM: Time modify ${msg.data} minutes`);
 
       case TIMDoorCommand.PG_FF:
         // express.e:4510-4515: File find
-console.log(`[TIMDoorHandler] PG_FF: File find "${msg.str}"`);
+debugLog(`[TIMDoorHandler] PG_FF: File find "${msg.str}"`);
         {
           const exists = amigafs.existsSync(msg.str);
           this.setData(msgAddr, exists ? 1 : -1);
@@ -485,7 +486,7 @@ console.log(`[TIMDoorHandler] PG_FF: File find "${msg.str}"`);
 
       case TIMDoorCommand.BB_TASKPRI:
         // express.e:4516-4518: Task priority
-console.log(`[TIMDoorHandler] BB_TASKPRI: Get task priority`);
+debugLog(`[TIMDoorHandler] BB_TASKPRI: Get task priority`);
         {
           const taskPri = this.config.priority || '0';
           this.setString(msgAddr, taskPri);
@@ -493,7 +494,7 @@ console.log(`[TIMDoorHandler] BB_TASKPRI: Get task priority`);
         break;
 
       default:
-console.log(`[TIMDoorHandler] Unknown PG_* command: ${msg.command}`);
+debugLog(`[TIMDoorHandler] Unknown PG_* command: ${msg.command}`);
         break;
     }
 
@@ -539,7 +540,7 @@ console.log(`[TIMDoorHandler] Unknown PG_* command: ${msg.command}`);
     }
 
     this.setData(msgAddr, value);
-console.log(`[TIMDoorHandler] PG_UD type=${dataType} -> ${value}`);
+debugLog(`[TIMDoorHandler] PG_UD type=${dataType} -> ${value}`);
   }
 
   /**
@@ -591,7 +592,7 @@ console.log(`[TIMDoorHandler] PG_UD type=${dataType} -> ${value}`);
     }
 
     this.setString(msgAddr, value);
-console.log(`[TIMDoorHandler] PG_US type=${dataType} -> "${value}"`);
+debugLog(`[TIMDoorHandler] PG_US type=${dataType} -> "${value}"`);
   }
 
   /**
@@ -612,7 +613,7 @@ console.log(`[TIMDoorHandler] PG_US type=${dataType} -> "${value}"`);
       }
     }
 
-console.log(`[TIMDoorHandler] Security screen not found: ${screenName}`);
+debugLog(`[TIMDoorHandler] Security screen not found: ${screenName}`);
   }
 
   /**
@@ -622,7 +623,7 @@ console.log(`[TIMDoorHandler] Security screen not found: ${screenName}`);
   private async displayFile(filePath: string): Promise<void> {
     try {
       if (!amigafs.existsSync(filePath)) {
-console.log(`[TIMDoorHandler] File not found: ${filePath}`);
+debugLog(`[TIMDoorHandler] File not found: ${filePath}`);
         return;
       }
 

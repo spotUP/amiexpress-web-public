@@ -24,6 +24,7 @@ export enum LoggedOnSubState {
   DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',
   DISPLAY_CONF_BULL = 'display_conf_bull',
+  AUTO_REJOIN = 'auto_rejoin',  // express.e:5066-5088 - auto-rejoin with S stats
   LOGOFF = 'logoff',
   DISPLAY_MENU = 'display_menu',
   READ_COMMAND = 'read_command',

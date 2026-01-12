@@ -6,6 +6,7 @@
 import express, { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as amigafs from '../utils/amigafs';
 import { getClientDoorBundler } from './client-door-bundler';
 
 export const doorApiRouter = express.Router();
@@ -115,6 +116,44 @@ console.error(`[DoorAPI] Error loading manifest for ${doorId}:`, error);
 });
 
 /**
+ * GET /api/doors/:doorId/assets/*
+ * Serve door asset files from the assets/ directory
+ *
+ * NOTE: Use regex route to avoid path-to-regexp incompatibilities.
+ */
+doorApiRouter.get(/^\/doors\/([^/]+)\/assets\/(.*)$/u, async (req: Request, res: Response) => {
+  const doorId = req.params[0];
+  const assetPath = req.params[1] || '';
+
+  try {
+    const result = await loadDoorManifest(doorId);
+    if (!result) {
+      return res.status(404).json({ error: 'Door not found' });
+    }
+
+    const assetsRoot = path.join(result.doorBasePath, 'assets');
+    const requestedPath = path.normalize(path.join(assetsRoot, assetPath));
+
+    if (!requestedPath.startsWith(assetsRoot + path.sep) && requestedPath !== assetsRoot) {
+      return res.status(400).json({ error: 'Invalid asset path' });
+    }
+
+    const resolved = amigafs.resolvePath(requestedPath);
+    if (!resolved) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    res.sendFile(resolved);
+  } catch (error) {
+console.error(`[DoorAPI] Error serving asset for ${doorId}:`, error);
+    res.status(500).json({
+      error: 'Failed to load asset',
+      message: (error as Error).message,
+    });
+  }
+});
+
+/**
  * GET /api/doors/list
  * List all available doors
  */
@@ -161,7 +200,6 @@ console.error('[DoorAPI] Error clearing cache:', error);
 async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBasePath: string } | null> {
   try {
     const bbsRoot = getBbsRoot();
-    const amigafs = require('../utils/amigafs');
 
     // Get door from registry to find actual location (LOCATION tooltype from .info file)
     const { getDoors } = require('../handlers/door.handler');
@@ -174,7 +212,7 @@ async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBa
       const manifestPath = path.join(doorBasePath, 'package.json');
       if (amigafs.existsSync(manifestPath)) {
         const content = amigafs.readFileSync(manifestPath, 'utf8');
-        return { manifest: JSON.parse(content), doorBasePath };
+        return { manifest: JSON.parse(String(content)), doorBasePath };
       }
     }
 
@@ -183,7 +221,7 @@ async function loadDoorManifest(doorId: string): Promise<{ manifest: any; doorBa
     const manifestPath = path.join(doorBasePath, 'package.json');
     if (amigafs.existsSync(manifestPath)) {
       const content = amigafs.readFileSync(manifestPath, 'utf8');
-      return { manifest: JSON.parse(content), doorBasePath };
+      return { manifest: JSON.parse(String(content)), doorBasePath };
     }
 
     return null;

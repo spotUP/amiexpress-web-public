@@ -646,6 +646,10 @@ console.log('🎯 F1 pressed during chat - exiting chat');
       return;
     }
 
+    if (session.clientDoorActive) {
+      return;
+    }
+
     // If game mode is active, skip command handler - key-down events handle input
     if (session.gameModeEnabled) {
       return;

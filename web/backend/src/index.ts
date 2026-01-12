@@ -318,6 +318,7 @@ export interface BBSSession {
   flagManager?: any; // File flagging manager for batch downloads
   inDoorManager?: boolean; // Whether user is currently in door manager
   doorInputHandler?: ((input: string) => void) | null; // Door input handler callback for TypeScript doors
+  clientDoorActive?: boolean; // Client (browser) door session active; suppress command handler input
   doorKeyStateHandler?:
     | ((data: {
         key: string;

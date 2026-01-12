@@ -92,8 +92,10 @@ export async function displayConferenceBulletins(socket: any, session: BBSSessio
 
 /**
  * Join conference function (joinConf equivalent)
+ * @param auto - If true, this is an auto-rejoin during login (express.e:5066-5088)
+ *               Auto-rejoin displays user stats (S command) and "Auto-ReJoined" message
  */
-export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false) {
+export async function joinConference(socket: any, session: BBSSession, confId: number, msgBaseId: number, silent: boolean = false, auto: boolean = false) {
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
     if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
@@ -127,9 +129,10 @@ console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
   }
 
   // Load message pointers for this conference/msg base (express.e joinConf sets lastMsgReadConf/lastNewReadConf)
+  let mailStat: any = null;
   if (session.user) {
     try {
-      const mailStat = await getMailStatFile(confId, msgBaseId);
+      mailStat = await getMailStatFile(confId, msgBaseId);
       const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
       const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
       session.lastMsgReadConf = validated.lastMsgReadConf || 0;
@@ -157,9 +160,35 @@ console.warn('[joinConference] Failed to sync node user file:', err);
   }
 
   if (!silent) {
+    // express.e:5066-5088 - auto-rejoin shows user stats and different message
+    if (auto) {
+      // express.e:5068 - processSysCommand('S') - Display user stats
+      const { processCommand } = require('../command.handler');
+      await processCommand(socket, session, 'S', '');
+
+      // express.e:5071-5074 - Display "Auto-ReJoined" message
+      const autoReJoinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
+        ? `\r\nConference ${confId}: ${conference.name} [${messageBase.name}] Auto-ReJoined`
+        : `\r\nConference ${confId}: ${conference.name} Auto-ReJoined`;
+      socket.emit('ansi-output', autoReJoinMsg);
+
+      // express.e:5096-5109 - Display message stats
+      const totalMessages = (mailStat?.highMsgNum || 1) - 1;
+      const lastScanned = Math.max((session.lastNewReadConf || 1) - 1, 1);
+      const lastRead = session.lastMsgReadConf || 0;
+
+      socket.emit('ansi-output', `\r\n\r\n\x1b[32mTotal messages           \x1b[33m:\x1b[0m ${totalMessages}\r\n`);
+      socket.emit('ansi-output', `\r\n\x1b[32mLast message auto scanned\x1b[33m:\x1b[0m ${lastScanned}\r\n`);
+      socket.emit('ansi-output', `\x1b[32mLast message read        \x1b[33m:\x1b[0m ${lastRead}\r\n`);
+    } else {
+      // Normal join - express.e:5077-5086
+      const joinMsg = messageBases.filter(mb => mb.conferenceId === confId).length > 1
+        ? `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name} [${messageBase.name}]`
+        : `\x1b[32mJoining Conference\x1b[33m:\x1b[0m ${conference.name}`;
+      socket.emit('ansi-output', `\r\n${joinMsg}\r\n`);
+    }
+
     // Like express.e:28576-28577 - load flagged files and command history
-    const finalMessage = `Conference joined: ${conference.name} (Base: ${messageBase.name})`;
-    finalizeCommand(socket, session, finalMessage);
     await loadFlagged(socket, session);
     await loadHistory(session);
 

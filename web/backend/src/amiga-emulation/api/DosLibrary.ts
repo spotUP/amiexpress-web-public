@@ -10,6 +10,7 @@ import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
 import { getSystemTime } from '../../utils/date-time.util';
+import { debugLog } from "../../utils/debug-log";
 
 // ========== File Operation Debugging ==========
 // Set DEBUG_FILE_OPS=1 to log all file operations (Open, Close, Read, Write, Lock, etc.)
@@ -341,7 +342,7 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
       sysop: 'Sysop'
     });
 
-console.log(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
+debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
   }
 
   /**
@@ -375,7 +376,7 @@ console.log(`[DosLibrary] Environment variables initialized for node ${nodeId}`)
    * Called by AmigaDoorSession during initialization
    */
   enableNewFileSystem(baseDir: string, pathManager?: PathManager): void {
-console.log(
+debugLog(
       "[dos.library] Enabling new file system with FileManager/PathManager"
     );
     this.pathManager = pathManager || new PathManager(baseDir);
@@ -393,7 +394,7 @@ console.log(
     // BPTRs 1 and 2 would point to addresses 4 and 8 (interrupt vectors) = garbage!
     this.stdinBptr = this.allocateFileHandleStruct(0);
     this.stdoutBptr = this.allocateFileHandleStruct(0);
-console.log(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.toString(16)} stdout=0x${this.stdoutBptr.toString(16)}`);
+debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.toString(16)} stdout=0x${this.stdoutBptr.toString(16)}`);
 
     // Update FileManager to use these BPTRs
     this.fileManager.setStdinBptr(this.stdinBptr);
@@ -475,7 +476,7 @@ console.log(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBpt
     this.emulator.writeMemory32(structAddr + 18, value.length); // lv_Len
 
     this.envVarCache.set(normalized, structAddr);
-console.log(
+debugLog(
       `[dos.library]   Env variable "${name}" registered -> "${value}"`
     );
     return structAddr;
@@ -498,14 +499,14 @@ console.log(
    * - Absolute paths starting with / -> used as-is
    */
   private resolvePath(amigaPath: string): string | null {
-console.log(`[dos.library] Resolving Amiga path: "${amigaPath}"`);
+debugLog(`[dos.library] Resolving Amiga path: "${amigaPath}"`);
 
     if (this.useNewFileSystem && this.pathManager) {
       const currentDir = this.getCurrentDirectoryForResolution();
       const normalized = this.normalizeAmigaPath(amigaPath);
       const resolved = this.pathManager.amiToSysPath(normalized, currentDir);
       if (resolved) {
-console.log(
+debugLog(
           `[dos.library] PathManager resolved "${normalized}" -> ${resolved}`
         );
         return resolved;
@@ -526,7 +527,7 @@ console.log(
         resolved = caseInsensitivePath;
       }
 
-console.log(`[dos.library] PROGDIR: device -> ${resolved}`);
+debugLog(`[dos.library] PROGDIR: device -> ${resolved}`);
       return resolved;
     }
 
@@ -534,7 +535,7 @@ console.log(`[dos.library] PROGDIR: device -> ${resolved}`);
     if (amigaPath.toUpperCase().startsWith("DOORS:")) {
       const relativePath = amigaPath.substring(6);
       const resolved = path.join(this.rootPath, "doors", relativePath);
-console.log(`[dos.library] Doors: device -> ${resolved}`);
+debugLog(`[dos.library] Doors: device -> ${resolved}`);
       return resolved;
     }
 
@@ -552,7 +553,7 @@ console.log(`[dos.library] Doors: device -> ${resolved}`);
         resolved = caseInsensitivePath;
       }
 
-console.log(`[dos.library] BBS: device -> ${resolved}`);
+debugLog(`[dos.library] BBS: device -> ${resolved}`);
       return resolved;
     }
 
@@ -560,13 +561,13 @@ console.log(`[dos.library] BBS: device -> ${resolved}`);
     if (amigaPath.toUpperCase().startsWith("S:")) {
       const relativePath = amigaPath.substring(2);
       const resolved = path.join(this.rootPath, "S", relativePath);
-console.log(`[dos.library] S: device -> ${resolved}`);
+debugLog(`[dos.library] S: device -> ${resolved}`);
       return resolved;
     }
 
     // Handle absolute paths
     if (amigaPath.startsWith("/")) {
-console.log(`[dos.library] Absolute path -> ${amigaPath}`);
+debugLog(`[dos.library] Absolute path -> ${amigaPath}`);
       return amigaPath;
     }
 
@@ -582,11 +583,11 @@ console.log(`[dos.library] Absolute path -> ${amigaPath}`);
 
     if (caseInsensitivePath) {
       resolved = caseInsensitivePath;
-console.log(
+debugLog(
         `[dos.library] Case-insensitive match: "${amigaPath}" -> ${resolved}`
       );
     } else {
-console.log(
+debugLog(
         `[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`
       );
     }
@@ -600,12 +601,12 @@ console.log(
    */
   setDoorDirectory(doorPath: string): void {
     this.doorDirectory = doorPath;
-console.log(`[dos.library] PROGDIR: device set to ${doorPath}`);
+debugLog(`[dos.library] PROGDIR: device set to ${doorPath}`);
 
     // Set current directory to door directory by default
     this.currentDirectory = doorPath;
     this.currentDirectoryAmiga = "PROGDIR:";
-console.log(`[dos.library] Current directory set to ${doorPath}`);
+debugLog(`[dos.library] Current directory set to ${doorPath}`);
 
     if (this.pathManager) {
       this.pathManager.setProgDir(doorPath);
@@ -630,7 +631,7 @@ console.log(`[dos.library] Current directory set to ${doorPath}`);
         return;
       }
 
-console.log(`[dos.library] Creating directory: ${dir}`);
+debugLog(`[dos.library] Creating directory: ${dir}`);
       amigafs.mkdirSync(dir, { recursive: true });
     } catch (error) {
 console.warn(
@@ -683,7 +684,7 @@ console.warn(
    * Queue input data from user
    */
   queueInput(data: string | Buffer): void {
-console.log(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(data) : `<buffer ${data.length}>`}`);
+debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(data) : `<buffer ${data.length}>`}`);
     if (Buffer.isBuffer(data)) {
       this.rawInputBuffers.push(data);
       this.inputBuffer += data.toString('latin1');
@@ -790,7 +791,7 @@ console.log(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringi
 
     const filename = this.readString(namePtr);
 
-console.log(`[dos.library] Open(filename="${filename}", mode=${mode})`);
+debugLog(`[dos.library] Open(filename="${filename}", mode=${mode})`);
     this.logDoorFile(`OPEN req ami="${filename}" mode=${mode}`);
     ximDebugLogger.logFileOperation('Open', filename, undefined, { mode });
 
@@ -799,7 +800,7 @@ console.log(`[dos.library] Open(filename="${filename}", mode=${mode})`);
       const bptr = this.fileManager.open(filename, mode);
       if (bptr > 0) {
         this.lastError = this.ERROR_NO_ERROR;
-console.log(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
+debugLog(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
         this.logDoorFile(`OPEN fm ok handle=${bptr} ami="${filename}" mode=${mode}`);
         ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr, success: true });
       } else {
@@ -850,7 +851,7 @@ console.error(
         realPath: undefined,
       });
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Open: Console device "${filename}" -> handle ${fileId}`
       );
       this.logDoorFile(
@@ -869,7 +870,7 @@ console.log(
         realPath: undefined,
       });
       this.lastError = this.ERROR_NO_ERROR;
-console.log(`[dos.library] Open: NIL: device -> handle ${fileId}`);
+debugLog(`[dos.library] Open: NIL: device -> handle ${fileId}`);
       this.logDoorFile(`OPEN ok ami="NIL:" handle=${fileId} mode=${mode} nil=true`);
     } else {
       // Real file - resolve path and attempt to open
@@ -897,7 +898,7 @@ console.error(`[dos.library] Open: File not found: ${realPath}`);
               // Load entire file into memory
               buffer = amigafs.readFileSync(realPath) as Buffer;
               fileId = this.nextFileId++;
-console.log(
+debugLog(
                 `[dos.library] Open: File opened for reading (${buffer.length} bytes) -> handle ${fileId}`
               );
               this.logDoorFile(
@@ -908,7 +909,7 @@ console.log(
             // Write mode - create new file or truncate existing
             buffer = Buffer.alloc(0);
             fileId = this.nextFileId++;
-console.log(
+debugLog(
               `[dos.library] Open: File opened for writing -> handle ${fileId}`
             );
             this.logDoorFile(
@@ -951,7 +952,7 @@ console.error(
       }
     }
 
-console.log(`[dos.library] Open returned: ${fileId}`);
+debugLog(`[dos.library] Open returned: ${fileId}`);
     return fileId;
   }
 
@@ -970,12 +971,12 @@ console.log(`[dos.library] Open returned: ${fileId}`);
   Close(): number {
     const handle = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] Close(handle=${handle})`);
+debugLog(`[dos.library] Close(handle=${handle})`);
     this.logDoorFile(`CLOSE handle=${handle}`);
 
     // V47+ behavior: Close(0) does nothing and returns success
     if (handle === 0) {
-console.log(`[dos.library] Close(0): No-op, returning success`);
+debugLog(`[dos.library] Close(0): No-op, returning success`);
       return -1; // DOSTRUE
     }
 
@@ -988,7 +989,7 @@ console.log(`[dos.library] Close(0): No-op, returning success`);
       const isOriginalStderr = (handle === this.STDERR_HANDLE);
 
       if (isOriginalStdin || isOriginalStdout || isOriginalStderr) {
-console.log(
+debugLog(
           `[dos.library] Close: original standard handle ${handle} (FileManager) -> success`
         );
         this.logDoorFile(`CLOSE ok handle=${handle} standard=true`);
@@ -997,7 +998,7 @@ console.log(
 
       const success = this.fileManager.close(handle);
       if (success) {
-console.log(
+debugLog(
           `[dos.library] Close (FileManager) succeeded for handle ${handle}`
         );
         return -1; // DOSTRUE
@@ -1014,7 +1015,7 @@ console.error(
 
     // Standard handles should not be closed
     if (handle <= 3 || handle === this.NIL_HANDLE) {
-console.log(
+debugLog(
         `[dos.library] Close: Standard handle ${handle}, returning success without closing`
       );
       this.logDoorFile(`CLOSE ok handle=${handle} standard=true`);
@@ -1038,7 +1039,7 @@ console.error(`[dos.library] Close: Invalid handle ${handle}`);
       fileHandle.name === "NIL:" ||
       fileHandle.name === "NIL"
     ) {
-console.log(
+debugLog(
         `[dos.library] Close: Console/NIL handle ${handle}, closing without disk flush`
       );
       this.logDoorFile(`CLOSE ok handle=${handle} ami="${fileHandle.name}" consoleOrNil=true`);
@@ -1052,7 +1053,7 @@ console.log(
         if (fileHandle.realPath && fileHandle.buffer) {
           try {
             amigafs.writeFileSync(fileHandle.realPath, fileHandle.buffer);
-console.log(
+debugLog(
               `[dos.library] Close: Wrote ${fileHandle.buffer.length} bytes to ${fileHandle.realPath}`
             );
             this.logDoorFile(
@@ -1077,14 +1078,14 @@ console.error(
     if (success) {
       // On success: restore IoErr() to previous value (per spec)
       this.lastError = previousIoErr;
-console.log(
+debugLog(
         `[dos.library] Close: File closed successfully, IoErr restored to ${previousIoErr}`
       );
       this.logDoorFile(`CLOSE ok handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}"`);
       return -1; // DOSTRUE
     } else {
       // On failure: IoErr already set above
-console.log(
+debugLog(
         `[dos.library] Close: Failed but handle deallocated, IoErr=${this.lastError}`
       );
       this.logDoorFile(`CLOSE fail handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" ioErr=${this.lastError}`);
@@ -1137,7 +1138,7 @@ console.log(
       this.inputBuffer = this.inputBuffer.substring(bytesToRead);
 
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Read returned: ${bytesToRead} bytes from STDIN`
       );
       return bytesToRead;
@@ -1154,7 +1155,7 @@ console.error(`[dos.library] Read: Invalid handle ${handle}`);
     // NIL: device always returns 0 bytes
     if (handle === this.NIL_HANDLE) {
       this.lastError = this.ERROR_NO_ERROR;
-console.log(`[dos.library] Read: NIL: device -> 0 bytes`);
+debugLog(`[dos.library] Read: NIL: device -> 0 bytes`);
       this.logDoorFile(`READ handle=${handle} ami="NIL:" bytes=0 nil=true`);
       return 0;
     }
@@ -1170,7 +1171,7 @@ console.error(`[dos.library] Read: No buffer for handle ${handle}`);
     const available = fileHandle.buffer.length - fileHandle.position;
     const bytesToRead = Math.min(length, available);
 
-console.log(
+debugLog(
       `[dos.library] Read: position=${fileHandle.position}, available=${available}, requested=${length}, reading=${bytesToRead}`
     );
 
@@ -1184,7 +1185,7 @@ console.log(
     fileHandle.position += bytesToRead;
 
     this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
       `[dos.library] Read returned: ${bytesToRead} bytes (position now ${fileHandle.position})`
     );
     this.logDoorFile(
@@ -1261,7 +1262,7 @@ console.error(
         // Convert bare LF to CR+LF for proper terminal display
         text = text.replace(/(?<!\r)\n/g, '\r\n');
 
-console.log(
+debugLog(
           `[dos.library] Write (FileManager): Console output (${length} bytes): ${JSON.stringify(
             text.substring(0, 100)
           )}${text.length > 100 ? '...' : ''}`
@@ -1271,12 +1272,12 @@ console.log(
         } else if (this.outputCallback) {
           this.outputCallback(text);
         } else {
-console.log(`[dos.library] Write: WARNING - No output callback set!`);
+debugLog(`[dos.library] Write: WARNING - No output callback set!`);
         }
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`
       );
       this.logDoorFile(`WRITE fm handle=${handle} bytes=${result.bytesWritten}`);
@@ -1296,7 +1297,7 @@ console.log(
       let text = rawBuf.toString('latin1');
 
       // DEBUG: Log WHO2 door output
-console.log(
+debugLog(
         `[dos.library] Write: Console output (${length} bytes): ${JSON.stringify(
           text
         )}`
@@ -1312,10 +1313,10 @@ console.log(
       if (this.outputRawCallback) {
         this.outputRawCallback(convertedBuf);
       } else if (this.outputCallback) {
-console.log(`[dos.library] Write: Sending to socket callback`);
+debugLog(`[dos.library] Write: Sending to socket callback`);
         this.outputCallback(convertedText);
       } else {
-console.log(`[dos.library] Write: WARNING - No output callback set!`);
+debugLog(`[dos.library] Write: WARNING - No output callback set!`);
       }
 
       this.lastError = this.ERROR_NO_ERROR;
@@ -1332,7 +1333,7 @@ console.log(`[dos.library] Write: WARNING - No output callback set!`);
 
     if (isNilDevice) {
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Write: NIL: device -> ${length} bytes discarded`
       );
       return length;
@@ -1367,7 +1368,7 @@ console.error(`[dos.library] Write: No buffer for handle ${handle}`);
       return -1;
     }
 
-console.log(
+debugLog(
       `[dos.library] Write: Writing ${length} bytes at position ${fileHandle.position}`
     );
 
@@ -1388,7 +1389,7 @@ console.log(
     fileHandle.position += length;
 
     this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
       `[dos.library] Write returned: ${length} bytes (position now ${fileHandle.position})`
     );
     this.logDoorFile(
@@ -1411,7 +1412,7 @@ console.log(
   setInheritedHandles(input: number, output: number): void {
     this.inheritedInput = input;
     this.inheritedOutput = output;
-console.log(
+debugLog(
       `[dos.library] Set inherited handles: Input=${input}, Output=${output}`
     );
   }
@@ -1434,7 +1435,7 @@ console.warn(`[dos.library] Cannot redirect stdout without FileManager/PathManag
         if (parentDir.endsWith('/BBS') || parentDir.endsWith('\\BBS')) {
 console.warn(`[dos.library] Skipping creation of BBS/ subdirectory for redirect: ${amiPath} -> ${resolved}`);
         } else if (!amigafs.existsSync(parentDir)) {
-console.log(`[dos.library] Creating parent directory for stdout redirect: ${parentDir}`);
+debugLog(`[dos.library] Creating parent directory for stdout redirect: ${parentDir}`);
           amigafs.mkdirSync(parentDir, { recursive: true });
         }
       } catch {
@@ -1452,7 +1453,7 @@ console.error(`[dos.library] Failed to redirect stdout to ${amiPath}`);
     this.fileManager.setStdoutHandle(bptr);
     this.inheritedOutput = bptr;
     this.logDoorFile(`STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
-console.log(`[dos.library] STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
+debugLog(`[dos.library] STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
     return bptr;
   }
 
@@ -1491,7 +1492,7 @@ console.log(`[dos.library] STDOUT redirected to ${amiPath} (BPTR ${bptr})`);
     const newHandle = this.emulator.getRegister(CPURegister.D1);
     const oldHandle = this.Input();
     
-console.log(`[dos.library] SelectInput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
+debugLog(`[dos.library] SelectInput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
     
     if (this.useNewFileSystem && this.fileManager) {
       this.fileManager.setStdinBptr(newHandle);
@@ -1510,7 +1511,7 @@ console.log(`[dos.library] SelectInput(0x${newHandle.toString(16)}), old=0x${old
     const newHandle = this.emulator.getRegister(CPURegister.D1);
     const oldHandle = this.Output();
     
-console.log(`[dos.library] SelectOutput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
+debugLog(`[dos.library] SelectOutput(0x${newHandle.toString(16)}), old=0x${oldHandle.toString(16)}`);
     
     if (this.useNewFileSystem && this.fileManager) {
       this.fileManager.setStdoutHandle(newHandle);
@@ -1526,7 +1527,7 @@ console.log(`[dos.library] SelectOutput(0x${newHandle.toString(16)}), old=0x${ol
    */
   IoErr(): number {
     if (this.lastError !== 0) {
-console.log(
+debugLog(
         `[dos.library] 🔴 IoErr() = ${this.lastError} (${this.getErrorMessage(
           this.lastError
         )})`
@@ -1550,7 +1551,7 @@ console.log(
     const newError = this.emulator.getRegister(CPURegister.D1);
     const oldError = this.lastError;
 
-console.log(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
+debugLog(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
 
     this.lastError = newError;
     return oldError;
@@ -1586,7 +1587,7 @@ console.log(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
     const ticksPastMinute =
       now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
 
-console.log(
+debugLog(
       `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute} (Local)`
     );
 
@@ -1608,11 +1609,11 @@ console.log(
     const ticks = this.emulator.getRegister(CPURegister.D1);
     const milliseconds = (ticks / 50) * 1000;
 
-console.log(`[dos.library] Delay(${ticks} ticks = ${milliseconds}ms)`);
+debugLog(`[dos.library] Delay(${ticks} ticks = ${milliseconds}ms)`);
 
     // Set delay expiration time
     this.delayUntil = Date.now() + milliseconds;
-console.log(
+debugLog(
       `[dos.library] Execution will pause until ${new Date(
         this.delayUntil
       ).toISOString()}`
@@ -1628,7 +1629,7 @@ console.log(
       return true;
     }
     if (this.delayUntil > 0 && Date.now() >= this.delayUntil) {
-console.log(`[dos.library] Delay completed, resuming execution`);
+debugLog(`[dos.library] Delay completed, resuming execution`);
       this.delayUntil = 0;
     }
     return false;
@@ -1648,7 +1649,7 @@ console.log(`[dos.library] Delay completed, resuming execution`);
     const offset = rawOffset | 0;
     const mode = rawMode | 0;
 
-console.log(
+debugLog(
       `[dos.library] Seek(handle=${handle}, offset=${offset}, mode=${mode})`
     );
 
@@ -1675,7 +1676,7 @@ console.error("[dos.library] Seek(FileManager): seek failed");
       }
 
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Seek(FileManager): moved from ${oldPos} to ${newPos}`
       );
       return oldPos;
@@ -1713,7 +1714,7 @@ console.error(
 
       fileHandle.position = newPos;
       this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
         `[dos.library] Seek: Console/NIL handle ${handle} moved from ${oldPos} to ${newPos}`
       );
       return oldPos;
@@ -1752,7 +1753,7 @@ console.error(`[dos.library] Seek: Invalid mode ${mode}`);
     fileHandle.position = newPosition;
 
     this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
       `[dos.library] Seek: Moved from ${oldPosition} to ${newPosition}`
     );
     return oldPosition;
@@ -1817,7 +1818,7 @@ console.log(
   AddDosEntry(): number {
     const dlistPtr = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] AddDosEntry(dlist=0x${dlistPtr.toString(16)})`);
+debugLog(`[dos.library] AddDosEntry(dlist=0x${dlistPtr.toString(16)})`);
 
     // V50+: NULL check
     if (dlistPtr === 0) {
@@ -1855,7 +1856,7 @@ console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success
     const flags = this.emulator.getRegister(CPURegister.D3);
 
     const name = namePtr ? this.emulator.readString(namePtr) : "<null>";
-console.log(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${name}", flags=0x${flags.toString(16)})`);
+debugLog(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${name}", flags=0x${flags.toString(16)})`);
 
     // STUB: Proper implementation would search DosList chain
     // For now, return NULL (not found) to prevent crashes
@@ -1872,6 +1873,13 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     const handle = this.emulator.getRegister(CPURegister.D1);
     const bufPtr = this.emulator.getRegister(CPURegister.D2);
     const maxLen = this.emulator.getRegister(CPURegister.D3);
+
+    // DEBUG: Log FGets call
+    const fs = require('fs');
+    try {
+      fs.appendFileSync('~/Code/amiexpress-web/logs/fgets-debug.log',
+        `[FGets] ${new Date().toISOString()} handle=0x${handle.toString(16)} bufPtr=0x${bufPtr.toString(16)} maxLen=${maxLen}\n`);
+    } catch (e) { /* ignore */ }
 
     if (bufPtr === 0 || maxLen <= 1) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
@@ -1892,6 +1900,13 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     }
 
     this.emulator.writeMemory(bufPtr + bytesRead, 0);
+
+    // DEBUG: Log result
+    try {
+      const result = bytesRead === 0 ? 'EOF/empty' : `${bytesRead} bytes`;
+      fs.appendFileSync('~/Code/amiexpress-web/logs/fgets-debug.log',
+        `[FGets] Result: ${result}\n`);
+    } catch (e) { /* ignore */ }
 
     if (bytesRead === 0) {
       this.lastError = this.ERROR_NO_MORE_ENTRIES;
@@ -2006,7 +2021,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     const filename = this.emulator.readString(filenameAddr, 256);
     const modeStr = this.emulator.readString(modeAddr, 16);
 
-console.log(`[dos.library] FOpen("${filename}", "${modeStr}")`);
+debugLog(`[dos.library] FOpen("${filename}", "${modeStr}")`);
 
     // Map mode string to AmigaDOS mode constant
     let mode: number;
@@ -2058,7 +2073,7 @@ console.error(`[dos.library] FOpen: Open failed for "${filename}"`);
       this.Seek();
     }
 
-console.log(`[dos.library] FOpen → handle=0x${handle.toString(16)}`);
+debugLog(`[dos.library] FOpen → handle=0x${handle.toString(16)}`);
     this.lastError = this.ERROR_NO_ERROR;
     return handle;
   }
@@ -2073,7 +2088,7 @@ console.log(`[dos.library] FOpen → handle=0x${handle.toString(16)}`);
   FClose(): number {
     const handle = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] FClose(handle=0x${handle.toString(16)})`);
+debugLog(`[dos.library] FClose(handle=0x${handle.toString(16)})`);
 
     if (handle === 0) {
 console.error(`[dos.library] FClose: NULL handle`);
@@ -2150,7 +2165,7 @@ console.error(`[dos.library] FClose: NULL handle`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const filename = this.readString(namePtr);
 
-console.log(`[dos.library] DeleteFile("${filename}")`);
+debugLog(`[dos.library] DeleteFile("${filename}")`);
 
     const realPath = this.resolvePath(filename);
     if (!realPath) {
@@ -2183,7 +2198,7 @@ console.error(
     try {
       // Delete the file (case-insensitive)
       amigafs.unlinkSync(realPath);
-console.log(`[dos.library] DeleteFile: Deleted file ${realPath}`);
+debugLog(`[dos.library] DeleteFile: Deleted file ${realPath}`);
 
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
       this.lastError = this.ERROR_NO_ERROR;
@@ -2209,7 +2224,7 @@ console.error(
     const oldName = this.readString(oldNamePtr);
     const newName = this.readString(newNamePtr);
 
-console.log(`[dos.library] Rename("${oldName}", "${newName}")`);
+debugLog(`[dos.library] Rename("${oldName}", "${newName}")`);
 
     const oldPath = this.resolvePath(oldName);
     const newPath = this.resolvePath(newName);
@@ -2251,7 +2266,7 @@ console.error(
     try {
       // Case-insensitive rename
       amigafs.renameSync(oldPath, newPath);
-console.log(`[dos.library] Rename: Renamed ${oldPath} to ${newPath}`);
+debugLog(`[dos.library] Rename: Renamed ${oldPath} to ${newPath}`);
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
@@ -2289,7 +2304,7 @@ console.error(
     // Convert to BPTR (address >> 2)
     const bptr = memAddr >> 2;
 
-console.log(
+debugLog(
       `[dos.library] Allocated FileLock: memAddr=0x${memAddr.toString(16)}, BPTR=${bptr}, lockId=${lockId}, mode=${mode}`
     );
 
@@ -2315,7 +2330,7 @@ console.log(
     const realPath = this.resolvePath(name);
     if (!realPath) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-console.log(
+debugLog(
         `[dos.library] 🔒 Lock("${name}") - ❌ Failed to resolve path [IoErr=${
           this.lastError
         }: ${this.getErrorMessage(this.lastError)}]`
@@ -2327,7 +2342,7 @@ console.log(
     // Check if path exists
     if (!amigafs.existsSync(realPath)) {
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-console.log(
+debugLog(
         `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${
           this.lastError
         }: ${this.getErrorMessage(this.lastError)}]`
@@ -2336,7 +2351,7 @@ console.log(
       return;
     }
 
-console.log(
+debugLog(
       `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`
     );
 
@@ -2355,7 +2370,7 @@ console.log(
     });
 
     this.lastLockPath = originalName;
-console.log(
+debugLog(
       `[dos.library] Lock: Created lock ${lockId} (BPTR ${bptr}) for path ${realPath}`
     );
     this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR, not lockId!
@@ -2371,7 +2386,7 @@ console.log(
 
     // BPTR 0 is special (means "no lock")
     if (bptrIn === 0) {
-console.log(`[dos.library] UnLock: BPTR 0 (no-op)`);
+debugLog(`[dos.library] UnLock: BPTR 0 (no-op)`);
       return;
     }
 
@@ -2379,7 +2394,7 @@ console.log(`[dos.library] UnLock: BPTR 0 (no-op)`);
     let found = false;
     for (const [lockId, lock] of this.locks.entries()) {
       if (lock.bptr === bptrIn) {
-console.log(`[dos.library] UnLock: Released lock ${lockId} (BPTR ${bptrIn})`);
+debugLog(`[dos.library] UnLock: Released lock ${lockId} (BPTR ${bptrIn})`);
         this.locks.delete(lockId);
         // Note: We don't explicitly free the FileLock memory since allocateTemp()
         // allocations are temporary and will be reclaimed automatically
@@ -2404,7 +2419,7 @@ console.warn(`[dos.library] UnLock: Invalid lock BPTR ${bptrIn}`);
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
     if (bptrIn === 0) {
-console.log(`[dos.library] DupLock(0) - NULL lock, returning 0`);
+debugLog(`[dos.library] DupLock(0) - NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -2442,7 +2457,7 @@ console.error(
       bptr: newBptr,
     });
 
-console.log(
+debugLog(
       `[dos.library] DupLock(BPTR=${bptrIn}) - Created duplicate lock ${newLockId} (BPTR ${newBptr}) for ${originalLock.path}`
     );
 
@@ -2465,7 +2480,7 @@ console.log(
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
-console.log(
+debugLog(
       `[dos.library] Examine(lock=${bptrIn}, fib=0x${fibPtr.toString(16)})`
     );
 
@@ -2503,7 +2518,7 @@ console.error(`[dos.library] Examine: Invalid lock BPTR ${bptrIn}`);
         const returnAddr = this.emulator.readMemory32(sp);
         const a5 = this.emulator.getRegister(CPURegister.A5);
         const val32 = this.emulator.readMemory16(a5 + 0x32);
-console.log(
+debugLog(
           `[dos.library][trace] PC=0x${pc.toString(16)} D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} ` +
           `D7=0x${d7.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} A5=0x${a5.toString(16)} ` +
           `A5+0x32=0x${val32.toString(16)} SP=0x${sp.toString(16)} RA=0x${returnAddr.toString(16)} fib=0x${fibPtr.toString(16)} file=${fileName}`
@@ -2522,7 +2537,7 @@ console.log(
       // AmiExpress "DirN" listing files must be treated as directories (matches real 68K behavior)
       const isDirListing = /^dir\d+$/i.test(fileName);
       const dirEntryType = stats.isDirectory() || isDirListing ? 2 : -3;
-console.log(
+debugLog(
         `[dos.library] Examine: fileName="${fileName}" dirEntryType=${dirEntryType}`
       );
       // Write fib_DirEntryType/EntryType (positive for dirs, negative for files)
@@ -2549,7 +2564,7 @@ console.log(
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
       this.emulator.writeMemory32(fibPtr + 124, fibSizeVal);
-console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
+debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
       this.emulator.writeMemory32(fibPtr + 128, 0);
@@ -2571,7 +2586,7 @@ console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)})
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);
 
-console.log(
+debugLog(
         `[dos.library] Examine: ${fileName} (${
           stats.isDirectory() ? "dir" : "file"
         }, ${stats.size} bytes)`
@@ -2591,11 +2606,11 @@ console.log(
         this.emulator.readMemory(fibPtr + 122),
         this.emulator.readMemory(fibPtr + 123),
       ];
-console.log(
+debugLog(
         `[dos.library]   fib_DirEntryType=${loggedDirEntryType}, ` +
         `fib_EntryType=${loggedEntryType}, fib_Size=${fibSizeVal}, fib_Protection=${protection}`
       );
-console.log(
+debugLog(
         `[dos.library]   raw DirEntry bytes=${rawDirBytes
           .map((b) => b.toString(16).padStart(2, "0"))
           .join(" ")} Entry bytes=${rawEntryBytes
@@ -2611,7 +2626,7 @@ console.log(
         const d7 = this.emulator.getRegister(CPURegister.D7);
         const a0 = this.emulator.getRegister(CPURegister.A0);
         const a1 = this.emulator.getRegister(CPURegister.A1);
-console.log(
+debugLog(
           `[dos.library][trace] PC=0x${pc.toString(16)} D0=0x${d0.toString(16)} D1=0x${d1.toString(16)} ` +
           `D7=0x${d7.toString(16)} A0=0x${a0.toString(16)} A1=0x${a1.toString(16)} ` +
           `fib_DirEntryType=${loggedDirEntryType} fib_Size=${fibSizeVal} prot=${protection}`
@@ -2623,7 +2638,7 @@ console.log(
         const files = amigafs.readdirSync(lock.path);
         this.dirIterators.set(foundLockId, files);
         this.dirIteratorIndex.set(foundLockId, 0);
-console.log(
+debugLog(
           `[dos.library] Examine: Initialized directory iterator (${files.length} entries)`
         );
       }
@@ -2650,7 +2665,7 @@ console.error(
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const fibPtr = this.emulator.getRegister(CPURegister.D2);
 
-console.log(
+debugLog(
       `[dos.library] ExNext(lock=${bptrIn}, fib=0x${fibPtr.toString(16)})`
     );
 
@@ -2687,7 +2702,7 @@ console.error(
 
     if (index >= files.length) {
       // No more entries
-console.log(`[dos.library] ExNext: No more entries`);
+debugLog(`[dos.library] ExNext: No more entries`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_MORE_ENTRIES;
 
@@ -2731,7 +2746,7 @@ console.log(`[dos.library] ExNext: No more entries`);
       // fib_Size (4 bytes)
       const fibSizeVal = stats.isFile() ? stats.size : 0;
       this.emulator.writeMemory32(fibPtr + 124, fibSizeVal);
-console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
+debugLog(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)}) -> 0x${(fibPtr + 124).toString(16)}`);
 
       // fib_NumBlocks (4 bytes)
       this.emulator.writeMemory32(fibPtr + 128, 0);
@@ -2753,7 +2768,7 @@ console.log(`[dos.library] fib_Size=${fibSizeVal} (0x${fibSizeVal.toString(16)})
       // fib_Comment (80 bytes BCPL string)
       this.writeBCPLString(fibPtr + 144, "", 79);
 
-console.log(
+debugLog(
         `[dos.library] ExNext: ${fileName} (${
           stats.isDirectory() ? "dir" : "file"
         }, ${stats.size} bytes)`
@@ -2789,7 +2804,7 @@ console.error(
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
     const infoPtr = this.emulator.getRegister(CPURegister.D2);
 
-console.log(
+debugLog(
       `[dos.library] Info(lock=0x${bptrIn.toString(
         16
       )}, info=0x${infoPtr.toString(16)})`
@@ -2839,7 +2854,7 @@ console.log(
       // id_InUse (4 bytes) - always 0 (not locked)
       this.writeLong(infoPtr + 32, 0);
 
-console.log(
+debugLog(
         `[dos.library] Info: blocks=${numBlocks}, used=${numBlocksUsed}, bytes/block=512`
       );
 
@@ -2861,7 +2876,7 @@ console.error(`[dos.library] Info: Error getting volume info:`, error);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-console.log(`[dos.library] CreateDir("${name}")`);
+debugLog(`[dos.library] CreateDir("${name}")`);
 
     const realPath = this.resolvePath(name);
     if (!realPath) {
@@ -2886,7 +2901,7 @@ console.error(
     try {
       // Create directory (recursive = true to create parent dirs)
       amigafs.mkdirSync(realPath, { recursive: true });
-console.log(`[dos.library] CreateDir: Created directory ${realPath}`);
+debugLog(`[dos.library] CreateDir: Created directory ${realPath}`);
 
       // Return lock to new directory
       const lockId = this.nextLockId++;
@@ -2922,7 +2937,7 @@ console.error(
   CurrentDir(): void {
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] CurrentDir(lock=${bptrIn})`);
+debugLog(`[dos.library] CurrentDir(lock=${bptrIn})`);
 
     // Create lock for current directory (to return as "old directory")
     const oldDirLockId = this.nextLockId++;
@@ -2940,7 +2955,7 @@ console.log(`[dos.library] CurrentDir(lock=${bptrIn})`);
 
     if (bptrIn === 0) {
       // D1=0 means "just get current directory lock, don't change"
-console.log(
+debugLog(
         `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} (BPTR ${oldDirBptr}) for ${this.currentDirectory}`
       );
       this.emulator.setRegister(CPURegister.D0, oldDirBptr); // Return BPTR
@@ -2977,7 +2992,7 @@ console.error(
     if (newLock.amigaPath) {
       this.currentDirectoryAmiga = newLock.amigaPath;
     }
-console.log(
+debugLog(
       `[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`
     );
 
@@ -2998,7 +3013,7 @@ console.log(
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-console.log(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation not allowed), returning NULL`);
+debugLog(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation not allowed), returning NULL`);
 
     // Process creation not supported in door emulation
     this.emulator.setRegister(CPURegister.D0, 0);
@@ -3019,8 +3034,8 @@ console.log(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation
   Exit(): void {
     const returnCode = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] Exit(returnCode=${returnCode})`);
-console.log(
+debugLog(`[dos.library] Exit(returnCode=${returnCode})`);
+debugLog(
       `[dos.library] Setting PC to exit trap address 0xFFFF00 to terminate door`
     );
 
@@ -3028,7 +3043,7 @@ console.log(
     const EXIT_TRAP_ADDRESS = 0xffff00;
     this.emulator.setRegister(16, EXIT_TRAP_ADDRESS); // PC = exit trap
 
-console.log(`[dos.library] Door will now exit cleanly`);
+debugLog(`[dos.library] Door will now exit cleanly`);
   }
 
   /**
@@ -3040,7 +3055,7 @@ console.log(`[dos.library] Door will now exit cleanly`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-console.log(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading not allowed), returning NULL`);
+debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading not allowed), returning NULL`);
 
     // Dynamic code loading not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
@@ -3055,7 +3070,7 @@ console.log(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loadin
   UnLoadSeg(): void {
     const segList = this.emulator.getRegister(CPURegister.D1);
 
-console.log(
+debugLog(
       `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - No-op (LoadSeg always fails)`
     );
 
@@ -3073,7 +3088,7 @@ console.log(
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-console.log(
+debugLog(
       `[dos.library] DeviceProc("${name}") - Returning fake MsgPort (device handlers not implemented)`
     );
 
@@ -3096,7 +3111,7 @@ console.log(
     const name = this.readString(namePtr);
     const comment = commentPtr ? this.readString(commentPtr) : "";
 
-console.log(`[dos.library] SetComment("${name}", "${comment}")`);
+debugLog(`[dos.library] SetComment("${name}", "${comment}")`);
 
     const realPath = this.resolvePath(name);
     if (!realPath) {
@@ -3120,14 +3135,14 @@ console.error(`[dos.library] SetComment: File not found: ${realPath}`);
       const commentPath = realPath + ".comment";
       if (comment) {
         amigafs.writeFileSync(commentPath, comment, "utf-8");
-console.log(
+debugLog(
           `[dos.library] SetComment: Wrote comment to ${commentPath}`
         );
       } else {
         // Empty comment = delete comment file (case-insensitive)
         if (amigafs.existsSync(commentPath)) {
           amigafs.unlinkSync(commentPath);
-console.log(
+debugLog(
             `[dos.library] SetComment: Removed comment file ${commentPath}`
           );
         }
@@ -3160,7 +3175,7 @@ console.error(
     const newSize = this.emulator.getRegister(CPURegister.D2) | 0; // Signed 32-bit
     const mode = this.emulator.getRegister(CPURegister.D3) | 0;    // Signed 32-bit
 
-console.log(
+debugLog(
       `[dos.library] SetFileSize(fh=0x${fhBptr.toString(16)}, size=${newSize}, mode=${mode})`
     );
 
@@ -3213,7 +3228,7 @@ console.error(
       // Update handle position to new size
       handle.position = absoluteSize;
 
-console.log(
+debugLog(
         `[dos.library] SetFileSize: Resized ${handle.realPath} to ${absoluteSize} bytes`
       );
 
@@ -3240,7 +3255,7 @@ console.error(
     const protect = this.emulator.getRegister(CPURegister.D2);
     const name = this.readString(namePtr);
 
-console.log(
+debugLog(
       `[dos.library] SetProtection("${name}", 0x${protect.toString(16)})`
     );
 
@@ -3284,7 +3299,7 @@ console.error(
       }
 
       fs.chmodSync(realPath, unixMode);
-console.log(
+debugLog(
         `[dos.library] SetProtection: Set ${realPath} to mode ${unixMode.toString(8)}`
       );
 
@@ -3308,10 +3323,10 @@ console.error(
   ParentDir(): void {
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] ParentDir(lock=0x${bptrIn.toString(16)})`);
+debugLog(`[dos.library] ParentDir(lock=0x${bptrIn.toString(16)})`);
 
     if (bptrIn === 0) {
-console.log(`[dos.library] ParentDir: NULL lock, returning 0`);
+debugLog(`[dos.library] ParentDir: NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -3334,7 +3349,7 @@ console.error(
 
     // Check if we're at root (parent is same as current or bbsRoot)
     if (parentPath === lock.path || parentPath === this.bbsRoot) {
-console.log(`[dos.library] ParentDir: At root, returning 0`);
+debugLog(`[dos.library] ParentDir: At root, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = this.ERROR_NO_ERROR;
       return;
@@ -3355,7 +3370,7 @@ console.log(`[dos.library] ParentDir: At root, returning 0`);
       bptr: parentBptr,
     });
 
-console.log(
+debugLog(
       `[dos.library] ParentDir: Created lock ${parentLockId} (BPTR ${parentBptr}) for parent ${parentPath}`
     );
 
@@ -3371,7 +3386,7 @@ console.log(
   IsInteractive(): void {
     const handle = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] IsInteractive(handle=${handle})`);
+debugLog(`[dos.library] IsInteractive(handle=${handle})`);
 
     // Console handles (1,2,3) are interactive
     if (handle >= 1 && handle <= 3) {
@@ -3393,7 +3408,7 @@ console.log(`[dos.library] IsInteractive(handle=${handle})`);
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
 
-console.log(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
+debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
 
     // Shell command execution not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
@@ -3421,7 +3436,7 @@ console.warn("[dos.library] Cli(): ThisTask missing");
 
     const prCliOffset = 0xac; // struct Process.pr_CLI
     const cliBptr = this.emulator.readMemory32(thisTask + prCliOffset);
-console.log(`[dos.library] Cli() -> 0x${cliBptr.toString(16)}`);
+debugLog(`[dos.library] Cli() -> 0x${cliBptr.toString(16)}`);
     this.emulator.setRegister(CPURegister.D0, cliBptr);
   }
 
@@ -3433,7 +3448,7 @@ console.log(`[dos.library] Cli() -> 0x${cliBptr.toString(16)}`);
    * This is the same string passed in A0 on startup from CLI.
    */
   GetArgStr(): void {
-console.log(
+debugLog(
       `[dos.library] GetArgStr() returning 0x${this.argStringPtr.toString(16)}`
     );
     this.emulator.setRegister(CPURegister.D0, this.argStringPtr);
@@ -3453,7 +3468,7 @@ console.log(
     const bufPtr = this.emulator.getRegister(CPURegister.D1);
     const bufLen = this.emulator.getRegister(CPURegister.D2);
 
-console.log(
+debugLog(
       `[dos.library] GetCliProgramName(buf=0x${bufPtr.toString(
         16
       )}, len=${bufLen})`
@@ -3464,7 +3479,7 @@ console.log(
       this.emulator.writeMemory(bufPtr, 0);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = 212; // ERROR_OBJECT_WRONG_TYPE
-console.log(
+debugLog(
         `[dos.library] GetCliProgramName: No CLI structure, returning failure`
       );
       return;
@@ -3479,7 +3494,7 @@ console.log(
 
     this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
     this.lastError = this.ERROR_NO_ERROR;
-console.log(
+debugLog(
       `[dos.library] GetCliProgramName: Returned "${this.programName.substring(
         0,
         copyLen
@@ -3493,7 +3508,7 @@ console.log(
   setCliInfo(argStringPtr: number, programName: string): void {
     this.argStringPtr = argStringPtr;
     this.programName = programName;
-console.log(
+debugLog(
       `[dos.library] CLI info set: argString=0x${argStringPtr.toString(
         16
       )}, progName="${programName}"`
@@ -3510,7 +3525,7 @@ console.log(
     const fileHandle = this.emulator.getRegister(CPURegister.D1);
     const timeout = this.emulator.getRegister(CPURegister.D2);
 
-console.log(
+debugLog(
       `[dos.library] WaitForChar(fh=${fileHandle}, timeout=${timeout})`
     );
 
@@ -3518,7 +3533,7 @@ console.log(
     if (fileHandle === this.STDIN_HANDLE || fileHandle === this.STDOUT_HANDLE) {
       const hasData = this.inputBuffer.length > 0;
       this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
-console.log(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
+debugLog(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
       return -1;
     }
 
@@ -3527,21 +3542,21 @@ console.log(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
     if (!file) {
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE - invalid handle
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-console.log(`[dos.library] WaitForChar: Invalid file handle`);
+debugLog(`[dos.library] WaitForChar: Invalid file handle`);
       return -1;
     }
 
     if (file.isConsole) {
       const hasData = this.inputBuffer.length > 0;
       this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
-console.log(
+debugLog(
         `[dos.library] WaitForChar: Console file, hasData=${hasData}`
       );
     } else {
       // File: check if position < file size
       const atEOF = !file.buffer || file.position >= file.buffer.length;
       this.emulator.setRegister(CPURegister.D0, atEOF ? 0 : -1);
-console.log(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
+debugLog(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
     }
     return this.emulator.getRegister(CPURegister.D0);
   }
@@ -3559,13 +3574,13 @@ console.log(`[dos.library] WaitForChar: Regular file, atEOF=${atEOF}`);
     const argvAddr = this.emulator.getRegister(CPURegister.D3);
 
     const fmt = this.readString(fmtAddr);
-console.log(`[dos.library] VFPrintf(fh=${fileHandle}, fmt="${fmt}")`);
+debugLog(`[dos.library] VFPrintf(fh=${fileHandle}, fmt="${fmt}")`);
 
     const file = this.openFiles.get(fileHandle);
     if (!file) {
       this.emulator.setRegister(CPURegister.D0, -1); // EOF
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
-console.log(`[dos.library] VFPrintf: Invalid file handle`);
+debugLog(`[dos.library] VFPrintf: Invalid file handle`);
       return;
     }
 
@@ -3587,7 +3602,7 @@ console.log(`[dos.library] VFPrintf: Invalid file handle`);
     }
 
     this.emulator.setRegister(CPURegister.D0, formatted.length);
-console.log(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
+debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
   }
 
   /**
@@ -4104,7 +4119,7 @@ console.log(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
-console.log(
+debugLog(
       `[dos.library] NameFromLock(lock=${bptrIn.toString(
         16
       )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
@@ -4126,7 +4141,7 @@ console.log(
     // Find lock by BPTR (D1 contains BPTR, not lockId)
     const result = this.findLockByBptr(bptrIn);
     if (!result) {
-console.log(
+debugLog(
         `[dos.library] NameFromLock: Lock BPTR ${bptrIn.toString(16)} not found`
       );
       this.lastError = this.ERROR_OBJECT_NOT_FOUND;
@@ -4143,7 +4158,7 @@ console.log(
     }
 
     this.writeString(bufAddr, path);
-console.log(`[dos.library] NameFromLock returned: ${path}`);
+debugLog(`[dos.library] NameFromLock returned: ${path}`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -4158,7 +4173,7 @@ console.log(`[dos.library] NameFromLock returned: ${path}`);
   OpenFromLock(): void {
     const bptrIn = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] OpenFromLock(lock=${bptrIn})`);
+debugLog(`[dos.library] OpenFromLock(lock=${bptrIn})`);
 
     // Find lock by BPTR (D1 contains BPTR, not lockId)
     const result = this.findLockByBptr(bptrIn);
@@ -4172,7 +4187,7 @@ console.error(`[dos.library] OpenFromLock: Invalid lock BPTR ${bptrIn}`);
 
     // Open the file for reading using FileManager
     const filePath = lock.path;
-console.log(`[dos.library] OpenFromLock: Opening file ${filePath}`);
+debugLog(`[dos.library] OpenFromLock: Opening file ${filePath}`);
 
     try {
       // Use FileManager to open the file
@@ -4194,7 +4209,7 @@ console.error(`[dos.library] OpenFromLock: Failed to open ${filePath}`);
       // Lock is consumed - remove it from our locks map
       this.locks.delete(lockId);
 
-console.log(`[dos.library] OpenFromLock: Opened ${filePath} as BPTR ${bptr}`);
+debugLog(`[dos.library] OpenFromLock: Opened ${filePath} as BPTR ${bptr}`);
       this.emulator.setRegister(CPURegister.D0, bptr);
       this.lastError = this.ERROR_NO_ERROR;
     } catch (error) {
@@ -4216,7 +4231,7 @@ console.error(`[dos.library] OpenFromLock: Error opening ${filePath}:`, error);
     const bufAddr = this.emulator.getRegister(CPURegister.D2);
     const bufLen = this.emulator.getRegister(CPURegister.D3);
 
-console.log(
+debugLog(
       `[dos.library] NameFromFH(fh=${fileHandle.toString(
         16
       )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
@@ -4237,7 +4252,7 @@ console.log(
     }
 
     this.writeString(bufAddr, path);
-console.log(`[dos.library] NameFromFH returned: ${path}`);
+debugLog(`[dos.library] NameFromFH returned: ${path}`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -4253,7 +4268,7 @@ console.log(`[dos.library] NameFromFH returned: ${path}`);
     const pathAddr = this.emulator.getRegister(CPURegister.D1);
     const path = this.readString(pathAddr);
 
-console.log(`[dos.library] FilePart(path="${path}")`);
+debugLog(`[dos.library] FilePart(path="${path}")`);
 
     // Find last '/' or ':'
     let lastSep = -1;
@@ -4268,7 +4283,7 @@ console.log(`[dos.library] FilePart(path="${path}")`);
     const offset = lastSep + 1;
     const resultAddr = pathAddr + offset;
 
-console.log(
+debugLog(
       `[dos.library] FilePart returned offset ${offset}, addr=${resultAddr.toString(
         16
       )}`
@@ -4289,7 +4304,7 @@ console.log(
     const pathAddr = this.emulator.getRegister(CPURegister.D1);
     const path = this.readString(pathAddr);
 
-console.log(`[dos.library] PathPart(path="${path}")`);
+debugLog(`[dos.library] PathPart(path="${path}")`);
 
     // Find last '/'
     let lastSlash = -1;
@@ -4303,7 +4318,7 @@ console.log(`[dos.library] PathPart(path="${path}")`);
     if (lastSlash >= 0) {
       // Return pointer to the '/'
       const resultAddr = pathAddr + lastSlash;
-console.log(
+debugLog(
         `[dos.library] PathPart returned offset ${lastSlash}, addr=${resultAddr.toString(
           16
         )}`
@@ -4324,7 +4339,7 @@ console.log(
     // Return pointer after the ':' or to beginning
     const offset = lastColon + 1;
     const resultAddr = pathAddr + offset;
-console.log(
+debugLog(
       `[dos.library] PathPart returned offset ${offset}, addr=${resultAddr.toString(
         16
       )}`
@@ -4368,7 +4383,7 @@ console.log(
       message = errorMsg;
     }
 
-console.log(
+debugLog(
       `[dos.library] Fault(code=${code}, header="${header}") -> "${message}"`
     );
 
@@ -4406,7 +4421,7 @@ console.log(
       message = `${errorMsg}\n`;
     }
 
-console.log(
+debugLog(
       `[dos.library] PrintFault(code=${code}, header="${header}") -> "${message}"`
     );
 
@@ -4485,7 +4500,7 @@ console.log(
     let rdargsAddr = this.emulator.getRegister(CPURegister.D3);
 
     if (templateAddr === 0 || arrayAddr === 0) {
-console.log(
+debugLog(
         "[dos.library] ReadArgs() - Invalid template or array pointer"
       );
       this.emulator.setRegister(CPURegister.D0, 0);
@@ -4494,7 +4509,7 @@ console.log(
     }
 
     const template = this.readString(templateAddr, 1024);
-console.log(
+debugLog(
       `[dos.library] ReadArgs(template="${template}", array=0x${arrayAddr.toString(
         16
       )}, rdargs=0x${rdargsAddr.toString(16)})`
@@ -4502,7 +4517,7 @@ console.log(
 
     const entries = this.parseReadArgsTemplate(template);
     if (entries.length === 0) {
-console.log(
+debugLog(
         "[dos.library] ReadArgs() - No template entries, returning existing RDArgs"
       );
       this.emulator.setRegister(CPURegister.D0, rdargsAddr);
@@ -4555,7 +4570,7 @@ console.log(
     };
 
     const fail = (code: number, message: string): void => {
-console.log(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
+debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = code;
     };
@@ -4820,7 +4835,7 @@ console.log(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
       (token) => !token.consumed && (token.keyUpper || token.value.length > 0)
     );
     if (leftovers.length > 0) {
-console.log(
+debugLog(
         `[dos.library] ReadArgs() - ignoring extra tokens: ${leftovers
           .map((t) => t.raw)
           .join(" ")}`
@@ -4846,7 +4861,7 @@ console.log(
     } minUserLevel=${minLevel} noSep=${argAt(11) ? "TRUE" : "FALSE"} dotSep=${
       argAt(12) ? "TRUE" : "FALSE"
     }`;
-console.log(parsedLine);
+debugLog(parsedLine);
     this.logDoorFile(parsedLine);
 
     this.emulator.setRegister(CPURegister.D0, rdargsAddr);
@@ -4863,17 +4878,17 @@ console.log(parsedLine);
   FreeArgs(): void {
     const rdargsAddr = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] FreeArgs(rdargs=0x${rdargsAddr.toString(16)})`);
+debugLog(`[dos.library] FreeArgs(rdargs=0x${rdargsAddr.toString(16)})`);
 
     if (rdargsAddr === 0) {
-console.log(`[dos.library] FreeArgs() - NULL pointer, nothing to free`);
+debugLog(`[dos.library] FreeArgs() - NULL pointer, nothing to free`);
       this.lastError = this.ERROR_NO_ERROR;
       return;
     }
 
     const context = this.readArgsContexts.get(rdargsAddr);
     if (!context) {
-console.log(
+debugLog(
         `[dos.library] FreeArgs() - no tracked context for 0x${rdargsAddr.toString(
           16
         )}`
@@ -4928,7 +4943,7 @@ console.log(
     const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
     const dat_StrDay = this.emulator.readMemory32(datetimeAddr + 22);
 
-console.log(
+debugLog(
       `[dos.library] DateToStr(days=${ds_Days}, minute=${ds_Minute}, tick=${ds_Tick}, format=${dat_Format})`
     );
 
@@ -5007,7 +5022,7 @@ console.log(
     ];
     const dayStr = dayNames[date.getDay()];
 
-console.log(
+debugLog(
       `[dos.library] DateToStr() -> date="${dateStr}", time="${timeStr}", day="${dayStr}"`
     );
 
@@ -5052,7 +5067,7 @@ console.log(
     const dat_StrDate = this.emulator.readMemory32(datetimeAddr + 14);
     const dat_StrTime = this.emulator.readMemory32(datetimeAddr + 18);
 
-console.log(
+debugLog(
       `[dos.library] StrToDate(format=${dat_Format}, datePtr=0x${dat_StrDate.toString(
         16
       )}, timePtr=0x${dat_StrTime.toString(16)})`
@@ -5080,7 +5095,7 @@ console.log(
       }
     }
 
-console.log(
+debugLog(
       `[dos.library] StrToDate parsing: date="${dateStr}" time="${timeStr}"`
     );
 
@@ -5165,7 +5180,7 @@ console.log(
     const minutesPastMidnight = hours * 60 + minutes;
     const ticksPastMinute = seconds * 50; // 50 ticks per second
 
-console.log(
+debugLog(
       `[dos.library] StrToDate result: ${year}-${month}-${day} ${hours}:${minutes}:${seconds} -> days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
     );
 
@@ -5196,14 +5211,14 @@ console.log(
     const dirname = this.readString(dirnameAddr);
     const filename = this.readString(filenameAddr);
 
-console.log(
+debugLog(
       `[dos.library] AddPart(dirname="${dirname}", filename="${filename}", size=${size})`
     );
 
     // If filename contains : it's a fully qualified path - replace dirname entirely
     if (filename.includes(":")) {
       if (filename.length + 1 > size) {
-console.log(
+debugLog(
           `[dos.library] AddPart() - buffer overflow (need ${
             filename.length + 1
           }, have ${size})`
@@ -5213,7 +5228,7 @@ console.log(
         return;
       }
       this.writeString(dirnameAddr, filename);
-console.log(`[dos.library] AddPart() -> "${filename}" (fully qualified)`);
+debugLog(`[dos.library] AddPart() -> "${filename}" (fully qualified)`);
       this.emulator.setRegister(CPURegister.D0, -1); // TRUE
       return;
     }
@@ -5231,7 +5246,7 @@ console.log(`[dos.library] AddPart() -> "${filename}" (fully qualified)`);
 
     // Check buffer overflow
     if (result.length + 1 > size) {
-console.log(
+debugLog(
         `[dos.library] AddPart() - buffer overflow (need ${
           result.length + 1
         }, have ${size})`
@@ -5243,7 +5258,7 @@ console.log(
 
     // Write result
     this.writeString(dirnameAddr, result);
-console.log(`[dos.library] AddPart() -> "${result}"`);
+debugLog(`[dos.library] AddPart() -> "${result}"`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -5265,7 +5280,7 @@ console.log(`[dos.library] AddPart() -> "${result}"`);
     const type = this.emulator.getRegister(CPURegister.D1);
     const tags = this.emulator.getRegister(CPURegister.D2);
 
-console.log(`[dos.library] AllocDosObject(type=${type}, tags=0x${tags.toString(16)})`);
+debugLog(`[dos.library] AllocDosObject(type=${type}, tags=0x${tags.toString(16)})`);
 
     // Determine size based on type
     let size: number;
@@ -5323,7 +5338,7 @@ console.error(`[dos.library] AllocDosObject: Unknown type ${type}`);
     }
     this.allocatedDosObjects.set(addr, { type, size });
 
-console.log(`[dos.library] AllocDosObject(${typeName}) -> 0x${addr.toString(16)} (${size} bytes)`);
+debugLog(`[dos.library] AllocDosObject(${typeName}) -> 0x${addr.toString(16)} (${size} bytes)`);
     this.emulator.setRegister(CPURegister.D0, addr);
   }
 
@@ -5337,10 +5352,10 @@ console.log(`[dos.library] AllocDosObject(${typeName}) -> 0x${addr.toString(16)}
     const type = this.emulator.getRegister(CPURegister.D1);
     const ptr = this.emulator.getRegister(CPURegister.D2);
 
-console.log(`[dos.library] FreeDosObject(type=${type}, ptr=0x${ptr.toString(16)})`);
+debugLog(`[dos.library] FreeDosObject(type=${type}, ptr=0x${ptr.toString(16)})`);
 
     if (ptr === 0) {
-console.log(`[dos.library] FreeDosObject: NULL pointer, ignoring`);
+debugLog(`[dos.library] FreeDosObject: NULL pointer, ignoring`);
       return;
     }
 
@@ -5351,10 +5366,10 @@ console.log(`[dos.library] FreeDosObject: NULL pointer, ignoring`);
 console.warn(`[dos.library] FreeDosObject: Type mismatch (allocated=${info.type}, freeing=${type})`);
       }
       this.allocatedDosObjects.delete(ptr);
-console.log(`[dos.library] FreeDosObject: Freed ${info.size} bytes at 0x${ptr.toString(16)}`);
+debugLog(`[dos.library] FreeDosObject: Freed ${info.size} bytes at 0x${ptr.toString(16)}`);
     } else {
       // Not tracked - just ignore (door may have allocated it differently)
-console.log(`[dos.library] FreeDosObject: Unknown allocation at 0x${ptr.toString(16)}, ignoring`);
+debugLog(`[dos.library] FreeDosObject: Unknown allocation at 0x${ptr.toString(16)}, ignoring`);
     }
   }
 
@@ -5372,13 +5387,13 @@ console.log(`[dos.library] FreeDosObject: Unknown allocation at 0x${ptr.toString
   handleCall(offset: number): boolean {
     // SPECIAL: Handle non-standard offset -28 that some doors call
     if (offset === -28) {
-console.log(
+debugLog(
         `[dos.library] WARNING: Offset -28 is NOT a standard dos.library function!`
       );
-console.log(
+debugLog(
         `[dos.library] This may indicate an offset calculation error.`
       );
-console.log(
+debugLog(
         `[dos.library] Returning success anyway to let door proceed.`
       );
       this.emulator.setRegister(CPURegister.D0, -1); // Return success
@@ -5387,7 +5402,7 @@ console.log(
 
     // Some doors call deeper LVOs we do not implement; stub benignly
     if (offset === -298) {
-console.log(
+debugLog(
         `[dos.library] WARNING: Offset -298 not implemented; returning 0`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
@@ -5693,7 +5708,7 @@ console.warn(`[dos.library]   Returning D0=0 (failure) - door should handle grac
     const type = this.emulator.getRegister(1); // D1
     const name = this.emulator.readString(nameAddr);
 
-console.log(`[dos.library] FindVar("${name}", type=${type})`);
+debugLog(`[dos.library] FindVar("${name}", type=${type})`);
 
     let localSearchAttempted = false;
     if ((type & 0xff) === 0) {
@@ -5704,13 +5719,13 @@ console.log(`[dos.library] FindVar("${name}", type=${type})`);
       const cliBPTR = this.emulator.readMemory32(taskAddr + prCliOffset);
 
       if (cliBPTR === 0) {
-console.log(`[dos.library]   No CLI structure found`);
+debugLog(`[dos.library]   No CLI structure found`);
       } else {
         const cliAddr = cliBPTR << 2;
         const localVarsBPTR = this.emulator.readMemory32(cliAddr + 0x5c); // cli_LocalVars
 
         if (localVarsBPTR === 0) {
-console.log(`[dos.library]   No local variables list`);
+debugLog(`[dos.library]   No local variables list`);
         } else {
           const localVarsListAddr = localVarsBPTR << 2;
           // Walk the list to find the variable
@@ -5724,7 +5739,7 @@ console.log(`[dos.library]   No local variables list`);
               const nodeName = this.emulator.readString(nodeNameAddr);
 
               if (nodeName === name) {
-console.log(
+debugLog(
                   `[dos.library]   Found local variable "${name}" at 0x${nodeAddr.toString(
                     16
                   )}`
@@ -5749,13 +5764,13 @@ console.log(
     }
 
     if (localSearchAttempted) {
-console.log(`[dos.library]   Variable "${name}" not found`);
+debugLog(`[dos.library]   Variable "${name}" not found`);
       this.emulator.setRegister(0, 0);
       return;
     }
 
     // Global variables not supported yet
-console.log(`[dos.library]   Global variables not supported`);
+debugLog(`[dos.library]   Global variables not supported`);
     this.emulator.setRegister(0, 0);
   }
 
@@ -5790,7 +5805,7 @@ console.log(`[dos.library]   Global variables not supported`);
       value = this.emulator.readString(bufferAddr, size);
     }
 
-console.log(`[dos.library] SetVar("${name}", "${value}", size=${size}, flags=${flags})`);
+debugLog(`[dos.library] SetVar("${name}", "${value}", size=${size}, flags=${flags})`);
 
     if (!this.envManager) {
 console.error(`[dos.library] SetVar: EnvironmentManager not initialized`);
@@ -5824,7 +5839,7 @@ console.error(`[dos.library] SetVar: EnvironmentManager not initialized`);
 
     const name = this.emulator.readString(nameAddr, 256);
 
-console.log(`[dos.library] GetVar("${name}", bufferSize=${size}, flags=${flags})`);
+debugLog(`[dos.library] GetVar("${name}", bufferSize=${size}, flags=${flags})`);
 
     if (!this.envManager) {
 console.error(`[dos.library] GetVar: EnvironmentManager not initialized`);
@@ -5834,7 +5849,7 @@ console.error(`[dos.library] GetVar: EnvironmentManager not initialized`);
 
     const value = this.envManager.getVar(name);
     if (value === undefined) {
-console.log(`[dos.library]   Variable "${name}" not found`);
+debugLog(`[dos.library]   Variable "${name}" not found`);
       this.emulator.setRegister(CPURegister.D0, -1); // Not found
       return;
     }
@@ -5843,7 +5858,7 @@ console.log(`[dos.library]   Variable "${name}" not found`);
     const copyLen = Math.min(value.length, size - 1); // Leave room for null terminator
     this.emulator.writeString(bufferAddr, value.substring(0, copyLen));
 
-console.log(`[dos.library]   Copied ${copyLen} characters: "${value.substring(0, copyLen)}"`);
+debugLog(`[dos.library]   Copied ${copyLen} characters: "${value.substring(0, copyLen)}"`);
     this.emulator.setRegister(CPURegister.D0, copyLen);
   }
 
@@ -5865,7 +5880,7 @@ console.log(`[dos.library]   Copied ${copyLen} characters: "${value.substring(0,
 
     const name = this.emulator.readString(nameAddr, 256);
 
-console.log(`[dos.library] DeleteVar("${name}", flags=${flags})`);
+debugLog(`[dos.library] DeleteVar("${name}", flags=${flags})`);
 
     if (!this.envManager) {
 console.error(`[dos.library] DeleteVar: EnvironmentManager not initialized`);
@@ -5889,7 +5904,7 @@ console.error(`[dos.library] DeleteVar: EnvironmentManager not initialized`);
     const bufferAddr = this.emulator.getRegister(CPURegister.D1);
     const bufferSize = this.emulator.getRegister(CPURegister.D2);
 
-console.log(`[dos.library] GetCurrentDirName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
+debugLog(`[dos.library] GetCurrentDirName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
 
     // Get current directory
     // Return the current Amiga-style directory path
@@ -5904,7 +5919,7 @@ console.error(`[dos.library] GetCurrentDirName: Buffer too small`);
     // Write directory name to buffer
     this.emulator.writeString(bufferAddr, currentDir);
 
-console.log(`[dos.library] GetCurrentDirName → "${currentDir}"`);
+debugLog(`[dos.library] GetCurrentDirName → "${currentDir}"`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -5920,7 +5935,7 @@ console.log(`[dos.library] GetCurrentDirName → "${currentDir}"`);
     const bufferAddr = this.emulator.getRegister(CPURegister.D1);
     const bufferSize = this.emulator.getRegister(CPURegister.D2);
 
-console.log(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
+debugLog(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
 
     // Return a generic program name (could be enhanced to track actual program)
     const programName = `DoorProgram`;
@@ -5934,7 +5949,7 @@ console.error(`[dos.library] GetProgramName: Buffer too small`);
     // Write program name to buffer
     this.emulator.writeString(bufferAddr, programName);
 
-console.log(`[dos.library] GetProgramName → "${programName}"`);
+debugLog(`[dos.library] GetProgramName → "${programName}"`);
     this.emulator.setRegister(CPURegister.D0, -1); // TRUE
   }
 
@@ -5948,7 +5963,7 @@ console.log(`[dos.library] GetProgramName → "${programName}"`);
   public SetProgramDir(): void {
     const newLock = this.emulator.getRegister(CPURegister.D1);
 
-console.log(`[dos.library] SetProgramDir(lock=0x${newLock.toString(16)})`);
+debugLog(`[dos.library] SetProgramDir(lock=0x${newLock.toString(16)})`);
 
     // Return the old lock (0 for now - could be enhanced to track)
     const oldLock = 0;
@@ -5957,7 +5972,7 @@ console.log(`[dos.library] SetProgramDir(lock=0x${newLock.toString(16)})`);
     // pr_HomeDir field (offset 0x98)
 
     this.emulator.setRegister(CPURegister.D0, oldLock);
-console.log(`[dos.library] SetProgramDir → oldLock=0x${oldLock.toString(16)}`);
+debugLog(`[dos.library] SetProgramDir → oldLock=0x${oldLock.toString(16)}`);
   }
 
   /**
@@ -5968,7 +5983,7 @@ console.log(`[dos.library] SetProgramDir → oldLock=0x${oldLock.toString(16)}`)
    * P1 function - Returns the directory where the program was loaded from
    */
   public GetProgramDir(): void {
-console.log(`[dos.library] GetProgramDir()`);
+debugLog(`[dos.library] GetProgramDir()`);
 
     // Return 0 for now (could be enhanced to track actual program directory)
     // In a full implementation, we would read this from the Process structure
@@ -5976,7 +5991,7 @@ console.log(`[dos.library] GetProgramDir()`);
     const programDirLock = 0;
 
     this.emulator.setRegister(CPURegister.D0, programDirLock);
-console.log(`[dos.library] GetProgramDir → 0x${programDirLock.toString(16)}`);
+debugLog(`[dos.library] GetProgramDir → 0x${programDirLock.toString(16)}`);
   }
 
   // ============================================================================
@@ -6001,7 +6016,7 @@ console.log(`[dos.library] GetProgramDir → 0x${programDirLock.toString(16)}`);
     const stringAddr = stringBPtr << 2;
     const str = this.emulator.readString(stringAddr, 4096);
 
-console.log(`[dos.library] PutStr("${str.substring(0, 50)}${str.length > 50 ? '...' : ''}")`);
+debugLog(`[dos.library] PutStr("${str.substring(0, 50)}${str.length > 50 ? '...' : ''}")`);
 
     // Write to stdout using Output() handle
     const outputHandle = this.Output();
@@ -6039,7 +6054,7 @@ console.log(`[dos.library] PutStr("${str.substring(0, 50)}${str.length > 50 ? '.
     const formatAddr = formatBPtr << 2;
     const format = this.emulator.readString(formatAddr, 4096);
 
-console.log(`[dos.library] VPrintf("${format.substring(0, 50)}${format.length > 50 ? '...' : ''}")`);
+debugLog(`[dos.library] VPrintf("${format.substring(0, 50)}${format.length > 50 ? '...' : ''}")`);
 
     // Parse format string and extract arguments
     // This is a simplified implementation - full VPrintf would use RawDoFmt
@@ -6091,7 +6106,7 @@ console.log(`[dos.library] VPrintf("${format.substring(0, 50)}${format.length > 
   public CheckSignal(): void {
     const signalNum = this.emulator.getRegister(CPURegister.D0);
 
-console.log(`[dos.library] CheckSignal(signalNum=${signalNum})`);
+debugLog(`[dos.library] CheckSignal(signalNum=${signalNum})`);
 
     // Check if signal bit is set (stubbed for BBS emulator)
     // In a full implementation, we would:
@@ -6101,7 +6116,7 @@ console.log(`[dos.library] CheckSignal(signalNum=${signalNum})`);
 
     const isSet = false; // No signals set in emulator
     this.emulator.setRegister(CPURegister.D0, isSet ? -1 : 0);
-console.log(`[dos.library] CheckSignal → ${isSet ? 'TRUE' : 'FALSE'}`);
+debugLog(`[dos.library] CheckSignal → ${isSet ? 'TRUE' : 'FALSE'}`);
   }
 
   /**
@@ -6125,7 +6140,7 @@ console.log(`[dos.library] CheckSignal → ${isSet ? 'TRUE' : 'FALSE'}`);
     const nameAddr = nameBPtr << 2;
     const name = this.emulator.readString(nameAddr, 256);
 
-console.log(`[dos.library] FindVar("${name}", type=${type})`);
+debugLog(`[dos.library] FindVar("${name}", type=${type})`);
 
     if (!this.envManager) {
 console.error(`[dos.library] FindVar: EnvironmentManager not initialized`);
@@ -6138,9 +6153,9 @@ console.error(`[dos.library] FindVar: EnvironmentManager not initialized`);
     this.emulator.setRegister(CPURegister.D0, varAddr);
 
     if (varAddr !== 0) {
-console.log(`[dos.library] FindVar → 0x${varAddr.toString(16)}`);
+debugLog(`[dos.library] FindVar → 0x${varAddr.toString(16)}`);
     } else {
-console.log(`[dos.library] FindVar → not found`);
+debugLog(`[dos.library] FindVar → not found`);
     }
   }
 
@@ -6196,7 +6211,7 @@ console.log(`[dos.library] FindVar → not found`);
     this.emulator.writeMemory32(addr + 36, bptr);      // fh_Args (use BPTR as identifier per vamos)
     this.emulator.writeMemory32(addr + 40, 0);         // fh_Arg2
 
-console.log(`[dos.library] Allocated FileHandle struct at 0x${addr.toString(16)} (BPTR 0x${bptr.toString(16)})`);
+debugLog(`[dos.library] Allocated FileHandle struct at 0x${addr.toString(16)} (BPTR 0x${bptr.toString(16)})`);
     return bptr;
   }
 

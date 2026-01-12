@@ -18,6 +18,7 @@ import { SysopDebugUtil, DebugSeverity } from "../../utils/sysop-debug.util.js";
 import { DoorLogger } from "../DoorLogger.js";
 import { DebugMonitor } from "./lifecycle/DebugMonitor.js";
 import { getSystemTime } from '../../utils/date-time.util';
+import { debugLog } from "../../utils/debug-log";
 
 // Performance: Verbose 68K debugging is disabled by default
 // Set DEBUG_68K=1 to enable detailed execution tracing
@@ -169,7 +170,7 @@ export class DoorLifecycleManager {
       disableInputWaitExtension: disableInputWait,
       progressTimeoutMs: Number(process.env.AEDOOR_PROGRESS_TIMEOUT_MS ?? 5000),
     };
-console.log(
+debugLog(
       `[DoorLifecycleManager] Config: loopGuard=${this.lifecycleConfig.loopGuardLimit} disableGuard=${this.lifecycleConfig.disableGuard} disableInputWait=${this.lifecycleConfig.disableInputWaitExtension} timeout=${this.lifecycleConfig.timeout}`
     );
 
@@ -201,13 +202,13 @@ console.log(
 
     this.spinLoopSleepMs = Number(process.env.AEDOOR_SPIN_SLEEP_MS ?? 1);
     if (watchValueOffsets.length > 0) {
-console.log(
+debugLog(
         `[DoorLifecycleManager] Value watch offsets: ${watchValueOffsets
           .map((o) => "0x" + o.toString(16))
           .join(", ")}`
       );
     }
-console.log(
+debugLog(
       `[DoorLifecycleManager] PC probe env="${process.env.DOOR_PC_PROBE_RANGES || ""}" maxHits=${this.pcProbeMaxHits} parsed=${pcProbeRanges
         .map(
           (r) =>
@@ -299,7 +300,7 @@ console.log(
         const cliModule = prCli
           ? this.emulator.readMemory32((prCli << 2) + 0x3c)
           : 0;
-console.log(
+debugLog(
           `[DoorLifecycleManager] Pre-loop state: PC=0x${pc.toString(
             16
           )} SP=0x${sp.toString(16)} A4=0x${a4.toString(
@@ -349,7 +350,7 @@ console.log(
             // Skip non-AEDoorPort messages (like replies to door's reply port)
             return;
           }
-          console.log(`[DoorLifecycleManager] Direct PutMsg callback: port=0x${portAddr.toString(16)} msg=0x${msgAddr.toString(16)}`);
+          debugLog(`[DoorLifecycleManager] Direct PutMsg callback: port=0x${portAddr.toString(16)} msg=0x${msgAddr.toString(16)}`);
           // IMPORTANT: The message was just added to the port queue by PutMsg.
           // We need to consume it via GetMsg to prevent double-processing.
           // The msgAddr parameter tells us what was added, but we should verify.
@@ -359,7 +360,7 @@ console.log(
           }
           if (consumedAddr && consumedAddr !== 0) {
             const parsed = self.ximProtocol.parseMessage(consumedAddr);
-            console.log(`[DoorLifecycleManager] Direct XIM message: cmd=${parsed.command} data=0x${parsed.data.toString(16)} string="${parsed.string}"`);
+            debugLog(`[DoorLifecycleManager] Direct XIM message: cmd=${parsed.command} data=0x${parsed.data.toString(16)} string="${parsed.string}"`);
             self.ximProtocol.handleMessage(parsed);
           }
         }
@@ -374,14 +375,14 @@ console.log(
     // express.e starts door process at line 4336, then waits for JH_REGISTER. But doors
     // like AquaScan check pr_MsgPort first for BBS mode detection before sending JH_REGISTER.
     if (this.config.doorType === "XIM" && this.messageHandler && !this.executionState.startupMessageSent) {
-console.log("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door execution starts");
+debugLog("[DoorLifecycleManager] Sending INIT/STAT to pr_MsgPort BEFORE door execution starts");
       await this.sendStartupMessage();
     }
 
     // Set up timeout
     if (this.lifecycleConfig.timeout) {
       this.executionTimer = setTimeout(() => {
-console.log("[DoorLifecycleManager] Execution timeout");
+debugLog("[DoorLifecycleManager] Execution timeout");
         this.socket.emit("door:error", { message: "Execution timeout" });
         this.terminate();
       }, this.lifecycleConfig.timeout * 1000);
@@ -437,11 +438,11 @@ console.log("[DoorLifecycleManager] Execution timeout");
       this.emulator.setOverclocking(overclockFactor);
 
       if (overclockFactor > 0) {
-console.log(`[DoorLifecycleManager] 🚀 Overclocking: ${overclockFactor}x (source: ${overclockSource})`);
+debugLog(`[DoorLifecycleManager] 🚀 Overclocking: ${overclockFactor}x (source: ${overclockSource})`);
       } else if (overclockFactor === -1) {
-console.log(`[DoorLifecycleManager] Overclocking: FORCE DISABLED (source: ${overclockSource})`);
+debugLog(`[DoorLifecycleManager] Overclocking: FORCE DISABLED (source: ${overclockSource})`);
       } else {
-console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockSource})`);
+debugLog(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockSource})`);
       }
       // ========== END OVERCLOCKING SYSTEM ==========
 
@@ -453,7 +454,7 @@ console.log(`[DoorLifecycleManager] Overclocking: disabled (source: ${overclockS
         const nodeId = this.config.bbsSession?.nodeId || 1;
         const portName = `AEDoorPort${nodeId}`;
         const portAddr = this.libraryManager.execLibrary.createAEDoorPort(portName);
-console.log(`[DoorLifecycleManager] Created/verified ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
+debugLog(`[DoorLifecycleManager] Created/verified ${portName} at 0x${portAddr.toString(16)} for BBS mode detection`);
       }
 
       // NOTE: DoorInfo structures are initialized on FIRST pollXIMMessages() call.
@@ -472,13 +473,13 @@ console.error(`[DoorLifecycleManager] Failed addresses: ${failedAddrs.map(a => '
         // This enables high-performance batch execution using executeUntilTrap()
         this.libraryTraps.syncTrapAddressesToMoira();
         const trapCount = this.emulator.getTrapAddressCount();
-console.log(`[DoorLifecycleManager] Trap-aware batch execution enabled (${trapCount} trap addresses)`);
+debugLog(`[DoorLifecycleManager] Trap-aware batch execution enabled (${trapCount} trap addresses)`);
       }
 
       // DEBUG: Verify ExecBase pointer at 0x4 before execution
       const execBaseAtFour = this.emulator.readMemory32(0x4);
       const a6AtStart = this.emulator.getRegister(14);
-console.log(`[DoorLifecycleManager] PRE-EXEC CHECK: Memory[0x4]=0x${execBaseAtFour.toString(16)} A6=0x${a6AtStart.toString(16)}`);
+debugLog(`[DoorLifecycleManager] PRE-EXEC CHECK: Memory[0x4]=0x${execBaseAtFour.toString(16)} A6=0x${a6AtStart.toString(16)}`);
 
       // SAFEGUARD: If ExecBase at 0x4 is 0 or corrupted, fix it
       const expectedExecBase = this.libraryManager?.execLibrary?.getExecBaseAddress() || 0x80000;
@@ -488,14 +489,14 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] is ${execBaseAtFour 
         // Also fix A6 if it was loaded from corrupted memory
         if (a6AtStart === 0 || a6AtStart === execBaseAtFour) {
           this.emulator.setRegister(14, expectedExecBase);
-console.log(`[DoorLifecycleManager] Fixed A6 register to 0x${expectedExecBase.toString(16)}`);
+debugLog(`[DoorLifecycleManager] Fixed A6 register to 0x${expectedExecBase.toString(16)}`);
         }
       }
 
       const watchRangeEnv = process.env.DOOR_WATCH_RANGE;
       if (watchRangeEnv) {
-console.log(`[DoorLifecycleManager] DOOR_WATCH_RANGE=${watchRangeEnv}`);
-console.log(
+debugLog(`[DoorLifecycleManager] DOOR_WATCH_RANGE=${watchRangeEnv}`);
+debugLog(
           `[DoorLifecycleManager] Watch range support: setWatchRange=${
             typeof this.emulator.setWatchRange
           } setDebugWatchpoints=${typeof this.emulator.setDebugWatchpoints}`
@@ -513,7 +514,7 @@ console.log(
           if (!Number.isNaN(start) && !Number.isNaN(end) && start > 0 && end >= start) {
             this.emulator.setWatchRange(start, end);
             this.emulator.setDebugWatchpoints(true);
-console.log(
+debugLog(
               `[DoorLifecycleManager] Watch range enabled: 0x${start.toString(
                 16
               )}-0x${end.toString(16)}`
@@ -532,8 +533,8 @@ console.error(
 
       const debugStackWritesEnv = process.env.DEBUG_STACK_WRITES;
       if (debugStackWritesEnv) {
-console.log(`[DoorLifecycleManager] DEBUG_STACK_WRITES=${debugStackWritesEnv}`);
-console.log(
+debugLog(`[DoorLifecycleManager] DEBUG_STACK_WRITES=${debugStackWritesEnv}`);
+debugLog(
           `[DoorLifecycleManager] Stack write logging support: setDebugStackWrites=${
             typeof this.emulator.setDebugStackWrites
           }`
@@ -542,13 +543,13 @@ console.log(
       // TEMPORARY: Force enable stack write logging to debug PC corruption
       if (this.emulator.setDebugStackWrites) {
         this.emulator.setDebugStackWrites(true);
-console.log("[DoorLifecycleManager] Stack write logging FORCE ENABLED for debugging");
+debugLog("[DoorLifecycleManager] Stack write logging FORCE ENABLED for debugging");
       }
 
       const callTrackingEnv = process.env.DOOR_CALL_TRACKING;
       if (callTrackingEnv) {
-console.log(`[DoorLifecycleManager] DOOR_CALL_TRACKING=${callTrackingEnv}`);
-console.log(
+debugLog(`[DoorLifecycleManager] DOOR_CALL_TRACKING=${callTrackingEnv}`);
+debugLog(
           `[DoorLifecycleManager] Call tracking support: enableCallTracking=${
             typeof this.emulator.enableCallTracking
           } isCallTrackingEnabled=${typeof this.emulator.isCallTrackingEnabled}`
@@ -556,7 +557,7 @@ console.log(
       }
       if (callTrackingEnv === "1" && this.emulator.enableCallTracking) {
         this.emulator.enableCallTracking(true);
-console.log(`[DoorLifecycleManager] Call tracking enabled`);
+debugLog(`[DoorLifecycleManager] Call tracking enabled`);
       }
 
       let prevA4 = this.emulator.getRegister(12);
@@ -661,7 +662,7 @@ console.log(`[DoorLifecycleManager] Call tracking enabled`);
                 stackWords.push(`SP+${i * 4}=<err>`);
               }
             }
-console.log(
+debugLog(
               `[DoorLifecycleManager] AEDoor PC=0x${pc.toString(
                 16
               )} iter=${this.executionState.iterationCount} d0=0x${d0.toString(
@@ -682,7 +683,7 @@ console.log(
           const a6Now = this.emulator.getRegister(14);
           if (a4Now !== prevA4 || a5Now !== prevA5) {
             if (DEBUG_68K) {
-console.log(
+debugLog(
                 `[DoorLifecycleManager] Early A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
                   16
                 )} A4=0x${a4Now.toString(16)} A5=0x${a5Now.toString(16)}`
@@ -703,7 +704,7 @@ console.log(
                 if (!cpu) {
                   // Native debugger not available; skip instruction dump.
                 }
-console.log(
+debugLog(
                   `[DoorLifecycleManager] A5 out of stack range in early trace: A5=0x${a5Now.toString(
                     16
                   )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
@@ -712,7 +713,7 @@ console.log(
                 );
                 const logCount = cpu ? cpu.nativeLoggedInstructions?.() || 0 : 0;
                 if (cpu && logCount > 0) {
-console.log(
+debugLog(
                     `[DoorLifecycleManager] Last ${Math.min(
                       logCount,
                       20
@@ -722,7 +723,7 @@ console.log(
                   for (let i = start; i < logCount; i++) {
                     const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
                     const disasm = cpu.nativeDisassemble?.(logPc) || '???';
-console.log(
+debugLog(
                       `[DoorLifecycleManager]   0x${logPc.toString(16)}: ${disasm}`
                     );
                   }
@@ -735,7 +736,7 @@ console.log(
           // DEBUG: Track A6 changes in early iterations
           if (earlyTraceCount <= 10 && DEBUG_68K) {
             const memAt4 = this.emulator.readMemory32(0x4);
-console.log(
+debugLog(
               `[DoorLifecycleManager] Early trace iter=${this.executionState.iterationCount} PC=0x${pc.toString(16)} A6=0x${a6Now.toString(16)} Memory[0x4]=0x${memAt4.toString(16)}`
             );
             // SAFEGUARD: Check if ExecBase at 0x4 got corrupted during execution
@@ -821,14 +822,11 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
         // === STEP 4: Check if PC is at a trap address (before batch execution) ===
         const isTrapAddr = this.libraryTraps?.isTrapAddress(pc);
-        console.log(`[TRAP-DEBUG] PC=0x${pc.toString(16)} isTrapAddr=${isTrapAddr}`);
         if (isTrapAddr) {
           // Handle the trap
           const trapHandled = await this.checkAndHandleLibraryTrap(pc);
-          console.log(`[TRAP-DEBUG] trapHandled=${trapHandled}`);
           if (trapHandled) {
             await this.handleTrapExecution(pc);
-            console.log(`[TRAP-DEBUG] After handleTrapExecution, calling pollXIMMessages`);
 
             // === STEP 4B: Check if WaitPort returned 0 (no messages) ===
             // Doors like Bulls/FR use tight WaitPort loops and need immediate XIM polling.
@@ -864,9 +862,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // DEBUG: Use small batch to catch PC corruption
         const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 10000;
         const pcBeforeBatch = this.emulator.getRegister(16);
-        console.log(`[BATCH-DEBUG] Starting batch at PC=0x${pcBeforeBatch.toString(16)}`);
+        debugLog(`[BATCH-DEBUG] Starting batch at PC=0x${pcBeforeBatch.toString(16)}`);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
-        console.log(`[BATCH-DEBUG] Batch result=${result}, newPC=0x${this.emulator.getRegister(16).toString(16)}`);
+        debugLog(`[BATCH-DEBUG] Batch result=${result}, newPC=0x${this.emulator.getRegister(16).toString(16)}`);
         const pcAfterBatch = this.emulator.getRegister(16);
 
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
@@ -884,7 +882,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
             try {
               const stackVal0 = this.emulator.readMemory32(sp);
               const stackVal4 = this.emulator.readMemory32(sp + 4);
-              console.log(
+              debugLog(
                 `[PC_JUMP] 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} ` +
                 `(delta=0x${pcDelta.toString(16)}) ` +
                 `SP=0x${sp.toString(16)} [SP]=0x${stackVal0.toString(16)} [SP+4]=0x${stackVal4.toString(16)} ` +
@@ -893,7 +891,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
                 `codeRegion=[0x${this.codeLowerBound.toString(16)}-0x${this.codeUpperBound.toString(16)}]`
               );
             } catch {
-              console.log(
+              debugLog(
                 `[PC_JUMP] 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toString(16)} ` +
                 `(delta=0x${pcDelta.toString(16)}) inCode=${wasPCInCode}->${isPCInCode}`
               );
@@ -920,7 +918,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
                 } catch {}
               }
 
-              console.log(
+              debugLog(
                 `[A3 CHANGE #${this.a3ChangeCount}] PC=0x${pcAfterBatch.toString(16)} ` +
                 `A3: 0x${this.lastA3.toString(16)} -> 0x${currentA3.toString(16)} ` +
                 `(delta=${delta >= 0 ? '+' : ''}0x${delta.toString(16)}) ` +
@@ -930,7 +928,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
 
               // Stop tracking after we hit 0x90000
               if (currentA3 === 0x90000) {
-                console.log(`\n*** A3 = 0x90000 REACHED at PC=0x${pcAfterBatch.toString(16)} ***\n`);
+                debugLog(`\n*** A3 = 0x90000 REACHED at PC=0x${pcAfterBatch.toString(16)} ***\n`);
               }
             } catch {}
           }
@@ -1040,7 +1038,6 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
           if (this.config.doorType === "XIM" || this.detectedXIMPort) {
             const execLib = this.libraryManager?.execLibrary;
             if (execLib?.getNeedsXIMPoll()) {
-              console.log(`[XIM-TRAP] Trap hit with needsXIMPoll=true, polling now`);
               await this.pollXIMMessages();
               execLib.clearNeedsXIMPoll();
             }
@@ -1063,7 +1060,6 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         // This handles cases where .info file is missing or has wrong TYPE.
         const execLib5b = this.libraryManager?.execLibrary;
         if (execLib5b?.getNeedsXIMPoll()) {
-          console.log(`[XIM-BATCH] needsXIMPoll flag set during batch, polling now`);
           execLib5b.clearNeedsXIMPoll();
         }
         await this.pollXIMMessages();
@@ -1085,7 +1081,7 @@ console.error(`  PC: 0x${pcBeforeBatch.toString(16)} -> 0x${pcAfterBatch.toStrin
         await new Promise((resolve) => setImmediate(resolve));
       }
 
-console.log(
+debugLog(
         "[DoorLifecycleManager] 🏁 Execution loop completed normally"
       );
     } catch (error) {
@@ -1131,9 +1127,9 @@ console.log(
     // Exit trap: Door returned to our sentinel address
     if (pc === 0xffff00 || pc === 0x1ff000) {
       const returnCode = this.emulator.getRegister(0);
-console.log(`[DoorLifecycleManager] === DOOR EXITED CLEANLY ===`);
-console.log(`[DoorLifecycleManager] Return code (D0): ${returnCode}`);
-console.log(
+debugLog(`[DoorLifecycleManager] === DOOR EXITED CLEANLY ===`);
+debugLog(`[DoorLifecycleManager] Return code (D0): ${returnCode}`);
+debugLog(
         `[DoorLifecycleManager] Total iterations: ${this.executionState.iterationCount}`
       );
 
@@ -1154,7 +1150,7 @@ console.log(
       const a4 = this.emulator.getRegister(12);
       const a5 = this.emulator.getRegister(13);
       const sp = this.emulator.getRegister(15);
-console.log(
+debugLog(
         `[DoorLifecycleManager] PC in low memory (0x${pc.toString(
           16
         )}) - likely stack corruption; SP=0x${sp.toString(
@@ -1250,7 +1246,7 @@ console.log(
         pc >= stackLower &&
         pc <= stackUpper + 0x100
       ) {
-console.log(
+debugLog(
           `[DoorLifecycleManager] PC reached stack region after exit (pc=0x${pc.toString(
             16
           )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
@@ -1305,7 +1301,7 @@ console.error(
           )} stack=[${stackWords.join(" ")}] lastPCs=[${lastPcTrace}]`
         );
       }
-console.log(
+debugLog(
         `[DoorLifecycleManager] WARNING: PC out of code region: pc=0x${pc.toString(
           16
         )} code=[0x${this.codeLowerBound.toString(
@@ -1438,7 +1434,7 @@ console.error(`[DoorLifecycleManager] CRITICAL: PC at invalid address 0x${pc.toS
           a4 !== 0 ? this.emulator.readMemory32((a4 - 0x40) >>> 0) : 0;
         const memA4m1c =
           a4 !== 0 ? this.emulator.readMemory32((a4 - 0x1c) >>> 0) : 0;
-console.log(
+debugLog(
           `[DoorLifecycleManager] A4/A5 change iter=${this.executionState.iterationCount} PC=0x${pc.toString(
             16
           )} A4=0x${a4.toString(16)} A5=0x${a5.toString(
@@ -1460,7 +1456,7 @@ console.log(
         ) {
           this.lastA5OutOfRangeLogged = a5;
           const cpu = this.emulator['cpu'];
-console.log(
+debugLog(
             `[DoorLifecycleManager] A5 out of stack range: A5=0x${a5.toString(
               16
             )} stack=[0x${stackLower.toString(16)}-0x${stackUpper.toString(
@@ -1469,7 +1465,7 @@ console.log(
           );
           const logCount = cpu ? cpu.nativeLoggedInstructions?.() || 0 : 0;
           if (cpu && logCount > 0) {
-console.log(
+debugLog(
               `[DoorLifecycleManager] Last ${Math.min(
                 logCount,
                 20
@@ -1479,7 +1475,7 @@ console.log(
             for (let i = start; i < logCount; i++) {
               const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
               const disasm = cpu.nativeDisassemble?.(logPc) || '???';
-console.log(
+debugLog(
                 `[DoorLifecycleManager]   0x${logPc.toString(16)}: ${disasm}`
               );
             }
@@ -1518,7 +1514,7 @@ console.log(
         .join(",");
       const formatVal = (value: number | null): string =>
         value === null ? "<err>" : `0x${value.toString(16)}`;
-console.log(
+debugLog(
         `[DoorLifecycleManager] INDIRECT-${instrWord >= 0x4ed0 ? "JMP" : "JSR"} pc=0x${pc.toString(
           16
         )} iter=${this.executionState.iterationCount} sp=0x${sp.toString(
@@ -1556,7 +1552,7 @@ console.log(
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
-console.log(
+debugLog(
         `[DoorLifecycleManager] VTABLE probe PC=0x${pc.toString(
           16
         )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
@@ -1586,7 +1582,7 @@ console.log(
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
-console.log(
+debugLog(
         `[DoorLifecycleManager] POST-FREEARGS probe PC=0x${pc.toString(
           16
         )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
@@ -1624,7 +1620,7 @@ console.log(
       const lastPcTrace = this.lastPCs
         .map((p) => `0x${p.toString(16)}`)
         .join(",");
-console.log(
+debugLog(
         `[DoorLifecycleManager] JMP-A0 probe PC=0x${pc.toString(
           16
         )} iter=${this.executionState.iterationCount} SP=0x${sp.toString(
@@ -1655,7 +1651,7 @@ console.log(
     const instrAtPC = this.emulator.readMemory16(pc);
     if (instrAtPC === 0x4afc) {
       // ILLEGAL instruction
-console.log(
+debugLog(
         `[DoorLifecycleManager] 🔥 ILLEGAL DETECTED at PC=0x${pc.toString(16)}`
       );
       const handled = this.emulator.handleIllegal(pc);
@@ -1684,49 +1680,49 @@ console.log(
         // JSR FindToolType
         const a0 = this.emulator.getRegister(8);
         const a1 = this.emulator.getRegister(9);
-console.log(`[NCONFS] PC=0x196c JSR FindToolType A0=0x${a0.toString(16)} A1=0x${a1.toString(16)}`);
+debugLog(`[NCONFS] PC=0x196c JSR FindToolType A0=0x${a0.toString(16)} A1=0x${a1.toString(16)}`);
         // Read A1 string (tooltype name)
         const name = this.emulator.readString(a1);
-console.log(`[NCONFS]   Looking for: "${name}"`);
+debugLog(`[NCONFS]   Looking for: "${name}"`);
       } else if (pc === 0x1970) {
         // MOVEA.L D0, A5 - save FindToolType result
         const d0 = this.emulator.getRegister(0);
-console.log(`[NCONFS] PC=0x1970 MOVEA.L D0,A5  D0=0x${d0.toString(16)} (FindToolType result)`);
+debugLog(`[NCONFS] PC=0x1970 MOVEA.L D0,A5  D0=0x${d0.toString(16)} (FindToolType result)`);
         if (d0 !== 0) {
           const value = this.emulator.readString(d0);
-console.log(`[NCONFS]   Value at D0: "${value}"`);
+debugLog(`[NCONFS]   Value at D0: "${value}"`);
         }
       } else if (pc === 0x1976) {
         // MOVEA.L A5, A0 - setup A0 for atoi
         const a5 = this.emulator.getRegister(13);
-console.log(`[NCONFS] PC=0x1976 MOVEA.L A5,A0  A5=0x${a5.toString(16)}`);
+debugLog(`[NCONFS] PC=0x1976 MOVEA.L A5,A0  A5=0x${a5.toString(16)}`);
       } else if (pc === 0x1978) {
         // BSR atoi
         const a0 = this.emulator.getRegister(8);
-console.log(`[NCONFS] PC=0x1978 BSR atoi  A0=0x${a0.toString(16)}`);
+debugLog(`[NCONFS] PC=0x1978 BSR atoi  A0=0x${a0.toString(16)}`);
         if (a0 !== 0) {
           const value = this.emulator.readString(a0);
-console.log(`[NCONFS]   String to convert: "${value}"`);
+debugLog(`[NCONFS]   String to convert: "${value}"`);
         }
       } else if (pc === 0x197c) {
         // MOVE.L D0, -0x6fd0(A4) - store NCONFS result
         const d0 = this.emulator.getRegister(0);
         const a4 = this.emulator.getRegister(12);
-console.log(`[NCONFS] PC=0x197c MOVE.L D0,-0x6fd0(A4)  D0=${d0} A4=0x${a4.toString(16)}`);
-console.log(`[NCONFS]   NCONFS value: ${d0}`);
+debugLog(`[NCONFS] PC=0x197c MOVE.L D0,-0x6fd0(A4)  D0=${d0} A4=0x${a4.toString(16)}`);
+debugLog(`[NCONFS]   NCONFS value: ${d0}`);
       } else if (pc === 0x6320) {
         // atoi entry
         const a0 = this.emulator.getRegister(8);
-console.log(`[NCONFS] PC=0x6320 atoi entry  A0=0x${a0.toString(16)}`);
+debugLog(`[NCONFS] PC=0x6320 atoi entry  A0=0x${a0.toString(16)}`);
         if (a0 !== 0) {
           const value = this.emulator.readString(a0);
-console.log(`[NCONFS]   atoi input string: "${value}"`);
+debugLog(`[NCONFS]   atoi input string: "${value}"`);
           // Dump memory at A0
           const bytes: string[] = [];
           for (let i = 0; i < 8; i++) {
             bytes.push(this.emulator.readMemory(a0 + i).toString(16).padStart(2, '0'));
           }
-console.log(`[NCONFS]   Memory at A0: [${bytes.join(' ')}]`);
+debugLog(`[NCONFS]   Memory at A0: [${bytes.join(' ')}]`);
         }
       } else if (pc === 0x19b6) {
         // CMP.L -0x6fd0(A4), D7 - loop comparison
@@ -1734,7 +1730,7 @@ console.log(`[NCONFS]   Memory at A0: [${bytes.join(' ')}]`);
         const a4 = this.emulator.getRegister(12);
         const nconfsAddr = (a4 - 0x6fd0) >>> 0;
         const nconfs = this.emulator.readMemory32(nconfsAddr);
-console.log(`[NCONFS] PC=0x19b6 CMP.L -0x6fd0(A4),D7  D7=${d7} NCONFS=${nconfs} at 0x${nconfsAddr.toString(16)}`);
+debugLog(`[NCONFS] PC=0x19b6 CMP.L -0x6fd0(A4),D7  D7=${d7} NCONFS=${nconfs} at 0x${nconfsAddr.toString(16)}`);
       }
     }
 
@@ -1793,7 +1789,7 @@ console.error(`  Iteration: ${iteration}`);
         this.watchAutoLower = lower;
         this.watchAutoUpper = upper;
         this.emulator.setWatchRange(lower, upper);
-console.log(
+debugLog(
           `[DoorLifecycleManager] Auto watch range set around SP=0x${spBefore.toString(
             16
           )} -> 0x${lower.toString(16)}-0x${upper.toString(16)}`
@@ -1822,7 +1818,7 @@ console.log(
             const a4 = this.emulator.getRegister(12);
             const a6 = this.emulator.getRegister(14);
             const a7 = spBefore;
-console.log(
+debugLog(
               `[AEDOOR_TRACE] pc=0x${pc.toString(16)} off=0x${offset.toString(
                 16
               )} d0=0x${d0.toString(16)} d1=0x${d1.toString(
@@ -1868,19 +1864,19 @@ console.log(
     const cpu = this.emulator['cpu'];
     if (process.env.DEBUG_68K_NATIVE === '1' && cpu?.hasNativeWatchpointHit?.()) {
       const watchAddr = cpu.getNativeWatchpointAddr?.() || 0;
-console.log(`\n[NATIVE DEBUG] *** WATCHPOINT HIT at 0x${watchAddr.toString(16)} ***`);
-console.log(`[NATIVE DEBUG]   PC: 0x${pc.toString(16)}`);
-console.log(`[NATIVE DEBUG]   Iteration: ${this.executionState.iterationCount}`);
+debugLog(`\n[NATIVE DEBUG] *** WATCHPOINT HIT at 0x${watchAddr.toString(16)} ***`);
+debugLog(`[NATIVE DEBUG]   PC: 0x${pc.toString(16)}`);
+debugLog(`[NATIVE DEBUG]   Iteration: ${this.executionState.iterationCount}`);
 
       // Dump last 20 logged instructions for context
       const logCount = cpu.nativeLoggedInstructions?.() || 0;
       if (logCount > 0) {
-console.log(`[NATIVE DEBUG]   Last ${Math.min(logCount, 20)} instructions:`);
+debugLog(`[NATIVE DEBUG]   Last ${Math.min(logCount, 20)} instructions:`);
         const start = Math.max(0, logCount - 20);
         for (let i = start; i < logCount; i++) {
           const logPc = cpu.nativeGetLogEntryPC?.(i) || 0;
           const disasm = cpu.nativeDisassemble?.(logPc) || '???';
-console.log(`[NATIVE DEBUG]     0x${logPc.toString(16)}: ${disasm}`);
+debugLog(`[NATIVE DEBUG]     0x${logPc.toString(16)}: ${disasm}`);
         }
       }
       cpu.clearNativeWatchpointHit?.();
@@ -1888,7 +1884,7 @@ console.log(`[NATIVE DEBUG]     0x${logPc.toString(16)}: ${disasm}`);
 
     if (process.env.DEBUG_68K_NATIVE === '1' && cpu?.hasNativeBreakpointHit?.()) {
       const bpAddr = cpu.getNativeBreakpointAddr?.() || 0;
-console.log(`\n[NATIVE DEBUG] *** BREAKPOINT HIT at 0x${bpAddr.toString(16)} ***`);
+debugLog(`\n[NATIVE DEBUG] *** BREAKPOINT HIT at 0x${bpAddr.toString(16)} ***`);
       (this.emulator as any).dumpRegisters?.();
       cpu.clearNativeBreakpointHit?.();
     }
@@ -1912,7 +1908,7 @@ console.error(`[DoorLifecycleManager] ILLEGAL exception, original PC was 0x${exc
         // Try to handle as library trap
         const handled = this.emulator.handleIllegal(exceptionPC);
         if (handled) {
-console.log(`[DoorLifecycleManager] Recovered from ILLEGAL via library trap`);
+debugLog(`[DoorLifecycleManager] Recovered from ILLEGAL via library trap`);
           // Pop the exception frame manually (SR=2 bytes, PC=4 bytes)
           this.emulator.setRegister(15, sp + 6);
           return;
@@ -1986,7 +1982,7 @@ console.error(`  Could not read instruction at 0x${pc.toString(16)}`);
     // Check PC after executeInstruction() if we were at 0x24a6
     if (wasAt24a6) {
       const newPc = this.emulator.getRegister(16);
-console.log(
+debugLog(
         `[DoorLifecycleManager] AFTER executeInstruction(): PC = 0x${newPc.toString(
           16
         )}, cycles=${cyclesExecuted}`
@@ -2005,27 +2001,12 @@ console.log(
   private async pollXIMMessages(): Promise<void> {
     this.pollCount++;
 
-    // AGGRESSIVE LOGGING: Log EVERY poll to see when it stops working
-console.log(`[DoorLifecycleManager][pollXIMMessages] POLL #${this.pollCount} doorType="${this.config.doorType}"`);
-
-    // Initialize protocol on first poll - log doorType for debugging
+    // Initialize protocol on first poll
     if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] pollXIMMessages called: doorType="${this.config.doorType}"`);
       // CORRECT PROTOCOL (from express.e:4352-4369):
       // - BBS waits for door to send JH_REGISTER first
       // - BBS does NOT pre-send INIT/STAT (that caused our polling to consume them)
       // - JH_REGISTER handler has 500ms fallback for old-style doors
-      //
-      // REMOVED: await this.sendStartupMessage();
-      // AquaScan was exiting with code 10 because we sent INIT/STAT BEFORE the door
-      // opened AEDoor.library. The door expects to receive startup messages AFTER
-      // it initializes communication, not before.
-    }
-
-    // Log every 10000 polls to confirm polling is active
-    if (this.pollCount - this.lastPollLog >= 10000) {
-console.log(`[DoorLifecycleManager] XIM polling active: ${this.pollCount} polls so far`);
-      this.lastPollLog = this.pollCount;
     }
 
     // CRITICAL: Skip polling if we're already waiting for user input
@@ -2038,7 +2019,7 @@ console.log(`[DoorLifecycleManager] XIM polling active: ${this.pollCount} polls 
     const execLib = this.libraryManager?.execLibrary;
     if (!execLib) {
       if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
+debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
       }
       return;
     }
@@ -2057,16 +2038,8 @@ console.log(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
 
     const aePortAddr = execLib.findPort(portNameAddr);
 
-    // Log port search every 1000 polls to debug
-    if (this.pollCount % 1000 === 1) {
-console.log(`[DoorLifecycleManager] XIM poll #${this.pollCount}: searching for ${portName}, found=0x${(aePortAddr || 0).toString(16)}`);
-    }
-
     if (!aePortAddr || aePortAddr === 0) {
       // Port not found yet - door might not have created it
-      if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] XIM polling: ${portName} not found yet (will keep checking)`);
-      }
       return;
     }
 
@@ -2074,17 +2047,11 @@ console.log(`[DoorLifecycleManager] XIM polling: ${portName} not found yet (will
     // regardless of what its .info file says (handles missing/incorrect TYPE in .info)
     if (!this.detectedXIMPort) {
       this.detectedXIMPort = true;
-console.log(`[DoorLifecycleManager] XIM AUTO-DETECT: Door created ${portName} at 0x${aePortAddr.toString(16)} - enabling XIM polling (config doorType=${this.config.doorType})`);
-    }
-
-    if (this.pollCount === 1) {
-console.log(`[DoorLifecycleManager] XIM polling: Found AEDoorPort at 0x${aePortAddr.toString(16)}`);
       // CRITICAL: Update XIMProtocol's port address to the actual port the door created.
       // Native AEDoor.library creates its own AEDoorPort{nodeId}, which may be different
       // from the AEServer.{nodeId} port we pre-created. Replies must go to this port.
       if (this.ximProtocol) {
         this.ximProtocol.setXimPortAddress(aePortAddr);
-console.log(`[DoorLifecycleManager] XIM polling: Updated XIMProtocol port address to 0x${aePortAddr.toString(16)}`);
       }
     }
 
@@ -2093,48 +2060,31 @@ console.log(`[DoorLifecycleManager] XIM polling: Updated XIMProtocol port addres
     // on AEDoorPort for doors that poll there (instead of their reply port),
     // we use skipReplies option to leave reply messages for the door to get.
     try {
-      // Use skipReplies to leave NT_REPLYMSG messages in queue for the door
-console.log(`[DoorLifecycleManager][pollXIMMessages] CALLING getMsg(port=0x${aePortAddr.toString(16)}, skipReplies=true)`);
       const msgAddr = execLib.getMsg(aePortAddr, { skipReplies: true });
-console.log(`[DoorLifecycleManager][pollXIMMessages] getMsg RETURNED: msgAddr=0x${(msgAddr || 0).toString(16)}`);
       if (msgAddr && msgAddr !== 0) {
-console.log(`[DoorLifecycleManager] XIM polling: Got message at 0x${msgAddr.toString(16)}`);
-
         // Found a message! Parse and handle it
         if (this.ximProtocol) {
-          // Parse the XIM message from memory
           const msg = this.ximProtocol.parseMessage(msgAddr);
           if (msg) {
-console.log(`[DoorLifecycleManager] XIM polling: Parsed message command=${msg.command} data=${msg.data}`);
-            // Handle the message (this will route output to socket)
             await this.ximProtocol.handleMessage(msg);
-
             // CRITICAL: Reply the message so door's GetMsg on its reply port receives it!
-            // In Amiga IPC, after GetMsg you MUST ReplyMsg to return message to sender.
-            // The door's mn_ReplyPort (DoorReplyPort{n}) is waiting for this.
             execLib.replyMsg(msgAddr);
-console.log(`[DoorLifecycleManager] XIM polling: Replied message at 0x${msgAddr.toString(16)}`);
 
             // Check if door requested shutdown (JH_SHUTDOWN)
             if (this.ximProtocol.isShuttingDown()) {
-console.log(`[DoorLifecycleManager] XIM polling: Door shutdown detected, stopping execution loop`);
               this.executionState.isRunning = false;
             }
           } else {
-console.log(`[DoorLifecycleManager] XIM polling: Failed to parse message`);
             // Still reply even if parse failed, so door doesn't hang
             execLib.replyMsg(msgAddr);
           }
         } else {
-console.log(`[DoorLifecycleManager] XIM polling: ximProtocol is null`);
           // Still reply even without handler, so door doesn't hang
           execLib.replyMsg(msgAddr);
         }
-      } else {
-console.log(`[DoorLifecycleManager][pollXIMMessages] NO MESSAGE - getMsg returned 0`);
       }
     } catch (error) {
-console.error(`[DoorLifecycleManager] XIM polling error:`, error);
+      console.error(`[DoorLifecycleManager] XIM polling error:`, error);
     }
   }
 
@@ -2151,12 +2101,12 @@ console.error(`[DoorLifecycleManager] XIM polling error:`, error);
 
     // Log doorType on first poll
     if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] pollTIMMessages called: doorType="${this.config.doorType}"`);
+debugLog(`[DoorLifecycleManager] pollTIMMessages called: doorType="${this.config.doorType}"`);
     }
 
     // Log every 10000 polls to confirm polling is active
     if (this.timPollCount - this.lastTimPollLog >= 10000) {
-console.log(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} polls so far`);
+debugLog(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} polls so far`);
       this.lastTimPollLog = this.timPollCount;
     }
 
@@ -2168,7 +2118,7 @@ console.log(`[DoorLifecycleManager] TIM polling active: ${this.timPollCount} pol
                             effectiveDoorType === "SUP";
     if (!usesDoorControl) {
       if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${effectiveDoorType} (not a DoorControl type)`);
+debugLog(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${effectiveDoorType} (not a DoorControl type)`);
       }
       return;
     }
@@ -2176,7 +2126,7 @@ console.log(`[DoorLifecycleManager] TIM polling DISABLED: doorType=${effectiveDo
     const execLib = this.libraryManager?.execLibrary;
     if (!execLib) {
       if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] TIM polling FAILED: execLib is null`);
+debugLog(`[DoorLifecycleManager] TIM polling FAILED: execLib is null`);
       }
       return;
     }
@@ -2195,20 +2145,20 @@ console.log(`[DoorLifecycleManager] TIM polling FAILED: execLib is null`);
     if (!timPortAddr || timPortAddr === 0) {
       // Port not found yet, door might not have registered
       if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] TIM polling: DoorControl port not found yet (will retry)`);
+debugLog(`[DoorLifecycleManager] TIM polling: DoorControl port not found yet (will retry)`);
       }
       return;
     }
 
     if (this.timPollCount === 1) {
-console.log(`[DoorLifecycleManager] TIM polling: Found DoorControl port at 0x${timPortAddr.toString(16)}`);
+debugLog(`[DoorLifecycleManager] TIM polling: Found DoorControl port at 0x${timPortAddr.toString(16)}`);
     }
 
     // Poll for messages with GetMsg
     try {
       const msgAddr = execLib.getMsg(timPortAddr);
       if (msgAddr && msgAddr !== 0) {
-console.log(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toString(16)}`);
+debugLog(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toString(16)}`);
 
         // Found a message! Handle it with TIM handler
         if (this.timHandler) {
@@ -2217,14 +2167,14 @@ console.log(`[DoorLifecycleManager] TIM polling: Got message at 0x${msgAddr.toSt
           // CRITICAL: Reply to the message so door's GetMsg receives it!
           // TIM/SIM doors poll their reply port waiting for the replied message
           execLib.replyMsg(msgAddr);
-console.log(`[DoorLifecycleManager] TIM polling: Replied to message at 0x${msgAddr.toString(16)}`);
+debugLog(`[DoorLifecycleManager] TIM polling: Replied to message at 0x${msgAddr.toString(16)}`);
 
           if (result.exit) {
-console.log(`[DoorLifecycleManager] TIM door requested exit`);
+debugLog(`[DoorLifecycleManager] TIM door requested exit`);
             this.executionState.isRunning = false;
           }
         } else {
-console.log(`[DoorLifecycleManager] TIM polling: timHandler is null`);
+debugLog(`[DoorLifecycleManager] TIM polling: timHandler is null`);
           // Even without handler, reply so door doesn't hang
           execLib.replyMsg(msgAddr);
         }
@@ -2293,7 +2243,7 @@ console.error(`[DoorLifecycleManager] TIM polling error:`, error);
       if (isWaitingForInput && !this.lifecycleConfig.disableInputWaitExtension) {
         // Extend guard and continue looping to allow user input.
         this.lifecycleConfig.loopGuardLimit += 50000;
-console.log(
+debugLog(
           `[DoorLifecycleManager] Extending loop guard while waiting for input -> ${this.lifecycleConfig.loopGuardLimit}`
         );
         this.executionState.lastProgressIteration = this.executionState.iterationCount;
@@ -2339,39 +2289,39 @@ console.log(
     const elapsed = Date.now() - this.executionState.startTime!;
     const pc = this.emulator.getRegister(16);
 
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] 📊 PROGRESS: Iteration ${
     //     this.executionState.iterationCount
     //   } (${(this.executionState.totalCycles / 1000000).toFixed(
     //     1
     //   )}M cycles, ${totalSeconds.toFixed(2)}s virtual, ${elapsed}ms real)`
     // );
-    // // console.log(`[DoorLifecycleManager] 📊 PC: 0x${pc.toString(16)}`);
-    // console.log(
+    // // debugLog(`[DoorLifecycleManager] 📊 PC: 0x${pc.toString(16)}`);
+    // debugLog(
     //   `[DoorLifecycleManager] 📊 Write calls: ${this.executionState.writeCallCount}, AEDoor calls: ${this.executionState.aedoorCallCount}`
     // );
 
     // // Memory check at progress milestones
     // try {
     //   const mem2001 = this.emulator.readMemory32(0x2001);
-    //   console.log(
+    //   debugLog(
     //     `[DoorLifecycleManager] 📊 memory[0x2001]: 0x${mem2001.toString(16)}`
     //   );
     // } catch (e) {
-    //   console.log(`[DoorLifecycleManager] 📊 memory[0x2001]: ERROR ${e}`);
+    //   debugLog(`[DoorLifecycleManager] 📊 memory[0x2001]: ERROR ${e}`);
     // }
   }
 
   private async handleGuardLimit(): Promise<void> {
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] SAFETY LIMIT: Door running for ${this.lifecycleConfig.loopGuardLimit} iterations - likely stuck`
     // );
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] Last PC: 0x${this.emulator
     //     .getRegister(16)
     //     .toString(16)}`
     // );
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] Iterations since last progress: ${
     //     this.executionState.iterationCount -
     //     this.executionState.lastProgressIteration
@@ -2379,10 +2329,10 @@ console.log(
     //     Date.now() - this.executionState.lastProgressTime
     //   }`
     // );
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] Total cycles: ${this.executionState.totalCycles}`
     // );
-    // console.log(
+    // debugLog(
     //   `[DoorLifecycleManager] Elapsed time: ${
     //     Date.now() - this.executionState.startTime!
     //   }ms`
@@ -2390,7 +2340,7 @@ console.log(
 
     // Try to send SIGBREAKF_CTRL_C to door first (graceful interrupt)
     if (this.libraryManager?.execLibrary) {
-      // console.log(`[DoorLifecycleManager] Sending SIGBREAKF_CTRL_C to door task`);
+      // debugLog(`[DoorLifecycleManager] Sending SIGBREAKF_CTRL_C to door task`);
       const SIGBREAKF_CTRL_C = 0x1000; // Bit 12
       try {
         // Signal current task (0 = current task)
@@ -2401,7 +2351,7 @@ console.log(
 
         // If still running after signal, terminate
         if (this.executionState.isRunning) {
-          // console.log(`[DoorLifecycleManager] Door did not respond to SIGBREAKF_CTRL_C, terminating`);
+          // debugLog(`[DoorLifecycleManager] Door did not respond to SIGBREAKF_CTRL_C, terminating`);
           this.terminate();
         }
       } catch (error) {
@@ -2418,18 +2368,18 @@ console.log(
     const buffer = this.emulator.getRegister(9); // A1 = buffer
     const length = this.emulator.getRegister(0); // D0 = length
 
-console.log(
+debugLog(
       `[DoorLifecycleManager] *** DOS.Write() CALL #${this.executionState.writeCallCount} ***`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   PC: 0x${pc.toString(16)}, Iteration: ${
         this.executionState.iterationCount
       }`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   File handle: 0x${fileHandle.toString(16)}`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   Buffer: 0x${buffer.toString(
         16
       )}, Length: ${length}`
@@ -2445,13 +2395,13 @@ console.log(
 
   private async logAEDoorCall(pc: number, offset: number): Promise<void> {
     const functionName = this.getAEDoorFunctionName(offset);
-console.log(
+debugLog(
       `[DoorLifecycleManager] *** AEDoor.library CALL #${this.executionState.aedoorCallCount} ***`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   Function: ${functionName} (offset ${offset})`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   PC: 0x${pc.toString(16)}, Iteration: ${
         this.executionState.iterationCount
       }`
@@ -2579,38 +2529,38 @@ console.error(
   }
 
   private logInitialState(): void {
-console.log(
+debugLog(
       "[DoorLifecycleManager] ==============================================="
     );
-console.log(
+debugLog(
       "[DoorLifecycleManager] 🚀 EXECUTION LOOP STARTING - LIFECYCLE MANAGER"
     );
-console.log(
+debugLog(
       "[DoorLifecycleManager] ==============================================="
     );
 
     // Verify all critical components
-console.log("[DoorLifecycleManager] 📋 SYSTEM STATUS:");
-console.log(`[DoorLifecycleManager]   Emulator: ✅`);
-console.log(
+debugLog("[DoorLifecycleManager] 📋 SYSTEM STATUS:");
+debugLog(`[DoorLifecycleManager]   Emulator: ✅`);
+debugLog(
       `[DoorLifecycleManager]   Running: ${this.executionState.isRunning} ✅`
     );
-console.log(`[DoorLifecycleManager]   Socket: ${this.socket.connected} ✅`);
-console.log(
+debugLog(`[DoorLifecycleManager]   Socket: ${this.socket.connected} ✅`);
+debugLog(
       `[DoorLifecycleManager]   Door Type: ${this.config.doorType || "SIM"}`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   Executable: ${this.config.executablePath
         .split("/")
         .pop()}`
     );
-console.log(
+debugLog(
       `[DoorLifecycleManager]   Debug Level: ${this.lifecycleConfig.debugLevel}`
     );
   }
 
   private async sendStartupMessage(): Promise<void> {
-console.log(
+debugLog(
       "[DoorLifecycleManager] === SENDING STARTUP MESSAGE TO DOOR ==="
     );
     this.executionState.startupMessageSent = true;
@@ -2631,10 +2581,10 @@ console.log(
         const args = Array.isArray(this.config.args) && this.config.args.length > 0
           ? this.config.args.map(String)
           : ["1"];
-console.log(`[DoorLifecycleManager] Sending WBStartup message for XIM door: ${doorName} args=[${args.join(", ")}]`);
+debugLog(`[DoorLifecycleManager] Sending WBStartup message for XIM door: ${doorName} args=[${args.join(", ")}]`);
         const msgAddr = execLib.seedWorkbenchStartup(doorName, args);
         if (msgAddr !== 0) {
-console.log(`[DoorLifecycleManager] WBStartup message sent at 0x${msgAddr.toString(16)}`);
+debugLog(`[DoorLifecycleManager] WBStartup message sent at 0x${msgAddr.toString(16)}`);
         } else {
 console.warn("[DoorLifecycleManager] Failed to send WBStartup message, falling back to jhMessage");
           // Fallback to old method
@@ -2671,7 +2621,7 @@ console.warn(
   terminate(): void {
     if (!this.executionState.isRunning) return;
 
-console.log("[DoorLifecycleManager] Terminating door lifecycle");
+debugLog("[DoorLifecycleManager] Terminating door lifecycle");
 
     this.executionState.isRunning = false;
 
@@ -2680,9 +2630,9 @@ console.log("[DoorLifecycleManager] Terminating door lifecycle");
       this.executionTimer = null;
     }
 
-console.log("[DoorLifecycleManager] 🚪 Emitting door:status = terminated");
+debugLog("[DoorLifecycleManager] 🚪 Emitting door:status = terminated");
     this.socket.emit("door:status", { status: "terminated" });
-console.log("[DoorLifecycleManager] Door lifecycle terminated");
+debugLog("[DoorLifecycleManager] Door lifecycle terminated");
   }
 
   /**

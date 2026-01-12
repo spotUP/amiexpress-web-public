@@ -675,17 +675,15 @@ console.error('[AUTH] Failed to launch LiveChat door:', error);
         return;
       }
 
-      // TOKEN-BASED RECONNECTION: Skip LOGON/bulletin flow when reconnecting with JWT
-      // This prevents showing the LOGON screen when the user's socket reconnects
-      // (e.g., due to network blips, browser tab sleeping, page refresh)
+      // TOKEN-BASED RECONNECTION: Show bulletins like a normal login
+      // This matches AmiExpress behavior where bulletins are shown on each connection
+      // Users can press 'Q' at ANSI prompt for quick logon to skip bulletins
       if (data.token) {
-console.log('[AUTH] Token-based reconnection - skipping LOGON/bulletin flow');
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        const { displayMainMenu } = require('../handlers/command-handler/menu');
-        await displayMainMenu(socket, session);
-        triggerSamiLogRefresh();
-        return;
+console.log('[AUTH] =============================================');
+console.log('[AUTH] TOKEN-BASED LOGIN DETECTED');
+console.log('[AUTH] Showing bulletins like normal login (AmiExpress behavior)');
+console.log('[AUTH] =============================================');
+        // Fall through to normal bulletin display flow below
       }
 
       // express.e:29854 - IF (displayScreen(SCREEN_LOGON)) THEN doPause()
@@ -708,7 +706,11 @@ console.log('[LOGIN] Pause set up, waiting for user input to continue');
       }
 
       // No LOGON screen - immediately trigger the bulletin display flow
-console.log('[LOGIN] No LOGON screen, immediately triggering bulletin flow');
+console.log('[AUTH] =============================================');
+console.log('[AUTH] USERNAME/PASSWORD LOGIN - Showing bulletin flow');
+console.log('[AUTH] subState:', session.subState);
+console.log('[AUTH] LOGON screen displayed:', logonDisplayed);
+console.log('[AUTH] =============================================');
       const { handleCommand } = require('../handlers/command.handler');
       await handleCommand(socket, session, '');
     } catch (error) {
