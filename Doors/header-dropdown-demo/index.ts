@@ -4,7 +4,7 @@
  */
 
 import { 
-  CoreDoor as Door, 
+  ServerDoor as Door, 
   type DoorContext, 
   DropdownMenu, 
   Box, 
@@ -286,7 +286,3 @@ door.onStart(async (ctx: DoorContext) => {
 });
 
 export default door;
-
-export async function runDoor(session: any): Promise<void> {
-  await door.execute(session);
-}

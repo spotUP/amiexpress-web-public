@@ -2,7 +2,7 @@
   "name": "bbs-dashboard",
   "version": "2.0.0",
   "description": "BBS SysOp Dashboard - Real-time monitoring using SDK v2.0 and neo-blessed UI",
-  "main": "compiled/index.js",
+  "main": "dist/index.js",
   "bbsCommand": "DASHBOARD",
   "doorType": "TS",
   "runtime": "server",

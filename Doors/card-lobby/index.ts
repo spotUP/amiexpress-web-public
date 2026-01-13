@@ -5,6 +5,7 @@
  * Full-featured multi-window lobby for card games with PokerEngine support.
  */
 
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import blessed, {
   Screen,
   Box,
@@ -91,6 +92,18 @@ export const metadata = {
   author: 'AmiExpress Team',
   command: 'CARDLOBBY',
 };
+
+/**
+ * Main door class
+ */
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const app = new CardLobbyApp(ctx as any);
+  await app.run();
+});
+
+export default door;
 
 class CardLobbyApp {
   private session: DoorSession;
@@ -1745,10 +1758,3 @@ class CardLobbyApp {
     this.refreshTimer = null;
   }
 }
-
-export async function runDoor(session: DoorSession): Promise<void> {
-  const app = new CardLobbyApp(session);
-  await app.run();
-}
-
-export default { runDoor, metadata };

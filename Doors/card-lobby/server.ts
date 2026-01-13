@@ -5,7 +5,7 @@
  * for the hybrid client (audio support).
  */
 
-import { runDoor as runCardLobby, metadata as cardLobbyMetadata } from './index';
+import door, { metadata as cardLobbyMetadata } from './index';
 
 type DoorSession = {
   socket?: {
@@ -30,14 +30,6 @@ export function emitSound(session: DoorSession, soundType: string): void {
 }
 
 /**
- * Main door entry point
- */
-export async function runDoor(session: DoorSession): Promise<void> {
-  // Run the card lobby
-  await runCardLobby(session as any);
-}
-
-/**
  * RPC handler for forwarding client input to the door
  */
 function forwardInput(params: { raw?: string }, session?: DoorSession): { ok: boolean } {
@@ -56,4 +48,4 @@ export const rpcHandlers = {
   input: forwardInput,
 };
 
-export default { runDoor, metadata, rpcHandlers };
+export default door;

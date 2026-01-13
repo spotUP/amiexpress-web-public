@@ -2,7 +2,7 @@
   "name": "card-lobby",
   "version": "2.0.0",
   "description": "Multiplayer card lobby with poker engine and web audio",
-  "main": "server.ts",
+  "main": "dist/server.js",
   "bbsCommand": "CARDLOBBY",
   "doorType": "TS",
   "runtime": "hybrid",

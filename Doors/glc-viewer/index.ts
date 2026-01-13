@@ -15,10 +15,20 @@
  * Original: dev/docs/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e
  */
 
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { Socket as SocketIOSocket } from 'socket.io';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// Metadata
+export const metadata = {
+  name: 'Global Last Callers',
+  version: '1.1.0',
+  description: 'View last callers across all BBSes',
+  author: 'REBEL/qUARTEX',
+  command: 'GLC',
+};
 
 const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
@@ -508,10 +518,12 @@ function displayData(socket: SocketIOSocket, data: GLCData, config: GLCConfig, s
 }
 
 /**
- * Run GLC Viewer door (TypeScript door interface)
+ * Main door class
  */
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, bbsSession } = doorSession;
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const { socket } = ctx;
 
   try {
     const config = loadConfig();
@@ -541,6 +553,6 @@ export async function runDoor(doorSession: any): Promise<void> {
   } catch (err: any) {
     socket.emit('ansi-output', `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`);
   }
+});
 
-  // BBS framework handles pause prompt - no need to emit here
-}
+export default door;

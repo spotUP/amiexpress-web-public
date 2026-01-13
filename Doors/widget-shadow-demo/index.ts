@@ -5,6 +5,7 @@
  * Demonstrates shadows and neo-blessed style transparency
  */
 
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { createApp } from './app.js';
 
 /** Door metadata */
@@ -16,18 +17,13 @@ export const metadata = {
   command: 'SHADOWDEMO',
 };
 
-/** Door session from BBS handler */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-}
+/**
+ * Main door class
+ */
+const door = new ServerDoor(metadata);
 
-/** Main door entry point - required by BBS */
-export async function runDoor(session: DoorSession): Promise<void> {
-  await createApp(session);
-}
+door.onStart(async (ctx: DoorContext) => {
+  await createApp(ctx as any);
+});
 
-export default { runDoor, metadata };
+export default door;

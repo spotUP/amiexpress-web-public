@@ -1,3 +1,4 @@
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { metadata } from './config';
 import { events } from './services';
 import { createApp } from './server';
@@ -5,22 +6,13 @@ import { runChatOnlyLogin } from './chat-only-login';
 
 export { metadata };
 
-/** Door session from BBS handler */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-}
+/**
+ * Main door class
+ */
+const door = new ServerDoor(metadata);
 
-/** Main door entry point */
-export async function runDoor(session: DoorSession): Promise<void> {
-  // CRITICAL: Set inDoorManager flag FIRST, before creating any blessed screens
-  // Both the login modal (runChatOnlyLogin) and main app (createApp) need this flag
-  if (session.bbsSession) {
-    session.bbsSession.inDoorManager = true;
-  }
+door.onStart(async (ctx: DoorContext) => {
+  const session = ctx;
 
   // Check if this is chat-only mode without a user (needs login)
   const chatOnly = session.bbsSession?.tempData?.chatOnly;
@@ -28,21 +20,16 @@ export async function runDoor(session: DoorSession): Promise<void> {
 
   if (chatOnly && !hasUser) {
     // Show login modal and wait for authentication
-    const loginSuccessful = await runChatOnlyLogin(session);
+    const loginSuccessful = await runChatOnlyLogin(session as any);
 
     if (!loginSuccessful) {
       return;
     }
   }
 
-  const app = await createApp(session);
+  const app = await createApp(session as any);
   await app.run();
   events.clear();
+});
 
-  // Cleanup: Reset inDoorManager flag
-  if (session.bbsSession) {
-    session.bbsSession.inDoorManager = false;
-  }
-}
-
-export default { runDoor, metadata };
+export default door;

@@ -2,9 +2,9 @@
   "name": "arkanoid",
   "version": "2.0.0",
   "description": "Arkanoid with Web Audio sounds and music - Hybrid Door",
-  "main": "server.ts",
   "bbsCommand": "ARKANOID",
-  "doorType": "TS",
+  "main": "dist/server.js",
+  "author": "AmiExpress Team",
   "runtime": "hybrid",
   "client": {
     "entry": "./client.ts",

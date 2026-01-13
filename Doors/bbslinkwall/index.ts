@@ -17,11 +17,20 @@
  * Original: dev/docs/AmiExpressEDoorSources/BBSLink/bbslinkwall.e
  */
 
-import { Socket as SocketIOSocket } from 'socket.io';
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as http from 'http';
+
+// Metadata
+export const metadata = {
+  name: 'BBSLink Graffiti Wall',
+  version: '1.1.0',
+  description: 'Global Graffiti Wall Client',
+  author: 'REBEL/QTX',
+  command: 'LINKWALL',
+};
 
 interface BBSLinkConfig {
   serverHost: string;
@@ -63,7 +72,7 @@ function urlEncode(text: string): string {
  * Load BBSLink configuration
  */
 function loadConfig(): BBSLinkConfig {
-  const configPath = path.join(process.cwd(), 'doors', 'bbslink', 'bbslink.cfg');
+  const configPath = path.join(process.cwd(), 'Doors', 'bbslink', 'bbslink.cfg');
 
   const config: BBSLinkConfig = {
     serverHost: 'games.bbslink.net',
@@ -171,7 +180,7 @@ async function httpGet(host: string, port: number, path: string, timeout: number
 /**
  * Show the wall
  */
-async function showWall(socket: SocketIOSocket, config: BBSLinkConfig): Promise<void> {
+async function showWall(socket: any, config: BBSLinkConfig): Promise<void> {
   try {
     const wallText = await httpGet(
       config.serverHost,
@@ -223,7 +232,7 @@ async function sendToServer(
 /**
  * Get user input
  */
-async function getUserInput(socket: SocketIOSocket, bbsSession: any, prompt: string, maxLen: number): Promise<string | null> {
+async function getUserInput(socket: any, bbsSession: any, prompt: string, maxLen: number): Promise<string | null> {
   return new Promise((resolve) => {
     socket.emit('ansi-output', prompt);
 
@@ -240,7 +249,7 @@ async function getUserInput(socket: SocketIOSocket, bbsSession: any, prompt: str
 
       // Handle enter
       if (data === '\r' || data === '\n') {
-        socket.off('user-input', handleInput);
+        delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', '\r\n');
         resolve(input);
         return;
@@ -260,7 +269,7 @@ async function getUserInput(socket: SocketIOSocket, bbsSession: any, prompt: str
 
     // Timeout after 5 minutes
     setTimeout(() => {
-      socket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       resolve(null);
     }, 300000);
   });
@@ -269,7 +278,7 @@ async function getUserInput(socket: SocketIOSocket, bbsSession: any, prompt: str
 /**
  * Get yes/no answer
  */
-async function getYesNo(socket: SocketIOSocket, bbsSession: any): Promise<boolean> {
+async function getYesNo(socket: any, bbsSession: any): Promise<boolean> {
   return new Promise((resolve) => {
     const handleInput = (data: string) => {
       const key = data.toLowerCase();
@@ -278,7 +287,7 @@ async function getYesNo(socket: SocketIOSocket, bbsSession: any): Promise<boolea
         socket.emit('ansi-output', 'Y\r\n');
         resolve(true);
       } else if (key === 'n') {
-        socket.off('user-input', handleInput);
+        delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', 'N\r\n');
         resolve(false);
       }
@@ -291,21 +300,17 @@ async function getYesNo(socket: SocketIOSocket, bbsSession: any): Promise<boolea
 /**
  * Wait for key press
  */
-async function pause(socket: SocketIOSocket, message: string = 'press RETURN to continue: '): Promise<void> {
-  return new Promise((resolve) => {
-    socket.emit('ansi-output', message);
-    socket.once('user-input', () => {
-      socket.emit('ansi-output', '\r\n');
-      resolve();
-    });
-  });
+async function pause(bbs: any, promptText: string = 'press ANY KEY to continue: '): Promise<void> {
+  await bbs.getKey(promptText);
 }
 
 /**
- * Run BBSLink Wall door (TypeScript door interface)
+ * Main door class
  */
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user, bbsSession } = doorSession;
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user, bbsSession, bbs } = ctx;
 
   try {
     // Load configuration
@@ -316,7 +321,7 @@ export async function runDoor(doorSession: any): Promise<void> {
       socket.emit('ansi-output', '\r\n\x1b[31mError: syscode missing from bbslink.cfg\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33mPlease configure your BBSLink account settings.\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[33mSign up at: http://www.bbslink.net/\x1b[0m\r\n\r\n');
-      await pause(socket, '\x1b[32mPress any key to continue...\x1b[0m');
+      await pause(bbs, '\x1b[32mPress any key to continue...\x1b[0m');
       return;
     }
 
@@ -330,7 +335,7 @@ export async function runDoor(doorSession: any): Promise<void> {
       return;
     }
 
-    const userId = user?.id || 0;
+    const userId = parseInt(user?.id || '0');
 
     // Display header
     socket.emit('ansi-output', '\x1b[2J\x1b[H');
@@ -426,11 +431,11 @@ export async function runDoor(doorSession: any): Promise<void> {
       }
 
       socket.emit('ansi-output', '\r\n\r\n');
-      await pause(socket);
+      await pause(bbs);
 
       // Show updated wall
       await showWall(socket, config);
-      await pause(socket);
+      await pause(bbs);
     }
 
   } catch (err: any) {
@@ -438,4 +443,6 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
-}
+});
+
+export default door;

@@ -1,8 +1,8 @@
 {
   "name": "fire-emblem-v2",
   "version": "2.0.0",
-  "description": "Fire Emblem: Emblem of Valor - Complete tactical RPG using SDK v2.0 and neo-blessed UI",
-  "main": "compiled/index.js",
+  "description": "Fire Emblem V2 - Strategy RPG",
+  "main": "dist/index.js",
   "bbsCommand": "FIREEMBLEM",
   "doorType": "TS",
   "runtime": "server",

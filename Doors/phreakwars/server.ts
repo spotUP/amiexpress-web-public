@@ -8,7 +8,16 @@
  * - Portable and self-contained
  */
 
-import { Socket as SocketIOSocket } from 'socket.io';
+import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
+
+// Metadata
+export const metadata = {
+  name: 'Phreak Wars',
+  version: '1.0.0',
+  description: 'The Underground BBS Empire - Phone Phreaking Simulation',
+  author: 'AmiExpress SDK',
+  command: 'PHREAKWARS',
+};
 
 // Import game modules
 import { PhreakWarsGameState } from './lib/types';
@@ -34,16 +43,17 @@ import {
 import { handleTextMinigame } from './lib/minigames';
 
 /**
- * SDK-compatible runDoor export
- * Follows the same pattern as bbslinkwall and other SDK doors
+ * Main door class
  */
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user } = doorSession;
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user } = ctx;
 
   console.log('[PhreakWars] Starting door for user:', user?.username);
 
   // Initialize or load game state
-  const userId = user?.id || 0;
+  const userId = String(user?.id || '0');
   let gameState = gameStates.get(userId);
 
   if (!gameState) {
@@ -54,6 +64,9 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   // Check and reset daily limits if needed
   checkAndResetDailyLimits(gameState);
+
+  // Store game state in context for onInput handler
+  (ctx as any).gameState = gameState;
 
   // Start the game
   if (gameState.player.handle === '') {
@@ -71,100 +84,91 @@ export async function runDoor(doorSession: any): Promise<void> {
     displayMainMenu(socket, gameState);
   }
 
-  // Set up input handler
-  const inputHandler = (data: string) => {
-    try {
-      const input = data.trim().toUpperCase();
-
-      // Route input based on current game mode
-      switch (gameState.currentMode) {
-        case 'main_menu':
-          handleMainMenu(socket, gameState, input);
-          break;
-        case 'character_creation':
-          handleCharacterCreation(socket, gameState, data);
-          break;
-        case 'phreaking':
-          handlePhreaking(socket, gameState, input);
-          break;
-        case 'bbs_exploration':
-          handleBBSExploration(socket, gameState, input);
-          break;
-        case 'programming':
-          handleProgramming(socket, gameState, input);
-          break;
-        case 'trading':
-          handleTrading(socket, gameState, input);
-          break;
-        case 'romance':
-          handleRomance(socket, gameState, input);
-          break;
-        case 'multiplayer':
-          handleMultiplayer(socket, gameState, input);
-          break;
-        case 'upgrades':
-          handleUpgrades(socket, gameState, input);
-          break;
-        case 'posting_subject':
-          handlePostingSubject(socket, gameState, data);
-          break;
-        case 'posting_body':
-          handlePostingBody(socket, gameState, data);
-          break;
-        case 'message_choice':
-          handleMessageChoice(socket, gameState, input);
-          break;
-        case 'waiting':
-          handleWaiting(socket, gameState, input);
-          break;
-        case 'stats_menu':
-          handleStatsMenu(socket, gameState, input);
-          break;
-        case 'delete_confirmation':
-          handleDeleteConfirmation(socket, gameState, input, doorSession);
-          break;
-        case 'text_minigame':
-          handleTextMinigame(socket, gameState, input);
-          break;
-        case 'quit':
-          // Remove input handler and exit
-          socket.removeListener('user-input', inputHandler);
-          socket.emit('ansi-output', '\r\n');
-          return;
-        default:
-          displayMainMenu(socket, gameState);
-      }
-
-      // Check if user quit during handler
-      if (gameState.currentMode === 'quit') {
-        socket.removeListener('user-input', inputHandler);
-        socket.emit('ansi-output', '\r\n');
-      }
-    } catch (error) {
-      console.error('[PhreakWars] Error handling input:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to menu...\x1b[0m\r\n');
-      displayMainMenu(socket, gameState);
-    }
-  };
-
-  // Register input handler
-  socket.on('user-input', inputHandler);
-
-  // Wait for door to complete (when mode becomes 'quit' or socket disconnects)
-  return new Promise<void>((resolve) => {
+  // Wait for quit mode
+  await new Promise<void>((resolve) => {
     const checkInterval = setInterval(() => {
-      if (gameState.currentMode === 'quit' || !socket.connected) {
+      if (gameState!.currentMode === 'quit' || !socket.connected) {
         clearInterval(checkInterval);
-        socket.removeListener('user-input', inputHandler);
         resolve();
       }
     }, 100);
-
-    // Clean up on disconnect
+    
     socket.once('disconnect', () => {
       clearInterval(checkInterval);
-      socket.removeListener('user-input', inputHandler);
       resolve();
     });
   });
-}
+});
+
+door.onInput(async (ctx: DoorContext, key: KeyPress) => {
+  const gameState = (ctx as any).gameState;
+  if (!gameState) return;
+  
+  const { socket } = ctx;
+  const data = key.raw;
+  const input = data.trim().toUpperCase();
+
+  try {
+    // Route input based on current game mode
+    switch (gameState.currentMode) {
+      case 'main_menu':
+        handleMainMenu(socket, gameState, input);
+        break;
+      case 'character_creation':
+        handleCharacterCreation(socket, gameState, data);
+        break;
+      case 'phreaking':
+        handlePhreaking(socket, gameState, input);
+        break;
+      case 'bbs_exploration':
+        handleBBSExploration(socket, gameState, input);
+        break;
+      case 'programming':
+        handleProgramming(socket, gameState, input);
+        break;
+      case 'trading':
+        handleTrading(socket, gameState, input);
+        break;
+      case 'romance':
+        handleRomance(socket, gameState, input);
+        break;
+      case 'multiplayer':
+        handleMultiplayer(socket, gameState, input);
+        break;
+      case 'upgrades':
+        handleUpgrades(socket, gameState, input);
+        break;
+      case 'posting_subject':
+        handlePostingSubject(socket, gameState, data);
+        break;
+      case 'posting_body':
+        handlePostingBody(socket, gameState, data);
+        break;
+      case 'message_choice':
+        handleMessageChoice(socket, gameState, input);
+        break;
+      case 'waiting':
+        handleWaiting(socket, gameState, input);
+        break;
+      case 'stats_menu':
+        handleStatsMenu(socket, gameState, input);
+        break;
+      case 'delete_confirmation':
+        handleDeleteConfirmation(socket, gameState, input, (ctx as any).rawSession || ctx);
+        break;
+      case 'text_minigame':
+        handleTextMinigame(socket, gameState, input);
+        break;
+      case 'quit':
+        return;
+      default:
+        displayMainMenu(socket, gameState);
+    }
+  } catch (error) {
+    console.error('[PhreakWars] Error handling input:', error);
+    socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to menu...\x1b[0m\r\n');
+    displayMainMenu(socket, gameState);
+  }
+});
+
+export default door;

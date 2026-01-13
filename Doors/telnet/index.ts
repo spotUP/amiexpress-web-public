@@ -12,10 +12,19 @@
  * Original: dev/docs/AmiExpressEDoorSources/telnetConnect/telnetdoor.e
  */
 
-import { Socket as SocketIOSocket } from 'socket.io';
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// Metadata
+export const metadata = {
+  name: 'Telnet Connect',
+  version: '1.1.0',
+  description: 'Connect to other BBSes via Telnet',
+  author: 'REBEL/QTX',
+  command: 'TELNET',
+};
 
 interface TelnetConfig {
   serverHost: string;
@@ -38,7 +47,7 @@ interface TelnetConnection {
  * Load telnet configuration
  */
 function loadConfig(): TelnetConfig[] {
-  const configPath = path.join(process.cwd(), 'doors', 'telnet-connect', 'telnetdoor.cfg');
+  const configPath = path.join(process.cwd(), 'Doors', 'telnet', 'telnetdoor.cfg');
   const configs: TelnetConfig[] = [];
 
   try {
@@ -50,14 +59,11 @@ function loadConfig(): TelnetConfig[] {
       for (const line of lines) {
         const trimmed = line.trim();
 
-        // Skip comments and empty lines
         if (trimmed.startsWith('#') || trimmed.startsWith(';') || !trimmed) {
           continue;
         }
 
-        // Check for section headers [BBSNAME]
         if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-          // Save previous config if it has required fields
           if (currentConfig.serverHost) {
             configs.push({
               serverHost: currentConfig.serverHost,
@@ -104,7 +110,6 @@ function loadConfig(): TelnetConfig[] {
         }
       }
 
-      // Add last config
       if (currentConfig.serverHost) {
         configs.push({
           serverHost: currentConfig.serverHost,
@@ -127,16 +132,15 @@ function loadConfig(): TelnetConfig[] {
 /**
  * Display BBS selection menu
  */
-function displayMenu(socket: SocketIOSocket, configs: TelnetConfig[]): void {
-  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
+function displayMenu(socket: any, configs: TelnetConfig[]): void {
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
   socket.emit('ansi-output', '\x1b[36m+================================================+\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[36m|\x1b[0m           \x1b[32mTELNET CONNECT\x1b[0m                     \x1b[36m|\x1b[0m\r\n');
   socket.emit('ansi-output', '\x1b[36m+================================================+\x1b[0m\r\n\r\n');
 
   if (configs.length === 0) {
     socket.emit('ansi-output', '\x1b[33mNo BBSes configured!\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', 'Create doors/telnet-connect/telnetdoor.cfg\r\n');
-    socket.emit('ansi-output', 'See telnetdoor.cfg.example for format.\r\n\r\n');
+    socket.emit('ansi-output', 'Create Doors/telnet/telnetdoor.cfg\r\n\r\n');
   } else {
     socket.emit('ansi-output', '\x1b[33mSelect a BBS to connect to:\x1b[0m\r\n\r\n');
 
@@ -152,12 +156,55 @@ function displayMenu(socket: SocketIOSocket, configs: TelnetConfig[]): void {
 }
 
 /**
- * Connect to telnet server
+ * Main door class
  */
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user, bbsSession } = ctx;
+  const configs = loadConfig();
+  let running = true;
+
+  while (running) {
+    displayMenu(socket, configs);
+
+    const choice = await new Promise<string>((resolve) => {
+      const handleInput = (data: string) => {
+        delete bbsSession.doorInputHandler;
+        resolve(data.trim().toUpperCase());
+      };
+      bbsSession.doorInputHandler = handleInput;
+    });
+
+    if (choice === 'Q' || !choice) {
+      running = false;
+      break;
+    }
+
+    if (choice === 'M') {
+      const manualConfig = await getManualConnection(socket, bbsSession);
+      if (manualConfig) {
+        await connectTelnet(socket, manualConfig, user?.username || 'Guest', bbsSession);
+      }
+    } else {
+      const index = parseInt(choice) - 1;
+      if (index >= 0 && index < configs.length) {
+        await connectTelnet(socket, configs[index], user?.username || 'Guest', bbsSession);
+      } else {
+        socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection.\x1b[0m\r\n');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+  }
+
+  socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
+});
+
 async function connectTelnet(
-  ioSocket: SocketIOSocket,
+  ioSocket: any,
   config: TelnetConfig,
-  currentUsername: string
+  currentUsername: string,
+  bbsSession: any
 ): Promise<void> {
   return new Promise((resolve) => {
     ioSocket.emit('ansi-output', `\r\n\x1b[36mConnecting to ${config.serverHost}:${config.telnetPort}...\x1b[0m\r\n`);
@@ -175,31 +222,21 @@ async function connectTelnet(
       loginSent: false
     };
 
-    // Handle connection established
     telnetSocket.on('connect', () => {
       conn.connected = true;
       ioSocket.emit('ansi-output', `\x1b[32mConnected to ${config.serverHost}!\x1b[0m\r\n\r\n`);
     });
 
-    // Handle incoming data from telnet server
     telnetSocket.on('data', (data: Buffer) => {
       const text = data.toString('binary');
       conn.buffer += text;
-
-      // Send to user's terminal
       ioSocket.emit('ansi-output', text);
 
-      // Auto-login if configured
       if (config.autoLogin && !conn.loginSent) {
-        // Check for username prompt
         if (config.usernamePrompt && conn.buffer.includes(config.usernamePrompt)) {
           const username = config.username === '#' ? currentUsername : config.username;
-          if (username) {
-            telnetSocket.write(username + '\r\n');
-          }
+          if (username) telnetSocket.write(username + '\r\n');
         }
-
-        // Check for password prompt
         if (config.passwordPrompt && conn.buffer.includes(config.passwordPrompt)) {
           if (config.password) {
             telnetSocket.write(config.password + '\r\n');
@@ -209,41 +246,29 @@ async function connectTelnet(
       }
     });
 
-    // Handle user input - forward to telnet server
     const handleInput = (data: string) => {
       if (conn.connected && !telnetSocket.destroyed) {
         telnetSocket.write(data);
       }
     };
 
-    ioSocket.on('user-input', handleInput);
+    bbsSession.doorInputHandler = handleInput;
 
-    // Handle disconnection
     telnetSocket.on('close', () => {
-      ioSocket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       ioSocket.emit('ansi-output', '\r\n\x1b[33mConnection closed.\x1b[0m\r\n');
       resolve();
     });
 
     telnetSocket.on('error', (err: Error) => {
-      ioSocket.off('user-input', handleInput);
+      delete bbsSession.doorInputHandler;
       ioSocket.emit('ansi-output', `\r\n\x1b[31mConnection error: ${err.message}\x1b[0m\r\n`);
-      resolve();
-    });
-
-    telnetSocket.on('timeout', () => {
-      ioSocket.off('user-input', handleInput);
-      telnetSocket.destroy();
-      ioSocket.emit('ansi-output', '\r\n\x1b[31mConnection timed out.\x1b[0m\r\n');
       resolve();
     });
   });
 }
 
-/**
- * Get manual connection details from user
- */
-async function getManualConnection(socket: SocketIOSocket, bbsSession: any): Promise<TelnetConfig | null> {
+async function getManualConnection(socket: any, bbsSession: any): Promise<TelnetConfig | null> {
   return new Promise((resolve) => {
     const config: Partial<TelnetConfig> = {};
     let step = 0;
@@ -253,9 +278,8 @@ async function getManualConnection(socket: SocketIOSocket, bbsSession: any): Pro
 
     const handleInput = (data: string) => {
       const input = data.trim();
-
       switch (step) {
-        case 0: // Get hostname
+        case 0:
           if (!input) {
             delete bbsSession.doorInputHandler;
             resolve(null);
@@ -265,10 +289,9 @@ async function getManualConnection(socket: SocketIOSocket, bbsSession: any): Pro
           socket.emit('ansi-output', `\r\nEnter port (default 23): `);
           step++;
           break;
-
-        case 1: // Get port
+        case 1:
           config.telnetPort = parseInt(input) || 23;
-          socket.off('user-input', handleInput);
+          delete bbsSession.doorInputHandler;
           resolve({
             serverHost: config.serverHost!,
             telnetPort: config.telnetPort,
@@ -277,54 +300,8 @@ async function getManualConnection(socket: SocketIOSocket, bbsSession: any): Pro
           break;
       }
     };
-
     bbsSession.doorInputHandler = handleInput;
   });
 }
 
-/**
- * Run Telnet Connect door (TypeScript door interface)
- */
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user, bbsSession } = doorSession;
-
-  const configs = loadConfig();
-  let running = true;
-
-  while (running) {
-    displayMenu(socket, configs);
-
-    // Wait for user selection
-    const choice = await new Promise<string>((resolve) => {
-      const handleInput = (data: string) => {
-        delete bbsSession.doorInputHandler;
-        resolve(data.trim().toUpperCase());
-      };
-      bbsSession.doorInputHandler = handleInput;
-    });
-
-    if (choice === 'Q' || !choice) {
-      running = false;
-      break;
-    }
-
-    if (choice === 'M') {
-      // Manual connection
-      const manualConfig = await getManualConnection(socket, bbsSession);
-      if (manualConfig) {
-        await connectTelnet(socket, manualConfig, user?.username || 'Guest');
-      }
-    } else {
-      // Numeric selection
-      const index = parseInt(choice) - 1;
-      if (index >= 0 && index < configs.length) {
-        await connectTelnet(socket, configs[index], user?.username || 'Guest');
-      } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection.\x1b[0m\r\n');
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-    }
-  }
-
-  socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
-}
+export default door;

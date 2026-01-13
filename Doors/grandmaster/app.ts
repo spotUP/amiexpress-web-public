@@ -162,6 +162,7 @@ export class GrandmasterApp {
     console.log('[GRANDMASTER] Setting up input handler, bbsSession exists:', !!this.session.bbsSession);
     
     if (this.session.bbsSession) {
+      this.session.bbsSession.inDoorManager = true;
       this.session.bbsSession.doorInputHandler = (data: any) => {
         if (!this.screen.destroyed) {
           // If data is an object (like mouse or specialized key event), stringify it
@@ -2087,6 +2088,11 @@ export class GrandmasterApp {
     }
 
     // Clean up
+    if (this.session.bbsSession) {
+      this.session.bbsSession.inDoorManager = false;
+      delete this.session.bbsSession.doorInputHandler;
+    }
+
     // InputHandler disabled; keep SDK input active for textbox.
     this.screen.destroy();
   }

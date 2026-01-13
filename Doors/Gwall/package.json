@@ -1,0 +1,23 @@
+{
+  "name": "gwall-door",
+  "version": "1.1.0",
+  "description": "Global Thermonuclear Wall",
+  "bbsCommand": "GWALL",
+  "main": "dist/index.js",
+  "author": "REBEL/QTX",
+  "license": "MIT",
+  "category": "utility",
+  "doorType": "TS",
+  "buildable": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.2.2"
+  }
+}

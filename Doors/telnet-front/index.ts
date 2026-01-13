@@ -15,8 +15,17 @@
  * Original: dev/docs/AmiExpressEDoorSources/TelnetFront/telnetfront.e
  */
 
-import { Socket as SocketIOSocket } from 'socket.io';
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import * as os from 'os';
+
+// Metadata
+export const metadata = {
+  name: 'Telnet Frontend',
+  version: '1.1.0',
+  description: 'Who\'s Online Login Display',
+  author: 'REBEL/QTX',
+  command: 'FRONTEND',
+};
 
 interface NodeInfo {
   nodeNumber: number;
@@ -73,7 +82,7 @@ function centre(text: string, width: number): string {
 /**
  * Get active nodes from BBS session manager
  */
-async function getNodes(socket: SocketIOSocket, currentNodeNumber: number, currentUserIp: string): Promise<NodeInfo[]> {
+async function getNodes(socket: any, currentNodeNumber: number, currentUserIp: string): Promise<NodeInfo[]> {
   return new Promise((resolve) => {
     const maxNodes = parseInt(process.env.MAX_NODES || '8');
 
@@ -159,7 +168,7 @@ function getDefaultNodes(currentNodeNumber: number, maxNodes: number): NodeInfo[
 /**
  * Display telnet frontend
  */
-async function displayFrontend(socket: SocketIOSocket, user: any): Promise<void> {
+async function displayFrontend(socket: any, user: any): Promise<void> {
   // Get connection info from user object or socket handshake
   let hostname = user?.hostname;
   let userIp = user?.ip;
@@ -266,11 +275,13 @@ async function displayFrontend(socket: SocketIOSocket, user: any): Promise<void>
 }
 
 /**
- * Run Telnet Frontend door (TypeScript door interface)
+ * Main door class
  */
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user, bbsSession } = doorSession;
+const door = new ServerDoor(metadata);
 
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user, bbsSession } = ctx;
+  
   console.log('[TELNET-FRONT] Starting display');
 
   // Display the frontend
@@ -286,26 +297,20 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   // For logged-in users, wait briefly for any key to continue
-  const exitPromise = new Promise<void>((resolve) => {
+  await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
-      if (bbsSession) {
-        delete bbsSession.doorInputHandler;
-      }
+      delete bbsSession.doorInputHandler;
       resolve();
     }, 2000);
 
     const handleInput = (data: string) => {
       clearTimeout(timeout);
-      if (bbsSession) {
-        delete bbsSession.doorInputHandler;
-      }
+      delete bbsSession.doorInputHandler;
       resolve();
     };
 
-    if (bbsSession) {
-      bbsSession.doorInputHandler = handleInput;
-    }
+    bbsSession.doorInputHandler = handleInput;
   });
+});
 
-  await exitPromise;
-}
+export default door;

@@ -1,8 +1,18 @@
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { Socket as SocketIOSocket } from 'socket.io';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as net from 'net';
 import * as http from 'http';
+
+// Metadata
+export const metadata = {
+  name: 'Global Thermonuclear Wall',
+  version: '1.1.0',
+  description: 'Global Scene Wall for BBSes',
+  author: 'REBEL/QTX',
+  command: 'GWALL',
+};
 
 const PROJECT_ROOT = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
 
@@ -947,8 +957,13 @@ async function sysopMode(socket: SocketIOSocket, bbs: any): Promise<void> {
     else if (key === 'F' && pagenum > 1) pagenum--;
   }
 }
-export async function runDoor(doorSession: any): Promise<void> {
-  const { socket, user, bbs } = doorSession;
+/**
+ * Main door class
+ */
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user, bbs } = ctx;
 
   // Initialize settings
   settings = {
@@ -986,7 +1001,7 @@ export async function runDoor(doorSession: any): Promise<void> {
 
   // Check if configured
   if (settings.mybbsshortcode === '???') {
-      const accesslevel = user.secLevel || 0;
+      const accesslevel = user.accessLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
         transmit(socket, '');
         transmit(socket, '\x1b[0mThe wall has not yet been configured, performing initial setup');
@@ -1057,7 +1072,7 @@ export async function runDoor(doorSession: any): Promise<void> {
     transmit(socket, '\x1b[0m');
 
     if (inputBuffer === 'S') {
-      const accesslevel = user.secLevel || 0;
+      const accesslevel = user.accessLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
         await sysopMode(socket, bbs);
         redo = true; // Refresh wall after sysop mode
@@ -1142,4 +1157,6 @@ export async function runDoor(doorSession: any): Promise<void> {
   }
 
   debugLog('shutdown');
-}
+});
+
+export default door;

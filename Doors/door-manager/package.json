@@ -2,7 +2,9 @@
   "name": "door-manager",
   "version": "2.0.0",
   "description": "Neo-blessed door management tool for AmiExpress BBS",
-  "main": "index.ts",
+  "bbsCommand": "DMAN",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

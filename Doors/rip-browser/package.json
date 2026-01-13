@@ -2,7 +2,9 @@
   "name": "@amiexpress/rip-browser",
   "version": "1.0.0",
   "description": "RIP Graphics Browser for AmiExpress-Web",
-  "main": "index.ts",
+  "bbsCommand": "RIPBROWSER",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
   "scripts": {
     "build": "tsc",
     "dev": "ts-node index.ts",

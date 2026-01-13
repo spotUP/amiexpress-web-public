@@ -17,33 +17,33 @@
  *   GMASTER STATS     - Your statistics
  */
 
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 import { createApp } from './app';
 
 /**
- * Door session interface
+ * Metadata
  */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params?: string[];
-  args?: string[];
-}
-
-export { createApp };
+export const metadata = {
+  name: 'GRANDMASTER',
+  version: '1.0.0',
+  description: 'TGM3-Inspired Multiplayer Tetris',
+  author: 'AmiExpress SDK',
+  command: 'GMASTER',
+};
 
 /**
- * Door entry point - called by BBS when user runs GMASTER command
+ * Main door class
  */
-export async function runDoor(session: DoorSession): Promise<void> {
-  // Parse command arguments for direct mode launch
-  const args = session.args || [];
+const door = new ServerDoor(metadata);
+
+door.onStart(async (ctx: DoorContext) => {
+  const session = ctx;
+  const args = session.params || [];
   const mode = args[0]?.toUpperCase();
 
   // Create and run the app
-  await createApp(session, mode);
-}
+  await createApp(session as any, mode);
+});
 
-// Default export for compatibility
-export default runDoor;
+export default door;
+export { createApp };

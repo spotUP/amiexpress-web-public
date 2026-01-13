@@ -7,6 +7,7 @@
  * This is a direct port to validate the ncurses compatibility layer.
  */
 
+import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import { PongDoor } from './app.js';
 
 /** Door metadata */
@@ -18,140 +19,93 @@ export const metadata = {
   command: 'PONG',
 };
 
-/** Door session from BBS handler */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-  doorInputHandler?: (data: string) => void;
-}
+/**
+ * Main door class
+ */
+const door = new ServerDoor(metadata);
 
-/** Main door entry point - required by BBS */
-export async function runDoor(session: DoorSession): Promise<void> {
-  const door = new PongDoor();
-  let inputHandlerInstalled = false;
+// Parse escape sequences into key names
+function parseKeyData(data: string): { ch: string | undefined; key: { name?: string; sequence: string } } {
+  const sequence = data;
 
-  // CRITICAL: Set inDoorManager flag so backend routes input to doorInputHandler
-  // Without this, socket-handlers.ts won't call the doorInputHandler!
-  session.bbsSession.inDoorManager = true;
-
-  // Enable game mode for real-time input (required for ncurses games)
-  // This makes the frontend send immediate key-down events instead of waiting for Enter
-  try {
-    if (session.bbs?.enableGameMode) {
-      session.bbs.enableGameMode();
-    }
-  } catch (error) {
-    // Continue anyway - game might still work without game mode
+  // Arrow keys and special keys via escape sequences
+  if (sequence.startsWith('\x1b[') || sequence.startsWith('\x1bO')) {
+    // CSI sequences (ESC [ ...)
+    if (sequence === '\x1b[A' || sequence === '\x1bOA') return { ch: undefined, key: { name: 'up', sequence } };
+    if (sequence === '\x1b[B' || sequence === '\x1bOB') return { ch: undefined, key: { name: 'down', sequence } };
+    if (sequence === '\x1b[C' || sequence === '\x1bOC') return { ch: undefined, key: { name: 'right', sequence } };
+    if (sequence === '\x1b[D' || sequence === '\x1bOD') return { ch: undefined, key: { name: 'left', sequence } };
+    if (sequence === '\x1b[H' || sequence === '\x1bOH') return { ch: undefined, key: { name: 'home', sequence } };
+    if (sequence === '\x1b[F' || sequence === '\x1bOF') return { ch: undefined, key: { name: 'end', sequence } };
+    if (sequence === '\x1b[5~') return { ch: undefined, key: { name: 'pageup', sequence } };
+    if (sequence === '\x1b[6~') return { ch: undefined, key: { name: 'pagedown', sequence } };
+    if (sequence === '\x1b[2~') return { ch: undefined, key: { name: 'insert', sequence } };
+    if (sequence === '\x1b[3~') return { ch: undefined, key: { name: 'delete', sequence } };
+    // F1-F4 (SS3)
+    if (sequence === '\x1bOP') return { ch: undefined, key: { name: 'f1', sequence } };
+    if (sequence === '\x1bOQ') return { ch: undefined, key: { name: 'f2', sequence } };
+    if (sequence === '\x1bOR') return { ch: undefined, key: { name: 'f3', sequence } };
+    if (sequence === '\x1bOS') return { ch: undefined, key: { name: 'f4', sequence } };
   }
 
-  // Parse escape sequences into key names
-  function parseKeyData(data: string): { ch: string | undefined; key: { name?: string; sequence: string } } {
-    const sequence = data;
+  // ESC alone
+  if (sequence === '\x1b') return { ch: undefined, key: { name: 'escape', sequence } };
 
-    // Arrow keys and special keys via escape sequences
-    if (sequence.startsWith('\x1b[') || sequence.startsWith('\x1bO')) {
-      // CSI sequences (ESC [ ...)
-      if (sequence === '\x1b[A' || sequence === '\x1bOA') return { ch: undefined, key: { name: 'up', sequence } };
-      if (sequence === '\x1b[B' || sequence === '\x1bOB') return { ch: undefined, key: { name: 'down', sequence } };
-      if (sequence === '\x1b[C' || sequence === '\x1bOC') return { ch: undefined, key: { name: 'right', sequence } };
-      if (sequence === '\x1b[D' || sequence === '\x1bOD') return { ch: undefined, key: { name: 'left', sequence } };
-      if (sequence === '\x1b[H' || sequence === '\x1bOH') return { ch: undefined, key: { name: 'home', sequence } };
-      if (sequence === '\x1b[F' || sequence === '\x1bOF') return { ch: undefined, key: { name: 'end', sequence } };
-      if (sequence === '\x1b[5~') return { ch: undefined, key: { name: 'pageup', sequence } };
-      if (sequence === '\x1b[6~') return { ch: undefined, key: { name: 'pagedown', sequence } };
-      if (sequence === '\x1b[2~') return { ch: undefined, key: { name: 'insert', sequence } };
-      if (sequence === '\x1b[3~') return { ch: undefined, key: { name: 'delete', sequence } };
-      // F1-F4 (SS3)
-      if (sequence === '\x1bOP') return { ch: undefined, key: { name: 'f1', sequence } };
-      if (sequence === '\x1bOQ') return { ch: undefined, key: { name: 'f2', sequence } };
-      if (sequence === '\x1bOR') return { ch: undefined, key: { name: 'f3', sequence } };
-      if (sequence === '\x1bOS') return { ch: undefined, key: { name: 'f4', sequence } };
-    }
+  // Backspace
+  if (sequence === '\x7f' || sequence === '\x08') return { ch: undefined, key: { name: 'backspace', sequence } };
 
-    // ESC alone
-    if (sequence === '\x1b') return { ch: undefined, key: { name: 'escape', sequence } };
+  // Enter
+  if (sequence === '\r' || sequence === '\n') return { ch: undefined, key: { name: 'enter', sequence } };
 
-    // Backspace
-    if (sequence === '\x7f' || sequence === '\x08') return { ch: undefined, key: { name: 'backspace', sequence } };
+  // Tab
+  if (sequence === '\t') return { ch: undefined, key: { name: 'tab', sequence } };
 
-    // Enter
-    if (sequence === '\r' || sequence === '\n') return { ch: undefined, key: { name: 'enter', sequence } };
+  // Regular character
+  return { ch: data, key: { name: data, sequence } };
+}
 
-    // Tab
-    if (sequence === '\t') return { ch: undefined, key: { name: 'tab', sequence } };
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, bbs } = ctx;
+  const pong = new PongDoor();
 
-    // Regular character
-    return { ch: data, key: { name: data, sequence } };
+  // Enable game mode for real-time input
+  if ((bbs as any)?.enableGameMode) {
+    (bbs as any).enableGameMode();
   }
 
   // Create a context compatible with ncurses initscr()
   const context = {
     emit: (event: string, data: string) => {
       if (event === 'ansi-output') {
-        session.socket.emit('ansi-output', data);
+        socket.emit('ansi-output', data);
       }
     },
-    write: (data: string) => session.socket.emit('ansi-output', data),
+    write: (data: string) => socket.emit('ansi-output', data),
     screen: {
       on: (event: string, handler: (ch: any, key: any) => void) => {
         if (event === 'keypress') {
-          if (session.bbsSession) {
-            // CRITICAL: Set handler on bbsSession, not on the wrapper session
-            session.bbsSession.doorInputHandler = (data: string) => {
-              const { ch, key } = parseKeyData(data);
-              console.log(`[PONG] Routing input: "${data}" -> ch: ${JSON.stringify(ch)}, key: ${JSON.stringify(key)}`);
-              handler(ch, key);
-            };
-            inputHandlerInstalled = true;
-          } else {
-            // Store fallback listener for cleanup
-            const socketListener = (data: string) => {
-              const { ch, key } = parseKeyData(data);
-              handler(ch, key);
-            };
-            session.socket.on('data', socketListener);
-            // Save reference for cleanup
-            (session as any)._ncursesPongSocketListener = socketListener;
-          }
+          // Use onInput handler via context-sharing or direct routing
+          (ctx as any)._pongKeyHandler = handler;
         }
       }
     }
   };
 
   try {
-    await door.onStart(context as any);
+    await pong.onStart(context as any);
   } finally {
-    // Clean up door manager flags
-    session.bbsSession.inDoorManager = false;
-
-    // Remove socket listeners to prevent memory leaks
-    if (session.socket) {
-      // Remove specific listener if it exists
-      const socketListener = (session as any)._ncursesPongSocketListener;
-      if (socketListener) {
-        session.socket.removeListener('data', socketListener);
-        delete (session as any)._ncursesPongSocketListener;
-      } else {
-        // Fallback to removing all data listeners
-        session.socket.removeAllListeners('data');
-      }
-    }
-    if (inputHandlerInstalled && session.bbsSession.doorInputHandler) {
-      delete session.bbsSession.doorInputHandler;
-    }
-
-    // Disable game mode
-    try {
-      if (session.bbs?.disableGameMode) {
-        session.bbs.disableGameMode();
-      }
-    } catch (error) {
-      // Silently handle cleanup errors
+    if ((bbs as any)?.disableGameMode) {
+      (bbs as any).disableGameMode();
     }
   }
-}
+});
 
-export default { runDoor, metadata };
+door.onInput(async (ctx: DoorContext, key: KeyPress) => {
+  const handler = (ctx as any)._pongKeyHandler;
+  if (handler) {
+    const { ch, key: keyData } = parseKeyData(key.raw);
+    handler(ch, keyData);
+  }
+});
+
+export default door;

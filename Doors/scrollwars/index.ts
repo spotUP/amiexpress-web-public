@@ -5,6 +5,7 @@
  * Enter clears the user's line; Backspace deletes; ESC exits.
  */
 
+import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -16,15 +17,6 @@ export const metadata = {
   author: 'AmiExpress',
   command: 'SCROLLWARS',
 };
-
-/** Door session from BBS handler */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-}
 
 interface ParticipantUi {
   screen: any;
@@ -47,7 +39,6 @@ interface Participant {
 
 const SCREEN_WIDTH = 80;
 const SCREEN_HEIGHT = 25;
-const STATUS_ROW = SCREEN_HEIGHT - 1;
 const PANEL_HEIGHT = SCREEN_HEIGHT - 1;
 const MAX_USERS = PANEL_HEIGHT - 2;
 const USER_PANEL_WIDTH = 18;
@@ -55,13 +46,10 @@ const CHAT_PANEL_WIDTH = SCREEN_WIDTH - USER_PANEL_WIDTH;
 const USERLIST_WIDTH = USER_PANEL_WIDTH - 2;
 const MESSAGE_WIDTH = CHAT_PANEL_WIDTH - 2;
 
-const USER_PANEL_LEFT = 0;
-const CHAT_PANEL_LEFT = USER_PANEL_WIDTH;
-
 const CURSOR_CHAR = ' ';
 const CURSOR_BLINK_MS = 500;
 
-// Standard blessed color names (8 colors that neo-blessed supports)
+// Standard blessed color names
 const COLOR_PALETTE = [
   'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'gray'
 ] as const;
@@ -84,10 +72,7 @@ let cursorVisible = true;
 let cursorTimer: NodeJS.Timeout | null = null;
 
 function startCursorTimer(): void {
-  if (cursorTimer) {
-    return;
-  }
-
+  if (cursorTimer) return;
   cursorTimer = setInterval(() => {
     cursorVisible = !cursorVisible;
     if (roomState.participants.size > 0) {
@@ -97,9 +82,7 @@ function startCursorTimer(): void {
 }
 
 function stopCursorTimerIfIdle(): void {
-  if (roomState.participants.size > 0) {
-    return;
-  }
+  if (roomState.participants.size > 0) return;
   if (cursorTimer) {
     clearInterval(cursorTimer);
     cursorTimer = null;
@@ -107,12 +90,8 @@ function stopCursorTimerIfIdle(): void {
 }
 
 function scheduleRender(participant: Participant): void {
-  if (!participant.active) {
-    return;
-  }
-  if (pendingRenders.has(participant.id)) {
-    return;
-  }
+  if (!participant.active) return;
+  if (pendingRenders.has(participant.id)) return;
 
   pendingRenders.add(participant.id);
   setImmediate(() => {
@@ -140,9 +119,7 @@ function releaseLineIndex(index: number): void {
 }
 
 function formatStatus(text: string): string {
-  if (text.length >= SCREEN_WIDTH) {
-    return text.slice(0, SCREEN_WIDTH);
-  }
+  if (text.length >= SCREEN_WIDTH) return text.slice(0, SCREEN_WIDTH);
   return text.padEnd(SCREEN_WIDTH, ' ');
 }
 
@@ -152,20 +129,13 @@ function sanitizeLabel(text: string, max: number): string {
 }
 
 function padText(text: string, width: number): string {
-  if (text.length >= width) {
-    return text.slice(0, width);
-  }
+  if (text.length >= width) return text.slice(0, width);
   return text.padEnd(width, ' ');
 }
 
 function buildMessageLine(buffer: string, color: BlessedColor): string {
-  if (MESSAGE_WIDTH <= 0) {
-    return '';
-  }
-
-  const trimmed = buffer.length > MESSAGE_WIDTH
-    ? buffer.slice(buffer.length - MESSAGE_WIDTH)
-    : buffer;
+  if (MESSAGE_WIDTH <= 0) return '';
+  const trimmed = buffer.length > MESSAGE_WIDTH ? buffer.slice(buffer.length - MESSAGE_WIDTH) : buffer;
   const padded = trimmed.padEnd(MESSAGE_WIDTH, ' ');
   const cursorPos = Math.min(trimmed.length, MESSAGE_WIDTH - 1);
   const before = padded.slice(0, cursorPos);
@@ -173,23 +143,17 @@ function buildMessageLine(buffer: string, color: BlessedColor): string {
   const cursorChar = baseChar === ' ' ? CURSOR_CHAR : baseChar;
   const after = padded.slice(cursorPos + 1);
 
-  // For cursor, use explicit fg/bg swap instead of {inverse} tag
-  // ({inverse} uses reset which clears all formatting)
   let cursorCell: string;
   if (cursorVisible) {
-    // Cursor: swap colors - background becomes the user color, foreground black
     cursorCell = `{${color}-bg}{black-fg}${cursorChar}{/black-fg}{/${color}-bg}`;
   } else {
     cursorCell = `{${color}-fg}${baseChar}{/${color}-fg}`;
   }
-
-  // Build line with color tags
   return `{${color}-fg}${before}{/${color}-fg}${cursorCell}{${color}-fg}${after}{/${color}-fg}`;
 }
 
 function buildUserLine(participant: Participant): string {
   const nameText = padText(sanitizeLabel(participant.username, USERLIST_WIDTH), USERLIST_WIDTH);
-  // Use blessed color tags instead of raw ANSI
   return `{${participant.color}-fg}${nameText}{/${participant.color}-fg}`;
 }
 
@@ -207,7 +171,6 @@ function updateLineContent(lineIndex: number): void {
     roomState.chatLines[lineIndex] = EMPTY_CHAT_LINE;
     return;
   }
-
   roomState.userLines[lineIndex] = buildUserLine(participant);
   roomState.chatLines[lineIndex] = buildMessageLine(participant.buffer, participant.color);
 }
@@ -215,19 +178,11 @@ function updateLineContent(lineIndex: number): void {
 function syncLineAcrossParticipants(lineIndex: number): void {
   const userLine = roomState.userLines[lineIndex];
   const chatLine = roomState.chatLines[lineIndex];
-
   for (const participant of roomState.participants.values()) {
     participant.ui.userPanel.setLine(lineIndex, userLine);
     participant.ui.chatPanel.setLine(lineIndex, chatLine);
     scheduleRender(participant);
   }
-}
-
-function syncPanelsToParticipant(participant: Participant): void {
-  participant.ui.userPanel.setContent(roomState.userLines.join('\n'));
-  participant.ui.chatPanel.setContent(roomState.chatLines.join('\n'));
-  participant.ui.statusBar.setContent(buildStatusSequence(participant));
-  scheduleRender(participant);
 }
 
 function syncStatusBars(): void {
@@ -238,52 +193,20 @@ function syncStatusBars(): void {
 }
 
 function refreshAllLines(updateStatus: boolean): void {
-  for (let i = 0; i < MAX_USERS; i++) {
-    updateLineContent(i);
-  }
-
+  for (let i = 0; i < MAX_USERS; i++) updateLineContent(i);
   const userContent = roomState.userLines.join('\n');
   const chatContent = roomState.chatLines.join('\n');
-
   for (const participant of roomState.participants.values()) {
     participant.ui.userPanel.setContent(userContent);
     participant.ui.chatPanel.setContent(chatContent);
-    if (updateStatus) {
-      participant.ui.statusBar.setContent(buildStatusSequence(participant));
-    }
+    if (updateStatus) participant.ui.statusBar.setContent(buildStatusSequence(participant));
     scheduleRender(participant);
   }
 }
 
-function appendChar(buffer: string, ch: string): string {
-  const next = buffer + ch;
-  if (next.length <= MESSAGE_WIDTH) {
-    return next;
-  }
-  return next.slice(next.length - MESSAGE_WIDTH);
-}
-
-function removeChar(buffer: string): string {
-  if (buffer.length === 0) {
-    return buffer;
-  }
-  return buffer.slice(0, -1);
-}
-
-function isPrintable(ch: string): boolean {
-  const code = ch.charCodeAt(0);
-  return code >= 32 && code <= 126;
-}
-
 function handleKeypress(participant: Participant, ch: string | undefined, key: any): boolean {
-  if (!participant.active) {
-    return false;
-  }
-
-  if (key?.name === 'escape' || key?.full === 'C-c' || key?.sequence === '\x03') {
-    return true;
-  }
-
+  if (!participant.active) return false;
+  if (key?.name === 'escape' || key?.full === 'C-c' || key?.sequence === '\x03') return true;
   if (key?.name === 'enter') {
     if (participant.buffer.length > 0) {
       participant.buffer = '';
@@ -292,18 +215,9 @@ function handleKeypress(participant: Participant, ch: string | undefined, key: a
     }
     return false;
   }
-
-  // Handle backspace/delete - check both key object and raw character
-  const isBackspace =
-    key?.name === 'backspace' ||
-    key?.name === 'delete' ||
-    key?.sequence === '\x08' ||
-    key?.sequence === '\x7f' ||
-    ch === '\x08' ||
-    ch === '\x7f';
-
+  const isBackspace = key?.name === 'backspace' || key?.name === 'delete' || key?.sequence === '\x08' || key?.sequence === '\x7f' || ch === '\x08' || ch === '\x7f';
   if (isBackspace) {
-    const next = removeChar(participant.buffer);
+    const next = participant.buffer.length > 0 ? participant.buffer.slice(0, -1) : participant.buffer;
     if (next !== participant.buffer) {
       participant.buffer = next;
       updateLineContent(participant.lineIndex);
@@ -311,284 +225,120 @@ function handleKeypress(participant: Participant, ch: string | undefined, key: a
     }
     return false;
   }
-
-  // Ignore arrow keys and other special keys
-  const isSpecialKey =
-    key?.name === 'up' ||
-    key?.name === 'down' ||
-    key?.name === 'left' ||
-    key?.name === 'right' ||
-    key?.name === 'home' ||
-    key?.name === 'end' ||
-    key?.name === 'pageup' ||
-    key?.name === 'pagedown' ||
-    key?.name === 'insert' ||
-    key?.name === 'tab';
-
-  if (isSpecialKey) {
-    return false;
-  }
-
-  if (!ch) {
-    return false;
-  }
-
+  if (!ch || key?.name?.length > 1) return false;
   let changed = false;
   for (const char of ch) {
-    if (!isPrintable(char)) {
-      continue;
-    }
-    participant.buffer = appendChar(participant.buffer, char);
+    if (char.charCodeAt(0) < 32 || char.charCodeAt(0) > 126) continue;
+    participant.buffer = (participant.buffer + char).slice(-MESSAGE_WIDTH);
     changed = true;
   }
-
   if (changed) {
     updateLineContent(participant.lineIndex);
     syncLineAcrossParticipants(participant.lineIndex);
   }
-
   return false;
 }
 
-function createUi(session: DoorSession): ParticipantUi {
-  const { bbs, bbsSession } = session;
+const door = new ServerDoor(metadata);
 
-  // Use createScreen helper with responsive mode
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, bbsSession, user, bbs } = ctx;
+  const lineIndex = allocateLineIndex();
+
+  if (lineIndex === null) {
+    socket.emit('ansi-output', '\x1b[2J\x1b[H');
+    socket.emit('ansi-output', `\x1b[31mScrollwars is full (${MAX_USERS} users max).\x1b[0m\r\n`);
+    return;
+  }
+
+  if ((bbs as any)?.enableGameMode) (bbs as any).enableGameMode();
+
+  const username = sanitizeLabel(user?.username || 'Guest', 32) || 'Guest';
+  const id = String(socket.id);
+
   const screen = createScreen({
-    smartCSR: false,  // FIXED: Was true - caused scroll artifacts and layout corruption
-    fastCSR: false,   // Disable fast CSR - forces full redraws for stable rendering
-    dockBorders: false,
-    fullUnicode: false,
+    smartCSR: false,
+    fastCSR: false,
     title: 'Scrollwars',
-    output: (data: string) => bbs.write(data),
+    output: (data: string) => (bbs as any)?.write(data),
     responsive: true,
   });
 
-  if (bbsSession) {
-    bbsSession.doorInputHandler = (data: string) => {
-      screen.program.emit('data', data);
-      return true;
-    };
-  }
-
-  screen.program.hideCursor();
-
-  // User panel (left side) as dockable panel
   const userPanelDock = new DockablePanel({
     parent: screen,
     title: ' Users ',
-    top: 0,
-    left: 0,
     width: '25%',
     height: '100%-1',
-    dockPosition: 'float',
-    showMinimizeButton: true,
-    resizable: true,
-    draggable: true,
-    minWidth: 15,
-    minHeight: 10,
     border: { type: 'line', fg: 'cyan' },
-    style: { border: { fg: 'cyan' } },
   });
 
   const userPanel = createBox({
     parent: userPanelDock,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
+    top: 1, left: 1, width: '100%-2', height: '100%-2',
     tags: true,
-    style: {
-      fg: 'white',
-      bg: 'black',
-    },
   });
 
-  // Chat panel (right side) as dockable panel
   const chatPanelDock = new DockablePanel({
     parent: screen,
     title: ' Scroll ',
-    top: 0,
     left: '25%',
     width: '75%',
     height: '100%-1',
-    dockPosition: 'float',
-    showMinimizeButton: true,
-    resizable: true,
-    draggable: true,
-    minWidth: 40,
-    minHeight: 10,
     border: { type: 'line', fg: 'cyan' },
-    style: { border: { fg: 'cyan' } },
   });
 
   const chatPanel = createBox({
     parent: chatPanelDock,
-    top: 1,
-    left: 1,
-    width: '100%-2',
-    height: '100%-2',
+    top: 1, left: 1, width: '100%-2', height: '100%-2',
     tags: true,
-    style: {
-      fg: 'white',
-      bg: 'black',
-    },
   });
 
   const statusBar = createBox({
     parent: screen,
     bottom: 0,
-    left: 0,
     width: '100%',
     height: 1,
     tags: true,
     style: { fg: 'cyan', bg: 'blue' },
   });
 
-  // Register responsive constraints
-  screen.responsiveLayout.registerElement(userPanelDock, {
-    minWidth: 15,
-    minHeight: 10,
-  });
-  screen.responsiveLayout.registerElement(chatPanelDock, {
-    minWidth: 40,
-    minHeight: 10,
-  });
-
-  // Responsive breakpoint handling
-  screen.responsiveLayout.onResize((width, height) => {
-    const breakpoint = screen.responsiveLayout.getBreakpoint();
-
-    if (breakpoint === 'small') {
-      // Hide user panel on small screens
-      userPanelDock.hide();
-      chatPanelDock.options.left = 0;
-      chatPanelDock.options.width = '100%';
-    } else {
-      // Show both panels on medium/large screens
-      userPanelDock.show();
-      userPanelDock.options.width = '25%';
-      chatPanelDock.options.left = '25%';
-      chatPanelDock.options.width = '75%';
-    }
-
-    screen.render();
-  });
-
-  return { screen, userPanel, chatPanel, statusBar };
-}
-
-/** Main door entry point - required by BBS */
-export async function runDoor(session: DoorSession): Promise<void> {
-  try {
-    const { socket, bbsSession, user, bbs } = session;
-    const lineIndex = allocateLineIndex();
-
-    if (lineIndex === null) {
-      socket.emit('ansi-output', '\x1b[2J\x1b[H');
-      socket.emit('ansi-output', `\x1b[31mScrollwars is full (${MAX_USERS} users max).\x1b[0m\r\n`);
-      socket.emit('door:close');
-      return;
-    }
-
-  if (bbs?.enableGameMode) {
-    bbs.enableGameMode();
-  }
-
-  const username = sanitizeLabel(user?.username || bbsSession?.user?.username || 'Guest', 32) || 'Guest';
-  const id = String(socket.id || `node-${bbsSession?.nodeId || 0}-${Date.now()}`);
-
   const participant: Participant = {
-    id,
-    username,
-    socket,
-    bbsSession,
-    lineIndex,
+    id, username, socket, bbsSession, lineIndex,
     color: COLOR_PALETTE[lineIndex % COLOR_PALETTE.length],
-    buffer: '',
-    active: true,
-    ui: {} as ParticipantUi,
+    buffer: '', active: true,
+    ui: { screen, userPanel, chatPanel, statusBar }
   };
 
-  participant.ui = createUi(session);
-  roomState.participants.set(participant.id, participant);
+  roomState.participants.set(id, participant);
   roomState.lineParticipants[lineIndex] = participant;
-  updateLineContent(lineIndex);
-
-  let closed = false;
-
+  
   const cleanup = () => {
-    if (closed) {
-      return;
-    }
-    closed = true;
-
-    if (bbsSession?.doorInputHandler) {
-      bbsSession.doorInputHandler = null;
-    }
-
-    if (bbs?.disableGameMode) {
-      bbs.disableGameMode();
-    }
-
+    if (!participant.active) return;
     participant.active = false;
-    roomState.participants.delete(participant.id);
+    roomState.participants.delete(id);
     roomState.lineParticipants[lineIndex] = null;
-    releaseLineIndex(participant.lineIndex);
-
-    updateLineContent(participant.lineIndex);
-    syncLineAcrossParticipants(participant.lineIndex);
+    releaseLineIndex(lineIndex);
+    updateLineContent(lineIndex);
+    syncLineAcrossParticipants(lineIndex);
     syncStatusBars();
-
-    // Remove event listeners to prevent memory leaks
-    if (participant.ui.screen) {
-      participant.ui.screen.removeAllListeners('keypress');
-      participant.ui.screen.removeAllListeners('destroy');
-    }
-
-    // Reset terminal state before destroying screen
-    const program = participant.ui.screen.program;
-    program.showCursor();
-    program.normalBuffer();
-    // Reset all attributes, clear screen, home cursor
-    bbs.write('\x1b[0m\x1b[2J\x1b[H');
-    participant.ui.screen.destroy();
+    if ((bbs as any)?.disableGameMode) (bbs as any).disableGameMode();
+    screen.destroy();
     stopCursorTimerIfIdle();
   };
 
-  const requestExit = () => {
-    cleanup();
-    socket.emit('door:close');
-  };
-
-  participant.ui.screen.on('keypress', (ch: string, key: any) => {
+  screen.on('keypress', (ch: string, key: any) => {
     if (handleKeypress(participant, ch, key)) {
-      requestExit();
+      cleanup();
     }
   });
 
   startCursorTimer();
-  syncPanelsToParticipant(participant);
-  syncLineAcrossParticipants(participant.lineIndex);
-  syncStatusBars();
+  refreshAllLines(true);
 
-    await new Promise<void>((resolve) => {
-      const finish = () => {
-        cleanup();
-        resolve();
-      };
+  await new Promise<void>((resolve) => {
+    screen.on('destroy', resolve);
+    socket.once('disconnect', cleanup);
+  });
+});
 
-      socket.once('door:close', finish);
-      socket.once('disconnect', finish);
-    });
-  } catch (error) {
-    console.error('[Scrollwars] Error in runDoor():', error);
-    // Try to cleanup if we have the session
-    if (session?.bbs) {
-      session.bbs.write('\x1b[31mAn error occurred. Exiting...\x1b[0m\r\n');
-    }
-    throw error;
-  }
-}
-
-export default { runDoor, metadata };
+export default door;

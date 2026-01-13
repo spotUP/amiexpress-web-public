@@ -54,7 +54,7 @@ import {
 
   // Timing
   napms,
-} from "@amiexpress/sdk/ncurses";
+} from "@amiexpress/bbs-door-sdk/ncurses";
 
 // Original C: typedef struct{short int x, y, c; bool movhor, movver;} object;
 interface GameObject {

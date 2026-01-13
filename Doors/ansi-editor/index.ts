@@ -15,7 +15,7 @@
  * - Real-time canvas rendering
  */
 
-import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor as Door } from '@amiexpress/bbs-door-sdk';
 import { UIEngine, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 
 import { EditorState, Tool, ANSI, SHORTCUTS, Cell } from './types.js';
@@ -770,8 +770,3 @@ door.onClose(async (ctx: DoorContext) => {
 // =============================================================================
 
 export default door;
-
-// Provide runDoor entrypoint expected by the TS door harness
-export async function runDoor(session: any): Promise<void> {
-  await door.execute(session);
-}
