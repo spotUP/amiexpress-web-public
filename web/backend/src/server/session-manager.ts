@@ -164,8 +164,8 @@ export function createSession(nodeId: number, options: SessionConnectionOptions 
     connectionBaud: options.connectionBaud || 19200,
     screenWidth: options.screenWidth || 80,
     screenHeight: options.screenHeight || 24,
-    modemEmulationEnabled: false,
-    modemBps: 0,
+    modemEmulationEnabled: (options.connectionBaud || 0) > 0,
+    modemBps: options.connectionBaud || 0,
     // Unicode capability - web always supports Unicode, telnet/SSH detected via TTYPE
     // Default to true for web, undefined for telnet/SSH (will be set after TTYPE negotiation)
     unicodeCapable: options.unicodeCapable ?? (options.connectionType === 'web' ? true : undefined)

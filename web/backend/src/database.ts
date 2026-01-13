@@ -390,14 +390,6 @@ console.log('✓ Added fontpreference column');
 console.log('✓ Added baud column');
       }
 
-      // Migration: Update existing users with baud=0 or 9600 to 56000 (56kbps - modern modem speed)
-      // baud=0 means "no throttling" which breaks modem emulation at login
-      const usersNeedingUpdate = this.db.prepare('SELECT COUNT(*) as count FROM users WHERE baud IN (0, 9600)').get() as any;
-      if (usersNeedingUpdate.count > 0) {
-        this.db.exec('UPDATE users SET baud = 56000 WHERE baud IN (0, 9600)');
-console.log(`✓ Migrated ${usersNeedingUpdate.count} users to baud=56000 (56kbps)`);
-      }
-
       // Check and add missing columns to system_config table
 console.log('Checking for missing columns in system_config table...');
       const systemConfigInfo = this.db.prepare('PRAGMA table_info(system_config)').all() as any[];
