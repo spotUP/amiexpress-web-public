@@ -1326,7 +1326,7 @@ console.log(
   const regKey = diskConfig.reg_key || "UNREGISTERED";
   socket.emit(
     "ansi-output",
-    `\r\nRegistered to ${regKey}. You are connected to Node ${nodeSession.nodeId} at ${DEFAULT_CONNECTION_BAUD} baud`
+    `\r\nRegistered to ${regKey}. You are connected to Node ${nodeSession.nodeId} via web connection`
   );
 
   // express.e:29518-29522 - Connection timestamp
