@@ -98,7 +98,8 @@ export class Door {
     const nodeId = rawSession.bbsSession?.nodeId || 1;
 
     if (this.runningSessions.has(nodeId)) {
-      throw new Error(`Door is already running on node ${nodeId}`);
+      console.warn(`[Door] Force-clearing stale session for node ${nodeId}`);
+      this.runningSessions.delete(nodeId);
     }
 
     this.runningSessions.add(nodeId);
@@ -108,14 +109,22 @@ export class Door {
     // Create context
     const context = this.createContext(socket, bbsSession, user, params, bbs);
 
+    // Register cleanup on disconnect
+    const onDisconnect = () => {
+      this.runningSessions.delete(nodeId);
+    };
+    socket.once('disconnect', onDisconnect);
+    socket.once('door:close', onDisconnect);
+
     try {
       // Call start handlers
       for (const handler of this.startHandlers) {
+        if (!this.runningSessions.has(nodeId)) break;
         await handler(context);
       }
 
       // Set up input loop
-      if (this.inputHandlers.length > 0) {
+      if (this.inputHandlers.length > 0 && this.runningSessions.has(nodeId)) {
         await this.runInputLoop(socket, bbsSession, context);
       }
 
@@ -134,6 +143,8 @@ export class Door {
         throw error;
       }
     } finally {
+      socket.off('disconnect', onDisconnect);
+      socket.off('door:close', onDisconnect);
       this.runningSessions.delete(nodeId);
     }
   }
@@ -147,7 +158,6 @@ export class Door {
     if (ctx) {
       this.runningSessions.delete(ctx.nodeId);
     } else {
-      // If no context, we can only clear all or hope the caller only had one session
       this.runningSessions.clear();
     }
   }
@@ -163,7 +173,8 @@ export class Door {
   ): DoorContext {
     const nodeId = bbsSession?.nodeId || 1;
     const output = new Output(socket);
-    const input = new Input(bbsSession, output);
+    const input = new Input(bbsSession, output, socket);
+    
     const storage = new Storage({
       doorName: this.config.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
       userId: user?.id,

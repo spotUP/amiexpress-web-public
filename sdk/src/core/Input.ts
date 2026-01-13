@@ -10,11 +10,13 @@ import { Output } from './Output';
 export class Input implements InputAPI {
   private bbsSession: any;
   private output: Output;
+  private socket?: any;
   private timeoutMs: number | null = null;
 
-  constructor(bbsSession: any, output: Output) {
+  constructor(bbsSession: any, output: Output, socket?: any) {
     this.bbsSession = bbsSession;
     this.output = output;
+    this.socket = socket;
   }
 
   // ===== Timeout Management =====
@@ -33,18 +35,33 @@ export class Input implements InputAPI {
     return new Promise((resolve, reject) => {
       let timeout: NodeJS.Timeout | null = null;
 
-      const handler = (data: string) => {
+      const cleanup = () => {
         if (timeout) clearTimeout(timeout);
         this.bbsSession.doorInputHandler = null;
+        if (this.socket) {
+          this.socket.off('disconnect', onDisconnect);
+        }
+      };
 
+      const onDisconnect = () => {
+        cleanup();
+        reject(new Error('Connection lost'));
+      };
+
+      const handler = (data: string) => {
+        cleanup();
         resolve(this.parseKeyPress(data));
       };
 
       this.bbsSession.doorInputHandler = handler;
 
+      if (this.socket) {
+        this.socket.once('disconnect', onDisconnect);
+      }
+
       if (this.timeoutMs) {
         timeout = setTimeout(() => {
-          this.bbsSession.doorInputHandler = null;
+          cleanup();
           reject(new Error('Input timeout'));
         }, this.timeoutMs);
       }
