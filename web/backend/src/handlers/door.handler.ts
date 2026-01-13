@@ -1632,6 +1632,13 @@ console.log(`[executeTypeScriptDoor] Sent door:status: running, door-active: tru
     // This allows doors to use socket.emit('room:join', ...) which will call handlers directly
     wrappedSocket = createDoorSocketWrapper(socket, session, bbsApi);
 
+    // FIX: Wait for any pending screen commands (like BBSTITLE) to complete before executing door
+    // This prevents door output from overlapping with the current screen display.
+    if (session.pendingScreenCommand) {
+      console.log(`[executeTypeScriptDoor] Waiting for pending screen command to complete before starting ${door.name}`);
+      await session.pendingScreenCommand;
+    }
+
     // SDK v2.0 pattern: Door instance with execute() method
 console.log(`[executeTypeScriptDoor] Calling door.execute() with SDK context...`);
     const doorInstance = doorModule.default;

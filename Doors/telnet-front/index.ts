@@ -289,10 +289,11 @@ door.onStart(async (ctx: DoorContext) => {
 
   console.log('[TELNET-FRONT] Display complete');
 
-  // During pre-login (AWAIT state), just display and exit - don't wait for input
-  // The main BBS flow will handle the ANSI prompt
+  // During pre-login (AWAIT state), display and wait briefly so it can be seen
+  // before the ANSI prompt appears below it
   if (!bbsSession || bbsSession.state === 'AWAIT') {
-    console.log('[TELNET-FRONT] Pre-login mode, exiting immediately');
+    console.log('[TELNET-FRONT] Pre-login mode, pausing for 2 seconds');
+    await new Promise(resolve => setTimeout(resolve, 2000));
     return;
   }
 
