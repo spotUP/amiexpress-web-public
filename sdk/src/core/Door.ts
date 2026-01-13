@@ -26,7 +26,9 @@ export class Door {
   private inputHandlers: InputHandler[] = [];
   private closeHandlers: CloseHandler[] = [];
   private errorHandlers: ErrorHandler[] = [];
-  private isRunning: boolean = false;
+  
+  /** Tracks active session IDs (node IDs) to allow concurrent execution while preventing same-node reentry */
+  private runningSessions = new Set<number>();
 
   constructor(config: DoorConfig) {
     this.config = config;
@@ -93,11 +95,13 @@ export class Door {
    * This is called by the BBS backend when a user runs the door
    */
   async execute(rawSession: RawDoorSession): Promise<void> {
-    if (this.isRunning) {
-      throw new Error('Door is already running');
+    const nodeId = rawSession.bbsSession?.nodeId || 1;
+
+    if (this.runningSessions.has(nodeId)) {
+      throw new Error(`Door is already running on node ${nodeId}`);
     }
 
-    this.isRunning = true;
+    this.runningSessions.add(nodeId);
 
     const { socket, bbsSession, user, params = [], bbs } = rawSession;
 
@@ -130,7 +134,7 @@ export class Door {
         throw error;
       }
     } finally {
-      this.isRunning = false;
+      this.runningSessions.delete(nodeId);
     }
   }
 
@@ -139,8 +143,13 @@ export class Door {
    *
    * Can be called from within handlers to immediately close the door
    */
-  async exit(): Promise<void> {
-    this.isRunning = false;
+  async exit(ctx?: DoorContext): Promise<void> {
+    if (ctx) {
+      this.runningSessions.delete(ctx.nodeId);
+    } else {
+      // If no context, we can only clear all or hope the caller only had one session
+      this.runningSessions.clear();
+    }
   }
 
   // ===== Internal Methods =====
@@ -152,6 +161,7 @@ export class Door {
     params: string[],
     bbs?: any
   ): DoorContext {
+    const nodeId = bbsSession?.nodeId || 1;
     const output = new Output(socket);
     const input = new Input(bbsSession, output);
     const storage = new Storage({
@@ -162,7 +172,7 @@ export class Door {
 
     return {
       user: user || { id: '0', username: 'Guest', accessLevel: 0, timesCalled: 0, uploads: 0, downloads: 0 },
-      nodeId: bbsSession?.nodeId || 1,
+      nodeId,
       output,
       input,
       storage,
@@ -171,7 +181,7 @@ export class Door {
       socket,
       bbsSession,
       close: async () => {
-        this.isRunning = false;
+        this.runningSessions.delete(nodeId);
       },
     };
   }
@@ -181,9 +191,11 @@ export class Door {
     bbsSession: any,
     context: DoorContext
   ): Promise<void> {
+    const nodeId = context.nodeId;
+
     return new Promise<void>((resolve) => {
       const handler = async (data: string) => {
-        if (!this.isRunning) {
+        if (!this.runningSessions.has(nodeId)) {
           bbsSession.doorInputHandler = null;
           resolve();
           return;
@@ -194,7 +206,7 @@ export class Door {
           const keyPress: KeyPress = {
             key: data,
             raw: data,
-            ctrl: false,
+            ctrl: data.charCodeAt(0) < 32,
             alt: false,
             shift: false,
             meta: false,
@@ -222,14 +234,14 @@ export class Door {
       // Handle disconnection
       socket.once('disconnect', () => {
         bbsSession.doorInputHandler = null;
-        this.isRunning = false;
+        this.runningSessions.delete(nodeId);
         resolve();
       });
 
       // Handle door:close event
       socket.once('door:close', () => {
         bbsSession.doorInputHandler = null;
-        this.isRunning = false;
+        this.runningSessions.delete(nodeId);
         resolve();
       });
     });
@@ -241,7 +253,10 @@ export class Door {
     return { ...this.config };
   }
 
-  isActive(): boolean {
-    return this.isRunning;
+  isActive(nodeId?: number): boolean {
+    if (nodeId !== undefined) {
+      return this.runningSessions.has(nodeId);
+    }
+    return this.runningSessions.size > 0;
   }
 }
