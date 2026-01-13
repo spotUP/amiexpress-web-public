@@ -1081,170 +1081,6 @@ console.error('[parseMciCodes] Error getting file count:', error);
   // Sends backspace character
   parsed = parsed.replace(mciRegex('h'), '\x08');
 
-  // ~CR_ - Prompted keypress (express.e:5571-5580)
-  // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
-  const crRegex = /~CR_([^|]+)\|\|/g;
-  parsed = parsed.replace(crRegex, (match, promptText) => {
-    hasPause = true;
-    return promptText;
-  });
-
-  // ~SM_ - Set Mode / Menu Name (express.e:5575-5585)
-  // Format: ~SM_<menuname>|| - sets current menu name for context tracking
-  const smRegex = /~SM_([^|]+)\|\|/g;
-  parsed = parsed.replace(smRegex, (match, menuName) => {
-    // Store current menu name in session for context
-    session.currentMenuName = menuName.trim();
-    screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
-    return ''; // Code doesn't display anything
-  });
-
-  // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
-  // Format: ~SMO<speed>| where speed is 1-5
-  // Note: Slow mode is a display effect, not applicable to web
-  parsed = parsed.replace(/~SMO(-?\d*)\|/gi, (_m: string, digits: string) => {
-    // express.e sets slowmo:=1, slowmoCount+=60*slowmo before reading value
-    slowmoCount += 60;
-    let speed = parseInt(digits, 10);
-    if (!speed || Number.isNaN(speed)) speed = 1;
-    // AmiExpress valid range 1-5; allow web extension -1..-3 for slower-than-1
-    if (speed > 5) speed = 1;
-    if (speed === 0) speed = 1;
-    if (speed < -3) speed = -3;
-    slowmo = speed;
-    slowmoApplied = slowmo;
-    slowmoAppliedCount = slowmoCount;
-    return '';
-  });
-
-  // ~SMC - Screen Mode Clear / Slow Mode Clear (express.e:5737-5739)
-  // Disables slow mode
-  parsed = parsed.replace(/~SMC\|/gi, () => {
-    slowmo = 0;
-    slowmoCount = 0;
-    return '';
-  });
-
-  // Legacy % codes (for compatibility)
-  parsed = parsed.replace(/%B/g, bbsName);
-  parsed = parsed.replace(/%S/g, sysopName);
-  parsed = parsed.replace(/%L/g, location);
-  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Main');
-  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '57600');
-  parsed = parsed.replace(/%D/g, fullDateTime);
-  parsed = parsed.replace(/%T/g, timeStr);
-  parsed = parsed.replace(/%U/g, username);
-  parsed = parsed.replace(/%N/g, '1');
-  parsed = parsed.replace(/%C/g, conferences.length.toString());
-
-  // MultiTop bulletin codes - @READUSERKEYS directive (strip it, it's not displayed)
-  parsed = parsed.replace(/@READUSERKEYS\s*/gi, '');
-
-  // MultiTop bulletin codes - %XX.YYCC format for user ranking data
-  // Format: %XX.YYCC where XX=slot(01-30), YY=field width, CC=code type
-  // Code types: UB=Upload Bytes, DB=Download Bytes, UC=Upload CPS, DC=Download CPS,
-  //             MS=Messages, TU=Total Users, SC=System Calls
-  const multiTopRegex = /%(\d{2})\.(\d{2})([A-Z]{2})/g;
-  let multiTopMatch;
-  const multiTopReplacements: Array<{match: string; slot: number; width: number; code: string}> = [];
-
-  // Collect all MultiTop codes first
-  while ((multiTopMatch = multiTopRegex.exec(parsed)) !== null) {
-    multiTopReplacements.push({
-      match: multiTopMatch[0],
-      slot: parseInt(multiTopMatch[1], 10),
-      width: parseInt(multiTopMatch[2], 10),
-      code: multiTopMatch[3]
-    });
-  }
-
-  // Process MultiTop codes if any found
-  if (multiTopReplacements.length > 0) {
-    // Fetch users sorted by different criteria for ranking
-    let rankedUsers: {
-      byUploadBytes: any[];
-      byDownloadBytes: any[];
-      byMessages: any[];
-    } = { byUploadBytes: [], byDownloadBytes: [], byMessages: [] };
-
-    try {
-      const allUsers = await db.getUsers({ limit: 100 });
-      rankedUsers.byUploadBytes = [...allUsers].sort((a, b) => (b.uploadBytes || 0) - (a.uploadBytes || 0));
-      rankedUsers.byDownloadBytes = [...allUsers].sort((a, b) => (b.downloadBytes || 0) - (a.downloadBytes || 0));
-      rankedUsers.byMessages = [...allUsers].sort((a, b) => (b.messagesPosted || 0) - (a.messagesPosted || 0));
-    } catch (error) {
-console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error);
-    }
-
-    // Get total users count
-    let totalUsers = 0;
-    try {
-      totalUsers = rankedUsers.byUploadBytes.length;
-    } catch (error) {
-      // Ignore
-    }
-
-    // Helper function to format bytes
-    const formatBytes = (bytes: number): string => {
-      if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
-      if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
-      if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
-      return bytes.toString() + ' B';
-    };
-
-    // Replace each MultiTop code
-    for (const rep of multiTopReplacements) {
-      const slotIdx = rep.slot - 1; // Convert to 0-indexed
-      let value = '';
-
-      switch (rep.code) {
-        case 'UB': // Upload Bytes
-          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
-            const bytes = rankedUsers.byUploadBytes[slotIdx].uploadBytes || 0;
-            value = formatBytes(bytes);
-          }
-          break;
-        case 'DB': // Download Bytes
-          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
-            const bytes = rankedUsers.byDownloadBytes[slotIdx].downloadBytes || 0;
-            value = formatBytes(bytes);
-          }
-          break;
-        case 'UC': // Upload CPS (use uploadBytes / timesCalled as approximation)
-          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
-            const user = rankedUsers.byUploadBytes[slotIdx] as any;
-            const cps = user.timesCalled > 0 ? Math.floor((user.uploadBytes || 0) / user.timesCalled) : 0;
-            value = cps.toString();
-          }
-          break;
-        case 'DC': // Download CPS (use downloadBytes / timesCalled as approximation)
-          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
-            const user = rankedUsers.byDownloadBytes[slotIdx] as any;
-            const cps = user.timesCalled > 0 ? Math.floor((user.downloadBytes || 0) / user.timesCalled) : 0;
-            value = cps.toString();
-          }
-          break;
-        case 'MS': // Messages Posted
-          if (slotIdx >= 0 && slotIdx < rankedUsers.byMessages.length) {
-            value = (rankedUsers.byMessages[slotIdx].messagesPosted || 0).toString();
-          }
-          break;
-        case 'TU': // Total Users
-          value = totalUsers.toString();
-          break;
-        case 'SC': // System Calls (use todayCalls from stats)
-          value = todayCalls.toString();
-          break;
-        default:
-          value = '0';
-      }
-
-      // Pad to field width
-      value = value.padStart(rep.width, ' ');
-      parsed = parsed.replace(rep.match, value);
-    }
-  }
-
   // === INLINE MODE: SEQUENTIAL MCI PROCESSING ===
   // express.e:5768-5802 processMci() iterates through content sequentially:
   // 1. Find next ~ character
@@ -1256,8 +1092,8 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
     const { processCommand } = require('./command.handler');
 
     // Regex to find inline MCI codes that need immediate execution
-    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_), ~SMO, ~SMC
-    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+|SMO-?\d*|SMC)(?:\|{1,2})?/g;
+    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
+    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
 
     let lastIndex = 0;
     let match;
@@ -1283,26 +1119,6 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
         // express.e:5469-5471 - sendCLS()
         emitText(socket, '\x1b[2J\x1b[H');
         screenDebug('[MCI] Sequential: ~f sendCLS()');
-      } else if (code.startsWith('SMO')) {
-        // express.e:5726-5736 - ~SMO slow motion
-        const digits = code.substring(3);
-        slowmoCount += 60;
-        let speed = parseInt(digits, 10);
-        if (!speed || Number.isNaN(speed)) speed = 1;
-        if (speed > 5) speed = 1;
-        if (speed === 0) speed = 1;
-        if (speed < -3) speed = -3;
-        slowmo = speed;
-        slowmoApplied = slowmo;
-        slowmoAppliedCount = slowmoCount;
-        screenDebug('[MCI] Sequential: ~SMO speed set to:', slowmo);
-      } else if (code === 'SMC') {
-        // express.e:5737-5739 - ~SMC clear slow motion
-        slowmo = 0;
-        slowmoCount = 0;
-        slowmoApplied = 0;
-        slowmoAppliedCount = 0;
-        screenDebug('[MCI] Sequential: ~SMC clear slowmo');
       } else if (code.startsWith('CC_')) {
         // express.e:5555-5563 - processSysCommand()
         const commandStr = code.substring(3).replace(/\|+$/, '').trim();
@@ -1535,6 +1351,170 @@ console.log(`[MCI] ~SR_ creating placeholder: ${srMatch[0]} -> ${placeholder}`);
       commandsToExecute.push(commandStr.trim());
       return '';
     });
+  }
+
+  // ~CR_ - Prompted keypress (express.e:5571-5580)
+  // Format: ~CR_<prompt>|| - displays prompt and waits for keypress
+  const crRegex = /~CR_([^|]+)\|\|/g;
+  parsed = parsed.replace(crRegex, (match, promptText) => {
+    hasPause = true;
+    return promptText;
+  });
+
+  // ~SM_ - Set Mode / Menu Name (express.e:5575-5585)
+  // Format: ~SM_<menuname>|| - sets current menu name for context tracking
+  const smRegex = /~SM_([^|]+)\|\|/g;
+  parsed = parsed.replace(smRegex, (match, menuName) => {
+    // Store current menu name in session for context
+    session.currentMenuName = menuName.trim();
+    screenDebug(`[MCI] ~SM_ set menu name to: ${session.currentMenuName}`);
+    return ''; // Code doesn't display anything
+  });
+
+  // ~SMO - Screen Mode On / Slow Mode On (express.e:5726-5736)
+  // Format: ~SMO<speed>| where speed is 1-5
+  // Note: Slow mode is a display effect, not applicable to web
+  parsed = parsed.replace(/~SMO(-?\d*)\|/gi, (_m: string, digits: string) => {
+    // express.e sets slowmo:=1, slowmoCount+=60*slowmo before reading value
+    slowmoCount += 60;
+    let speed = parseInt(digits, 10);
+    if (!speed || Number.isNaN(speed)) speed = 1;
+    // AmiExpress valid range 1-5; allow web extension -1..-3 for slower-than-1
+    if (speed > 5) speed = 1;
+    if (speed === 0) speed = 1;
+    if (speed < -3) speed = -3;
+    slowmo = speed;
+    slowmoApplied = slowmo;
+    slowmoAppliedCount = slowmoCount;
+    return '';
+  });
+
+  // ~SMC - Screen Mode Clear / Slow Mode Clear (express.e:5737-5739)
+  // Disables slow mode
+  parsed = parsed.replace(/~SMC\|/gi, () => {
+    slowmo = 0;
+    slowmoCount = 0;
+    return '';
+  });
+
+  // Legacy % codes (for compatibility)
+  parsed = parsed.replace(/%B/g, bbsName);
+  parsed = parsed.replace(/%S/g, sysopName);
+  parsed = parsed.replace(/%L/g, location);
+  parsed = parsed.replace(/%CF/g, session.currentConfName || 'Main');
+  parsed = parsed.replace(/%R/g, session.user ? Math.floor(session.timeRemaining / 60).toString() : '57600');
+  parsed = parsed.replace(/%D/g, fullDateTime);
+  parsed = parsed.replace(/%T/g, timeStr);
+  parsed = parsed.replace(/%U/g, username);
+  parsed = parsed.replace(/%N/g, '1');
+  parsed = parsed.replace(/%C/g, conferences.length.toString());
+
+  // MultiTop bulletin codes - @READUSERKEYS directive (strip it, it's not displayed)
+  parsed = parsed.replace(/@READUSERKEYS\s*/gi, '');
+
+  // MultiTop bulletin codes - %XX.YYCC format for user ranking data
+  // Format: %XX.YYCC where XX=slot(01-30), YY=field width, CC=code type
+  // Code types: UB=Upload Bytes, DB=Download Bytes, UC=Upload CPS, DC=Download CPS,
+  //             MS=Messages, TU=Total Users, SC=System Calls
+  const multiTopRegex = /%(\d{2})\.(\d{2})([A-Z]{2})/g;
+  let multiTopMatch;
+  const multiTopReplacements: Array<{match: string; slot: number; width: number; code: string}> = [];
+
+  // Collect all MultiTop codes first
+  while ((multiTopMatch = multiTopRegex.exec(parsed)) !== null) {
+    multiTopReplacements.push({
+      match: multiTopMatch[0],
+      slot: parseInt(multiTopMatch[1], 10),
+      width: parseInt(multiTopMatch[2], 10),
+      code: multiTopMatch[3]
+    });
+  }
+
+  // Process MultiTop codes if any found
+  if (multiTopReplacements.length > 0) {
+    // Fetch users sorted by different criteria for ranking
+    let rankedUsers: {
+      byUploadBytes: any[];
+      byDownloadBytes: any[];
+      byMessages: any[];
+    } = { byUploadBytes: [], byDownloadBytes: [], byMessages: [] };
+
+    try {
+      const allUsers = await db.getUsers({ limit: 100 });
+      rankedUsers.byUploadBytes = [...allUsers].sort((a, b) => (b.uploadBytes || 0) - (a.uploadBytes || 0));
+      rankedUsers.byDownloadBytes = [...allUsers].sort((a, b) => (b.downloadBytes || 0) - (a.downloadBytes || 0));
+      rankedUsers.byMessages = [...allUsers].sort((a, b) => (b.messagesPosted || 0) - (a.messagesPosted || 0));
+    } catch (error) {
+console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error);
+    }
+
+    // Get total users count
+    let totalUsers = 0;
+    try {
+      totalUsers = rankedUsers.byUploadBytes.length;
+    } catch (error) {
+      // Ignore
+    }
+
+    // Replace each MultiTop code
+    for (const rep of multiTopReplacements) {
+      const slotIdx = rep.slot - 1; // Convert to 0-indexed
+      let value = '';
+
+      switch (rep.code) {
+        case 'UB': // Upload Bytes
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
+            const bytes = rankedUsers.byUploadBytes[slotIdx].uploadBytes || 0;
+            value = formatBytes(bytes);
+          }
+          break;
+        case 'DB': // Download Bytes
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
+            const bytes = rankedUsers.byDownloadBytes[slotIdx].downloadBytes || 0;
+            value = formatBytes(bytes);
+          }
+          break;
+        case 'UC': // Upload CPS (use uploadBytes / timesCalled as approximation)
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byUploadBytes.length) {
+            const user = rankedUsers.byUploadBytes[slotIdx] as any;
+            const cps = user.timesCalled > 0 ? Math.floor((user.uploadBytes || 0) / user.timesCalled) : 0;
+            value = cps.toString();
+          }
+          break;
+        case 'DC': // Download CPS (use downloadBytes / timesCalled as approximation)
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byDownloadBytes.length) {
+            const user = rankedUsers.byDownloadBytes[slotIdx] as any;
+            const cps = user.timesCalled > 0 ? Math.floor((user.downloadBytes || 0) / user.timesCalled) : 0;
+            value = cps.toString();
+          }
+          break;
+        case 'MS': // Messages Posted
+          if (slotIdx >= 0 && slotIdx < rankedUsers.byMessages.length) {
+            value = (rankedUsers.byMessages[slotIdx].messagesPosted || 0).toString();
+          }
+          break;
+        case 'TU': // Total Users
+          value = totalUsers.toString();
+          break;
+        case 'SC': // System Calls (use todayCalls from stats)
+          value = todayCalls.toString();
+          break;
+        default:
+          value = '0';
+      }
+
+      // Pad to field width
+      value = value.padStart(rep.width, ' ');
+      parsed = parsed.replace(rep.match, value);
+    }
+  }
+
+  // Helper function to format bytes
+  function formatBytes(bytes: number): string {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return bytes.toString() + ' B';
   }
 
   // Process ~SS_ file display codes (express.e:5490-5500)
