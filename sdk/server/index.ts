@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { Door as CoreDoor } from '../src/core/Door';
 import {
   BBSUser,
   DoorConfig,
@@ -14,15 +15,12 @@ import {
   AnsiBgColor,
 } from '../common';
 
-export class ServerDoor extends EventEmitter {
-  /** Door configuration */
-  public readonly config: DoorConfig;
-
+export class ServerDoor extends CoreDoor {
   /** Currently connected user(s) */
   private users: Map<number, BBSUser> = new Map();
 
-  /** Door state */
-  private state: 'idle' | 'running' | 'shutdown' = 'idle';
+  /** Door execution state */
+  private doorState: 'idle' | 'running' | 'shutdown' = 'idle';
 
   /** Frame counter for animations */
   private frameCount: number = 0;
@@ -36,30 +34,16 @@ export class ServerDoor extends EventEmitter {
   /** RPC handlers (for hybrid doors) */
   private rpcHandlers: Map<string, (params: any) => Promise<any>> = new Map();
 
+  /** Event emitter for legacy events */
+  private events = new EventEmitter();
+
   /**
    * Create a new Server-side BBS Door
    *
    * @param config - Door configuration
-   *
-   * @example
-   * ```typescript
-   * const door = new ServerDoor({
-   *   name: 'File Manager',
-   *   version: '1.0.0',
-   *   author: 'Admin',
-   *   description: 'BBS file management system'
-   * });
-   * ```
    */
   constructor(config: DoorConfig) {
-    super();
-    this.config = {
-      minSecurity: 0,
-      maxTime: 0,
-      multiplayer: false,
-      runtime: 'server',
-      ...config,
-    };
+    super(config as any);
     this.initialize();
   }
 
@@ -68,7 +52,7 @@ export class ServerDoor extends EventEmitter {
    * @private
    */
   private initialize(): void {
-    this.emit('init', this.config);
+    this.events.emit('init', this.config);
     this.setupDefaultHandlers();
   }
 
@@ -109,49 +93,29 @@ export class ServerDoor extends EventEmitter {
         else if (data === '\u001b') key.key = 'Escape';
         else if (data === '\u007f' || data === '\b') key.key = 'Backspace';
 
-        this.emit('input', { user, key });
+        this.events.emit('input', { user, key });
       });
 
       // Send output to stdout
-      this.on('output', (data: { user: BBSUser; text: string }) => {
+      this.events.on('output', (data: { user: BBSUser; text: string }) => {
         process.stdout.write(data.text);
       });
     }
   }
 
   /**
-   * Start the door and begin accepting connections
+   * Start the door (backward compatibility)
    */
   public start(): void {
-    // Reset state if door was left in running state from a previous crash/disconnect
-    // ESM modules are cached, so the same ServerDoor instance may be reused across sessions
-    if (this.state !== 'idle' && this.state !== 'shutdown') {
-      console.warn('[ServerDoor] Door was in running state from previous session - resetting');
-      this.state = 'idle';
+    if (this.doorState !== 'idle' && this.doorState !== 'shutdown') {
+      this.doorState = 'idle';
       this.frameCount = 0;
       this.lastFrameTime = 0;
       this.users.clear();
     }
 
-    this.state = 'running';
-    this.emit('start');
-
-    // In preview mode, auto-connect test user
-    if (process.env.PREVIEW_MODE === '1') {
-      const testUser: BBSUser = {
-        id: 1,
-        name: 'Preview User',
-        node: 1,
-        securityLevel: 255,
-        timeLeft: 9999,
-        graphicsMode: 'ANSI',
-        termWidth: 80,
-        termHeight: 24,
-        data: {},
-      };
-
-      setTimeout(() => this.connect(testUser), 100);
-    }
+    this.doorState = 'running';
+    this.events.emit('start');
 
     // Start main loop
     this.mainLoop();
@@ -162,7 +126,7 @@ export class ServerDoor extends EventEmitter {
    * @private
    */
   private mainLoop(): void {
-    if (this.state !== 'running') return;
+    if (this.doorState !== 'running') return;
 
     const now = Date.now();
     const delta = now - this.lastFrameTime;
@@ -172,8 +136,8 @@ export class ServerDoor extends EventEmitter {
       this.frameCount++;
       this.lastFrameTime = now;
 
-      this.emit('update', delta);
-      this.emit('render', this.frameCount);
+      this.events.emit('update', delta);
+      this.events.emit('render', this.frameCount);
     }
 
     setTimeout(() => this.mainLoop(), 0);
@@ -182,28 +146,31 @@ export class ServerDoor extends EventEmitter {
   /**
    * Handle new user connection
    */
-  public onConnect(handler: (user: BBSUser) => void | Promise<void>): void {
-    this.on('connect', handler);
+  public onConnect(handler: (user: BBSUser) => void | Promise<void>): this {
+    this.events.on('connect', handler);
+    return this;
   }
 
   /**
    * Connect a user to the door
    */
   public connect(user: BBSUser): void {
-    if (user.securityLevel < (this.config.minSecurity || 0)) {
-      this.emit('connect:denied', user, 'insufficient_security');
+    const minSecurity = (this.config as any).minSecurity || 0;
+    if (user.securityLevel < minSecurity) {
+      this.events.emit('connect:denied', user, 'insufficient_security');
       return;
     }
 
     this.users.set(user.id, user);
-    this.emit('connect', user);
+    this.events.emit('connect', user);
   }
 
   /**
    * Handle user disconnection
    */
-  public onDisconnect(handler: (user: BBSUser) => void): void {
-    this.on('disconnect', handler);
+  public onDisconnect(handler: (user: BBSUser) => void): this {
+    this.events.on('disconnect', handler);
+    return this;
   }
 
   /**
@@ -214,16 +181,17 @@ export class ServerDoor extends EventEmitter {
     if (!user) return;
 
     this.users.delete(userId);
-    this.emit('disconnect', user);
+    this.events.emit('disconnect', user);
   }
 
   /**
-   * Handle keyboard input
+   * Handle keyboard input (legacy style)
    */
-  public onInput(handler: (user: BBSUser, key: KeyEvent) => void): void {
-    this.on('input', (data: { user: BBSUser; key: KeyEvent }) => {
+  public onInputLegacy(handler: (user: BBSUser, key: KeyEvent) => void): this {
+    this.events.on('input', (data: { user: BBSUser; key: KeyEvent }) => {
       handler(data.user, data.key);
     });
+    return this;
   }
 
   /**
@@ -232,21 +200,42 @@ export class ServerDoor extends EventEmitter {
   public sendInput(userId: number, key: KeyEvent): void {
     const user = this.users.get(userId);
     if (!user) return;
-    this.emit('input', { user, key });
+    this.events.emit('input', { user, key });
   }
 
   /**
    * Handle game updates (called every frame)
    */
-  public onUpdate(handler: (delta: number) => void): void {
-    this.on('update', handler);
+  public onUpdate(handler: (delta: number) => void): this {
+    this.events.on('update', handler);
+    return this;
   }
 
   /**
    * Handle rendering (called every frame after update)
    */
-  public onRender(handler: (frame: number) => void): void {
-    this.on('render', handler);
+  public onRender(handler: (frame: number) => void): this {
+    this.events.on('render', handler);
+    return this;
+  }
+
+  /**
+   * Pause the door (stop game loop)
+   */
+  public pause(): void {
+    this.doorState = 'idle';
+    this.events.emit('pause');
+  }
+
+  /**
+   * Resume the door (restart game loop)
+   */
+  public resume(): void {
+    if (this.doorState === 'idle') {
+      this.doorState = 'running';
+      this.events.emit('resume');
+      this.mainLoop();
+    }
   }
 
   /**
@@ -256,101 +245,12 @@ export class ServerDoor extends EventEmitter {
     if (userId !== undefined) {
       const user = this.users.get(userId);
       if (user) {
-        this.emit('output', { user, text });
+        this.events.emit('output', { user, text });
       }
     } else {
       this.users.forEach((user) => {
-        this.emit('output', { user, text });
+        this.events.emit('output', { user, text });
       });
-    }
-  }
-
-  /**
-   * Send ANSI formatted output
-   */
-  public sendAnsi(ansi: string, userId?: number): void {
-    this.send(ansi, userId);
-  }
-
-  /**
-   * Move cursor to position
-   */
-  public moveCursor(x: number, y: number, userId?: number): void {
-    this.sendAnsi(`\x1b[${y};${x}H`, userId);
-  }
-
-  /**
-   * Clear the screen
-   */
-  public clearScreen(userId?: number): void {
-    this.sendAnsi('\x1b[2J\x1b[H', userId);
-  }
-
-  /**
-   * Set foreground color
-   */
-  public setColor(color: number, userId?: number): void {
-    this.sendAnsi(`\x1b[${color}m`, userId);
-  }
-
-  /**
-   * Get connected user by ID
-   */
-  public getUser(userId: number): BBSUser | undefined {
-    return this.users.get(userId);
-  }
-
-  /**
-   * Get all connected users
-   */
-  public getUsers(): BBSUser[] {
-    return Array.from(this.users.values());
-  }
-
-  /**
-   * Get user count
-   */
-  public getUserCount(): number {
-    return this.users.size;
-  }
-
-  /**
-   * Set target FPS for game loop
-   */
-  public setFPS(fps: number): void {
-    this.targetFPS = Math.max(1, Math.min(120, fps));
-  }
-
-  /**
-   * Get current FPS
-   */
-  public getFPS(): number {
-    return this.targetFPS;
-  }
-
-  /**
-   * Get current frame count
-   */
-  public getFrameCount(): number {
-    return this.frameCount;
-  }
-
-  /**
-   * Pause the door (stop game loop)
-   */
-  public pause(): void {
-    this.state = 'idle';
-    this.emit('pause');
-  }
-
-  /**
-   * Resume the door (restart game loop)
-   */
-  public resume(): void {
-    if (this.state === 'idle') {
-      this.state = 'running';
-      this.emit('resume');
-      this.mainLoop();
     }
   }
 
@@ -358,130 +258,24 @@ export class ServerDoor extends EventEmitter {
    * Shutdown the door gracefully
    */
   public shutdown(): void {
-    if (this.state === 'shutdown') return;
-
-    this.state = 'shutdown';
-
+    if (this.doorState === 'shutdown') return;
+    this.doorState = 'shutdown';
     this.users.forEach((user) => {
       this.disconnect(user.id);
     });
-
-    this.emit('shutdown');
-    this.removeAllListeners();
-
-    // Exit process
+    this.events.emit('shutdown');
+    this.events.removeAllListeners();
     process.exit(0);
   }
 
-  /**
-   * Wait for specified time (async helper)
-   */
-  public async wait(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  // Helper for EventEmitter bridge
+  public on(event: string | symbol, listener: (...args: any[]) => void): this {
+    this.events.on(event, listener);
+    return this;
   }
 
-  /**
-   * Wait for user input (async helper)
-   */
-  public async waitForInput(
-    userId: number,
-    timeout: number = 0
-  ): Promise<KeyEvent | null> {
-    return new Promise((resolve) => {
-      let timeoutId: NodeJS.Timeout | null = null;
-
-      const handler = (data: { user: BBSUser; key: KeyEvent }) => {
-        if (data.user.id === userId) {
-          if (timeoutId) clearTimeout(timeoutId);
-          this.off('input', handler);
-          resolve(data.key);
-        }
-      };
-
-      this.on('input', handler);
-
-      if (timeout > 0) {
-        timeoutId = setTimeout(() => {
-          this.off('input', handler);
-          resolve(null);
-        }, timeout);
-      }
-    });
-  }
-
-  /**
-   * Prompt user for input
-   */
-  public async prompt(
-    prompt: string,
-    userId: number,
-    timeout: number = 0
-  ): Promise<string> {
-    this.send(prompt, userId);
-
-    let input = '';
-    let done = false;
-    const startTime = Date.now();
-
-    while (!done) {
-      const key = await this.waitForInput(
-        userId,
-        timeout > 0 ? timeout - (Date.now() - startTime) : 0
-      );
-
-      if (!key) {
-        done = true;
-        break;
-      }
-
-      if (key.key === 'Enter' || key.key === '\r' || key.key === '\n') {
-        done = true;
-      } else if (key.key === 'Backspace') {
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          this.sendAnsi('\x1b[1D \x1b[1D', userId);
-        }
-      } else if (key.key.length === 1) {
-        input += key.key;
-        this.send(key.key, userId);
-      }
-    }
-
-    this.send('\r\n', userId);
-    return input;
-  }
-
-  /**
-   * Register RPC handler (for hybrid doors)
-   *
-   * @param method - RPC method name
-   * @param handler - Handler function
-   *
-   * @example
-   * ```typescript
-   * door.onRPC('saveSong', async (params) => {
-   *   await fs.promises.writeFile(params.filename, params.data);
-   *   return { success: true };
-   * });
-   * ```
-   */
-  public onRPC(
-    method: string,
-    handler: (params: any) => Promise<any>
-  ): void {
-    this.rpcHandlers.set(method, handler);
-  }
-
-  /**
-   * Handle RPC call (internal use by BBS bridge)
-   * @private
-   */
-  public async handleRPC(method: string, params: any): Promise<any> {
-    const handler = this.rpcHandlers.get(method);
-    if (!handler) {
-      throw new Error(`Unknown RPC method: ${method}`);
-    }
-    return await handler(params);
+  public emit(event: string | symbol, ...args: any[]): boolean {
+    return this.events.emit(event, ...args);
   }
 }
 

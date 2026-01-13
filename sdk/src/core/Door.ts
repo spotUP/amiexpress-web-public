@@ -21,7 +21,7 @@ import { Input } from './Input';
 import { Storage } from './Storage';
 
 export class Door {
-  private config: DoorConfig;
+  public readonly config: DoorConfig;
   private startHandlers: StartHandler[] = [];
   private inputHandlers: InputHandler[] = [];
   private closeHandlers: CloseHandler[] = [];
@@ -32,6 +32,15 @@ export class Door {
     this.config = config;
   }
 
+  /**
+   * Start the door (backward compatibility with legacy SDK)
+   */
+  public start(): void {
+    // This is a no-op in the modern SDK as the BBS calls execute()
+    // but we keep it for backward compatibility with code that calls door.start()
+    console.log(`[Door] ${this.config.name} initialized and ready.`);
+  }
+
   // ===== Lifecycle Registration =====
 
   /**
@@ -39,6 +48,16 @@ export class Door {
    */
   onStart(handler: StartHandler): this {
     this.startHandlers.push(handler);
+    return this;
+  }
+
+  /**
+   * Alias for onStart (for backward compatibility)
+   */
+  onConnect(handler: (user: any) => void | Promise<void>): this {
+    this.onStart(async (ctx) => {
+      await handler(ctx.user);
+    });
     return this;
   }
 

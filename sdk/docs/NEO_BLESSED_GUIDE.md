@@ -14,95 +14,67 @@ Always aim for modern, desktop-like doors with windows, panels, and mouse suppor
 
 ### Door Entry Point (REQUIRED)
 
-TypeScript doors **MUST** export a `runDoor()` function. This is the entry point the BBS calls when launching your door.
+TypeScript doors **MUST** export a `ServerDoor` instance as the `default` export. This is the entry point the BBS calls when launching your door.
 
 TypeScript doors **MUST** also include a `.info` file in `Commands/BBSCmd/`. The BBS registers doors at startup by scanning BBSCMD entries.
 
 **index.ts** (entry point):
 ```typescript
-import { createApp } from './app.js';
+import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
 
-/** Door metadata (optional but recommended) */
+/** Door metadata */
 export const metadata = {
-  name: 'My Neo-Blessed Door',
+  name: 'My Modern Door',
   version: '1.0.0',
   description: 'Interactive TUI application',
   author: 'Your Name',
   command: 'MYDOOR',
 };
 
-/** Door session from BBS handler */
-interface DoorSession {
-  socket: any;
-  user: any;
-  bbsSession: any;
-  bbs: any;
-  params: string[];
-}
+const door = new ServerDoor(metadata);
 
-/** Main door entry point - REQUIRED by SDK */
-export async function runDoor(session: DoorSession): Promise<void> {
-  const app = await createApp(session);
-  await app.run();
-}
+/** Main door logic */
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, user, bbs } = ctx;
+  
+  // Create your UI here...
+  ctx.output.writeLine('Welcome to my door!');
+});
 
-// Default export (optional, for compatibility)
-export default { runDoor, metadata };
+export default door;
 ```
 
-**IMPORTANT**: Without `runDoor()` export, you'll get:
-```
-Invalid TypeScript door: Must export Door instance or runDoor() function
-```
+**IMPORTANT**: Modern doors use the class-based pattern with lifecycle hooks (`onStart`, `onInput`, `onClose`). The legacy functional `runDoor()` pattern is no longer supported.
 
-### Basic Setup
+### Basic Setup with Blessed
 
-**app.ts** (main application):
+**app.ts** (main application logic):
 ```typescript
-import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createScreen, setupInputHandler } from '@amiexpress/bbs-door-sdk';
 
+export async function startApp(ctx: DoorContext) {
+  const { bbs } = ctx;
 
-export async function createApp(session: DoorSession) {
-  const { bbs } = session;
-
-  // Create screen with output handler
-  const screen = blessed.screen({
-    smartCSR: true,
-    fullUnicode: true,
+  // Create screen using helper for BBS compatibility
+  const screen = createScreen({
     title: 'My Door',
     output: (data: string) => bbs.write(data),
   });
 
-  // Wire up input handling
-  if (session.bbsSession) {
-    session.bbsSession.doorInputHandler = (data: string) => {
-      screen._handleData(data);
-    };
+  // Wire up input handling from SDK context to blessed
+  setupInputHandler(ctx, screen);
+
+  // Enable mouse support if needed
+  if (bbs.enableMouseEvents) {
+    bbs.enableMouseEvents();
   }
 
-  // Enable mouse support
-  screen.enableMouse();
+  // Create your UI elements...
 
-  // Create your UI here...
-
-  // Cleanup on exit
-  function cleanup() {
-    screen.disableMouse();
-    if (session.bbsSession) {
-      delete session.bbsSession.doorInputHandler;
-    }
-    screen.destroy();
-    bbs.write('\x1b[2J\x1b[H');
-  }
-
-  return {
-    async run() {
-      screen.render();
-      await new Promise<void>((resolve) => {
-        screen.on('destroy', resolve);
-      });
-    }
-  };
+  // Wait for door to exit (screen destroy)
+  await new Promise<void>((resolve) => {
+    screen.on('destroy', resolve);
+  });
 }
 ```
 

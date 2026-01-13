@@ -109,6 +109,7 @@ export { CardEngine } from './engines/cards/card-engine';
 export { PokerEngine } from './engines/poker/poker-engine';
 export { TacticalCombatEngine } from './engines/tactical/tactical-combat-engine';
 export { UIEngine, UIHelpers } from './engines/ui';
+export * as ncurses from './engines/ui/ncurses';
 export * from './utils/blessed-helpers';
 export type { UIEngineOptions, WidgetStyle, MenuItem, DialogOptions, InputDialogOptions, ConfirmDialogOptions, ListSelectionOptions, StatusBarOptions } from './engines/ui';
 export type {
