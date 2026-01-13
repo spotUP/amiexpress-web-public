@@ -525,6 +525,11 @@ const door = new ServerDoor(metadata);
 door.onStart(async (ctx: DoorContext) => {
   const { socket } = ctx;
 
+  if (!socket) {
+    console.error('[glc-viewer] Socket missing from context!');
+    return;
+  }
+
   try {
     const config = loadConfig();
 

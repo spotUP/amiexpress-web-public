@@ -1333,11 +1333,9 @@ console.error(`[executeDoor] Failed to start client door for hybrid: ${door.name
         await executeMciDoor(socket, session, door, doorSession);
         break;
       case 'TS': // TypeScript door type from BBSCMD file
+      case 'SDK': // SDK door - use in-process TypeScript execution
       case 'typescript': // TypeScript door with runDoor() export
         await executeTypeScriptDoor(socket, session, door, doorSession, hybridSessionId);
-        break;
-      case 'SDK': // SDK door with Door wrapper class (separate process)
-        await executeSDKDoor(socket, session, door, doorSession);
         break;
       case 'python': // Python door
       case 'PY': // Python door type from BBSCMD file
@@ -1666,7 +1664,7 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
     await doorInstance.execute({
       socket: wrappedSocket,
       bbsSession: session,
-      user: session.user!,
+      user: session.user,
       bbs: bbsApi,
       params: door.parameters || []
     });
@@ -1784,222 +1782,6 @@ console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err)
     if (session.state === BBSState.LOGGEDON && session.user) {
       await displayMainMenu(socket, session);
     }
-  }
-}
-
-/**
- * Execute SDK door as separate Node.js process
- * Uses child_process.fork() to spawn SDK door with Door wrapper class
- * Bridges Door events to Socket.IO for real-time communication
- */
-async function executeSDKDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession): Promise<void> {
-console.log(`[executeSDKDoor] Starting SDK door: ${door.name}`);
-console.log(`[executeSDKDoor] Door path: ${door.path}`);
-  disableShortcuts(session);
-
-  // NOTE: Don't enable game mode by default - it blocks 'command' events which breaks bbs.getKey()
-  // Doors that need real-time keyboard input (games) should call bbs.enableGameMode() themselves
-  session.inDoorManager = true;
-  socket.emit('door-active', true);
-  // enableGameMode(socket, session, 'SDK');
-
-  try {
-    // Build absolute path to door
-    let doorPath = door.path;
-
-    if (!doorPath) {
-      emitText(socket, `\r\n\x1b[31mDoor path is not configured\x1b[0m\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-
-    // Get BBS root directory (use BBS_ROOT env var or default to project root)
-    const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-
-    // If path is a directory, append index.js (compiled)
-    // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
-    if (amigafs.existsSync(path.join(projectRoot, doorPath)) &&
-        amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
-      // Try compiled version first, fall back to TypeScript
-      const compiledPath = path.join(doorPath, 'dist', 'index.js');
-      const tsPath = path.join(doorPath, 'index.ts');
-
-      if (amigafs.existsSync(path.join(projectRoot, compiledPath))) {
-        doorPath = compiledPath;
-      } else if (amigafs.existsSync(path.join(projectRoot, tsPath))) {
-        doorPath = tsPath;
-      } else {
-        doorPath = path.join(doorPath, 'index.js');
-      }
-    }
-
-    // Build absolute path
-    doorPath = path.isAbsolute(doorPath)
-      ? doorPath
-      : path.join(projectRoot, doorPath);
-
-console.log(`[executeSDKDoor] Resolved path: ${doorPath}`);
-
-    // Check if door exists (use amigafs for case-insensitive matching)
-    if (!amigafs.existsSync(doorPath)) {
-      emitText(socket, `\r\n\x1b[31mDoor not found: ${doorPath}\x1b[0m\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-
-    const { user: sdkUser } = resolveDoorExecutionUser(session);
-
-    // Prepare user data for SDK door
-    const userData = {
-      id: sdkUser.id,
-      name: sdkUser.username,
-      node: session.nodeId || 1,
-      securityLevel: sdkUser.secLevel,
-      timeLeft: session.timeRemaining || 3600,
-      graphicsMode: sdkUser.ansi ? 'ANSI' : 'ASCII',
-      termWidth: session.screenWidth || 80,
-      termHeight: session.screenHeight || 24,
-      data: {}
-    };
-
-console.log(`[executeSDKDoor] Forking child process...`);
-
-    // Fork child process for SDK door
-    // If it's a TypeScript file, use tsx to run it
-    const isTypeScript = doorPath.endsWith('.ts');
-    const forkOptions: any = {
-      cwd: path.dirname(doorPath),
-      env: {
-        ...process.env,
-        SDK_MODE: '1',
-        BBS_USER_DATA: JSON.stringify(userData)
-      },
-      silent: true, // Capture stdout/stderr
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    };
-
-    // Add tsx loader for TypeScript files
-    if (isTypeScript) {
-      forkOptions.execArgv = ['--import', 'tsx'];
-    }
-
-    const childProcess = fork(doorPath, [], forkOptions);
-
-console.log(`[executeSDKDoor] Child process spawned with PID: ${childProcess.pid}`);
-
-    let doorRunning = true;
-
-    // Handle Door output events via IPC
-    childProcess.on('message', (message: any) => {
-      if (message.type === 'output') {
-        // Door emitted output event - send to user
-        emitText(socket, message.text);
-      } else if (message.type === 'disconnect') {
-        // Door requested disconnect
-console.log('[executeSDKDoor] Door requested disconnect');
-        doorRunning = false;
-        childProcess.kill();
-      }
-    });
-
-    // Handle stdout (fallback if not using IPC)
-    if (childProcess.stdout) {
-      childProcess.stdout.on('data', (data: Buffer) => {
-        emitText(socket, data.toString());
-      });
-    }
-
-    // Handle stderr
-    if (childProcess.stderr) {
-      childProcess.stderr.on('data', (data: Buffer) => {
-console.error(`[executeSDKDoor] stderr: ${data.toString()}`);
-      });
-    }
-
-    // Forward user input to SDK door
-    const inputHandler = (data: string) => {
-      if (doorRunning && childProcess && !childProcess.killed) {
-        // Send input to door via IPC
-        childProcess.send({
-          type: 'input',
-          key: {
-            key: data,
-            ctrl: data.charCodeAt(0) < 32,
-            alt: false,
-            shift: false,
-            code: data.charCodeAt(0)
-          }
-        });
-      }
-    };
-
-    socket.on('user-input', inputHandler);
-
-    // Handle door disconnect
-    const disconnectHandler = () => {
-console.log('[executeSDKDoor] User disconnected');
-      doorRunning = false;
-      if (childProcess && !childProcess.killed) {
-        childProcess.send({ type: 'disconnect' });
-        setTimeout(() => {
-          if (!childProcess.killed) {
-            childProcess.kill();
-          }
-        }, 1000);
-      }
-    };
-
-    socket.once('disconnect', disconnectHandler);
-
-    // Wait for door to exit
-    await new Promise<void>((resolve) => {
-      childProcess.on('exit', (code) => {
-console.log(`[executeSDKDoor] Child process exited with code: ${code}`);
-        doorRunning = false;
-        socket.off('user-input', inputHandler);
-        socket.off('disconnect', disconnectHandler);
-        resolve();
-      });
-
-      childProcess.on('error', (err) => {
-console.error(`[executeSDKDoor] Child process error:`, err);
-        doorRunning = false;
-        socket.off('user-input', inputHandler);
-        socket.off('disconnect', disconnectHandler);
-        resolve();
-      });
-    });
-
-console.log('[executeSDKDoor] Door execution completed');
-
-    // Disable game mode when door exits
-    disableGameMode(socket, session);
-
-    // Reset flags and return to menu
-    delete session.inDoorManager;
-    socket.emit('door-active', false);
-    session.cmdShortcuts = false;
-    if (session.shortcuts?.clear) {
-      session.shortcuts.clear();
-    }
-    session.menuPause = false;
-    // Actually display the menu instead of just setting state
-    await displayMainMenu(socket, session);
-
-  } catch (error) {
-console.error('[executeSDKDoor] Error:', error);
-    emitText(socket, `\r\n\x1b[31mError executing SDK door: ${(error as Error).message}\x1b[0m\r\n`);
-    session.cmdShortcuts = false;
-    if (session.shortcuts?.clear) {
-      session.shortcuts.clear();
-    }
-    session.menuPause = false;
-    // Actually display the menu instead of just setting state
-    await displayMainMenu(socket, session);
   }
 }
 

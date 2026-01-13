@@ -965,6 +965,11 @@ const door = new ServerDoor(metadata);
 door.onStart(async (ctx: DoorContext) => {
   const { socket, user, bbs } = ctx;
 
+  if (!socket) {
+    console.error('[Gwall] Socket missing from context!');
+    return;
+  }
+
   // Initialize settings
   settings = {
     sysoplevel: SYSOPLEVEL,

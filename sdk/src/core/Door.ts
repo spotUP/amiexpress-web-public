@@ -148,7 +148,7 @@ export class Door {
   private createContext(
     socket: Socket,
     bbsSession: any,
-    user: User,
+    user: User | undefined,
     params: string[],
     bbs?: any
   ): DoorContext {
@@ -156,17 +156,19 @@ export class Door {
     const input = new Input(bbsSession, output);
     const storage = new Storage({
       doorName: this.config.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-      userId: user.id,
+      userId: user?.id,
     });
 
     return {
-      user,
-      nodeId: bbsSession.nodeId || 1,
+      user: user || { id: '0', username: 'Guest', accessLevel: 0, timesCalled: 0, uploads: 0, downloads: 0 },
+      nodeId: bbsSession?.nodeId || 1,
       output,
       input,
       storage,
       params,
       bbs,
+      socket,
+      bbsSession,
       close: async () => {
         this.isRunning = false;
       },
