@@ -157,6 +157,7 @@ export class Door {
     const storage = new Storage({
       doorName: this.config.name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
       userId: user?.id,
+      global: !user,
     });
 
     return {
