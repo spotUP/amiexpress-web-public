@@ -1256,8 +1256,8 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
     const { processCommand } = require('./command.handler');
 
     // Regex to find inline MCI codes that need immediate execution
-    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
-    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
+    // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_), ~SMO, ~SMC
+    const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+|SMO-?\d*|SMC)(?:\|{1,2})?/g;
 
     let lastIndex = 0;
     let match;
@@ -1283,6 +1283,26 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
         // express.e:5469-5471 - sendCLS()
         emitText(socket, '\x1b[2J\x1b[H');
         screenDebug('[MCI] Sequential: ~f sendCLS()');
+      } else if (code.startsWith('SMO')) {
+        // express.e:5726-5736 - ~SMO slow motion
+        const digits = code.substring(3);
+        slowmoCount += 60;
+        let speed = parseInt(digits, 10);
+        if (!speed || Number.isNaN(speed)) speed = 1;
+        if (speed > 5) speed = 1;
+        if (speed === 0) speed = 1;
+        if (speed < -3) speed = -3;
+        slowmo = speed;
+        slowmoApplied = slowmo;
+        slowmoAppliedCount = slowmoCount;
+        screenDebug('[MCI] Sequential: ~SMO speed set to:', slowmo);
+      } else if (code === 'SMC') {
+        // express.e:5737-5739 - ~SMC clear slow motion
+        slowmo = 0;
+        slowmoCount = 0;
+        slowmoApplied = 0;
+        slowmoAppliedCount = 0;
+        screenDebug('[MCI] Sequential: ~SMC clear slowmo');
       } else if (code.startsWith('CC_')) {
         // express.e:5555-5563 - processSysCommand()
         const commandStr = code.substring(3).replace(/\|+$/, '').trim();
