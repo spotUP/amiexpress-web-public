@@ -1490,39 +1490,55 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
     // Use amigafs for case-insensitive path resolution (AmigaOS compatibility)
     if (amigafs.existsSync(path.join(projectRoot, doorPath)) &&
         amigafs.statSync(path.join(projectRoot, doorPath)).isDirectory()) {
-      const packageJsonPath = path.join(projectRoot, doorPath, 'package.json');
-      if (amigafs.existsSync(packageJsonPath)) {
-        try {
-          const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
-          // Check if it's a hybrid door with explicit server entry
-          if (packageJson.runtime === 'hybrid' && packageJson.server && packageJson.server.entry) {
-            // Use server entry from manifest (e.g., "./server.ts")
-            const serverEntry = packageJson.server.entry.replace(/^\.\//, '');
-            doorPath = path.join(doorPath, serverEntry);
+      
+      const doorDir = path.join(projectRoot, doorPath);
+      
+      // 🎯 FIX: Always prefer .ts source if it exists at the root of the door directory
+      // This prevents running stale compiled .js files when source has changed.
+      const rootIndexTs = path.join(doorDir, 'index.ts');
+      const rootServerTs = path.join(doorDir, 'server.ts');
+      
+      if (amigafs.existsSync(rootIndexTs)) {
+        doorPath = path.join(doorPath, 'index.ts');
+console.log(`[executeTypeScriptDoor] Found root index.ts, using source instead of package.json main`);
+      } else if (amigafs.existsSync(rootServerTs)) {
+        doorPath = path.join(doorPath, 'server.ts');
+console.log(`[executeTypeScriptDoor] Found root server.ts, using source instead of package.json main`);
+      } else {
+        const packageJsonPath = path.join(doorDir, 'package.json');
+        if (amigafs.existsSync(packageJsonPath)) {
+          try {
+            const packageJson = JSON.parse(amigafs.readFileSync(packageJsonPath, 'utf8') as string);
+            // Check if it's a hybrid door with explicit server entry
+            if (packageJson.runtime === 'hybrid' && packageJson.server && packageJson.server.entry) {
+              // Use server entry from manifest (e.g., "./server.ts")
+              const serverEntry = packageJson.server.entry.replace(/^\.\//, '');
+              doorPath = path.join(doorPath, serverEntry);
 console.log(`[executeTypeScriptDoor] Hybrid door detected, using server entry: ${serverEntry}`);
-          } else if (packageJson.main) {
-            // Use main entry from package.json when it exists, otherwise fall back to index.ts.
-            const mainEntry = path.join(doorPath, packageJson.main);
-            const mainEntryPath = path.join(projectRoot, mainEntry);
-            if (amigafs.existsSync(mainEntryPath)) {
-              doorPath = mainEntry;
+            } else if (packageJson.main) {
+              // Use main entry from package.json when it exists, otherwise fall back to index.ts.
+              const mainEntry = path.join(doorPath, packageJson.main);
+              const mainEntryPath = path.join(projectRoot, mainEntry);
+              if (amigafs.existsSync(mainEntryPath)) {
+                doorPath = mainEntry;
 console.log(`[executeTypeScriptDoor] Using main entry from package.json: ${packageJson.main}`);
-            } else {
-              doorPath = path.join(doorPath, 'index.ts');
+              } else {
+                doorPath = path.join(doorPath, 'index.ts');
 console.warn(`[executeTypeScriptDoor] Main entry not found (${packageJson.main}); using index.ts`);
+              }
+            } else {
+              // Default to index.ts
+              doorPath = path.join(doorPath, 'index.ts');
             }
-          } else {
-            // Default to index.ts
+          } catch (error) {
+            // If package.json parse fails, fall back to index.ts
+console.log(`[executeTypeScriptDoor] Failed to parse package.json, using default index.ts`);
             doorPath = path.join(doorPath, 'index.ts');
           }
-        } catch (error) {
-          // If package.json parse fails, fall back to index.ts
-console.log(`[executeTypeScriptDoor] Failed to parse package.json, using default index.ts`);
+        } else {
+          // No package.json, default to index.ts
           doorPath = path.join(doorPath, 'index.ts');
         }
-      } else {
-        // No package.json, default to index.ts
-        doorPath = path.join(doorPath, 'index.ts');
       }
     }
 
@@ -1588,10 +1604,8 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
                      typeof doorModule.default.execute === 'function' &&
                      typeof doorModule.default.getConfig === 'function';
 
-    const isLegacyDoor = typeof doorModule.runDoor === 'function';
-
-    if (!isSDKDoor && !isLegacyDoor) {
-      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export Door instance or runDoor() function\x1b[0m\r\n`);
+    if (!isSDKDoor) {
+      emitText(socket, `\r\n\x1b[31mInvalid TypeScript door: Must export ServerDoor instance as default export\x1b[0m\r\n`);
       emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = false;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -1600,19 +1614,11 @@ console.log(`[executeTypeScriptDoor] Importing: ${importPath}`);
 
     disableShortcuts(session);
 
-    if (isSDKDoor) {
 console.log(`[executeTypeScriptDoor] SDK v2.0 Door detected, calling execute()`);
-    } else {
-console.log(`[executeTypeScriptDoor] Legacy door detected, calling runDoor()`);
-    }
 
     // Set door active flag - this blocks command handler but door can still receive events
     session.inDoorManager = true;
 console.log(`[executeTypeScriptDoor] Set inDoorManager=true`);
-
-    // NOTE: Don't enable game mode by default - it blocks 'command' events which breaks bbs.getKey()
-    // Doors that need real-time keyboard input (games) should call bbs.enableGameMode() themselves
-    // enableGameMode(socket, session, 'TS');
 
     // Notify frontend that door is active
     socket.emit('door:status', { status: 'running' });
@@ -1628,53 +1634,44 @@ console.log(`[executeTypeScriptDoor] Sent door:status: running, door-active: tru
     // This allows doors to use socket.emit('room:join', ...) which will call handlers directly
     wrappedSocket = createDoorSocketWrapper(socket, session, bbsApi);
 
-    // Execute door based on pattern
-    if (isSDKDoor) {
-      // SDK v2.0 pattern: Door instance with execute() method
+    // SDK v2.0 pattern: Door instance with execute() method
 console.log(`[executeTypeScriptDoor] Calling door.execute() with SDK context...`);
-      const doorInstance = doorModule.default;
+    const doorInstance = doorModule.default;
 
-      await doorInstance.execute({
-        socket: wrappedSocket,
-        bbsSession: session,
-        user: session.user!,
-        bbs: bbsApi,
-        params: door.parameters || []
-      });
+    if (packageJson?.runtime === 'hybrid' && hybridSessionId) {
+      const rpcHandlers = doorModule.rpcHandlers || doorModule.default?.rpcHandlers;
+      if (rpcHandlers && typeof rpcHandlers === 'object') {
+        const { getClientDoorBridge } = require('../doors/client-door-bridge');
+        const bridge = getClientDoorBridge();
 
-console.log(`[executeTypeScriptDoor] Door.execute() returned`);
-    } else {
-      // Legacy pattern: runDoor() function
-console.log(`[executeTypeScriptDoor] Calling door's runDoor() function...`);
-
-      const doorSessionObj = {
-        socket: wrappedSocket,
-        user: session.user,
-        bbsSession: session,  // Pass reference to BBS session for input routing
-        bbs: bbsApi,          // BBS API with all functions
-        params: door.parameters || []  // Pass command-line parameters from .info PARAMS
-      };
-
-      if (packageJson?.runtime === 'hybrid' && hybridSessionId) {
-        const rpcHandlers = doorModule.rpcHandlers || doorModule.default?.rpcHandlers;
-        if (rpcHandlers && typeof rpcHandlers === 'object') {
-          const { getClientDoorBridge } = require('../doors/client-door-bridge');
-          const bridge = getClientDoorBridge();
-
-          for (const [method, handler] of Object.entries(rpcHandlers)) {
-            if (typeof handler === 'function') {
-              bridge.registerRPCHandler(hybridSessionId, method, async (params: any) => {
-                return (handler as Function)(params, doorSessionObj);
-              });
+        for (const [method, handler] of Object.entries(rpcHandlers)) {
+          if (typeof handler === 'function') {
+            bridge.registerRPCHandler(hybridSessionId, method, async (params: any) => {
+              // Create a legacy-compatible session object for handlers that might expect it
+              const doorSessionObj = {
+                socket: wrappedSocket,
+                user: session.user,
+                bbsSession: session,
+                bbs: bbsApi,
+                params: door.parameters || []
+              };
+              return (handler as Function)(params, doorSessionObj);
+            });
 console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
-            }
           }
         }
       }
-
-      await doorModule.runDoor(doorSessionObj);
-console.log(`[executeTypeScriptDoor] Door's runDoor() returned`);
     }
+
+    await doorInstance.execute({
+      socket: wrappedSocket,
+      bbsSession: session,
+      user: session.user!,
+      bbs: bbsApi,
+      params: door.parameters || []
+    });
+
+console.log(`[executeTypeScriptDoor] Door.execute() returned`);
 
 console.log(`[executeTypeScriptDoor] Door completed successfully`);
 
