@@ -86,10 +86,39 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
   }
 
   /**
-   * Log user login
+   * Write session divider (required for ByteKillHandler compatibility)
+   * express.e callersLogDivider() writes this before each user session
    */
-  logLogin(nodeId: number, username: string): void {
-    this.appendLog(nodeId, `Login: ${username}`);
+  private writeDivider(nodeId: number): void {
+    try {
+      this.ensureNodeDir(nodeId);
+      const logPath = this.getLogPath(nodeId);
+      fs.appendFileSync(logPath, '**************************************************************\n', 'utf8');
+    } catch (error) {
+      console.error(`[CallersLog] Error writing divider to Node${nodeId}/CallersLog:`, error);
+    }
+  }
+
+  /**
+   * Log user login
+   * Per express.e displayUserToCallersLog(), this writes a divider then user info
+   */
+  logLogin(nodeId: number, username: string, slotNumber: number = 1, location: string = 'Unknown'): void {
+    // Write divider before login entry (express.e:16029)
+    this.writeDivider(nodeId);
+    // Format: DD-Mon-YYYY (HH:MM) [slot] username (connectString) location
+    // express.e uses formatLongDate + formatLongTime, similar to our format
+    const timestamp = this.formatTimestamp();
+    const entry = `${timestamp} [${slotNumber}] ${username} (LOCAL) ${location}`;
+    // Write directly without extra timestamp (appendLog adds one)
+    try {
+      this.ensureNodeDir(nodeId);
+      const logPath = this.getLogPath(nodeId);
+      fs.appendFileSync(logPath, entry + '\n', 'utf8');
+      console.log(`[CallersLog] Node${nodeId}: Login ${username}`);
+    } catch (error) {
+      console.error(`[CallersLog] Error writing login to Node${nodeId}/CallersLog:`, error);
+    }
   }
 
   /**

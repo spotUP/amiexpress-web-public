@@ -222,30 +222,12 @@ function calculateGlobalStats(users: UserStats[]): GlobalStats {
   };
 }
 
-/**
- * Format bytes with appropriate suffix (bytes, KB, MB, GB)
- */
+// formatBytes imported from shared utility
+import { formatBytesPadded } from './byte-format.util';
+
+// Local wrapper to match original signature
 function formatBytes(bytes: number, width: number): string {
-  let value: number;
-  let suffix: string;
-
-  if (bytes >= 1073741824) {
-    value = bytes / 1073741824;
-    suffix = 'GB';
-  } else if (bytes >= 1048576) {
-    value = bytes / 1048576;
-    suffix = 'MB';
-  } else if (bytes >= 1024) {
-    value = bytes / 1024;
-    suffix = 'KB';
-  } else {
-    value = bytes;
-    suffix = 'bytes';
-  }
-
-  const numStr = value.toFixed(value >= 10 ? 0 : 1);
-  const result = `${numStr} ${suffix}`;
-  return result.padStart(width, ' ');
+  return formatBytesPadded(bytes, width);
 }
 
 /**

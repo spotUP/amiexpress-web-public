@@ -57,6 +57,24 @@ console.log(`[ModemEmulator] enable() called with bps=${bps}, enabled=${this.ena
   }
 
   /**
+   * Wait for queue to drain with throttling intact
+   * Use this before disabling to preserve animation timing
+   */
+  async drain(): Promise<void> {
+    // Wait for processing to complete
+    while (this.processing || this.queue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+
+  /**
+   * Check if queue has pending data
+   */
+  hasPendingData(): boolean {
+    return this.queue.length > 0 || this.processing;
+  }
+
+  /**
    * Check if emulation is enabled
    */
   isEnabled(): boolean {

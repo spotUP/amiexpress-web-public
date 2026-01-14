@@ -24,6 +24,8 @@ import { looksLikeAsciiArt } from '../../utils/ascii-art.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const iconv = require('iconv-lite');
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -54,6 +56,11 @@ export class XIMIOHandler {
   // ANSI sequence buffer for handling split escape sequences across JH_SM calls
   // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
   private ansiBuffer: string = '';
+
+  // File display serialization - prevent overlapping JH_SF requests
+  // Doors may send multiple JH_SF requests in quick succession (e.g., dRE!WAll)
+  // Without serialization, outputs interleave causing display corruption
+  private fileDisplayLock: Promise<void> = Promise.resolve();
 
   constructor(
     emulator: MoiraEmulator,
@@ -822,42 +829,56 @@ console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
    * Handle JH_SF (Show File - full path)
    */
   async handleShowFile(msg: XIMMessage): Promise<void> {
-    const targetPath = this.getMessageString(msg).trim();
-    const forceNonStop = msg.data === 1;
+    // Serialize file display requests to prevent output interleaving
+    // Doors like dRE!WAll send multiple JH_SF requests in quick succession
+    const doDisplay = async () => {
+      const targetPath = this.getMessageString(msg).trim();
+      const forceNonStop = msg.data === 1;
+const testFs = require('fs');
+testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] handleShowFile START: targetPath="${targetPath}" forceNonStop=${forceNonStop}\n`);
 
-    if (!targetPath) {
-      this.reply(msg, 0);
-      return;
-    }
+      if (!targetPath) {
+        this.reply(msg, 0);
+        return;
+      }
 
-    const resolved = this.resolvePath(targetPath);
-    const parsed = path.parse(resolved);
-    const candidates =
-      parsed.ext && parsed.ext.length > 0
-        ? [resolved]
-        : [
-            `${resolved}.txt`,
-            `${resolved}.TXT`,
-            `${resolved}.txt.gr`,
-            `${resolved}.GR1`,
-          ];
+      const resolved = this.resolvePath(targetPath);
+      const parsed = path.parse(resolved);
+      const candidates =
+        parsed.ext && parsed.ext.length > 0
+          ? [resolved]
+          : [
+              `${resolved}.txt`,
+              `${resolved}.TXT`,
+              `${resolved}.txt.gr`,
+              `${resolved}.GR1`,
+            ];
 
-    const target = this.findFirstExisting(candidates);
-    if (!target) {
+      const target = this.findFirstExisting(candidates);
+testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] handleShowFile: resolved="${resolved}" candidates=${JSON.stringify(candidates)} target="${target}"\n`);
+      if (!target) {
 console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
-      this.reply(msg, 0);
-      return;
-    }
+        this.reply(msg, 0);
+        return;
+      }
 
-    const displayed = await this.displayTextFile(target, forceNonStop, msg);
-    if (!displayed) {
-      this.reply(msg, 0);
-      return;
-    }
+      const displayed = await this.displayTextFile(target, forceNonStop, msg);
+      if (!displayed) {
+        this.reply(msg, 0);
+        return;
+      }
 
-    if (!this.waitingForPause) {
-      this.reply(msg, 1);
-    }
+      if (!this.waitingForPause) {
+        this.reply(msg, 1);
+      }
+    };
+
+    // Chain onto the file display lock to ensure serialization
+    this.fileDisplayLock = this.fileDisplayLock.then(doDisplay).catch(err => {
+      console.error('[XIMIOHandler] JH_SF error:', err);
+      this.reply(msg, 0);
+    });
+    await this.fileDisplayLock;
   }
 
   /**
@@ -1060,6 +1081,18 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // as "[36m" instead of actual colored text.
     let converted = fullText.replace(/\x9b/g, '\x1b[');
 
+    // Filter out Amiga console.device specific codes that aren't standard ANSI:
+    // - [0 p = cursor off (Amiga-specific, not valid ANSI)
+    // - [1 p = cursor on (Amiga-specific, not valid ANSI)
+    // - [ p = toggle cursor (Amiga-specific)
+    // These have a space before the 'p' which makes them Amiga-specific.
+    // Standard ANSI cursor codes don't have a space (e.g., [?25h, [?25l)
+    const amigaCursorMatches = converted.match(/\[(\d*)\s+p/gi);
+    if (amigaCursorMatches) {
+console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCursorMatches)}`);
+    }
+    converted = converted.replace(/\[(\d*)\s+p/gi, '');
+
     // Handle @READUSERKEYS directive from MultiTop and similar doors
     // This directive should trigger a pause and wait for user keypress
     const hasReadUserKeys = /@READUSERKEYS\s*/gi.test(converted);
@@ -1078,10 +1111,10 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // Some Amiga doors output bare "[32m" sequences without ESC prefix,
     // relying on Amiga console.device's ability to accept these directly.
     // For proper terminal output, we need to add the ESC prefix.
-    // Pattern: [ followed by optional params (digits/semicolons/?) and command letter
-    // Examples: [32m -> ESC[32m, [0m -> ESC[0m, [2J -> ESC[2J, [1;33m -> ESC[1;33m
+    // Pattern: [ followed by optional ? (DEC private), params (digits/semicolons), and command letter
+    // Examples: [32m -> ESC[32m, [0m -> ESC[0m, [2J -> ESC[2J, [?25l -> ESC[?25l
     // Only convert if not already preceded by ESC
-    converted = converted.replace(/(?<!\x1b)\[(\d*(?:;\d*)*[?]?[A-Za-z])/g, '\x1b[$1');
+    converted = converted.replace(/(?<!\x1b)\[([?]?\d*(?:;\d*)*[A-Za-z])/g, '\x1b[$1');
 
     // Check for incomplete ANSI escape sequence at end of text
     // CSI format: ESC [ (params) (letter) where letter terminates the sequence
@@ -1271,7 +1304,16 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     msg: XIMMessage
   ): Promise<boolean> {
     try {
-      const content = amigafs.readFileSync(filePath, 'utf-8') as string;
+      // Read file as binary buffer first to handle encoding properly
+      // Amiga files use ISO-8859-1 encoding, not UTF-8
+      const rawBuffer = amigafs.readFileSync(filePath) as Buffer;
+      // Convert from ISO-8859-1 (Amiga standard) to UTF-8 for display
+      const content = iconv.decode(rawBuffer, 'iso-8859-1');
+console.log(`[XIM-DEBUG] displayTextFile: ${filePath}, rawBuffer.length=${rawBuffer.length}, content.length=${content.length}`);
+console.log(`[XIM-DEBUG] First 100 bytes hex: ${rawBuffer.slice(0, 100).toString('hex')}`);
+// Write to a test file to verify code path is hit
+const testFs = require('fs');
+testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] displayTextFile: ${filePath}\n`);
 
       // Process MCI codes in file contents (express.e:6790-6820)
       try {
@@ -1436,7 +1478,9 @@ debugLog('[XIMIOHandler] Pause acknowledged, resuming');
   }
 
   /**
-   * Send reply to door via ReplyMsg
+   * Send reply to door via bidirectional XIM protocol
+   *
+   * CRITICAL FIX 2026-01-13: XIM doors poll AEDoorPort for replies, not mn_ReplyPort
    */
   private reply(msg: XIMMessage, data: number, stringValue?: string): void {
 debugLog('[XIMIOHandler] Sending reply to door:');
@@ -1461,9 +1505,14 @@ debugLog(`  Data: ${data}`);
       message: 'Reply to door I/O request',
     });
 
-    this.execLibrary.replyMsg(msg.msgAddr);
-
-debugLog('[XIMIOHandler] Reply sent via ReplyMsg');
+    // Send reply via standard Exec ReplyMsg - this puts the message
+    // on mn_ReplyPort where the door is waiting for it.
+    // Note: DoorLifecycleManager also calls replyMsg() but that's OK -
+    // replyMsg is idempotent (tracks via repliedMessages).
+    // DO NOT put reply on XIM port - it confuses the skipReplies tracking.
+    debugLog(`[XIMIOHandler] Reply via ReplyMsg (msg=0x${msg.msgAddr.toString(16)})`);
+    // Note: We don't call replyMsg here because DoorLifecycleManager does it
+    // after handleMessage returns. This prevents double-reply issues.
   }
 
   /**

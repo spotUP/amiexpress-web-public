@@ -18,6 +18,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
+import { formatDateSlash } from '../../utils/date-format.util';
 
 import type { BBSSession } from '../../index';
 
@@ -309,16 +310,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/**
- * Format date for display
- */
+// formatDate imported from '../../utils/date-format.util' as formatDateSlash
+// Wrapper to accept string argument (original signature)
 function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: '2-digit'
-  });
+  return formatDateSlash(dateString);
 }
 
 /**

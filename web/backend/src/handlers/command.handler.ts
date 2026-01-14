@@ -495,8 +495,16 @@ console.error('[pauseDisplayFlow] Error during pause:', error);
 
 // Dependency injection setters
 export async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+  let loopCount = 0;
+  const maxLoops = 20; // Prevent infinite loops
   try {
     while (isDisplayFlowState(session.subState)) {
+      loopCount++;
+      if (loopCount > maxLoops) {
+        console.error(`[DISPLAY FLOW] LOOP DETECTED! Breaking after ${maxLoops} iterations. subState=${session.subState}`);
+        session.subState = LoggedOnSubState.READ_COMMAND;
+        break;
+      }
       displayFlowLog(
         'advance',
         `state=${session.subState}`,
@@ -618,6 +626,8 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         // joinConference sets subState to DISPLAY_MENU and menuPause to true
         if (pauseDisplayFlow(socket, session)) {
           displayFlowLog('pause after auto-rejoin');
+          // Clear menuPause since we already paused here - prevents double pause in DISPLAY_MENU
+          session.menuPause = false;
           return;
         }
         continue;
@@ -643,6 +653,9 @@ console.error('[handleCommand] Error running queued screen commands:', error);
           const { doPause } = require('./screen.handler');
           doPause(socket, session);
           session.menuPause = false;
+          // CRITICAL: Return after installing pause - don't continue to display menu until pause dismissed
+          displayFlowLog('pause before MENU (menuPause was true)');
+          return;
         }
 
         // express.e: checkScreenClear + displayScreen(MENU) when menu is shown
@@ -777,6 +790,7 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   // If a door is active but has lost its handler, clear door state so BBS input resumes
   if (session.inDoorManager && !session.doorInputHandler) {
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door state is cleared
     if (session.subState === LoggedOnSubState.DOOR_RUNNING) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
     }
@@ -1181,8 +1195,13 @@ console.error('[SystemStats] Error tracking login:', error);
           if (logonDisplayed) {
             // LOGON screen displayed - honor express.e doPause() (express.e:29854)
             // State already set to DISPLAY_BULL, pause handler will continue flow
+            // CRITICAL: Only call doPause if displayScreen didn't already set up a pause (via ~SP MCI)
+            if (!session.paginatedScreen) {
 console.log('[LOGIN] LOGON displayed (telnet), adding pause per express.e:29854');
-            doPause(socket, session);
+              doPause(socket, session);
+            } else {
+console.log('[LOGIN] LOGON displayed (telnet) with built-in pause (~SP), skipping doPause');
+            }
             return;
           }
 
@@ -3718,7 +3737,10 @@ console.log('[CommandPriority] Trying as InternalCommand');
 // Process BBS commands (processInternalCommand equivalent)
 export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
   // Clear screen before showing command output (authentic BBS behavior)
-  emitText(socket, '\x1b[2J\x1b[H');
+  // EXCEPTION: Don't clear when called from ~CC_ screen commands - screen is already being displayed
+  if (!session.executingScreenCommand) {
+    emitText(socket, '\x1b[2J\x1b[H');
+  }
 
   // Map commands to internalCommandX functions from AmiExpress
   switch (command) {
@@ -4075,6 +4097,7 @@ console.error('[GA] Failed to persist session for door input:', err);
 
         // Restore state after door exit
         session.inDoorManager = false;
+        session.mouseEventsEnabled = false; // Reset mouse events when door exits
         delete session.doorInputHandler;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         try {
@@ -4096,6 +4119,7 @@ console.error('[GA] Fatal error:', error);
         emitText(socket, `${(error as Error).message}\r\n`);
         emitText(socket, `${(error as Error).stack}\r\n\r\n`);
         session.inDoorManager = false;
+        session.mouseEventsEnabled = false; // Reset mouse events when door exits
         delete session.doorInputHandler;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.menuPause = true;
@@ -4219,10 +4243,15 @@ console.log(`[Command Handler] No matching door found for: ${command}`);
         DebugSeverity.INFO
       );
 
-      emitText(socket, `\r\nUnknown command: ${command}\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // Only show error message if NOT a screen-initiated command (~CC_, ~XI)
+      // Screen commands should fail silently - user didn't explicitly type them
+      if (!session.executingScreenCommand) {
+        // express.e:28397 - "No such command!!  Use '?' for command list."
+        emitText(socket, `\r\nNo such command!!  Use '?' for command list.\r\n\r\n`);
+        // express.e:28647-28648 - After command, menuPause=TRUE, subState=DISPLAY_MENU
+        session.menuPause = true;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+      }
       break;
   }
 

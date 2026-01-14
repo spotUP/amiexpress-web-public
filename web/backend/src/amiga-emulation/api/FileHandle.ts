@@ -52,6 +52,15 @@ export class FileHandle {
   /** Track open mode to guard invalid seeks */
   private openMode: 'r' | 'w' | 'rw' | null = null;
 
+  /** Count how many times we've hit EOF and then seeked backwards - for loop detection */
+  private eofSeekBackCount: number = 0;
+
+  /** Track if we just returned EOF (0 bytes) - for loop detection */
+  private justReturnedEof: boolean = false;
+
+  /** Permanently locked to EOF - no more reads allowed */
+  private permanentEof: boolean = false;
+
   /**
    * Snapshot of file size at open time (for read-only files).
    * This prevents infinite loops when reading files that grow during read
@@ -145,9 +154,37 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
       throw new Error('File not open');
     }
 
+    // Check for permanent EOF lock first (applies to all handle types)
+    if (this.permanentEof) {
+      return Buffer.alloc(0);
+    }
+
     if (this.isMemoryHandle && this.memoryBuffer) {
       const available = this.memoryBuffer.length - this.position;
       const bytesToRead = Math.min(length, available);
+      // Log to file for debugging (only if not permanently locked)
+      try {
+        const logLine = `[FileHandle] MEMORY: ${this.amiPath} bufLen=${this.memoryBuffer.length} pos=${this.position} avail=${available} reading=${bytesToRead} eofSeekCount=${this.eofSeekBackCount}\n`;
+        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+      } catch {}
+
+      // If we've detected an infinite seek loop pattern (hit EOF, seeked back multiple times), force EOF
+      if (this.eofSeekBackCount >= 3) {
+        this.permanentEof = true;
+        try {
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            `[FileHandle] LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
+        } catch {}
+        return Buffer.alloc(0);
+      }
+
+      // Track EOF for loop detection
+      if (bytesToRead === 0) {
+        this.justReturnedEof = true;
+      } else {
+        this.justReturnedEof = false;
+      }
+
       const slice = this.memoryBuffer.subarray(this.position, this.position + bytesToRead);
       this.position += bytesToRead;
       return Buffer.from(slice);
@@ -164,21 +201,52 @@ console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
     }
 
     try {
+      // If we've detected an infinite seek loop pattern, force EOF
+      if (this.eofSeekBackCount >= 3) {
+        this.permanentEof = true;
+        try {
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            `[FileHandle] FILE LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
+        } catch {}
+        return Buffer.alloc(0);
+      }
+
       // For read-only files with a snapshot size, limit reads to the original file size.
       // This prevents infinite loops when reading files that grow during read.
       let effectiveLength = length;
       if (this.snapshotSize !== null) {
         const available = this.snapshotSize - this.position;
+        try {
+          const logLine = `[FileHandle] FILE: ${this.amiPath} snapshot=${this.snapshotSize} pos=${this.position} avail=${available} req=${length} eofSeekCount=${this.eofSeekBackCount}\n`;
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+        } catch {}
         if (available <= 0) {
           // Already at or past the snapshot EOF - return empty (EOF)
+          this.justReturnedEof = true;
+          try {
+            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', `[FileHandle] FILE EOF: ${this.amiPath}\n`);
+          } catch {}
           return Buffer.alloc(0);
         }
         effectiveLength = Math.min(length, available);
+      } else {
+        try {
+          const logLine = `[FileHandle] FILE NO-SNAPSHOT: ${this.amiPath} pos=${this.position} req=${length}\n`;
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log', logLine);
+        } catch {}
       }
 
       const buffer = Buffer.alloc(effectiveLength);
       const bytesRead = fs.readSync(this.fd, buffer, 0, effectiveLength, this.position);
       this.position += bytesRead;
+
+      // Track EOF for loop detection
+      if (bytesRead === 0) {
+        this.justReturnedEof = true;
+      } else {
+        this.justReturnedEof = false;
+      }
+
       return buffer.slice(0, bytesRead);
     } catch (error) {
       // Only log errors, not every read operation
@@ -245,8 +313,14 @@ console.error(`[FileHandle] Write error:`, error);
    * Seek to position in file
    */
   seek(position: number, whence: number): number {
+    // If permanently locked to EOF, all seeks fail
+    if (this.permanentEof) {
+      return -1;
+    }
+
     if (this.isMemoryHandle && this.memoryBuffer) {
       const size = this.memoryBuffer.length;
+      const oldPos = this.position;
       let targetPos = this.position;
       if (whence === 0) {
         targetPos = position;
@@ -255,9 +329,34 @@ console.error(`[FileHandle] Write error:`, error);
       } else if (whence === 2) {
         targetPos = size + position;
       }
+
+      // Log seeks for debugging
+      try {
+        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          `[FileHandle] SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
+      } catch {}
+
+      // Detect infinite loop pattern: if we just hit EOF and now we're seeking backwards
+      if (this.justReturnedEof && targetPos < oldPos) {
+        this.eofSeekBackCount++;
+        try {
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            `[FileHandle] EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
+        } catch {}
+        // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
+        if (this.eofSeekBackCount >= 10) {
+          this.permanentEof = true;
+          try {
+            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+              `[FileHandle] SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
+          } catch {}
+          return -1; // Return error to signal EOF/failure
+        }
+      }
+
       // Guard runaway seeks on read-only memory-backed handles to avoid tight loops
       if (this.openMode === 'r' && targetPos > size) {
-console.warn(
+        console.warn(
           `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${size})`
         );
         return -1;
@@ -274,6 +373,7 @@ console.warn(
     try {
       const stats = fs.fstatSync(this.fd);
       const fileSize = stats.size;
+      const oldPos = this.position;
       // Compute target position first
       let targetPos = this.position;
       if (whence === 0) {
@@ -284,9 +384,33 @@ console.warn(
         targetPos = stats.size + position;
       }
 
+      // Log seeks for debugging
+      try {
+        fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+          `[FileHandle] FILE SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
+      } catch {}
+
+      // Detect infinite loop pattern: if we just hit EOF and now we're seeking backwards
+      if (this.justReturnedEof && targetPos < oldPos) {
+        this.eofSeekBackCount++;
+        try {
+          fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+            `[FileHandle] FILE EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
+        } catch {}
+        // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
+        if (this.eofSeekBackCount >= 10) {
+          this.permanentEof = true;
+          try {
+            fs.appendFileSync('~/Code/amiexpress-web/logs/filehandle-debug.log',
+              `[FileHandle] FILE SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
+          } catch {}
+          return -1; // Return error to signal EOF/failure
+        }
+      }
+
       // If opened read-only, prevent runaway seeks far past EOF
       if (this.openMode === 'r' && targetPos > fileSize) {
-console.warn(
+        console.warn(
           `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${fileSize})`
         );
         return -1;

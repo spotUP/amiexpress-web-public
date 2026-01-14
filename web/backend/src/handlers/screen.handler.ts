@@ -28,6 +28,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
+import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, type WipeType } from '../utils/screen-wipe.util';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
@@ -650,6 +651,9 @@ export async function parseMciCodes(
   let slowmoCount = session?.slowmoCount || 0;
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
+
+  // Helper: formatBytes imported from '../utils/byte-format.util'
+  const formatBytes = formatBytesUtil;
 
   // PHASE 5: ~Dx MCI Terminator Support (express.e:5651-5735)
   // Parse ~D<char> codes to change MCI terminator dynamically
@@ -1507,14 +1511,6 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
       value = value.padStart(rep.width, ' ');
       parsed = parsed.replace(rep.match, value);
     }
-  }
-
-  // Helper function to format bytes
-  function formatBytes(bytes: number): string {
-    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
-    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
-    return bytes.toString() + ' B';
   }
 
   // Process ~SS_ file display codes (express.e:5490-5500)
@@ -2697,31 +2693,46 @@ console.error(`[displayScreen]  ERROR executing queued command ${commandStr}:`, 
 /**
  * Restore modem state after animation playback
  * Called when screen display completes, pagination ends, or segment processing finishes
+ * CRITICAL: Waits for modem queue to drain before disabling, preserving animation timing
  */
 function restoreModemState(socket: any, session: BBSSession): void {
   if (session.savedModemState) {
     const { getModemEmulator } = require('../utils/modem-emulator.util');
     const modemEmulator = getModemEmulator(socket);
+    const savedState = session.savedModemState;
 
-    if (session.savedModemState.enabled && session.savedModemState.bps > 0) {
-      modemEmulator.enable(session.savedModemState.bps);
-      session.modemEmulationEnabled = true;
-      session.modemBps = session.savedModemState.bps;
-      console.log(`[ANSI-ANIM] Restored modem emulation to ${session.savedModemState.bps} bps`);
+    // Clear saved state immediately to prevent double-restore
+    session.savedModemState = undefined;
+
+    // If modem has pending data, wait for it to drain before restoring state
+    // This preserves animation timing - don't immediately flush the queue
+    if (modemEmulator.hasPendingData()) {
+      console.log(`[ANSI-ANIM] Waiting for modem queue to drain before restoring state...`);
+      modemEmulator.drain().then(() => {
+        doRestore(modemEmulator, savedState);
+      });
     } else {
-      modemEmulator.disable();
-      session.modemEmulationEnabled = false;
-      session.modemBps = 0;
-      console.log(`[ANSI-ANIM] Restored modem emulation to disabled (full speed)`);
+      doRestore(modemEmulator, savedState);
     }
 
-    // Restore AnsiBuffer flush delay
-    const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
-    const ansiBuffer = getAnsiBuffer(socket);
-    ansiBuffer.setFlushDelay(session.savedModemState.enabled ? 0 : 16);
+    function doRestore(emulator: any, state: any) {
+      if (state.enabled && state.bps > 0) {
+        emulator.enable(state.bps);
+        session.modemEmulationEnabled = true;
+        session.modemBps = state.bps;
+        console.log(`[ANSI-ANIM] Restored modem emulation to ${state.bps} bps`);
+      } else {
+        emulator.disable();
+        session.modemEmulationEnabled = false;
+        session.modemBps = 0;
+        console.log(`[ANSI-ANIM] Restored modem emulation to disabled (full speed)`);
+      }
 
-    // Clear saved state to prevent double-restore
-    session.savedModemState = undefined;
+      // Restore AnsiBuffer flush delay
+      const { getAnsiBuffer } = require('../utils/ansi-buffer.util');
+      const ansiBuffer = getAnsiBuffer(socket);
+      ansiBuffer.setFlushDelay(state.enabled ? 0 : 16);
+    }
   }
 }
 

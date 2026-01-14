@@ -929,6 +929,17 @@ debugLog(`[XIMBBSInfo][BB_CONFNUM] Reply msgAddr=0x${msg.msgAddr.toString(16)}, 
       message: 'Reply to door BBS info query',
     });
 
-    this.execLibrary.replyMsg(msg.msgAddr);
+    // CRITICAL FIX 2026-01-13: Use bidirectional XIM protocol
+    // XIM doors poll AEDoorPort for replies, not their mn_ReplyPort
+    const ximPortAddr = this.state.ximPortAddr;
+    if (ximPortAddr && ximPortAddr !== 0) {
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+      debugLog(`[XIMBBSInfo] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
+    } else {
+      this.execLibrary.replyMsg(msg.msgAddr);
+      debugLog(`[XIMBBSInfo] Reply sent via ReplyMsg (fallback)`);
+    }
   }
 }

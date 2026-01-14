@@ -178,28 +178,8 @@ export function loadConferenceFileAreas(bbsRoot: string, confId: number): FileAr
   return loadFileAreasFromDisk(bbsRoot, [{ id: confId, name: `Conference ${confId}` }]);
 }
 
-/**
- * Resolve a BBS: assign path to actual filesystem path
- * BBS: → bbsRoot
- * BBS2: → bbsRoot (for mirror/backup paths, treat as same)
- *
- * @param assignPath - Path with BBS: assign (e.g., "BBS:Conf2/Upload/")
- * @param bbsRoot - BBS root directory
- * @returns Resolved filesystem path
- */
-export function resolveAssignPath(assignPath: string, bbsRoot: string): string {
-  if (!assignPath) return bbsRoot;
-
-  let resolved = assignPath;
-
-  // Replace BBS: and BBS2: with actual root
-  resolved = resolved.replace(/^BBS2?:/i, bbsRoot);
-
-  // Ensure trailing slash is removed for consistent path.join
-  resolved = resolved.replace(/\/$/, '');
-
-  return resolved;
-}
+// NOTE: resolveAssignPath() was removed - use path-util.ts::resolveAssignPath() instead
+// It handles more assign types (BBS:, DOORS:, NODE#:, T:, RAM:, etc.)
 
 /**
  * Ensure root Screens has placeholders for core screens only.

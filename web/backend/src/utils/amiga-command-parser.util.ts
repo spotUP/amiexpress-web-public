@@ -205,13 +205,17 @@ function readNullString(buffer: Buffer, offset: number): [string, number] {
 }
 
 /**
- * Parse Amiga .info file tooltypes using proper binary structure parsing
+ * Extract tooltypes from Amiga .info file using proper binary structure parsing.
+ *
+ * NOTE: This function returns Map<string, string> of tooltypes only.
+ * For full .info file parsing (including binary data preservation), use
+ * info-file.util.ts::parseInfoFile() instead.
  *
  * @param filePath - Path to the .info file
  * @param session - Optional BBS session for sysop debug messages
  * @param socket - Optional socket for sysop debug messages
  */
-export function parseInfoFile(filePath: string, session?: any, socket?: any): Map<string, string> {
+export function extractTooltypesFromInfoFile(filePath: string, session?: any, socket?: any): Map<string, string> {
   const tooltypes = new Map<string, string>();
 
   try {
@@ -497,7 +501,7 @@ function getConferenceDirNames(confNumber: number): string[] {
  * Implements express.e:4630-4820 command loading logic
  */
 export function loadCommandFromInfo(filePath: string): CommandDefinition | null {
-  const tooltypes = parseInfoFile(filePath);
+  const tooltypes = extractTooltypesFromInfoFile(filePath);
 
   if (tooltypes.size === 0) {
     return null;
@@ -716,3 +720,13 @@ export function findCommand(
   const commands = scanCommandDirectory(baseDir, commandType, conferenceId, nodeId);
   return commands.get(commandName.toUpperCase()) || null;
 }
+
+/**
+ * Backward-compatible alias for extractTooltypesFromInfoFile.
+ *
+ * DEPRECATED: Use extractTooltypesFromInfoFile() for clarity, or
+ * info-file.util.ts::parseInfoFile() for full .info file parsing.
+ *
+ * @deprecated Use extractTooltypesFromInfoFile instead
+ */
+export { extractTooltypesFromInfoFile as parseInfoFile };

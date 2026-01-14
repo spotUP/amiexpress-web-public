@@ -64,6 +64,7 @@ import * as path from 'path';
 import { User } from '../database';
 import { loadBBSConfig } from './bbs-config-file.service';
 import { getSystemTime } from '../utils/date-time.util';
+import { formatDateSlash, formatTime as formatTimeUtil } from '../utils/date-format.util';
 
 // Cache for previous caller info per node (avoids reading logs repeatedly)
 interface PreviousCallerInfo {
@@ -227,20 +228,11 @@ console.log(`[DoorDropFile] Could not read CallersLog for Node${nodeId}:`, err);
       fs.mkdirSync(nodeDir, { recursive: true });
     }
 
-    // Format dates
+    // Format dates - using shared utilities from date-format.util
     const now = getSystemTime();
     const lastLogin = user.lastLogin || now;
-    const formatDate = (date: Date) => {
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      const yy = String(date.getFullYear()).slice(-2);
-      return `${mm}/${dd}/${yy}`;
-    };
-    const formatTime = (date: Date) => {
-      const hh = String(date.getHours()).padStart(2, '0');
-      const mm = String(date.getMinutes()).padStart(2, '0');
-      return `${hh}:${mm}`;
-    };
+    const formatDate = formatDateSlash;
+    const formatTime = (date: Date) => formatTimeUtil(date, false); // HH:MM without seconds
 
     // Calculate logoff time
     const logoffTime = new Date(now.getTime() + timeRemaining * 1000);

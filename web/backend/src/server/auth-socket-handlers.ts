@@ -615,6 +615,7 @@ console.error('[Webhook] Error sending user login webhook:', error);
       // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
       session.cmdShortcuts = false;
       session.inDoorManager = false;
+      session.mouseEventsEnabled = false; // Ensure mouse events are disabled on login
       session.doorInputHandler = undefined;
       if (session.shortcuts) session.shortcuts.clear();
 
@@ -699,8 +700,13 @@ console.log('[AUTH] =============================================');
         // NOTE: We don't pass an onComplete callback because handleCommand (command.handler.ts:692-693)
         // automatically calls advanceDisplayFlow() when pagination completes in a display flow state.
         // Passing a callback that calls handleCommand would cause DOUBLE advancement (BULL displays twice).
+        // CRITICAL: Only call doPause if displayScreen didn't already set up a pause (via ~SP MCI)
+        if (!session.paginatedScreen) {
 console.log('[LOGIN] LOGON displayed, adding pause per express.e:29854');
-        doPause(socket, session);
+          doPause(socket, session);
+        } else {
+console.log('[LOGIN] LOGON displayed with built-in pause (~SP), skipping doPause');
+        }
 console.log('[LOGIN] Pause set up, waiting for user input to continue');
         return;
       }

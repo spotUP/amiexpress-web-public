@@ -348,8 +348,12 @@ console.log('[ENV] Join Conference');
   }
 
   if (newConf < 1 || newConf > _conferences.length) {
-    // AmiExpress shows only the JOINCONF screen and prompt (no auto list dump).
-    await _displayScreen(socket, session, 'JOINCONF');
+    // AmiExpress shows JOINCONF screen, or if not found, show conference list
+    const screenDisplayed = await _displayScreen(socket, session, 'JOINCONF');
+    if (!screenDisplayed) {
+      // No JOINCONF screen file - show the built-in conference list
+      displayConferenceList(socket, session);
+    }
 
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.complexPrompt([

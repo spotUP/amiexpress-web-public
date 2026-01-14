@@ -2067,20 +2067,14 @@ debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
           const msg = this.ximProtocol.parseMessage(msgAddr);
           if (msg) {
             await this.ximProtocol.handleMessage(msg);
-            // CRITICAL: Reply the message so door's GetMsg on its reply port receives it!
-            execLib.replyMsg(msgAddr);
+            // Reply to door via mn_ReplyPort so door's WaitPort/GetMsg unblocks
+            execLib.replyMsg(msg.msgAddr);
 
             // Check if door requested shutdown (JH_SHUTDOWN)
             if (this.ximProtocol.isShuttingDown()) {
               this.executionState.isRunning = false;
             }
-          } else {
-            // Still reply even if parse failed, so door doesn't hang
-            execLib.replyMsg(msgAddr);
           }
-        } else {
-          // Still reply even without handler, so door doesn't hang
-          execLib.replyMsg(msgAddr);
         }
       }
     } catch (error) {

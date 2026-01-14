@@ -22,6 +22,8 @@ import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
 import { config } from '../../config';
+import { formatBytesCompact } from '../../utils/byte-format.util';
+import { formatDateSlash } from '../../utils/date-format.util';
 
 import type { BBSSession } from '../../index';
 
@@ -245,16 +247,8 @@ function formatFileSize(bytes: number): string {
   }
 }
 
-/**
- * Format date for display (MM/DD/YY)
- */
-function formatDate(date: Date): string {
-  const d = new Date(date);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const year = String(d.getFullYear()).substring(2);
-  return `${month}/${day}/${year}`;
-}
+// formatDate imported from '../../utils/date-format.util' as formatDateSlash
+const formatDate = formatDateSlash;
 
 /**
  * A Command - Alter File Flags (Flag for Download)
@@ -545,16 +539,8 @@ async function displayFileStatus(socket: any, session: BBSSession): Promise<void
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
-/**
- * Format bytes for display
- */
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0';
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)}GB`;
-}
+// formatBytes now imported from '../../utils/byte-format.util' as formatBytesCompact
+const formatBytes = formatBytesCompact;
 
 /**
  * B Command - Read Bulletin

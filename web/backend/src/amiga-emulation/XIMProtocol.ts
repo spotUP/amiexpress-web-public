@@ -336,14 +336,22 @@ debugLog(`[XIMProtocol] Input injected successfully`);
       return false;
     }
 
-    // Only inject for confirmed native doors (detected after 500ms timer)
-    // XIM doors should NOT have input injected - they use XIM protocol
-    if (!isNativeDoor) {
-      return false;
+    // For native doors (detected after 500ms timer), always inject
+    if (isNativeDoor) {
+      return true;
     }
 
-    // This is a native door that needs input injection via PutMsg
-    return true;
+    // HYBRID DOORS: Some XIM doors (like zOOsTAT) use XIM for output but native
+    // GetMsg polling for input at pause prompts. If the door is registered,
+    // NOT waiting for XIM input, and has a valid door port, inject input.
+    // This handles doors that display "(Press Enter to continue)" via printf
+    // and wait via WaitPort/GetMsg instead of JH_HK.
+    if (isRegistered && !isWaiting && this.doorPort) {
+      debugLog(`[XIMProtocol] shouldInjectNativeInput: Hybrid door - injecting for registered non-waiting door`);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -396,6 +404,12 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
    * Routes to appropriate specialized handler based on command type
    */
   async handleMessage(msg: XIMMessage): Promise<void> {
+    // UNCONDITIONAL TRACE: Log ALL incoming commands to verify handleMessage is being called
+    // Write to same log file as door-logging.util.ts so we can see it
+    const fs = require('fs');
+    const path = require('path');
+    const logPath = path.join(process.cwd(), '../../logs/door-68k.log');
+    fs.appendFileSync(logPath, `[XIMProtocol:TRACE] handleMessage() CALLED: cmd=${msg.command}\n`);
     const humanName = this.messageParser.getCommandName(msg.command);
 
     // Log incoming message to XIM debug log
@@ -593,12 +607,24 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
       return;
     }
 
-    // Unknown command
+    // Commands 21-99: Undefined gap between JH_* (0-20) and DT_* (100+) ranges
+    // Some doors echo back the JH_REGISTER reply command value (which contains userLineLen).
+    // Common values: 23 (user line length), 29 (default when no user logged in)
+    // These appear to be capability/feature checks. Return 0 (not active/not supported).
+    if (msg.command >= 21 && msg.command <= 99) {
+      const fs = require('fs');
+      const path = require('path');
+      const logPath = path.join(process.cwd(), '../../logs/door-68k.log');
+      fs.appendFileSync(logPath, `[XIMProtocol] CMD ${msg.command} (undefined range 21-99): data=${msg.data} -> replying 0\n`);
+      this.sendReply(msg, 0);
+      return;
+    }
+
+    // Unknown command - match express.e DEFAULT behavior (line 4221-4228)
+    // express.e just logs a warning and does NOT modify msg.data - reply with data unchanged
 debugLog(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
 debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
-    // Return 1 for unknown commands (0 might signal "not supported" to some doors)
-    // cmd=23 specifically is used by AquaScan right after JH_REGISTER
-    this.sendReply(msg, 1);
+    this.sendReply(msg, msg.data);
   }
 
   /**
@@ -1109,9 +1135,9 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
       XIMCommand.JH_REGISTER,
       XIMCommand.JH_SHUTDOWN,
       XIMCommand.JH_SIGBIT,
-      XIMCommand.JH_MCI,
-      XIMCommand.JH_SG,
-      XIMCommand.JH_SF,
+      // NOTE: JH_MCI, JH_SG, JH_SF are handled by io.ts (isIOCommand) for better
+      // encoding support (ISO-8859-1), MCI processing, file candidate search,
+      // ACS/language lookup, and async serialization. Do NOT add them here.
       XIMCommand.JH_EF,
       XIMCommand.JH_FLAGFILE,
       XIMCommand.ZMODEMSEND,
@@ -1182,17 +1208,8 @@ debugLog(
         this.systemCommandsHandler.handleSignalBit(msg);
         break;
 
-      case XIMCommand.JH_MCI:
-        this.systemCommandsHandler.handleMCI(msg);
-        break;
-
-      case XIMCommand.JH_SG:
-        this.systemCommandsHandler.handleSecurityScreen(msg);
-        break;
-
-      case XIMCommand.JH_SF:
-        this.systemCommandsHandler.handleShowFile(msg);
-        break;
+      // NOTE: JH_MCI, JH_SG, JH_SF are now handled by ioHandler (see isIOCommand)
+      // for better encoding support, MCI processing, and file handling.
 
       case XIMCommand.JH_EF:
         this.systemCommandsHandler.handleEditFile(msg);
@@ -1318,7 +1335,15 @@ debugLog(
   }
 
   /**
-   * Send reply to door via ReplyMsg
+   * Send reply to door via bidirectional XIM protocol
+   *
+   * CRITICAL FIX 2026-01-13: XIM doors use BIDIRECTIONAL communication on ONE port.
+   * Door sends messages TO AEDoorPort AND polls SAME port for replies.
+   * Standard ReplyMsg() sends to mn_ReplyPort which causes door to miss replies.
+   * Must use PutMsg() back to the AEDoorPort where door is polling.
+   *
+   * Bug was: Only JH_REGISTER used bidirectional, other commands used replyMsg()
+   * causing doors to loop waiting for replies they never see.
    */
   private sendReply(msg: any, data: number): void {
     const humanName = this.messageParser.getCommandName(msg.command);
@@ -1340,7 +1365,20 @@ debugLog(
     });
 
     this.messageParser.writeData(msg.msgAddr, data);
-    this.execLibrary.replyMsg(msg.msgAddr);
+
+    // Use bidirectional XIM protocol - send reply back to AEDoorPort
+    // This matches how handleRegister sends replies
+    const ximPortAddr = this.state.ximPortAddr;
+    if (ximPortAddr && ximPortAddr !== 0) {
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+      debugLog(`[XIMProtocol] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
+    } else {
+      // Fallback to standard ReplyMsg if no XIM port (shouldn't happen for XIM doors)
+      this.execLibrary.replyMsg(msg.msgAddr);
+      debugLog(`[XIMProtocol] Reply sent via ReplyMsg to door's reply port (fallback)`);
+    }
   }
 
   /**

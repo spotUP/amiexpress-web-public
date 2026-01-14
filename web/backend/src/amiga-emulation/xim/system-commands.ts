@@ -19,6 +19,9 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
+import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const iconv = require('iconv-lite');
 
 export class XIMSystemCommandsHandler {
   private emulator: MoiraEmulator;
@@ -550,9 +553,9 @@ debugLog(`  Text: "${text}"`);
         pauseAfter: msg.data !== 0,
       });
       if (result?.content) {
-        this.socket.emit('ansi-output', result.content);
+        this.socket.emit('ansi-output', convertAmigaTextForTerminal(result.content));
       } else {
-        this.socket.emit('ansi-output', text + (msg.data !== 0 ? '\r\n' : ''));
+        this.socket.emit('ansi-output', convertAmigaTextForTerminal(text + (msg.data !== 0 ? '\r\n' : '')));
       }
       if (msg.data !== 0) {
         // express.e: add CRLF and checkForPause
@@ -560,7 +563,7 @@ debugLog(`  Text: "${text}"`);
       }
     } catch (err) {
 console.warn('[XIMSystem] JH_MCI fallback:', err);
-      this.socket.emit('ansi-output', text + (msg.data !== 0 ? '\r\n' : ''));
+      this.socket.emit('ansi-output', convertAmigaTextForTerminal(text + (msg.data !== 0 ? '\r\n' : '')));
     }
 
     this.reply(msg, 1);
@@ -579,7 +582,13 @@ debugLog(`  Screen: "${screenName}"`);
     const resolved = this.resolvePath(screenName);
     if (amigafs.existsSync(resolved)) {
       try {
-        const content = amigafs.readFileSync(resolved, 'utf-8') as string;
+        // Read as binary buffer and convert from ISO-8859-1 (Amiga encoding) to UTF-8
+        const rawBuffer = amigafs.readFileSync(resolved) as Buffer;
+        let content = iconv.decode(rawBuffer, 'iso-8859-1');
+
+        // Apply full Amiga text conversion (ANSI codes + line endings)
+        content = convertAmigaTextForTerminal(content);
+
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
@@ -605,7 +614,13 @@ debugLog(`  File: "${fileName}"`);
     const resolved = this.resolvePath(fileName);
     if (amigafs.existsSync(resolved)) {
       try {
-        const content = amigafs.readFileSync(resolved, 'utf-8') as string;
+        // Read as binary buffer and convert from ISO-8859-1 (Amiga encoding) to UTF-8
+        const rawBuffer = amigafs.readFileSync(resolved) as Buffer;
+        let content = iconv.decode(rawBuffer, 'iso-8859-1');
+
+        // Apply full Amiga text conversion (ANSI codes + line endings)
+        content = convertAmigaTextForTerminal(content);
+
         this.socket.emit('ansi-output', content);
       } catch (err) {
         SysopDebugUtil.debugFileError(this.socket, this.bbsSession, 'read', resolved, err as Error);
@@ -676,7 +691,9 @@ debugLog(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: $
   }
 
   /**
-   * Send reply to door
+   * Send reply to door via bidirectional XIM protocol
+   *
+   * CRITICAL FIX 2026-01-13: XIM doors poll AEDoorPort for replies, not mn_ReplyPort
    */
   private reply(
     msg: XIMMessage,
@@ -704,7 +721,16 @@ debugLog(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: $
       message: 'Reply to door request',
     });
 
-    this.execLibrary.replyMsg(msg.msgAddr);
+    // Use bidirectional XIM protocol - send reply back to AEDoorPort
+    if (this.ximPortAddr !== 0) {
+      const NT_REPLYMSG = 6;
+      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+      this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
+      debugLog(`[XIMSystem] Reply sent via PutMsg to ximPort=0x${this.ximPortAddr.toString(16)} (bidirectional XIM)`);
+    } else {
+      this.execLibrary.replyMsg(msg.msgAddr);
+      debugLog(`[XIMSystem] Reply sent via ReplyMsg (fallback)`);
+    }
   }
 
   /**

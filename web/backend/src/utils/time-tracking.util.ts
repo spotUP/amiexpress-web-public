@@ -6,6 +6,10 @@
  */
 
 import { BBSSession } from '../index';
+import { checkSecurity } from './acs.util';
+import { ACSPermission } from '../constants/acs-permissions';
+import { LoggedOnSubState } from '../constants/bbs-states';
+import { displayScreen } from '../handlers/screen.handler';
 
 /**
  * Update time used in session based on elapsed time since last update.
@@ -66,25 +70,47 @@ export function updateTimeUsed(socket: any, session: BBSSession): void {
  * Check if user has exceeded time limit and force logoff if needed.
  * Based on express.e:556-566 (PROC checkTimeUsed)
  *
- * Express.e logic:
- * - If timeLimit < 0 and no override access, show SCREEN_LOGON24 and logoff
+ * Express.e logic (line 557):
+ *   IF (timeLimit<0) AND (state<>STATE_LOGOFF) AND (checkSecurity(ACS_OVERRIDE_TIMELIMIT)=FALSE)
+ *     IF displayScreen(SCREEN_LOGON24)=FALSE
+ *       aePuts('You have exceeded your time limit\b\n')
+ *       aePuts('Goodbye\b\n\b\n')
+ *       aePuts('Disconnecting..\b\n')
+ *     ENDIF
+ *     state:=STATE_LOGOFF
  *
  * @param socket Socket for user session
  * @param session BBSSession object
- * @returns true if time exceeded, false otherwise
+ * @returns true if time exceeded and user should be logged off, false otherwise
  */
-export function checkTimeUsed(socket: any, session: BBSSession): boolean {
+export async function checkTimeUsed(socket: any, session: BBSSession): Promise<boolean> {
   if (!session.user) return false;
 
   const timeLimit = session.user.timeTotal - session.user.timeUsed;
 
+  // express.e:557 - Check if time exceeded
   if (timeLimit < 0) {
-    // TODO: Check ACS_OVERRIDE_TIMELIMIT security flag (express.e:557)
-    // TODO: Display SCREEN_LOGON24 or fallback message (express.e:558-560)
+    // express.e:557 - Skip if already logging off
+    if (session.subState === LoggedOnSubState.LOGOFF) {
+      return false;
+    }
 
-    // For now, just emit a message and return true
-    socket.emit('ansi-output', '\r\nYou have exceeded your time limit\r\n');
-    socket.emit('ansi-output', 'Goodbye\r\n\r\n');
+    // express.e:557 - Check ACS_OVERRIDE_TIMELIMIT permission
+    // Sysops (level 255) and users with this permission are exempt from time limits
+    if (checkSecurity(session.user, ACSPermission.OVERRIDE_TIMELIMIT)) {
+      return false; // User has override - no time limit enforcement
+    }
+
+    // express.e:558-561 - Display SCREEN_LOGON24 or fallback message
+    const screenDisplayed = await displayScreen(socket, session, 'LOGON24', false);
+    if (!screenDisplayed) {
+      socket.emit('ansi-output', '\r\nYou have exceeded your time limit\r\n');
+      socket.emit('ansi-output', 'Goodbye\r\n\r\n');
+      socket.emit('ansi-output', 'Disconnecting..\r\n');
+    }
+
+    // express.e:563 - Set state to logging off
+    session.subState = LoggedOnSubState.LOGOFF;
 
     return true;
   }
@@ -96,12 +122,20 @@ export function checkTimeUsed(socket: any, session: BBSSession): boolean {
  * Calculate time remaining in minutes for display.
  * Based on express.e:28417,28419 - Div((loggedOnUser.timeTotal-loggedOnUser.timeUsed),60)
  *
+ * Users with ACS_OVERRIDE_TIMELIMIT (sysops) see 9999 for unlimited time.
+ *
  * @param session BBSSession object
- * @returns Time remaining in minutes
+ * @returns Time remaining in minutes (9999 for unlimited)
  */
 export function getTimeRemainingMinutes(session: BBSSession): number {
   if (!session.user) return 60; // Default fallback
 
+  // express.e:557 - Users with OVERRIDE_TIMELIMIT have unlimited time
+  if (checkSecurity(session.user, ACSPermission.OVERRIDE_TIMELIMIT)) {
+    return 9999; // Display as unlimited
+  }
+
   const timeRemaining = session.user.timeTotal - session.user.timeUsed;
-  return Math.floor(timeRemaining / 60); // Convert seconds to minutes
+  // Ensure we never return negative time remaining
+  return Math.max(0, Math.floor(timeRemaining / 60)); // Convert seconds to minutes
 }

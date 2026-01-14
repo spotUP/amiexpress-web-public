@@ -749,6 +749,7 @@ console.error('[launchAmigaDoor] Unable to persist session for door input:', err
     disableGameMode(socket, session);
 
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -1849,6 +1850,7 @@ console.log(`[executeNativeGccDoor] Door exited with code ${code}`);
     // Clean up
     disableGameMode(socket, session);
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -1862,6 +1864,7 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
 
     disableGameMode(socket, session);
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -2332,6 +2335,7 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     disableGameMode(socket, session);
 
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -2420,6 +2424,7 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
     session.inDoorManager = false;
+    session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     try {

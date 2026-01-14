@@ -12,6 +12,7 @@ import { join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSystemTime } from '../utils/date-time.util';
+import { formatBytes } from '../utils/byte-format.util';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -347,12 +348,6 @@ async function checkPorts() {
   };
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
+// formatBytes now imported from '../utils/byte-format.util'
 
 export const deploymentRouter = router;

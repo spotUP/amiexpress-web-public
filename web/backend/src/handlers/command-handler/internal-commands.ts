@@ -471,6 +471,7 @@ console.error('[GA] Unable to persist session for door input:', err);
 
         // Cleanup door input handling
         session.inDoorManager = false;
+        session.mouseEventsEnabled = false; // Reset mouse events when door exits
         delete session.doorInputHandler;
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         try {

@@ -30,6 +30,10 @@ export enum XIMCommand {
   JH_SO = 18,          // Serial output
   JH_SMPTR = 19,       // Send message pointer
   JH_20 = 20,          // Command 20
+  // Commands 21-99 are UNDEFINED in axcommon.e (gap between JH_* and DT_* ranges)
+  // Some doors echo back JH_REGISTER reply command value (userLineLen) as a feature check
+  // Common values seen: 23 (user line length), 29 (default when no user)
+  // Handler returns 0 for all commands in this range
   JH_CK = 500,         // Check for key (QuicKey) - alias
   JH_DL = 15,          // Alias used by glue for ExtHK/DL
   JH_MCI = 507,        // MCI processing

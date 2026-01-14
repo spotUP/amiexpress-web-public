@@ -5464,7 +5464,7 @@ debugLog(
     this.emulator.writeMemory(msgAddr + 8, NT_REPLYMSG);
 
     // Track replies so host-side polling can skip them on AEDoorPort.
-    this.repliedMessages.add(msgAddr);
+    this.markMessageAsReplied(msgAddr);
 
     // Send message back to reply port via PutMsg
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
@@ -5483,6 +5483,15 @@ debugLog(
 debugLog(
       `[ExecLibrary] Reply sent to port 0x${replyPortAddr.toString(16)}`
     );
+  }
+
+  /**
+   * Mark a message as replied (for tracking by host-side polling)
+   * This is used by XIM I/O handler to track replies sent via PutMsg
+   * so that getMsg with skipReplies option can skip them.
+   */
+  markMessageAsReplied(msgAddr: number): void {
+    this.repliedMessages.add(msgAddr);
   }
 
   /**

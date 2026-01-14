@@ -17,6 +17,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { getSystemTime } from '../../utils/date-time.util';
+import { formatDateDash } from '../../utils/date-format.util';
 
 import type { BBSSession } from '../../index';
 
@@ -183,15 +184,8 @@ async function handleNewFilesDisplay(socket: any, session: BBSSession): Promise<
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
-/**
- * Format date as mm-dd-yy (express.e formatLongDate)
- */
-function formatDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const year = String(date.getFullYear()).substring(2);
-  return `${month}-${day}-${year}`;
-}
+// formatDate imported from '../../utils/date-format.util' as formatDateDash
+const formatDate = formatDateDash;
 
 /**
  * Format file size for display
