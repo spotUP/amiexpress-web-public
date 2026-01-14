@@ -12,7 +12,7 @@ import {
   createScreen,
   createBox,
   createList,
-  setupInputHandler,
+  DoorInputManager,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { createDockable } from './ui/dockable';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -56,8 +56,6 @@ import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
 
-import { PassThrough } from 'stream';
-
 /**
  * Main application class
  */
@@ -67,13 +65,13 @@ export class GrandmasterApp {
   private state: AppState;
   private gameEngine: GameEngine | null = null;
   private inputHandler: InputHandler;
+  private inputManager: DoorInputManager;
   private sounds: SoundEngine;
   private highScores: HighScoreManager;
   private network: GrandmasterNetworkManager | null = null;
   private attackManager: AttackManager | null = null;
   private multiplayerServer: MultiplayerServer;
   private currentScreen: 'menu' | 'game' | 'lobby' | 'settings' | 'stats' = 'menu';
-  private inputStream: PassThrough;
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -81,11 +79,18 @@ export class GrandmasterApp {
     this.sounds = new SoundEngine(session);
     this.highScores = new HighScoreManager();
     this.multiplayerServer = new MultiplayerServer();
-    
-    // Create input stream to decouple from process.stdin
-    this.inputStream = new PassThrough();
+
     this.screen = this.createScreen();
-    
+
+    // Create input manager for centralized state management
+    this.inputManager = new DoorInputManager(session, this.screen, {
+      enableGameMode: true,
+      enableGrabKeys: true,
+      enableMouse: true,
+      debug: false,
+      debugName: 'GRANDMASTER'
+    });
+
     // Create input handler with user's key bindings
     this.inputHandler = new InputHandler(
       this.screen,
@@ -127,6 +132,17 @@ export class GrandmasterApp {
           hold: [...DEFAULT_KEYS.hold],
           pause: [...DEFAULT_KEYS.pause],
         },
+        // Visual Effects Settings
+        blockGlow: true,
+        glowIntensity: 1.0,
+        clearStyle: 'inward',
+        clearDirection: 'in',
+        clearAnimationSpeed: 1.0,
+        placementEffects: true,
+        floatTextMode: 'offboard',
+        b2bGlowEnabled: true,
+        connectedBlocks: false,  // Disabled by default (BBS terminal limitations)
+        animationIntensity: 'normal',
       },
       stats: {
         gamesPlayed: 0,
@@ -144,38 +160,46 @@ export class GrandmasterApp {
   }
 
   /**
+   * Check if a modal/dialog is currently open
+   * This prevents screen-level escape handlers from firing when a modal is handling ESC
+   */
+  private isModalOpen(): boolean {
+    return this.screen?.children?.some((child: any) =>
+      child.type === 'docmodal' ||
+      child.type === 'question' ||
+      child.type === 'message' ||
+      child.type === 'prompt' ||
+      child.type === 'loading'
+    ) || false;
+  }
+
+  /**
    * Create neo-blessed screen
    */
   private createScreen(): Screen {
-    const screen = createScreen({
+    const screen = createScreen(this.session.bbs, {
       dockBorders: true,
-      title: 'GRANDMASTER',
+      title: 'GRANDMASTER v1.1.0',  // Version for debugging
       fullUnicode: false,
       smartCSR: false,  // Disable smart scroll-region optimization - prevents layout corruption
       fastCSR: false,   // Disable fast CSR - forces full redraws for stable rendering
       focusKeys: false, // Disable focus navigation keys - prevent arrows from being swallowed
-      input: this.inputStream, // Use decoupled input stream
-      output: (data: string) => this.session.bbs.write(data),
+      ignoreLocked: ['mouse', 'keypress'],  // Prevent blur from clearing screen
     });
 
-    // Connect input handler - feed directly to our inputStream
-    console.log('[GRANDMASTER] Setting up input handler, bbsSession exists:', !!this.session.bbsSession);
-    
-    if (this.session.bbsSession) {
-      this.session.bbsSession.inDoorManager = true;
-      this.session.bbsSession.doorInputHandler = (data: any) => {
-        if (!this.screen.destroyed) {
-          // If data is an object (like mouse or specialized key event), stringify it
-          // Blessed's custom _handleData will parse it back
-          const chunk = (typeof data === 'string' || data instanceof Buffer) 
-            ? data 
-            : JSON.stringify(data);
-          this.inputStream.write(chunk);
-        }
-      };
+    // Prevent screen from clearing on blur - add a render call to redraw
+    // Use 'any' to access internal blessed properties
+    const program = (screen as any).program;
+    if (program) {
+      // Override blur handler to just re-render instead of clearing
+      program.on('blur', () => {
+        // Just re-render on blur, don't clear
+        screen.render();
+      });
     }
-    
-    console.log('[GRANDMASTER] input handler configured via PassThrough');
+
+    // Note: Input setup is now handled by DoorInputManager in run()
+    // This keeps screen creation separate from input state management
 
     return screen;
   }
@@ -184,18 +208,21 @@ export class GrandmasterApp {
    * Run the application
    */
   async run(initialMode?: string): Promise<void> {
-    // Enable game mode for smooth keyboard input (required for neo-blessed doors)
-    // This provides raw keydown/keyup events and bypasses OS key repeat delays
-    if (this.session.bbs?.enableGameMode) {
-      this.session.bbs.enableGameMode();
-      console.log('[GRANDMASTER] Game mode enabled');
-    }
+    // Clear any previous door's screen artifacts
+    // This prevents ghosting when switching between doors
+    this.screen.program.write('\x1b[2J');  // Clear entire screen with ANSI
+    this.screen.program.write('\x1b[H');   // Move cursor to home (0,0)
+    this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+    this.screen.alloc();
+    this.screen.render();
 
-    // Enable mouse events for neo-blessed mouse support
-    if (this.session.bbs?.enableMouseEvents) {
-      this.session.bbs.enableMouseEvents();
-      console.log('[GRANDMASTER] Mouse events enabled');
-    }
+    // Wait for screen clear to propagate to terminal (critical for modem speeds)
+    // At slow speeds, ANSI clear codes take time to transmit
+    await this.sleep(200);
+
+    // Enable door input (game mode, keyboard capture, mouse, input handler)
+    // DoorInputManager handles all input state in one place
+    this.inputManager.enable();
 
     // Show attract mode (boot sequence + demo)
     await this.showAttractMode();
@@ -376,6 +403,13 @@ export class GrandmasterApp {
   private async showLobby(): Promise<void> {
     this.currentScreen = 'lobby';
 
+    // Disable game mode so textboxes can receive input
+    if (this.session.bbs?.disableGameMode) {
+      this.session.bbs.disableGameMode();
+      console.log('[GRANDMASTER] Game mode disabled for versus lobby chat');
+    }
+    this.inputHandler.setEnabled(false);
+
     // Check if network is available
     if (!this.network) {
       const errorBox = createDockable({
@@ -438,7 +472,10 @@ export class GrandmasterApp {
       modeBox.on('select', (_item: any, index: number) => {
         resolve(index);
       });
-      this.screen.key(['escape'], () => resolve(3));  // Back
+      this.screen.key(['escape'], () => {
+        if (this.isModalOpen()) return;
+        resolve(3);  // Back
+      });
     });
 
     modeBox.destroy();
@@ -465,6 +502,13 @@ export class GrandmasterApp {
     // Show lobby and wait for result
     const result = await lobbyScreen.show('custom', selectedMode);
 
+    // Re-enable game mode and input handler after lobby
+    this.inputHandler.setEnabled(true);
+    if (this.session.bbs?.enableGameMode) {
+      this.session.bbs.enableGameMode();
+      console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+    }
+
     if (result.action === 'start' && result.mode) {
       // Start multiplayer game
       await this.startVersusGame(result.mode);
@@ -476,6 +520,13 @@ export class GrandmasterApp {
    */
   private async showTetriNetLobby(): Promise<void> {
     this.currentScreen = 'lobby';
+
+    // Disable game mode so textboxes can receive input
+    if (this.session.bbs?.disableGameMode) {
+      this.session.bbs.disableGameMode();
+      console.log('[GRANDMASTER] Game mode disabled for TetriNET lobby chat');
+    }
+    this.inputHandler.setEnabled(false);
 
     // First show mode selection
     const modePanel = createDockable({
@@ -521,7 +572,10 @@ export class GrandmasterApp {
       modeBox.on('select', (_item: any, index: number) => {
         resolve(index);
       });
-      this.screen.key(['escape'], () => resolve(7));  // Back
+      this.screen.key(['escape'], () => {
+        if (this.isModalOpen()) return;
+        resolve(7);  // Back
+      });
     });
 
     modeBox.destroy();
@@ -665,6 +719,13 @@ export class GrandmasterApp {
 
     // Show lobby and wait for result
     const result = await lobby.show(entryMode, selectedMode);
+
+    // Re-enable game mode and input handler after lobby
+    this.inputHandler.setEnabled(true);
+    if (this.session.bbs?.enableGameMode) {
+      this.session.bbs.enableGameMode();
+      console.log('[GRANDMASTER] Game mode re-enabled after TetriNET lobby');
+    }
 
     if (result.action === 'start') {
       // Start TetriNET game with the settings from lobby
@@ -991,7 +1052,10 @@ export class GrandmasterApp {
       modeSelectBox.on('select', (_item: any, index: number) => {
         resolve(index);
       });
-      this.screen.key(['escape'], () => resolve(-1));
+      this.screen.key(['escape'], () => {
+        if (this.isModalOpen()) return;
+        resolve(-1);
+      });
     });
 
     modeSelectBox.destroy();
@@ -1277,6 +1341,7 @@ export class GrandmasterApp {
     const footerHeight = 3;
     const inputHeight = 3;
     const sidePanelHeight = `100%-${footerHeight + inputHeight}`;
+    const chatWidth = 36; // Consistent width for chat area and input
 
     const createLobbyUi = () => {
       const gameBox = createDockable({
@@ -1295,7 +1360,7 @@ export class GrandmasterApp {
         parent: gameBox,
         top: 0,
         left: 0,
-        width: 35,
+        width: chatWidth,
         height: sidePanelHeight,
         label: client.getSlot() ? ' Partyline Chat ' : ' TSpec Chat ',
         border: { type: 'line' },
@@ -1310,7 +1375,7 @@ export class GrandmasterApp {
         parent: gameBox,
         top: 0,
         right: 0,
-        width: 25,
+        width: 26,
         height: sidePanelHeight,
         style: { bg: 'black' },
       });
@@ -1320,7 +1385,7 @@ export class GrandmasterApp {
         top: 0,
         left: 0,
         width: '100%',
-        height: '60%',
+        height: 11,
         label: ' Players ',
         border: { type: 'line' },
         style: { border: { fg: 'green' }, bg: 'black' },
@@ -1329,10 +1394,10 @@ export class GrandmasterApp {
 
       const spectatorList = createDockable({
         parent: rightPanel,
-        top: '60%',
+        top: 11,
         left: 0,
         width: '100%',
-        height: '40%',
+        height: `100%-11`,
         label: ' Spectators ',
         border: { type: 'line' },
         style: { border: { fg: 'magenta' }, bg: 'black' },
@@ -1370,8 +1435,8 @@ export class GrandmasterApp {
       const chatInput = createTextbox({
         parent: gameBox,
         bottom: footerHeight,
-        left: 1,
-        width: 33,
+        left: 0,
+        width: chatWidth,
         height: inputHeight,
         border: { type: 'line' },
         style: {
@@ -1754,7 +1819,10 @@ export class GrandmasterApp {
       difficultyBox.on('select', (_item: any, index: number) => {
         resolve(index);
       });
-      this.screen.key(['escape'], () => resolve(7));  // Back
+      this.screen.key(['escape'], () => {
+        if (this.isModalOpen()) return;
+        resolve(7);  // Back
+      });
     });
 
     difficultyBox.destroy();
@@ -1887,7 +1955,7 @@ export class GrandmasterApp {
   private async showSettings(): Promise<void> {
     this.currentScreen = 'settings';
 
-    const settingsScreen = new SettingsScreen(this.screen, this.state);
+    const settingsScreen = new SettingsScreen(this.screen, this.state, this.sounds);
     await settingsScreen.show();
 
     // Update input handler with any changed key bindings
@@ -2075,11 +2143,18 @@ export class GrandmasterApp {
    * Quit the application
    */
   private async quit(): Promise<void> {
-    // Disable game mode before exiting
-    if (this.session.bbs?.disableGameMode) {
-      this.session.bbs.disableGameMode();
-      console.log('[GRANDMASTER] Game mode disabled');
-    }
+    // Clear screen buffer before exit to prevent ghosting in next door
+    // This ensures tetrinet lobby, menus, etc. don't leak into BBS or next GMASTER session
+    this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+    this.screen.alloc();
+    this.screen.render();
+
+    // Wait for clear to propagate (critical for modem speeds)
+    await this.sleep(200);
+
+    // Disable door input (restores BBS state)
+    // DoorInputManager handles all cleanup in correct order
+    this.inputManager.disable();
 
     // Disconnect from network to prevent socket leaks
     if (this.network) {
@@ -2087,13 +2162,7 @@ export class GrandmasterApp {
       console.log('[GRANDMASTER] Network disconnected');
     }
 
-    // Clean up
-    if (this.session.bbsSession) {
-      this.session.bbsSession.inDoorManager = false;
-      delete this.session.bbsSession.doorInputHandler;
-    }
-
-    // InputHandler disabled; keep SDK input active for textbox.
+    // Destroy screen (this will cleanup blessed state)
     this.screen.destroy();
   }
 
