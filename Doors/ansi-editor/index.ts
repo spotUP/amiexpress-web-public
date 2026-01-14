@@ -14,8 +14,7 @@
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { showANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
-import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import * as amigafs from '../../web/backend/src/utils/amigafs';
+import * as fs from 'fs';
 import * as path from 'path';
 
 interface AnsiFile {
@@ -61,8 +60,8 @@ let currentState: EditorState | null = null;
 
 door.onStart(async (ctx: DoorContext) => {
   const ansiDir = path.join(process.cwd(), 'data', 'ansi-art');
-  if (!amigafs.existsSync(ansiDir)) {
-    amigafs.mkdirSync(ansiDir, { recursive: true });
+  if (!fs.existsSync(ansiDir)) {
+    fs.mkdirSync(ansiDir, { recursive: true });
   }
 
   currentState = {
@@ -133,7 +132,7 @@ async function showMainMenu(ctx: DoorContext): Promise<void> {
     ctx.output.writeLine('\r\n{center}{gray-fg}Use arrow keys to navigate, Enter to select, or press letter key{/gray-fg}');
     ctx.output.writeLine(`{center}{gray-fg}Current directory: {white-fg}${currentState.currentDir}{/white-fg}{/gray-fg}{/center}\r\n`);
 
-    const choice = await ctx.input.getKey();
+    const choice = (await ctx.input.waitForKey()).key;
 
     if (choice === '\x1b[A') { // Up arrow
       currentState.selectedIndex = (currentState.selectedIndex - 1 + menuItems.length) % menuItems.length;
@@ -178,7 +177,7 @@ async function handleMenuSelection(ctx: DoorContext, index: number): Promise<voi
     case 6: // Quit
       if (currentState.modified) {
         ctx.output.writeLine('\r\n{yellow-fg}You have unsaved changes. Really quit? (y/n){/yellow-fg} ');
-        const confirm = await ctx.input.getKey();
+        const confirm = (await ctx.input.waitForKey()).key;
         if (confirm !== 'y' && confirm !== 'Y') {
           return;
         }
@@ -189,15 +188,15 @@ async function handleMenuSelection(ctx: DoorContext, index: number): Promise<voi
 
 async function createNewFile(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('\r\n{cyan-fg}Enter filename (without extension):{/cyan-fg} ');
-  const filename = await ctx.input.readLine();
+  const filename = await ctx.input.getLine();
   if (!filename || !currentState) return;
 
   const fullPath = path.join(currentState.currentDir, `${filename}.ans`);
 
-  if (amigafs.existsSync(fullPath)) {
+  if (fs.existsSync(fullPath)) {
     ctx.output.writeLine('{red-fg}File already exists!{/red-fg}\r\n');
     ctx.output.writeLine('Press any key...');
-    await ctx.input.getKey();
+    (await ctx.input.waitForKey()).key;
     return;
   }
 
@@ -219,7 +218,7 @@ async function openFileDialog(ctx: DoorContext): Promise<void> {
   if (files.length === 0) {
     ctx.output.writeLine('\r\n{yellow-fg}No ANSI files found in current directory.{/yellow-fg}\r\n');
     ctx.output.writeLine('Press any key...');
-    await ctx.input.getKey();
+    (await ctx.input.waitForKey()).key;
     return;
   }
 
@@ -229,13 +228,13 @@ async function openFileDialog(ctx: DoorContext): Promise<void> {
   });
 
   ctx.output.writeLine('\r\n{cyan-fg}Enter file number (or 0 to cancel):{/cyan-fg} ');
-  const input = await ctx.input.readLine();
+  const input = await ctx.input.getLine();
   const fileNum = parseInt(input || '0');
 
   if (fileNum > 0 && fileNum <= files.length) {
     const selectedFile = files[fileNum - 1];
     currentState.currentFile = selectedFile;
-    const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
+    const content = fs.readFileSync(selectedFile.fullPath, 'utf8') as string;
     await openEditor(ctx, content);
   }
 }
@@ -259,16 +258,16 @@ async function showFileBrowser(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('\r\n{cyan-fg}[E]dit  [N]ew  [Q]uit{/cyan-fg}\r\n');
   ctx.output.writeLine('Choice: ');
 
-  const choice = await ctx.input.getKey();
+  const choice = (await ctx.input.waitForKey()).key;
 
   if (choice === 'e' || choice === 'E') {
     ctx.output.writeLine('Enter file number: ');
-    const input = await ctx.input.readLine();
+    const input = await ctx.input.getLine();
     const fileNum = parseInt(input || '0');
     if (fileNum > 0 && fileNum <= files.length) {
       const selectedFile = files[fileNum - 1];
       currentState.currentFile = selectedFile;
-      const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
+      const content = fs.readFileSync(selectedFile.fullPath, 'utf8') as string;
       await openEditor(ctx, content);
     }
   } else if (choice === 'n' || choice === 'N') {
@@ -288,7 +287,7 @@ async function showGallery(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('{center}{gray-fg}For now, use File Browser to view and edit files.{/gray-fg}\r\n\r\n');
   ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
 
-  await ctx.input.getKey();
+  (await ctx.input.waitForKey()).key;
 }
 
 async function showSettings(ctx: DoorContext): Promise<void> {
@@ -307,7 +306,7 @@ async function showSettings(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('\r\n{gray-fg}Settings are configured in this session{/gray-fg}\r\n');
   ctx.output.writeLine('{cyan-fg}Press any key to return{/cyan-fg}');
 
-  await ctx.input.getKey();
+  (await ctx.input.waitForKey()).key;
 }
 
 async function showHelp(ctx: DoorContext): Promise<void> {
@@ -336,14 +335,14 @@ async function showHelp(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('  {white-fg}5{/white-fg} - Ellipse\r\n');
 
   ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
-  await ctx.input.getKey();
+  (await ctx.input.waitForKey()).key;
 }
 
 async function openEditor(ctx: DoorContext, initialContent: string): Promise<void> {
   if (!currentState) return;
 
   try {
-    const result = await showANSIEditor(ctx.session as any, {
+    const result = await showANSIEditor(ctx.bbsSession as any, {
       title: currentState.currentFile ? `Editing: ${currentState.currentFile.filename}` : 'New ANSI File',
       initialContent,
       maxLines: 1000,
@@ -353,16 +352,16 @@ async function openEditor(ctx: DoorContext, initialContent: string): Promise<voi
       statusBar: currentState.settings.showStatusBar,
       onSave: async (content: string) => {
         if (currentState?.currentFile) {
-          if (currentState.settings.backupOnSave && amigafs.existsSync(currentState.currentFile.fullPath)) {
+          if (currentState.settings.backupOnSave && fs.existsSync(currentState.currentFile.fullPath)) {
             const backupPath = currentState.currentFile.fullPath + '.bak';
-            const original = amigafs.readFileSync(currentState.currentFile.fullPath);
-            amigafs.writeFileSync(backupPath, original);
+            const original = fs.readFileSync(currentState.currentFile.fullPath);
+            fs.writeFileSync(backupPath, original);
           }
 
-          amigafs.writeFileSync(currentState.currentFile.fullPath, content);
+          fs.writeFileSync(currentState.currentFile.fullPath, content);
           currentState.modified = false;
 
-          const stats = amigafs.statSync(currentState.currentFile.fullPath);
+          const stats = fs.statSync(currentState.currentFile.fullPath);
           currentState.currentFile.size = stats.size;
           currentState.currentFile.modified = stats.mtime;
 
@@ -378,7 +377,7 @@ async function openEditor(ctx: DoorContext, initialContent: string): Promise<voi
   } catch (error) {
     ctx.output.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
     ctx.output.writeLine('Press any key...');
-    await ctx.input.getKey();
+    (await ctx.input.waitForKey()).key;
   }
 }
 
@@ -388,11 +387,11 @@ function scanDirectory(dirPath: string): AnsiFile[] {
   const files: AnsiFile[] = [];
 
   try {
-    const entries = amigafs.readdirSync(dirPath);
+    const entries = fs.readdirSync(dirPath);
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry);
-      const stats = amigafs.statSync(fullPath);
+      const stats = fs.statSync(fullPath);
 
       if (stats.isFile()) {
         const ext = path.extname(entry).toLowerCase();
