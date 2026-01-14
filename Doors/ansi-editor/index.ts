@@ -85,7 +85,7 @@ door.onStart(async (ctx: DoorContext) => {
   try {
     await showMainMenu(ctx);
   } catch (error) {
-    ctx.output.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
+    ctx.output.writeLine(`\r\n\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`);
   }
 });
 
@@ -94,7 +94,7 @@ door.onClose(async (ctx: DoorContext) => {
 });
 
 door.onError(async (ctx: DoorContext, error: Error) => {
-  ctx.output.writeLine(`\r\n{red-fg}Error in ANSI Editor: ${error.message}{/red-fg}\r\n`);
+  ctx.output.writeLine(`\r\n\x1b[31mError in ANSI Editor: ${error.message}\x1b[0m\r\n`);
 });
 
 async function showMainMenu(ctx: DoorContext): Promise<void> {
@@ -104,11 +104,11 @@ async function showMainMenu(ctx: DoorContext): Promise<void> {
 
   while (!exit) {
     ctx.output.writeLine('\x1b[2J\x1b[H');
-    ctx.output.writeLine('{center}{cyan-fg}{bold}╔═══════════════════════════════════════════════════════════════════════════╗{/bold}{/cyan-fg}');
-    ctx.output.writeLine('{cyan-fg}{bold}║{/bold}{/cyan-fg}  {yellow-fg}{bold}AmiExpress ANSI Art Editor{/bold}{/yellow-fg} - Professional ANSI/ASCII Art Creation  {cyan-fg}{bold}║{/bold}{/cyan-fg}');
-    ctx.output.writeLine('{cyan-fg}{bold}╚═══════════════════════════════════════════════════════════════════════════╝{/bold}{/cyan-fg}{/center}\r\n');
+    ctx.output.writeLine('\x1b[36m\x1b[1m╔═══════════════════════════════════════════════════════════════════════════╗\x1b[0m\x1b[0m');
+    ctx.output.writeLine('\x1b[36m\x1b[1m║\x1b[0m\x1b[0m  \x1b[33m\x1b[1mAmiExpress ANSI Art Editor\x1b[0m\x1b[0m - Professional ANSI/ASCII Art Creation  \x1b[36m\x1b[1m║\x1b[0m\x1b[0m');
+    ctx.output.writeLine('\x1b[36m\x1b[1m╚═══════════════════════════════════════════════════════════════════════════╝\x1b[0m\x1b[0m\r\n');
 
-    ctx.output.writeLine('{center}{white-fg}{bold}Main Menu{/bold}{/white-fg}{/center}\r\n');
+    ctx.output.writeLine('\x1b[37m\x1b[1mMain Menu\x1b[0m\x1b[0m\r\n');
 
     const menuItems = [
       { key: 'N', label: 'New File', desc: 'Create a new ANSI art file' },
@@ -123,14 +123,14 @@ async function showMainMenu(ctx: DoorContext): Promise<void> {
     menuItems.forEach((item, idx) => {
       const highlight = currentState!.selectedIndex === idx;
       if (highlight) {
-        ctx.output.writeLine(`  {black-bg}{yellow-fg}► [{bold}${item.key}{/bold}] ${item.label.padEnd(20)} ${item.desc}{/yellow-fg}{/black-bg}`);
+        ctx.output.writeLine(`  \x1b[40m\x1b[33m► [\x1b[1m${item.key}\x1b[0m] ${item.label.padEnd(20)} ${item.desc}\x1b[0m\x1b[0m`);
       } else {
-        ctx.output.writeLine(`    {cyan-fg}[{bold}${item.key}{/bold}]{/cyan-fg} {white-fg}${item.label.padEnd(20)}{/white-fg} {gray-fg}${item.desc}{/gray-fg}`);
+        ctx.output.writeLine(`    \x1b[36m[\x1b[1m${item.key}\x1b[0m]\x1b[0m \x1b[37m${item.label.padEnd(20)}\x1b[0m \x1b[90m${item.desc}\x1b[0m`);
       }
     });
 
-    ctx.output.writeLine('\r\n{center}{gray-fg}Use arrow keys to navigate, Enter to select, or press letter key{/gray-fg}');
-    ctx.output.writeLine(`{center}{gray-fg}Current directory: {white-fg}${currentState.currentDir}{/white-fg}{/gray-fg}{/center}\r\n`);
+    ctx.output.writeLine('\r\n\x1b[90mUse arrow keys to navigate, Enter to select, or press letter key\x1b[0m');
+    ctx.output.writeLine(`\x1b[90mCurrent directory: \x1b[37m${currentState.currentDir}\x1b[0m\x1b[0m\r\n`);
 
     const choice = (await ctx.input.waitForKey()).key;
 
@@ -176,7 +176,7 @@ async function handleMenuSelection(ctx: DoorContext, index: number): Promise<voi
       break;
     case 6: // Quit
       if (currentState.modified) {
-        ctx.output.writeLine('\r\n{yellow-fg}You have unsaved changes. Really quit? (y/n){/yellow-fg} ');
+        ctx.output.writeLine('\r\n\x1b[33mYou have unsaved changes. Really quit? (y/n)\x1b[0m ');
         const confirm = (await ctx.input.waitForKey()).key;
         if (confirm !== 'y' && confirm !== 'Y') {
           return;
@@ -187,14 +187,14 @@ async function handleMenuSelection(ctx: DoorContext, index: number): Promise<voi
 }
 
 async function createNewFile(ctx: DoorContext): Promise<void> {
-  ctx.output.writeLine('\r\n{cyan-fg}Enter filename (without extension):{/cyan-fg} ');
+  ctx.output.writeLine('\r\n\x1b[36mEnter filename (without extension):\x1b[0m ');
   const filename = await ctx.input.getLine();
   if (!filename || !currentState) return;
 
   const fullPath = path.join(currentState.currentDir, `${filename}.ans`);
 
   if (fs.existsSync(fullPath)) {
-    ctx.output.writeLine('{red-fg}File already exists!{/red-fg}\r\n');
+    ctx.output.writeLine('\x1b[31mFile already exists!\x1b[0m\r\n');
     ctx.output.writeLine('Press any key...');
     (await ctx.input.waitForKey()).key;
     return;
@@ -216,18 +216,18 @@ async function openFileDialog(ctx: DoorContext): Promise<void> {
 
   const files = scanDirectory(currentState.currentDir);
   if (files.length === 0) {
-    ctx.output.writeLine('\r\n{yellow-fg}No ANSI files found in current directory.{/yellow-fg}\r\n');
+    ctx.output.writeLine('\r\n\x1b[33mNo ANSI files found in current directory.\x1b[0m\r\n');
     ctx.output.writeLine('Press any key...');
     (await ctx.input.waitForKey()).key;
     return;
   }
 
-  ctx.output.writeLine('\r\n{cyan-fg}{bold}Files:{/bold}{/cyan-fg}\r\n');
+  ctx.output.writeLine('\r\n\x1b[36m\x1b[1mFiles:\x1b[0m\x1b[0m\r\n');
   files.forEach((f, idx) => {
-    ctx.output.writeLine(`  {white-fg}[${idx + 1}]{/white-fg} ${f.filename} (${formatFileSize(f.size)})`);
+    ctx.output.writeLine(`  \x1b[37m[${idx + 1}]\x1b[0m ${f.filename} (${formatFileSize(f.size)})`);
   });
 
-  ctx.output.writeLine('\r\n{cyan-fg}Enter file number (or 0 to cancel):{/cyan-fg} ');
+  ctx.output.writeLine('\r\n\x1b[36mEnter file number (or 0 to cancel):\x1b[0m ');
   const input = await ctx.input.getLine();
   const fileNum = parseInt(input || '0');
 
@@ -244,18 +244,18 @@ async function showFileBrowser(ctx: DoorContext): Promise<void> {
 
   const files = scanDirectory(currentState.currentDir);
 
-  ctx.output.writeLine('\r\n{cyan-fg}{bold}═══ File Browser ═══{/bold}{/cyan-fg}\r\n');
-  ctx.output.writeLine(`{gray-fg}Directory: ${currentState.currentDir}{/gray-fg}\r\n`);
+  ctx.output.writeLine('\r\n\x1b[36m\x1b[1m═══ File Browser ═══\x1b[0m\x1b[0m\r\n');
+  ctx.output.writeLine(`\x1b[90mDirectory: ${currentState.currentDir}\x1b[0m\r\n`);
 
   if (files.length === 0) {
-    ctx.output.writeLine('{yellow-fg}No files found.{/yellow-fg}\r\n');
+    ctx.output.writeLine('\x1b[33mNo files found.\x1b[0m\r\n');
   } else {
     files.forEach((f, idx) => {
-      ctx.output.writeLine(`{white-fg}${(idx + 1).toString().padStart(3)}.{/white-fg} ${f.filename.padEnd(30)} ${formatFileSize(f.size).padStart(10)}`);
+      ctx.output.writeLine(`\x1b[37m${(idx + 1).toString().padStart(3)}.\x1b[0m ${f.filename.padEnd(30)} ${formatFileSize(f.size).padStart(10)}`);
     });
   }
 
-  ctx.output.writeLine('\r\n{cyan-fg}[E]dit  [N]ew  [Q]uit{/cyan-fg}\r\n');
+  ctx.output.writeLine('\r\n\x1b[36m[E]dit  [N]ew  [Q]uit\x1b[0m\r\n');
   ctx.output.writeLine('Choice: ');
 
   const choice = (await ctx.input.waitForKey()).key;
@@ -281,11 +281,11 @@ async function showGallery(ctx: DoorContext): Promise<void> {
   const files = scanDirectory(currentState.currentDir);
 
   ctx.output.writeLine('\x1b[2J\x1b[H');
-  ctx.output.writeLine('{center}{yellow-fg}{bold}ANSI Art Gallery{/bold}{/yellow-fg}\r\n\r\n');
-  ctx.output.writeLine(`{center}${files.length} files found in ${currentState.currentDir}{/center}\r\n\r\n`);
-  ctx.output.writeLine('{center}{gray-fg}Gallery view with thumbnails coming soon!{/gray-fg}\r\n');
-  ctx.output.writeLine('{center}{gray-fg}For now, use File Browser to view and edit files.{/gray-fg}\r\n\r\n');
-  ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
+  ctx.output.writeLine('\x1b[33m\x1b[1mANSI Art Gallery\x1b[0m\x1b[0m\r\n\r\n');
+  ctx.output.writeLine(`${files.length} files found in ${currentState.currentDir}\r\n\r\n`);
+  ctx.output.writeLine('\x1b[90mGallery view with thumbnails coming soon!\x1b[0m\r\n');
+  ctx.output.writeLine('\x1b[90mFor now, use File Browser to view and edit files.\x1b[0m\r\n\r\n');
+  ctx.output.writeLine('\x1b[36mPress any key to return\x1b[0m');
 
   (await ctx.input.waitForKey()).key;
 }
@@ -294,7 +294,7 @@ async function showSettings(ctx: DoorContext): Promise<void> {
   if (!currentState) return;
 
   ctx.output.writeLine('\x1b[2J\x1b[H');
-  ctx.output.writeLine('{center}{cyan-fg}{bold}═══ Editor Settings ═══{/bold}{/cyan-fg}\r\n\r\n');
+  ctx.output.writeLine('\x1b[36m\x1b[1m═══ Editor Settings ═══\x1b[0m\x1b[0m\r\n\r\n');
 
   ctx.output.writeLine(`  Auto-save:          {${currentState.settings.autoSave ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
   ctx.output.writeLine(`  Backup on save:     {${currentState.settings.backupOnSave ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
@@ -303,38 +303,38 @@ async function showSettings(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine(`  Show status bar:    {${currentState.settings.showStatusBar ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
   ctx.output.writeLine(`  Confirm delete:     {${currentState.settings.confirmDelete ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
 
-  ctx.output.writeLine('\r\n{gray-fg}Settings are configured in this session{/gray-fg}\r\n');
-  ctx.output.writeLine('{cyan-fg}Press any key to return{/cyan-fg}');
+  ctx.output.writeLine('\r\n\x1b[90mSettings are configured in this session\x1b[0m\r\n');
+  ctx.output.writeLine('\x1b[36mPress any key to return\x1b[0m');
 
   (await ctx.input.waitForKey()).key;
 }
 
 async function showHelp(ctx: DoorContext): Promise<void> {
   ctx.output.writeLine('\x1b[2J\x1b[H');
-  ctx.output.writeLine('{center}{yellow-fg}{bold}ANSI Editor - Help{/bold}{/yellow-fg}\r\n\r\n');
+  ctx.output.writeLine('\x1b[33m\x1b[1mANSI Editor - Help\x1b[0m\x1b[0m\r\n\r\n');
 
-  ctx.output.writeLine('{cyan-fg}{bold}═══ Text Editing Mode ═══{/bold}{/cyan-fg}\r\n');
-  ctx.output.writeLine('  {white-fg}Arrow Keys{/white-fg}     - Move cursor');
-  ctx.output.writeLine('  {white-fg}Ctrl+S{/white-fg}         - Save file');
-  ctx.output.writeLine('  {white-fg}Ctrl+M{/white-fg}         - Switch to Draw Mode');
-  ctx.output.writeLine('  {white-fg}ESC{/white-fg}            - Exit editor\r\n');
+  ctx.output.writeLine('\x1b[36m\x1b[1m═══ Text Editing Mode ═══\x1b[0m\x1b[0m\r\n');
+  ctx.output.writeLine('  \x1b[37mArrow Keys\x1b[0m     - Move cursor');
+  ctx.output.writeLine('  \x1b[37mCtrl+S\x1b[0m         - Save file');
+  ctx.output.writeLine('  \x1b[37mCtrl+M\x1b[0m         - Switch to Draw Mode');
+  ctx.output.writeLine('  \x1b[37mESC\x1b[0m            - Exit editor\r\n');
 
-  ctx.output.writeLine('{cyan-fg}{bold}═══ Drawing Mode ═══{/bold}{/cyan-fg}\r\n');
-  ctx.output.writeLine('  {white-fg}1-9{/white-fg}            - Select drawing tool');
-  ctx.output.writeLine('  {white-fg}C{/white-fg}              - Character picker');
-  ctx.output.writeLine('  {white-fg}F/B{/white-fg}            - Foreground/Background color');
-  ctx.output.writeLine('  {white-fg}I{/white-fg}              - Toggle iCE colors');
-  ctx.output.writeLine('  {white-fg}U{/white-fg}              - Undo');
-  ctx.output.writeLine('  {white-fg}Ctrl+M{/white-fg}         - Back to Text Mode\r\n');
+  ctx.output.writeLine('\x1b[36m\x1b[1m═══ Drawing Mode ═══\x1b[0m\x1b[0m\r\n');
+  ctx.output.writeLine('  \x1b[37m1-9\x1b[0m            - Select drawing tool');
+  ctx.output.writeLine('  \x1b[37mC\x1b[0m              - Character picker');
+  ctx.output.writeLine('  \x1b[37mF/B\x1b[0m            - Foreground/Background color');
+  ctx.output.writeLine('  \x1b[37mI\x1b[0m              - Toggle iCE colors');
+  ctx.output.writeLine('  \x1b[37mU\x1b[0m              - Undo');
+  ctx.output.writeLine('  \x1b[37mCtrl+M\x1b[0m         - Back to Text Mode\r\n');
 
-  ctx.output.writeLine('{cyan-fg}{bold}═══ Drawing Tools ═══{/bold}{/cyan-fg}\r\n');
-  ctx.output.writeLine('  {white-fg}1{/white-fg} - Freehand    {white-fg}6{/white-fg} - Filled Ellipse');
-  ctx.output.writeLine('  {white-fg}2{/white-fg} - Line        {white-fg}7{/white-fg} - Flood Fill');
-  ctx.output.writeLine('  {white-fg}3{/white-fg} - Box         {white-fg}8{/white-fg} - Eyedropper');
-  ctx.output.writeLine('  {white-fg}4{/white-fg} - Box Filled  {white-fg}9{/white-fg} - Block Select');
-  ctx.output.writeLine('  {white-fg}5{/white-fg} - Ellipse\r\n');
+  ctx.output.writeLine('\x1b[36m\x1b[1m═══ Drawing Tools ═══\x1b[0m\x1b[0m\r\n');
+  ctx.output.writeLine('  \x1b[37m1\x1b[0m - Freehand    \x1b[37m6\x1b[0m - Filled Ellipse');
+  ctx.output.writeLine('  \x1b[37m2\x1b[0m - Line        \x1b[37m7\x1b[0m - Flood Fill');
+  ctx.output.writeLine('  \x1b[37m3\x1b[0m - Box         \x1b[37m8\x1b[0m - Eyedropper');
+  ctx.output.writeLine('  \x1b[37m4\x1b[0m - Box Filled  \x1b[37m9\x1b[0m - Block Select');
+  ctx.output.writeLine('  \x1b[37m5\x1b[0m - Ellipse\r\n');
 
-  ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
+  ctx.output.writeLine('\x1b[36mPress any key to return\x1b[0m');
   (await ctx.input.waitForKey()).key;
 }
 
@@ -375,7 +375,7 @@ async function openEditor(ctx: DoorContext, initialContent: string): Promise<voi
       currentState.modified = result !== initialContent;
     }
   } catch (error) {
-    ctx.output.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
+    ctx.output.writeLine(`\r\n\x1b[31mError: ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`);
     ctx.output.writeLine('Press any key...');
     (await ctx.input.waitForKey()).key;
   }
