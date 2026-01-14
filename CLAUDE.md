@@ -327,6 +327,71 @@ git status --short | grep "^??" | awk '{print $2}' | grep -o '\.[^.]*$' | sort |
 3. Never leave 100+ files uncommitted across sessions
 4. Add new runtime file patterns to .gitignore immediately
 
+### 16. NEO-BLESSED DOOR INPUT - USE DOORINPUTMANAGER
+
+**CRITICAL:** TypeScript doors using neo-blessed MUST use `DoorInputManager` for input state or BBS input breaks.
+
+**❌ OLD WAY (Manual - Error Prone):**
+```typescript
+// Easy to forget steps, wrong order, or miss cleanup
+(screen.program as any).grabKeys = true;
+setupInputHandler(session, screen);
+// ... forget to cleanup = BBS input breaks!
+```
+
+**✅ NEW WAY (DoorInputManager - Safe):**
+```typescript
+import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+
+// In constructor
+this.inputManager = new DoorInputManager(session, screen, {
+  enableGameMode: true,   // Raw keyboard (games)
+  enableGrabKeys: true,   // Global capture (all keys)
+  enableMouse: true,      // Mouse events
+  debug: false,
+  debugName: 'MyDoor'
+});
+
+// In run()
+this.inputManager.enable();
+
+// In quit()
+this.inputManager.disable();  // Automatic cleanup - can't forget!
+```
+
+**Why DoorInputManager:**
+- ✅ One enable, one disable - simple API
+- ✅ Correct order guaranteed (enable: 1-5, disable: 5-1)
+- ✅ Can't forget cleanup steps
+- ✅ Auto-cleanup on destroy
+- ✅ Optional debug logging
+- ✅ Suspend/resume for modals
+
+**What it manages:**
+1. BBS game mode (`enableGameMode` / `disableGameMode`)
+2. BBS session flag (`inDoorManager`)
+3. Blessed keyboard capture (`grabKeys`)
+4. Blessed mouse events (`enableMouse` / `disableMouse`)
+5. Input handler setup/cleanup (`setupInputHandler` / `removeInputHandler`)
+
+**Symptoms of missing cleanup:**
+- "Can't type in BBS after exiting door"
+- Input frozen/unresponsive
+- Commands don't work
+- Must reconnect to fix
+
+**Test checklist:**
+1. Exit door via menu (Q/ESC)
+2. **Immediately try typing in BBS** - should work
+3. Run door again - should work
+4. Exit again - BBS input should still work
+5. Test 5+ times - input must work every time
+
+**See:**
+- `Documentation/4-Door-Developers/DOOR_INPUT_MANAGER_GUIDE.md` - Complete guide
+- `Doors/grandmaster/app.ts` - Real example
+- `sdk/utils/door-input-manager.ts` - Source code
+
 ---
 
 ## Project Overview
