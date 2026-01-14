@@ -947,6 +947,10 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ans
         const { displayScreen } = require('./screen.handler');
         await displayScreen(socket, session, 'BBSTITLE');
 
+        // Clear pagination state so next input goes to login prompt (express.e:29551)
+        session.paginatedScreen = undefined;
+        session.lastScreenHadPause = false;
+
         // Immediately transition to login state (no key press required)
         session.state = BBSState.LOGON;
         session.subState = undefined;
@@ -2742,6 +2746,9 @@ console.log(' Conference number entered:', input);
       if (isNaN(confNum) || confNum < 1 || confNum > getConferences().length) {
         // express.e:25142-25150 - Redisplay JOINCONF and prompt again (no error message)
         await displayScreen(socket, session, 'JOINCONF');
+        // Clear pagination state so next input goes to conference prompt (express.e:25143-25145)
+        session.paginatedScreen = undefined;
+        session.lastScreenHadPause = false;
         emitText(socket, '\r\n');
         emitPrompt(socket, AnsiUtil.complexPrompt([
           { text: 'Conference Number ', color: 'white' },

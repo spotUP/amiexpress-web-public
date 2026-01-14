@@ -44,7 +44,7 @@ let _messageBases: MessageBase[] = [];
 let _db: Database;
 let _joinConference: (socket: any, session: BBSSession, confId: number, msgBaseId: number) => Promise<boolean>;
 let _checkConfAccess: (user: any, confNum: number) => boolean;
-let _displayScreen: (socket: any, session: BBSSession, screenName: string) => boolean;
+let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
 let _displayUploadInterface: (socket: any, session: BBSSession, params: string) => void;
 let _displayDownloadInterface: (socket: any, session: BBSSession, params: string) => void;
 
@@ -355,6 +355,11 @@ console.log('[ENV] Join Conference');
       displayConferenceList(socket, session);
     }
 
+    // Clear any pagination state from displayScreen so the next input goes to
+    // the conference number prompt, not a pause handler (express.e:25143-25145)
+    session.paginatedScreen = undefined;
+    session.lastScreenHadPause = false;
+
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.complexPrompt([
       { text: 'Conference Number ', color: 'white' },
@@ -389,7 +394,12 @@ console.log('[ENV] Join Conference');
 
   // express.e:25169-25179 - Prompt for message base if invalid
   if (newMsgBase < 1 || newMsgBase > msgBaseCount) {
-    _displayScreen(socket, session, 'CONF_JOINMSGBASE');
+    await _displayScreen(socket, session, 'CONF_JOINMSGBASE');
+
+    // Clear any pagination state from displayScreen so the next input goes to
+    // the message base prompt, not a pause handler (express.e:25169-25179)
+    session.paginatedScreen = undefined;
+    session.lastScreenHadPause = false;
 
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.complexPrompt([
