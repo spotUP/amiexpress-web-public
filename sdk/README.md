@@ -9,6 +9,7 @@ Always aim for modern, desktop-like doors using neo-blessed windows, panels, and
 ## Quick Links
 
 - **[TypeScript Door Guide](../Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md)** - Full TypeScript door patterns and pitfalls
+- **[DoorInputManager Guide](../Documentation/4-Door-Developers/DOOR_INPUT_MANAGER_GUIDE.md)** - **REQUIRED** for neo-blessed doors - Centralized input management
 - **[TypeScript Examples](./examples/)** - Working TypeScript door examples
 - **[Templates](./templates/)** - Starter templates
 - **[68K SDK](./68k/README.md)** - Create authentic 68K Amiga binaries (C/Assembly)

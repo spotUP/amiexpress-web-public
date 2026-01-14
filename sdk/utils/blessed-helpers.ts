@@ -1373,3 +1373,6 @@ export function createPanel(options: any): any {
     ...options,
   });
 }
+
+// Export DoorInputManager for centralized input state management
+export { DoorInputManager, type DoorInputOptions } from './door-input-manager';

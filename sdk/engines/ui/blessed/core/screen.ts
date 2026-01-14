@@ -4,7 +4,7 @@
 
 import { Element } from './element';
 import { Program } from './program';
-import { cursor, screen as screenAnsi, attrs, blend } from './colors';
+import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi } from './colors';
 import { KeyBindings } from './keybindings';
 import { ResponsiveLayoutManager, type ResponsiveConfig } from './responsive-layout';
 import type { ScreenOptions, KeyEvent, MouseEvent } from './types';
@@ -1355,12 +1355,32 @@ export class Screen extends Element {
       }
     }
 
-    // Label
-    if (element.options.label) {
-      const rawLabel = String(element.options.label).trim();
+    // Label - use border.label if specified, otherwise element.options.label
+    const labelSource = (typeof border === 'object' && (border as any).label)
+      ? (border as any).label
+      : element.options.label;
+    if (labelSource) {
+      const rawLabel = String(labelSource).trim();
+      // Check if label contains blessed tags like {cyan-fg}
+      const hasInlineTags = rawLabel.includes('{') && rawLabel.includes('}');
+
       if (borderType === 'ascii') {
-        this._renderAsciiLabel(pos, rawLabel, labelAttr, attr);
+        // For ASCII borders, strip tags and use labelAttr
+        const strippedLabel = rawLabel.replace(/\{[^}]+\}/g, '');
+        this._renderAsciiLabel(pos, strippedLabel, labelAttr, attr);
+      } else if (hasInlineTags) {
+        // Parse blessed tags and render with inline styles
+        const labelText = ` ${rawLabel} `;
+        const styledChars = this._parseStyledLabel(labelText, labelAttr);
+        let x = pos.xi + 2;
+        for (let i = 0; i < styledChars.length && x < pos.xl - 1; i += 1, x += 1) {
+          // Guard: check buffer existence
+          if (x >= 0 && x < this.width && this.buffer[pos.yi] && this.buffer[pos.yi][x]) {
+            this.buffer[pos.yi][x] = styledChars[i];
+          }
+        }
       } else {
+        // No inline tags, use labelAttr (from labelStyle or default)
         const labelText = ` ${rawLabel} `;
         let x = pos.xi + 2;
         for (let i = 0; i < labelText.length && x < pos.xl - 1; i += 1, x += 1) {
@@ -1420,6 +1440,80 @@ export class Screen extends Element {
       if (x >= 0 && this.buffer[pos.yi][x]) {
         this.buffer[pos.yi][x] = [borderAttr, '-'];
       }
+    }
+  }
+
+  /**
+   * Parse a label string with blessed tags and return styled characters
+   * Handles tags like {cyan-fg}Text{/} and extracts attributes for each character
+   */
+  private _parseStyledLabel(text: string, defaultAttr: number): [number, string][] {
+    const result: [number, string][] = [];
+    let currentAttr = defaultAttr;
+    let i = 0;
+
+    while (i < text.length) {
+      // Check for tag opening
+      if (text[i] === '{') {
+        const closeIdx = text.indexOf('}', i);
+        if (closeIdx !== -1) {
+          const tag = text.slice(i + 1, closeIdx);
+
+          // Handle closing tags
+          if (tag.startsWith('/')) {
+            currentAttr = defaultAttr; // Reset to default
+          } else {
+            // Parse opening tag
+            const style = this._tagToStyle(tag);
+            if (style) {
+              currentAttr = this.styleToAttr(style);
+            }
+          }
+          i = closeIdx + 1;
+          continue;
+        }
+      }
+
+      // Regular character
+      result.push([currentAttr, text[i]]);
+      i++;
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert a blessed tag name to a style object
+   */
+  private _tagToStyle(tag: string): Record<string, any> | null {
+    // Handle foreground colors: "cyan-fg", "red-fg", etc.
+    if (tag.endsWith('-fg')) {
+      const colorName = tag.slice(0, -3);
+      return { fg: colorName };
+    }
+
+    // Handle background colors: "cyan-bg", "red-bg", etc.
+    if (tag.endsWith('-bg')) {
+      const colorName = tag.slice(0, -3);
+      return { bg: colorName };
+    }
+
+    // Handle style attributes
+    switch (tag) {
+      case 'bold':
+        return { bold: true };
+      case 'underline':
+        return { underline: true };
+      case 'blink':
+        return { blink: true };
+      case 'inverse':
+        return { inverse: true };
+      default:
+        // Could be a color name alone (treated as fg)
+        if (tag.match(/^[a-z]+$/)) {
+          return { fg: tag };
+        }
+        return null;
     }
   }
 
