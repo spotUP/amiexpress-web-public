@@ -498,14 +498,15 @@ export function canvasToANSI(canvas: Cell[][], useIceColors = false): string {
       const cell = canvas[y][x];
 
       // Optimize ANSI codes - only emit when attributes change
-      if (cell.fg !== currentFg || cell.bg !== currentBg || cell.blink !== currentBlink) {
+      const cellBlink = cell.blink ?? false;
+      if (cell.fg !== currentFg || cell.bg !== currentBg || cellBlink !== currentBlink) {
         // Build ANSI escape sequence
         let codes: number[] = [];
 
         // Handle blink
-        if (cell.blink !== currentBlink) {
-          codes.push(cell.blink ? 5 : 25);
-          currentBlink = cell.blink;
+        if (cellBlink !== currentBlink) {
+          codes.push(cellBlink ? 5 : 25);
+          currentBlink = cellBlink;
         }
 
         // Handle foreground color

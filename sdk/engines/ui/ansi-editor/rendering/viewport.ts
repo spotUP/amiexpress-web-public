@@ -338,7 +338,8 @@ export class Viewport {
         const cell = canvas[y][x];
 
         // Optimize ANSI codes - only emit when attributes change
-        if (cell.fg !== currentFg || cell.bg !== currentBg || cell.blink !== currentBlink) {
+        const cellBlink = cell.blink ?? false;
+        if (cell.fg !== currentFg || cell.bg !== currentBg || cellBlink !== currentBlink) {
           // Close previous tags
           if (currentFg !== -1) {
             line += '{/}';
@@ -351,7 +352,7 @@ export class Viewport {
 
           currentFg = cell.fg;
           currentBg = cell.bg;
-          currentBlink = cell.blink;
+          currentBlink = cellBlink;
         }
 
         // Render cursor if on this position
