@@ -62,6 +62,10 @@ export class XIMIOHandler {
   // Without serialization, outputs interleave causing display corruption
   private fileDisplayLock: Promise<void> = Promise.resolve();
 
+  // Direct socket emit function that bypasses modem emulator throttling
+  // Doors should output at full speed regardless of user's modem speed preference
+  private directEmit: (event: string, ...args: any[]) => boolean;
+
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
@@ -76,6 +80,10 @@ export class XIMIOHandler {
     this.messageParser = messageParser;
     this.state = state;
     this.bbsSession = bbsSession || {};
+
+    // Use direct socket emit to bypass modem emulator throttling
+    // Doors output at full speed regardless of user's modem speed preference
+    this.directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
   }
 
   /**
@@ -156,7 +164,7 @@ export class XIMIOHandler {
           if (this.lineInputBuffer.length > 0) {
             this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
             // Echo backspace to terminal
-            this.socket.emit('ansi-output', '\b \b');
+            this.directEmit('ansi-output', '\b \b');
           }
           continue;
         }
@@ -166,7 +174,7 @@ export class XIMIOHandler {
           this.lineInputBuffer += token;
           // Echo typed character (only for single visible characters)
           if (token.length === 1 && token >= ' ' && token <= '~') {
-            this.socket.emit('ansi-output', token);
+            this.directEmit('ansi-output', token);
           }
         }
         continue;
@@ -253,14 +261,14 @@ export class XIMIOHandler {
             content = content.replace(/\x0c/g, '');
             // Normalize line endings: Amiga uses \n, terminal needs \r\n
             content = content.replace(/\r?\n/g, '\r\n');
-            this.socket.emit('ansi-output', content);
+            this.directEmit('ansi-output', content);
           } catch {
             // Silent fail - don't output file path
           }
         }
         // Don't output file path as fallback - it's not meant to be displayed
       } else {
-        this.socket.emit('ansi-output', defaultText);
+        this.directEmit('ansi-output', defaultText);
       }
       // Auto-respond for confirm-only prompt
       this.messageParser.writeMessageString(msg.msgAddr, defaultText);
@@ -278,9 +286,9 @@ export class XIMIOHandler {
       const upperFull = fullString.toUpperCase();
       if (upperFull.startsWith('RAM:') || upperFull.startsWith('T:')) {
         // File path detected - show a "press Enter" prompt instead
-        this.socket.emit('ansi-output', '(Press Enter to continue)');
+        this.directEmit('ansi-output', '(Press Enter to continue)');
       } else {
-        this.socket.emit('ansi-output', defaultText);
+        this.directEmit('ansi-output', defaultText);
       }
     }
 
@@ -1176,7 +1184,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
         const output = `${segment}${suffix}`;
 
         // Emit output BEFORE checking pause
-        this.socket.emit('ansi-output', output);
+        this.directEmit('ansi-output', output);
         bytesSent += output.length;
 
         // express.e only increments lineCount and checks pause if a newline was emitted
@@ -1196,7 +1204,7 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
       this.waitingForPause = true;
       this.pauseReply = { msg: pendingMsg, data: 1 };
       this.pauseInputBuffer = '';
-      this.socket.emit('ansi-output', '(Pause)...Space To Resume: ');
+      this.directEmit('ansi-output', '(Pause)...Space To Resume: ');
       this.emulator.pause();
       // Don't return bytesSent here - let the caller handle the pause state
     }
@@ -1433,7 +1441,7 @@ debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
       this.pauseInputBuffer = '';
       
       // Notify user - Match express.e:5192 exactly
-      this.socket.emit('ansi-output', '(Pause)...More(y/n/ns)? ');
+      this.directEmit('ansi-output', '(Pause)...More(y/n/ns)? ');
       
       // Pause emulator while waiting for user to acknowledge pause
       this.emulator.pause();
