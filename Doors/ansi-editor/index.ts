@@ -11,9 +11,10 @@
  * - Export to multiple formats (.ANS, .ASC, .XB)
  */
 
-import type { BBSSession } from '../../web/backend/src/types';
-import { showANSIEditor } from '../../sdk/engines/ui/ansi-editor';
-import blessed from '../../sdk/engines/ui/blessed';
+import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
+import type { DoorContext } from '@amiexpress/bbs-door-sdk';
+import { showANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
+import { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import * as amigafs from '../../web/backend/src/utils/amigafs';
 import * as path from 'path';
 
@@ -49,21 +50,22 @@ interface EditorState {
   modified: boolean;
 }
 
-export default async function ansiEditorDoor(session: BBSSession): Promise<void> {
-  const screen = blessed.screen({
-    smartCSR: true,
-    fullUnicode: true,
-    dockBorders: true,
-    autoPadding: true
-  });
+const door = new Door({
+  name: 'ANSI Editor',
+  version: '1.0.0',
+  description: 'Professional ANSI Art Editor with file management',
+  author: 'AmiExpress SDK v2.0',
+});
 
-  // Initialize state
+let currentState: EditorState | null = null;
+
+door.onStart(async (ctx: DoorContext) => {
   const ansiDir = path.join(process.cwd(), 'data', 'ansi-art');
   if (!amigafs.existsSync(ansiDir)) {
     amigafs.mkdirSync(ansiDir, { recursive: true });
   }
 
-  const state: EditorState = {
+  currentState = {
     currentFile: null,
     currentDir: ansiDir,
     files: [],
@@ -82,58 +84,32 @@ export default async function ansiEditorDoor(session: BBSSession): Promise<void>
   };
 
   try {
-    // Show main menu
-    await showMainMenu(session, screen, state);
+    await showMainMenu(ctx);
   } catch (error) {
-    session.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
-  } finally {
-    screen.destroy();
+    ctx.output.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
   }
-}
+});
 
-async function showMainMenu(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+door.onClose(async (ctx: DoorContext) => {
+  currentState = null;
+});
+
+door.onError(async (ctx: DoorContext, error: Error) => {
+  ctx.output.writeLine(`\r\n{red-fg}Error in ANSI Editor: ${error.message}{/red-fg}\r\n`);
+});
+
+async function showMainMenu(ctx: DoorContext): Promise<void> {
+  if (!currentState) return;
+
   let exit = false;
 
   while (!exit) {
-    screen.children.forEach((child: any) => child.destroy());
+    ctx.output.writeLine('\x1b[2J\x1b[H');
+    ctx.output.writeLine('{center}{cyan-fg}{bold}╔═══════════════════════════════════════════════════════════════════════════╗{/bold}{/cyan-fg}');
+    ctx.output.writeLine('{cyan-fg}{bold}║{/bold}{/cyan-fg}  {yellow-fg}{bold}AmiExpress ANSI Art Editor{/bold}{/yellow-fg} - Professional ANSI/ASCII Art Creation  {cyan-fg}{bold}║{/bold}{/cyan-fg}');
+    ctx.output.writeLine('{cyan-fg}{bold}╚═══════════════════════════════════════════════════════════════════════════╝{/bold}{/cyan-fg}{/center}\r\n');
 
-    // Title box
-    const title = blessed.box({
-      parent: screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      content: '{center}{cyan-fg}{bold}╔═══════════════════════════════════════════════════════════════════════════╗{/bold}{/cyan-fg}\n' +
-               '{cyan-fg}{bold}║{/bold}{/cyan-fg}  {yellow-fg}{bold}AmiExpress ANSI Art Editor{/bold}{/yellow-fg} - Professional ANSI/ASCII Art Creation  {cyan-fg}{bold}║{/bold}{/cyan-fg}\n' +
-               '{cyan-fg}{bold}╚═══════════════════════════════════════════════════════════════════════════╝{/bold}{/cyan-fg}{/center}',
-      tags: true,
-      style: {
-        fg: 'cyan',
-        bg: 'black'
-      }
-    });
-
-    // Menu box
-    const menu = blessed.box({
-      parent: screen,
-      top: 4,
-      left: 'center',
-      width: 60,
-      height: 16,
-      border: {
-        type: 'line',
-        fg: 'cyan'
-      },
-      style: {
-        fg: 'white',
-        bg: 'black',
-        border: {
-          fg: 'cyan'
-        }
-      },
-      tags: true
-    });
+    ctx.output.writeLine('{center}{white-fg}{bold}Main Menu{/bold}{/white-fg}{/center}\r\n');
 
     const menuItems = [
       { key: 'N', label: 'New File', desc: 'Create a new ANSI art file' },
@@ -145,91 +121,86 @@ async function showMainMenu(session: BBSSession, screen: any, state: EditorState
       { key: 'Q', label: 'Quit', desc: 'Exit ANSI Editor' }
     ];
 
-    let content = '\n{center}{white-fg}{bold}Main Menu{/bold}{/white-fg}{/center}\n\n';
-    menuItems.forEach(item => {
-      const highlight = state.selectedIndex === menuItems.indexOf(item);
+    menuItems.forEach((item, idx) => {
+      const highlight = currentState!.selectedIndex === idx;
       if (highlight) {
-        content += `  {black-bg}{yellow-fg}► [{bold}${item.key}{/bold}] ${item.label.padEnd(20)} ${item.desc}{/yellow-fg}{/black-bg}\n`;
+        ctx.output.writeLine(`  {black-bg}{yellow-fg}► [{bold}${item.key}{/bold}] ${item.label.padEnd(20)} ${item.desc}{/yellow-fg}{/black-bg}`);
       } else {
-        content += `    {cyan-fg}[{bold}${item.key}{/bold}]{/cyan-fg} {white-fg}${item.label.padEnd(20)}{/white-fg} {gray-fg}${item.desc}{/gray-fg}\n`;
+        ctx.output.writeLine(`    {cyan-fg}[{bold}${item.key}{/bold}]{/cyan-fg} {white-fg}${item.label.padEnd(20)}{/white-fg} {gray-fg}${item.desc}{/gray-fg}`);
       }
     });
 
-    menu.setContent(content);
+    ctx.output.writeLine('\r\n{center}{gray-fg}Use arrow keys to navigate, Enter to select, or press letter key{/gray-fg}');
+    ctx.output.writeLine(`{center}{gray-fg}Current directory: {white-fg}${currentState.currentDir}{/white-fg}{/gray-fg}{/center}\r\n`);
 
-    // Status bar
-    const statusBar = blessed.box({
-      parent: screen,
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      content: '{center}{gray-fg}Use arrow keys to navigate, Enter to select, or press letter key{/gray-fg}\n' +
-               `{center}{gray-fg}Current directory: {white-fg}${state.currentDir}{/white-fg}{/gray-fg}{/center}`,
-      tags: true,
-      style: {
-        fg: 'gray',
-        bg: 'black'
+    const choice = await ctx.input.getKey();
+
+    if (choice === '\x1b[A') { // Up arrow
+      currentState.selectedIndex = (currentState.selectedIndex - 1 + menuItems.length) % menuItems.length;
+    } else if (choice === '\x1b[B') { // Down arrow
+      currentState.selectedIndex = (currentState.selectedIndex + 1) % menuItems.length;
+    } else if (choice === '\r' || choice === '\n') { // Enter
+      await handleMenuSelection(ctx, currentState.selectedIndex);
+      if (currentState.selectedIndex === 6) exit = true;
+    } else if (choice && choice.length === 1) {
+      const letter = choice.toUpperCase();
+      const itemIndex = menuItems.findIndex(item => item.key === letter);
+      if (itemIndex !== -1) {
+        await handleMenuSelection(ctx, itemIndex);
+        if (itemIndex === 6) exit = true;
       }
-    });
-
-    screen.render();
-
-    // Handle input
-    const choice = await waitForMenuInput(screen, menuItems.length, state);
-
-    switch (choice) {
-      case 'N':
-      case 0:
-        await createNewFile(session, screen, state);
-        break;
-      case 'O':
-      case 1:
-        await openFileDialog(session, screen, state);
-        break;
-      case 'B':
-      case 2:
-        await showFileBrowser(session, screen, state);
-        break;
-      case 'G':
-      case 3:
-        await showGallery(session, screen, state);
-        break;
-      case 'S':
-      case 4:
-        await showSettings(session, screen, state);
-        break;
-      case 'H':
-      case 5:
-        await showHelp(session, screen, state);
-        break;
-      case 'Q':
-      case 6:
-        if (state.modified) {
-          const confirm = await confirmDialog(screen, 'You have unsaved changes. Really quit?');
-          if (confirm) exit = true;
-        } else {
-          exit = true;
-        }
-        break;
     }
   }
 }
 
-async function createNewFile(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  // Ask for filename
-  const filename = await promptDialog(screen, 'New File', 'Enter filename (without extension):', '');
-  if (!filename) return;
+async function handleMenuSelection(ctx: DoorContext, index: number): Promise<void> {
+  if (!currentState) return;
 
-  const fullPath = path.join(state.currentDir, `${filename}.ans`);
+  switch (index) {
+    case 0: // New File
+      await createNewFile(ctx);
+      break;
+    case 1: // Open File
+      await openFileDialog(ctx);
+      break;
+    case 2: // File Browser
+      await showFileBrowser(ctx);
+      break;
+    case 3: // Gallery
+      await showGallery(ctx);
+      break;
+    case 4: // Settings
+      await showSettings(ctx);
+      break;
+    case 5: // Help
+      await showHelp(ctx);
+      break;
+    case 6: // Quit
+      if (currentState.modified) {
+        ctx.output.writeLine('\r\n{yellow-fg}You have unsaved changes. Really quit? (y/n){/yellow-fg} ');
+        const confirm = await ctx.input.getKey();
+        if (confirm !== 'y' && confirm !== 'Y') {
+          return;
+        }
+      }
+      break;
+  }
+}
 
-  // Check if file exists
+async function createNewFile(ctx: DoorContext): Promise<void> {
+  ctx.output.writeLine('\r\n{cyan-fg}Enter filename (without extension):{/cyan-fg} ');
+  const filename = await ctx.input.readLine();
+  if (!filename || !currentState) return;
+
+  const fullPath = path.join(currentState.currentDir, `${filename}.ans`);
+
   if (amigafs.existsSync(fullPath)) {
-    await messageDialog(screen, 'Error', 'File already exists!');
+    ctx.output.writeLine('{red-fg}File already exists!{/red-fg}\r\n');
+    ctx.output.writeLine('Press any key...');
+    await ctx.input.getKey();
     return;
   }
 
-  // Create empty file and open editor
   const newFile: AnsiFile = {
     filename: `${filename}.ans`,
     fullPath,
@@ -237,427 +208,163 @@ async function createNewFile(session: BBSSession, screen: any, state: EditorStat
     modified: new Date()
   };
 
-  state.currentFile = newFile;
-  await openEditor(session, screen, state, '');
+  currentState.currentFile = newFile;
+  await openEditor(ctx, '');
 }
 
-async function openFileDialog(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  // Get list of files
-  const files = scanDirectory(state.currentDir);
+async function openFileDialog(ctx: DoorContext): Promise<void> {
+  if (!currentState) return;
+
+  const files = scanDirectory(currentState.currentDir);
   if (files.length === 0) {
-    await messageDialog(screen, 'No Files', 'No ANSI files found in current directory.');
+    ctx.output.writeLine('\r\n{yellow-fg}No ANSI files found in current directory.{/yellow-fg}\r\n');
+    ctx.output.writeLine('Press any key...');
+    await ctx.input.getKey();
     return;
   }
 
-  // Show file list dialog
-  const fileList = blessed.list({
-    parent: screen,
-    top: 'center',
-    left: 'center',
-    width: '70%',
-    height: '70%',
-    label: ' Select File to Open ',
-    border: {
-      type: 'line',
-      fg: 'cyan'
-    },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      selected: {
-        fg: 'black',
-        bg: 'cyan'
-      },
-      border: {
-        fg: 'cyan'
-      }
-    },
-    keys: true,
-    vi: true,
-    mouse: true,
-    tags: true,
-    items: files.map(f => `${f.filename.padEnd(30)} ${formatFileSize(f.size).padStart(10)} ${formatDate(f.modified)}`)
+  ctx.output.writeLine('\r\n{cyan-fg}{bold}Files:{/bold}{/cyan-fg}\r\n');
+  files.forEach((f, idx) => {
+    ctx.output.writeLine(`  {white-fg}[${idx + 1}]{/white-fg} ${f.filename} (${formatFileSize(f.size)})`);
   });
 
-  screen.render();
+  ctx.output.writeLine('\r\n{cyan-fg}Enter file number (or 0 to cancel):{/cyan-fg} ');
+  const input = await ctx.input.readLine();
+  const fileNum = parseInt(input || '0');
 
-  return new Promise((resolve) => {
-    fileList.on('select', async (item: any, index: number) => {
-      fileList.destroy();
-      screen.render();
+  if (fileNum > 0 && fileNum <= files.length) {
+    const selectedFile = files[fileNum - 1];
+    currentState.currentFile = selectedFile;
+    const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
+    await openEditor(ctx, content);
+  }
+}
 
-      const selectedFile = files[index];
-      state.currentFile = selectedFile;
+async function showFileBrowser(ctx: DoorContext): Promise<void> {
+  if (!currentState) return;
 
-      // Load file content
+  const files = scanDirectory(currentState.currentDir);
+
+  ctx.output.writeLine('\r\n{cyan-fg}{bold}═══ File Browser ═══{/bold}{/cyan-fg}\r\n');
+  ctx.output.writeLine(`{gray-fg}Directory: ${currentState.currentDir}{/gray-fg}\r\n`);
+
+  if (files.length === 0) {
+    ctx.output.writeLine('{yellow-fg}No files found.{/yellow-fg}\r\n');
+  } else {
+    files.forEach((f, idx) => {
+      ctx.output.writeLine(`{white-fg}${(idx + 1).toString().padStart(3)}.{/white-fg} ${f.filename.padEnd(30)} ${formatFileSize(f.size).padStart(10)}`);
+    });
+  }
+
+  ctx.output.writeLine('\r\n{cyan-fg}[E]dit  [N]ew  [Q]uit{/cyan-fg}\r\n');
+  ctx.output.writeLine('Choice: ');
+
+  const choice = await ctx.input.getKey();
+
+  if (choice === 'e' || choice === 'E') {
+    ctx.output.writeLine('Enter file number: ');
+    const input = await ctx.input.readLine();
+    const fileNum = parseInt(input || '0');
+    if (fileNum > 0 && fileNum <= files.length) {
+      const selectedFile = files[fileNum - 1];
+      currentState.currentFile = selectedFile;
       const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
-      await openEditor(session, screen, state, content);
-      resolve();
-    });
-
-    fileList.on('cancel', () => {
-      fileList.destroy();
-      screen.render();
-      resolve();
-    });
-
-    fileList.focus();
-  });
-}
-
-async function showFileBrowser(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  let exit = false;
-
-  while (!exit) {
-    const files = scanDirectory(state.currentDir);
-    state.files = files;
-
-    screen.children.forEach((child: any) => child.destroy());
-
-    // Title
-    const title = blessed.box({
-      parent: screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: 1,
-      content: `{center}{cyan-fg}{bold}File Browser - ${state.currentDir}{/bold}{/cyan-fg}{/center}`,
-      tags: true
-    });
-
-    // File list
-    const fileList = blessed.listtable({
-      parent: screen,
-      top: 2,
-      left: 0,
-      width: '100%',
-      height: '100%-6',
-      border: {
-        type: 'line',
-        fg: 'cyan'
-      },
-      style: {
-        fg: 'white',
-        bg: 'black',
-        header: {
-          fg: 'yellow',
-          bold: true
-        },
-        cell: {
-          selected: {
-            fg: 'black',
-            bg: 'cyan'
-          }
-        },
-        border: {
-          fg: 'cyan'
-        }
-      },
-      keys: true,
-      vi: true,
-      mouse: true,
-      tags: true
-    });
-
-    const data = [
-      ['Filename', 'Size', 'Modified', 'Dimensions']
-    ];
-
-    files.forEach(f => {
-      data.push([
-        f.filename,
-        formatFileSize(f.size),
-        formatDate(f.modified),
-        f.width && f.height ? `${f.width}x${f.height}` : 'Unknown'
-      ]);
-    });
-
-    fileList.setData(data);
-
-    // Command bar
-    const commands = blessed.box({
-      parent: screen,
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      content: '{center}{cyan-fg}[E]{/cyan-fg}dit {cyan-fg}[D]{/cyan-fg}elete {cyan-fg}[R]{/cyan-fg}ename {cyan-fg}[I]{/cyan-fg}nfo {cyan-fg}[N]{/cyan-fg}ew {cyan-fg}[ESC]{/cyan-fg} Back{/center}\n' +
-               `{center}{gray-fg}${files.length} files found{/gray-fg}{/center}`,
-      tags: true,
-      style: {
-        fg: 'white',
-        bg: 'black'
-      }
-    });
-
-    screen.render();
-
-    // Handle input
-    const result = await waitForBrowserInput(screen, fileList, files);
-
-    switch (result.action) {
-      case 'edit':
-        if (result.index >= 0 && result.index < files.length) {
-          const selectedFile = files[result.index];
-          state.currentFile = selectedFile;
-          const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
-          await openEditor(session, screen, state, content);
-        }
-        break;
-      case 'delete':
-        if (result.index >= 0 && result.index < files.length) {
-          const file = files[result.index];
-          if (state.settings.confirmDelete) {
-            const confirm = await confirmDialog(screen, `Delete ${file.filename}?`);
-            if (confirm) {
-              amigafs.unlinkSync(file.fullPath);
-            }
-          } else {
-            amigafs.unlinkSync(file.fullPath);
-          }
-        }
-        break;
-      case 'rename':
-        if (result.index >= 0 && result.index < files.length) {
-          const file = files[result.index];
-          const newName = await promptDialog(screen, 'Rename File', 'New filename:', path.basename(file.filename, path.extname(file.filename)));
-          if (newName) {
-            const newPath = path.join(state.currentDir, `${newName}${path.extname(file.filename)}`);
-            amigafs.renameSync(file.fullPath, newPath);
-          }
-        }
-        break;
-      case 'info':
-        if (result.index >= 0 && result.index < files.length) {
-          await showFileInfo(screen, files[result.index]);
-        }
-        break;
-      case 'new':
-        await createNewFile(session, screen, state);
-        break;
-      case 'back':
-        exit = true;
-        break;
+      await openEditor(ctx, content);
     }
+  } else if (choice === 'n' || choice === 'N') {
+    await createNewFile(ctx);
   }
 }
 
-async function showGallery(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  const files = scanDirectory(state.currentDir);
+async function showGallery(ctx: DoorContext): Promise<void> {
+  if (!currentState) return;
 
-  screen.children.forEach((child: any) => child.destroy());
+  const files = scanDirectory(currentState.currentDir);
 
-  const galleryBox = blessed.box({
-    parent: screen,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    content: '{center}{yellow-fg}{bold}ANSI Art Gallery{/bold}{/yellow-fg}\n\n' +
-             `{center}${files.length} files found in ${state.currentDir}{/center}\n\n` +
-             '{center}{gray-fg}Gallery view with thumbnails coming soon!{/gray-fg}\n' +
-             '{center}{gray-fg}For now, use File Browser to view and edit files.{/gray-fg}\n\n' +
-             '{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}',
-    tags: true,
-    style: {
-      fg: 'white',
-      bg: 'black'
-    }
-  });
+  ctx.output.writeLine('\x1b[2J\x1b[H');
+  ctx.output.writeLine('{center}{yellow-fg}{bold}ANSI Art Gallery{/bold}{/yellow-fg}\r\n\r\n');
+  ctx.output.writeLine(`{center}${files.length} files found in ${currentState.currentDir}{/center}\r\n\r\n`);
+  ctx.output.writeLine('{center}{gray-fg}Gallery view with thumbnails coming soon!{/gray-fg}\r\n');
+  ctx.output.writeLine('{center}{gray-fg}For now, use File Browser to view and edit files.{/gray-fg}\r\n\r\n');
+  ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
 
-  screen.render();
-  await session.waitForKey();
+  await ctx.input.getKey();
 }
 
-async function showSettings(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  let exit = false;
-  let selectedSetting = 0;
+async function showSettings(ctx: DoorContext): Promise<void> {
+  if (!currentState) return;
 
-  while (!exit) {
-    screen.children.forEach((child: any) => child.destroy());
+  ctx.output.writeLine('\x1b[2J\x1b[H');
+  ctx.output.writeLine('{center}{cyan-fg}{bold}═══ Editor Settings ═══{/bold}{/cyan-fg}\r\n\r\n');
 
-    const settingsBox = blessed.box({
-      parent: screen,
-      top: 'center',
-      left: 'center',
-      width: 70,
-      height: 20,
-      label: ' Editor Settings ',
-      border: {
-        type: 'line',
-        fg: 'cyan'
-      },
-      style: {
-        fg: 'white',
-        bg: 'black',
-        border: {
-          fg: 'cyan'
-        }
-      },
-      tags: true
-    });
+  ctx.output.writeLine(`  Auto-save:          {${currentState.settings.autoSave ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
+  ctx.output.writeLine(`  Backup on save:     {${currentState.settings.backupOnSave ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
+  ctx.output.writeLine(`  Show line numbers:  {${currentState.settings.showLineNumbers ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
+  ctx.output.writeLine(`  Show toolbar:       {${currentState.settings.showToolbar ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
+  ctx.output.writeLine(`  Show status bar:    {${currentState.settings.showStatusBar ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
+  ctx.output.writeLine(`  Confirm delete:     {${currentState.settings.confirmDelete ? 'green-fg}ON' : 'red-fg}OFF'}{/}`);
 
-    const settings = [
-      { name: 'Auto-save', value: state.settings.autoSave },
-      { name: 'Backup on save', value: state.settings.backupOnSave },
-      { name: 'Show line numbers', value: state.settings.showLineNumbers },
-      { name: 'Show toolbar', value: state.settings.showToolbar },
-      { name: 'Show status bar', value: state.settings.showStatusBar },
-      { name: 'Confirm delete', value: state.settings.confirmDelete }
-    ];
+  ctx.output.writeLine('\r\n{gray-fg}Settings are configured in this session{/gray-fg}\r\n');
+  ctx.output.writeLine('{cyan-fg}Press any key to return{/cyan-fg}');
 
-    let content = '\n';
-    settings.forEach((setting, idx) => {
-      const highlight = selectedSetting === idx;
-      const status = setting.value ? '{green-fg}[ON]{/green-fg}' : '{red-fg}[OFF]{/red-fg}';
-      if (highlight) {
-        content += `  {black-bg}{yellow-fg}► ${setting.name.padEnd(25)} ${status}{/yellow-fg}{/black-bg}\n`;
-      } else {
-        content += `    ${setting.name.padEnd(25)} ${status}\n`;
-      }
-    });
-
-    content += '\n{center}{gray-fg}Use arrow keys, Space to toggle, ESC to exit{/gray-fg}{/center}';
-    settingsBox.setContent(content);
-
-    screen.render();
-
-    const result = await waitForSettingsInput(screen, settings.length);
-
-    if (result.action === 'toggle') {
-      const settingKeys = ['autoSave', 'backupOnSave', 'showLineNumbers', 'showToolbar', 'showStatusBar', 'confirmDelete'] as const;
-      const key = settingKeys[result.index];
-      state.settings[key] = !state.settings[key];
-    } else if (result.action === 'back') {
-      exit = true;
-    } else if (result.action === 'move') {
-      selectedSetting = result.index;
-    }
-  }
+  await ctx.input.getKey();
 }
 
-async function showHelp(session: BBSSession, screen: any, state: EditorState): Promise<void> {
-  screen.children.forEach((child: any) => child.destroy());
+async function showHelp(ctx: DoorContext): Promise<void> {
+  ctx.output.writeLine('\x1b[2J\x1b[H');
+  ctx.output.writeLine('{center}{yellow-fg}{bold}ANSI Editor - Help{/bold}{/yellow-fg}\r\n\r\n');
 
-  const helpBox = blessed.box({
-    parent: screen,
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    label: ' ANSI Editor Help ',
-    border: {
-        type: 'line',
-      fg: 'cyan'
-    },
-    scrollable: true,
-    alwaysScroll: true,
-    keys: true,
-    vi: true,
-    mouse: true,
-    scrollbar: {
-      ch: '█',
-      fg: 'cyan'
-    },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      border: {
-        fg: 'cyan'
-      }
-    },
-    tags: true,
-    content: `
-{center}{yellow-fg}{bold}AmiExpress ANSI Art Editor - Help{/bold}{/yellow-fg}{/center}
+  ctx.output.writeLine('{cyan-fg}{bold}═══ Text Editing Mode ═══{/bold}{/cyan-fg}\r\n');
+  ctx.output.writeLine('  {white-fg}Arrow Keys{/white-fg}     - Move cursor');
+  ctx.output.writeLine('  {white-fg}Ctrl+S{/white-fg}         - Save file');
+  ctx.output.writeLine('  {white-fg}Ctrl+M{/white-fg}         - Switch to Draw Mode');
+  ctx.output.writeLine('  {white-fg}ESC{/white-fg}            - Exit editor\r\n');
 
-{cyan-fg}{bold}═══ Text Editing Mode ═══{/bold}{/cyan-fg}
+  ctx.output.writeLine('{cyan-fg}{bold}═══ Drawing Mode ═══{/bold}{/cyan-fg}\r\n');
+  ctx.output.writeLine('  {white-fg}1-9{/white-fg}            - Select drawing tool');
+  ctx.output.writeLine('  {white-fg}C{/white-fg}              - Character picker');
+  ctx.output.writeLine('  {white-fg}F/B{/white-fg}            - Foreground/Background color');
+  ctx.output.writeLine('  {white-fg}I{/white-fg}              - Toggle iCE colors');
+  ctx.output.writeLine('  {white-fg}U{/white-fg}              - Undo');
+  ctx.output.writeLine('  {white-fg}Ctrl+M{/white-fg}         - Back to Text Mode\r\n');
 
-  {white-fg}Arrow Keys{/white-fg}     - Move cursor
-  {white-fg}Home/End{/white-fg}       - Start/End of line
-  {white-fg}PgUp/PgDn{/white-fg}      - Scroll page
-  {white-fg}Backspace/Del{/white-fg}  - Delete character
-  {white-fg}Enter{/white-fg}          - New line
+  ctx.output.writeLine('{cyan-fg}{bold}═══ Drawing Tools ═══{/bold}{/cyan-fg}\r\n');
+  ctx.output.writeLine('  {white-fg}1{/white-fg} - Freehand    {white-fg}6{/white-fg} - Filled Ellipse');
+  ctx.output.writeLine('  {white-fg}2{/white-fg} - Line        {white-fg}7{/white-fg} - Flood Fill');
+  ctx.output.writeLine('  {white-fg}3{/white-fg} - Box         {white-fg}8{/white-fg} - Eyedropper');
+  ctx.output.writeLine('  {white-fg}4{/white-fg} - Box Filled  {white-fg}9{/white-fg} - Block Select');
+  ctx.output.writeLine('  {white-fg}5{/white-fg} - Ellipse\r\n');
 
-  {white-fg}Ctrl+S{/white-fg}         - Save file
-  {white-fg}Ctrl+M{/white-fg}         - Switch to Draw Mode
-  {white-fg}Ctrl+F{/white-fg}         - Find text
-  {white-fg}Ctrl+Z{/white-fg}         - Undo
-  {white-fg}Ctrl+Y{/white-fg}         - Redo
-  {white-fg}F1{/white-fg}             - Show this help
-  {white-fg}ESC{/white-fg}            - Exit editor
-
-{cyan-fg}{bold}═══ Drawing Mode (Ctrl+M to switch) ═══{/bold}{/cyan-fg}
-
-  {yellow-fg}Tool Selection:{/yellow-fg}
-  {white-fg}1{/white-fg} - Freehand Draw      {white-fg}6{/white-fg} - Filled Ellipse
-  {white-fg}2{/white-fg} - Line               {white-fg}7{/white-fg} - Flood Fill
-  {white-fg}3{/white-fg} - Box (outline)      {white-fg}8{/white-fg} - Eyedropper/Pick
-  {white-fg}4{/white-fg} - Box (filled)       {white-fg}9{/white-fg} - Block Selection
-  {white-fg}5{/white-fg} - Ellipse (outline)
-
-  {yellow-fg}Character & Colors:{/yellow-fg}
-  {white-fg}C{/white-fg} - Character Picker (256 CP437 chars)
-  {white-fg}F{/white-fg} - Foreground Color
-  {white-fg}B{/white-fg} - Background Color
-  {white-fg}I{/white-fg} - Toggle iCE Colors (16 BG colors + blink)
-
-  {yellow-fg}Other:{/yellow-fg}
-  {white-fg}U{/white-fg} - Undo
-  {white-fg}Ctrl+Z{/white-fg} - Undo
-  {white-fg}Ctrl+L{/white-fg} - Clear Canvas
-  {white-fg}Ctrl+M{/white-fg} - Back to Text Mode
-
-{cyan-fg}{bold}═══ File Formats ═══{/bold}{/cyan-fg}
-
-  {white-fg}.ANS{/white-fg} - ANSI art with color codes
-  {white-fg}.ASC{/white-fg} - ASCII art (text only)
-  {white-fg}.XB{/white-fg}  - XBin format with SAUCE metadata
-
-{cyan-fg}{bold}═══ Advanced Features ═══{/bold}{/cyan-fg}
-
-  • {green-fg}CP437 Extended ASCII{/green-fg} - Full 256-character set
-  • {green-fg}16-color palette{/green-fg} - Standard + bright colors
-  • {green-fg}iCE colors{/green-fg} - 16 background colors (disable blink)
-  • {green-fg}Brush modes{/green-fg} - Half-block, quarter-block patterns
-  • {green-fg}Mirror drawing{/green-fg} - Symmetrical art creation
-  • {green-fg}SAUCE metadata{/green-fg} - Author, title, group info
-  • {green-fg}Undo/Redo{/green-fg} - Full history support
-
-{center}{gray-fg}Press any key to return{/gray-fg}{/center}
-`
-  });
-
-  screen.render();
-  await session.waitForKey();
+  ctx.output.writeLine('{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}');
+  await ctx.input.getKey();
 }
 
-async function openEditor(session: BBSSession, screen: any, state: EditorState, initialContent: string): Promise<void> {
+async function openEditor(ctx: DoorContext, initialContent: string): Promise<void> {
+  if (!currentState) return;
+
   try {
-    const result = await showANSIEditor(session, {
-      title: state.currentFile ? `Editing: ${state.currentFile.filename}` : 'New ANSI File',
+    const result = await showANSIEditor(ctx.session as any, {
+      title: currentState.currentFile ? `Editing: ${currentState.currentFile.filename}` : 'New ANSI File',
       initialContent,
       maxLines: 1000,
       maxLineLength: 160,
-      showLineNumbers: state.settings.showLineNumbers,
-      toolbar: state.settings.showToolbar,
-      statusBar: state.settings.showStatusBar,
+      showLineNumbers: currentState.settings.showLineNumbers,
+      toolbar: currentState.settings.showToolbar,
+      statusBar: currentState.settings.showStatusBar,
       onSave: async (content: string) => {
-        if (state.currentFile) {
-          // Backup if enabled
-          if (state.settings.backupOnSave && amigafs.existsSync(state.currentFile.fullPath)) {
-            const backupPath = state.currentFile.fullPath + '.bak';
-            const original = amigafs.readFileSync(state.currentFile.fullPath);
+        if (currentState?.currentFile) {
+          if (currentState.settings.backupOnSave && amigafs.existsSync(currentState.currentFile.fullPath)) {
+            const backupPath = currentState.currentFile.fullPath + '.bak';
+            const original = amigafs.readFileSync(currentState.currentFile.fullPath);
             amigafs.writeFileSync(backupPath, original);
           }
 
-          // Save file
-          amigafs.writeFileSync(state.currentFile.fullPath, content);
-          state.modified = false;
+          amigafs.writeFileSync(currentState.currentFile.fullPath, content);
+          currentState.modified = false;
 
-          // Update file info
-          const stats = amigafs.statSync(state.currentFile.fullPath);
-          state.currentFile.size = stats.size;
-          state.currentFile.modified = stats.mtime;
+          const stats = amigafs.statSync(currentState.currentFile.fullPath);
+          currentState.currentFile.size = stats.size;
+          currentState.currentFile.modified = stats.mtime;
 
           return true;
         }
@@ -665,11 +372,13 @@ async function openEditor(session: BBSSession, screen: any, state: EditorState, 
       }
     });
 
-    if (result !== null) {
-      state.modified = result !== initialContent;
+    if (result !== null && currentState) {
+      currentState.modified = result !== initialContent;
     }
   } catch (error) {
-    await messageDialog(screen, 'Error', `Failed to open editor: ${error instanceof Error ? error.message : String(error)}`);
+    ctx.output.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
+    ctx.output.writeLine('Press any key...');
+    await ctx.input.getKey();
   }
 }
 
@@ -710,207 +419,4 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-}
-
-async function waitForMenuInput(screen: any, itemCount: number, state: EditorState): Promise<string | number> {
-  return new Promise((resolve) => {
-    const keyHandler = (_ch: any, key: any) => {
-      if (!key) return;
-
-      if (key.name === 'up') {
-        state.selectedIndex = (state.selectedIndex - 1 + itemCount) % itemCount;
-        screen.render();
-      } else if (key.name === 'down') {
-        state.selectedIndex = (state.selectedIndex + 1) % itemCount;
-        screen.render();
-      } else if (key.name === 'return' || key.name === 'enter') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve(state.selectedIndex);
-      } else if (key.name && key.name.length === 1) {
-        const letter = key.name.toUpperCase();
-        screen.unkey(['keypress'], keyHandler);
-        resolve(letter);
-      }
-    };
-
-    screen.on('keypress', keyHandler);
-  });
-}
-
-async function waitForBrowserInput(screen: any, list: any, files: AnsiFile[]): Promise<{action: string, index: number}> {
-  return new Promise((resolve) => {
-    const keyHandler = (_ch: any, key: any) => {
-      if (!key) return;
-
-      const selected = list.selected - 1; // -1 for header row
-
-      if (key.name === 'e' && selected >= 0) {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'edit', index: selected });
-      } else if (key.name === 'd' && selected >= 0) {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'delete', index: selected });
-      } else if (key.name === 'r' && selected >= 0) {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'rename', index: selected });
-      } else if (key.name === 'i' && selected >= 0) {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'info', index: selected });
-      } else if (key.name === 'n') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'new', index: -1 });
-      } else if (key.name === 'escape') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'back', index: -1 });
-      } else if (key.name === 'return' || key.name === 'enter') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'edit', index: selected });
-      }
-    };
-
-    screen.on('keypress', keyHandler);
-  });
-}
-
-async function waitForSettingsInput(screen: any, settingCount: number): Promise<{action: string, index: number}> {
-  let currentIndex = 0;
-
-  return new Promise((resolve) => {
-    const keyHandler = (_ch: any, key: any) => {
-      if (!key) return;
-
-      if (key.name === 'up') {
-        currentIndex = (currentIndex - 1 + settingCount) % settingCount;
-        resolve({ action: 'move', index: currentIndex });
-      } else if (key.name === 'down') {
-        currentIndex = (currentIndex + 1) % settingCount;
-        resolve({ action: 'move', index: currentIndex });
-      } else if (key.name === 'space') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'toggle', index: currentIndex });
-      } else if (key.name === 'escape') {
-        screen.unkey(['keypress'], keyHandler);
-        resolve({ action: 'back', index: -1 });
-      }
-    };
-
-    screen.on('keypress', keyHandler);
-  });
-}
-
-async function confirmDialog(screen: any, message: string): Promise<boolean> {
-  const dialog = blessed.question({
-    parent: screen,
-    top: 'center',
-    left: 'center',
-    width: 'shrink',
-    height: 'shrink',
-    border: {
-      type: 'line',
-      fg: 'yellow'
-    },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      border: {
-        fg: 'yellow'
-      }
-    },
-    tags: true
-  });
-
-  return new Promise((resolve) => {
-    dialog.ask(message + ' (y/n)', (err: any, value: any) => {
-      dialog.destroy();
-      screen.render();
-      resolve(value === true || (typeof value === 'string' && value.toLowerCase() === 'y'));
-    });
-  });
-}
-
-async function messageDialog(screen: any, title: string, message: string): Promise<void> {
-  const msgBox = blessed.message({
-    parent: screen,
-    top: 'center',
-    left: 'center',
-    width: 'shrink',
-    height: 'shrink',
-    label: ` ${title} `,
-    border: {
-      type: 'line',
-      fg: 'cyan'
-    },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      border: {
-        fg: 'cyan'
-      }
-    },
-    tags: true
-  });
-
-  return new Promise((resolve) => {
-    msgBox.display(message, 0, () => {
-      msgBox.destroy();
-      screen.render();
-      resolve();
-    });
-  });
-}
-
-async function promptDialog(screen: any, title: string, question: string, defaultValue: string): Promise<string | null> {
-  const promptBox = blessed.prompt({
-    parent: screen,
-    top: 'center',
-    left: 'center',
-    width: 'shrink',
-    height: 'shrink',
-    label: ` ${title} `,
-    border: {
-      type: 'line',
-      fg: 'cyan'
-    },
-    style: {
-      fg: 'white',
-      bg: 'black',
-      border: {
-        fg: 'cyan'
-      }
-    },
-    tags: true
-  });
-
-  return new Promise((resolve) => {
-    promptBox.input(question, defaultValue, (err: any, value: any) => {
-      promptBox.destroy();
-      screen.render();
-      if (err) {
-        resolve(null);
-      } else {
-        resolve(value || null);
-      }
-    });
-  });
-}
-
-async function showFileInfo(screen: any, file: AnsiFile): Promise<void> {
-  const info = `
-{center}{yellow-fg}{bold}File Information{/bold}{/yellow-fg}{/center}
-
-{cyan-fg}Filename:{/cyan-fg}     ${file.filename}
-{cyan-fg}Full Path:{/cyan-fg}    ${file.fullPath}
-{cyan-fg}Size:{/cyan-fg}         ${formatFileSize(file.size)}
-{cyan-fg}Modified:{/cyan-fg}     ${formatDate(file.modified)}
-${file.width ? `{cyan-fg}Dimensions:{/cyan-fg}  ${file.width}x${file.height}` : ''}
-${file.title ? `{cyan-fg}Title:{/cyan-fg}       ${file.title}` : ''}
-${file.author ? `{cyan-fg}Author:{/cyan-fg}      ${file.author}` : ''}
-${file.group ? `{cyan-fg}Group:{/cyan-fg}       ${file.group}` : ''}
-
-{center}{gray-fg}Press any key to close{/gray-fg}{/center}
-`;
-
-  await messageDialog(screen, 'File Info', info);
-}
+export default door;
