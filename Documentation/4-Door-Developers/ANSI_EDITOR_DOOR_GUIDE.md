@@ -4,10 +4,12 @@
 
 The ANSI Editor is a full-featured professional ANSI art creation and editing door for AmiExpress BBS. It provides a complete application with file management, multiple editing modes, and comprehensive help.
 
-**Command:** `ANSI-EDITOR`
+**Command:** `ANSI-EDIT`
 **Access Level:** 0 (All users)
 **Category:** Art & Graphics
 **Type:** TypeScript SDK Door
+
+**Note:** Registered as `ANSI-EDIT` due to BBS command name length limits (max 10 chars). The .info file contains `ANSI-EDIT` but the system truncates to `ANSI-EDIT`.
 
 ## Features
 
@@ -159,7 +161,7 @@ All ANSI files are stored in this directory by default. The directory is automat
 
 ### Creating New ANSI Art
 
-1. Run `ANSI-EDITOR` command in BBS
+1. Run `ANSI-EDIT` command in BBS
 2. Select "New File" (or press N)
 3. Enter filename (extension added automatically)
 4. Editor opens in text mode
@@ -171,7 +173,7 @@ All ANSI files are stored in this directory by default. The directory is automat
 
 ### Editing Existing File
 
-1. Run `ANSI-EDITOR` command
+1. Run `ANSI-EDIT` command
 2. Select "File Browser" (or press B)
 3. Navigate to file with arrow keys
 4. Press E to edit or Enter
@@ -293,7 +295,7 @@ All ANSI files are stored in this directory by default. The directory is automat
 ## Troubleshooting
 
 **Door won't start:**
-- Check that BBSCmd.info has ANSI-EDITOR entry
+- Check that BBSCmd.info has ANSI-EDIT entry
 - Verify TYPE=TS and PRELOADER=YES are set
 - Ensure web/backend/src/doors/ansi-editor.ts exists
 - Check logs for import errors
