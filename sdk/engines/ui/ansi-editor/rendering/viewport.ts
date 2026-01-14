@@ -246,6 +246,19 @@ export class Viewport {
    * Render main content area
    */
   private renderContent(cursor: { line: number; col: number }): void {
+    const mode = this.state.getMode();
+
+    if (mode === 'draw') {
+      this.renderCanvasContent(cursor);
+    } else {
+      this.renderTextContent(cursor);
+    }
+  }
+
+  /**
+   * Render text editing content
+   */
+  private renderTextContent(cursor: { line: number; col: number }): void {
     const contentLines: string[] = [];
     const contentWidth = this.viewport.width;
 
@@ -291,6 +304,120 @@ export class Viewport {
     contentLines.push(cursorPrompt);
 
     this.contentBox.setContent(contentLines.join('\n'));
+  }
+
+  /**
+   * Render canvas drawing content
+   */
+  private renderCanvasContent(cursor: { line: number; col: number }): void {
+    const canvas = this.state.getCanvas();
+    if (!canvas) {
+      this.contentBox.setContent('Canvas not initialized');
+      return;
+    }
+
+    const contentLines: string[] = [];
+    const contentWidth = this.viewport.width;
+    const visibleStart = this.viewport.scrollLeft;
+    const visibleEnd = visibleStart + contentWidth;
+
+    // Render visible canvas rows
+    for (let y = this.viewport.visibleLineStart; y < this.viewport.visibleLineEnd; y++) {
+      if (y >= canvas.length) {
+        contentLines.push('');
+        continue;
+      }
+
+      let line = '';
+      let currentFg = -1;
+      let currentBg = -1;
+      let currentBlink = false;
+
+      // Render visible columns
+      for (let x = visibleStart; x < Math.min(visibleEnd, canvas[y].length); x++) {
+        const cell = canvas[y][x];
+
+        // Optimize ANSI codes - only emit when attributes change
+        if (cell.fg !== currentFg || cell.bg !== currentBg || cell.blink !== currentBlink) {
+          // Close previous tags
+          if (currentFg !== -1) {
+            line += '{/}';
+          }
+
+          // Open new tags
+          const fgColor = this.getColorName(cell.fg);
+          const bgColor = this.getColorName(cell.bg);
+          line += `{${fgColor}-fg}{${bgColor}-bg}`;
+
+          currentFg = cell.fg;
+          currentBg = cell.bg;
+          currentBlink = cell.blink;
+        }
+
+        // Render cursor if on this position
+        if (y === cursor.line && x === cursor.col) {
+          line += `{inverse}${cell.char}{/inverse}`;
+        } else {
+          line += cell.char;
+        }
+      }
+
+      // Close tags at end of line
+      if (currentFg !== -1) {
+        line += '{/}';
+      }
+
+      contentLines.push(line);
+    }
+
+    // Fill remaining height with empty lines
+    // Reserve last line for cursor position indicator
+    const maxContentLines = this.viewport.height - 1;
+    while (contentLines.length < maxContentLines) {
+      contentLines.push('');
+    }
+
+    // Add cursor position indicator with tool info
+    const x = cursor.col + 1;
+    const y = cursor.line + 1;
+    const tool = this.state.getCurrentTool();
+    const fg = this.state.getCurrentFg();
+    const bg = this.state.getCurrentBg();
+    const char = this.state.getCurrentChar();
+
+    const fgColor = this.getColorName(fg);
+    const bgColor = this.getColorName(bg);
+    const sample = `{${fgColor}-fg}{${bgColor}-bg}${char}{/}`;
+
+    const cursorPrompt = `{cyan-fg}▌{/cyan-fg} X:${x} Y:${y} Tool:${tool} ${sample}`;
+    contentLines.push(cursorPrompt);
+
+    this.contentBox.setContent(contentLines.join('\n'));
+  }
+
+  /**
+   * Get color name from color code (0-15)
+   */
+  private getColorName(code: number): string {
+    const colors = [
+      'black',       // 0
+      'red',         // 1
+      'green',       // 2
+      'yellow',      // 3
+      'blue',        // 4
+      'magenta',     // 5
+      'cyan',        // 6
+      'white',       // 7
+      'lightblack',  // 8 (gray)
+      'lightred',    // 9
+      'lightgreen',  // 10
+      'lightyellow', // 11
+      'lightblue',   // 12
+      'lightmagenta',// 13
+      'lightcyan',   // 14
+      'lightwhite'   // 15
+    ];
+    return colors[code] || 'white';
   }
 
   /**

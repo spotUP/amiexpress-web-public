@@ -3,8 +3,9 @@
  * Maintains document content, cursor position, and modification state
  */
 
-import type { Position, Selection, EditorState as IEditorState, EditorOperation } from '../types';
+import type { Position, Selection, EditorState as IEditorState, EditorOperation, Cell, DrawingTool, BrushMode, EditorMode } from '../types';
 import { ANSIUtils } from './ansi-utils';
+import * as Canvas from './canvas';
 
 /**
  * Editor state manager
@@ -742,5 +743,333 @@ export class EditorState {
     }
 
     this.state.modified = true;
+  }
+
+  // ===== CANVAS MODE METHODS =====
+
+  /**
+   * Get editor mode (text or draw)
+   */
+  getMode(): EditorMode {
+    return this.state.mode || 'text';
+  }
+
+  /**
+   * Set editor mode
+   */
+  setMode(mode: EditorMode): void {
+    if (mode === 'draw' && !this.state.canvas) {
+      // Initialize canvas when switching to draw mode
+      this.initializeCanvas(80, 25);
+    }
+    this.state.mode = mode;
+  }
+
+  /**
+   * Initialize canvas for drawing mode
+   */
+  initializeCanvas(width: number, height: number): void {
+    this.state.canvas = Canvas.createCanvas(width, height);
+    this.state.canvasWidth = width;
+    this.state.canvasHeight = height;
+    this.state.currentTool = 'draw';
+    this.state.brushMode = 'half-block';
+    this.state.currentFg = 7;  // White
+    this.state.currentBg = 0;  // Black
+    this.state.currentChar = '█';
+    this.state.drawingStartPoint = null;
+    this.state.drawingEndPoint = null;
+    this.state.drawingPreview = null;
+    this.state.iceColorsEnabled = false;
+  }
+
+  /**
+   * Get canvas
+   */
+  getCanvas(): Cell[][] | undefined {
+    return this.state.canvas;
+  }
+
+  /**
+   * Set canvas
+   */
+  setCanvas(canvas: Cell[][]): void {
+    this.state.canvas = canvas;
+    this.state.canvasWidth = canvas[0]?.length || 0;
+    this.state.canvasHeight = canvas.length;
+    this.state.modified = true;
+  }
+
+  /**
+   * Get canvas dimensions
+   */
+  getCanvasDimensions(): { width: number; height: number } {
+    return {
+      width: this.state.canvasWidth || 0,
+      height: this.state.canvasHeight || 0
+    };
+  }
+
+  /**
+   * Clear canvas
+   */
+  clearCanvas(): void {
+    if (this.state.canvas) {
+      Canvas.clearCanvas(this.state.canvas);
+      this.state.modified = true;
+    }
+  }
+
+  /**
+   * Get current drawing tool
+   */
+  getCurrentTool(): DrawingTool {
+    return this.state.currentTool || 'draw';
+  }
+
+  /**
+   * Set current drawing tool
+   */
+  setCurrentTool(tool: DrawingTool): void {
+    this.state.currentTool = tool;
+  }
+
+  /**
+   * Get brush mode
+   */
+  getBrushMode(): BrushMode {
+    return this.state.brushMode || 'half-block';
+  }
+
+  /**
+   * Set brush mode
+   */
+  setBrushMode(mode: BrushMode): void {
+    this.state.brushMode = mode;
+  }
+
+  /**
+   * Get current foreground color
+   */
+  getCurrentFg(): number {
+    return this.state.currentFg || 7;
+  }
+
+  /**
+   * Set current foreground color
+   */
+  setCurrentFg(fg: number): void {
+    this.state.currentFg = Math.max(0, Math.min(15, fg));
+  }
+
+  /**
+   * Get current background color
+   */
+  getCurrentBg(): number {
+    return this.state.currentBg || 0;
+  }
+
+  /**
+   * Set current background color
+   */
+  setCurrentBg(bg: number): void {
+    this.state.currentBg = Math.max(0, Math.min(15, bg));
+  }
+
+  /**
+   * Get current character
+   */
+  getCurrentChar(): string {
+    return this.state.currentChar || '█';
+  }
+
+  /**
+   * Set current character
+   */
+  setCurrentChar(char: string): void {
+    this.state.currentChar = char;
+  }
+
+  /**
+   * Get current drawing cell (based on current fg/bg/char)
+   */
+  getCurrentCell(): Cell {
+    return {
+      char: this.getCurrentChar(),
+      fg: this.getCurrentFg(),
+      bg: this.getCurrentBg(),
+      blink: false
+    };
+  }
+
+  /**
+   * Get drawing start point (for shape tools)
+   */
+  getDrawingStartPoint(): Position | null {
+    return this.state.drawingStartPoint || null;
+  }
+
+  /**
+   * Set drawing start point
+   */
+  setDrawingStartPoint(pos: Position | null): void {
+    this.state.drawingStartPoint = pos;
+  }
+
+  /**
+   * Get drawing end point (for shape tools)
+   */
+  getDrawingEndPoint(): Position | null {
+    return this.state.drawingEndPoint || null;
+  }
+
+  /**
+   * Set drawing end point
+   */
+  setDrawingEndPoint(pos: Position | null): void {
+    this.state.drawingEndPoint = pos;
+  }
+
+  /**
+   * Get drawing preview canvas
+   */
+  getDrawingPreview(): Cell[][] | null {
+    return this.state.drawingPreview || null;
+  }
+
+  /**
+   * Set drawing preview canvas
+   */
+  setDrawingPreview(preview: Cell[][] | null): void {
+    this.state.drawingPreview = preview;
+  }
+
+  /**
+   * Check if iCE colors are enabled
+   */
+  isIceColorsEnabled(): boolean {
+    return this.state.iceColorsEnabled || false;
+  }
+
+  /**
+   * Toggle iCE colors
+   */
+  toggleIceColors(): void {
+    this.state.iceColorsEnabled = !this.state.iceColorsEnabled;
+  }
+
+  /**
+   * Set iCE colors
+   */
+  setIceColors(enabled: boolean): void {
+    this.state.iceColorsEnabled = enabled;
+  }
+
+  /**
+   * Set canvas cell at position
+   */
+  setCanvasCell(x: number, y: number, cell: Cell): void {
+    if (this.state.canvas) {
+      Canvas.setCell(this.state.canvas, x, y, cell);
+      this.state.modified = true;
+    }
+  }
+
+  /**
+   * Get canvas cell at position
+   */
+  getCanvasCell(x: number, y: number): Cell | null {
+    if (this.state.canvas) {
+      return Canvas.getCell(this.state.canvas, x, y);
+    }
+    return null;
+  }
+
+  /**
+   * Convert canvas to ANSI string
+   */
+  canvasToANSI(): string {
+    if (this.state.canvas) {
+      return Canvas.canvasToANSI(this.state.canvas, this.isIceColorsEnabled());
+    }
+    return '';
+  }
+
+  /**
+   * Load content into canvas (for file loading)
+   */
+  loadCanvasFromANSI(content: string, width: number, height: number): void {
+    // Create new canvas
+    const canvas = Canvas.createCanvas(width, height);
+
+    // Parse ANSI content and populate canvas
+    // This is a simplified parser - full implementation would parse ANSI codes
+    const lines = content.split('\n');
+    let currentFg = 7;
+    let currentBg = 0;
+
+    for (let y = 0; y < Math.min(lines.length, height); y++) {
+      let x = 0;
+      const line = lines[y];
+
+      for (let i = 0; i < line.length && x < width; i++) {
+        const char = line[i];
+
+        // Skip ANSI escape sequences (simplified - full parser needed)
+        if (char === '\x1b') {
+          // Parse escape sequence
+          const match = line.substring(i).match(/^\x1b\[([0-9;]+)m/);
+          if (match) {
+            const codes = match[1].split(';').map(Number);
+            for (const code of codes) {
+              if (code >= 30 && code <= 37) {
+                currentFg = code - 30;
+              } else if (code >= 90 && code <= 97) {
+                currentFg = code - 90 + 8;
+              } else if (code >= 40 && code <= 47) {
+                currentBg = code - 40;
+              } else if (code >= 100 && code <= 107) {
+                currentBg = code - 100 + 8;
+              }
+            }
+            i += match[0].length - 1;
+            continue;
+          }
+        }
+
+        // Set cell
+        Canvas.setCell(canvas, x, y, {
+          char,
+          fg: currentFg,
+          bg: currentBg,
+          blink: false
+        });
+        x++;
+      }
+    }
+
+    this.setCanvas(canvas);
+  }
+
+  /**
+   * Resize canvas
+   */
+  resizeCanvas(newWidth: number, newHeight: number): void {
+    if (this.state.canvas) {
+      this.state.canvas = Canvas.resizeCanvas(this.state.canvas, newWidth, newHeight);
+      this.state.canvasWidth = newWidth;
+      this.state.canvasHeight = newHeight;
+      this.state.modified = true;
+    }
+  }
+
+  /**
+   * Clone current canvas (for undo)
+   */
+  cloneCanvas(): Cell[][] | undefined {
+    if (this.state.canvas) {
+      return Canvas.cloneCanvas(this.state.canvas);
+    }
+    return undefined;
   }
 }
