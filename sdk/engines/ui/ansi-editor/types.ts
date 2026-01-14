@@ -83,6 +83,50 @@ export type {
 };
 
 /**
+ * Canvas cell for drawing mode
+ * Used for pixel-based ANSI art editing
+ */
+export interface Cell {
+  char: string;
+  fg: number;  // 0-15 (0-7 normal, 8-15 bright)
+  bg: number;  // 0-15 (0-7 normal, 8-15 bright with iCE colors)
+  blink?: boolean;  // Blink attribute (requires iCE colors)
+}
+
+/**
+ * Drawing tool types
+ */
+export type DrawingTool =
+  | 'draw'          // Freehand drawing
+  | 'line'          // Straight lines
+  | 'box'           // Rectangles
+  | 'box-fill'      // Filled rectangles
+  | 'ellipse'       // Ellipse outline
+  | 'ellipse-fill'  // Filled ellipse
+  | 'text'          // Text mode (default)
+  | 'fill'          // Flood fill
+  | 'pick'          // Color/char picker
+  | 'select';       // Selection tool
+
+/**
+ * Brush mode for drawing
+ */
+export type BrushMode =
+  | 'half-block'    // Half-block drawing (default)
+  | 'quarter-block' // Quarter-block drawing
+  | 'custom'        // Custom character
+  | 'shading'       // Shade patterns
+  | 'colorize'      // Change colors only
+  | 'replace';      // Replace specific char/color
+
+/**
+ * Editor mode
+ */
+export type EditorMode =
+  | 'text'          // Text editing mode (default)
+  | 'draw';         // Drawing mode with canvas
+
+/**
  * Minimal session interface for editor
  */
 export type ANSITokenType = 'text' | 'ansi' | 'reset' | 'color' | 'style';
@@ -110,6 +154,21 @@ export interface EditorState {
   modified: boolean;
   undoStack: EditorOperation[];
   redoStack: EditorOperation[];
+
+  // Drawing mode extensions
+  mode?: EditorMode;
+  canvas?: Cell[][];           // Cell-based canvas for drawing
+  canvasWidth?: number;         // Canvas width in characters
+  canvasHeight?: number;        // Canvas height in characters
+  currentTool?: DrawingTool;    // Active drawing tool
+  brushMode?: BrushMode;        // Brush mode
+  currentFg?: number;           // Current foreground color (0-15)
+  currentBg?: number;           // Current background color (0-15)
+  currentChar?: string;         // Current character for drawing
+  drawingStartPoint?: Position | null;  // Start point for shape tools
+  drawingEndPoint?: Position | null;    // End point for shape tools
+  drawingPreview?: Cell[][] | null;     // Preview canvas for tools
+  iceColorsEnabled?: boolean;   // Enable 16 BG colors + blink
 }
 
 /**
