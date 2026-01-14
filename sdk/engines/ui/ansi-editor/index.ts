@@ -17,6 +17,8 @@ export {
   BBSCodeProvider,
   WordProvider,
 } from './core/autocomplete';
+export * as Canvas from './core/canvas';
+export * as FileOps from './core/file-ops';
 
 // Type exports
 export type {
@@ -38,6 +40,10 @@ export type {
   SearchResult,
   EditorEventHandler,
   EditorEvents,
+  Cell,
+  DrawingTool,
+  BrushMode,
+  EditorMode,
 } from './types';
 
 // Main API
@@ -50,12 +56,50 @@ export { SearchDialog } from './ui/search-dialog';
 export { ColorPicker } from './ui/color-picker';
 export { Toolbar } from './ui/toolbar';
 export { AutocompleteDialog } from './ui/autocomplete-dialog';
+export { CharacterPicker, ColorPicker as DrawColorPicker } from './ui/character-picker';
 export type { ANSIColorName, ANSIColorInfo } from './ui/color-picker';
 export type { ToolbarAction } from './ui/toolbar';
 
 // Input handling
 export { KeyboardHandler } from './input/keyboard-handler';
 
-// Future exports (to be implemented)
-// export { ANSIEditorComponent } from './components/editor-component';
-// export { showInlineEditor } from './api/inline-editor';
+// Drawing Tools
+export * as DrawingTools from './tools/drawing-tools';
+export * as BrushModes from './tools/brush-modes';
+export {
+  getToolHandler,
+  handleDrawEvent,
+  undoDrawing,
+  clearUndoStack,
+  getSelection,
+  clearSelection,
+  copySelection,
+  pasteSelection,
+} from './tools/drawing-tools';
+export {
+  getBrushCell,
+  getMirroredPositions,
+  applyBrushWithMirror,
+  getBrushArea,
+  applyDithering,
+} from './tools/brush-modes';
+export {
+  getCP437Char,
+  getCP437Code,
+  isCP437Char,
+  getAllCP437Chars,
+  getCommonDrawingChars,
+} from './ui/character-picker';
+
+// File Operations
+export {
+  loadANSFile,
+  saveANSFile,
+  loadASCFile,
+  saveASCFile,
+  loadXBFile,
+  detectFileFormat,
+  loadFile,
+  saveFile,
+} from './core/file-ops';
+export type { SAUCERecord } from './core/file-ops';
