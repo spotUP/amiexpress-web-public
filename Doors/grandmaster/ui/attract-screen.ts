@@ -12,6 +12,7 @@ import { GameEngine } from '../core/game';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
 import { BotPlayer } from '../ai/bot-player';
+import { GameScreen } from './game-screen';
 import { PieceManager, ARS_COLORS, PIECE_COLORS } from '../core/pieces';
 import { getGhostY } from '../core/board';
 import { ScreenShaker } from '../effects/screen-shake';
@@ -60,8 +61,9 @@ export class AttractScreen {
   private rainbowTimer: number = 0;
   private readonly RAINBOW_COLORS = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
 
-  // Demo game
+  // Demo game - now using GameScreen!
   private demoEngine: GameEngine | null = null;
+  private gameScreen: GameScreen | null = null;
   private demoRunning: boolean = false;
   private lastRenderedAt: number = 0;
   private updateInterval: NodeJS.Timeout | null = null;
@@ -124,8 +126,16 @@ export class AttractScreen {
    * Setup UI layout
    */
   private setupUI(): void {
-    // Clear screen
+    // Clear screen - both widgets AND buffer
     this.screen.children.forEach(child => child.destroy());
+
+    // Clear the entire terminal with ANSI escape codes (more aggressive)
+    this.screen.program.write('\x1b[2J');  // Clear entire screen
+    this.screen.program.write('\x1b[H');   // Move cursor to home (0,0)
+
+    // Clear blessed internal buffer to prevent ghosting from previous screens
+    this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+    this.screen.alloc();
 
     // Main container (for boot logo) - full screen black background
     this.mainBox = createBox({
@@ -136,6 +146,10 @@ export class AttractScreen {
       height: '100%',
       align: 'center',
       content: '',
+      style: {
+        bg: 'black',
+        fg: 'white',
+      },
     });
 
     // Demo gameplay area (left side) - hidden initially
@@ -284,7 +298,7 @@ export class AttractScreen {
       }
       content += '{/bold}\n{yellow-fg}v1.0.0{/yellow-fg}\n\n';
       content += '{white-fg}A Tetris: The Grand Master 3 Tribute{/white-fg}\n\n';
-      content += '{yellow-fg}{blink}Press Space to Play!{/blink}{/yellow-fg}';
+      content += '{yellow-fg}{blink}Press any key to start!{/blink}{/yellow-fg}';
 
       this.mainBox.setContent(content);
       this.screen.render();
@@ -294,9 +308,11 @@ export class AttractScreen {
     // Cleanup title listeners
     this.screen.removeListener('keypress', titleHandler);
     this.screen.removeListener('mouse', titleHandler);
-    
+
     // If key was pressed, exit attract mode immediately to enter game
     if (titleKeyPressed) {
+        // Add delay to trap input and prevent it from bleeding through to menu
+        await new Promise(resolve => setTimeout(resolve, 100));
         this.exit();
     }
   }
@@ -304,56 +320,63 @@ export class AttractScreen {
   /**
    * Start demo gameplay
    */
-  private startDemo(): void {
+  private async startDemo(): Promise<void> {
     if (!this.running) return;
+
+    // Hide main box and show demo area
+    this.mainBox.hide();
+    this.demoBox.show();
+    this.infoBox.show();
+    this.effectsBox?.show();
+
+    // Create demo engine
     this.demoEngine = new GameEngine('master', this.state.settings, this.sounds);
+    this.demoEngine.start();
 
-    if (this.demoEngine) {
-      this.demoEngine.start();
-      this.demoRunning = true;
-      this.stateTimer = 0;
-      this.lastLevel = 0;
-      this.lastGrade = '9';
-      this.lastLines = 0;
-      this.lastBoardHash = '';
-      this.hardDropTrails = [];
-      this.shineCells.clear();
-      this.animations.clear();
-      this.particles.clear();
+    // Create GameScreen instance for playfield rendering (null input = AI-controlled)
+    this.gameScreen = new GameScreen(
+      this.screen,
+      this.demoEngine,
+      null,  // No input handler - bot controls it
+      this.sounds,
+      this.state
+    );
 
-      // Parity with GameScreen: bot hard drops trigger trails
-      this.demoEngine.onHardDrop(() => {
-        this.addHardDropTrail();
-      });
-    }
+    this.demoRunning = true;
+    this.stateTimer = 0;
+
+    // Start GameScreen's game loop (it handles all rendering & effects now!)
+    // Note: We don't await this - it runs in background while we manage attract state
+    this.gameScreen.run().catch(err => {
+      console.error('[AttractScreen] GameScreen error:', err);
+      this.demoRunning = false;
+    });
   }
 
   /**
    * Update attract mode state
    */
-  private update(deltaTime: number): void {
+  private async update(deltaTime: number): Promise<void> {
     if (!this.running) return;
     this.stateTimer += deltaTime;
 
-    // Update effect systems
-    this.shaker.update(deltaTime);
-    this.particles.update(deltaTime);
-    this.transitions.update(deltaTime);
-    this.animations.update(deltaTime);
-    this.updateShineEffect();
+    // GameScreen now handles all effect systems during demo!
+    // Only update these for non-demo states
+    if (this.attractState !== 'demo') {
+      this.shaker.update(deltaTime);
+      this.particles.update(deltaTime);
+      this.transitions.update(deltaTime);
+      this.animations.update(deltaTime);
+      this.updateShineEffect();
+    }
     this.updateGradeAnimation(deltaTime);
 
     switch (this.attractState) {
       case 'demo':
-        if (this.demoEngine && this.demoRunning) {
-          // Update demo game
-          this.demoEngine.update(deltaTime);
-
-          // Update bot AI
+        if (this.demoEngine && this.demoRunning && this.gameScreen) {
+          // GameScreen handles engine.update() and all rendering/effects!
+          // We just control the bot AI
           this.botPlayer.update(deltaTime, this.demoEngine);
-
-          // Check for game events (Parity with GameScreen)
-          this.checkDemoEvents();
 
           // Check if demo ended
           const gameState = this.demoEngine.getState();
@@ -361,6 +384,11 @@ export class AttractScreen {
             this.demoRunning = false;
             this.stateTimer = 0;
             this.attractState = 'leaderboard';
+            // Cleanup GameScreen
+            if (this.gameScreen) {
+              this.demoBox.hide();
+              this.gameScreen = null;
+            }
           }
 
           // Auto-restart after 3 minutes
@@ -368,6 +396,11 @@ export class AttractScreen {
             this.demoRunning = false;
             this.stateTimer = 0;
             this.attractState = 'leaderboard';
+            // Cleanup GameScreen
+            if (this.gameScreen) {
+              this.demoBox.hide();
+              this.gameScreen = null;
+            }
           }
         }
         break;
@@ -393,16 +426,17 @@ export class AttractScreen {
         if (this.stateTimer > 8000) {
           this.stateTimer = 0;
           this.attractState = 'demo';
-          this.startDemo();
+          await this.startDemo();
         }
         break;
     }
   }
 
   /**
-   * Check for demo game events and trigger effects
+   * DEPRECATED: GameScreen now handles all game events and effects!
+   * This method is no longer used when GameScreen is active.
    */
-  private checkDemoEvents(): void {
+  private checkDemoEvents_UNUSED(): void {
     if (!this.demoEngine) return;
     const gameState = this.demoEngine.getState();
 
@@ -582,30 +616,12 @@ export class AttractScreen {
    */
   private render(): void {
     if (!this.running) return;
-    
+
     let needsRender = false;
 
-    if (this.attractState === 'demo' && this.demoEngine) {
-        const state = this.demoEngine.getState();
-        const boardHash = this.getBoardHash(state);
-        const isShaking = this.shaker.isShaking();
-
-        if (boardHash !== this.lastBoardHash || this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0 || isShaking) {
-            // Apply shake offset
-            if (isShaking) {
-                const offset = this.shaker.getOffset();
-                this.demoBox.top = 2 + offset.y;
-                this.demoBox.left = 2 + offset.x;
-            } else {
-                this.demoBox.top = 2;
-                this.demoBox.left = 2;
-            }
-
-            this.renderDemo();
-            this.lastBoardHash = boardHash;
-            needsRender = true;
-        }
-    } else {
+    // GameScreen handles ALL rendering during demo state!
+    // We only render the info panels for non-demo states
+    if (this.attractState !== 'demo') {
         switch (this.attractState) {
             case 'leaderboard':
                 this.renderLeaderboard();
@@ -620,18 +636,15 @@ export class AttractScreen {
         needsRender = true;
     }
 
-    // Render effects overlay
-    if (this.particles.getRenderableParticles().length > 0 || this.animations.getAnimations().length > 0) {
-      this.renderEffects();
-      needsRender = true;
-    }
-
     if (needsRender) {
         this.screen.render();
     }
   }
 
-  private renderEffects(): void {
+  /**
+   * DEPRECATED: GameScreen now handles all effects rendering!
+   */
+  private renderEffects_UNUSED(): void {
     let effectsContent = '';
     const screenWidth = this.screen.width;
     const screenHeight = this.screen.height;
@@ -712,9 +725,10 @@ export class AttractScreen {
   }
 
   /**
-   * Render demo gameplay
+   * DEPRECATED: GameScreen now renders the demo playfield!
+   * This method is no longer used.
    */
-  private renderDemo(): void {
+  private renderDemo_UNUSED(): void {
     if (!this.demoEngine) return;
 
     // Clear main box (remove boot logo)
