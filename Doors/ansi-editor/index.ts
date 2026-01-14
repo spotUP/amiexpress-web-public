@@ -1,772 +1,916 @@
 /**
- * ANSI Editor SDK - State-of-the-art ANSI/ASCII art editor
- * Complete Moebius feature parity with modern enhancements
+ * ANSI Editor - Complete ANSI Art Editor Door
  *
  * Features:
- * - Full drawing toolset (draw, line, box, ellipse, fill, text, pick, select, shifter)
- * - Mouse and keyboard input support
- * - Undo/redo system with chunked operations
- * - Selection and clipboard (copy, cut, paste, transform)
- * - Neo-Blessed modal dialogs for professional UI
- * - Multiple file format support (ANS, ASC, BIN, XB, TXT)
- * - iCE colors support (16 background colors + blink)
- * - Guides and grid overlays
- * - Color picker with full palette
- * - Real-time canvas rendering
+ * - File browser with directory navigation
+ * - Gallery view with ANSI previews
+ * - Full ANSI editor (text + drawing modes)
+ * - SAUCE metadata editor
+ * - Settings/preferences
+ * - Help system
+ * - Export to multiple formats (.ANS, .ASC, .XB)
  */
 
-import { ServerDoor as Door } from '@amiexpress/bbs-door-sdk';
-import { UIEngine, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
+import type { BBSSession } from '../../web/backend/src/types';
+import { showANSIEditor } from '../../sdk/engines/ui/ansi-editor';
+import blessed from '../../sdk/engines/ui/blessed';
+import * as amigafs from '../../web/backend/src/utils/amigafs';
+import * as path from 'path';
 
-import { EditorState, Tool, ANSI, SHORTCUTS, Cell } from './types.js';
-import {
-  createCanvas,
-  saveUndoState,
-  flushUndoChunk,
-  undo,
-  redo,
-  startSelection,
-  updateSelection,
-  clearSelection,
-  copySelection,
-  cutSelection,
-  pasteSelection,
-  selectAll,
-  flipSelectionHorizontal,
-  flipSelectionVertical,
-  rotateSelection90,
-  shiftSelection,
-  renderCanvas,
-  renderStatusBar,
-  clearCanvas,
-} from './canvas.js';
-import {
-  getToolHandler,
-  insertTextChar,
-  shiftHalfBlock,
-} from './drawing.js';
-import {
-  ToolSelectorModal,
-  ColorPickerModal,
-  FileDialogModal,
-  ConfirmDialog,
-  MessageDialog,
-  HelpDialog,
-  GalleryBrowserModal,
-  RecentFilesModal,
-} from './modals.js';
-import {
-  loadFile,
-  saveFile,
-  listFiles,
-  fileExists,
-  importFile,
-  exportSelection,
-} from './file-ops.js';
+interface AnsiFile {
+  filename: string;
+  fullPath: string;
+  size: number;
+  modified: Date;
+  width?: number;
+  height?: number;
+  title?: string;
+  author?: string;
+  group?: string;
+}
 
-// =============================================================================
-// ANSI EDITOR DOOR
-// =============================================================================
+interface EditorSettings {
+  defaultDir: string;
+  autoSave: boolean;
+  backupOnSave: boolean;
+  showLineNumbers: boolean;
+  showToolbar: boolean;
+  showStatusBar: boolean;
+  confirmDelete: boolean;
+}
 
-const door = new Door({
-  name: 'ANSI Editor',
-  version: '2.0.0',
-  author: 'AmiExpress-Web',
-  description: 'State-of-the-art ANSI/ASCII art editor with full Moebius features',
-});
+interface EditorState {
+  currentFile: AnsiFile | null;
+  currentDir: string;
+  files: AnsiFile[];
+  settings: EditorSettings;
+  mode: 'menu' | 'browser' | 'gallery' | 'editor' | 'settings' | 'help';
+  selectedIndex: number;
+  modified: boolean;
+}
 
-// =============================================================================
-// EDITOR STATE INITIALIZATION
-// =============================================================================
+export default async function ansiEditorDoor(session: BBSSession): Promise<void> {
+  const screen = blessed.screen({
+    smartCSR: true,
+    fullUnicode: true,
+    dockBorders: true,
+    autoPadding: true
+  });
 
-function createInitialState(): EditorState {
-  return {
-    // Canvas
-    canvas: createCanvas(80, 22), // 22 lines for editing (2 for status)
-    width: 80,
-    height: 22,
+  // Initialize state
+  const ansiDir = path.join(process.cwd(), 'data', 'ansi-art');
+  if (!amigafs.existsSync(ansiDir)) {
+    amigafs.mkdirSync(ansiDir, { recursive: true });
+  }
 
-    // Cursor
-    cursorX: 0,
-    cursorY: 0,
-    cursorVisible: true,
-
-    // Drawing state
-    currentFg: 7,
-    currentBg: 0,
-    currentChar: '█',
-    currentTool: 'draw',
-    brushMode: 'half-block',
-    operationMode: 'normal',
-
-    // Brush state (from old editor)
-    brushSize: 1,  // 1-9
-    mirrorModeEnabled: false,
-    numpadModeEnabled: false,
-    straightLineMode: false,
-
-    // iCE colors and attributes
-    iceColorsEnabled: false,
-    blinkEnabled: false,
-
-    // Undo/redo
-    undoStack: [],
-    redoStack: [],
-    maxUndoLevels: 100,
-    lastUndoTime: 0,
-    undoChunkTimeout: 1000,
-    pendingUndoChunk: false,
-
-    // Selection
-    selecting: false,
-    selectionStart: null,
-    selectionEnd: null,
-    clipboard: [],
-
-    // Viewport state (for large canvases)
-    viewportX: 0,
-    viewportY: 0,
-
-    // UI state
-    showGuide: 'none',
-    showStatusBar: true,
-    showColorPalette: false,
-    showToolbar: true,
-    gridSpacing: 10,
-    currentFKeySet: 'normal' as 'normal' | 'shift',
-
-    // File state
-    currentFilename: null,
-    modified: false,
-    lastSavedCanvas: null,
-    insertMode: true,
-
-    // Auto-save state (from old editor)
-    autoSaveEnabled: true,
-    autoSaveIntervalMs: 5 * 60 * 1000,  // 5 minutes
-
-    // Drawing state for tools
-    drawingStartPoint: null,
-    drawingEndPoint: null,
-    drawingPreview: null,
-
-    // Mouse state
-    mouseDown: false,
-    lastMouseX: 0,
-    lastMouseY: 0,
+  const state: EditorState = {
+    currentFile: null,
+    currentDir: ansiDir,
+    files: [],
+    settings: {
+      defaultDir: ansiDir,
+      autoSave: false,
+      backupOnSave: true,
+      showLineNumbers: true,
+      showToolbar: true,
+      showStatusBar: true,
+      confirmDelete: true
+    },
+    mode: 'menu',
+    selectedIndex: 0,
+    modified: false
   };
+
+  try {
+    // Show main menu
+    await showMainMenu(session, screen, state);
+  } catch (error) {
+    session.writeLine(`\r\n{red-fg}Error: ${error instanceof Error ? error.message : String(error)}{/red-fg}\r\n`);
+  } finally {
+    screen.destroy();
+  }
 }
 
-// =============================================================================
-// MAIN EDITOR CLASS
-// =============================================================================
+async function showMainMenu(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  let exit = false;
 
-class ANSIEditor {
-  private state: EditorState;
-  private ui: UIEngine;
-  private running: boolean = false;
-  private ctx: DoorContext;
+  while (!exit) {
+    screen.children.forEach((child: any) => child.destroy());
 
-  constructor(ctx: DoorContext) {
-    this.ctx = ctx;
-    this.state = createInitialState();
-
-    // Create UI engine for modals
-    this.ui = new UIEngine({
-      width: 80,
-      height: 24,
-      smartCSR: true,
-      enableMouse: true,
-      enableKeys: true,
-      output: (data: string) => { /* Capture via getOutput() instead */ }
-    });
-  }
-
-  // ===========================================================================
-  // INITIALIZATION
-  // ===========================================================================
-
-  async init(): Promise<void> {
-    this.running = true;
-
-    // Setup event routing from UI engine to socket
-    this.ui.on('render', () => {
-      const output = this.ui.getOutput();
-      if (output) {
-        this.emit(output);
+    // Title box
+    const title = blessed.box({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      content: '{center}{cyan-fg}{bold}╔═══════════════════════════════════════════════════════════════════════════╗{/bold}{/cyan-fg}\n' +
+               '{cyan-fg}{bold}║{/bold}{/cyan-fg}  {yellow-fg}{bold}AmiExpress ANSI Art Editor{/bold}{/yellow-fg} - Professional ANSI/ASCII Art Creation  {cyan-fg}{bold}║{/bold}{/cyan-fg}\n' +
+               '{cyan-fg}{bold}╚═══════════════════════════════════════════════════════════════════════════╝{/bold}{/cyan-fg}{/center}',
+      tags: true,
+      style: {
+        fg: 'cyan',
+        bg: 'black'
       }
     });
 
-    // Key events (now coming from our UIEngine/blessed)
-    this.ui.on('keypress', (ch: string, key: any) => {
-      const focused = this.ui.getScreen().getFocused();
-      if (!focused || focused === this.ui.getScreen()) {
-        this.handleKeypress(ch, key);
-      }
-    });
-
-    // Initial screen draw
-    this.emit(ANSI.CLEAR_SCREEN);
-    this.emit(ANSI.HIDE_CURSOR);
-    this.refresh();
-
-    // Show welcome message
-    // Note: We don't await this here because it would block initialization
-    // Instead, we let it run in the background
-    this.showWelcome().then(() => {
-        // Enable mouse support after welcome modal is closed
-        if ((this.ctx.bbs as any)?.enableMouseEvents) {
-          (this.ctx.bbs as any).enableMouseEvents();
+    // Menu box
+    const menu = blessed.box({
+      parent: screen,
+      top: 4,
+      left: 'center',
+      width: 60,
+      height: 16,
+      border: {
+        type: 'line',
+        fg: 'cyan'
+      },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: {
+          fg: 'cyan'
         }
+      },
+      tags: true
     });
 
-    // Handle mouse events from socket
-    this.ctx.socket.on('mouse', (event: any) => {
-      this.handleMouse(event);
+    const menuItems = [
+      { key: 'N', label: 'New File', desc: 'Create a new ANSI art file' },
+      { key: 'O', label: 'Open File', desc: 'Open an existing file' },
+      { key: 'B', label: 'File Browser', desc: 'Browse and manage ANSI files' },
+      { key: 'G', label: 'Gallery View', desc: 'Visual gallery of ANSI art' },
+      { key: 'S', label: 'Settings', desc: 'Configure editor preferences' },
+      { key: 'H', label: 'Help', desc: 'Keyboard shortcuts and features' },
+      { key: 'Q', label: 'Quit', desc: 'Exit ANSI Editor' }
+    ];
+
+    let content = '\n{center}{white-fg}{bold}Main Menu{/bold}{/white-fg}{/center}\n\n';
+    menuItems.forEach(item => {
+      const highlight = state.selectedIndex === menuItems.indexOf(item);
+      if (highlight) {
+        content += `  {black-bg}{yellow-fg}► [{bold}${item.key}{/bold}] ${item.label.padEnd(20)} ${item.desc}{/yellow-fg}{/black-bg}\n`;
+      } else {
+        content += `    {cyan-fg}[{bold}${item.key}{/bold}]{/cyan-fg} {white-fg}${item.label.padEnd(20)}{/white-fg} {gray-fg}${item.desc}{/gray-fg}\n`;
+      }
     });
-  }
 
-  /**
-   * Main input entry point called by Door.onInput
-   */
-  public handleInput(key: KeyPress): void {
-    if (!this.running) return;
+    menu.setContent(content);
 
-    // 1. Feed to UIEngine for modals/blessed widgets
-    this.ui.getScreen()._handleData(key.raw);
-    
-    // 2. Handle canvas drawing if no modal is active
-    const focused = this.ui.getScreen().getFocused();
-    if (!focused || focused === this.ui.getScreen()) {
-       // Only call handleKeyboard for printable single characters
-       if (key.raw.length === 1 && key.raw.charCodeAt(0) >= 32) {
-         this.handleKeyboard(key.raw);
-       } else if (key.raw === '\x1b') {
-         // ESC
-         this.handleKeyboard(key.raw);
-       }
-    }
-  }
-
-  // ===========================================================================
-  // KEYBOARD HANDLING
-  // ===========================================================================
-
-  private handleKeyboard(data: string): void {
-    // Handle raw keyboard data
-    if (data.length === 1) {
-      const char = data;
-
-      // In text mode, insert characters
-      if (this.state.currentTool === 'text') {
-        insertTextChar(this.state, char);
-        this.refresh();
-        return;
+    // Status bar
+    const statusBar = blessed.box({
+      parent: screen,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      content: '{center}{gray-fg}Use arrow keys to navigate, Enter to select, or press letter key{/gray-fg}\n' +
+               `{center}{gray-fg}Current directory: {white-fg}${state.currentDir}{/white-fg}{/gray-fg}{/center}`,
+      tags: true,
+      style: {
+        fg: 'gray',
+        bg: 'black'
       }
+    });
 
-      // Tool shortcuts
-      switch (char.toLowerCase()) {
-        case 'd':
-          this.setTool('draw');
-          break;
-        case 'l':
-          this.setTool('line');
-          break;
-        case 'b':
-          this.setTool('box');
-          break;
-        case 'e':
-          this.setTool('ellipse');
-          break;
-        case 't':
-          this.setTool('text');
-          break;
-        case 'f':
-          this.setTool('fill');
-          break;
-        case 'p':
-          this.setTool('pick');
-          break;
-        case 's':
-          this.setTool('select');
-          break;
-        case 'h':
-          this.setTool('shifter');
-          break;
-        case 'k':
-          this.showColorPicker();
-          break;
-        case 'g':
-          this.toggleGuides();
-          break;
-        case 'i':
-          this.toggleIceColors();
-          break;
-        case 'q':
-          this.quit();
-          break;
-      }
+    screen.render();
+
+    // Handle input
+    const choice = await waitForMenuInput(screen, menuItems.length, state);
+
+    switch (choice) {
+      case 'N':
+      case 0:
+        await createNewFile(session, screen, state);
+        break;
+      case 'O':
+      case 1:
+        await openFileDialog(session, screen, state);
+        break;
+      case 'B':
+      case 2:
+        await showFileBrowser(session, screen, state);
+        break;
+      case 'G':
+      case 3:
+        await showGallery(session, screen, state);
+        break;
+      case 'S':
+      case 4:
+        await showSettings(session, screen, state);
+        break;
+      case 'H':
+      case 5:
+        await showHelp(session, screen, state);
+        break;
+      case 'Q':
+      case 6:
+        if (state.modified) {
+          const confirm = await confirmDialog(screen, 'You have unsaved changes. Really quit?');
+          if (confirm) exit = true;
+        } else {
+          exit = true;
+        }
+        break;
     }
-
-    // Handle escape sequences
-    if (data === '\x1b') {
-      // ESC - cancel current operation
-      const handler = getToolHandler(this.state.currentTool);
-      handler.onCancel(this.state);
-      clearSelection(this.state);
-      this.refresh();
-    }
-  }
-
-  private async handleKeypress(ch: string, key: any): Promise<void> {
-    const { name, ctrl, alt, shift } = key;
-
-    // Arrow keys - move cursor
-    if (name === 'left') {
-      this.moveCursor(-1, 0);
-    } else if (name === 'right') {
-      this.moveCursor(1, 0);
-    } else if (name === 'up') {
-      this.moveCursor(0, -1);
-    } else if (name === 'down') {
-      this.moveCursor(0, 1);
-    }
-
-    // Page Up/Down
-    else if (name === 'pageup') {
-      this.moveCursor(0, -10);
-    } else if (name === 'pagedown') {
-      this.moveCursor(0, 10);
-    }
-
-    // Home/End
-    else if (name === 'home') {
-      this.state.cursorX = 0;
-      this.refresh();
-    } else if (name === 'end') {
-      this.state.cursorX = this.state.width - 1;
-      this.refresh();
-    }
-
-    // Ctrl+Z - Undo
-    else if (ctrl && name === 'z') {
-      if (undo(this.state)) {
-        this.refresh();
-      }
-    }
-
-    // Ctrl+Y - Redo
-    else if (ctrl && name === 'y') {
-      if (redo(this.state)) {
-        this.refresh();
-      }
-    }
-
-    // Ctrl+C - Copy
-    else if (ctrl && name === 'c') {
-      if (copySelection(this.state)) {
-        await this.showMessage('Selection copied to clipboard');
-      }
-    }
-
-    // Ctrl+X - Cut
-    else if (ctrl && name === 'x') {
-      if (cutSelection(this.state)) {
-        this.refresh();
-        await this.showMessage('Selection cut to clipboard');
-      }
-    }
-
-    // Ctrl+V - Paste
-    else if (ctrl && name === 'v') {
-      pasteSelection(this.state);
-      this.refresh();
-    }
-
-    // Ctrl+A - Select All
-    else if (ctrl && name === 'a') {
-      selectAll(this.state);
-      this.refresh();
-    }
-
-    // Ctrl+N - New File
-    else if (ctrl && name === 'n') {
-      await this.newFile();
-    }
-
-    // Ctrl+O - Open File
-    else if (ctrl && name === 'o') {
-      await this.openFile();
-    }
-
-    // Ctrl+S - Save File
-    else if (ctrl && name === 's') {
-      await this.saveCurrentFile();
-    }
-
-    // Delete - Delete selection
-    else if (name === 'delete') {
-      if (this.state.selecting) {
-        const handler = getToolHandler(this.state.currentTool);
-        handler.onCancel(this.state);
-        clearSelection(this.state);
-        this.refresh();
-      }
-    }
-
-    // Tab - Show tool selector
-    else if (name === 'tab') {
-      await this.showToolSelector();
-    }
-
-    // F1 - Help
-    else if (name === 'f1') {
-      await this.showHelp();
-    }
-
-    // Shifter tool shortcuts
-    else if (this.state.currentTool === 'shifter') {
-      if (name === 'left') {
-        shiftHalfBlock(this.state, 'left');
-        this.refresh();
-      } else if (name === 'right') {
-        shiftHalfBlock(this.state, 'right');
-        this.refresh();
-      }
-    }
-  }
-
-  // ===========================================================================
-  // MOUSE HANDLING
-  // ===========================================================================
-
-  private handleMouse(event: any): void {
-    const { x, y, button, action } = event;
-
-    // Convert to canvas coordinates (0-indexed, accounting for status bar)
-    const canvasX = Math.max(0, Math.min(this.state.width - 1, x - 1));
-    const canvasY = Math.max(0, Math.min(this.state.height - 1, y - 1));
-
-    if (canvasY >= this.state.height) {
-      // Clicked on status bar - ignore
-      return;
-    }
-
-    // Update cursor position
-    this.state.cursorX = canvasX;
-    this.state.cursorY = canvasY;
-
-    // Get current tool handler
-    const handler = getToolHandler(this.state.currentTool);
-
-    // Handle mouse actions
-    if (action === 'mousedown') {
-      this.state.mouseDown = true;
-      this.state.lastMouseX = canvasX;
-      this.state.lastMouseY = canvasY;
-      handler.onStart(this.state, canvasX, canvasY);
-      this.refresh();
-    } else if (action === 'mousemove') {
-      if (this.state.mouseDown) {
-        handler.onMove(this.state, canvasX, canvasY);
-        this.refresh();
-      }
-    } else if (action === 'mouseup') {
-      if (this.state.mouseDown) {
-        handler.onEnd(this.state, canvasX, canvasY);
-        this.state.mouseDown = false;
-        this.refresh();
-      }
-    }
-
-    // Update selection if in select mode
-    if (this.state.currentTool === 'select' && this.state.selecting) {
-      updateSelection(this.state);
-      this.refresh();
-    }
-  }
-
-  // ===========================================================================
-  // RENDERING
-  // ===========================================================================
-
-  private refresh(): void {
-    // 1. Render canvas + status bar
-    let output = renderCanvas(this.state);
-    if (this.state.showStatusBar) {
-      output += renderStatusBar(this.state);
-    }
-    this.emit(output);
-
-    // 2. If a modal is up, re-render it on top to ensure visibility
-    const focused = this.ui.getScreen().getFocused();
-    if (focused && focused !== this.ui.getScreen()) {
-      this.ui.render(true);
-      const modalOutput = this.ui.getOutput();
-      if (modalOutput) {
-        this.emit(modalOutput);
-      }
-    }
-  }
-
-  private emit(data: string): void {
-    void this.ctx.output.write(data);
-  }
-
-  // ===========================================================================
-  // TOOL MANAGEMENT
-  // ===========================================================================
-
-  private setTool(tool: Tool): void {
-    // Flush any pending undo chunks
-    flushUndoChunk(this.state);
-
-    // Cancel current tool operation
-    const oldHandler = getToolHandler(this.state.currentTool);
-    oldHandler.onCancel(this.state);
-
-    // Clear selection
-    clearSelection(this.state);
-
-    // Set new tool
-    this.state.currentTool = tool;
-
-    // Show tool change message
-    this.showStatusMessage(`Tool: ${tool.toUpperCase()}`);
-    this.refresh();
-  }
-
-  private async showToolSelector(): Promise<void> {
-    const modal = new ToolSelectorModal(this.ui, this.state.currentTool);
-    const result = await modal.show();
-
-    if (result) {
-      this.setTool(result);
-    } else {
-      this.refresh();
-    }
-  }
-
-  private async showColorPicker(): Promise<void> {
-    const modal = new ColorPickerModal(
-      this.ui,
-      this.state.currentFg,
-      this.state.currentBg,
-      this.state.iceColorsEnabled
-    );
-
-    const result = await modal.show();
-
-    if (result) {
-      this.state.currentFg = result.fg;
-      this.state.currentBg = result.bg;
-    }
-
-    this.refresh();
-  }
-
-  // ===========================================================================
-  // FILE OPERATIONS
-  // ===========================================================================
-
-  private async newFile(): Promise<void> {
-    if (this.state.modified) {
-      const modal = new ConfirmDialog(
-        this.ui,
-        'New File',
-        'Current file has unsaved changes. Continue?'
-      );
-
-      if (!(await modal.show())) {
-        this.refresh();
-        return;
-      }
-    }
-
-    clearCanvas(this.state);
-    this.state.currentFilename = null;
-    this.state.modified = false;
-    this.state.undoStack = [];
-    this.state.redoStack = [];
-
-    await this.showMessage('New file created');
-    this.refresh();
-  }
-
-  private async openFile(): Promise<void> {
-    const files = listFiles();
-
-    if (files.length === 0) {
-      await this.showMessage('No files found', 'warning');
-      this.refresh();
-      return;
-    }
-
-    const modal = new FileDialogModal(this.ui, 'Open File', files, 'open');
-    const filename = await modal.show();
-
-    if (filename) {
-      try {
-        await loadFile(this.state, filename);
-        await this.showMessage(`Loaded: ${filename}`);
-      } catch (error) {
-        await this.showMessage(`Error: ${(error as Error).message}`, 'error');
-      }
-    }
-
-    this.refresh();
-  }
-
-  private async saveCurrentFile(): Promise<void> {
-    if (!this.state.currentFilename) {
-      await this.saveFileAs();
-      return;
-    }
-
-    try {
-      await saveFile(this.state, this.state.currentFilename);
-      await this.showMessage(`Saved: ${this.state.currentFilename}`);
-    } catch (error) {
-      await this.showMessage(`Error: ${(error as Error).message}`, 'error');
-    }
-
-    this.refresh();
-  }
-
-  private async saveFileAs(): Promise<void> {
-    const files = listFiles();
-    const modal = new FileDialogModal(this.ui, 'Save As', files, 'save');
-    const filename = await modal.show();
-
-    if (filename) {
-      try {
-        await saveFile(this.state, filename);
-        await this.showMessage(`Saved: ${filename}`);
-      } catch (error) {
-        await this.showMessage(`Error: ${(error as Error).message}`, 'error');
-      }
-    }
-
-    this.refresh();
-  }
-
-  // ===========================================================================
-  // UI HELPERS
-  // ===========================================================================
-
-  private async showWelcome(): Promise<void> {
-    const modal = new MessageDialog(
-      this.ui,
-      'ANSI Editor',
-      'State-of-the-art ANSI/ASCII art editor\n\nPress F1 for help\nPress Tab for tools',
-      'info'
-    );
-
-    await modal.show();
-    this.refresh();
-  }
-
-  private async showHelp(): Promise<void> {
-    const modal = new HelpDialog(this.ui);
-    await modal.show();
-    this.refresh();
-  }
-
-  private async showMessage(
-    message: string,
-    type: 'info' | 'warning' | 'error' = 'info'
-  ): Promise<void> {
-    const modal = new MessageDialog(this.ui, type.toUpperCase(), message, type);
-    await modal.show();
-  }
-
-  private showStatusMessage(message: string): void {
-    // Show brief status message (would be on status bar)
-    // For now, just included in status bar rendering
-  }
-
-  // ===========================================================================
-  // UTILITY METHODS
-  // ===========================================================================
-
-  private moveCursor(dx: number, dy: number): void {
-    this.state.cursorX = Math.max(0, Math.min(this.state.width - 1, this.state.cursorX + dx));
-    this.state.cursorY = Math.max(0, Math.min(this.state.height - 1, this.state.cursorY + dy));
-
-    // Update selection if in select mode
-    if (this.state.currentTool === 'select' && this.state.selecting) {
-      updateSelection(this.state);
-    }
-
-    this.refresh();
-  }
-
-  private toggleGuides(): void {
-    const guides: ('none' | '80x25' | '80x40' | '44x22' | 'grid')[] = ['none', '80x25', '80x40', '44x22', 'grid'];
-    const currentIndex = guides.indexOf(this.state.showGuide);
-    const nextIndex = (currentIndex + 1) % guides.length;
-    this.state.showGuide = guides[nextIndex];
-
-    this.showStatusMessage(`Guides: ${this.state.showGuide}`);
-    this.refresh();
-  }
-
-  private toggleIceColors(): void {
-    this.state.iceColorsEnabled = !this.state.iceColorsEnabled;
-    this.showStatusMessage(`iCE Colors: ${this.state.iceColorsEnabled ? 'ON' : 'OFF'}`);
-    this.refresh();
-  }
-
-  private async quit(): Promise<void> {
-    if (this.state.modified) {
-      const modal = new ConfirmDialog(
-        this.ui,
-        'Quit',
-        'File has unsaved changes. Quit anyway?'
-      );
-
-      if (!(await modal.show())) {
-        this.refresh();
-        return;
-      }
-    }
-
-    this.running = false;
-    this.ctx.close();
   }
 }
 
-// =============================================================================
-// DOOR CONNECTION HANDLER
-// =============================================================================
+async function createNewFile(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  // Ask for filename
+  const filename = await promptDialog(screen, 'New File', 'Enter filename (without extension):', '');
+  if (!filename) return;
 
-// Store active editors by socket ID to support concurrent sessions
-const activeEditors = new Map<string, ANSIEditor>();
+  const fullPath = path.join(state.currentDir, `${filename}.ans`);
 
-door.onStart(async (ctx: DoorContext) => {
-  console.log(`[ANSI Editor] User ${ctx.user.username} connected`);
-
-  const editor = new ANSIEditor(ctx);
-  activeEditors.set(ctx.socket.id, editor);
-  
-  // Initialize editor (non-blocking)
-  await editor.init();
-});
-
-door.onInput(async (ctx: DoorContext, key: KeyPress) => {
-  const editor = activeEditors.get(ctx.socket.id);
-  if (editor) {
-    editor.handleInput(key);
+  // Check if file exists
+  if (amigafs.existsSync(fullPath)) {
+    await messageDialog(screen, 'Error', 'File already exists!');
+    return;
   }
-});
 
-door.onClose(async (ctx: DoorContext) => {
-  console.log(`[ANSI Editor] User ${ctx.user.username} disconnected`);
-  activeEditors.delete(ctx.socket.id);
-});
+  // Create empty file and open editor
+  const newFile: AnsiFile = {
+    filename: `${filename}.ans`,
+    fullPath,
+    size: 0,
+    modified: new Date()
+  };
 
-// =============================================================================
-// EXPORT
-// =============================================================================
+  state.currentFile = newFile;
+  await openEditor(session, screen, state, '');
+}
 
-export default door;
+async function openFileDialog(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  // Get list of files
+  const files = scanDirectory(state.currentDir);
+  if (files.length === 0) {
+    await messageDialog(screen, 'No Files', 'No ANSI files found in current directory.');
+    return;
+  }
+
+  // Show file list dialog
+  const fileList = blessed.list({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: '70%',
+    height: '70%',
+    label: ' Select File to Open ',
+    border: {
+      type: 'line',
+      fg: 'cyan'
+    },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      selected: {
+        fg: 'black',
+        bg: 'cyan'
+      },
+      border: {
+        fg: 'cyan'
+      }
+    },
+    keys: true,
+    vi: true,
+    mouse: true,
+    tags: true,
+    items: files.map(f => `${f.filename.padEnd(30)} ${formatFileSize(f.size).padStart(10)} ${formatDate(f.modified)}`)
+  });
+
+  screen.render();
+
+  return new Promise((resolve) => {
+    fileList.on('select', async (item: any, index: number) => {
+      fileList.destroy();
+      screen.render();
+
+      const selectedFile = files[index];
+      state.currentFile = selectedFile;
+
+      // Load file content
+      const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
+      await openEditor(session, screen, state, content);
+      resolve();
+    });
+
+    fileList.on('cancel', () => {
+      fileList.destroy();
+      screen.render();
+      resolve();
+    });
+
+    fileList.focus();
+  });
+}
+
+async function showFileBrowser(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  let exit = false;
+
+  while (!exit) {
+    const files = scanDirectory(state.currentDir);
+    state.files = files;
+
+    screen.children.forEach((child: any) => child.destroy());
+
+    // Title
+    const title = blessed.box({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: 1,
+      content: `{center}{cyan-fg}{bold}File Browser - ${state.currentDir}{/bold}{/cyan-fg}{/center}`,
+      tags: true
+    });
+
+    // File list
+    const fileList = blessed.listtable({
+      parent: screen,
+      top: 2,
+      left: 0,
+      width: '100%',
+      height: '100%-6',
+      border: {
+        type: 'line',
+        fg: 'cyan'
+      },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        header: {
+          fg: 'yellow',
+          bold: true
+        },
+        cell: {
+          selected: {
+            fg: 'black',
+            bg: 'cyan'
+          }
+        },
+        border: {
+          fg: 'cyan'
+        }
+      },
+      keys: true,
+      vi: true,
+      mouse: true,
+      tags: true
+    });
+
+    const data = [
+      ['Filename', 'Size', 'Modified', 'Dimensions']
+    ];
+
+    files.forEach(f => {
+      data.push([
+        f.filename,
+        formatFileSize(f.size),
+        formatDate(f.modified),
+        f.width && f.height ? `${f.width}x${f.height}` : 'Unknown'
+      ]);
+    });
+
+    fileList.setData(data);
+
+    // Command bar
+    const commands = blessed.box({
+      parent: screen,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      content: '{center}{cyan-fg}[E]{/cyan-fg}dit {cyan-fg}[D]{/cyan-fg}elete {cyan-fg}[R]{/cyan-fg}ename {cyan-fg}[I]{/cyan-fg}nfo {cyan-fg}[N]{/cyan-fg}ew {cyan-fg}[ESC]{/cyan-fg} Back{/center}\n' +
+               `{center}{gray-fg}${files.length} files found{/gray-fg}{/center}`,
+      tags: true,
+      style: {
+        fg: 'white',
+        bg: 'black'
+      }
+    });
+
+    screen.render();
+
+    // Handle input
+    const result = await waitForBrowserInput(screen, fileList, files);
+
+    switch (result.action) {
+      case 'edit':
+        if (result.index >= 0 && result.index < files.length) {
+          const selectedFile = files[result.index];
+          state.currentFile = selectedFile;
+          const content = amigafs.readFileSync(selectedFile.fullPath, 'utf8') as string;
+          await openEditor(session, screen, state, content);
+        }
+        break;
+      case 'delete':
+        if (result.index >= 0 && result.index < files.length) {
+          const file = files[result.index];
+          if (state.settings.confirmDelete) {
+            const confirm = await confirmDialog(screen, `Delete ${file.filename}?`);
+            if (confirm) {
+              amigafs.unlinkSync(file.fullPath);
+            }
+          } else {
+            amigafs.unlinkSync(file.fullPath);
+          }
+        }
+        break;
+      case 'rename':
+        if (result.index >= 0 && result.index < files.length) {
+          const file = files[result.index];
+          const newName = await promptDialog(screen, 'Rename File', 'New filename:', path.basename(file.filename, path.extname(file.filename)));
+          if (newName) {
+            const newPath = path.join(state.currentDir, `${newName}${path.extname(file.filename)}`);
+            amigafs.renameSync(file.fullPath, newPath);
+          }
+        }
+        break;
+      case 'info':
+        if (result.index >= 0 && result.index < files.length) {
+          await showFileInfo(screen, files[result.index]);
+        }
+        break;
+      case 'new':
+        await createNewFile(session, screen, state);
+        break;
+      case 'back':
+        exit = true;
+        break;
+    }
+  }
+}
+
+async function showGallery(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  const files = scanDirectory(state.currentDir);
+
+  screen.children.forEach((child: any) => child.destroy());
+
+  const galleryBox = blessed.box({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    content: '{center}{yellow-fg}{bold}ANSI Art Gallery{/bold}{/yellow-fg}\n\n' +
+             `{center}${files.length} files found in ${state.currentDir}{/center}\n\n` +
+             '{center}{gray-fg}Gallery view with thumbnails coming soon!{/gray-fg}\n' +
+             '{center}{gray-fg}For now, use File Browser to view and edit files.{/gray-fg}\n\n' +
+             '{center}{cyan-fg}Press any key to return{/cyan-fg}{/center}',
+    tags: true,
+    style: {
+      fg: 'white',
+      bg: 'black'
+    }
+  });
+
+  screen.render();
+  await session.waitForKey();
+}
+
+async function showSettings(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  let exit = false;
+  let selectedSetting = 0;
+
+  while (!exit) {
+    screen.children.forEach((child: any) => child.destroy());
+
+    const settingsBox = blessed.box({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 70,
+      height: 20,
+      label: ' Editor Settings ',
+      border: {
+        type: 'line',
+        fg: 'cyan'
+      },
+      style: {
+        fg: 'white',
+        bg: 'black',
+        border: {
+          fg: 'cyan'
+        }
+      },
+      tags: true
+    });
+
+    const settings = [
+      { name: 'Auto-save', value: state.settings.autoSave },
+      { name: 'Backup on save', value: state.settings.backupOnSave },
+      { name: 'Show line numbers', value: state.settings.showLineNumbers },
+      { name: 'Show toolbar', value: state.settings.showToolbar },
+      { name: 'Show status bar', value: state.settings.showStatusBar },
+      { name: 'Confirm delete', value: state.settings.confirmDelete }
+    ];
+
+    let content = '\n';
+    settings.forEach((setting, idx) => {
+      const highlight = selectedSetting === idx;
+      const status = setting.value ? '{green-fg}[ON]{/green-fg}' : '{red-fg}[OFF]{/red-fg}';
+      if (highlight) {
+        content += `  {black-bg}{yellow-fg}► ${setting.name.padEnd(25)} ${status}{/yellow-fg}{/black-bg}\n`;
+      } else {
+        content += `    ${setting.name.padEnd(25)} ${status}\n`;
+      }
+    });
+
+    content += '\n{center}{gray-fg}Use arrow keys, Space to toggle, ESC to exit{/gray-fg}{/center}';
+    settingsBox.setContent(content);
+
+    screen.render();
+
+    const result = await waitForSettingsInput(screen, settings.length);
+
+    if (result.action === 'toggle') {
+      const settingKeys = ['autoSave', 'backupOnSave', 'showLineNumbers', 'showToolbar', 'showStatusBar', 'confirmDelete'] as const;
+      const key = settingKeys[result.index];
+      state.settings[key] = !state.settings[key];
+    } else if (result.action === 'back') {
+      exit = true;
+    } else if (result.action === 'move') {
+      selectedSetting = result.index;
+    }
+  }
+}
+
+async function showHelp(session: BBSSession, screen: any, state: EditorState): Promise<void> {
+  screen.children.forEach((child: any) => child.destroy());
+
+  const helpBox = blessed.box({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    label: ' ANSI Editor Help ',
+    border: {
+        type: 'line',
+      fg: 'cyan'
+    },
+    scrollable: true,
+    alwaysScroll: true,
+    keys: true,
+    vi: true,
+    mouse: true,
+    scrollbar: {
+      ch: '█',
+      fg: 'cyan'
+    },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      border: {
+        fg: 'cyan'
+      }
+    },
+    tags: true,
+    content: `
+{center}{yellow-fg}{bold}AmiExpress ANSI Art Editor - Help{/bold}{/yellow-fg}{/center}
+
+{cyan-fg}{bold}═══ Text Editing Mode ═══{/bold}{/cyan-fg}
+
+  {white-fg}Arrow Keys{/white-fg}     - Move cursor
+  {white-fg}Home/End{/white-fg}       - Start/End of line
+  {white-fg}PgUp/PgDn{/white-fg}      - Scroll page
+  {white-fg}Backspace/Del{/white-fg}  - Delete character
+  {white-fg}Enter{/white-fg}          - New line
+
+  {white-fg}Ctrl+S{/white-fg}         - Save file
+  {white-fg}Ctrl+M{/white-fg}         - Switch to Draw Mode
+  {white-fg}Ctrl+F{/white-fg}         - Find text
+  {white-fg}Ctrl+Z{/white-fg}         - Undo
+  {white-fg}Ctrl+Y{/white-fg}         - Redo
+  {white-fg}F1{/white-fg}             - Show this help
+  {white-fg}ESC{/white-fg}            - Exit editor
+
+{cyan-fg}{bold}═══ Drawing Mode (Ctrl+M to switch) ═══{/bold}{/cyan-fg}
+
+  {yellow-fg}Tool Selection:{/yellow-fg}
+  {white-fg}1{/white-fg} - Freehand Draw      {white-fg}6{/white-fg} - Filled Ellipse
+  {white-fg}2{/white-fg} - Line               {white-fg}7{/white-fg} - Flood Fill
+  {white-fg}3{/white-fg} - Box (outline)      {white-fg}8{/white-fg} - Eyedropper/Pick
+  {white-fg}4{/white-fg} - Box (filled)       {white-fg}9{/white-fg} - Block Selection
+  {white-fg}5{/white-fg} - Ellipse (outline)
+
+  {yellow-fg}Character & Colors:{/yellow-fg}
+  {white-fg}C{/white-fg} - Character Picker (256 CP437 chars)
+  {white-fg}F{/white-fg} - Foreground Color
+  {white-fg}B{/white-fg} - Background Color
+  {white-fg}I{/white-fg} - Toggle iCE Colors (16 BG colors + blink)
+
+  {yellow-fg}Other:{/yellow-fg}
+  {white-fg}U{/white-fg} - Undo
+  {white-fg}Ctrl+Z{/white-fg} - Undo
+  {white-fg}Ctrl+L{/white-fg} - Clear Canvas
+  {white-fg}Ctrl+M{/white-fg} - Back to Text Mode
+
+{cyan-fg}{bold}═══ File Formats ═══{/bold}{/cyan-fg}
+
+  {white-fg}.ANS{/white-fg} - ANSI art with color codes
+  {white-fg}.ASC{/white-fg} - ASCII art (text only)
+  {white-fg}.XB{/white-fg}  - XBin format with SAUCE metadata
+
+{cyan-fg}{bold}═══ Advanced Features ═══{/bold}{/cyan-fg}
+
+  • {green-fg}CP437 Extended ASCII{/green-fg} - Full 256-character set
+  • {green-fg}16-color palette{/green-fg} - Standard + bright colors
+  • {green-fg}iCE colors{/green-fg} - 16 background colors (disable blink)
+  • {green-fg}Brush modes{/green-fg} - Half-block, quarter-block patterns
+  • {green-fg}Mirror drawing{/green-fg} - Symmetrical art creation
+  • {green-fg}SAUCE metadata{/green-fg} - Author, title, group info
+  • {green-fg}Undo/Redo{/green-fg} - Full history support
+
+{center}{gray-fg}Press any key to return{/gray-fg}{/center}
+`
+  });
+
+  screen.render();
+  await session.waitForKey();
+}
+
+async function openEditor(session: BBSSession, screen: any, state: EditorState, initialContent: string): Promise<void> {
+  try {
+    const result = await showANSIEditor(session, {
+      title: state.currentFile ? `Editing: ${state.currentFile.filename}` : 'New ANSI File',
+      initialContent,
+      maxLines: 1000,
+      maxLineLength: 160,
+      showLineNumbers: state.settings.showLineNumbers,
+      toolbar: state.settings.showToolbar,
+      statusBar: state.settings.showStatusBar,
+      onSave: async (content: string) => {
+        if (state.currentFile) {
+          // Backup if enabled
+          if (state.settings.backupOnSave && amigafs.existsSync(state.currentFile.fullPath)) {
+            const backupPath = state.currentFile.fullPath + '.bak';
+            const original = amigafs.readFileSync(state.currentFile.fullPath);
+            amigafs.writeFileSync(backupPath, original);
+          }
+
+          // Save file
+          amigafs.writeFileSync(state.currentFile.fullPath, content);
+          state.modified = false;
+
+          // Update file info
+          const stats = amigafs.statSync(state.currentFile.fullPath);
+          state.currentFile.size = stats.size;
+          state.currentFile.modified = stats.mtime;
+
+          return true;
+        }
+        return false;
+      }
+    });
+
+    if (result !== null) {
+      state.modified = result !== initialContent;
+    }
+  } catch (error) {
+    await messageDialog(screen, 'Error', `Failed to open editor: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Helper functions
+
+function scanDirectory(dirPath: string): AnsiFile[] {
+  const files: AnsiFile[] = [];
+
+  try {
+    const entries = amigafs.readdirSync(dirPath);
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry);
+      const stats = amigafs.statSync(fullPath);
+
+      if (stats.isFile()) {
+        const ext = path.extname(entry).toLowerCase();
+        if (ext === '.ans' || ext === '.asc' || ext === '.xb') {
+          files.push({
+            filename: entry,
+            fullPath,
+            size: stats.size,
+            modified: stats.mtime
+          });
+        }
+      }
+    }
+  } catch (error) {
+    // Directory doesn't exist or can't be read
+  }
+
+  return files.sort((a, b) => a.filename.localeCompare(b.filename));
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+async function waitForMenuInput(screen: any, itemCount: number, state: EditorState): Promise<string | number> {
+  return new Promise((resolve) => {
+    const keyHandler = (_ch: any, key: any) => {
+      if (!key) return;
+
+      if (key.name === 'up') {
+        state.selectedIndex = (state.selectedIndex - 1 + itemCount) % itemCount;
+        screen.render();
+      } else if (key.name === 'down') {
+        state.selectedIndex = (state.selectedIndex + 1) % itemCount;
+        screen.render();
+      } else if (key.name === 'return' || key.name === 'enter') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve(state.selectedIndex);
+      } else if (key.name && key.name.length === 1) {
+        const letter = key.name.toUpperCase();
+        screen.unkey(['keypress'], keyHandler);
+        resolve(letter);
+      }
+    };
+
+    screen.on('keypress', keyHandler);
+  });
+}
+
+async function waitForBrowserInput(screen: any, list: any, files: AnsiFile[]): Promise<{action: string, index: number}> {
+  return new Promise((resolve) => {
+    const keyHandler = (_ch: any, key: any) => {
+      if (!key) return;
+
+      const selected = list.selected - 1; // -1 for header row
+
+      if (key.name === 'e' && selected >= 0) {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'edit', index: selected });
+      } else if (key.name === 'd' && selected >= 0) {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'delete', index: selected });
+      } else if (key.name === 'r' && selected >= 0) {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'rename', index: selected });
+      } else if (key.name === 'i' && selected >= 0) {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'info', index: selected });
+      } else if (key.name === 'n') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'new', index: -1 });
+      } else if (key.name === 'escape') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'back', index: -1 });
+      } else if (key.name === 'return' || key.name === 'enter') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'edit', index: selected });
+      }
+    };
+
+    screen.on('keypress', keyHandler);
+  });
+}
+
+async function waitForSettingsInput(screen: any, settingCount: number): Promise<{action: string, index: number}> {
+  let currentIndex = 0;
+
+  return new Promise((resolve) => {
+    const keyHandler = (_ch: any, key: any) => {
+      if (!key) return;
+
+      if (key.name === 'up') {
+        currentIndex = (currentIndex - 1 + settingCount) % settingCount;
+        resolve({ action: 'move', index: currentIndex });
+      } else if (key.name === 'down') {
+        currentIndex = (currentIndex + 1) % settingCount;
+        resolve({ action: 'move', index: currentIndex });
+      } else if (key.name === 'space') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'toggle', index: currentIndex });
+      } else if (key.name === 'escape') {
+        screen.unkey(['keypress'], keyHandler);
+        resolve({ action: 'back', index: -1 });
+      }
+    };
+
+    screen.on('keypress', keyHandler);
+  });
+}
+
+async function confirmDialog(screen: any, message: string): Promise<boolean> {
+  const dialog = blessed.question({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 'shrink',
+    height: 'shrink',
+    border: {
+      type: 'line',
+      fg: 'yellow'
+    },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      border: {
+        fg: 'yellow'
+      }
+    },
+    tags: true
+  });
+
+  return new Promise((resolve) => {
+    dialog.ask(message + ' (y/n)', (err: any, value: any) => {
+      dialog.destroy();
+      screen.render();
+      resolve(value === true || (typeof value === 'string' && value.toLowerCase() === 'y'));
+    });
+  });
+}
+
+async function messageDialog(screen: any, title: string, message: string): Promise<void> {
+  const msgBox = blessed.message({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 'shrink',
+    height: 'shrink',
+    label: ` ${title} `,
+    border: {
+      type: 'line',
+      fg: 'cyan'
+    },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      border: {
+        fg: 'cyan'
+      }
+    },
+    tags: true
+  });
+
+  return new Promise((resolve) => {
+    msgBox.display(message, 0, () => {
+      msgBox.destroy();
+      screen.render();
+      resolve();
+    });
+  });
+}
+
+async function promptDialog(screen: any, title: string, question: string, defaultValue: string): Promise<string | null> {
+  const promptBox = blessed.prompt({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 'shrink',
+    height: 'shrink',
+    label: ` ${title} `,
+    border: {
+      type: 'line',
+      fg: 'cyan'
+    },
+    style: {
+      fg: 'white',
+      bg: 'black',
+      border: {
+        fg: 'cyan'
+      }
+    },
+    tags: true
+  });
+
+  return new Promise((resolve) => {
+    promptBox.input(question, defaultValue, (err: any, value: any) => {
+      promptBox.destroy();
+      screen.render();
+      if (err) {
+        resolve(null);
+      } else {
+        resolve(value || null);
+      }
+    });
+  });
+}
+
+async function showFileInfo(screen: any, file: AnsiFile): Promise<void> {
+  const info = `
+{center}{yellow-fg}{bold}File Information{/bold}{/yellow-fg}{/center}
+
+{cyan-fg}Filename:{/cyan-fg}     ${file.filename}
+{cyan-fg}Full Path:{/cyan-fg}    ${file.fullPath}
+{cyan-fg}Size:{/cyan-fg}         ${formatFileSize(file.size)}
+{cyan-fg}Modified:{/cyan-fg}     ${formatDate(file.modified)}
+${file.width ? `{cyan-fg}Dimensions:{/cyan-fg}  ${file.width}x${file.height}` : ''}
+${file.title ? `{cyan-fg}Title:{/cyan-fg}       ${file.title}` : ''}
+${file.author ? `{cyan-fg}Author:{/cyan-fg}      ${file.author}` : ''}
+${file.group ? `{cyan-fg}Group:{/cyan-fg}       ${file.group}` : ''}
+
+{center}{gray-fg}Press any key to close{/gray-fg}{/center}
+`;
+
+  await messageDialog(screen, 'File Info', info);
+}
