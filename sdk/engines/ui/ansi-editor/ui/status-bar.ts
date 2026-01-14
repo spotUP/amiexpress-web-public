@@ -83,8 +83,14 @@ export class StatusBar {
     // Calculate padding to right-align help text
     const statusLength = ANSIUtils.stripANSI(content).length;
     const helpLength = helpText.length;
-    const width = this.box.width as number || 80;
-    const padding = Math.max(1, width - statusLength - helpLength - 4);
+
+    // Get actual rendered width (use screen width if box width not computed)
+    const boxWidth = this.box.width;
+    const width = typeof boxWidth === 'number' && boxWidth > 0 ? boxWidth : 80;
+
+    // Ensure padding doesn't cause overflow
+    const minWidth = statusLength + helpLength + 4;
+    const padding = width > minWidth ? Math.max(1, width - statusLength - helpLength - 4) : 1;
 
     this.box.setContent(` ${content}${' '.repeat(padding)}${helpText} `);
   }

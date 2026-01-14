@@ -4,8 +4,9 @@
  * Uses Panel widgets for better structure and visual separation
  */
 
-import { type Screen, type Box } from '../../blessed';
+import { type Screen } from '../../blessed';
 import { Panel } from '../../blessed/widgets/panel';
+import { Box } from '../../blessed/widgets/box';
 import type { EditorState } from '../core/editor-state';
 import type { ViewportInfo } from '../types';
 import { ANSIUtils } from '../core/ansi-utils';
@@ -25,10 +26,10 @@ export interface ViewportOptions {
  */
 export class Viewport {
   private containerPanel: Panel;
-  private lineNumberPanel?: Panel;
-  private contentPanel: Panel;
-  private rulerPanel?: Panel;
-  private scrollbarPanel?: Panel;
+  private lineNumberBox?: Box;
+  private contentBox: Box;
+  private rulerBox?: Box;
+  private scrollbarBox?: Box;
   private state: EditorState;
   private showLineNumbers: boolean;
   private lineNumberWidth: number;
@@ -61,6 +62,8 @@ export class Viewport {
       right: 0,
       border: {
         type: 'line',
+        label: 'Editor',
+        labelStyle: { fg: 'cyan' },
       },
       style: {
         fg: 'white',
@@ -72,15 +75,14 @@ export class Viewport {
       keys: true,
       mouse: true,
       tags: true,
-      label: ' {cyan-fg}Editor{/} ',
     });
 
-    // Create ruler panel (optional, at top of container)
+    // Create ruler box (optional, at top of container)
     if (this.showRuler) {
-      this.rulerPanel = new Panel({
+      this.rulerBox = new Box({
         parent: this.containerPanel,
         top: 0,
-        left: this.showLineNumbers ? this.lineNumberWidth + 3 : 0,
+        left: this.showLineNumbers ? this.lineNumberWidth + 1 : 0,
         right: this.showScrollbar ? 2 : 0,
         height: 1,
         style: {
@@ -91,14 +93,14 @@ export class Viewport {
       });
     }
 
-    // Create line number panel (optional, left side)
+    // Create line number box (optional, left side)
     if (this.showLineNumbers) {
-      this.lineNumberPanel = new Panel({
+      this.lineNumberBox = new Box({
         parent: this.containerPanel,
         top: this.showRuler ? 1 : 0,
         bottom: 0,
         left: 0,
-        width: this.lineNumberWidth + 3,  // "+ 3" for " │ "
+        width: this.lineNumberWidth + 1,  // Width for numbers + separator
         style: {
           fg: 'blue',
           bg: 'black',
@@ -107,9 +109,9 @@ export class Viewport {
       });
     }
 
-    // Create scrollbar panel (optional, right side)
+    // Create scrollbar box (optional, right side)
     if (this.showScrollbar) {
-      this.scrollbarPanel = new Panel({
+      this.scrollbarBox = new Box({
         parent: this.containerPanel,
         top: this.showRuler ? 1 : 0,
         bottom: 0,
@@ -123,12 +125,12 @@ export class Viewport {
       });
     }
 
-    // Create content panel (main editing area)
-    this.contentPanel = new Panel({
+    // Create content box (main editing area)
+    this.contentBox = new Box({
       parent: this.containerPanel,
       top: this.showRuler ? 1 : 0,
       bottom: 0,
-      left: this.showLineNumbers ? this.lineNumberWidth + 3 : 0,
+      left: this.showLineNumbers ? this.lineNumberWidth + 1 : 0,
       right: this.showScrollbar ? 2 : 0,
       style: {
         fg: 'white',
@@ -148,8 +150,8 @@ export class Viewport {
    */
   updateViewport(): void {
     // Use content panel dimensions (not container)
-    this.viewport.width = (this.contentPanel.width as number) || 80;
-    this.viewport.height = (this.contentPanel.height as number) || 24;
+    this.viewport.width = (this.contentBox.width as number) || 80;
+    this.viewport.height = (this.contentBox.height as number) || 24;
 
     const scroll = this.state.getScroll();
     this.viewport.scrollTop = scroll.top;
@@ -172,12 +174,12 @@ export class Viewport {
     const lineCount = this.state.getLineCount();
 
     // Render ruler (column numbers) if enabled
-    if (this.showRuler && this.rulerPanel) {
+    if (this.showRuler && this.rulerBox) {
       this.renderRuler();
     }
 
     // Render line numbers if enabled
-    if (this.showLineNumbers && this.lineNumberPanel) {
+    if (this.showLineNumbers && this.lineNumberBox) {
       this.renderLineNumbers(cursor);
     }
 
@@ -185,7 +187,7 @@ export class Viewport {
     this.renderContent(cursor);
 
     // Render scrollbar if enabled
-    if (this.showScrollbar && this.scrollbarPanel) {
+    if (this.showScrollbar && this.scrollbarBox) {
       this.renderScrollbar();
     }
   }
@@ -194,10 +196,10 @@ export class Viewport {
    * Render ruler with column numbers
    */
   private renderRuler(): void {
-    if (!this.rulerPanel) return;
+    if (!this.rulerBox) return;
 
     const scroll = this.state.getScroll();
-    const width = (this.rulerPanel.width as number) || 80;
+    const width = (this.rulerBox.width as number) || 80;
 
     // Generate ruler: "....5....10...15..."
     let ruler = '';
@@ -214,14 +216,14 @@ export class Viewport {
       }
     }
 
-    this.rulerPanel.setContent(`{cyan-fg}${ruler}{/}`);
+    this.rulerBox.setContent(`{cyan-fg}${ruler}{/}`);
   }
 
   /**
    * Render line numbers panel
    */
   private renderLineNumbers(cursor: { line: number; col: number }): void {
-    if (!this.lineNumberPanel) return;
+    if (!this.lineNumberBox) return;
 
     const lineNumberLines: string[] = [];
 
@@ -237,7 +239,7 @@ export class Viewport {
       lineNumberLines.push(`{blue-fg}${' '.repeat(this.lineNumberWidth)}{/} {cyan-fg}│{/}`);
     }
 
-    this.lineNumberPanel.setContent(lineNumberLines.join('\n'));
+    this.lineNumberBox.setContent(lineNumberLines.join('\n'));
   }
 
   /**
@@ -268,7 +270,7 @@ export class Viewport {
           const cursorChar = visibleText[cursorCol] || ' ';
           const after = visibleText.substring(cursorCol + 1);
 
-          visibleText = before + `{black-bg}{white-fg}${cursorChar}{/}` + after;
+          visibleText = before + `{inverse}${cursorChar}{/inverse}` + after;
         }
       }
 
@@ -276,25 +278,33 @@ export class Viewport {
     }
 
     // Fill remaining height with empty lines
-    while (contentLines.length < this.viewport.height) {
+    // Reserve last line for cursor position indicator
+    const maxContentLines = this.viewport.height - 1;
+    while (contentLines.length < maxContentLines) {
       contentLines.push('');
     }
 
-    this.contentPanel.setContent(contentLines.join('\n'));
+    // Add cursor position indicator at bottom of canvas
+    const lineNum = cursor.line + 1;
+    const colNum = cursor.col + 1;
+    const cursorPrompt = `{cyan-fg}▌{/cyan-fg} Line ${lineNum}, Col ${colNum}`;
+    contentLines.push(cursorPrompt);
+
+    this.contentBox.setContent(contentLines.join('\n'));
   }
 
   /**
    * Render scrollbar indicator
    */
   private renderScrollbar(): void {
-    if (!this.scrollbarPanel) return;
+    if (!this.scrollbarBox) return;
 
     const totalLines = this.state.getLineCount();
-    const height = (this.scrollbarPanel.height as number) || 24;
+    const height = (this.scrollbarBox.height as number) || 24;
 
     if (totalLines <= this.viewport.height) {
       // No scrolling needed
-      this.scrollbarPanel.setContent('');
+      this.scrollbarBox.setContent('');
       return;
     }
 
@@ -310,7 +320,7 @@ export class Viewport {
       }
     }
 
-    this.scrollbarPanel.setContent(scrollbarLines.join('\n'));
+    this.scrollbarBox.setContent(scrollbarLines.join('\n'));
   }
 
   /**
