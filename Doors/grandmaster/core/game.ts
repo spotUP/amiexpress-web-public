@@ -25,6 +25,8 @@ import { ReplayRecorder, type Replay } from '../server/replay-manager';
 import { MedalManager, type Medal } from './medals';
 import { CreditRollManager, InvisiblePieceManager } from './credit-roll';
 import type { SoundEngine } from '../audio/sounds';
+import { AnimationManager } from '../effects/animations';
+import { BlockGlowManager } from '../effects/block-glow';
 
 export class GameEngine {
   private state: GameState;
@@ -39,6 +41,8 @@ export class GameEngine {
   private finesseEvaluator: FinesseEvaluator;
   private recorder?: ReplayRecorder;  // Optional replay recording
   private onHardDropCallback?: () => void;
+  private animations: AnimationManager;
+  private glowManager: BlockGlowManager;
 
   // Stats tracking
   private tetrisCount: number = 0;
@@ -67,12 +71,15 @@ export class GameEngine {
   };
 
   constructor(
-    mode: GameMode, 
-    settings: PlayerSettings, 
+    mode: GameMode,
+    settings: PlayerSettings,
     private sounds: SoundEngine,
     attackManager?: AttackManager
   ) {
     this.settings = settings;
+    // Initialize with stub managers (will be set via setters)
+    this.animations = new AnimationManager();
+    this.glowManager = new BlockGlowManager();
     this.pieceManager = new PieceManager(settings.rotationSystem);
     this.sectionManager = new SectionManager();
     this.gradeManager = new GradeManager();
@@ -82,6 +89,23 @@ export class GameEngine {
     this.finesseEvaluator = new FinesseEvaluator();
     this.attackManager = attackManager;
     this.state = this.createInitialState(mode);
+  }
+
+  /**
+   * Set animation manager (for visual effects)
+   */
+  setAnimationManager(animations: AnimationManager): void {
+    this.animations = animations;
+  }
+
+  /**
+   * Set glow manager (for block glow effects)
+   */
+  setGlowManager(glowManager: BlockGlowManager): void {
+    this.glowManager = glowManager;
+    // Configure from settings
+    this.glowManager.setEnabled(this.settings.blockGlow);
+    this.glowManager.setIntensityMultiplier(this.settings.glowIntensity);
   }
 
   /**
@@ -105,6 +129,7 @@ export class GameEngine {
       grade: '9',
       combo: 0,
       backToBack: false,
+      backToBackCount: 0,
 
       // T-Spin tracking (HeborisCE tspin_flag system)
       lastMove: null,
@@ -720,6 +745,17 @@ export class GameEngine {
     const lockTime = Date.now();
     this.placePieceWithTimestamp(shape, piece.x, piece.y, piece.type, lockTime);
 
+    // Get locked cells for visual effects
+    const lockedCells = shape.map(([dx, dy]) => ({ x: piece.x + dx, y: piece.y + dy }));
+
+    // Trigger placement effect (before particles/shake)
+    const pieceColor = this.getPieceColorName(piece.type);
+    console.log(`[GAME] Settings check - placementEffects: ${this.settings.placementEffects}, blockGlow: ${this.settings.blockGlow}, floatTextMode: ${this.settings.floatTextMode}`);
+    if (this.settings.placementEffects) {
+      console.log(`[GAME] Triggering placement effect for ${piece.type} at ${lockedCells.length} cells`);
+      this.animations.placementEffect(piece.type, lockedCells, piece.rotation, pieceColor);
+    }
+
     // Evaluate finesse for this placement
     const hadFinesse = this.finesseEvaluator.evaluatePlacement(piece);
 
@@ -748,6 +784,17 @@ export class GameEngine {
     const newSection = Math.floor(this.state.level / 100);
 
     if (lineCount > 0) {
+      // Trigger line clear glow
+      const clearType = tSpin !== 'none' ? 'tspin' : (lineCount === 4 ? 'tetris' : 'normal');
+      const centerX = lockedCells.reduce((sum, cell) => sum + cell.x, 0) / lockedCells.length;
+      const centerY = lockedCells.reduce((sum, cell) => sum + cell.y, 0) / lockedCells.length;
+      this.glowManager.addLineClearGlow(clearedLines, clearType, centerX, centerY);
+
+      // Trigger lock glow with radial patterns for combos/T-spins
+      const isCombo = this.state.combo > 0;
+      const isTSpin = tSpin !== 'none';
+      this.glowManager.addLockGlow(lockedCells, isCombo, isTSpin);
+
       // Clear lines
       clearLines(this.state.board, clearedLines);
 
@@ -784,6 +831,21 @@ export class GameEngine {
       const isBackToBackAction = tSpin !== 'none' || lineCount === 4;
       if (isBackToBackAction && this.state.backToBack) {
         baseScore = Math.floor(baseScore * 1.5);  // 50% bonus
+        // Increment B2B chain
+        this.state.backToBackCount++;
+
+        // Trigger B2B glow animation
+        if (this.settings.b2bGlowEnabled) {
+          const b2bType = lineCount === 4 ? 'tetris' : 'tspin';
+          this.animations.backToBackGlow(lockedCells, this.state.backToBackCount, b2bType);
+          this.glowManager.addBackToBackGlow(lockedCells);
+        }
+      } else if (isBackToBackAction) {
+        // Start new B2B chain
+        this.state.backToBackCount = 1;
+      } else if (lineCount > 0) {
+        // Break B2B chain (single/double/triple without T-spin)
+        this.state.backToBackCount = 0;
       }
       this.state.backToBack = isBackToBackAction;
 
@@ -797,6 +859,40 @@ export class GameEngine {
         this.tSpinCount++;
       }
 
+      // Trigger floating text for clear types
+      let clearMessage = '';
+      let clearColor = 'white';
+
+      if (tSpin === 'full') {
+        if (lineCount === 3) {
+          clearMessage = 'T-SPIN TRIPLE';
+          clearColor = 'magenta';
+        } else if (lineCount === 2) {
+          clearMessage = 'T-SPIN DOUBLE';
+          clearColor = 'magenta';
+        } else if (lineCount === 1) {
+          clearMessage = 'T-SPIN SINGLE';
+          clearColor = 'magenta';
+        }
+      } else if (tSpin === 'mini') {
+        if (lineCount === 2) {
+          clearMessage = 'T-SPIN MINI DOUBLE';
+          clearColor = 'cyan';
+        } else if (lineCount === 1) {
+          clearMessage = 'T-SPIN MINI';
+          clearColor = 'cyan';
+        }
+      } else if (lineCount === 4) {
+        clearMessage = 'QUAD';
+        clearColor = 'yellow';
+      }
+
+      if (clearMessage) {
+        const avgY = clearedLines.reduce((sum, y) => sum + y, 0) / clearedLines.length;
+        console.log(`[GAME] Triggering floating text: "${clearMessage}" at (${centerX}, ${avgY}) color:${clearColor} mode:${this.settings.floatTextMode}`);
+        this.animations.floatingText(clearMessage, centerX, avgY, clearColor, this.settings.floatTextMode);
+      }
+
       // Check for perfect clear
       const perfectClear = isPerfectClear(this.state.board);
       if (perfectClear) {
@@ -804,6 +900,14 @@ export class GameEngine {
         this.perfectClearCount++;
         // Award AC medal
         this.medalManager.checkPerfectClear(this.state.level);
+        // Trigger floating text
+        this.animations.floatingText('PERFECT CLEAR', 5, 12, 'cyan', this.settings.floatTextMode);
+      }
+
+      // Trigger combo milestone floating text
+      const combo = this.state.combo;
+      if (combo === 5 || combo === 10 || (combo >= 15 && combo % 5 === 0)) {
+        this.animations.floatingText(`${combo} COMBO!`, 5, 12, 'yellow', this.settings.floatTextMode);
       }
 
       // Award SK medal (Skill - Tetrises and T-Spins)
@@ -824,7 +928,6 @@ export class GameEngine {
       }
 
       // Award grade points for line clear
-      const isTSpin = tSpin !== 'none';
       this.gradeManager.awardPoints(lineCount, this.state.combo, this.state.level, isTSpin);
       this.state.grade = this.gradeManager.getGrade();
       this.state.internalGrade = this.gradeManager.getInternalGrade();
@@ -1159,5 +1262,21 @@ export class GameEngine {
    */
   onHardDrop(callback: () => void): void {
     this.onHardDropCallback = callback;
+  }
+
+  /**
+   * Get color name for piece type (for visual effects)
+   */
+  private getPieceColorName(type: PieceType): string {
+    const colorMap: Record<PieceType, string> = {
+      'I': 'cyan',
+      'O': 'yellow',
+      'T': 'magenta',
+      'S': 'green',
+      'Z': 'red',
+      'J': 'blue',
+      'L': 'white'
+    };
+    return colorMap[type];
   }
 }

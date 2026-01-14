@@ -11,6 +11,9 @@ import { ScreenShaker } from '../effects/screen-shake';
 import { ParticleSystem } from '../effects/particles';
 import { TransitionManager } from '../effects/transitions';
 import { AnimationManager, AnimationRenderer } from '../effects/animations';
+import { BlockGlowManager } from '../effects/block-glow';
+import { LineClearAnimationManager } from '../effects/line-clear-animation';
+import { ConnectedBlockRenderer } from '../effects/connected-blocks';
 
 /**
  * Main game screen
@@ -33,6 +36,9 @@ export class GameScreen {
   private particles: ParticleSystem;
   private transitions: TransitionManager;
   private animations: AnimationManager;
+  private glowManager: BlockGlowManager;
+  private clearAnimation: LineClearAnimationManager;
+  private connectedBlocks: ConnectedBlockRenderer;
 
   // Track previous state for detecting changes
   private lastGrade: string = '9';
@@ -73,7 +79,7 @@ export class GameScreen {
   constructor(
     private screen: Screen,
     private engine: GameEngine,
-    private input: InputHandler,
+    private input: InputHandler | null,  // Null for attract mode (AI-controlled)
     private sounds: SoundEngine,
     private state: AppState
   ) {
@@ -82,6 +88,19 @@ export class GameScreen {
     this.particles = new ParticleSystem();
     this.transitions = new TransitionManager();
     this.animations = new AnimationManager();
+    this.glowManager = new BlockGlowManager();
+    this.clearAnimation = new LineClearAnimationManager();
+    this.connectedBlocks = new ConnectedBlockRenderer();
+
+    // Share managers with game engine for trigger integration
+    this.engine.setAnimationManager(this.animations);
+    this.engine.setGlowManager(this.glowManager);
+
+    // Configure managers from settings
+    this.glowManager.setEnabled(state.settings.blockGlow);
+    this.glowManager.setIntensityMultiplier(state.settings.glowIntensity);
+    this.clearAnimation.setEnabled(state.settings.clearStyle !== 'instant');
+    this.connectedBlocks.setEnabled(state.settings.connectedBlocks);
   }
 
   /**
@@ -118,7 +137,9 @@ export class GameScreen {
 
         // Update game (always at 60Hz logic)
         this.engine.update(deltaTime);
-        this.input.update(deltaTime);
+        if (this.input) {
+          this.input.update(deltaTime);
+        }
 
         // Get current state once for all checks
         const gameState = this.engine.getState();
@@ -128,6 +149,8 @@ export class GameScreen {
         this.particles.update(deltaTime);
         this.transitions.update(deltaTime);
         this.animations.update(deltaTime);
+        this.glowManager.update(deltaTime);
+        this.clearAnimation.update(deltaTime);
         this.updateGradeAnimation(deltaTime);
 
         // Update rainbow border animation
@@ -467,6 +490,7 @@ export class GameScreen {
       content: '←→ Move | Z/X Rotate | ↓ Soft | Enter Hard | C Hold | ESC Pause',
     });
 
+    // Create effectsBox LAST so it renders on top of all other elements
     this.effectsBox = createBox({
       parent: this.screen,
       top: 0,
@@ -474,6 +498,9 @@ export class GameScreen {
       right: 0,
       bottom: 0,
       style: { fg: 'white', bg: 'transparent' },
+      clickable: false,
+      mouse: false,
+      tags: true,
     });
   }
 
@@ -481,6 +508,9 @@ export class GameScreen {
    * Setup input handlers
    */
   private setupInput(): void {
+    // Skip input setup for attract mode (AI-controlled)
+    if (!this.input) return;
+
     this.input.on('left', () => {
       if (this.engine.move(-1)) {
         this.sounds.playSfx('move');
@@ -651,7 +681,9 @@ export class GameScreen {
       statsContent += `\n\n  {cyan-fg}T-SPIN MINI{/cyan-fg}`;
     }
 
-    if (state.backToBack) {
+    if (state.backToBack && state.backToBackCount > 1) {
+      statsContent += `\n  {yellow-fg}{bold}B2B x${state.backToBackCount}{/bold}{/yellow-fg}`;
+    } else if (state.backToBack) {
       statsContent += `\n  {yellow-fg}{bold}B2B{/bold}{/yellow-fg}`;
     }
 
@@ -699,10 +731,41 @@ export class GameScreen {
     for (const anim of animations) {
       if (anim.type === 'gradeUp') {
         const rendered = AnimationRenderer.renderGradeUp(anim);
-        effectsContent += `\x1b[${5};${40}H${rendered}`;
+        // Center grade up animation on screen
+        // "GRADE UP!" is ~9 chars, center at screenWidth/2
+        const centerX = Math.floor(screenWidth / 2) - 5;
+        effectsContent += `\x1b[${5};${centerX}H${rendered}`;
       } else if (anim.type === 'cool' || anim.type === 'regret') {
         const rendered = AnimationRenderer.renderSectionResult(anim);
-        effectsContent += `\x1b[${3};${30}H${rendered}`;
+        // Center section result on screen
+        const text = anim.type === 'cool' ? 'COOL!' : 'REGRET';
+        const centerX = Math.floor(screenWidth / 2) - Math.floor(text.length / 2);
+        effectsContent += `\x1b[${3};${centerX}H${rendered}`;
+      } else if (anim.type === 'comboCounter') {
+        // Render combo counter animation
+        const data = anim.data as any;
+        const combo = data.combo;
+        const milestone = data.milestone;
+        const progress = anim.elapsed / anim.duration;
+
+        // Flash and fade effect
+        if (progress < 0.8) {
+          const color = combo >= 15 ? 'red' : combo >= 10 ? 'yellow' : 'cyan';
+          const scale = progress < 0.2 ? 'bold' : '';
+          const comboText = `${combo} COMBO!`;
+          const centerX = Math.floor(screenWidth / 2) - Math.floor(comboText.length / 2);
+          effectsContent += `\x1b[${8};${centerX}H{${color}-fg}${scale ? '{bold}' : ''}${comboText}${scale ? '{/bold}' : ''}{/${color}-fg}`;
+        }
+      } else if (anim.type === 'tSpin') {
+        // Render T-Spin flash
+        const data = anim.data as any;
+        const progress = anim.elapsed / anim.duration;
+
+        if (progress < 0.6) {
+          const tspinText = 'T-SPIN!';
+          const centerX = Math.floor(screenWidth / 2) - Math.floor(tspinText.length / 2);
+          effectsContent += `\x1b[${10};${centerX}H{magenta-fg}{bold}${tspinText}{/bold}{/magenta-fg}`;
+        }
       } else if (anim.type === 'lockGlow') {
         const intensity = AnimationRenderer.getLockGlowIntensity(anim);
         if (intensity > 0.3) {
@@ -717,6 +780,49 @@ export class GameScreen {
               effectsContent += `\x1b[${y};${x}H{white-fg}░░{/white-fg}`;
             }
           }
+        }
+      }
+    }
+
+    // Render floating texts
+    const floatingTexts = this.animations.getFloatingTexts();
+    if (floatingTexts.length > 0) {
+      console.log(`[EFFECTS] Rendering ${floatingTexts.length} floating texts:`, floatingTexts.map(t => ({text: t.text, x: t.x, y: t.y, mode: t.mode})));
+    }
+    for (const text of floatingTexts) {
+      const progress = text.timer / text.maxTimer;
+
+      // Calculate alpha (fade out frames 80-100)
+      let alpha = 1.0;
+      if (text.timer > 80) {
+        alpha = 1.0 - ((text.timer - 80) / 20);
+      }
+
+      // Filter by mode
+      if (text.mode === 'offboard' && text.x >= 0 && text.x < 10) {
+        continue; // Don't render if on playfield in offboard mode
+      }
+
+      // Calculate screen position (convert board coords to screen coords)
+      // Board box is at blessed position (left:2, top:1) = ANSI (column 3, row 2) in 1-indexed coords
+      // Board content inside border starts at blessed (3, 2) = ANSI (column 4, row 3) in 1-indexed coords
+      // Each board cell is 2 chars wide
+      // Board Y coordinates: 4-23 visible (0-3 are vanish zone)
+      // ANSI uses 1-indexed coordinates, so add 1 to blessed positions
+      const boardContentLeft = 4;  // ANSI 1-indexed: left(3) + border(1)
+      const boardContentTop = 3;   // ANSI 1-indexed: top(2) + border(1)
+      const screenX = boardContentLeft + Math.floor(text.x * 2);
+      const screenY = boardContentTop + Math.floor(text.y - 4);  // y=4 is first visible row, maps to ANSI row 3
+
+      // Apply alpha via color (blessed limitation - can't do true alpha)
+      const color = alpha > 0.5 ? text.color : 'gray';
+
+      // Render multi-line text
+      for (let i = 0; i < text.text.length; i++) {
+        const line = text.text[i];
+        const y = screenY + i;
+        if (y >= 0 && y < screenHeight) {
+          effectsContent += `\x1b[${y};${screenX}H{${color}-fg}${line}{/${color}-fg}`;
         }
       }
     }
@@ -906,6 +1012,11 @@ export class GameScreen {
     const creditRoll = (this.engine as any).creditRollManager;
     const invisibleManager = (this.engine as any).invisiblePieceManager;
     const isMasterRoll = state.creditRollActive;
+
+    // Update connected blocks cache if enabled
+    if (this.state.settings.connectedBlocks) {
+      this.connectedBlocks.updateCache(board);
+    }
     
     let content = '';
     const now = Date.now();
@@ -919,8 +1030,15 @@ export class GameScreen {
       const shape = pieceManager.getShape(currentPiece.type, currentPiece.rotation);
       if (shape) {
         pieceShape = shape;
+        // Only calculate ghost if piece is visible or will land in visible area
         if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
-          ghostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+          const calculatedGhostY = getGhostY(board, shape, currentPiece.x, currentPiece.y);
+          // Only use ghost if ANY part of it is in visible area (ghostY + shape height >= 4)
+          // This prevents ghost rendering when the entire ghost is in vanish zone
+          const ghostBottom = calculatedGhostY + shape.length - 1;
+          if (ghostBottom >= 4 && calculatedGhostY !== currentPiece.y) {
+            ghostY = calculatedGhostY;
+          }
         }
       }
     }
@@ -950,9 +1068,15 @@ export class GameScreen {
         if (ghostY !== null && currentPiece && pieceShape && char === '  ' && !isMasterRoll) {
           const px = x - currentPiece.x;
           const py = y - ghostY;
+          // Calculate the actual board row this ghost block represents
+          const ghostBlockY = ghostY + py;
+          // Additional bounds check: ensure ghost block is within board and shape bounds
+          // AND ensure the ghost block's board position is in visible area (>= 4)
           if (py >= 0 && py < pieceShape.length &&
               px >= 0 && px < pieceShape[py].length &&
-              pieceShape[py][px]) {
+              pieceShape[py][px] &&
+              ghostBlockY >= 4 && ghostBlockY < 24 &&  // Ghost block must be in visible board area
+              x >= 0 && x < board.width) {  // Within board width
             char = '{gray-fg}░░{/gray-fg}';
           }
         }
@@ -968,13 +1092,19 @@ export class GameScreen {
         }
 
         if (char === '  ' && cell.filled) {
-          if (this.hasShineEffect(x, y) && !isMasterRoll) {
+          // Check line clear animation fade
+          const clearFade = this.clearAnimation.getCellFade(x, y);
+
+          if (clearFade >= 1.0) {
+            // Cell fully cleared by animation - render as empty
+            char = '  ';
+          } else if (this.hasShineEffect(x, y) && !isMasterRoll) {
             char = '{white-bg}{white-fg}██{/white-fg}{/white-bg}';
           } else if (isMasterRoll && cell.lockTime) {
             // Apply TGM3 authentic credit roll fade
             const age = Date.now() - cell.lockTime;
             const fadeStage = creditRoll.getFadeStage(cell.lockTime);
-            
+
             if (fadeStage === 'full') {
               char = this.getBlockChar(cell.color as PieceType, rotationSystem);
             } else if (fadeStage === 'bright') {
@@ -985,7 +1115,54 @@ export class GameScreen {
               char = '  '; // Fully invisible
             }
           } else if (!isMasterRoll) {
-            char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+            // Get base character (connected blocks or simple blocks)
+            const pieceColor = this.getPieceColorName(cell.color as PieceType);
+
+            if (this.state.settings.connectedBlocks) {
+              char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
+            } else {
+              char = this.getBlockChar(cell.color as PieceType, rotationSystem);
+            }
+
+            // Apply block glow overlay if active
+            const glowIntensity = this.glowManager.getGlowIntensity(x, y);
+            if (glowIntensity > 0) {
+              const glowColor = this.glowManager.getGlowColor(x, y);
+              if (glowColor) {
+                char = this.applyGlow(char, glowColor, glowIntensity);
+              }
+            }
+
+            // Apply line clear fade effect if animating
+            if (clearFade > 0 && clearFade < 1.0) {
+              char = LineClearAnimationManager.applyFade(char, clearFade);
+            }
+
+            // Apply placement effect overlay if active
+            const placementEffects = this.animations.getPlacementEffects();
+            for (const effect of placementEffects) {
+              const effectChar = AnimationRenderer.renderPlacementEffect(effect, x, y);
+              if (effectChar) {
+                char = effectChar;
+                break; // Only apply first matching effect
+              }
+            }
+
+            // Apply back-to-back glow overlay if active
+            const b2bAnimations = this.animations.getAnimationsByType('backToBackGlow');
+            for (const anim of b2bAnimations) {
+              const b2bChar = AnimationRenderer.renderBackToBackGlow(
+                anim.data,
+                anim.elapsed,
+                anim.duration,
+                x,
+                y
+              );
+              if (b2bChar) {
+                char = b2bChar;
+                break;
+              }
+            }
           }
         }
 
@@ -1157,6 +1334,34 @@ export class GameScreen {
   }
 
   /**
+   * Get color name for piece type (for visual effects)
+   */
+  private getPieceColorName(type: PieceType): string {
+    const rotationSystem = this.state.settings.rotationSystem;
+    const colors = rotationSystem === 'ARS' ? ARS_COLORS : PIECE_COLORS;
+    return colors[type] || 'white';
+  }
+
+  /**
+   * Apply glow effect to block character
+   */
+  private applyGlow(baseChar: string, glowColor: string, intensity: number): string {
+    // intensity 1.0 = full glow, 0.0 = no glow
+    const brightColor = this.getBrightColor(glowColor);
+
+    if (intensity > 0.7) {
+      // Strong glow - bright background
+      return `{${brightColor}-bg}${baseChar}{/${brightColor}-bg}`;
+    } else if (intensity > 0.3) {
+      // Medium glow - normal background
+      return `{${glowColor}-bg}${baseChar}{/${glowColor}-bg}`;
+    } else {
+      // Minimal glow - just use base
+      return baseChar;
+    }
+  }
+
+  /**
    * Show pause menu
    */
   private showPauseMenu(): void {
@@ -1229,6 +1434,7 @@ export class GameScreen {
 
     this.screen.render();
     this.sounds.playSfx('game_over');
+    this.sounds.stopMusic(); // Stop current music before playing game over music
     this.sounds.playMusic('game_over', false);
 
     await this.waitForKey();
@@ -1246,7 +1452,9 @@ export class GameScreen {
   }
 
   private cleanup(): void {
-    this.input.reset();
+    if (this.input) {
+      this.input.reset();
+    }
     this.sounds.stopMusic();
     this.boardBox?.destroy();
     this.nextBox?.destroy();
