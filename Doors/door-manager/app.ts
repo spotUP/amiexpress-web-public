@@ -25,8 +25,7 @@ import {
   createBox,
   createList,
   createText,
-  setupInputHandler,
-  removeInputHandler
+  DoorInputManager
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
@@ -118,13 +117,8 @@ export async function createApp(session: DoorSession) {
 
   // Only sysops can use door manager
   if (!isSysop) {
-    return new Promise<void>((resolve) => {
-      const handler = () => {
-        removeInputHandler(session);
-        resolve();
-      };
-      session.bbsSession.doorInputHandler = handler;
-    });
+    bbs.write('\r\n\x1b[31mAccess Denied: SysOp only\x1b[0m\r\n');
+    return Promise.resolve();
   }
 
   // Fetch installed doors
@@ -132,14 +126,7 @@ export async function createApp(session: DoorSession) {
 
   if (doors.length === 0) {
     bbs.write('\r\n\x1b[36mNo doors are currently installed.\x1b[0m\r\n');
-    bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    return new Promise<void>((resolve) => {
-      const handler = () => {
-        removeInputHandler(session);
-        resolve();
-      };
-      session.bbsSession.doorInputHandler = handler;
-    });
+    return Promise.resolve();
   }
 
   // Create responsive screen
@@ -152,8 +139,15 @@ export async function createApp(session: DoorSession) {
     responsive: true,
   });
 
-  // Connect input
-  setupInputHandler(session, screen);
+  // Create input manager (menu-based door, no game mode needed)
+  const inputManager = new DoorInputManager(session, screen, {
+    enableGameMode: false,  // Menu-based UI, not a game
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // Door has mouse support
+  });
+
+  // Enable input
+  inputManager.enable();
 
   // Create header
   const header = createBox({
@@ -429,7 +423,7 @@ export async function createApp(session: DoorSession) {
 
   // Handle screen destroy
   screen.on('destroy', () => {
-    removeInputHandler(session);
+    inputManager.disable();
   });
 
   // Initial render

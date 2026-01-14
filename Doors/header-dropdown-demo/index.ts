@@ -3,14 +3,14 @@
  * Inline one-line menu labels with dropdowns (no button widgets).
  */
 
-import { 
-  ServerDoor as Door, 
-  type DoorContext, 
-  DropdownMenu, 
-  Box, 
-  type Screen, 
-  createScreen, 
-  setupInputHandler,
+import {
+  ServerDoor as Door,
+  type DoorContext,
+  DropdownMenu,
+  Box,
+  type Screen,
+  createScreen,
+  DoorInputManager,
   createBox
 } from '@amiexpress/bbs-door-sdk';
 
@@ -39,19 +39,20 @@ door.onStart(async (ctx: DoorContext) => {
     title: 'Header Dropdown Demo',
   });
 
-  // 2. Setup Input Handler (connects BBS input to blessed)
-  setupInputHandler(ctx, screen);
-
-  // 3. Setup Cleanup on Destroy
-  screen.on('destroy', () => {
-    if (ctx.bbsSession) {
-      delete ctx.bbsSession.doorInputHandler;
-    }
+  // 2. Create input manager (dropdown menu door with mouse support)
+  const inputManager = new DoorInputManager(ctx, screen, {
+    enableGameMode: false,  // Menu UI, not a game
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // Door has dropdown menu mouse support
   });
 
-  if ((bbs as any)?.enableMouseEvents) {
-    (bbs as any).enableMouseEvents();
-  }
+  // 3. Enable input (handles all input setup automatically)
+  inputManager.enable();
+
+  // 4. Setup cleanup on destroy
+  screen.on('destroy', () => {
+    inputManager.disable();
+  });
 
   // --- UI Construction ---
 

@@ -3,8 +3,7 @@ import {
   UIHelpers,
   AnsiColor,
   convertUnicodeBoxToACS,
-  setupInputHandler,
-  removeInputHandler
+  DoorInputManager
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,8 +38,15 @@ export async function execute(session: any) {
   // Clear screen to wipe preloader
   screen.clear();
 
-  // Connect input
-  setupInputHandler(session, screen);
+  // Create input manager (browser door, no game mode needed)
+  const inputManager = new DoorInputManager(session, screen, {
+    enableGameMode: false,  // Browser UI, not a game
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // List has mouse support
+  });
+
+  // Enable input
+  inputManager.enable();
 
   // ========== UI COMPONENTS ========== 
   // ... (rest of the component setup code)
@@ -229,7 +235,7 @@ export async function execute(session: any) {
     console.log('[RIP Browser] Entering event loop promise');
     screen.on('destroy', () => {
       console.log('[RIP Browser] Screen destroyed, resolving promise');
-      removeInputHandler(session);
+      inputManager.disable();
       resolve();
     });
   });

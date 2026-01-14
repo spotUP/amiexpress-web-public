@@ -77,8 +77,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
 import {
   createScreen,
-  setupInputHandler,
-  removeInputHandler
+  DoorInputManager
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 /**
@@ -107,11 +106,6 @@ export async function createApp(session: DoorSession) {
   const { bbs, user } = session;
   const username = user?.username || 'Guest';
 
-  // Enable game mode for smooth keyboard input (bypasses OS key repeat delay)
-  if (bbs?.enableGameMode) {
-    bbs.enableGameMode();
-  }
-
   const testResults: TestResult[] = [];
   let currentDemo: string | null = null;
   const intervals: NodeJS.Timeout[] = [];
@@ -128,26 +122,22 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== CONNECT INPUT ==========
-  if (session.bbsSession) {
-    session.bbsSession.inDoorManager = true;
-  }
-  setupInputHandler(session, screen);
+  // Create input manager (showcase door with smooth keyboard and mouse)
+  const inputManager = new DoorInputManager(session, screen, {
+    enableGameMode: true,   // Enable smooth keyboard input (bypasses OS key repeat delay)
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // Door has extensive mouse support
+    debug: false,
+    debugName: 'NEO-BLESSED-SHOWCASE'
+  });
 
-  // Enable mouse support and standardized toggle (F12/Alt+M)
-  screen.enableMouse();
+  // Enable input (handles game mode, inDoorManager flag, input handler, mouse)
+  inputManager.enable();
+
+  // Enable standardized mouse toggle (F12/Alt+M)
   screen.enableMouseToggle((enabled) => {
     setStatus(enabled ? 'Mouse tracking enabled' : 'Mouse tracking disabled (Text selection ON)');
   });
-
-  console.log('[neo-blessed-showcase] bbs object:', typeof bbs, 'enableMouseEvents exists:', !!bbs?.enableMouseEvents);
-  console.log('[neo-blessed-showcase] session.bbsSession:', typeof session.bbsSession);
-  if (bbs?.enableMouseEvents) {
-    console.log('[neo-blessed-showcase] Calling bbs.enableMouseEvents()...');
-    bbs.enableMouseEvents();
-    console.log('[neo-blessed-showcase] After enableMouseEvents, session.bbsSession.mouseEventsEnabled:', session.bbsSession?.mouseEventsEnabled);
-  } else {
-    console.log('[neo-blessed-showcase] WARNING: bbs.enableMouseEvents NOT available!');
-  }
 
   // ========== MAIN LAYOUT ==========
   // Note: Preloader is handled by door-preloader.ts (PRELOADER=YES in .info file)
@@ -3502,8 +3492,7 @@ End of sample markdown.`;
     intervals.length = 0;
     timeouts.forEach(t => clearTimeout(t));
     timeouts.length = 0;
-    screen.disableMouse();
-    removeInputHandler(session);
+    inputManager.disable();  // Handles all input cleanup (game mode, mouse, handlers, flags)
     screen.destroy();
     if (bbs) {
       bbs.write('\x1b[2J\x1b[H');

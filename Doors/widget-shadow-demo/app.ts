@@ -8,7 +8,7 @@
  */
 
 import { Screen, DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, setupInputHandler, removeInputHandler } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
   socket: any;
@@ -82,18 +82,15 @@ export async function createApp(session: DoorSession) {
     throw error;
   }
 
-  // Connect input from BBS to screen
-  setupInputHandler(session, screen);
+  // Create input manager (demo door with mouse dragging)
+  const inputManager = new DoorInputManager(session, screen, {
+    enableGameMode: false,  // Demo UI, not a game
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // Door has mouse dragging
+  });
 
-  // Enable mouse for dragging
-  screen.enableMouse();
-  if (bbs && typeof bbs.enableMouseEvents === 'function') {
-    try {
-      bbs.enableMouseEvents();
-    } catch (error) {
-      // Silently handle if mouse events fail to enable
-    }
-  }
+  // Enable input (handles mouse events automatically)
+  inputManager.enable();
 
   // Light blue background with lorem ipsum text (EXACT from neo-blessed)
   const bg = createBox({
@@ -256,13 +253,8 @@ export async function createApp(session: DoorSession) {
           overPanel.destroy?.();
         }
 
-        // Disable mouse events
-        if (bbs?.disableMouseEvents) {
-          bbs.disableMouseEvents();
-        }
-
-        // Remove input handler
-        removeInputHandler(session);
+        // Disable input (handles all cleanup automatically)
+        inputManager.disable();
       } catch (error) {
         // Silently handle cleanup errors
       }

@@ -8,7 +8,6 @@
 import { CoreDoor as Door, type DoorContext, type KeyPress } from '@amiexpress/bbs-door-sdk';
 import { Screen, Textbox, Box, Text, Autocomplete, AutocompleteTextbox, AutocompleteManager, UsernameProvider, BBSCodeProvider } from '@amiexpress/bbs-door-sdk';
 import type { AutocompleteContext } from '@amiexpress/bbs-door-sdk';
-import { PassThrough } from 'stream';
 import {
   EditorState,
   Viewport,
@@ -36,7 +35,6 @@ const door = new Door({
 });
 
 let activeScreen: Screen | null = null;
-let activeInput: PassThrough | null = null;
 
 door.onStart(async (ctx: DoorContext) => {
   const { bbs, user, output, input } = ctx;
@@ -46,16 +44,10 @@ door.onStart(async (ctx: DoorContext) => {
     (bbs as any).disableGameMode();
   }
 
-  // Create input stream to decouple from process.stdin
-  // This prevents double/triple input handling (stdin + door.onInput)
-  const inputThrough = new PassThrough();
-  activeInput = inputThrough;
-
   // Create main screen
   const screen = new Screen({
     smartCSR: true,
     fullUnicode: true,
-    input: inputThrough,
     title: 'Mail Composer',
     output: (data: string) => output.write(data),
   });
@@ -76,7 +68,6 @@ door.onStart(async (ctx: DoorContext) => {
       await showComposer(screen, bbs, username, ctx);
     } finally {
       activeScreen = null;
-      activeInput = null;
       screen.destroy();
     }
   };
@@ -85,8 +76,9 @@ door.onStart(async (ctx: DoorContext) => {
 });
 
 door.onInput(async (_ctx: DoorContext, key: KeyPress) => {
-  if (activeInput && key.raw) {
-    activeInput.write(key.raw);
+  // Emit input to the screen's program for processing
+  if (activeScreen && key.raw) {
+    activeScreen.program.emit('data', key.raw);
   }
 });
 

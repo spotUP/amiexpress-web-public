@@ -9,8 +9,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
   createBox,
   createList,
-  setupInputHandler,
-  removeInputHandler
+  DoorInputManager
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 interface DoorSession {
@@ -160,14 +159,7 @@ export async function createApp(session: DoorSession) {
 
   if (doors.length === 0) {
     bbs.write('\r\n\x1b[36mNo doors are currently available.\x1b[0m\r\n');
-    bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    return new Promise<void>((resolve) => {
-      const handler = () => {
-        removeInputHandler(session);
-        resolve();
-      };
-      session.bbsSession.doorInputHandler = handler;
-    });
+    return Promise.resolve();
   }
 
   // Check if a specific door was requested via params
@@ -183,14 +175,7 @@ export async function createApp(session: DoorSession) {
       return;
     } else {
       bbs.write(`\r\n\x1b[31mDoor "${doorName}" not found.\x1b[0m\r\n`);
-      bbs.write('\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      return new Promise<void>((resolve) => {
-        const handler = () => {
-          session.bbsSession.doorInputHandler = null;
-          resolve();
-        };
-        session.bbsSession.doorInputHandler = handler;
-      });
+      return Promise.resolve();
     }
   }
 
@@ -217,8 +202,15 @@ export async function createApp(session: DoorSession) {
     throw error;
   }
 
-  // Connect input
-  setupInputHandler(session, screen);
+  // Create input manager (menu-based door, no game mode needed)
+  const inputManager = new DoorInputManager(session, screen, {
+    enableGameMode: false,  // Menu-based UI, not a game
+    enableGrabKeys: false,  // Blessed widgets handle their own input
+    enableMouse: true,      // Door has mouse support
+  });
+
+  // Enable input
+  inputManager.enable();
 
   // Create header
   const header = createBox({
@@ -499,7 +491,7 @@ export async function createApp(session: DoorSession) {
 
   // Handle screen destroy
   screen.on('destroy', () => {
-    removeInputHandler(session);
+    inputManager.disable();
   });
 
   // Initial render
