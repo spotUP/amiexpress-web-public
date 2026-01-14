@@ -122,6 +122,20 @@ export const PARTICLE_PRESETS: Record<string, ParticlePreset> = {
     friction: 0.96,
     fadeOut: true,
   },
+
+  // COOL section achievement - celebratory burst
+  cool: {
+    count: 50,
+    spread: { x: 4, y: 2 },
+    speed: 5,
+    life: 35,
+    chars: ['●', '○', '★', '◆'],
+    colors: ['cyan', 'white', 'green'],
+    gravity: 0.1,
+    friction: 0.94,
+    trail: true,
+    fadeOut: true,
+  },
 };
 
 /**

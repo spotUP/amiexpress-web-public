@@ -176,7 +176,7 @@ export class TetriNetScreen {
   private setupEngineCallbacks(): void {
     // Special used
     this.engine.onSpecialUsed((type, targetId) => {
-      this.sounds.playSfx('lock');  // Using existing sound effect
+      this.sounds.playSfx('attack');  // Attack sound for special usage
       this.inventoryPanel.showUseAnimation();
 
       if (targetId) {

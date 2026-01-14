@@ -8,6 +8,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { createDockable } from './dockable';
 import type { AppState, PlayerSettings, RotationSystem, KeyBindings } from '../core/types';
+import type { SoundEngine } from '../audio/sounds';
 
 /**
  * Friendly names for key bindings
@@ -47,7 +48,8 @@ function formatKeyBinding(keys: string[]): string {
 export class SettingsScreen {
   constructor(
     private screen: Screen,
-    private state: AppState
+    private state: AppState,
+    private sounds: SoundEngine
   ) {}
 
   /**
@@ -118,12 +120,16 @@ export class SettingsScreen {
 
       // Update description on selection change
       menu.on('select item', (_item: any, index: number) => {
+        // Play navigation sound when scrolling through settings
+        this.sounds.playSfx('menu_select');
         descBox.setContent(this.getDescription(index));
         this.screen.render();
       });
 
       // Handle item selection - wrap async handler for blessed's sync event requirement
       menu.on('select', (_item: any, index: number) => {
+        // Play selection sound when opening a setting
+        this.sounds.playSfx('menu_ok');
         this.handleSelection(index, menu).then(() => {
           this.screen.render();
         });
@@ -161,6 +167,16 @@ export class SettingsScreen {
       `Music Volume:      {yellow-fg}${Math.floor(s.musicVolume * 100)}%{/yellow-fg}`,
       `SFX Volume:        {yellow-fg}${Math.floor(s.sfxVolume * 100)}%{/yellow-fg}`,
       '',
+      '{cyan-fg}--- VISUAL EFFECTS ---{/cyan-fg}',
+      `Block Glow:        {yellow-fg}${s.blockGlow ? 'ON' : 'OFF'}{/yellow-fg}`,
+      `Glow Intensity:    {yellow-fg}${Math.floor(s.glowIntensity * 100)}%{/yellow-fg}`,
+      `Clear Style:       {yellow-fg}${s.clearStyle.toUpperCase()}{/yellow-fg}`,
+      `Clear Direction:   {yellow-fg}${s.clearDirection.toUpperCase()}{/yellow-fg}`,
+      `Placement Effects: {yellow-fg}${s.placementEffects ? 'ON' : 'OFF'}{/yellow-fg}`,
+      `Floating Text:     {yellow-fg}${s.floatTextMode.toUpperCase()}{/yellow-fg}`,
+      `B2B Glow:          {yellow-fg}${s.b2bGlowEnabled ? 'ON' : 'OFF'}{/yellow-fg}`,
+      `Connected Blocks:  {yellow-fg}${s.connectedBlocks ? 'ON' : 'OFF'}{/yellow-fg}`,
+      '',
       '{cyan-fg}--- KEY BINDINGS ---{/cyan-fg}',
       `Move Left:         {yellow-fg}${formatKeyBinding(kb.left)}{/yellow-fg}`,
       `Move Right:        {yellow-fg}${formatKeyBinding(kb.right)}{/yellow-fg}`,
@@ -190,6 +206,16 @@ export class SettingsScreen {
       'Number of next pieces to preview',
       'Background music volume',
       'Sound effects volume',
+      '',
+      '',  // VISUAL EFFECTS header
+      'Enable/disable block glow effects',
+      'Glow intensity (0-100%)',
+      'Line clear animation style (inward/outward/instant/directional)',
+      'Clear direction for directional style (in/out)',
+      'Enable/disable piece placement effects',
+      'Floating text mode (off/offboard/all)',
+      'Enable/disable back-to-back glow bonus',
+      'Enable/disable connected block rendering',
       '',
       '',  // KEY BINDINGS header
       'Press any key to rebind Move Left',
@@ -241,35 +267,60 @@ export class SettingsScreen {
       case 8:  // SFX Volume
         await this.adjustVolume('sfxVolume');
         break;
-      // Key bindings (index 10 = header, 11-19 = bindings)
-      case 11:  // Move Left
+      // Visual Effects (index 10 = header, 11-18 = settings)
+      case 11:  // Block Glow
+        s.blockGlow = !s.blockGlow;
+        break;
+      case 12:  // Glow Intensity
+        await this.adjustGlowIntensity();
+        break;
+      case 13:  // Clear Style
+        await this.cycleClearStyle();
+        break;
+      case 14:  // Clear Direction
+        s.clearDirection = s.clearDirection === 'in' ? 'out' : 'in';
+        break;
+      case 15:  // Placement Effects
+        s.placementEffects = !s.placementEffects;
+        break;
+      case 16:  // Floating Text
+        await this.cycleFloatTextMode();
+        break;
+      case 17:  // B2B Glow
+        s.b2bGlowEnabled = !s.b2bGlowEnabled;
+        break;
+      case 18:  // Connected Blocks
+        s.connectedBlocks = !s.connectedBlocks;
+        break;
+      // Key bindings (index 20 = header, 21-29 = bindings)
+      case 21:  // Move Left
         await this.editKeyBinding('left', 'Move Left');
         break;
-      case 12:  // Move Right
+      case 22:  // Move Right
         await this.editKeyBinding('right', 'Move Right');
         break;
-      case 13:  // Rotate CW
+      case 23:  // Rotate CW
         await this.editKeyBinding('rotateCW', 'Rotate Clockwise');
         break;
-      case 14:  // Rotate CCW
+      case 24:  // Rotate CCW
         await this.editKeyBinding('rotateCCW', 'Rotate Counter-Clockwise');
         break;
-      case 15:  // Rotate 180
+      case 25:  // Rotate 180
         await this.editKeyBinding('rotate180', 'Rotate 180');
         break;
-      case 16:  // Soft Drop
+      case 26:  // Soft Drop
         await this.editKeyBinding('softDrop', 'Soft Drop');
         break;
-      case 17:  // Hard Drop
+      case 27:  // Hard Drop
         await this.editKeyBinding('hardDrop', 'Hard Drop');
         break;
-      case 18:  // Hold
+      case 28:  // Hold
         await this.editKeyBinding('hold', 'Hold');
         break;
-      case 19:  // Pause
+      case 29:  // Pause
         await this.editKeyBinding('pause', 'Pause');
         break;
-      case 21:  // Save & Exit
+      case 31:  // Save & Exit
         menu.emit('keypress', null, { name: 'escape' });
         return;
     }
@@ -323,6 +374,7 @@ export class SettingsScreen {
       const keyHandler = (_ch: any, key: any) => {
         if (key.name === 'left') {
           newValue = Math.max(min, newValue - step);
+          this.sounds.playSfx('menu_select');  // Sound for value adjustment
           inputBox.setContent(`{bold}${key.toUpperCase()}{/bold}\n\n` +
             `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
             `Range: ${min} - ${max}\n\n` +
@@ -331,6 +383,7 @@ export class SettingsScreen {
           this.screen.render();
         } else if (key.name === 'right') {
           newValue = Math.min(max, newValue + step);
+          this.sounds.playSfx('menu_select');  // Sound for value adjustment
           inputBox.setContent(`{bold}${key.toUpperCase()}{/bold}\n\n` +
             `Current: {yellow-fg}${newValue}{/yellow-fg}\n` +
             `Range: ${min} - ${max}\n\n` +
@@ -339,11 +392,13 @@ export class SettingsScreen {
           this.screen.render();
         } else if (key.name === 'return' || key.name === 'enter') {
           (this.state.settings as any)[key] = newValue;
+          this.sounds.playSfx('menu_ok');  // Sound for confirmation
           this.screen.removeListener('keypress', keyHandler);
           inputBox.destroy();
           this.screen.render();
           resolve();
         } else if (key.name === 'escape') {
+          this.sounds.playSfx('menu_select');  // Sound for cancel
           this.screen.removeListener('keypress', keyHandler);
           inputBox.destroy();
           this.screen.render();
@@ -390,19 +445,23 @@ export class SettingsScreen {
       const keyHandler = (_ch: any, key: any) => {
         if (key.name === 'left') {
           volume = Math.max(0, volume - 5);
+          this.sounds.playSfx('menu_select');  // Sound for volume adjustment
           updateDisplay();
           this.screen.render();
         } else if (key.name === 'right') {
           volume = Math.min(100, volume + 5);
+          this.sounds.playSfx('menu_select');  // Sound for volume adjustment
           updateDisplay();
           this.screen.render();
         } else if (key.name === 'return' || key.name === 'enter') {
           this.state.settings[settingKey] = volume / 100;
+          this.sounds.playSfx('menu_ok');  // Sound for confirmation
           this.screen.removeListener('keypress', keyHandler);
           volumeBox.destroy();
           this.screen.render();
           resolve();
         } else if (key.name === 'escape') {
+          this.sounds.playSfx('menu_select');  // Sound for cancel
           this.screen.removeListener('keypress', keyHandler);
           volumeBox.destroy();
           this.screen.render();
@@ -496,5 +555,41 @@ export class SettingsScreen {
 
       this.screen.on('keypress', keyHandler);
     });
+  }
+
+  /**
+   * Adjust glow intensity
+   */
+  private async adjustGlowIntensity(): Promise<void> {
+    const current = Math.floor(this.state.settings.glowIntensity * 100);
+    const min = 0;
+    const max = 100;
+    const step = 10;
+
+    // Cycle through values
+    let next = current + step;
+    if (next > max) next = min;
+
+    this.state.settings.glowIntensity = next / 100;
+  }
+
+  /**
+   * Cycle clear style
+   */
+  private async cycleClearStyle(): Promise<void> {
+    const styles: Array<'inward' | 'outward' | 'instant' | 'directional'> = ['inward', 'outward', 'instant', 'directional'];
+    const current = styles.indexOf(this.state.settings.clearStyle);
+    const next = (current + 1) % styles.length;
+    this.state.settings.clearStyle = styles[next];
+  }
+
+  /**
+   * Cycle floating text mode
+   */
+  private async cycleFloatTextMode(): Promise<void> {
+    const modes: Array<'off' | 'offboard' | 'all'> = ['off', 'offboard', 'all'];
+    const current = modes.indexOf(this.state.settings.floatTextMode);
+    const next = (current + 1) % modes.length;
+    this.state.settings.floatTextMode = modes[next];
   }
 }

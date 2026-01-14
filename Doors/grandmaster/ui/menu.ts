@@ -41,6 +41,15 @@ export class MenuScreen {
     // Enable mouse control for menu navigation
     this.screen.program.enableMouse();
 
+    // Clear terminal buffer to prevent ghosting from previous screens (e.g., tetrinet lobby)
+    // This is the same fix used in app.ts startup for modem speed compatibility
+    this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+    this.screen.alloc();
+    this.screen.render();
+
+    // Wait for screen clear to propagate (critical for modem speeds)
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     return new Promise((resolve) => {
       // Play menu music
       this.sounds.playMusic('menu', true);
@@ -140,6 +149,8 @@ export class MenuScreen {
 
       // Update description when selection changes
       menu.on('select item', (_item: any, index: number) => {
+        // Play navigation sound when scrolling through menu
+        this.sounds.playSfx('menu_select');
         descBox.setContent(this.getModeDescription(index));
         this.screen.render();
       });
@@ -167,7 +178,7 @@ export class MenuScreen {
         height: 1,
         align: 'center',
         style: { fg: 'gray', bg: 'black' },
-        content: 'Arrow Keys: Navigate  |  Enter: Select  |  Q: Quit',
+        content: 'Arrow Keys: Navigate  |  Enter: Select  |  ESC/Q: Quit',
       });
 
       // Ensure title is rendered on top (z-index fix)
@@ -193,7 +204,7 @@ export class MenuScreen {
         ];
 
         const selection = selections[index];
-        this.sounds.playSfx('move');
+        this.sounds.playSfx('menu_ok');
 
         // Clean up
         background.destroy();
@@ -209,6 +220,11 @@ export class MenuScreen {
 
       // Handle quit key
       menu.key(['q', 'Q'], () => {
+        menu.emit('select', null, 12);  // Trigger quit selection (index 12)
+      });
+
+      // Handle ESC key - same as quit
+      menu.key(['escape'], () => {
         menu.emit('select', null, 12);  // Trigger quit selection (index 12)
       });
 

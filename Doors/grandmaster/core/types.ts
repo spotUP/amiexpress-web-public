@@ -75,6 +75,7 @@ export interface GameState {
   grade: string;
   combo: number;
   backToBack: boolean;
+  backToBackCount: number;  // Track chain length for B2B visual bonus
 
   // T-Spin tracking (HeborisCE tspin_flag system)
   lastMove: 'rotate' | 'move' | 'drop' | null;
@@ -157,6 +158,18 @@ export interface PlayerSettings {
   musicVolume: number;
   sfxVolume: number;
   keyBindings: KeyBindings;
+
+  // Visual Effects Settings
+  blockGlow: boolean;                 // Enable/disable block glow system
+  glowIntensity: number;              // 0.0-1.0 multiplier
+  clearStyle: 'inward' | 'outward' | 'instant' | 'directional';  // Line clear animation style
+  clearDirection: 'in' | 'out';       // For directional mode
+  clearAnimationSpeed: number;        // 0.5-2.0 multiplier (0.5=slow, 2.0=fast)
+  placementEffects: boolean;          // Enable/disable piece placement effects
+  floatTextMode: 'off' | 'offboard' | 'all';  // Floating text mode
+  b2bGlowEnabled: boolean;            // Enable/disable B2B secondary glow
+  connectedBlocks: boolean;           // Enable/disable connected block rendering
+  animationIntensity: 'low' | 'normal' | 'high';  // Global animation speed multiplier
 }
 
 // ============================================================================
