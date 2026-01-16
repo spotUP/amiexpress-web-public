@@ -474,14 +474,74 @@ echo ""
 
 fi  # End of QUICK_MODE check (if QUICK_MODE=true, all above was skipped)
 
+# Lockfile to prevent multiple instances
+LOCKFILE="/tmp/amiexpress-servers.lock"
+if [ -f "$LOCKFILE" ]; then
+  LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
+  if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+    printf "%b\n" "${RED}[ERROR] Servers already running (PID $LOCK_PID)${RESET}"
+    printf "%b\n" "${YELLOW}Run ./dev/scripts/kill-servers.sh first${RESET}"
+    exit 1
+  else
+    # Stale lock file, remove it
+    rm -f "$LOCKFILE"
+  fi
+fi
+echo $$ > "$LOCKFILE"
+
 # Kill any existing servers first
 ./dev/scripts/kill-servers.sh || exit 1
 
 printf "%b\n" "${CYAN}→ Starting servers (unified deployment - all frontends served from backend)...${RESET}"
 echo ""
 
-# Trap to kill all servers on exit
-trap 'echo ""; printf "%b\n" "${CYAN}→ Stopping servers...${RESET}"; kill $BACKEND_PID $PREVIEW_PID 2>/dev/null; wait; printf "%b\n" "${GREEN}[OK] Servers stopped${RESET}"; exit' EXIT INT TERM
+# Enhanced trap to kill all servers and cleanup on exit
+# - Kill entire process group (all children)
+# - Remove lockfile
+# - Wait for graceful shutdown
+cleanup_servers() {
+  echo ""
+  printf "%b\n" "${CYAN}→ Stopping servers...${RESET}"
+
+  # Kill backend process and all children
+  if [ -n "$BACKEND_PID" ]; then
+    # Try graceful shutdown first
+    kill -TERM "$BACKEND_PID" 2>/dev/null
+
+    # Also kill any child processes (watch-doors spawns backend)
+    pkill -P "$BACKEND_PID" 2>/dev/null
+  fi
+
+  # Kill preview process
+  if [ -n "$PREVIEW_PID" ]; then
+    kill -TERM "$PREVIEW_PID" 2>/dev/null
+    pkill -P "$PREVIEW_PID" 2>/dev/null
+  fi
+
+  # Give processes 2 seconds to terminate gracefully
+  sleep 2
+
+  # Force kill if still alive
+  if [ -n "$BACKEND_PID" ]; then
+    kill -9 "$BACKEND_PID" 2>/dev/null
+    pkill -9 -P "$BACKEND_PID" 2>/dev/null
+  fi
+
+  if [ -n "$PREVIEW_PID" ]; then
+    kill -9 "$PREVIEW_PID" 2>/dev/null
+    pkill -9 -P "$PREVIEW_PID" 2>/dev/null
+  fi
+
+  # Wait for all children
+  wait 2>/dev/null
+
+  # Remove lockfile
+  rm -f "$LOCKFILE"
+
+  printf "%b\n" "${GREEN}[OK] Servers stopped${RESET}"
+}
+
+trap cleanup_servers EXIT INT TERM
 
 # Start backend in background (conditionally filter output, always save to log)
 # Backend serves all three frontends from built static files:
@@ -496,8 +556,10 @@ if [ "$WATCH_DOORS" = true ]; then
   printf "%b\n" "   ${CYAN}Door file watcher will auto-restart backend when doors change${RESET}"
   if [ "$DEBUG_MODE" = true ]; then
     printf "%b\n" "   ${CYAN}DEBUG_68K enabled for verbose 68K logging${RESET}"
+    # Start in background with job control for process group
     (cd "$REPO_ROOT" && DEBUG_68K=1 XIM_DEBUG_JSON=1 XIM_DEBUG_AMIGA=1 DOOR_CALL_TRACKING=1 DEBUG_68K_NATIVE=1 AEDOOR_TRACE=1 DEBUG_LIBRARY_TRAPS=1 BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG") &
   else
+    # Start in background with job control for process group
     (cd "$REPO_ROOT" && BBS_DATA_DIR="$REPO_ROOT" NODE_ENV=development npx tsx dev/scripts/watch-doors.ts 2>&1 | tee "$BACKEND_LOG" | grep --line-buffered -E "^(✅|\[WEB\]|Database initialized|Error|Warning|\[WATCH\]|Restarting)") &
   fi
   BACKEND_PID=$!
