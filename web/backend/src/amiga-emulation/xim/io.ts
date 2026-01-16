@@ -62,10 +62,6 @@ export class XIMIOHandler {
   // Without serialization, outputs interleave causing display corruption
   private fileDisplayLock: Promise<void> = Promise.resolve();
 
-  // Direct socket emit function that bypasses modem emulator throttling
-  // Doors should output at full speed regardless of user's modem speed preference
-  private directEmit: (event: string, ...args: any[]) => boolean;
-
   constructor(
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
@@ -80,10 +76,25 @@ export class XIMIOHandler {
     this.messageParser = messageParser;
     this.state = state;
     this.bbsSession = bbsSession || {};
+  }
 
-    // Use direct socket emit to bypass modem emulator throttling
-    // Doors output at full speed regardless of user's modem speed preference
-    this.directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
+  /**
+   * Direct emit that bypasses modem emulator throttling
+   * Doors should output at full speed regardless of user's modem speed preference
+   * Must check _directEmit at call time since modem emulator may install after XIM handler
+   */
+  /**
+   * Direct emit that bypasses modem emulator throttling
+   * Doors output at full speed regardless of user's modem speed preference
+   */
+  private directEmit(event: string, ...args: any[]): boolean {
+    const socket = this.socket as any;
+    // Use the direct emit stored by modem emulator, or call emit on prototype
+    if (socket._directEmit) {
+      return socket._directEmit(event, ...args);
+    }
+    // No modem emulator installed, use regular emit
+    return this.socket.emit(event, ...args);
   }
 
   /**
@@ -93,6 +104,26 @@ export class XIMIOHandler {
     return (
       this.waitingForLineInput || this.waitingForHotkey || this.waitingForExtHotkey || this.waitingForPause
     );
+  }
+
+  /**
+   * Check if there's queued input available for immediate processing
+   */
+  hasQueuedInput(): boolean {
+    return this.inputQueue.length > 0;
+  }
+
+  /**
+   * Clear any queued input from before the door started.
+   * Called when a new door session begins to prevent leftover keystrokes
+   * (e.g., Enter presses during login) from auto-responding to door prompts.
+   */
+  clearQueuedInput(): void {
+    const queueSize = this.inputQueue.length;
+    if (queueSize > 0) {
+      debugLog(`[XIMIOHandler] Clearing ${queueSize} queued inputs from before door started`);
+      this.inputQueue.length = 0;
+    }
   }
 
   /**
@@ -125,6 +156,13 @@ export class XIMIOHandler {
    */
   queueInput(data: string): void {
     if (this.state.carrierDropped) {
+      return;
+    }
+
+    // CRITICAL: Filter out mouse event JSON that leaks through from frontend
+    // These are JSON objects like {"type":"mouse"...} that shouldn't be treated as text input
+    if (data.startsWith('{"type":"mous') || data.startsWith('{"type":"key')) {
+      debugLog(`[XIMIOHandler] Ignoring mouse/key event JSON: ${data.substring(0, 30)}...`);
       return;
     }
 
@@ -224,8 +262,13 @@ export class XIMIOHandler {
    * IMPORTANT: Pause emulator to wait for user input.
    */
   handleLineInput(msg: XIMMessage): void {
+    // Mark that this door uses XIM input commands - prevents native input injection
+    this.state.usedXimInput = true;
+
     if (this.state.carrierDropped) {
       this.reply(msg, -1, '');
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume after early return
       return;
     }
 
@@ -242,13 +285,23 @@ export class XIMIOHandler {
     // This prevents the stuck polling issue with quicklogon and similar doors.
     if (defaultText.length === 0 && maxLen >= 65536) {
       this.reply(msg, 1, '');
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume after early return
       return;
     }
 
     // FIX: If door sends JH_LI with data=0 (maxLen=0), it's a confirm-only prompt.
     // In express.e lineInput, maxLen=0 means user can only press Enter (can't add chars).
     // Reference: express.e:2335 - (ch>31) AND (EstrLen(outputString)<maxLen) - no chars can be added when maxLen=0
-    if (msg.data === 0 && defaultText.length > 0) {
+    if (msg.data === 0) {
+      // When data=0 and string is empty, door just wants to sync/continue - auto-respond
+      if (defaultText.length === 0) {
+        this.reply(msg, 1, '');
+        this.execLibrary.replyMsg(msg.msgAddr);
+        this.emulator.resume();
+        return;
+      }
+      // When data=0 and string has content, handle as confirm prompt or file path
       // Check if string is a temp file path (RAM: or T:) that doors use for output display
       // Doors like zOOsTAT write to temp files then send the path via JH_LI expecting display
       const upperText = defaultText.toUpperCase();
@@ -276,6 +329,9 @@ export class XIMIOHandler {
         this.messageParser.writeString(msg.stringPtr, defaultText, DoorConstants.MESSAGE_STRING_CAPACITY);
       }
       this.reply(msg, 1);
+      // CRITICAL: Send reply to door's mn_ReplyPort so it wakes from Wait()
+      this.execLibrary.replyMsg(msg.msgAddr);
+      this.emulator.resume();  // CRITICAL: Resume after early return (zOOsTAT fix)
       return;
     }
 
@@ -296,6 +352,39 @@ export class XIMIOHandler {
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';  // Don't pre-fill with file path
     this.lineInputMaxLen = maxLen;
+
+    // CRITICAL FIX 2026-01-15: Drain any queued input into the line buffer.
+    // Due to async socket events, user input can arrive BEFORE we set waitingForLineInput.
+    // Such input ends up in inputQueue instead of being captured for line input.
+    // This caused 5D-Edit and other doors to ignore typed characters.
+    while (this.inputQueue.length > 0 && this.lineInputBuffer.length < maxLen) {
+      const token = this.inputQueue.shift()!;
+      if (token === '\r' || token === '\n') {
+        // Enter key - complete line input immediately
+        this.completeLineInput();
+        return;
+      }
+      if (token === '\b' || token === '\x7f') {
+        // Backspace
+        if (this.lineInputBuffer.length > 0) {
+          this.lineInputBuffer = this.lineInputBuffer.slice(0, -1);
+          this.directEmit('ansi-output', '\b \b');
+        }
+        continue;
+      }
+      // Add to buffer and echo
+      this.lineInputBuffer += token;
+      if (token.length === 1 && token >= ' ' && token <= '~') {
+        this.directEmit('ansi-output', token);
+      }
+    }
+
+    // CRITICAL FIX 2026-01-15: Pause emulator while waiting for line input!
+    // Without this, the door continues executing and may send JH_HK requests,
+    // which then take precedence in queueInput() causing characters to be
+    // treated as hotkey responses instead of accumulating in line buffer.
+    // This caused Dre!Wall and other doors to "submit after 1-2 characters".
+    this.emulator.pause();
   }
 
   /**
@@ -329,13 +418,17 @@ debugLog(
     const dataVal = this.state.carrierDropped ? -1 : 1;
     this.reply(msg, dataVal);
 
+    // CRITICAL: Now that input is received, send ReplyMsg to door
+    // This puts the message on mn_ReplyPort where door is waiting
+    this.execLibrary.replyMsg(msg.msgAddr);
+
     // Reset state
     this.waitingForLineInput = false;
     this.lineInputMessage = null;
     this.lineInputBuffer = '';
     this.lineInputMaxLen = DoorConstants.MESSAGE_STRING_CAPACITY;
 
-debugLog('[XIMIOHandler] Line input completed, resuming emulator');
+debugLog('[XIMIOHandler] Line input completed, reply sent, resuming emulator');
     this.emulator.resume();
   }
 
@@ -364,6 +457,11 @@ debugLog(
     }
 
     this.reply(msg, bytesWritten);
+
+    // CRITICAL FIX 2026-01-15: Send reply to door's mn_ReplyPort
+    // AEDoor.library doors (TurboLister) poll their reply port for responses.
+    // Without this, the door spins forever waiting for the reply.
+    this.execLibrary.replyMsg(msg.msgAddr);
   }
 
   /**
@@ -460,6 +558,9 @@ debugLog(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ?
    * IMPORTANT: Pause emulator to wait for user input.
    */
   handlePromptMessage(msg: XIMMessage): void {
+    // Mark that this door uses XIM input commands - prevents native input injection
+    this.state.usedXimInput = true;
+
     const prompt = this.getMessageString(msg);
     const maxLength = Math.min(
       msg.data && msg.data > 0 ? msg.data : DoorConstants.MESSAGE_STRING_CAPACITY,
@@ -468,6 +569,8 @@ debugLog(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ?
 
     if (this.state.carrierDropped) {
       this.reply(msg, -1, '');
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume after early return
       return;
     }
 
@@ -547,8 +650,13 @@ debugLog(`[XIMIOHandler] Multi-char token, returning first: ${token.charCodeAt(0
 debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
+    // Mark that this door uses XIM input commands - prevents native input injection
+    this.state.usedXimInput = true;
+
     if (this.state.carrierDropped) {
       this.reply(msg, -1, '');
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume after early return
       return;
     }
 
@@ -561,12 +669,18 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
     if (this.inputQueue.length > 0) {
       const token = this.inputQueue.shift()!;
       const keyData = this.processHotkeyToken(token);
-
-      this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
       const keyCode = keyData.charCodeAt(0);
+
+      // CRITICAL FIX 2026-01-15: Write character code to msg.command, NOT XIM port!
+      // express.e:3438-3448: msg.command:=readChar(doorTimeout,...)
+      // Doors expect the character code in msg.command. Writing getXimPort() (1 or 2)
+      // caused doors to see Ctrl+A/Ctrl+B instead of the actual key pressed.
+      this.messageParser.writeCommand(msg.msgAddr, keyCode);
       const keyName = keyCode === 13 ? 'ENTER' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
 debugLog(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
       this.reply(msg, 1, keyData);
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume when input was queued (pre-paused by callback)
       return;
     }
 
@@ -603,14 +717,20 @@ debugLog(`  Key name: ${keyName}`);
 debugLog(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
 debugLog('========================================');
 
-    this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
+    // CRITICAL FIX 2026-01-15: Write character code to msg.command, NOT XIM port!
+    // express.e:3438-3448: msg.command:=readChar(doorTimeout,...)
+    // Doors expect the character code in msg.command.
+    this.messageParser.writeCommand(msg.msgAddr, keyCode);
     this.reply(msg, this.state.carrierDropped ? -1 : 1, keyData);
+
+    // CRITICAL: Now that input is received, send ReplyMsg to door
+    this.execLibrary.replyMsg(msg.msgAddr);
 
     this.waitingForHotkey = false;
     this.hotkeyMessage = null;
 
     // Resume emulator execution now that we have input
-debugLog('[XIMIOHandler] JH_HK: Resuming emulator');
+debugLog('[XIMIOHandler] JH_HK: Reply sent, resuming emulator');
     this.emulator.resume();
   }
 
@@ -639,11 +759,14 @@ debugLog('========================================');
     this.messageParser.writeCommand(msg.msgAddr, charCode);
     this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
+    // CRITICAL: Now that input is received, send ReplyMsg to door
+    this.execLibrary.replyMsg(msg.msgAddr);
+
     this.waitingForExtHotkey = false;
     this.extHotkeyMessage = null;
 
     // Resume emulator execution now that we have input
-debugLog('[XIMIOHandler] JH_ExtHK: Resuming emulator');
+debugLog('[XIMIOHandler] JH_ExtHK: Reply sent, resuming emulator');
     this.emulator.resume();
   }
 
@@ -661,9 +784,14 @@ debugLog('[XIMIOHandler] JH_ExtHK: Resuming emulator');
 debugLog('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
     this.state.lineCount = 0;
 
+    // Mark that this door uses XIM input commands - prevents native input injection
+    this.state.usedXimInput = true;
+
     if (this.state.carrierDropped) {
       this.messageParser.writeCommand(msg.msgAddr, -1);
       this.reply(msg, -1);
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume after early return
       return;
     }
 
@@ -674,6 +802,8 @@ debugLog('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
       this.messageParser.writeCommand(msg.msgAddr, charCode);
 debugLog(`  [READ] Extended hotkey: '${char}' (code=${charCode})`);
       this.reply(msg, 1);
+      this.execLibrary.replyMsg(msg.msgAddr);  // Send to door's reply port
+      this.emulator.resume();  // CRITICAL: Resume when input was queued (pre-paused by callback)
       return;
     }
 
@@ -842,8 +972,6 @@ console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
     const doDisplay = async () => {
       const targetPath = this.getMessageString(msg).trim();
       const forceNonStop = msg.data === 1;
-const testFs = require('fs');
-testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] handleShowFile START: targetPath="${targetPath}" forceNonStop=${forceNonStop}\n`);
 
       if (!targetPath) {
         this.reply(msg, 0);
@@ -863,7 +991,6 @@ testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] handl
             ];
 
       const target = this.findFirstExisting(candidates);
-testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] handleShowFile: resolved="${resolved}" candidates=${JSON.stringify(candidates)} target="${target}"\n`);
       if (!target) {
 console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
         this.reply(msg, 0);
@@ -1317,11 +1444,6 @@ console.log(`[XIM-DEBUG] Filtering Amiga cursor codes: ${JSON.stringify(amigaCur
       const rawBuffer = amigafs.readFileSync(filePath) as Buffer;
       // Convert from ISO-8859-1 (Amiga standard) to UTF-8 for display
       const content = iconv.decode(rawBuffer, 'iso-8859-1');
-console.log(`[XIM-DEBUG] displayTextFile: ${filePath}, rawBuffer.length=${rawBuffer.length}, content.length=${content.length}`);
-console.log(`[XIM-DEBUG] First 100 bytes hex: ${rawBuffer.slice(0, 100).toString('hex')}`);
-// Write to a test file to verify code path is hit
-const testFs = require('fs');
-testFs.appendFileSync('/tmp/xim-debug.txt', `[${new Date().toISOString()}] displayTextFile: ${filePath}\n`);
 
       // Process MCI codes in file contents (express.e:6790-6820)
       try {
@@ -1473,8 +1595,12 @@ debugLog('[XIMIOHandler] Pause acknowledged, resuming');
 
     // Reply to the message that triggered the pause
     this.reply(msg, data);
-    
+
+    // CRITICAL: Send ReplyMsg to door so it can continue
+    this.execLibrary.replyMsg(msg.msgAddr);
+
     // Resume emulator
+debugLog('[XIMIOHandler] Pause complete, reply sent, resuming');
     this.emulator.resume();
   }
 

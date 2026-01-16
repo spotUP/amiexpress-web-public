@@ -308,7 +308,8 @@ console.log(`  Raw16 data=${data16} cmd=${cmd16} node=${node16} line=${line16}`)
   }
 
   writeStringPointer(msgAddr: number, value: number): boolean {
-    const layout = this.getMessageLayout(this.getMessageLength(msgAddr));
+    const msgLen = this.getMessageLength(msgAddr);
+    const layout = this.getMessageLayout(msgLen);
     const offsets = this.getLayoutOffsets(layout);
     if (!this.hasField(msgAddr, offsets.stringPtr, 4)) {
       return false;

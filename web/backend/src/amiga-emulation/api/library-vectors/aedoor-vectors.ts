@@ -148,21 +148,11 @@ console.log("[AEDoorLibrary][Trap] CreateComm intercepted");
       return lib.hotKey();
     },
   },
-  {
-    offset: -132, // LVO -132 (0xFF7C)
-    name: "PreCreateComm",
-    handler: (emu, lib: AEDoorLibrary) => {
-console.log("[AEDoorLibrary][Trap] PreCreateComm intercepted");
-      return lib.preCreateComm();
-    },
-  },
-  {
-    offset: -138, // LVO -138 (0xFF76)
-    name: "PostDeleteComm",
-    handler: (emu, lib: AEDoorLibrary) => {
-      return lib.postDeleteComm();
-    },
-  },
+  // NOTE: PreCreateComm (-132) and PostDeleteComm (-138) are intentionally NOT trapped.
+  // These functions have complex internal logic (call createComm, send messages, cleanup)
+  // that our TypeScript stubs don't replicate properly.
+  // Letting them execute natively in the AEDoor.library binary works better.
+  // The native library is loaded at 0x200000 with JMP tables pointing to real code.
   {
     offset: -24, // Some doors call this slot; provide a safe stub
     name: "Stub_-24",

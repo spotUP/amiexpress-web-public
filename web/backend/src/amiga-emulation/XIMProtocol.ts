@@ -217,6 +217,22 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
   }
 
   /**
+   * Check if there's queued input available for immediate processing
+   */
+  hasQueuedInput(): boolean {
+    return this.ioHandler.hasQueuedInput();
+  }
+
+  /**
+   * Clear any queued input from before the door started.
+   * Called when a new door session begins to prevent leftover keystrokes
+   * (e.g., Enter presses during login) from auto-responding to door prompts.
+   */
+  clearQueuedInput(): void {
+    this.ioHandler.clearQueuedInput();
+  }
+
+  /**
    * Queue input from terminal for door to read via GETKEY or JH_LI
    * Called from AmigaDoorSession when 'door:input' event received
    */
@@ -322,11 +338,20 @@ debugLog(`[XIMProtocol] Input injected successfully`);
     const isRegistered = this.state.registered;
     const isWaiting = this.ioHandler.isWaitingForLineInput();
     const isNativeDoor = this.state.isNativeDoor === true;
+    const usedXimInput = this.state.usedXimInput === true;
 
-    debugLog(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor}`);
+    debugLog(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor} usedXimInput=${usedXimInput}`);
 
     // Must be registered
     if (!isRegistered) {
+      return false;
+    }
+
+    // CRITICAL FIX 2026-01-15: If door has EVER used XIM input commands (JH_HK, JH_LI, JH_PM),
+    // NEVER inject native input. The door expects replies to its requests, not injected messages.
+    // This fixes dRE!WAll and other XIM doors that were receiving double messages.
+    if (usedXimInput) {
+      debugLog(`[XIMProtocol] shouldInjectNativeInput: Door used XIM input commands - NOT injecting`);
       return false;
     }
 
@@ -404,12 +429,6 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
    * Routes to appropriate specialized handler based on command type
    */
   async handleMessage(msg: XIMMessage): Promise<void> {
-    // UNCONDITIONAL TRACE: Log ALL incoming commands to verify handleMessage is being called
-    // Write to same log file as door-logging.util.ts so we can see it
-    const fs = require('fs');
-    const path = require('path');
-    const logPath = path.join(process.cwd(), '../../logs/door-68k.log');
-    fs.appendFileSync(logPath, `[XIMProtocol:TRACE] handleMessage() CALLED: cmd=${msg.command}\n`);
     const humanName = this.messageParser.getCommandName(msg.command);
 
     // Log incoming message to XIM debug log
@@ -547,21 +566,12 @@ debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (corr
       return;
     }
 
-    // Registration gate
+    // NOTE: No registration gate! Express.e (lines 4352-4370) processes ALL XIM
+    // messages without requiring JH_REGISTER first. Doors like zOOsTAT send JH_LI
+    // before JH_REGISTER as part of their initialization sequence.
+    // The registration just records the door is active - it doesn't gate commands.
     if (!this.state.registered) {
-console.warn('[XIMProtocol] Ignoring command before JH_REGISTER handshake');
-      this.messageParser.writeData(msg.msgAddr, 0);
-      // Log outgoing reply to XIM structured logger
-      ximLogger.log('warn', 'send', this.doorCommand || 'UNKNOWN', this.bbsSession.nodeId || 1, {
-        type: `${humanName}_REJECTED`,
-        typeCode: msg.command,
-        param: 0,
-      }, {
-        msgAddr: `0x${msg.msgAddr.toString(16)}`,
-        message: 'Rejected: door not registered',
-      });
-      this.execLibrary.replyMsg(msg.msgAddr);
-      return;
+debugLog(`[XIMProtocol] Processing command ${humanName} before JH_REGISTER (allowed per express.e)`);
     }
 
     if (this.state.shuttingDown && msg.command !== XIMCommand.JH_SHUTDOWN) {
@@ -1197,6 +1207,10 @@ debugLog(
   private handleSystemCommand(msg: any): void {
     switch (msg.command) {
       case XIMCommand.JH_REGISTER:
+        // CRITICAL FIX 2026-01-15: Clear any buffered input from before the door started.
+        // User may have pressed Enter multiple times during login, and those keystrokes
+        // would otherwise auto-respond to the door's JH_HK prompts (ghost input bug).
+        this.clearQueuedInput();
         this.systemCommandsHandler.handleRegister(msg);
         break;
 
@@ -1366,19 +1380,11 @@ debugLog(
 
     this.messageParser.writeData(msg.msgAddr, data);
 
-    // Use bidirectional XIM protocol - send reply back to AEDoorPort
-    // This matches how handleRegister sends replies
-    const ximPortAddr = this.state.ximPortAddr;
-    if (ximPortAddr && ximPortAddr !== 0) {
-      const NT_REPLYMSG = 6;
-      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
-      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
-      debugLog(`[XIMProtocol] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
-    } else {
-      // Fallback to standard ReplyMsg if no XIM port (shouldn't happen for XIM doors)
-      this.execLibrary.replyMsg(msg.msgAddr);
-      debugLog(`[XIMProtocol] Reply sent via ReplyMsg to door's reply port (fallback)`);
-    }
+    // CRITICAL FIX 2026-01-14: Use standard ReplyMsg() to send reply to door's mn_ReplyPort
+    // The door calls Wait() on its reply port's signal bit (typically 0x21000), NOT on AEDoorPort (0x40000)
+    // Using bidirectional PutMsg to AEDoorPort signals the wrong bit and leaves the door stuck in Wait()
+    this.execLibrary.replyMsg(msg.msgAddr);
+    debugLog(`[XIMProtocol] Reply sent via ReplyMsg to door's reply port 0x${msg.replyPort?.toString(16) || 'unknown'}`)
   }
 
   /**

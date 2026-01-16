@@ -144,16 +144,13 @@ debugLog(
       message: 'Door registration acknowledged',
     });
 
-    // Use bidirectional XIM protocol - send reply back to AEDoorPort
-    if (this.ximPortAddr !== 0) {
-      const NT_REPLYMSG = 6;
-      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
-      this.execLibrary.putMsg(this.ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
-debugLog(`[XIMSystem] Reply sent via PutMsg to ximPort=0x${this.ximPortAddr.toString(16)} (bidirectional XIM)`);
-    } else {
-      this.execLibrary.replyMsg(msg.msgAddr);
-debugLog(`[XIMSystem] Reply sent via ReplyMsg to door's reply port (fallback)`);
-    }
+    // CRITICAL FIX 2026-01-14: Use standard ReplyMsg() for JH_REGISTER_REPLY
+    // The door's mn_ReplyPort (e.g., 0x104500) has a signal bit that the door
+    // is waiting for in Wait(). Using PutMsg to AEDoorPort signals the WRONG bit
+    // (AEDoorPort's bit 18 vs door's reply port bit 12 or 17).
+    // ReplyMsg sends to mn_ReplyPort and signals the correct task/bit.
+    this.execLibrary.replyMsg(msg.msgAddr);
+debugLog(`[XIMSystem] Reply sent via ReplyMsg to door's reply port 0x${msg.replyPort?.toString(16) || 'unknown'}`)
 
 debugLog(`[XIMSystem] Registration acknowledged`);
     // express.e only sets msg.command for JH_REGISTER; avoid post-register memory writes.

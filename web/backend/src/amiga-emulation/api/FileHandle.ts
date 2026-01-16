@@ -68,6 +68,9 @@ export class FileHandle {
    */
   private snapshotSize: number | null = null;
 
+  /** Skip snapshotSize - for temp files that may be rewritten by Execute() */
+  private skipSnapshot: boolean = false;
+
   constructor(
     amiPath: string,
     sysPath: string,
@@ -77,6 +80,7 @@ export class FileHandle {
       isNil?: boolean;
       isConsole?: boolean;
       memoryBuffer?: Buffer;
+      skipSnapshot?: boolean; // Don't snapshot file size - for temp files
     } = {}
   ) {
     this.amiPath = amiPath;
@@ -87,6 +91,7 @@ export class FileHandle {
     this.isNil = options.isNil || false;
     this.isConsole = options.isConsole || false;
     this.memoryBuffer = options.memoryBuffer || null;
+    this.skipSnapshot = options.skipSnapshot || false;
   }
 
   /**
@@ -134,7 +139,8 @@ console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" f
       // For read-only files, snapshot the file size at open time.
       // This prevents infinite loops when reading files that grow during read
       // (e.g., CallersLog being appended to while ByteKillHandler reads it).
-      if (mode === 'r') {
+      // Skip snapshot for temp files (T:) that may be rewritten by Execute().
+      if (mode === 'r' && !this.skipSnapshot) {
         const stats = fs.fstatSync(this.fd);
         this.snapshotSize = stats.size;
       }

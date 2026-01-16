@@ -89,7 +89,17 @@ debugLog(`  [READ] DT_NAME (file scan context): "${fileCount}" files in Conf${co
           } else {
             // Normal context: return username
             const username = user?.username || 'Guest';
-            this.messageParser.writeString(stringAddr, username, 31);
+            // CRITICAL FIX 2026-01-15: Use writeMessageString to update BOTH embedded buffer AND strPtr
+            // Some doors (like dRE!WAll) read the username via strPtr, not the embedded buffer.
+            // Without this fix, doors get garbage/empty username and fail to save user entries.
+            this.messageParser.writeMessageString(msg.msgAddr, username);
+
+            // Also clear the rest of the buffer to avoid garbage data confusing doors
+            // that might read fixed-length fields
+            for (let i = username.length + 1; i < 32; i++) {
+              this.emulator.writeMemory(stringAddr + i, 0);
+            }
+
             const verify = this.messageParser.readString(stringAddr, 31);
 debugLog(`  [READ] DT_NAME verify buffer: "${verify}"`);
 debugLog(`  [READ] DT_NAME: "${username}"`);
@@ -138,7 +148,13 @@ debugLog(`  [WRITE] DT_PASSWORD set (length=${newPwd.length})`);
       case XIMCommand.DT_LOCATION:
         if (isRead) {
           const location = user?.location || 'Unknown';
-          this.messageParser.writeString(stringAddr, location, 30);
+          // CRITICAL FIX 2026-01-15: Use writeMessageString to update BOTH embedded buffer AND strPtr
+          // Some doors read the location via strPtr, not the embedded buffer.
+          this.messageParser.writeMessageString(msg.msgAddr, location);
+          // Also clear the rest of the buffer to avoid garbage data
+          for (let i = location.length + 1; i < 32; i++) {
+            this.emulator.writeMemory(stringAddr + i, 0);
+          }
 debugLog(`  [READ] DT_LOCATION: "${location}"`);
         } else {
           const newLocation = this.messageParser.readString(stringAddr, 30);
@@ -199,7 +215,9 @@ debugLog(`  [WRITE] DT_SLOTNUMBER: ${newSlot}`);
       case XIMCommand.DT_SECSTATUS:
         if (isRead) {
           const secLevel = user?.secLevel || 10;
-          this.messageParser.writeString(stringAddr, secLevel.toString(), 200);
+          // CRITICAL FIX 2026-01-15: Use writeMessageString to update BOTH embedded buffer AND strPtr
+          // Some doors read security status via strPtr
+          this.messageParser.writeMessageString(msg.msgAddr, secLevel.toString());
 debugLog(`  [READ] DT_SECSTATUS: ${secLevel}`);
         } else {
           const newLevel = parseInt(this.messageParser.readString(stringAddr, 200));
@@ -285,7 +303,9 @@ debugLog(`  [WRITE] DT_TIMELIMIT: ${newLimit}`);
                           user?.linesPerScreen ||
                           (user as any)?.pageLength ||
                           24;
-          this.messageParser.writeString(stringAddr, lineLen.toString(), 200);
+          // CRITICAL: Use writeMessageString to update BOTH embedded buffer AND strPtr
+          // Some doors (like JoinCnf) read via strPtr, not the embedded buffer
+          this.messageParser.writeMessageString(msg.msgAddr, lineLen.toString());
           const verify = this.messageParser.readString(stringAddr, 200);
 debugLog(`  [READ] DT_LINELENGTH verify buffer: "${verify}"`);
 debugLog(`  [READ] DT_LINELENGTH: ${lineLen} (screen height in lines)`);
@@ -599,27 +619,68 @@ debugLog(`  [WRITE] DT_TIMEOUT: ${newTimeout}`);
         break;
 
       case XIMCommand.DT_CONFACCESS:
-        // express.e:3777-3778: Uses 10 bytes for conferences 1-10
+        // express.e:3777-3778: Uses up to 10 bytes for conferences 1-10
         // For 25 conferences (1-25), use DT_CONFACCESS2 instead!
         if (isRead) {
           let confAccess =
             (this.bbsSession as any)?.confAccess ||
             this.state.confAccess ||
             '';
-          // Default to full access for first 10 conferences if empty
+
+          // If no access string set, build one based on actual conference count
           if (confAccess.length === 0) {
-            confAccess = 'XXXXXXXXXX'; // 10 X's = full access to conferences 1-10
+            // Get actual number of conferences from ConfConfig.info (like handleConfAccess in bbs-info.ts)
+            let numConfs = 2; // Default to 2 conferences
+            try {
+              const path = require('path');
+              const fs = require('fs');
+              const bbsRoot = (this.bbsSession as any)?.bbsRoot || process.cwd();
+              const confConfigPath = path.join(bbsRoot, 'ConfConfig.info');
+              if (fs.existsSync(confConfigPath)) {
+                const buffer = fs.readFileSync(confConfigPath);
+                let currentString = '';
+                const extracted: string[] = [];
+                for (let i = 0; i < buffer.length; i++) {
+                  const charCode = buffer[i];
+                  if (charCode >= 32 && charCode <= 126) {
+                    currentString += String.fromCharCode(charCode);
+                  } else {
+                    if (currentString.length >= 2) extracted.push(currentString);
+                    currentString = '';
+                  }
+                }
+                for (const line of extracted) {
+                  const cleanLine = line.replace(/^[^a-zA-Z0-9+(%#']+/g, '').trim();
+                  const upperLine = cleanLine.toUpperCase();
+                  // Support both NCONFS= and NUMCONFS= formats
+                  if (upperLine.startsWith('NCONFS=')) {
+                    const val = parseInt(cleanLine.substring(7).trim(), 10);
+                    if (!isNaN(val) && val > 0) numConfs = val;
+                  } else if (upperLine.startsWith('NUMCONFS=')) {
+                    const val = parseInt(cleanLine.substring(9).trim(), 10);
+                    if (!isNaN(val) && val > 0) numConfs = val;
+                  }
+                }
+              }
+            } catch { /* use default */ }
+
+            // Build access string with X for each actual conference (up to 10)
+            const actualConfs = Math.min(numConfs, 10);
+            confAccess = 'X'.repeat(actualConfs);
+debugLog(`  [READ] DT_CONFACCESS: Built access from ConfConfig.info: numConfs=${numConfs}, actualConfs=${actualConfs}`);
           }
-          // Truncate to 10 bytes (conferences 1-10 only)
-          const confAccess10 = confAccess.slice(0, 10).padEnd(10, 'X');
-          this.messageParser.writeString(stringAddr, confAccess10, 10);
-debugLog(`  [READ] DT_CONFACCESS: "${confAccess10}" (10 chars, confs 1-10)`);
+
+          // Return only up to 10 characters (express.e uses 10 bytes max for DT_CONFACCESS)
+          const confAccess10 = confAccess.slice(0, 10);
+          // CRITICAL: Use writeMessageString to update BOTH embedded buffer AND strPtr
+          this.messageParser.writeMessageString(msg.msgAddr, confAccess10);
+debugLog(`  [READ] DT_CONFACCESS: "${confAccess10}" (${confAccess10.length} chars, confs 1-${confAccess10.length})`);
         } else {
-          // Write operation - accept 10 characters
+          // Write operation - accept up to 10 characters
           const newAccess = this.messageParser.readString(stringAddr, 10);
           this.state.confAccess = newAccess;
           (this.bbsSession as any).confAccess = newAccess;
-debugLog(`  [WRITE] DT_CONFACCESS: "${newAccess}" (10 chars)`);
+debugLog(`  [WRITE] DT_CONFACCESS: "${newAccess}" (${newAccess.length} chars)`);
         }
         break;
 
@@ -1014,17 +1075,32 @@ debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
       message: 'Reply to door data query',
     });
 
-    // CRITICAL FIX 2026-01-13: Use bidirectional XIM protocol
-    // XIM doors poll AEDoorPort for replies, not their mn_ReplyPort
-    const ximPortAddr = this.state.ximPortAddr;
-    if (ximPortAddr && ximPortAddr !== 0) {
-      const NT_REPLYMSG = 6;
-      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
-      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
-      debugLog(`[XIMDataQuery] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
-    } else {
+    // CRITICAL FIX 2026-01-15: Detect which reply method to use based on msg.replyPort
+    // - AEDoor.library-based doors (TurboLister) set mn_ReplyPort and poll THAT port
+    // - Native XIM doors poll the AEDoorPort bidirectionally (replyPort often 0)
+    // If message has valid replyPort, use ReplyMsg to send there (AEDoor.library mode)
+    // Otherwise use bidirectional PutMsg to XIM port (native XIM mode)
+    const msgReplyPort = msg.replyPort || 0;
+
+    if (msgReplyPort !== 0) {
+      // AEDoor.library mode: door polls its own reply port
       this.execLibrary.replyMsg(msg.msgAddr);
-      debugLog(`[XIMDataQuery] Reply sent via ReplyMsg (fallback)`);
+      debugLog(`[XIMDataQuery] Reply sent via ReplyMsg to msg.replyPort=0x${msgReplyPort.toString(16)} (AEDoor.library mode)`);
+    } else {
+      // Native XIM mode: door polls AEDoorPort bidirectionally
+      const ximPortAddr = this.state.ximPortAddr;
+      const doorPortAddr = (this.state as any).doorPortAddr;
+      const targetPort = ximPortAddr || doorPortAddr;
+
+      if (targetPort && targetPort !== 0) {
+        const NT_REPLYMSG = 6;
+        this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+        this.execLibrary.putMsg(targetPort, msg.msgAddr, { suppressDoorCallback: true });
+        debugLog(`[XIMDataQuery] Reply sent via PutMsg to port=0x${targetPort.toString(16)} (bidirectional XIM)`);
+      } else {
+        this.execLibrary.replyMsg(msg.msgAddr);
+        debugLog(`[XIMDataQuery] Reply sent via ReplyMsg (fallback)`);
+      }
     }
   }
 }

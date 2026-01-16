@@ -92,6 +92,11 @@ export class DoorLifecycleManager {
   private executionTimer: NodeJS.Timeout | null = null;
   private isPaused: boolean = false;
 
+  // PERFORMANCE FIX: Track if doorMessageCallback is handling XIM messages
+  // When active, skip pollXIMMessages to avoid duplicate processing
+  private usingDoorMessageCallback: boolean = false;
+  private messagesHandledThisBatch: number = 0;
+
   // Debug tracking
   private executionPath: string[] = [];
   private writeCallLog: Array<{ pc: number; iteration: number; args: any }> =
@@ -327,6 +332,15 @@ debugLog(
         if (msgAddr && msgAddr !== 0 && self.ximProtocol) {
           // Parse and handle the XIM message
           const parsed = self.ximProtocol.parseMessage(msgAddr);
+
+          // CRITICAL FIX: Pre-pause for blocking I/O commands (same as doorMessageCallback)
+          // handleMessage is async, so pause() inside handlers won't take effect before callback returns
+          const blockingCommands = [6, 0, 5, 15]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15
+          const hasQueuedInput = self.ximProtocol.hasQueuedInput?.() ?? false;
+          if (blockingCommands.includes(parsed.command) && self.emulator && !hasQueuedInput) {
+            self.emulator.pause();
+          }
+
           // Handle synchronously - for JH_WRITE this just emits to socket and replies
           // Note: handleMessage is async but the sync parts (including replyMsg) run immediately
           self.ximProtocol.handleMessage(parsed);
@@ -350,19 +364,29 @@ debugLog(
             // Skip non-AEDoorPort messages (like replies to door's reply port)
             return;
           }
-          debugLog(`[DoorLifecycleManager] Direct PutMsg callback: port=0x${portAddr.toString(16)} msg=0x${msgAddr.toString(16)}`);
-          // IMPORTANT: The message was just added to the port queue by PutMsg.
-          // We need to consume it via GetMsg to prevent double-processing.
-          // The msgAddr parameter tells us what was added, but we should verify.
-          const consumedAddr = execLib.getMsg(portAddr);
-          if (consumedAddr !== msgAddr) {
-            console.warn(`[DoorLifecycleManager] PutMsg callback: consumed 0x${consumedAddr.toString(16)} != passed 0x${msgAddr.toString(16)}`);
+          // PERFORMANCE FIX 2026-01-14: Mark that we're using callback-based processing
+          // This prevents pollXIMMessages from double-processing the same messages
+          self.usingDoorMessageCallback = true;
+          self.messagesHandledThisBatch++;
+
+          // Remove from queue and process immediately
+          execLib.removeMessageFromPort(portAddr, msgAddr);
+          const parsed = self.ximProtocol.parseMessage(msgAddr);
+
+          // CRITICAL FIX: For blocking I/O commands (JH_HK, JH_LI, JH_PM, JH_ExtHK),
+          // we MUST pause the emulator BEFORE calling handleMessage.
+          // handleMessage is async, and without this the pause() inside handleHotkey/etc
+          // won't take effect until AFTER this callback returns (due to await in handleMessage).
+          // This causes the door to continue executing and spin on GetMsg.
+          // ONLY pause if no input is already queued - otherwise the handler replies immediately.
+          const blockingCommands = [6, 0, 5, 15]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_ExtHK=15
+          const hasQueuedInput = self.ximProtocol.hasQueuedInput?.() ?? false;
+          if (blockingCommands.includes(parsed.command) && self.emulator && !hasQueuedInput) {
+            // Pre-pause: the actual handler will set waitingFor* flags
+            self.emulator.pause();
           }
-          if (consumedAddr && consumedAddr !== 0) {
-            const parsed = self.ximProtocol.parseMessage(consumedAddr);
-            debugLog(`[DoorLifecycleManager] Direct XIM message: cmd=${parsed.command} data=0x${parsed.data.toString(16)} string="${parsed.string}"`);
-            self.ximProtocol.handleMessage(parsed);
-          }
+
+          self.ximProtocol.handleMessage(parsed);
         }
       });
     }
@@ -540,10 +564,11 @@ debugLog(
           }`
         );
       }
-      // TEMPORARY: Force enable stack write logging to debug PC corruption
-      if (this.emulator.setDebugStackWrites) {
+      // Stack write logging disabled by default - only enable via DEBUG_STACK_WRITES=1
+      // Was previously force enabled for PC corruption debugging
+      if (process.env.DEBUG_STACK_WRITES && this.emulator.setDebugStackWrites) {
         this.emulator.setDebugStackWrites(true);
-debugLog("[DoorLifecycleManager] Stack write logging FORCE ENABLED for debugging");
+debugLog("[DoorLifecycleManager] Stack write logging ENABLED via DEBUG_STACK_WRITES=1");
       }
 
       const callTrackingEnv = process.env.DOOR_CALL_TRACKING;
@@ -858,13 +883,18 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // === STEP 5: BATCH EXECUTION using executeUntilTrap() ===
         // Execute instructions in tight C++ loop until a trap address is hit.
         // This is MUCH faster than single-instruction execution for CPU-intensive doors.
-        // Batch size: 10000 instructions per yield (allows XIM polling and UI updates)
-        // DEBUG: Use small batch to catch PC corruption
-        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 10000;
+        // PERFORMANCE: Increased batch size from 10000 to 50000 for faster throughput
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP ? 1 : 50000;
         const pcBeforeBatch = this.emulator.getRegister(16);
-        debugLog(`[BATCH-DEBUG] Starting batch at PC=0x${pcBeforeBatch.toString(16)}`);
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
-        debugLog(`[BATCH-DEBUG] Batch result=${result}, newPC=0x${this.emulator.getRegister(16).toString(16)}`);
+
+        // CRITICAL: If pause was set during batch execution (e.g., by doorMessageCallback
+        // for a blocking XIM command like JH_LI/JH_HK), immediately yield to handlePausedState
+        // instead of continuing. Without this, the door loops calling PutMsg/GetMsg rapidly.
+        if (this.emulator.isPaused()) {
+          continue;  // Will be caught by isPaused() check at top of loop
+        }
+
         const pcAfterBatch = this.emulator.getRegister(16);
 
         // TRACE PC JUMPS: Log large PC changes to catch corrupted returns/jumps
@@ -974,11 +1004,13 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         //   - dos.library: 0xaff00-0xb0000
         //   - icon.library: 0xcff00-0xd0000
         //   - utility.library: 0xeff00-0xf0000
+        // Library trap regions: traps are at negative offsets from base, can extend 1KB+ below base
+        // Examples: Wait at -318 (0x80000-0x13e=0x7fec2), GetMsg at -372 (0x7fe8c), FindPort at -390 (0x7fe7a)
         const isJumpToLibraryTrap = (
-          (pcAfterBatch >= 0x7ff00 && pcAfterBatch < 0x80000) ||   // exec.library
-          (pcAfterBatch >= 0xaff00 && pcAfterBatch < 0xb0000) ||   // dos.library
-          (pcAfterBatch >= 0xcff00 && pcAfterBatch < 0xd0000) ||   // icon.library
-          (pcAfterBatch >= 0xeff00 && pcAfterBatch < 0xf0000)      // utility.library
+          (pcAfterBatch >= 0x7f800 && pcAfterBatch < 0x80000) ||   // exec.library (expanded: -2048 to 0)
+          (pcAfterBatch >= 0xaf800 && pcAfterBatch < 0xb0000) ||   // dos.library (expanded)
+          (pcAfterBatch >= 0xcf800 && pcAfterBatch < 0xd0000) ||   // icon.library (expanded)
+          (pcAfterBatch >= 0xef800 && pcAfterBatch < 0xf0000)      // utility.library (expanded)
         );
 
         if (Math.abs(jumpSize) > 0x1000 && !isJumpToLibraryTrap) { // Only track large jumps, exclude library calls
@@ -2016,6 +2048,13 @@ debugLog(
       return;
     }
 
+    // PERFORMANCE FIX 2026-01-14: Skip polling entirely if doorMessageCallback is active
+    // The callback processes ALL messages synchronously during PutMsg - no async polling needed!
+    // This eliminates the duplicate processing that was causing 2-3x slowdown.
+    if (this.usingDoorMessageCallback) {
+      return;
+    }
+
     const execLib = this.libraryManager?.execLibrary;
     if (!execLib) {
       if (this.pollCount === 1) {
@@ -2067,8 +2106,15 @@ debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
           const msg = this.ximProtocol.parseMessage(msgAddr);
           if (msg) {
             await this.ximProtocol.handleMessage(msg);
-            // Reply to door via mn_ReplyPort so door's WaitPort/GetMsg unblocks
-            execLib.replyMsg(msg.msgAddr);
+
+            // CRITICAL FIX: Don't reply immediately if waiting for user input!
+            // Blocking commands (JH_PM, JH_LI, JH_HK) set waitingFor* flags and pause.
+            // The reply will be sent when input arrives (completeLineInput, completeHotkey, etc.)
+            // Sending premature reply causes door to continue with empty/stale data.
+            if (!this.ximProtocol.isWaitingForLineInput()) {
+              // Reply to door via mn_ReplyPort so door's WaitPort/GetMsg unblocks
+              execLib.replyMsg(msg.msgAddr);
+            }
 
             // Check if door requested shutdown (JH_SHUTDOWN)
             if (this.ximProtocol.isShuttingDown()) {

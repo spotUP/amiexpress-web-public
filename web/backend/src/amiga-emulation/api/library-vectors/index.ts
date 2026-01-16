@@ -19,3 +19,5 @@ export {
 } from "./math-vectors";
 export { INTUITION_VECTORS } from "./intuition-vectors";
 export { EXEC_VECTORS } from "./exec-vectors";
+export { BSDSOCKET_VECTORS } from "./bsdsocket-vectors";
+export { AMISSLMASTER_VECTORS, AMISSL_VECTORS } from "./amissl-vectors";

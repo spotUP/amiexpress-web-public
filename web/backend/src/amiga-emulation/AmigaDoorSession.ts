@@ -667,6 +667,24 @@ debugLog(
           );
           this.sharedState.libraryTraps.installIconVectors();
         }
+        if (name.toLowerCase() === "bsdsocket.library") {
+debugLog(
+            "[AmigaDoorSession] bsdsocket.library opened, installing vectors..."
+          );
+          this.sharedState.libraryTraps.installBsdSocketVectors();
+        }
+        if (name.toLowerCase() === "amisslmaster.library") {
+debugLog(
+            "[AmigaDoorSession] amisslmaster.library opened, installing vectors..."
+          );
+          this.sharedState.libraryTraps.installAmiSSLMasterVectors();
+        }
+        if (name.toLowerCase() === "amissl.library") {
+debugLog(
+            "[AmigaDoorSession] amissl.library opened, installing vectors..."
+          );
+          this.sharedState.libraryTraps.installAmiSSLVectors();
+        }
       }
     );
 

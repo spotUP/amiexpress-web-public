@@ -629,15 +629,26 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * CopyStr() - LVO -120
+   * Copies the string FROM stringPtr (library buffer) TO door's buffer (A2)
+   * The door calls this after GetDT to copy the result to its own storage
+   * D0 = max length, A2 = destination buffer
+   * Returns: pointer to the copied string (destination)
    */
   copyStr(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const sourceAddr = this.emulator.getRegister(10);
-    const maxlen = this.emulator.getRegister(0);
-    const source = this.readCString(sourceAddr, maxlen);
-    this.writeCString(state.stringPtr, source, state.stringCapacity);
+    const destAddr = this.emulator.getRegister(10); // A2 = destination (door's buffer)
+    const maxlen = this.emulator.getRegister(0);    // D0 = max length
+
+    // Copy FROM stringPtr (library's buffer with GetDT result) TO destAddr (door's buffer)
+    const source = this.readCString(state.stringPtr, maxlen);
+    if (destAddr) {
+      this.writeCString(destAddr, source, maxlen);
+      this.emulator.setRegister(0, destAddr);
+      return destAddr;
+    }
+
     this.emulator.setRegister(0, state.stringPtr);
     return state.stringPtr;
   }
@@ -654,20 +665,20 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * PreCreateComm() - LVO -132
-   * Called before door communication setup
+   * Per aedoor.library disassembly (libFunc19):
+   *   1. Saves registers (D1-D7/A2-A6)
+   *   2. Calls createComm to create a new CommHandle
+   *   3. Saves handle in A1
+   *   4. Jumps to LAB_262 (cleanup)
+   *   5. Returns D0=0
+   *
+   * CRITICAL: Native returns D0=0, NOT 1!
+   * The native code doesn't validate nodeNum - it just creates and cleans up a CommHandle.
    */
   preCreateComm(): number {
-    const nodeNum = this.emulator.getRegister(0);
-console.log(`[AEDoorLibrary] PreCreateComm(node=${nodeNum})`);
-
-    // Basic validation - could add more setup logic here
-    if (nodeNum < 1 || nodeNum > 99) {
-console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
-      this.emulator.setRegister(0, 0);
-      return -1; // Error
-    }
-
-    this.emulator.setRegister(0, 1); // Success
+    // Native libFunc19 eventually returns D0=0 via LAB_262->LAB_27E cleanup
+    // No validation needed - native doesn't do any
+    this.emulator.setRegister(0, 0); // Success - D0=0 like native
     return 0;
   }
 
@@ -675,14 +686,23 @@ console.warn(`[AEDoorLibrary] PreCreateComm: Invalid node number ${nodeNum}`);
    * PostDeleteComm() - LVO -138
    * Per aedoor.library disassembly (libFunc20): Creates CommHandle, sends cmd 2, loops
    * This is called during door cleanup. The native implementation creates a new comm handle
-   * and sends a cleanup command. We need to return success to allow doors to complete
-   * their cleanup and exit.
+   * and sends a cleanup command.
+   *
+   * Native behavior (from disassembly):
+   *   1. Saves registers (D1-D7/A2-A6)
+   *   2. Calls createComm to create a new CommHandle
+   *   3. Sends command 2 via libFunc04 (PutMsg/Wait/GetMsg)
+   *   4. Cleans up via LAB_262->LAB_27E
+   *   5. Returns D0=0
+   *
+   * CRITICAL: Native returns D0=0, NOT a CommHandle pointer!
+   * Returning non-zero causes doors to loop infinitely.
    */
   postDeleteComm(): number {
-    // The native libFunc20 creates a new CommHandle internally (via createComm) and sends
-    // command 2 to the BBS. D0 is not a node number input - it's set to 2 (command) internally.
-    // We just need to return success so doors can complete their cleanup loops.
-    this.emulator.setRegister(0, 1); // Success - comm handle pointer (non-zero = success)
+    // Native libFunc20 eventually returns D0=0 via LAB_262->LAB_27E cleanup
+    // The door code checks "tst.l d0; bne" so D0=0 means success (continue),
+    // D0!=0 means error/retry loop
+    this.emulator.setRegister(0, 0); // Success - D0=0 like native
     return 0;
   }
 

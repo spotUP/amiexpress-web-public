@@ -26,6 +26,8 @@ import {
   MathIEEESingTransLibrary,
 } from "./MathLibrary";
 import { IntuitionLibrary } from "./IntuitionLibrary";
+import { BsdSocketLibrary } from "./BsdSocketLibrary";
+import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./AmiSSLLibrary";
 import { EXEC_LVO_MAP, DOS_LVO_MAP } from "../constants/lvo-map";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -46,6 +48,9 @@ import {
   MATHIEEESINGTRANS_VECTORS,
   INTUITION_VECTORS,
   EXEC_VECTORS,
+  BSDSOCKET_VECTORS,
+  AMISSLMASTER_VECTORS,
+  AMISSL_VECTORS,
 } from "./library-vectors";
 
 // Performance: Verbose logging is disabled by default
@@ -76,6 +81,9 @@ export class LibraryTraps {
   private mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
   private mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
   private intuitionLibrary: IntuitionLibrary | null = null;
+  private bsdSocketLibrary: BsdSocketLibrary | null = null;
+  private amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
+  private amisslLibrary: AmiSSLLibrary | null = null;
 
   // Map of trap address -> vector entry
   private trapMap: Map<number, LibraryVector> = new Map();
@@ -138,6 +146,15 @@ export class LibraryTraps {
     }
     if (library === this.intuitionLibrary) {
       return "intuition.library";
+    }
+    if (library === this.bsdSocketLibrary) {
+      return "bsdsocket.library";
+    }
+    if (library === this.amisslMasterLibrary) {
+      return "amisslmaster.library";
+    }
+    if (library === this.amisslLibrary) {
+      return "amissl.library";
     }
     if ((library as any).libraryName) {
       return (library as any).libraryName;
@@ -235,6 +252,27 @@ export class LibraryTraps {
    */
   setIntuitionLibrary(lib: IntuitionLibrary): void {
     this.intuitionLibrary = lib;
+  }
+
+  /**
+   * Set the bsdsocket.library instance
+   */
+  setBsdSocketLibrary(lib: BsdSocketLibrary): void {
+    this.bsdSocketLibrary = lib;
+  }
+
+  /**
+   * Set the amisslmaster.library instance
+   */
+  setAmiSSLMasterLibrary(lib: AmiSSLMasterLibrary): void {
+    this.amisslMasterLibrary = lib;
+  }
+
+  /**
+   * Set the amissl.library instance
+   */
+  setAmiSSLLibrary(lib: AmiSSLLibrary): void {
+    this.amisslLibrary = lib;
   }
 
   /**
@@ -931,6 +969,117 @@ console.log(`[LibraryTraps] Installing mathieeesingtrans.library vectors at base
     }
 
 console.log(`[LibraryTraps] Installed ${MATHIEEESINGTRANS_VECTORS.length} mathieeesingtrans.library vectors`);
+  }
+
+  /**
+   * Install bsdsocket.library vectors
+   */
+  installBsdSocketVectors(): void {
+    if (!this.bsdSocketLibrary) {
+      console.error("[LibraryTraps] Cannot install bsdsocket vectors: library not set");
+      return;
+    }
+
+    const socketBase = this.execLibrary.getLibraryBase("bsdsocket.library");
+    if (socketBase === 0) {
+      console.error("[LibraryTraps] Cannot install bsdsocket vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing bsdsocket.library vectors at base 0x${socketBase.toString(16)}`);
+    this.bsdSocketLibrary.baseAddress = socketBase;
+
+    for (const vector of BSDSOCKET_VECTORS) {
+      const trapAddr = socketBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.bsdSocketLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.bsdSocketLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${BSDSOCKET_VECTORS.length} bsdsocket.library vectors`);
+  }
+
+  /**
+   * Install amisslmaster.library vectors
+   */
+  installAmiSSLMasterVectors(): void {
+    if (!this.amisslMasterLibrary) {
+      console.error("[LibraryTraps] Cannot install amisslmaster vectors: library not set");
+      return;
+    }
+
+    const sslBase = this.execLibrary.getLibraryBase("amisslmaster.library");
+    if (sslBase === 0) {
+      console.error("[LibraryTraps] Cannot install amisslmaster vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing amisslmaster.library vectors at base 0x${sslBase.toString(16)}`);
+    this.amisslMasterLibrary.baseAddress = sslBase;
+
+    for (const vector of AMISSLMASTER_VECTORS) {
+      const trapAddr = sslBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.amisslMasterLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.amisslMasterLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${AMISSLMASTER_VECTORS.length} amisslmaster.library vectors`);
+  }
+
+  /**
+   * Install amissl.library vectors
+   */
+  installAmiSSLVectors(): void {
+    if (!this.amisslLibrary) {
+      console.error("[LibraryTraps] Cannot install amissl vectors: library not set");
+      return;
+    }
+
+    const sslBase = this.execLibrary.getLibraryBase("amissl.library");
+    if (sslBase === 0) {
+      console.error("[LibraryTraps] Cannot install amissl vectors: library not opened");
+      return;
+    }
+
+    console.log(`[LibraryTraps] Installing amissl.library vectors at base 0x${sslBase.toString(16)}`);
+    this.amisslLibrary.baseAddress = sslBase;
+
+    for (const vector of AMISSL_VECTORS) {
+      const trapAddr = sslBase + vector.offset;
+      this.emulator.writeMemory16(trapAddr, 0x4AFC);
+      this.trapMap.set(trapAddr, vector);
+      this.libraryMap.set(trapAddr, this.amisslLibrary);
+
+      if (!this.offsetMap.has(vector.offset)) {
+        this.offsetMap.set(vector.offset, []);
+        this.offsetLibraryMap.set(vector.offset, []);
+      }
+      this.offsetMap.get(vector.offset)!.push(vector);
+      this.offsetLibraryMap.get(vector.offset)!.push(this.amisslLibrary);
+
+      console.log(`  [${vector.name}] Vector at 0x${trapAddr.toString(16)} (offset ${vector.offset})`);
+    }
+
+    console.log(`[LibraryTraps] Installed ${AMISSL_VECTORS.length} amissl.library vectors`);
   }
 
   /**

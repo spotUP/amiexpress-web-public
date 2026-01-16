@@ -388,6 +388,9 @@ export interface XIMState {
   // Native door detection: set to true ONLY after 500ms timer fires with no XIM data requests
   // XIM doors that send JH_HK/etc should NOT have input injected - they receive via reply
   isNativeDoor?: boolean;
+  // Track if door has used XIM input commands (JH_HK, JH_LI, JH_PM, etc.)
+  // If true, NEVER inject native input - the door expects replies to its requests
+  usedXimInput?: boolean;
 }
 
 /**

@@ -3407,8 +3407,270 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
   Execute(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
+    let outputHandle = this.emulator.getRegister(CPURegister.D3);
+
+    // Parse shell redirection (">file" or ">>file") from command string
+    // AmigaDOS Execute() expects the shell to handle redirection, so we parse it here
+    let redirectFile: string | null = null;
+    let redirectAppend = false;
+    let commandPart = name;
+
+    // Check for >> (append) first, then > (overwrite)
+    const appendMatch = name.match(/^(.+?)\s*>>\s*(.+)$/);
+    const overwriteMatch = name.match(/^(.+?)\s*>\s*(.+)$/);
+
+    if (appendMatch) {
+      commandPart = appendMatch[1].trim();
+      redirectFile = appendMatch[2].trim();
+      redirectAppend = true;
+      debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" >> "${redirectFile}"`);
+    } else if (overwriteMatch) {
+      commandPart = overwriteMatch[1].trim();
+      redirectFile = overwriteMatch[2].trim();
+      redirectAppend = false;
+      debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" > "${redirectFile}"`);
+    }
+
+    // If redirection is specified but no output handle provided, open the file
+    let ownedOutputHandle = 0;
+    if (redirectFile && (!outputHandle || outputHandle === 0) && this.fileManager) {
+      const mode = redirectAppend ? MODE_READWRITE : MODE_NEWFILE;
+      ownedOutputHandle = this.fileManager.open(redirectFile, mode);
+      if (ownedOutputHandle) {
+        outputHandle = ownedOutputHandle;
+        // For append mode, seek to end
+        if (redirectAppend) {
+          this.fileManager.seek(ownedOutputHandle, 0, 2); // OFFSET_END
+        }
+        debugLog(`[dos.library] Execute: Opened "${redirectFile}" for redirection (BPTR=0x${ownedOutputHandle.toString(16)})`);
+      } else {
+        debugLog(`[dos.library] Execute: Failed to open "${redirectFile}" for redirection`);
+      }
+    }
+
+    // Handle specific safe commands
+    const upperName = commandPart.toUpperCase().trim();
+
+    // DATE command - returns current date/time in Amiga format
+    // Format: "Thursday 15-Jan-26 20:20:52"
+    if (upperName === 'DATE' || upperName === 'C:DATE' || upperName.endsWith(':DATE')) {
+      const now = getSystemTime();
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dayName = days[now.getDay()];
+      const day = now.getDate().toString().padStart(2, '0');
+      const month = months[now.getMonth()];
+      const year = (now.getFullYear() % 100).toString().padStart(2, '0');
+      const hours = now.getHours().toString().padStart(2, '0');
+      const mins = now.getMinutes().toString().padStart(2, '0');
+      const secs = now.getSeconds().toString().padStart(2, '0');
+      const dateStr = `${dayName} ${day}-${month}-${year} ${hours}:${mins}:${secs}\n`;
+
+debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.trim()}"`);
+
+      // Write to output handle if provided
+      // Note: Most doors don't use Execute() for DATE - they expect T:SysInfo.TMP
+      // to be pre-generated (handled in FileManager.ts auto-generation)
+      if (outputHandle && outputHandle > 0) {
+        // Write date string directly to the file handle using Write()
+        // Allocate temp memory for the string
+        const tempAddr = 0x140000; // Use a temp buffer area
+        for (let i = 0; i < dateStr.length; i++) {
+          this.emulator.writeMemory(tempAddr + i, dateStr.charCodeAt(i));
+        }
+        this.emulator.writeMemory(tempAddr + dateStr.length, 0); // Null terminate
+
+        this.emulator.setRegister(CPURegister.D1, outputHandle);
+        this.emulator.setRegister(CPURegister.D2, tempAddr);
+        this.emulator.setRegister(CPURegister.D3, dateStr.length);
+        this.Write();
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE = success
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    // AVAIL command - returns memory info
+    if (upperName === 'AVAIL' || upperName === 'C:AVAIL' || upperName.endsWith(':AVAIL')) {
+      // Simulate Amiga memory stats (reasonable values)
+      const chipAvail = 1894800;
+      const chipUsed = 201328;
+      const chipMax = 2096128;
+      const chipLargest = 1840944;
+      const fastAvail = 7193760;
+      const fastUsed = 1194848;
+      const fastMax = 8388608;
+      const fastLargest = 3814456;
+      const totalAvail = chipAvail + fastAvail;
+      const totalUsed = chipUsed + fastUsed;
+      const totalMax = chipMax + fastMax;
+      const totalLargest = fastLargest;
+
+      const availStr =
+        `Type  Available    In-Use   Maximum   Largest\n` +
+        `chip  ${chipAvail.toString().padStart(9)} ${chipUsed.toString().padStart(9)} ${chipMax.toString().padStart(9)} ${chipLargest.toString().padStart(9)}\n` +
+        `fast  ${fastAvail.toString().padStart(9)} ${fastUsed.toString().padStart(9)} ${fastMax.toString().padStart(9)} ${fastLargest.toString().padStart(9)}\n` +
+        `total ${totalAvail.toString().padStart(9)} ${totalUsed.toString().padStart(9)} ${totalMax.toString().padStart(9)} ${totalLargest.toString().padStart(9)}\n`;
+
+      debugLog(`[dos.library] Execute("${name}") -> AVAIL command`);
+
+      if (outputHandle && outputHandle > 0) {
+        const tempAddr = 0x140000;
+        for (let i = 0; i < availStr.length; i++) {
+          this.emulator.writeMemory(tempAddr + i, availStr.charCodeAt(i));
+        }
+        this.emulator.writeMemory(tempAddr + availStr.length, 0);
+        this.emulator.setRegister(CPURegister.D1, outputHandle);
+        this.emulator.setRegister(CPURegister.D2, tempAddr);
+        this.emulator.setRegister(CPURegister.D3, availStr.length);
+        this.Write();
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    // INFO command - returns disk info
+    if (upperName === 'INFO' || upperName === 'C:INFO' || upperName.endsWith(':INFO')) {
+      const infoStr =
+        `Mounted disks:\n` +
+        `Unit      Size    Used    Free Full Errs   Status   Name\n` +
+        `BBS:      500M  250000  250000  50%   0  Read/Write AmiExpress\n` +
+        `RAM:       21K      21       0 100%   0  Read/Write Ram Disk\n` +
+        `\n` +
+        `Volumes available:\n` +
+        `AmiExpress [Mounted]\n` +
+        `Ram Disk [Mounted]\n`;
+
+      debugLog(`[dos.library] Execute("${name}") -> INFO command`);
+
+      if (outputHandle && outputHandle > 0) {
+        const tempAddr = 0x140000;
+        for (let i = 0; i < infoStr.length; i++) {
+          this.emulator.writeMemory(tempAddr + i, infoStr.charCodeAt(i));
+        }
+        this.emulator.writeMemory(tempAddr + infoStr.length, 0);
+        this.emulator.setRegister(CPURegister.D1, outputHandle);
+        this.emulator.setRegister(CPURegister.D2, tempAddr);
+        this.emulator.setRegister(CPURegister.D3, infoStr.length);
+        this.Write();
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    // VERSION command - returns version info from a binary
+    // Format: VERSION <filename> - extracts $VER: string from the file
+    if (upperName.startsWith('VERSION ') || upperName.startsWith('C:VERSION ')) {
+      const parts = name.trim().split(/\s+/);
+      const targetFile = parts.length > 1 ? parts[1] : '';
+
+      // Try to read $VER: string from the target file
+      let verString = 'Unknown 0.0';
+      if (targetFile) {
+        try {
+          const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || '';
+          if (sysPath && fs.existsSync(sysPath)) {
+            const content = fs.readFileSync(sysPath);
+            const verMatch = content.toString('latin1').match(/\$VER:\s*([^\r\n\x00]+)/);
+            if (verMatch) {
+              verString = verMatch[1].trim();
+            }
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+
+      debugLog(`[dos.library] Execute("${name}") -> VERSION command, result: "${verString}"`);
+
+      if (outputHandle && outputHandle > 0) {
+        const versionOutput = `${verString}\n`;
+        const tempAddr = 0x140000;
+        for (let i = 0; i < versionOutput.length; i++) {
+          this.emulator.writeMemory(tempAddr + i, versionOutput.charCodeAt(i));
+        }
+        this.emulator.writeMemory(tempAddr + versionOutput.length, 0);
+        this.emulator.setRegister(CPURegister.D1, outputHandle);
+        this.emulator.setRegister(CPURegister.D2, tempAddr);
+        this.emulator.setRegister(CPURegister.D3, versionOutput.length);
+        this.Write();
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
+
+    // SHOWCONFIG command - returns Amiga hardware configuration
+    if (upperName === 'SHOWCONFIG' || upperName.includes('SHOWCONFIG') ||
+        upperName.endsWith('/SHOWCONFIG') || upperName.endsWith(':SHOWCONFIG')) {
+      const showConfigStr =
+        `=======================================================================\n` +
+        `PROCESSOR: 68040\n` +
+        `\n` +
+        `CUSTOM CHIPS: ECS PAL Agnus (id=$0023), ECS Denise (id=$00fc)\n` +
+        `\n` +
+        `VERS: Kickstart version 40.68, Exec version 40.10\n` +
+        `      Disk version 40.1\n` +
+        `\n` +
+        `RAM:\n` +
+        `Node type $a, Attributes $5 (FAST), at $200000-$9fffff (8 meg)\n` +
+        `Node type $a, Attributes $3 (CHIP), at $4000-$1fffff (2 meg)\n` +
+        `\n` +
+        `BOARDS:\n` +
+        ` None\n` +
+        `=======================================================================\n`;
+
+      debugLog(`[dos.library] Execute("${name}") -> SHOWCONFIG command`);
+
+      if (outputHandle && outputHandle > 0) {
+        const tempAddr = 0x140000;
+        for (let i = 0; i < showConfigStr.length; i++) {
+          this.emulator.writeMemory(tempAddr + i, showConfigStr.charCodeAt(i));
+        }
+        this.emulator.writeMemory(tempAddr + showConfigStr.length, 0);
+        this.emulator.setRegister(CPURegister.D1, outputHandle);
+        this.emulator.setRegister(CPURegister.D2, tempAddr);
+        this.emulator.setRegister(CPURegister.D3, showConfigStr.length);
+        this.Write();
+      }
+
+      // Close owned output handle if we opened it
+      if (ownedOutputHandle && this.fileManager) {
+        this.fileManager.close(ownedOutputHandle);
+      }
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = this.ERROR_NO_ERROR;
+      return;
+    }
 
 debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
+
+    // Close owned output handle if we opened it (even on failure)
+    if (ownedOutputHandle && this.fileManager) {
+      this.fileManager.close(ownedOutputHandle);
+    }
 
     // Shell command execution not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);

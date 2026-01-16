@@ -180,6 +180,9 @@ export class ExecLibrary {
   private readonly INTUITION_LIB_ADDR = 0x0e0000; // intuition.library at 896KB
   private readonly GRAPHICS_LIB_ADDR = 0x0e8000; // graphics.library at 928KB
   private readonly UTILITY_LIB_ADDR = 0x0f0000; // utility.library at 960KB
+  private readonly BSDSOCKET_LIB_ADDR = 0x0f2000; // bsdsocket.library at 968KB
+  private readonly AMISSLMASTER_LIB_ADDR = 0x0f4000; // amisslmaster.library at 976KB
+  private readonly AMISSL_LIB_ADDR = 0x0f6000; // amissl.library at 984KB
   private nextStubLibraryAddr = 0x0f8000; // fallback base for unknown stub libraries
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
@@ -464,6 +467,11 @@ debugLog(
         16
       )} (SAS/C pattern)`
     );
+
+    // Write random seed at 0x100 for doors that need entropy
+    // This provides a different value each time a door runs
+    const randomSeed = (Date.now() & 0xFFFFFFFF) ^ (Math.random() * 0xFFFFFFFF >>> 0);
+    this.emulator.writeMemory32(0x00000400, randomSeed);
 
     // Create stub function for unknown system vectors
     // Some programs (like GetAnswer) load function pointers from low memory
@@ -1097,6 +1105,27 @@ debugLog(
           version: 37,
           revision: 0,
           stubJumpTableEntries: 64,
+        };
+      case "bsdsocket.library":
+        return {
+          address: this.BSDSOCKET_LIB_ADDR,
+          version: 4,
+          revision: 0,
+          stubJumpTableEntries: 60,
+        };
+      case "amisslmaster.library":
+        return {
+          address: this.AMISSLMASTER_LIB_ADDR,
+          version: 4,
+          revision: 0,
+          stubJumpTableEntries: 10,
+        };
+      case "amissl.library":
+        return {
+          address: this.AMISSL_LIB_ADDR,
+          version: 4,
+          revision: 0,
+          stubJumpTableEntries: 500,
         };
       default:
         return null;
@@ -5258,6 +5287,65 @@ debugLog(
   }
 
   /**
+   * Remove a specific message from a port's queue
+   * Used by PutMsg callback to remove the exact message that triggered the callback,
+   * since getMsg returns HEAD (oldest) but callback receives newly added message (TAIL).
+   */
+  removeMessageFromPort(portAddr: number, msgAddr: number): boolean {
+    const port = this.messagePorts.get(portAddr);
+    if (!port) {
+      return false;
+    }
+
+    const index = port.messages.indexOf(msgAddr);
+    if (index !== -1) {
+      port.messages.splice(index, 1);
+      debugLog(`[ExecLibrary] removeMessageFromPort: removed 0x${msgAddr.toString(16)} from port 0x${portAddr.toString(16)}, ${port.messages.length} remaining`);
+
+      // Also try to remove from memory linked list (best effort)
+      // This ensures both JS array and memory stay in sync
+      try {
+        const msgListAddr = portAddr + 20; // mp_MsgList offset
+        this.removeFromList(msgListAddr, msgAddr);
+      } catch {
+        // Ignore errors - JS array is already updated
+      }
+
+      if (port.messages.length === 0) {
+        port.signaled = false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Remove a specific node from a list (helper for removeMessageFromPort)
+   */
+  private removeFromList(listAddr: number, nodeAddr: number): void {
+    // Walk the list to find and unlink the node
+    // List structure: lh_Head (4), lh_Tail (4), lh_TailPred (4)
+    // Node structure: ln_Succ (4), ln_Pred (4), ...
+    const head = this.emulator.readMemory32(listAddr);
+    let current = head;
+    let count = 0;
+    const maxIter = 1000;
+
+    while (current && current !== 0 && count < maxIter) {
+      if (current === nodeAddr) {
+        // Found it - unlink
+        const succ = this.emulator.readMemory32(nodeAddr);
+        const pred = this.emulator.readMemory32(nodeAddr + 4);
+        if (pred) this.emulator.writeMemory32(pred, succ);
+        if (succ) this.emulator.writeMemory32(succ + 4, pred);
+        return;
+      }
+      current = this.emulator.readMemory32(current);
+      count++;
+    }
+  }
+
+  /**
    * WaitPort() - LVO -384 (0xFFFFFE80)
    *
    * Wait for a message to arrive at a port.
@@ -6160,63 +6248,125 @@ debugLog(
   private formatRawString(fmt: string, argvAddr: number): string {
     let result = "";
     let argIndex = 0;
+    let i = 0;
 
-    for (let i = 0; i < fmt.length; i++) {
+    while (i < fmt.length) {
       if (fmt[i] === "%" && i + 1 < fmt.length) {
-        const spec = fmt[i + 1];
-        let longFormat = false;
+        // Parse format specifier: %[-][width][.precision][l]type
+        i++; // Skip %
 
-        if (spec === "l" && i + 2 < fmt.length) {
+        // Check for %%
+        if (fmt[i] === "%") {
+          result += "%";
+          i++;
+          continue;
+        }
+
+        // Parse flags (- for left align)
+        let leftAlign = false;
+        if (fmt[i] === "-") {
+          leftAlign = true;
+          i++;
+        }
+
+        // Parse width
+        let width = 0;
+        while (i < fmt.length && fmt[i] >= "0" && fmt[i] <= "9") {
+          width = width * 10 + parseInt(fmt[i], 10);
+          i++;
+        }
+
+        // Parse precision
+        let precision = -1;
+        if (i < fmt.length && fmt[i] === ".") {
+          i++;
+          precision = 0;
+          while (i < fmt.length && fmt[i] >= "0" && fmt[i] <= "9") {
+            precision = precision * 10 + parseInt(fmt[i], 10);
+            i++;
+          }
+        }
+
+        // Parse long modifier
+        let longFormat = false;
+        if (i < fmt.length && fmt[i] === "l") {
           longFormat = true;
           i++;
         }
 
-        const actualSpec = longFormat ? fmt[i + 1] : spec;
+        // Parse type specifier
+        if (i >= fmt.length) break;
+        const typeSpec = fmt[i];
+        i++;
 
-        switch (actualSpec) {
+        // Get argument and format it
+        let formatted = "";
+        switch (typeSpec) {
           case "s": {
             const strPtr = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            const str = this.emulator.readString(strPtr);
-            result += str;
+            let str = strPtr ? this.emulator.readString(strPtr) : "";
+            // Apply precision (max length for strings)
+            if (precision >= 0 && str.length > precision) {
+              str = str.substring(0, precision);
+            }
+            formatted = str;
             argIndex++;
-            i++;
             break;
           }
           case "d":
-          case "u": {
+          case "i": {
             const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += (val | 0).toString(10);
+            // Sign extend for signed display
+            const signedVal = val > 0x7fffffff ? val - 0x100000000 : val;
+            formatted = signedVal.toString(10);
             argIndex++;
-            i++;
             break;
           }
-          case "x":
+          case "u": {
+            const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            formatted = (val >>> 0).toString(10);
+            argIndex++;
+            break;
+          }
+          case "x": {
+            const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
+            formatted = (val >>> 0).toString(16);
+            argIndex++;
+            break;
+          }
           case "X": {
             const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += val.toString(16);
+            formatted = (val >>> 0).toString(16).toUpperCase();
             argIndex++;
-            i++;
             break;
           }
           case "c": {
             const val = this.emulator.readMemory32(argvAddr + argIndex * 4);
-            result += String.fromCharCode(val & 0xff);
+            formatted = String.fromCharCode(val & 0xff);
             argIndex++;
-            i++;
-            break;
-          }
-          case "%": {
-            result += "%";
-            i++;
             break;
           }
           default: {
-            result += fmt[i];
+            // Unknown specifier - just output it
+            formatted = "%" + typeSpec;
             break;
           }
         }
+
+        // Apply width padding
+        if (width > 0 && formatted.length < width) {
+          const padding = " ".repeat(width - formatted.length);
+          if (leftAlign) {
+            formatted = formatted + padding;
+          } else {
+            formatted = padding + formatted;
+          }
+        }
+
+        result += formatted;
       } else {
         result += fmt[i];
+        i++;
       }
     }
 

@@ -1241,9 +1241,14 @@ debugLog(`[DoorMessageHandler]   Set door timeout to: ${newTimeout}`);
 
       case XIMCommand.DT_CONFACCESS:
         // express.e:3777-3778: Conference access string
+        // Fallback path - normally handled by XIMDataQueryHandler via XIMProtocol
 debugLog(`[DoorMessageHandler]   DT_CONFACCESS: data=${data}`);
         if (data) {
-          this.writeStringToMessage(msgAddr, "111111111"); // All conferences
+          // Use confAccess from disk/session, NOT hardcoded value
+          const confAccess = (this.config.bbsSession as any)?.confAccess ||
+                             (this.config.bbsSession as any)?.user?.confAccess ||
+                             'XX'; // Default to 2 conferences
+          this.writeStringToMessage(msgAddr, confAccess.slice(0, 10));
         }
         break;
 

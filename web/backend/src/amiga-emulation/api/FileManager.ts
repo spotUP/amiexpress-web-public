@@ -236,6 +236,68 @@ console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
       return 0; // Failed
     }
 
+    // Auto-generate T:SysInfo.TMP with date and version info
+    // Format: Three newline-separated lines for FGets to read:
+    //   Line 1: Date/time string
+    //   Line 2: ACP version string
+    //   Line 3: Express version string
+    // NOTE: Only generate if file doesn't exist - door may call Execute() to overwrite
+    const upperAmiPath = amiPath.toUpperCase();
+    if (upperAmiPath === 'T:SYSINFO.TMP' && !amigafs.existsSync(sysPath)) {
+      // Generate Amiga-format date string: "Thursday 15-Jan-26 20:20:52"
+      const now = new Date();
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dayName = days[now.getDay()];
+      const day = now.getDate().toString().padStart(2, '0');
+      const month = months[now.getMonth()];
+      const year = (now.getFullYear() % 100).toString().padStart(2, '0');
+      const hours = now.getHours().toString().padStart(2, '0');
+      const mins = now.getMinutes().toString().padStart(2, '0');
+      const secs = now.getSeconds().toString().padStart(2, '0');
+      const dateStr = `${dayName} ${day}-${month}-${year} ${hours}:${mins}:${secs}`;
+
+      // Extract version strings from ACP and Express binaries
+      let acpVersion = 'ACP 4.10 (AmiExpress-Web)';
+      let expressVersion = 'AmiExpress 5.6.1';
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..');
+
+        const acpPath = path.join(bbsRoot, 'ACP');
+        if (fs.existsSync(acpPath)) {
+          const content = fs.readFileSync(acpPath);
+          const match = content.toString('latin1').match(/\$VER:\s*([^\r\n\x00]+)/);
+          if (match) acpVersion = match[1].trim();
+        }
+        const expressPath = path.join(bbsRoot, 'Express');
+        if (fs.existsSync(expressPath)) {
+          const content = fs.readFileSync(expressPath);
+          const match = content.toString('latin1').match(/\$VER:\s*([^\r\n\x00]+)/);
+          if (match) expressVersion = match[1].trim();
+        }
+      } catch (e) {
+        // Use defaults
+      }
+
+      // Build content with newlines - door uses FGets to read line by line
+      const fullContent = `${dateStr}\n${acpVersion}\n${expressVersion}\n`;
+
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const tmpDir = path.dirname(sysPath);
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        fs.writeFileSync(sysPath, fullContent, { encoding: 'latin1' });
+console.log(`[FileManager] Auto-generated ${amiPath}:\n  Date: ${dateStr}\n  ACP: ${acpVersion}\n  Express: ${expressVersion}`);
+      } catch (err) {
+console.error(`[FileManager] Failed to auto-generate ${amiPath}:`, err);
+      }
+    }
+
     // Check if file exists and log it (use amigafs for case-insensitive matching)
     const fileExists = amigafs.existsSync(sysPath);
     if (fileExists) {
@@ -263,7 +325,10 @@ console.error(`[FileManager] Unknown mode: ${mode}`);
     }
 
     let memoryBuffer: Buffer | undefined;
-    if (fileMode === 'r' && this.fileCache) {
+    // Skip memory caching for T: (temp) files - they may be modified by Execute()
+    // and we need to read fresh content from disk each time
+    const isTempFile = upperAmiPath.startsWith('T:');
+    if (fileMode === 'r' && this.fileCache && !isTempFile) {
       const cached = this.fileCache.load(amiPath, this.currentDirSysPath);
       if (cached && cached.isDirectory) {
 console.error(`[FileManager] "${amiPath}" points to directory, cannot open as file`);
@@ -277,12 +342,14 @@ console.error(`[FileManager] "${amiPath}" points to directory, cannot open as fi
     }
 
     // Create file handle
+    // For temp files (T:), skip snapshotSize since Execute() may rewrite them
     const fh = new FileHandle(amiPath, sysPath, {
       needClose: true,
       autoFlush: false,
       isNil: false,
       isConsole: false,
       memoryBuffer,
+      skipSnapshot: isTempFile,
     });
 
     // Try to open the file

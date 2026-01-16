@@ -229,11 +229,8 @@ debugLog(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
 
       case XIMCommand.BB_CONFNUM:
         {
-          // CRITICAL: Returns 0-based conference number (currentConf - 1)
+          // Returns 0-based conference number (currentConf - 1)
           // Per express.e:3832: StringF(tempstring,'\d',currentConf-1)
-          // Example: User in conference 29 → returns "28", conference 1 → returns "0"
-          // Try multiple possible sources for current conference
-          // Priority: currentConference > currentConf > conferenceId > user.lastConf > default to 1
           const currentConfNum =
             (this.bbsSession as any)?.currentConference !== undefined
               ? (this.bbsSession as any).currentConference
@@ -247,15 +244,7 @@ debugLog(`[XIMBBSInfo] BB_LOCAL: "${value}"`);
           // MUST subtract 1 to convert to 0-based (express.e requirement)
           const confNum = currentConfNum - 1;
           value = confNum.toString();
-
-          // CRITICAL DEBUG: Log buffer state BEFORE write to track "23" vs "2" issue
-          const beforeWrite = this.messageParser.readString(
-            msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
-            DoorConstants.MESSAGE_STRING_CAPACITY
-          );
-debugLog(`[XIMBBSInfo][BB_CONFNUM] BEFORE write: buffer="${beforeWrite}" (incoming from door)`);
-debugLog(`[XIMBBSInfo][BB_CONFNUM] Calculated value: "${value}" (0-based) from currentConfNum=${currentConfNum} (currentConf=${(this.bbsSession as any)?.currentConf})`);
-debugLog(`[XIMBBSInfo][BB_CONFNUM] Will write "${value}" to buffer at 0x${(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET).toString(16)}`);
+debugLog(`[XIMBBSInfo][BB_CONFNUM] READ: Returning ${value} (0-based) from currentConf=${currentConfNum}`);
           break;
         }
 
@@ -350,8 +339,6 @@ debugLog(`[XIMBBSInfo][BB_CONFNUM] Message state: cmd=${cmd}, data=${data}, stri
       }
     } else if (!isRead && msg.string) {
       // Accept updated values (write mode)
-      // CRITICAL: Only BB_CONFNAME and BB_CONFLOCAL support WRITE mode
-      // BB_LOCAL is READ-ONLY per express.e:3708-3709
       switch (msg.command) {
         case XIMCommand.BB_CONFNAME:
           this.bbsSession.conferenceName = msg.string;
@@ -359,7 +346,7 @@ debugLog(`[XIMBBSInfo][BB_CONFNUM] Message state: cmd=${cmd}, data=${data}, stri
         case XIMCommand.BB_CONFLOCAL:
           this.bbsSession.conferencePath = msg.string;
           break;
-        // BB_LOCAL intentionally omitted - READ-ONLY
+        // BB_LOCAL is READ-ONLY per express.e:3708-3709
       }
     }
 
@@ -787,7 +774,12 @@ debugLog(`[XIMBBSInfo] CONF_ACCESS - Check access to conf ${confNum}`);
 
         for (const line of extracted) {
           const cleanLine = line.replace(/^[^a-zA-Z0-9+(%#']+/g, '').trim();
-          if (cleanLine.toUpperCase().startsWith('NUMCONFS=')) {
+          const upperLine = cleanLine.toUpperCase();
+          // Support both NCONFS= and NUMCONFS= formats
+          if (upperLine.startsWith('NCONFS=')) {
+            const val = parseInt(cleanLine.substring(7).trim(), 10);
+            if (!isNaN(val)) numConfs = val;
+          } else if (upperLine.startsWith('NUMCONFS=')) {
             const val = parseInt(cleanLine.substring(9).trim(), 10);
             if (!isNaN(val)) numConfs = val;
           }
@@ -795,19 +787,21 @@ debugLog(`[XIMBBSInfo] CONF_ACCESS - Check access to conf ${confNum}`);
       }
     } catch { /* use default */ }
 
+    let accessResult: number;
     if (confNum < 0 || confNum >= numConfs) {
       // Invalid conference number
-      this.messageParser.writeData(msg.msgAddr, 2); // 2 = invalid
+      accessResult = 2;
     } else {
       // Check access from confAccess string (disk-based only)
       // state.confAccess comes from disk (user.data) via door.handler.ts
       // Do NOT fall back to bbsSession.confAccess - that may be SQLite data
       const confAccess = this.state.confAccess || '';
       const hasAccess = confAccess.length > confNum && confAccess[confNum].toUpperCase() === 'X';
-      this.messageParser.writeData(msg.msgAddr, hasAccess ? 1 : 0);
+      accessResult = hasAccess ? 1 : 0;
 debugLog(`  confAccess="${confAccess}" (len=${confAccess.length}, from disk), check index ${confNum}, Access: ${hasAccess ? 'YES' : 'NO'}`);
     }
-    this.reply(msg, 1);
+    // CRITICAL: Pass accessResult to reply, NOT hardcoded 1
+    this.reply(msg, accessResult);
   }
 
   /**
@@ -929,17 +923,32 @@ debugLog(`[XIMBBSInfo][BB_CONFNUM] Reply msgAddr=0x${msg.msgAddr.toString(16)}, 
       message: 'Reply to door BBS info query',
     });
 
-    // CRITICAL FIX 2026-01-13: Use bidirectional XIM protocol
-    // XIM doors poll AEDoorPort for replies, not their mn_ReplyPort
-    const ximPortAddr = this.state.ximPortAddr;
-    if (ximPortAddr && ximPortAddr !== 0) {
-      const NT_REPLYMSG = 6;
-      this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
-      this.execLibrary.putMsg(ximPortAddr, msg.msgAddr, { suppressDoorCallback: true });
-      debugLog(`[XIMBBSInfo] Reply sent via PutMsg to ximPort=0x${ximPortAddr.toString(16)} (bidirectional XIM)`);
-    } else {
+    // CRITICAL FIX 2026-01-15: Detect which reply method to use based on msg.replyPort
+    // - AEDoor.library-based doors (TurboLister) set mn_ReplyPort and poll THAT port
+    // - Native XIM doors poll the AEDoorPort bidirectionally (replyPort often 0)
+    // If message has valid replyPort, use ReplyMsg to send there (AEDoor.library mode)
+    // Otherwise use bidirectional PutMsg to XIM port (native XIM mode)
+    const msgReplyPort = msg.replyPort || 0;
+
+    if (msgReplyPort !== 0) {
+      // AEDoor.library mode: door polls its own reply port
       this.execLibrary.replyMsg(msg.msgAddr);
-      debugLog(`[XIMBBSInfo] Reply sent via ReplyMsg (fallback)`);
+      debugLog(`[XIMBBSInfo] Reply sent via ReplyMsg to msg.replyPort=0x${msgReplyPort.toString(16)} (AEDoor.library mode)`);
+    } else {
+      // Native XIM mode: door polls AEDoorPort bidirectionally
+      const ximPortAddr = this.state.ximPortAddr;
+      const doorPortAddr = (this.state as any).doorPortAddr;
+      const targetPort = ximPortAddr || doorPortAddr;
+
+      if (targetPort && targetPort !== 0) {
+        const NT_REPLYMSG = 6;
+        this.emulator.writeMemory(msg.msgAddr + 8, NT_REPLYMSG);
+        this.execLibrary.putMsg(targetPort, msg.msgAddr, { suppressDoorCallback: true });
+        debugLog(`[XIMBBSInfo] Reply sent via PutMsg to port=0x${targetPort.toString(16)} (bidirectional XIM)`);
+      } else {
+        this.execLibrary.replyMsg(msg.msgAddr);
+        debugLog(`[XIMBBSInfo] Reply sent via ReplyMsg (fallback)`);
+      }
     }
   }
 }

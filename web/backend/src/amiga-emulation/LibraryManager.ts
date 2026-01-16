@@ -18,6 +18,8 @@ import {
   MathIEEESingTransLibrary,
 } from "./api/MathLibrary";
 import { IntuitionLibrary } from "./api/IntuitionLibrary";
+import { BsdSocketLibrary } from "./api/BsdSocketLibrary";
+import { AmiSSLMasterLibrary, AmiSSLLibrary } from "./api/AmiSSLLibrary";
 import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
@@ -49,6 +51,9 @@ export class LibraryManager {
   public mathIEEESingBasLibrary: MathIEEESingBasLibrary | null = null;
   public mathIEEESingTransLibrary: MathIEEESingTransLibrary | null = null;
   public intuitionLibrary: IntuitionLibrary | null = null;
+  public bsdSocketLibrary: BsdSocketLibrary | null = null;
+  public amisslMasterLibrary: AmiSSLMasterLibrary | null = null;
+  public amisslLibrary: AmiSSLLibrary | null = null;
   public libraryTraps: LibraryTraps | null = null;
   public ximProtocol: XIMProtocol | null = null;
   public bbsApiLibrary: BbsApiLibrary | null = null;
@@ -573,6 +578,13 @@ debugLog("[LibraryManager] Creating math libraries...");
 debugLog("[LibraryManager] Creating intuition.library...");
     this.intuitionLibrary = new IntuitionLibrary(this.emulator);
 
+debugLog("[LibraryManager] Creating network libraries (bsdsocket, amissl)...");
+    this.bsdSocketLibrary = new BsdSocketLibrary(this.emulator);
+    this.amisslMasterLibrary = new AmiSSLMasterLibrary(this.emulator);
+    this.amisslLibrary = new AmiSSLLibrary(this.emulator);
+    // Connect amissl to bsdsocket for TLS upgrade
+    this.amisslLibrary.setBsdSocketLibrary(this.bsdSocketLibrary);
+
 debugLog("[LibraryManager] Installing library call traps...");
 
     this.libraryTraps = new LibraryTraps(this.emulator, this.execLibrary);
@@ -598,6 +610,9 @@ debugLog("[LibraryManager] Installing library call traps...");
     this.libraryTraps.setMathIEEESingBasLibrary(this.mathIEEESingBasLibrary);
     this.libraryTraps.setMathIEEESingTransLibrary(this.mathIEEESingTransLibrary);
     this.libraryTraps.setIntuitionLibrary(this.intuitionLibrary);
+    this.libraryTraps.setBsdSocketLibrary(this.bsdSocketLibrary);
+    this.libraryTraps.setAmiSSLMasterLibrary(this.amisslMasterLibrary);
+    this.libraryTraps.setAmiSSLLibrary(this.amisslLibrary);
 
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
@@ -664,6 +679,18 @@ debugLog("[LibraryManager] mathieeesingtrans.library opened, installing vectors.
       if (name.toLowerCase() === "intuition.library") {
 debugLog("[LibraryManager] intuition.library opened, installing vectors...");
         this.libraryTraps!.installIntuitionVectors();
+      }
+      if (name.toLowerCase() === "bsdsocket.library") {
+debugLog("[LibraryManager] bsdsocket.library opened, installing vectors...");
+        this.libraryTraps!.installBsdSocketVectors();
+      }
+      if (name.toLowerCase() === "amisslmaster.library") {
+debugLog("[LibraryManager] amisslmaster.library opened, installing vectors...");
+        this.libraryTraps!.installAmiSSLMasterVectors();
+      }
+      if (name.toLowerCase() === "amissl.library") {
+debugLog("[LibraryManager] amissl.library opened, installing vectors...");
+        this.libraryTraps!.installAmiSSLVectors();
       }
       if (name.toLowerCase() === "graphics.library") {
 debugLog(
