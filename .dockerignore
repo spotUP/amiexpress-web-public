@@ -69,6 +69,9 @@ data/amiga-roms/*
 # Door binaries (Render build needs them in context)
 !Doors/**
 !doors/**
+# But exclude node_modules inside doors (they get npm ci'd fresh)
+Doors/**/node_modules
+doors/**/node_modules
 
 # User data (will be in volume)
 Users/*.db

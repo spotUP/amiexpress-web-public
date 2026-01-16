@@ -110,16 +110,17 @@ RUN apk add --no-cache bash findutils
 # Copy all TypeScript doors
 COPY Doors ./Doors
 
-# Build all TypeScript doors that have package.json
+# Build TypeScript doors (top-level only, skip node_modules)
 RUN echo "[Build] Building TypeScript doors..." && \
-    find Doors -name "package.json" -type f | while read pkgfile; do \
-      doordir=$(dirname "$pkgfile"); \
-      echo "[Build] Building door: $doordir"; \
-      cd "/app/$doordir" && \
-      npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null && \
-      npm run build 2>&1 && \
-      echo "[Build] ✓ Built $doordir" || echo "[Build] ✗ Failed to build $doordir"; \
-      cd /app; \
+    for doordir in Doors/*/; do \
+      doorname=$(basename "$doordir"); \
+      if [ -f "${doordir}package.json" ] && [ "$doorname" != "node_modules" ]; then \
+        echo "[Build] Building door: $doorname"; \
+        cd "/app/$doordir" && \
+        (npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null) && \
+        (npm run build 2>&1 || echo "[Build] No build script for $doorname"); \
+        cd /app; \
+      fi; \
     done && \
     echo "[Build] TypeScript doors build complete"
 
