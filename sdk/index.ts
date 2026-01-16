@@ -160,6 +160,46 @@ export {
 export * as blessed from './engines/ui/blessed/index';
 export { default as Blessed } from './engines/ui/blessed/index';
 
+// ANSI Editor Core Library (reusable for other doors)
+export * as ANSIEditorCore from './engines/ui/ansi-editor/index';
+export {
+  // Canvas operations
+  Canvas as ANSICanvas,
+  // Drawing tools
+  DrawingTools,
+  BrushModes,
+  getToolHandler,
+  handleDrawEvent,
+  undoDrawing,
+  clearUndoStack,
+  // File operations
+  FileOps as ANSIFileOps,
+  loadANSFile,
+  saveANSFile,
+  loadASCFile,
+  saveASCFile,
+  detectFileFormat,
+  loadFile as loadANSIFile,
+  saveFile as saveANSIFile,
+  // Editor utilities
+  EditorState as ANSIEditorState,
+  Clipboard as ANSIClipboard,
+  ANSIUtils,
+  // Character picker utilities
+  getCP437Char,
+  getCP437Code,
+  isCP437Char,
+  getAllCP437Chars,
+  getCommonDrawingChars,
+} from './engines/ui/ansi-editor/index';
+export type {
+  Cell,
+  DrawingTool,
+  BrushMode,
+  EditorMode,
+  SAUCERecord,
+} from './engines/ui/ansi-editor/index';
+
 // Export blessed classes and types directly for easier access
 export {
   Screen,
@@ -246,40 +286,6 @@ export type { DropdownMenuOptions, DropdownMenuItem } from './engines/ui/blessed
 
 // Export AutocompleteTextboxOptions separately (defined in widget file, not core/types)
 export type { AutocompleteTextboxOptions } from './engines/ui/blessed/widgets/autocomplete-textbox';
-
-// ANSI Editor SDK
-export { 
-  ANSIUtils, 
-  EditorState, 
-  CursorManager, 
-  Clipboard, 
-  SearchManager,
-  showANSIEditor,
-  Viewport,
-  StatusBar,
-  SearchDialog,
-  ColorPicker,
-  Toolbar,
-  AutocompleteDialog,
-  KeyboardHandler
-} from './engines/ui/ansi-editor/index';
-
-export type {
-  EditorSession,
-  EditorOptions,
-  KeyBinding,
-  EditorOperation,
-  ANSIToken,
-  ANSITokenType,
-  ANSIColor,
-  ViewportInfo,
-  SearchResult,
-  EditorEventHandler,
-  EditorEvents,
-  ANSIColorName,
-  ANSIColorInfo,
-  ToolbarAction
-} from './engines/ui/ansi-editor/index';
 
 // Components
 export { MenuSystem } from './components/menus/menu-system';

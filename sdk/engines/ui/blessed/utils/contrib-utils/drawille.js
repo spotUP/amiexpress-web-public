@@ -1,28 +1,12 @@
 "use strict";
-/**
- * Drawille - Braille Canvas for Terminal
- *
- * 1:1 port from drawille-blessed-contrib/index.js
- * Uses Unicode Braille characters (U+2800-U+28FF) for high-resolution terminal graphics
- *
- * Each Braille character represents a 2x4 pixel grid:
- * ⠁ ⠂ ⠄ ⠈ ⠐ ⠠ ⡀ ⢀
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DrawilleCanvas = exports.colors = void 0;
-/**
- * Braille dot mapping for 2x4 grid
- * [y%4][x%2] = bit mask
- */
 const map = [
-    [0x1, 0x8], // Row 0: dots 1 and 4
-    [0x2, 0x10], // Row 1: dots 2 and 5
-    [0x4, 0x20], // Row 2: dots 3 and 6
-    [0x40, 0x80] // Row 3: dots 7 and 8
+    [0x1, 0x8],
+    [0x2, 0x10],
+    [0x4, 0x20],
+    [0x40, 0x80]
 ];
-/**
- * Standard terminal color codes
- */
 exports.colors = {
     black: 0,
     red: 1,
@@ -34,10 +18,6 @@ exports.colors = {
     white: 7,
     normal: 9
 };
-/**
- * Braille Canvas
- * Provides high-resolution drawing using Unicode Braille characters
- */
 class DrawilleCanvas {
     constructor(width, height) {
         if (width % 2 !== 0) {
@@ -56,9 +36,6 @@ class DrawilleCanvas {
         this.fontBg = 'normal';
         this.color = 'normal';
     }
-    /**
-     * Get coordinate index in the buffer
-     */
     getCoord(x, y) {
         x = Math.floor(x);
         y = Math.floor(y);
@@ -67,9 +44,6 @@ class DrawilleCanvas {
         const coord = nx + (this.width / 2) * ny;
         return coord;
     }
-    /**
-     * Set a pixel (turn on)
-     */
     set(x, y) {
         if (!(x >= 0 && x < this.width && y >= 0 && y < this.height)) {
             return;
@@ -80,9 +54,6 @@ class DrawilleCanvas {
         this.colors[coord] = typeof this.color === 'string' ? exports.colors[this.color] : this.color;
         this.chars[coord] = null;
     }
-    /**
-     * Unset a pixel (turn off)
-     */
     unset(x, y) {
         if (!(x >= 0 && x < this.width && y >= 0 && y < this.height)) {
             return;
@@ -93,9 +64,6 @@ class DrawilleCanvas {
         this.colors[coord] = null;
         this.chars[coord] = null;
     }
-    /**
-     * Toggle a pixel
-     */
     toggle(x, y) {
         if (!(x >= 0 && x < this.width && y >= 0 && y < this.height)) {
             return;
@@ -106,21 +74,12 @@ class DrawilleCanvas {
         this.colors[coord] = null;
         this.chars[coord] = null;
     }
-    /**
-     * Clear the entire canvas
-     */
     clear() {
         this.content.fill(0);
     }
-    /**
-     * Measure text width
-     */
     measureText(str) {
         return { width: str.length * 2 + 2 };
     }
-    /**
-     * Write text at position
-     */
     writeText(str, x, y) {
         const coord = this.getCoord(x, y);
         for (let i = 0; i < str.length; i++) {
@@ -131,11 +90,6 @@ class DrawilleCanvas {
         this.chars[coord] = '\x1b[3' + fg + 'm' + '\x1b[4' + bg + 'm' + this.chars[coord];
         this.chars[coord + str.length - 1] += '\x1b[39m\x1b[49m';
     }
-    /**
-     * Render canvas to string
-     * @param delimiter Line delimiter (default: '\n')
-     * @returns Rendered canvas as string with ANSI codes
-     */
     frame(delimiter) {
         delimiter = delimiter || '\n';
         const result = [];

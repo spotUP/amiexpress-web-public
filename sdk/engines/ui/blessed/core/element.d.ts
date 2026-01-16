@@ -2,31 +2,52 @@
  * Base Element class - foundation for all widgets
  */
 import { EventEmitter } from './events';
-import type { ElementOptions, Position } from './types';
+import type { ElementOptions, Position, Border } from './types';
+import { ResponsiveBehavior, type ResponsiveState } from './responsive-mixin';
+import type { BreakpointName } from './responsive-constants';
+import type { SwipeOptions, LongPressOptions } from './touch-gestures';
 export declare class Element extends EventEmitter {
     options: ElementOptions;
     parent: Element | null;
     screen: any;
     children: Element[];
+    style: any;
+    border: Border | null;
     position: Position;
     lpos?: Position;
     content: string;
     private _lines;
     private _contentDirty;
+    private _lastParsedWidth;
     visible: boolean;
     hidden: boolean;
     focused: boolean;
     destroyed: boolean;
-    private childBase;
+    disabled: boolean;
+    /**
+     * Check if this element or any of its descendants has focus
+     */
+    hasFocusedChild(): boolean;
+    protected childBase: number;
     private childOffset;
     private clickable;
     private keyable;
     private input;
-    private _hovered;
+    protected _hovered: boolean;
+    protected _overBorder: boolean;
+    protected _scrollbarHovered: boolean;
+    protected _resizing: boolean;
+    private _lastClickTime;
     private _draggable?;
     private _dragMD?;
     private _dragM?;
     private _drag?;
+    protected _scrollbarDragging: boolean;
+    private _scrollbarDragStartY;
+    private _scrollbarDragStartBase;
+    private _scrollbarMouseMoveHandler?;
+    private _scrollbarMouseUpHandler?;
+    protected _responsiveBehavior?: ResponsiveBehavior;
     /**
      * Draggable property with setter that enables/disables dragging
      * EXACT from neo-blessed element.js: __defineSetter__('draggable', ...)
@@ -34,34 +55,55 @@ export declare class Element extends EventEmitter {
     get draggable(): boolean;
     set draggable(value: boolean);
     constructor(options?: ElementOptions);
+    /**
+     * Set up closable feature - adds X button and ESC key binding
+     */
+    private _closableXButton?;
+    private setupClosable;
+    private createClosableXButton;
+    /**
+     * Close this element - hides it and emits 'close' event
+     */
+    close(): void;
     private calcPos;
     private getPadding;
-    private hasBorder;
+    protected hasBorder(): boolean;
+    /**
+     * Invalidate coordinates - NO-OP since caching was removed
+     * Kept for API compatibility with existing code that calls it
+     */
+    _invalidateCoords(): void;
     _getCoords(get?: boolean, noscroll?: boolean): Position | undefined;
     /**
      * Get calculated width (in columns)
      */
     get width(): number;
+    set width(val: number | string);
     /**
      * Get calculated height (in rows)
      */
     get height(): number;
+    set height(val: number | string);
     /**
      * Get left position (relative to parent)
      */
-    get left(): number;
+    get left(): number | string;
+    set left(val: number | string);
     /**
      * Get right position (relative to parent)
      */
-    get right(): number;
+    get right(): number | string;
+    set right(val: number | string);
     /**
      * Get top position (relative to parent)
      */
-    get top(): number;
+    get top(): number | string;
+    set top(val: number | string);
     /**
      * Get bottom position (relative to parent)
      */
-    get bottom(): number;
+    get bottom(): number | string;
+    set bottom(val: number | string);
     /**
      * Get absolute left position (screen coordinates)
      */
@@ -245,6 +287,14 @@ export declare class Element extends EventEmitter {
     private _propagateScreen;
     focus(): void;
     blur(): void;
+    /**
+     * Disable element (prevents interaction, applies disabled style)
+     */
+    disable(): void;
+    /**
+     * Enable element (restores interaction, removes disabled style)
+     */
+    enable(): void;
     private _overlayId?;
     /**
      * Get unique overlay ID for this element (lazily generated)
@@ -257,6 +307,19 @@ export declare class Element extends EventEmitter {
     show(): void;
     hide(): void;
     toggle(): void;
+    /**
+     * Enable transparency (50% color blending with underlying content)
+     * Similar to CSS opacity but for terminal - blends colors at 50% alpha
+     */
+    setTransparent(enabled?: boolean): void;
+    /**
+     * Check if element has transparency enabled
+     */
+    isTransparent(): boolean;
+    /**
+     * Toggle transparency on/off
+     */
+    toggleTransparent(): void;
     setFront(): void;
     setBack(): void;
     scroll(offset: number): void;
@@ -272,7 +335,10 @@ export declare class Element extends EventEmitter {
      * Screen event listeners tracking
      * EXACT from neo-blessed element.js lines 267-297
      */
-    private _slisteners?;
+    protected _slisteners: Array<{
+        type: string;
+        handler: (...args: any[]) => void;
+    }>;
     /**
      * Register event listener on screen and track it for cleanup
      * EXACT from neo-blessed element.js lines 267-271
@@ -288,6 +354,10 @@ export declare class Element extends EventEmitter {
      * EXACT from neo-blessed element.js lines 284-297
      */
     removeScreenEvent(type: string, handler: (...args: any[]) => void): void;
+    /**
+     * Unbind all screen events for this element
+     */
+    private _unbindScreenEvents;
     /**
      * Enable mouse events for this element
      */
@@ -324,7 +394,7 @@ export declare class Element extends EventEmitter {
     disableDrag(): boolean;
     /**
      * Enable resizing for this element
-     * Resize by dragging the bottom-right corner (last 2 chars of bottom row)
+     * Allows resizing from all edges and corners
      */
     enableResize(callback?: (data: {
         width: number;
@@ -349,22 +419,24 @@ export declare class Element extends EventEmitter {
     /**
      * Key handler - register a key binding
      */
-    key(keys: string | string[], listener: (ch: any, key: any) => void): void;
+    key(keys: string | string[], listener: (ch: any, key: any) => boolean | void): void;
     /**
      * Remove key handler
      */
-    unkey(keys: string | string[], listener: (ch: any, key: any) => void): void;
+    unkey(keys: string | string[], listener: (ch: any, key: any) => boolean | void): void;
     /**
      * Handle keypress event
      */
     onKeypress(ch: string, key: any): void;
     /**
      * Handle mouse event
+     * Returns true if the event was handled by this element
      */
-    onMouse(event: any): void;
+    onMouse(event: any): boolean;
     /**
-     * Handle mouse leave
+     * Check if coordinates are on the scrollbar thumb specifically
      */
+    private isOnScrollbarThumb;
     onMouseLeave(): void;
     render(): void;
     /**
@@ -373,6 +445,7 @@ export declare class Element extends EventEmitter {
     private getBorderChars;
     /**
      * Render border around element
+     * Supports per-edge colors via fgTop, fgBottom, fgLeft, fgRight properties
      */
     renderBorder(): void;
     /**
@@ -383,6 +456,31 @@ export declare class Element extends EventEmitter {
      * Check if element has scrollbar
      */
     hasScrollbar(): boolean;
+    /**
+     * Check if a point is on the element's border
+     */
+    isOnBorder(x: number, y: number): boolean;
+    /**
+     * Identify which edge or corner is at the given point for resizing
+     */
+    getResizeEdge(x: number, y: number): string | null;
+    /**
+     * Check if a point is on the scrollbar track
+     * Returns true if the click is on the scrollbar column
+     */
+    isOnScrollbar(x: number, y: number): boolean;
+    /**
+     * Get the scrollbar geometry for drag calculations
+     */
+    private _getScrollbarGeometry;
+    /**
+     * Start scrollbar drag operation
+     */
+    private _startScrollbarDrag;
+    /**
+     * End scrollbar drag operation
+     */
+    private _endScrollbarDrag;
     /**
      * Render scrollbar
      */
@@ -561,7 +659,42 @@ export declare class Element extends EventEmitter {
         line: number;
         col: number;
     };
+    /**
+     * Called when screen resizes. Override in widgets for custom resize behavior.
+     */
+    protected _handleResize(width: number, height: number, state: ResponsiveState): void;
+    /**
+     * Called when breakpoint changes. Override in widgets for breakpoint-specific behavior.
+     */
+    protected _handleBreakpointChange(breakpoint: BreakpointName, previousBreakpoint: BreakpointName, state: ResponsiveState): void;
+    /**
+     * Called when entering mobile mode (xs breakpoint). Override in widgets.
+     */
+    protected _enterMobileMode(): void;
+    /**
+     * Called when exiting mobile mode (leaving xs breakpoint). Override in widgets.
+     */
+    protected _exitMobileMode(): void;
+    /**
+     * Get the current responsive state
+     */
+    getResponsiveState(): ResponsiveState | undefined;
+    /**
+     * Get the current breakpoint name
+     */
+    getBreakpoint(): BreakpointName | undefined;
+    /**
+     * Check if currently in mobile mode (xs breakpoint)
+     */
+    isMobile(): boolean;
+    /**
+     * Enable swipe gestures on this element
+     */
+    enableSwipe(options: SwipeOptions): () => void;
+    /**
+     * Enable long press gesture on this element
+     */
+    enableLongPress(options: LongPressOptions): () => void;
     destroy(): void;
     free(): void;
 }
-//# sourceMappingURL=element.d.ts.map

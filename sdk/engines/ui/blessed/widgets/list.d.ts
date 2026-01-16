@@ -1,8 +1,15 @@
 /**
  * List widget - Scrollable list with selection
+ *
+ * Responsive features:
+ * - Touch-friendly row heights on mobile (2+ lines per item)
+ * - Swipe scrolling on mobile
+ * - Momentum scrolling
  */
 import { Element } from '../core/element';
-import type { ListOptions } from '../core/types';
+import type { ListOptions, MouseEvent } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 export declare class List extends Element {
     items: string[];
     selected: number;
@@ -12,6 +19,12 @@ export declare class List extends Element {
     private lineToItem;
     private itemLineStart;
     private itemLineCount;
+    private _hoveredItem;
+    private _lastKeyTime;
+    private _isMobileMode;
+    private _mobileRowHeight;
+    private _swipeStartY;
+    private _swipeStartScroll;
     constructor(options?: ListOptions);
     private _onClick;
     private _updateContent;
@@ -97,7 +110,39 @@ export declare class List extends Element {
      * EXACT from neo-blessed list.js lines 593-597
      */
     cancelSelected(i?: number): void;
+    /**
+     * Pad a line with spaces to fill the full width.
+     * This prevents ghost characters from old selection when content changes.
+     */
+    private _padLine;
     private getItemWrapWidth;
     private wrapAnsiText;
+    onMouse(event: MouseEvent): boolean;
+    onMouseLeave(): void;
+    hide(): void;
+    destroy(): void;
+    /**
+     * Handle breakpoint change - adjust row heights
+     */
+    protected _handleBreakpointChange(breakpoint: BreakpointName, previousBreakpoint: BreakpointName, state: ResponsiveState): void;
+    /**
+     * Called when entering mobile mode - enable touch features
+     */
+    protected _enterMobileMode(): void;
+    /**
+     * Called when exiting mobile mode - disable touch features
+     */
+    protected _exitMobileMode(): void;
+    /**
+     * Handle swipe start for mobile scrolling
+     */
+    handleSwipeStart(y: number): void;
+    /**
+     * Handle swipe move for mobile scrolling
+     */
+    handleSwipeMove(y: number): void;
+    /**
+     * Handle swipe end with momentum
+     */
+    handleSwipeEnd(velocityY: number): void;
 }
-//# sourceMappingURL=list.d.ts.map

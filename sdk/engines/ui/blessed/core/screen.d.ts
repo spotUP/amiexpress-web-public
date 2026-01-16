@@ -3,8 +3,11 @@
  */
 import { Element } from './element';
 import { Program } from './program';
+import { KeyBindings } from './keybindings';
+import { ResponsiveLayoutManager } from './responsive-layout';
 import type { ScreenOptions, KeyEvent } from './types';
 export declare class Screen extends Element {
+    options: ScreenOptions;
     private _width;
     private _height;
     focused: boolean;
@@ -12,19 +15,46 @@ export declare class Screen extends Element {
     program: Program;
     private output;
     private focusHistory;
+    private focusStack;
     private savedFocus;
+    private focusTrap;
     private buffer;
     private lastBuffer;
     private dirty;
+    private _renderPending;
+    private _renderTimer;
+    private _dirtyMinX;
+    private _dirtyMinY;
+    private _dirtyMaxX;
+    private _dirtyMaxY;
+    private _mouseIndex;
+    private _mouseIndexValid;
+    private _hoveredElements;
     private title;
     private cursorHidden;
     private cursorX;
     private cursorY;
+    private _cursorStyle;
     private _dragging;
     private keyHandlers;
+    keyBindings: KeyBindings;
+    private _contextMenuHandler;
+    responsiveLayout: ResponsiveLayoutManager;
+    private _responsive;
+    private _locked;
+    private _optimizedRendering;
+    private _dirtyElements;
+    private _fullRedrawNeeded;
     constructor(options?: ScreenOptions & {
+        input?: any;
         output?: (data: string) => void;
+        responsive?: boolean;
     });
+    /**
+     * Setup browser context menu prevention
+     * This allows SDK doors to use right-click without the browser menu appearing
+     */
+    private setupBrowserContextMenu;
     /**
      * Setup key event routing from Program to Screen
      */
@@ -37,6 +67,20 @@ export declare class Screen extends Element {
      * Handle mouse event and route to appropriate elements
      */
     private handleMouseEvent;
+    /**
+     * Determine and set the appropriate cursor style based on hovered elements
+     */
+    private updateCursorStyleForHover;
+    /**
+     * Get appropriate cursor style for an element based on its type and properties
+     */
+    private getCursorStyleForElement;
+    private _rebuildMouseIndex;
+    /**
+     * Invalidate mouse index when elements move or change
+     * Called by Element when positions change
+     */
+    invalidateMouseIndex(): void;
     /**
      * Get all elements at screen coordinates
      */
@@ -55,14 +99,19 @@ export declare class Screen extends Element {
     disableMouse(): void;
     private write;
     /**
+     * Get the rendered ANSI output from the program buffer
+     */
+    getOutput(): string;
+    /**
      * Set screen dimensions based on user configuration
-     * BBS Constraints:
-     * - Width: Always 80 columns (classic BBS standard)
+     * BBS Constraints (non-responsive mode):
+     * - Width: 80 columns (classic BBS standard)
      * - Height: User-configurable (default 23 content + 2 prompts = 25 total max)
      *
      * @param linesPerScreen User's configured lines per screen (default 23)
+     * @param width Optional width (only used in responsive mode)
      */
-    setDimensions(linesPerScreen?: number): void;
+    setDimensions(linesPerScreen?: number, width?: number): void;
     /**
      * Get current screen dimensions
      */
@@ -76,6 +125,14 @@ export declare class Screen extends Element {
     flush(): void;
     private clearBuffers;
     /**
+     * Force a full screen redraw on the next render by invalidating lastBuffer.
+     * This ensures all cells are output to the terminal, which is useful after
+     * destroying dialogs or overlays where remnants might otherwise persist.
+     *
+     * Call this before render() when transitioning between dialogs/overlays.
+     */
+    forceFullRedraw(): void;
+    /**
      * Allocate (create) a new blank buffer
      */
     alloc(): [number, string][][];
@@ -83,6 +140,35 @@ export declare class Screen extends Element {
      * Reallocate buffers (called on resize)
      */
     realloc(): void;
+    /**
+     * Lock the screen to prevent rendering during batch updates
+     */
+    lock(): void;
+    /**
+     * Unlock the screen and trigger a coordinated render
+     */
+    unlock(): void;
+    /**
+     * Enable optimized rendering for slow connections (modem/telnet)
+     * This mode only redraws changed elements instead of clearing the full screen
+     */
+    enableOptimizedRendering(): void;
+    /**
+     * Disable optimized rendering (use full screen redraws)
+     */
+    disableOptimizedRendering(): void;
+    /**
+     * Check if optimized rendering is enabled
+     */
+    isOptimizedRenderingEnabled(): boolean;
+    /**
+     * Mark an element as needing redraw (for optimized rendering)
+     */
+    markDirtyElement(element: Element): void;
+    /**
+     * Request a full redraw on next render (for optimized rendering)
+     */
+    requestFullRedraw(): void;
     /**
      * Create a blank line
      */
@@ -109,6 +195,7 @@ export declare class Screen extends Element {
      */
     private styleToAttr;
     render(): void;
+    private _doRender;
     private _renderElement;
     /**
      * Render shadow effect (EXACT 1:1 PORT FROM blessed element.js lines 2119-2145)
@@ -123,7 +210,17 @@ export declare class Screen extends Element {
     private _renderBorder;
     private _dockBorders;
     private _renderAsciiLabel;
+    /**
+     * Parse a label string with blessed tags and return styled characters
+     * Handles tags like {cyan-fg}Text{/} and extracts attributes for each character
+     */
+    private _parseStyledLabel;
+    /**
+     * Convert a blessed tag name to a style object
+     */
+    private _tagToStyle;
     private _getAngle;
+    private _markDirty;
     private _diff;
     draw(start: number, end: number): void;
     /**
@@ -192,13 +289,37 @@ export declare class Screen extends Element {
      * Reset scroll region
      */
     resetScrollRegion(): void;
+    /**
+     * Push current focus to stack and focus a new element
+     */
     focusPush(element: Element): void;
+    /**
+     * Pop focus from stack and restore it
+     */
     focusPop(): Element | null;
     saveFocus(): Element | null;
     restoreFocus(): Element | null;
     rewindFocus(): void;
     /**
-     * Get all focusable elements in tree order
+     * Enable focus trapping within a container (for modals)
+     * Tab/Shift+Tab will only cycle through elements within the container
+     */
+    trapFocus(container: Element): void;
+    /**
+     * Disable focus trapping and restore previous focus
+     */
+    releaseFocusTrap(): void;
+    /**
+     * Check if focus is currently trapped
+     */
+    isFocusTrapped(): boolean;
+    /**
+     * Get the current focus trap container (if any)
+     */
+    getFocusTrap(): Element | null;
+    /**
+     * Get all focusable elements in tree order, sorted by tabIndex
+     * If focus is trapped, only returns elements within the trap container
      */
     private _getFocusable;
     /**
@@ -217,6 +338,12 @@ export declare class Screen extends Element {
      * Focus element at offset from current
      */
     focusOffset(offset: number): void;
+    /**
+     * Enable global key bindings (F12, Alt+M) to toggle mouse tracking.
+     * Useful for allowing users to disable mouse capture for text selection.
+     * @param callback Optional callback triggered on toggle, receives (enabled: boolean)
+     */
+    enableMouseToggle(callback?: (enabled: boolean) => void): void;
     key(keys: string | string[], handler: (ch: any, key: KeyEvent) => void): void;
     onceKey(keys: string | string[], handler: (ch: any, key: KeyEvent) => void): void;
     unkey(keys: string | string[], handler: (ch: any, key: KeyEvent) => void): void;
@@ -224,6 +351,17 @@ export declare class Screen extends Element {
     setTitle(title: string): void;
     showCursor(): void;
     hideCursor(): void;
+    /**
+     * Set cursor style for web frontend (CSS cursor property)
+     * Valid styles: 'default', 'pointer', 'text', 'move', 'grab', 'grabbing',
+     *               'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize',
+     *               'col-resize', 'row-resize', 'crosshair', 'not-allowed'
+     */
+    setCursorStyle(style: string): void;
+    /**
+     * Get current cursor style
+     */
+    getCursorStyle(): string;
     /**
      * Enter alternate buffer and initialize screen
      */
@@ -285,6 +423,11 @@ export declare class Screen extends Element {
      * Unlock key handlers
      */
     unlockKeys(): void;
+    /**
+     * Resize the screen to new dimensions
+     * Called when terminal size changes (e.g., browser window resize)
+     */
+    resize(cols: number, rows: number): void;
     private _colorToCode;
     private _stripAnsi;
     /**
@@ -339,4 +482,3 @@ export declare class Screen extends Element {
      */
     _handleData(data: string): void;
 }
-//# sourceMappingURL=screen.d.ts.map

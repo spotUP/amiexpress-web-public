@@ -28,6 +28,7 @@ import {
   BREAKPOINT_SM,
   MIN_TOUCH_HEIGHT,
 } from '../core/responsive-constants';
+import { trapModalInput } from '../utils/modal-helpers';
 
 export interface DocModalOptions extends ElementOptions {
   /** Modal title shown in border label */
@@ -71,6 +72,8 @@ export class DocModal extends Box {
   private _contentTopDesktop: number;
   private _swipeStartY: number = 0;
   private _swipeStartTime: number = 0;
+  private _trapCleanup?: () => void;
+  private _savedFocus?: any;
 
   constructor(options: DocModalOptions = {}) {
     super({
@@ -168,7 +171,7 @@ export class DocModal extends Box {
       },
       style: {
         fg: options.contentStyle?.fg || 'white',
-        bg: options.contentStyle?.bg || 'black',
+        bg: options.contentStyle?.bg || 'blue',
       },
       content: options.content || '',
     });
@@ -183,6 +186,22 @@ export class DocModal extends Box {
   private _setupKeyHandlers(): void {
     // Close handler
     const closeModal = () => {
+      // Clean up input trapping
+      if (this._trapCleanup) {
+        this._trapCleanup();
+        this._trapCleanup = undefined;
+      }
+
+      // Restore focus
+      if (this.screen) {
+        if ((this.screen as any).focusPop) {
+          (this.screen as any).focusPop();
+        }
+        if ((this.screen as any).restoreFocus && this._savedFocus) {
+          (this.screen as any).restoreFocus(this._savedFocus);
+        }
+      }
+
       this.hide();
       if (this._onClose) {
         this._onClose();
@@ -190,16 +209,20 @@ export class DocModal extends Box {
       this.emit('close');
     };
 
-    // Mouse wheel scrolling
-    this._contentArea.on('wheelup', () => {
+    // Mouse wheel scrolling - on both content area and modal itself
+    const handleWheelUp = () => {
       this._contentArea.scroll(-3);
       this.screen?.render();
-    });
-
-    this._contentArea.on('wheeldown', () => {
+    };
+    const handleWheelDown = () => {
       this._contentArea.scroll(3);
       this.screen?.render();
-    });
+    };
+
+    this._contentArea.on('wheelup', handleWheelUp);
+    this._contentArea.on('wheeldown', handleWheelDown);
+    this.on('wheelup', handleWheelUp);
+    this.on('wheeldown', handleWheelDown);
 
     // Keyboard navigation on content area (which has focus)
     this._contentArea.key(['up', 'k'], () => {
@@ -324,6 +347,17 @@ export class DocModal extends Box {
         if (originalOnClose) originalOnClose();
         focusOnClose.focus?.();
       };
+    }
+
+    // Save focus and trap input within modal
+    if (this.screen) {
+      if ((this.screen as any).saveFocus) {
+        this._savedFocus = (this.screen as any).saveFocus();
+      }
+      if ((this.screen as any).focusPush) {
+        (this.screen as any).focusPush(this);
+      }
+      this._trapCleanup = trapModalInput(this);
     }
 
     this.show();

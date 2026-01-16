@@ -22,6 +22,10 @@ export interface Border {
     label?: string;
     labelStyle?: Colors;
     labelPosition?: 'left' | 'center' | 'right';
+    fgTop?: Color;
+    fgBottom?: Color;
+    fgLeft?: Color;
+    fgRight?: Color;
 }
 export interface Padding {
     left?: number;
@@ -57,6 +61,8 @@ export interface ElementOptions {
         scrollbar?: Colors;
         focus?: Colors;
         hover?: Colors;
+        active?: Colors;
+        disabled?: Colors;
     };
     border?: Border | 'line' | 'bg';
     padding?: number | Padding;
@@ -75,18 +81,34 @@ export interface ElementOptions {
     draggable?: boolean;
     dockBorders?: boolean;
     ignoreDockContrast?: boolean;
+    disabled?: boolean;
+    zIndex?: number;
+    tabIndex?: number;
+    tabbable?: boolean;
     scrollable?: boolean;
     alwaysScroll?: boolean;
     scrollbar?: {
         ch?: string;
+        thumb?: {
+            ch?: string;
+        };
         track?: {
             ch?: string;
+            style?: Colors;
         };
         style?: Colors;
     };
     baseLimit?: number;
     mouse?: boolean;
     hoverText?: string;
+    cursorStyle?: string;
+    closable?: boolean;
+    closeOnEscape?: boolean;
+    trapFocus?: boolean;
+    responsive?: boolean;
+    touchFriendly?: boolean;
+    swipeEnabled?: boolean;
+    mobileBreakpoint?: number;
     label?: string;
     parent?: Element;
     screen?: Screen;
@@ -111,6 +133,7 @@ export interface MouseEvent {
 export type EventHandler = (...args: any[]) => void;
 export interface ScreenOptions {
     program?: any;
+    input?: any;
     smartCSR?: boolean;
     fastCSR?: boolean;
     resizeTimeout?: number;
@@ -137,6 +160,13 @@ export interface ScreenOptions {
     forceUnicode?: boolean;
     terminal?: string;
     tput?: boolean;
+    responsive?: boolean;
+    focusKeys?: boolean;
+    breakpoints?: {
+        small?: number;
+        medium?: number;
+        large?: number;
+    };
 }
 export interface ListOptions extends ElementOptions {
     items?: string[];
@@ -202,8 +232,134 @@ export interface LogOptions extends ElementOptions {
     scrollback?: number;
     scrollOnInput?: boolean;
 }
+export interface TreeNode {
+    name?: string;
+    extended?: boolean;
+    children?: TreeNode[] | Record<string, TreeNode> | ((node: TreeNode) => TreeNode[] | Record<string, TreeNode>);
+    childrenContent?: TreeNode[] | Record<string, TreeNode>;
+    parent?: TreeNode | null;
+    position?: number;
+    depth?: number;
+}
+export interface TreeTemplate {
+    extend?: string;
+    retract?: string;
+    lines?: boolean;
+    spaces?: boolean;
+}
+export interface TreeOptions extends ElementOptions {
+    extended?: boolean;
+    keys?: string[] | boolean;
+    vi?: boolean;
+    mouse?: boolean;
+    scrollable?: boolean;
+    ignoreKeys?: string[];
+    template?: TreeTemplate;
+    selectedBg?: string | number | number[];
+    selectedFg?: string | number | number[];
+    bold?: boolean;
+}
+export interface AutocompleteSuggestion {
+    label: string;
+    insertText?: string;
+    detail?: string;
+    kind?: 'text' | 'keyword' | 'function' | 'variable' | 'user';
+    sortText?: string;
+    documentation?: string;
+}
+export interface AutocompleteContext {
+    currentLine: string;
+    cursorPosition: number;
+    lineNumber: number;
+    documentContent: string[];
+}
+export interface AutocompleteProvider {
+    trigger?: string;
+    shouldTrigger?: (context: AutocompleteContext) => boolean;
+    getSuggestions: (context: AutocompleteContext) => Promise<AutocompleteSuggestion[]>;
+}
+export interface AutocompleteOptions extends ElementOptions {
+    providers?: AutocompleteProvider[];
+    onSelect?: (suggestion: AutocompleteSuggestion) => void;
+    onCancel?: () => void;
+}
+export interface VideoOptions extends ElementOptions {
+    src?: string;
+    file?: string;
+    autoPlay?: boolean;
+    loop?: boolean;
+    controls?: boolean;
+    muted?: boolean;
+}
+export interface TabPanelOptions extends ElementOptions {
+    tabs?: {
+        label: string;
+        content: string | any;
+        key?: string;
+    }[];
+    activeTab?: number;
+    barHeight?: number;
+    style?: ElementOptions['style'] & {
+        tab?: Colors;
+        activeTab?: Colors;
+    };
+}
+export interface AccordionItem {
+    label: string;
+    content: string | any;
+    expanded?: boolean;
+}
+export interface AccordionOptions extends ElementOptions {
+    items?: AccordionItem[];
+    multiple?: boolean;
+    style?: ElementOptions['style'] & {
+        header?: Colors;
+        expanded?: Colors;
+    };
+}
+export interface CollapsibleOptions extends ElementOptions {
+    label?: string;
+    expanded?: boolean;
+    collapsedHeight?: number;
+    style?: ElementOptions['style'] & {
+        header?: Colors;
+    };
+}
+export interface StackedGaugeOptions extends ElementOptions {
+    stack?: {
+        percent: number;
+        color: string;
+        label?: string;
+    }[];
+    showLabel?: boolean;
+}
+export interface ColorPickerOptions extends ElementOptions {
+    color?: string;
+    onSelect?: (color: string) => void;
+}
+export interface FileExplorerOptions extends ElementOptions {
+    cwd?: string;
+    showPreview?: boolean;
+    showDetails?: boolean;
+}
+export interface CarouselOptions {
+    screen: Screen;
+    interval?: number;
+    controlKeys?: boolean;
+    rotate?: boolean;
+}
+export type CarouselPage = (screen: Screen, page: number) => void;
 export interface Element {
     options: ElementOptions;
+    style: Colors & {
+        border?: Colors;
+        scrollbar?: Colors;
+        focus?: Colors;
+        hover?: Colors;
+        active?: Colors;
+        disabled?: Colors;
+    };
+    border: Border | null;
     parent: Element | null;
     screen: Screen | null;
     children: Element[];
@@ -223,6 +379,7 @@ export interface Element {
     clearLine(i: number): void;
     insertTop(line: string): void;
     insertBottom(line: string): void;
+    onMouse(event: MouseEvent): boolean;
     append(element: Element): void;
     prepend(element: Element): void;
     remove(element: Element): void;
@@ -233,6 +390,7 @@ export interface Element {
     on(event: string, handler: EventHandler): void;
     once(event: string, handler: EventHandler): void;
     removeListener(event: string, handler: EventHandler): void;
+    off(event: string, handler: EventHandler): void;
     emit(event: string, ...args: any[]): void;
     focus(): void;
     show(): void;
@@ -272,4 +430,3 @@ export interface Screen extends Element {
     hideCursor(): void;
     destroy(): void;
 }
-//# sourceMappingURL=types.d.ts.map

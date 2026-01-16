@@ -34,6 +34,11 @@ export class EventEmitter {
     return this;
   }
 
+  // Alias for removeListener (Node.js EventEmitter compatibility)
+  off(event: string, handler: EventHandler): this {
+    return this.removeListener(event, handler);
+  }
+
   removeAllListeners(event?: string): this {
     if (event) {
       this.events.delete(event);

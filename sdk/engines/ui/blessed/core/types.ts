@@ -494,6 +494,7 @@ export interface Element {
   on(event: string, handler: EventHandler): void;
   once(event: string, handler: EventHandler): void;
   removeListener(event: string, handler: EventHandler): void;
+  off(event: string, handler: EventHandler): void;  // Alias for removeListener
   emit(event: string, ...args: any[]): void;
 
   // Focus

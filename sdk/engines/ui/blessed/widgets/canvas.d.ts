@@ -1,53 +1,78 @@
 /**
- * Canvas Widget
+ * Canvas - Basic drawing canvas for custom rendering
  *
- * 1:1 port from blessed-contrib/lib/widget/canvas.js
- * Provides a canvas widget with Braille-based drawing
+ * Responsive features:
+ * - Reinitializes buffer on breakpoint change
  */
 import { Box } from './box';
-import { Canvas as InnerCanvas, Context } from '../utils/contrib-utils/drawille-canvas';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 export interface CanvasOptions extends ElementOptions {
-    data?: any;
+    fillChar?: string;
+    clearChar?: string;
 }
-/**
- * Canvas Widget
- * Box with Braille-based drawing canvas
- */
 export declare class Canvas extends Box {
-    options: CanvasOptions;
-    _canvas?: InnerCanvas;
-    ctx?: Context;
-    canvasSize?: {
-        width: number;
-        height: number;
-    };
+    protected buffer: string[][];
+    protected fillChar: string;
+    protected clearChar: string;
+    protected canvasWidth: number;
+    protected canvasHeight: number;
+    protected _dirty: boolean;
+    private _renderTimeout;
     constructor(options?: CanvasOptions);
     /**
-     * Calculate canvas size based on widget dimensions
-     * Braille characters are 2x4 pixels, so we multiply accordingly
-     * Width must be multiple of 2, height must be multiple of 4
+     * Initialize canvas buffer
+     * Accounts for borders and padding to use actual content area
      */
-    calcSize(): void;
+    private initializeBuffer;
+    /**
+     * Set pixel at coordinates
+     * @param autoRender - If true (default), schedules a debounced render. Set to false for batch operations.
+     */
+    setPixel(x: number, y: number, char?: string, autoRender?: boolean): void;
+    /**
+     * Schedule a debounced render (16ms = ~60fps)
+     */
+    private _scheduleRender;
+    /**
+     * Get pixel at coordinates
+     */
+    getPixel(x: number, y: number): string | undefined;
     /**
      * Clear the canvas
      */
-    clear(): void;
+    clearCanvas(): void;
     /**
-     * Set data (override in subclasses)
+     * Draw a line from (x1, y1) to (x2, y2)
      */
-    setData(data: any): void;
+    drawLine(x1: number, y1: number, x2: number, y2: number, char?: string): void;
     /**
-     * Sync canvas content to element content
-     * Call this after drawing operations to make content visible
+     * Draw a rectangle
      */
-    syncContent(): void;
+    drawRect(x: number, y: number, width: number, height: number, char?: string, filled?: boolean): void;
     /**
-     * Render the canvas
+     * Draw a circle
      */
-    render(): any;
+    drawCircle(cx: number, cy: number, radius: number, char?: string): void;
+    /**
+     * Draw text at position
+     */
+    drawText(x: number, y: number, text: string): void;
+    /**
+     * Fill area with character
+     */
+    fill(x: number, y: number, char?: string): void;
+    /**
+     * Render canvas to content
+     */
+    render(): void;
+    /**
+     * Get canvas dimensions
+     */
+    getCanvasSize(): {
+        width: number;
+        height: number;
+    };
+    protected _handleBreakpointChange(breakpoint: BreakpointName, previousBreakpoint: BreakpointName, state: ResponsiveState): void;
 }
-/**
- * Factory function
- */
-export declare function canvas(options?: CanvasOptions): Canvas;

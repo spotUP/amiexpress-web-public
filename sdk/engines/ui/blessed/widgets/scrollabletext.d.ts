@@ -3,8 +3,13 @@
  */
 import { Text } from './text';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+export interface ScrollableTextOptions extends ElementOptions {
+    alwaysScroll?: boolean;
+}
 export declare class ScrollableText extends Text {
-    constructor(options?: ElementOptions);
+    constructor(options?: ScrollableTextOptions);
     /**
      * Get the current scroll percentage
      */
@@ -13,5 +18,9 @@ export declare class ScrollableText extends Text {
      * Set scroll by percentage (0-100)
      */
     setScrollPercent(percent: number): void;
+    protected _handleBreakpointChange(breakpoint: BreakpointName, previousBreakpoint: BreakpointName, state: ResponsiveState): void;
 }
-//# sourceMappingURL=scrollabletext.d.ts.map
+/**
+ * Factory function
+ */
+export declare function scrollabletext(options?: ScrollableTextOptions): ScrollableText;

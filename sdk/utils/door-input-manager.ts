@@ -113,7 +113,14 @@ export class DoorInputManager {
     // 4. Enable blessed mouse events
     if (this.options.enableMouse && this.screen?.program) {
       this.screen.program.enableMouse();
-      this.log('✓ Mouse events enabled');
+      this.log('✓ Blessed mouse events enabled');
+    }
+
+    // 4b. Enable BBS session mouse events (required for socket-handlers to forward mouse to door)
+    // Set DIRECTLY on bbsSession - this is what socket-handlers checks
+    if (this.options.enableMouse && this.session.bbsSession) {
+      this.session.bbsSession.mouseEventsEnabled = true;
+      this.log('✓ BBS mouse events enabled');
     }
 
     // 5. Setup input handler (BBS → blessed bridge)
@@ -150,10 +157,17 @@ export class DoorInputManager {
       this.log('✓ Input handler removed');
     }
 
+    // 4b. Disable BBS session mouse events
+    // Set DIRECTLY on bbsSession - this is what socket-handlers checks
+    if (this.options.enableMouse && this.session.bbsSession) {
+      this.session.bbsSession.mouseEventsEnabled = false;
+      this.log('✓ BBS mouse events disabled');
+    }
+
     // 4. Disable blessed mouse events
     if (this.options.enableMouse && this.screen?.program) {
       this.screen.program.disableMouse();
-      this.log('✓ Mouse events disabled');
+      this.log('✓ Blessed mouse events disabled');
     }
 
     // 3. Disable blessed keyboard capture

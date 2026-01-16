@@ -877,27 +877,17 @@ export function createScreen(
   // Enable mouse toggle (F12/Alt+M) to allow users to disable if needed
   screen.enableMouseToggle();
 
-  // Auto-join default room 'lobby' if not in a room yet
-  // This is required for real-time media (webcam, audio) to function
-  // NOTE: Only auto-join if user is authenticated (has a session with user object)
-  if (bbs && typeof bbs.getCurrentRoomId === 'function' && !bbs.getCurrentRoomId()) {
-    // Check if user is authenticated before attempting to join
-    const hasUser = bbs.getUser?.() || bbs.user;
-    if (hasUser) {
-      console.log('[createScreen] Not in a room, auto-joining "lobby" for media services...');
-      bbs.joinRoom('lobby').then((result: any) => {
-        if (result.success) {
-          console.log('[createScreen] Successfully joined "lobby"');
-        } else {
-          console.warn(`[createScreen] Failed to auto-join "lobby": ${result.error}`);
-        }
-      }).catch((err: any) => {
-        console.error(`[createScreen] Error auto-joining "lobby": ${err.message}`);
-      });
-    } else {
-      console.log('[createScreen] User not authenticated yet, skipping auto-join');
-    }
-  }
+  // REMOVED: Auto-join lobby room
+  //
+  // This was causing "Chat Room: lobby" text to appear in door backgrounds because:
+  // 1. createScreen() called bbs.joinRoom('lobby')
+  // 2. BBS wrote join messages to terminal BEFORE door took control
+  // 3. Blessed screen rendered on top but didn't clear background
+  // 4. Chat room text showed through in all doors
+  //
+  // FIX: Doors that need room membership (like voice-chat) should explicitly call
+  // bbs.joinRoom() AFTER setting up their screen, not rely on createScreen() to do it.
+  // This prevents unwanted terminal output during door initialization.
 
   // Listen for resize events from backend if bbs is provided
   if (bbs && typeof bbs.on === 'function') {
@@ -983,7 +973,8 @@ export function setupInputHandler(
       return;
     }
 
-    // 4. Pass input to blessed screen's program
+    // 4. Pass ALL input to blessed screen's program
+    // Neo-blessed's program.ts handles JSON mouse events internally
     if (screen.program) {
       screen.program.emit('data', data);
     }
@@ -1178,7 +1169,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }
+    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'cyan' } }
   });
 
   const promptDialog = blessed.prompt({
@@ -1189,7 +1180,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'black', border: { fg: 'green' } }
+    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'green' } }
   });
 
   const questionDialog = blessed.question({
@@ -1201,7 +1192,7 @@ export function createDialogs(screen: Screen, returnFocusElement?: any) {
     tags: true,
     zIndex: 600, // Above overlay
     ch: ' ',     // Ensure solid background
-    style: { fg: 'white', bg: 'black', border: { fg: 'yellow' } }
+    style: { fg: 'white', bg: 'blue', transparent: true, border: { fg: 'yellow' } }
   });
 
   function showMessageDialog(text: string, callback?: () => void) {

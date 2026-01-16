@@ -1,8 +1,13 @@
 /**
  * BigText - Large ASCII text widget using figlet-style fonts
+ *
+ * Responsive features:
+ * - Switches to simpler font on mobile
  */
 import { Box } from './box';
 import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
 export interface BigTextOptions extends ElementOptions {
     text?: string;
     font?: 'standard' | 'banner' | 'block' | 'simple';
@@ -12,6 +17,8 @@ export declare class BigText extends Box {
     private text;
     private font;
     private fch;
+    private _desktopFont;
+    private _isMobileMode;
     constructor(options?: BigTextOptions);
     /**
      * Generate big text from input string
@@ -53,5 +60,7 @@ export declare class BigText extends Box {
      * Set fill character
      */
     setFillChar(ch: string): void;
+    protected _handleBreakpointChange(breakpoint: BreakpointName, previousBreakpoint: BreakpointName, state: ResponsiveState): void;
+    protected _enterMobileMode(): void;
+    protected _exitMobileMode(): void;
 }
-//# sourceMappingURL=bigtext.d.ts.map

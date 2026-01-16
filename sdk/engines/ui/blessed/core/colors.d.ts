@@ -86,4 +86,3 @@ export declare function stripAnsi(text: string): string;
 export declare function textWidth(text: string): number;
 export declare const colorToRgb: (color: number) => number[];
 export declare const rgbToNearestColor: typeof match;
-//# sourceMappingURL=colors.d.ts.map

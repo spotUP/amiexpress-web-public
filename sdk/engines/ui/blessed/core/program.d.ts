@@ -44,6 +44,7 @@ export declare class Program extends EventEmitter {
     private mouseHandlers;
     private _mouseEnabled;
     private _lastMouseEvent;
+    private _handlingData;
     constructor(options?: ProgramOptions);
     /**
      * Write data to output
@@ -461,10 +462,16 @@ export declare class Program extends EventEmitter {
      * Parse key from input buffer
      */
     private parseKey;
+    private _inputBuffer;
+    private _escTimer;
     /**
      * Handle input data
      */
     _handleData(data: string): void;
+    /**
+     * Helper to emit key events
+     */
+    private _emitKey;
     /**
      * Parse JSON mouse event from web frontend
      */
@@ -494,4 +501,3 @@ export declare class Program extends EventEmitter {
      */
     destroy(): void;
 }
-//# sourceMappingURL=program.d.ts.map

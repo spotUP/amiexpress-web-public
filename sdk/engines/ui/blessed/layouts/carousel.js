@@ -1,17 +1,7 @@
 "use strict";
-/**
- * Carousel Layout
- *
- * 1:1 port from blessed-contrib/lib/layout/carousel.js
- * Page carousel with navigation controls
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Carousel = void 0;
 exports.carousel = carousel;
-/**
- * Carousel Layout
- * Manages multiple pages with navigation
- */
 class Carousel {
     constructor(pages, options) {
         this.currPage = 0;
@@ -68,15 +58,24 @@ class Carousel {
             this.intervalId = setInterval(this.next.bind(this), this.options.interval);
         }
         if (this.options.controlKeys) {
-            this.screen.key(['right', 'left', 'home', 'end'], (ch, key) => {
-                if (key.name == 'right')
+            this.screen.on('keypress', (ch, key) => {
+                if (key.name === 'right' || (key.name === 'l')) {
                     this.next();
-                if (key.name == 'left')
+                    return true;
+                }
+                if (key.name === 'left' || (key.name === 'h')) {
                     this.prev();
-                if (key.name == 'home')
+                    return true;
+                }
+                if (key.name === 'home') {
                     this.home();
-                if (key.name == 'end')
+                    return true;
+                }
+                if (key.name === 'end') {
                     this.end();
+                    return true;
+                }
+                return false;
             });
         }
     }
@@ -88,9 +87,6 @@ class Carousel {
     }
 }
 exports.Carousel = Carousel;
-/**
- * Factory function
- */
 function carousel(pages, options) {
     return new Carousel(pages, options);
 }

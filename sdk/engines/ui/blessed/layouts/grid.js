@@ -1,18 +1,8 @@
 "use strict";
-/**
- * Grid Layout
- *
- * 1:1 port from blessed-contrib/lib/layout/grid.js
- * Grid-based layout system for arranging widgets
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Grid = void 0;
 exports.grid = grid;
-const utils_1 = require("../utils/utils");
-/**
- * Grid Layout
- * Provides grid-based widget positioning
- */
+const utils_1 = require("../utils/contrib-utils/utils");
 class Grid {
     constructor(options) {
         this.widgetSpacing = 0;
@@ -47,9 +37,6 @@ class Grid {
     }
 }
 exports.Grid = Grid;
-/**
- * Factory function
- */
 function grid(options) {
     return new Grid(options);
 }
