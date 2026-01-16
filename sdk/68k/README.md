@@ -9,8 +9,101 @@ This is the **68K cross-compilation** component of SDK 2.0. It allows you to wri
 ## Supported Languages
 
 - **C**: Cross-compiled with vbcc → Native Amiga HUNK ✅
-- **Assembly**: Assembled with vasm → HUNK (direct output) ✅
+- **Assembly**: Assembled with vasm → HUNK executable ✅ (FIRST WORKING DOOR: Jan 2026!)
 - **C + Assembly**: Mixed C/ASM for library calls and optimizations ✅
+
+---
+
+## Pure Assembly Door (Quickest Path)
+
+The fastest way to create a native 68K door is pure assembly with vasm:
+
+### Install vasm
+
+```bash
+brew install vasm
+```
+
+### Minimal Working Door
+
+```asm
+; hello.asm - Minimal AmiExpress door
+; Build: vasmm68k_mot -Fhunkexe -kick1hunks -nosym -m68000 hello.asm -o hello
+
+ABSEXECBASE     EQU     4
+LVO_OpenLibrary EQU     -552
+LVO_CloseLibrary EQU    -414
+LVO_CreateComm  EQU     -30         ; TRAPPED - use this!
+LVO_DeleteComm  EQU     -36         ; TRAPPED - use this!
+LVO_WriteStr    EQU     -84         ; TRAPPED - use this!
+
+        SECTION text,CODE
+start:
+        movem.l d0-d7/a0-a6,-(sp)
+        move.l  ABSEXECBASE,a6
+        lea     libname(pc),a1
+        moveq   #0,d0
+        jsr     LVO_OpenLibrary(a6)
+        move.l  d0,a5
+        beq.s   .exit
+
+        move.l  a5,a6
+        jsr     LVO_CreateComm(a6)      ; Init comm
+
+        lea     msg(pc),a0
+        jsr     LVO_WriteStr(a6)        ; Output text
+
+        jsr     LVO_DeleteComm(a6)      ; Cleanup
+
+        move.l  ABSEXECBASE,a6
+        move.l  a5,a1
+        jsr     LVO_CloseLibrary(a6)
+.exit:
+        movem.l (sp)+,d0-d7/a0-a6
+        moveq   #0,d0
+        rts
+
+libname:  dc.b  'AEDoor.library',0
+        EVEN
+msg:      dc.b  13,10,'Hello from 68K assembly!',13,10,0
+        EVEN
+        END
+```
+
+### Build & Install
+
+```bash
+# Build
+vasmm68k_mot -Fhunkexe -kick1hunks -nosym -m68000 hello.asm -o hello
+
+# Install
+mkdir -p Doors/HELLO
+cp hello Doors/HELLO/
+echo "STACK=8192" > Doors/HELLO/hello.info
+
+# Register command
+cat > Commands/BBSCmd/HELLO.info << 'EOF'
+BBSCMD=HELLO
+TYPE=AMI
+LOCATION=Doors/HELLO/hello
+DESCRIPTION=Hello assembly door
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+EOF
+```
+
+### Critical Rules
+
+1. **Use `-Fhunkexe`** not `-Fhunk` (creates proper executable)
+2. **Use TRAPPED LVOs only**: CreateComm(-30), DeleteComm(-36), WriteStr(-84), etc.
+3. **Do NOT use**: PreCreateComm(-132), PostDeleteComm(-138) - these are NOT trapped
+4. **Single SECTION** for executables (no separate DATA section)
+5. **PC-relative limit**: 32KB - use offset tables for larger data
+
+See `doors/cplistan/` for a complete example with 999 strings and RNG.
+
+---
 
 ## When to Use 68K vs TypeScript
 
@@ -194,14 +287,17 @@ vamos doors/mydoor/mydoor
 
 Check these working examples:
 
-- **hello-vbcc**: Minimal door (returns 0)
-- **hello-output**: Uses AEDoor.library WriteStr
+- **cplistan**: Pure assembly door with 999 strings, RNG, offset tables (WORKING!)
+- **hello-asm**: Minimal assembly door example
+- **hello-vbcc**: Minimal C door (returns 0)
+- **hello-output**: C door with AEDoor.library WriteStr
 
 Run them with:
 ```bash
 # From BBS terminal
-hellovbcc
-helloout
+cp          # CP Listan - displays random Swedish wisdom
+helloasm    # Hello from assembly
+hellovbcc   # Hello from C
 ```
 
 ## File Structure
@@ -217,9 +313,12 @@ sdk/68k/
 ├── src/
 │   └── glue.c           # Glue layer with string functions
 ├── doors/               # Example doors
-│   ├── hello-vbcc/      # Minimal example
-│   └── hello-output/    # AEDoor.library example
+│   ├── cplistan/        # WORKING assembly door (999 strings, RNG)
+│   ├── hello-asm/       # Minimal assembly example
+│   ├── hello-vbcc/      # Minimal C example
+│   └── hello-output/    # AEDoor.library C example
 └── templates/           # Door templates
+    └── minimal.asm      # Minimal assembly door template
 ```
 
 ## Need Help?

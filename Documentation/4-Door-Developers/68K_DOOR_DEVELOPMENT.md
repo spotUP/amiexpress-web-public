@@ -4,9 +4,196 @@
 
 **Detailed postmortems (AquaScan analysis, Bulls notes, SDK plans) live in `archive/`.**
 
+---
+
+## Quick Start - Pure Assembly Door
+
+The fastest way to create a native 68K door is pure assembly. Here's a minimal working example:
+
+### Prerequisites
+
+```bash
+# Install vasm (Amiga assembler)
+brew install vasm
+```
+
+### Minimal Assembly Door
+
+Create `sdk/68k/doors/mydoor/mydoor.asm`:
+
+```asm
+; Minimal AmiExpress Door - 68000 Assembly
+; Assemble: vasmm68k_mot -Fhunkexe -kick1hunks -nosym -m68000 mydoor.asm -o mydoor
+
+ABSEXECBASE     EQU     4
+LVO_OpenLibrary EQU     -552
+LVO_CloseLibrary EQU    -414
+LVO_CreateComm  EQU     -30         ; AEDoor: initialize comm (TRAPPED)
+LVO_DeleteComm  EQU     -36         ; AEDoor: cleanup comm (TRAPPED)
+LVO_WriteStr    EQU     -84         ; AEDoor: output text (TRAPPED)
+
+        SECTION text,CODE
+
+start:
+        movem.l d0-d7/a0-a6,-(sp)
+
+        ; Open AEDoor.library
+        move.l  ABSEXECBASE,a6
+        lea     libname(pc),a1
+        moveq   #0,d0
+        jsr     LVO_OpenLibrary(a6)
+        move.l  d0,a5               ; Save AEDoorBase in A5
+        beq.s   .exit
+
+        ; Initialize comm channel
+        move.l  a5,a6
+        jsr     LVO_CreateComm(a6)
+
+        ; Output message
+        move.l  a5,a6
+        lea     message(pc),a0
+        jsr     LVO_WriteStr(a6)
+
+        ; Cleanup
+        move.l  a5,a6
+        jsr     LVO_DeleteComm(a6)
+
+        ; Close library
+        move.l  ABSEXECBASE,a6
+        move.l  a5,a1
+        jsr     LVO_CloseLibrary(a6)
+
+.exit:
+        movem.l (sp)+,d0-d7/a0-a6
+        moveq   #0,d0
+        rts
+
+libname:    dc.b    'AEDoor.library',0
+        EVEN
+message:    dc.b    13,10,'Hello from assembly!',13,10,0
+        EVEN
+
+        END
+```
+
+### Build and Install
+
+```bash
+# Assemble
+cd sdk/68k/doors/mydoor
+vasmm68k_mot -Fhunkexe -kick1hunks -nosym -m68000 mydoor.asm -o mydoor
+
+# Install
+mkdir -p ../../../../Doors/MYDOOR
+cp mydoor ../../../../Doors/MYDOOR/
+
+# Create door .info
+echo "STACK=8192" > ../../../../Doors/MYDOOR/mydoor.info
+
+# Create command .info
+cat > ../../../../Commands/BBSCmd/MYDOOR.info << 'EOF'
+BBSCMD=MYDOOR
+TYPE=AMI
+LOCATION=Doors/MYDOOR/mydoor
+DESCRIPTION=My assembly door
+ACCESS=0
+MULTINODE=YES
+PRIORITY=SAME
+EOF
+```
+
+### Test
+
+Restart the BBS and type `MYDOOR` at the prompt.
+
+---
+
+## AEDoor.library LVO Reference
+
+**CRITICAL**: Use only TRAPPED functions. Non-trapped functions execute native code that doesn't work in the emulator.
+
+| LVO | Name | Status | Description |
+|-----|------|--------|-------------|
+| -30 | CreateComm | TRAPPED | Initialize communication channel |
+| -36 | DeleteComm | TRAPPED | Cleanup communication channel |
+| -42 | SendCmd | TRAPPED | Send command to BBS |
+| -48 | SendStrCmd | TRAPPED | Send string command |
+| -54 | SendDataCmd | TRAPPED | Send data command |
+| -60 | SendStrDataCmd | TRAPPED | Send string+data command |
+| -66 | GetData | TRAPPED | Get data from BBS |
+| -72 | GetString | TRAPPED | Get string from BBS |
+| -78 | Prompt | TRAPPED | Display prompt, get input |
+| -84 | WriteStr | TRAPPED | Output text to user |
+| -90 | ShowGFile | TRAPPED | Display graphics file |
+| -96 | ShowFile | TRAPPED | Display text file |
+| -102 | SetDT | TRAPPED | Set door data |
+| -108 | GetDT | TRAPPED | Get door data |
+| -114 | GetStr | TRAPPED | Get string input |
+| -120 | CopyStr | TRAPPED | Copy string |
+| -126 | HotKey | TRAPPED | Wait for hotkey |
+| -132 | PreCreateComm | NOT TRAPPED | Do not use |
+| -138 | PostDeleteComm | NOT TRAPPED | Do not use |
+
+---
+
+## Technical Considerations
+
+### Executable Format
+
+Use `-Fhunkexe` for proper executable format:
+
+```bash
+# CORRECT - creates executable with HUNK_HEADER (0x3F3)
+vasmm68k_mot -Fhunkexe -kick1hunks -nosym -m68000 door.asm -o door
+
+# WRONG - creates object file with HUNK_UNIT (0x3E7)
+vasmm68k_mot -Fhunk -kick1hunks -nosym -m68000 door.asm -o door
+```
+
+### PC-Relative Addressing Limits
+
+68000 PC-relative addressing has a 16-bit signed displacement limit (+/- 32KB). For doors with >32KB of data:
+
+1. **Use a single CODE section** (required for `-Fhunkexe`)
+2. **Use offset tables** instead of absolute pointers
+3. **Calculate addresses at runtime** using base registers
+
+Example for large data:
+
+```asm
+        ; Get base addresses
+        lea     start(pc),a5
+        add.l   #data_table-start,a5    ; A5 = data table base
+
+        ; Access data using offset
+        move.l  (a5,d0.l),d1            ; Get offset
+        lea     start(pc),a0
+        add.l   #string_data-start,a0   ; A0 = string data base
+        add.l   d1,a0                   ; A0 = actual string address
+```
+
+### No Relocations
+
+`-Fhunkexe` does not include relocation hunks. All address references must be:
+- PC-relative (within 32KB range), or
+- Calculated at runtime using base registers
+
+---
+
+## Working Example: CP Listan
+
+See `sdk/68k/doors/cplistan/` for a complete working example featuring:
+
+- 999 embedded strings (42KB total)
+- Random number generation (LFSR seeded from DateStamp)
+- Offset table for large data handling
+- Proper AEDoor.library integration
+
+---
+
 ## 1. Workflow
 - Door runs use the harness `node web/backend/dist/scripts/run-amiga-door.js <door> <node> <command>` and log to `logs/door-68k.log`, `/tmp/bulls.out`, and `/tmp/*.log`. Use `DEBUG_XIM_OUTPUT=1` for extra tracing.
-- The backend follows express.e’s AEDoor/doorInfo expectations; consult `archive/Bulls_DISASM_NOTES.md` and `archive/AEDoor_LIBRARY_NOTES.md` for offsets.
+- The backend follows express.e's AEDoor/doorInfo expectations; consult `archive/Bulls_DISASM_NOTES.md` and `archive/AEDoor_LIBRARY_NOTES.md` for offsets.
 - When parsing Dir files, the system now honors art lines by storing them in the continuation block; art lines no longer truncate before ASCII logos.
 
 ## 2. Protocols & Parsers
