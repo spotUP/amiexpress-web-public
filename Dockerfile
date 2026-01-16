@@ -128,6 +128,9 @@ RUN echo "[Build] Building TypeScript doors..." && \
 # ============================================================================
 FROM node:18-alpine AS backend-builder
 
+# Install build tools needed for native modules (deasync, better-sqlite3)
+RUN apk add --no-cache python3 make g++ build-base
+
 WORKDIR /app/web/backend
 
 COPY web/backend/package*.json ./
@@ -135,7 +138,8 @@ COPY web/backend/package*.json ./
 RUN npm ci --ignore-scripts
 
 COPY web/backend ./
-RUN npm run build
+# Run tsc directly since dependencies are already installed via npm ci
+RUN npx tsc --project tsconfig.build.json
 
 # ============================================================================
 # Stage 8: Production Image
