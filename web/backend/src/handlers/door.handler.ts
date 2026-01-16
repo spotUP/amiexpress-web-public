@@ -24,6 +24,7 @@ import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { getSystemTime } from '../utils/date-time.util';
+import { logDoorStart, logDoorExit, DoorType } from '../utils/node-logs.util';
 
 import type { BBSSession } from '../index';
 import type { User } from '../database/types';
@@ -2282,7 +2283,8 @@ console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: tru
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
-console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" hasXIM=${!!shared.ximProtocol}`);
+console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data.length}) hasXIM=${!!shared.ximProtocol}`);
+console.log('[executeAmigaDoor] Call stack:', new Error().stack?.split('\n').slice(1, 5).join('\n'));
         logDoorDebug(
           `KEY door=${door.command || door.id || 'UNK'} data=${JSON.stringify(
             data
@@ -2326,8 +2328,21 @@ console.log(`[executeAmigaDoor] After setSession: verify inDoorManager=${verifyS
 console.error('[executeAmigaDoor] Unable to persist session for door input:', err);
     }
 
+    // Log door start to Node{N}/DoorLog (express.e:9392-9419)
+    const doorTypeCode = doorType === 'XIM' ? DoorType.XIM :
+                         doorType === 'SIM' ? DoorType.SIM :
+                         doorType === 'AIM' ? DoorType.AIM :
+                         doorType === 'TIM' ? DoorType.TIM :
+                         doorType === 'IIM' ? DoorType.IIM :
+                         doorType === 'MCI' ? DoorType.MCI : DoorType.XIM;
+    // Use doorPath for logging (like express.e: "DOORS:FILEID/FILEID")
+    logDoorStart(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown', doorPath);
+
     // Start the door execution
     await amigaSession.start();
+
+    // Log door exit to Node{N}/DoorLog
+    logDoorExit(bbsRoot, nodeNumber, doorTypeCode, session.user?.username || 'Unknown');
 
 console.log(`[executeAmigaDoor] Door execution completed`);
 

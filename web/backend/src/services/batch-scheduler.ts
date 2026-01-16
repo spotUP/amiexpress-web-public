@@ -441,6 +441,10 @@ console.error('[BatchScheduler] MultiTop requires design file and output file ar
     return;
   }
 
+  // NOTE: dannounce (Discord Announce) now works natively via bsdsocket.library + amissl.library emulation
+  // The 68K emulator can make real HTTPS connections using Node.js tls module bridging
+  // No special-casing needed - let it run through the normal 68K emulation path
+
   // Special-case GLCUpdater (TypeScript) to send caller data to global server
   // Command format: utils:glcupdater BBSNAME CALLERSLOG [IGNORELOCAL] [IGNORESYSOP] [IGNORESYSOPUSER] [PROCESSALL]
   // Example: utils:glcupdater "AmiExpress" bbs:node1/callerslog IGNORELOCAL IGNORESYSOP

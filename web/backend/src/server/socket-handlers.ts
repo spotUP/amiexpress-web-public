@@ -549,6 +549,7 @@ console.error('No session found for socket:', socket.id);
     }
 
     // Intercept pause prompts (checkForPause) before any other handling
+console.log(`[socket-handlers] checkPauseHandler active: ${!!(session as any).checkPauseHandler}, flagPauseHandler active: ${!!(session as any).flagPauseHandler}`);
     if ((session as any).checkPauseHandler) {
       // Accumulate line input for pause prompts
       if (!(session as any).checkPauseBuffer) {
@@ -656,6 +657,7 @@ console.log('🎯 F1 pressed during chat - exiting chat');
     }
 
     // If a door is active, call the door's input handler
+console.log(`[socket-handlers] About to check door - data="${data}" (len=${data.length}), inDoor=${session.inDoorManager}, subState=${session.subState}`);
     logDoorDebug(
       `CMD data=${JSON.stringify(data)} node=${session.nodeId} inDoor=${session.inDoorManager} subState=${session.subState} handler=${!!session.doorInputHandler}`
     );
@@ -666,6 +668,7 @@ console.log('🎯 F1 pressed during chat - exiting chat');
           return;
         }
         logDoorDebug(`CMD->door handler dispatch`);
+console.log(`[socket-handlers] ABOUT TO CALL doorInputHandler with: "${data}" (length=${data.length}, charCode=${data.charCodeAt(0)})`);
         session.doorInputHandler(data);
         return;
       } else {

@@ -274,7 +274,13 @@ console.log(`[ModemEmulator] Intercepting ansi-output (${data.length} bytes), th
 
     (this.socket as any)._modemEmulatorInstalled = true;
     (this.socket as any)._modemEmulator = this;
-console.log(`[ModemEmulator] install() complete`);
+
+    // CRITICAL: Provide _directEmit for XIM doors to bypass throttling
+    // XIM doors output text faster than modem speeds and need direct socket access
+    (this.socket as any)._directEmit = (event: string, ...args: any[]) => {
+      return self.directEmit(event, ...args);
+    };
+console.log(`[ModemEmulator] install() complete - _directEmit provided for XIM bypass`);
   }
 }
 

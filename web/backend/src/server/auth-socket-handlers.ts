@@ -611,6 +611,10 @@ console.error('[Webhook] Error sending user login webhook:', error);
       // Set user preferences
       session.confRJoin = user.autoRejoin || 1;
       session.msgBaseRJoin = 1; // Default message base
+      // CRITICAL: Set currentConf for XIM doors (BB_CONFNUM query) - express.e sets this at login
+      session.currentConf = user.autoRejoin || 1;
+      session.currentConference = user.autoRejoin || 1;
+      session.conferenceId = user.autoRejoin || 1;
       // Like express.e:394 - default cmdShortcuts to FALSE (line input mode)
       // This will be set to TRUE if .keys file exists when displaying menu (express.e:6567-6573)
       session.cmdShortcuts = false;

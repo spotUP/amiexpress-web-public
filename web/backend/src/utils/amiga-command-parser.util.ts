@@ -531,9 +531,14 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     type = (DoorType[typeStr.toUpperCase() as keyof typeof DoorType]) || DoorType.SIM;
   }
 
-  // Build command definition - use case-insensitive replacement for DOORS: prefix
+  // Build command definition - normalize Amiga paths to Unix
+  // Handle common Amiga path prefixes:
+  // - doors:xxx -> doors/xxx
+  // - BBS:doors/xxx -> doors/xxx (BBS: is the BBS root)
+  // - BBS:Doors/xxx -> Doors/xxx
   const normalizedLocation = locationKey
-    .replace(/^doors:/i, 'doors/')
+    .replace(/^BBS:/i, '')           // Strip BBS: prefix (it's the BBS root)
+    .replace(/^doors:/i, 'doors/')   // Convert doors: to doors/
     .replace(/:/g, '/');
 
   const cmd: CommandDefinition = {
