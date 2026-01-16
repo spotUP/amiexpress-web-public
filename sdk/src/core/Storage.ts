@@ -73,10 +73,13 @@ export class Storage implements StorageAPI {
       return [];
     }
 
-    const files = fs.readdirSync(this.storageDir);
-    return files
+    const allEntries = fs.readdirSync(this.storageDir);
+
+    const files = allEntries
       .filter(f => f.endsWith('.json'))
       .map(f => f.replace(/\.json$/, ''));
+
+    return files;
   }
 
   async clear(): Promise<void> {

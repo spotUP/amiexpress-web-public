@@ -255,6 +255,18 @@ export interface BBSApi {
 
   /** Check user access level */
   hasAccess(userId: string, level: number): Promise<boolean>;
+
+  /** Read file from BBS data directory */
+  readFile(filename: string): Promise<string | null>;
+
+  /** Write file to BBS data directory */
+  writeFile(filename: string, content: string): Promise<boolean>;
+
+  /** List files in a directory with optional pattern filter */
+  listFiles(directory: string, pattern?: string): Promise<string[]>;
+
+  /** Check if file exists */
+  fileExists(filename: string): Promise<boolean>;
 }
 
 // ===== Lifecycle Hooks =====

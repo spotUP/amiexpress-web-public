@@ -24,9 +24,48 @@ export interface DropdownMenuOptions {
 }
 
 export class DropdownMenu extends Element {
+  // Static registry to track open menus - ensures only one is open at a time
+  private static openMenus: Set<DropdownMenu> = new Set();
+
+  // Flag to block clicks immediately after menu close (prevents drawing on canvas)
+  private static justClosed: boolean = false;
+
   private items: DropdownMenuItem[];
   private selectedIndex: number = 0;
   private outsideClickHandler?: (event: any) => void;
+  private anchor?: Element;
+  private anchorLeft: number = 0;
+  private anchorTop: number = 0;
+
+  /**
+   * Close all currently open dropdown menus
+   */
+  static closeAll(): void {
+    for (const menu of DropdownMenu.openMenus) {
+      menu.close();
+    }
+  }
+
+  /**
+   * Check if any dropdown menu is currently open
+   */
+  static isAnyOpen(): boolean {
+    return DropdownMenu.openMenus.size > 0;
+  }
+
+  /**
+   * Check if a menu was just closed (blocks canvas clicks for one tick)
+   */
+  static wasJustClosed(): boolean {
+    return DropdownMenu.justClosed;
+  }
+
+  /**
+   * Check if click should be blocked (menu open OR just closed)
+   */
+  static shouldBlockClick(): boolean {
+    return DropdownMenu.openMenus.size > 0 || DropdownMenu.justClosed;
+  }
 
   constructor(options: DropdownMenuOptions) {
     const width = options.width || 20;
@@ -101,6 +140,14 @@ export class DropdownMenu extends Element {
 
   openAt(left: number, top: number): void {
     if (!this.screen) return;
+
+    // Close any other open menus first (ensures only one menu open at a time)
+    for (const menu of DropdownMenu.openMenus) {
+      if (menu !== this) {
+        menu.close();
+      }
+    }
+
     const cols = this.screen.cols;
     const rows = this.screen.rows;
 
@@ -114,6 +161,10 @@ export class DropdownMenu extends Element {
     this.top = clampedTop;
     this.show();
     this.focus();
+
+    // Track this menu as open
+    DropdownMenu.openMenus.add(this);
+
     this.screen.trapFocus(this);
     this.attachOutsideClick();
     this.screen.render();
@@ -131,8 +182,20 @@ export class DropdownMenu extends Element {
     this.openAt(left, top);
   }
 
-  close(): void {
+  close(fromOutsideClick: boolean = false): void {
     if (!this.screen) return;
+
+    // Remove from open menus registry
+    DropdownMenu.openMenus.delete(this);
+
+    // If closed by outside click, set flag to block canvas clicks for one tick
+    if (fromOutsideClick) {
+      DropdownMenu.justClosed = true;
+      setImmediate(() => {
+        DropdownMenu.justClosed = false;
+      });
+    }
+
     this.hide();
     this.detachOutsideClick();
     this.screen.releaseFocusTrap();
@@ -143,6 +206,51 @@ export class DropdownMenu extends Element {
     this.items = items;
     this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
     this.updateContent();
+  }
+
+  /**
+   * Register an anchor element for hover-to-open behavior
+   * When any menu is open, hovering over this anchor opens this menu
+   * @param anchor The element that triggers this menu
+   * @param leftOffset Additional left offset (optional, default 0)
+   * @param topOffset Additional top offset (optional, default 0 to open directly below anchor)
+   */
+  registerAnchor(anchor: Element, leftOffset: number = 0, topOffset: number = 0): void {
+    this.anchor = anchor;
+
+    // Helper to get dynamic position from anchor's current coordinates
+    const getPosition = (): { left: number; top: number } => {
+      const coords = anchor._getCoords();
+      if (coords) {
+        return {
+          left: coords.xi + leftOffset,
+          top: coords.yl + topOffset,  // Open directly below the anchor
+        };
+      }
+      // Fallback if no coords available
+      return { left: leftOffset, top: topOffset };
+    };
+
+    // Click always opens
+    anchor.on('click', () => {
+      const pos = getPosition();
+      this.openAt(pos.left, pos.top);
+    });
+
+    // Hover opens only when another menu is already open
+    anchor.on('mouseenter', () => {
+      if (DropdownMenu.isAnyOpen() && this.hidden) {
+        const pos = getPosition();
+        this.openAt(pos.left, pos.top);
+      }
+    });
+  }
+
+  /**
+   * Check if this menu is currently open
+   */
+  isOpen(): boolean {
+    return !this.hidden && DropdownMenu.openMenus.has(this);
   }
 
   private move(delta: number): void {
@@ -201,15 +309,18 @@ export class DropdownMenu extends Element {
       if (!pos) return;
       const outside = event.x < pos.xi || event.x > pos.xl || event.y < pos.yi || event.y > pos.yl;
       if (outside) {
-        this.close();
+        this.close(true);  // Pass true to indicate outside click
       }
     };
 
+    // Listen on both mousedown and click for reliable outside click detection
+    this.screen.on('mousedown', this.outsideClickHandler);
     this.screen.on('click', this.outsideClickHandler);
   }
 
   private detachOutsideClick(): void {
     if (!this.screen || !this.outsideClickHandler) return;
+    this.screen.off('mousedown', this.outsideClickHandler);
     this.screen.off('click', this.outsideClickHandler);
     this.outsideClickHandler = undefined;
   }

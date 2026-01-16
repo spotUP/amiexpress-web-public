@@ -146,8 +146,30 @@ Doors/<door>/
 - **`onClose`** - Runs cleanup before exit (always called)
 - **`ctx.output`** - All output methods (write, writeLine, clear, etc.)
 - **`ctx.input`** - Input methods (getLine, getChar, etc.)
-- **`ctx.storage`** - Save/load door data
+- **`ctx.storage`** - Save/load door data (user-specific)
 - **`ctx.user`** - Current user info
+- **`ctx.bbs`** - BBS system API (file operations, user lists, etc.)
+
+### BBS File API (ctx.bbs)
+
+The `ctx.bbs` object provides access to BBS system files (for sysop tools, screen editors, etc.):
+
+```typescript
+// Read a BBS file (relative to BBS data directory)
+const content = await ctx.bbs.readFile('Screens/MENU.TXT');
+
+// Write a BBS file
+await ctx.bbs.writeFile('Screens/MENU.TXT', newContent);
+
+// List files in a directory with optional pattern filter
+const ansFiles = await ctx.bbs.listFiles('Screens', '*.ans');
+const allFiles = await ctx.bbs.listFiles('Bulletins');
+
+// Check if file exists
+const exists = await ctx.bbs.fileExists('Screens/WELCOME.ANS');
+```
+
+**Note:** File operations use the BBS data directory as the root. Use `ctx.storage` for user-specific door data instead.
 
 ### Hybrid Door (Browser + Server)
 

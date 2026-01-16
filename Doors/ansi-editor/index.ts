@@ -1,326 +1,335 @@
 /**
- * ANSI Editor - Professional ANSI Art Editor Door
+ * ANSI Editor Door - Professional ANSI/ASCII Art Editor
  *
- * Features:
- * - Modern blessed UI with panels and mouse support
- * - File browser with directory navigation
- * - Gallery view with ANSI previews
- * - Full ANSI editor (text + drawing modes)
- * - Settings/preferences
- * - Help system
+ * Uses blessed ANSIEditor widget for full-featured editing
+ * Files are stored in user's private storage (database-backed)
  */
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
-import type { DoorContext } from '@amiexpress/bbs-door-sdk';
-import { showANSIEditor } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor';
-import { Screen, Box, List, Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import * as fs from 'fs';
-import * as path from 'path';
+import type { DoorContext, StorageAPI } from '@amiexpress/bbs-door-sdk';
+import { Screen, ANSIEditor, List, Box, Text, Textbox, DocModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
-interface AnsiFile {
+// File prefix for storage keys
+const FILE_PREFIX = 'ansi:';
+
+// Sysop access level threshold
+const SYSOP_ACCESS_LEVEL = 255;
+
+// BBS screen directories that sysops can browse
+const BBS_SCREEN_DIRS = [
+  { path: 'Screens', label: 'Main Screens' },
+  { path: 'Bulletins', label: 'Bulletins' },
+  { path: 'Conf01/Screens', label: 'Conf 1 Screens' },
+  { path: 'Conf01/Bulletins', label: 'Conf 1 Bulletins' },
+  { path: 'Conf02/Screens', label: 'Conf 2 Screens' },
+  { path: 'Conf03/Screens', label: 'Conf 3 Screens' },
+];
+
+interface AnsiFileInfo {
   filename: string;
-  fullPath: string;
   size: number;
-  modified: Date;
+  modified: string;  // ISO date string
 }
 
-interface EditorSettings {
-  defaultDir: string;
-  autoSave: boolean;
-  backupOnSave: boolean;
-  showLineNumbers: boolean;
-  showToolbar: boolean;
-  showStatusBar: boolean;
-  confirmDelete: boolean;
+interface BBSFileInfo {
+  filename: string;
+  path: string;      // Full relative path
+  size: number;
 }
 
-interface EditorState {
-  currentFile: AnsiFile | null;
-  currentDir: string;
-  files: AnsiFile[];
-  settings: EditorSettings;
-  modified: boolean;
-}
-
-class ANSIEditorUI {
+class ANSIEditorDoor {
   private ctx!: DoorContext;
   private screen!: Screen;
-  private mainBox!: Box;
-  private menuList!: List;
-  private statusBar!: Text;
+  private inputManager!: DoorInputManager;
+  private editor!: ANSIEditor;
+  private currentFilename: string | null = null;
+  private currentBBSPath: string | null = null;  // For BBS files (sysop mode)
+  private isBBSFile = false;                      // True if editing a BBS file
   private exitResolve: (() => void) | null = null;
   private hasExited = false;
 
-  private state: EditorState = {
-    currentFile: null,
-    currentDir: '',
-    files: [],
-    settings: {
-      defaultDir: '',
-      autoSave: false,
-      backupOnSave: true,
-      showLineNumbers: true,
-      showToolbar: true,
-      showStatusBar: true,
-      confirmDelete: true
-    },
-    modified: false
-  };
-
   setContext(ctx: DoorContext): void {
     this.ctx = ctx;
-    this.state.currentDir = path.join(process.cwd(), 'data', 'ansi-art');
-    this.state.settings.defaultDir = this.state.currentDir;
-
-    // Ensure directory exists
-    if (!fs.existsSync(this.state.currentDir)) {
-      fs.mkdirSync(this.state.currentDir, { recursive: true });
-    }
   }
 
   async start(): Promise<void> {
     this.createUI();
-    await this.showMainMenu();
+
+    // Enable input handling
+    this.inputManager.enable();
+
+    // Go directly to editor (skip main menu)
+    await this.openEditor('');
 
     // Wait for exit
     await new Promise<void>((resolve) => {
-      const resolver = () => {
-        if (!this.hasExited) {
-          this.hasExited = true;
-          resolve();
-        }
-      };
-      this.exitResolve = resolver;
-      this.screen.once('destroy', resolver);
+      this.exitResolve = resolve;
+      this.screen.once('destroy', resolve);
     });
   }
 
-  private createUI(): void {
-    this.screen = new Screen({
-      smartCSR: true,
-      dockBorders: true,
-      title: 'ANSI Art Editor',
-      output: (data: string) => this.ctx.output.write(data),
-      responsive: true,
-    });
+  // ============================================
+  // STORAGE HELPERS
+  // ============================================
 
-    // Main container
-    this.mainBox = new Box({
+  /**
+   * List all ANSI files in user's storage
+   */
+  private async listFiles(): Promise<AnsiFileInfo[]> {
+    const keys = await this.ctx.storage.keys();
+    const ansiKeys = keys.filter(k => k.startsWith(FILE_PREFIX));
+
+    const files: AnsiFileInfo[] = [];
+    for (const key of ansiKeys) {
+      const data = await this.ctx.storage.load<{ content: string; modified: string }>(key);
+      if (data) {
+        files.push({
+          filename: key.slice(FILE_PREFIX.length),
+          size: data.content?.length || 0,
+          modified: data.modified || new Date().toISOString(),
+        });
+      }
+    }
+
+    return files.sort((a, b) => a.filename.localeCompare(b.filename));
+  }
+
+  /**
+   * Load file content from storage
+   */
+  private async loadFile(filename: string): Promise<string | null> {
+    const key = FILE_PREFIX + filename;
+    const data = await this.ctx.storage.load<{ content: string; modified: string }>(key);
+    return data?.content || null;
+  }
+
+  /**
+   * Save file content to storage
+   */
+  private async saveFile(filename: string, content: string): Promise<void> {
+    const key = FILE_PREFIX + filename;
+    await this.ctx.storage.save(key, {
+      content,
+      modified: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Delete file from storage
+   */
+  private async deleteFile(filename: string): Promise<void> {
+    const key = FILE_PREFIX + filename;
+    await this.ctx.storage.delete(key);
+  }
+
+  // ============================================
+  // SYSOP BBS FILE OPERATIONS
+  // ============================================
+
+  /**
+   * Check if current user is a sysop
+   */
+  private isSysop(): boolean {
+    return (this.ctx.user?.accessLevel || 0) >= SYSOP_ACCESS_LEVEL;
+  }
+
+  /**
+   * List BBS screen files in a directory
+   */
+  private async listBBSFiles(directory: string): Promise<BBSFileInfo[]> {
+    if (!this.ctx.bbs) return [];
+
+    try {
+      const files = await this.ctx.bbs.listFiles(directory, '*.ans');
+      const txtFiles = await this.ctx.bbs.listFiles(directory, '*.txt');
+      const allFiles = [...files, ...txtFiles];
+
+      return allFiles.map(filename => ({
+        filename,
+        path: `${directory}/${filename}`,
+        size: 0,  // Size not available from listFiles
+      }));
+    } catch (error) {
+      console.error(`[ANSI-Editor] Error listing BBS files in ${directory}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Load BBS file content
+   */
+  private async loadBBSFile(filepath: string): Promise<string | null> {
+    if (!this.ctx.bbs) return null;
+
+    try {
+      const content = await this.ctx.bbs.readFile(filepath);
+      return content;
+    } catch (error) {
+      console.error(`[ANSI-Editor] Error loading BBS file ${filepath}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Save BBS file content
+   */
+  private async saveBBSFile(filepath: string, content: string): Promise<boolean> {
+    if (!this.ctx.bbs) return false;
+
+    try {
+      const success = await this.ctx.bbs.writeFile(filepath, content);
+      return success;
+    } catch (error) {
+      console.error(`[ANSI-Editor] Error saving BBS file ${filepath}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Show BBS screen file browser (sysop only)
+   */
+  private async showBBSFileBrowser(): Promise<void> {
+    if (!this.isSysop()) {
+      this.showMessage('Access Denied', 'Only sysops can browse BBS files.', 'red');
+      return;
+    }
+
+    this.editor.hide();
+
+    // First, show directory selection
+    const dirItems = BBS_SCREEN_DIRS.map((d, idx) =>
+      `${(idx + 1).toString().padStart(2)}. ${d.label.padEnd(25)} (${d.path})`
+    );
+
+    const dirList = new List({
       parent: this.screen,
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%-3',
-      border: { type: 'line', fg: 'cyan' },
-      style: { border: { fg: 'cyan' } },
-      label: ' {bold}{yellow-fg}AmiExpress ANSI Art Editor{/yellow-fg}{/bold} ',
+      top: 'center',
+      left: 'center',
+      width: '70%',
+      height: '60%',
+      border: { type: 'line', fg: 'yellow' },
+      label: ' {bold}BBS Screen Directories{/bold} ',
       tags: true,
-    });
-
-    // Menu list
-    this.menuList = new List({
-      parent: this.mainBox,
-      top: 1,
-      left: 2,
-      width: '100%-4',
-      height: '100%-2',
-      items: [],
       keys: true,
       mouse: true,
       vi: true,
       style: {
-        selected: { bg: 'blue', fg: 'white', bold: true },
+        selected: { bg: 'yellow', fg: 'black', bold: true },
         item: { fg: 'white' },
+        border: { fg: 'yellow' },
       },
-      tags: true,
+      items: dirItems,
     });
 
-    // Status bar
-    this.statusBar = new Text({
-      parent: this.screen,
+    new Text({
+      parent: dirList,
       bottom: 0,
-      left: 0,
-      width: '100%',
-      height: 3,
-      content: '',
-      tags: true,
-      style: { fg: 'cyan' },
-    });
-
-    // Key handlers
-    this.screen.key(['q', 'Q', 'escape'], () => {
-      this.cleanup();
-    });
-
-    this.screen.key(['enter'], () => {
-      const index = this.menuList.selected;
-      this.handleMenuSelection(index).catch(console.error);
-    });
-  }
-
-  private async showMainMenu(): Promise<void> {
-    const menuItems = [
-      '{cyan-fg}[N]{/cyan-fg} New File          - Create a new ANSI art file',
-      '{cyan-fg}[O]{/cyan-fg} Open File         - Open an existing file',
-      '{cyan-fg}[B]{/cyan-fg} File Browser      - Browse and manage ANSI files',
-      '{cyan-fg}[G]{/cyan-fg} Gallery View      - Visual gallery of ANSI art',
-      '{cyan-fg}[S]{/cyan-fg} Settings          - Configure editor preferences',
-      '{cyan-fg}[H]{/cyan-fg} Help              - Keyboard shortcuts and features',
-      '{cyan-fg}[Q]{/cyan-fg} Quit              - Exit ANSI Editor',
-    ];
-
-    this.menuList.setItems(menuItems);
-    this.updateStatusBar();
-    this.screen.render();
-
-    // Letter key shortcuts
-    this.screen.key(['n', 'N'], () => this.handleMenuSelection(0).catch(console.error));
-    this.screen.key(['o', 'O'], () => this.handleMenuSelection(1).catch(console.error));
-    this.screen.key(['b', 'B'], () => this.handleMenuSelection(2).catch(console.error));
-    this.screen.key(['g', 'G'], () => this.handleMenuSelection(3).catch(console.error));
-    this.screen.key(['s', 'S'], () => this.handleMenuSelection(4).catch(console.error));
-    this.screen.key(['h', 'H'], () => this.handleMenuSelection(5).catch(console.error));
-  }
-
-  private updateStatusBar(): void {
-    const files = this.scanDirectory(this.state.currentDir);
-    this.statusBar.setContent(
-      `\n {gray-fg}Directory: {white-fg}${this.state.currentDir}{/white-fg}  |  Files: {white-fg}${files.length}{/white-fg}  |  Arrow keys + Enter to select  |  Q to quit{/gray-fg}`
-    );
-  }
-
-  private async handleMenuSelection(index: number): Promise<void> {
-    switch (index) {
-      case 0: // New File
-        await this.createNewFile();
-        break;
-      case 1: // Open File
-        await this.openFileDialog();
-        break;
-      case 2: // File Browser
-        await this.showFileBrowser();
-        break;
-      case 3: // Gallery
-        await this.showGallery();
-        break;
-      case 4: // Settings
-        await this.showSettings();
-        break;
-      case 5: // Help
-        await this.showHelp();
-        break;
-      case 6: // Quit
-        this.cleanup();
-        break;
-    }
-  }
-
-  private async createNewFile(): Promise<void> {
-    // Create input dialog
-    const inputBox = new Box({
-      parent: this.screen,
-      top: 'center',
-      left: 'center',
-      width: 60,
-      height: 7,
-      border: { type: 'line', fg: 'yellow' },
-      style: { border: { fg: 'yellow' } },
-      label: ' {bold}New File{/bold} ',
-      tags: true,
-    });
-
-    const promptText = new Text({
-      parent: inputBox,
-      top: 1,
       left: 2,
-      content: 'Enter filename (without extension):',
+      content: '{gray-fg}Enter: Browse | ESC: Cancel{/gray-fg}',
       tags: true,
     });
 
-    this.screen.render();
-
-    // Get filename using SDK input
-    const filename = await this.ctx.input.getLine();
-
-    inputBox.destroy();
-    this.screen.render();
-
-    if (!filename) return;
-
-    const fullPath = path.join(this.state.currentDir, `${filename}.ans`);
-
-    if (fs.existsSync(fullPath)) {
-      await this.showMessage('Error', 'File already exists!', 'red');
-      return;
-    }
-
-    const newFile: AnsiFile = {
-      filename: `${filename}.ans`,
-      fullPath,
-      size: 0,
-      modified: new Date()
+    const closeDialog = () => {
+      dirList.destroy();
+      this.editor.show();
+      this.editor.focus();
+      this.screen.render();
     };
 
-    this.state.currentFile = newFile;
-    await this.openEditor('');
-    this.updateStatusBar();
+    dirList.key(['escape', 'q'], closeDialog);
+
+    dirList.key(['enter'], () => {
+      const index = dirList.selected;
+      if (index >= 0 && index < BBS_SCREEN_DIRS.length) {
+        const dir = BBS_SCREEN_DIRS[index];
+        dirList.destroy();
+        this.showBBSDirectoryBrowser(dir.path, dir.label).catch(console.error);
+      }
+    });
+
+    dirList.focus();
     this.screen.render();
   }
 
-  private async openFileDialog(): Promise<void> {
-    const files = this.scanDirectory(this.state.currentDir);
+  /**
+   * Show files in a specific BBS directory
+   */
+  private async showBBSDirectoryBrowser(directory: string, label: string): Promise<void> {
+    const files = await this.listBBSFiles(directory);
+
     if (files.length === 0) {
-      await this.showMessage('Info', 'No ANSI files found in current directory.', 'yellow');
+      this.showMessage('No Files', `No .ans or .txt files found in ${directory}`, 'yellow');
+      this.editor.show();
+      this.editor.focus();
+      this.screen.render();
       return;
     }
 
-    // Create file list dialog
-    const fileBox = new Box({
+    const fileList = new List({
       parent: this.screen,
       top: 'center',
       left: 'center',
       width: '80%',
       height: '80%',
-      border: { type: 'line', fg: 'cyan' },
-      style: { border: { fg: 'cyan' } },
-      label: ' {bold}Select File{/bold} ',
+      border: { type: 'line', fg: 'yellow' },
+      label: ` {bold}${label}{/bold} `,
       tags: true,
-    });
-
-    const fileList = new List({
-      parent: fileBox,
-      top: 1,
-      left: 1,
-      width: '100%-2',
-      height: '100%-2',
-      items: files.map((f, idx) => `${(idx + 1).toString().padStart(3)}. ${f.filename.padEnd(30)} ${this.formatFileSize(f.size)}`),
       keys: true,
       mouse: true,
       vi: true,
       style: {
-        selected: { bg: 'blue', fg: 'white', bold: true },
+        selected: { bg: 'yellow', fg: 'black', bold: true },
         item: { fg: 'white' },
+        border: { fg: 'yellow' },
       },
+      items: files.map((f, idx) =>
+        `${(idx + 1).toString().padStart(3)}. ${f.filename}`
+      ),
     });
 
-    const closeHandler = () => {
-      fileBox.destroy();
+    new Text({
+      parent: fileList,
+      bottom: 0,
+      left: 2,
+      content: '{gray-fg}Enter: Open | B: Back | ESC: Cancel{/gray-fg}',
+      tags: true,
+    });
+
+    const closeDialog = () => {
+      fileList.destroy();
+      this.editor.show();
+      this.editor.focus();
       this.screen.render();
     };
 
-    fileList.key(['escape', 'q'], closeHandler);
+    fileList.key(['escape', 'q'], closeDialog);
+
+    fileList.key(['b', 'B'], () => {
+      fileList.destroy();
+      this.showBBSFileBrowser();
+    });
+
     fileList.key(['enter'], () => {
       const index = fileList.selected;
       if (index >= 0 && index < files.length) {
-        closeHandler();
-        const selectedFile = files[index];
-        this.state.currentFile = selectedFile;
-        const content = fs.readFileSync(selectedFile.fullPath, 'utf8');
-        // Don't await here - fire and forget
-        this.openEditor(content).then(() => {
-          this.updateStatusBar();
-          this.screen.render();
-        });
+        const file = files[index];
+        fileList.destroy();
+
+        // Load and open the BBS file
+        this.loadBBSFile(file.path).then(content => {
+          if (content !== null) {
+            this.currentFilename = file.filename;
+            this.currentBBSPath = file.path;
+            this.isBBSFile = true;
+            this.openEditor(content).catch(console.error);
+          } else {
+            this.showMessage('Error', `Failed to load ${file.filename}`, 'red');
+            this.editor.show();
+            this.editor.focus();
+            this.screen.render();
+          }
+        }).catch(console.error);
       }
     });
 
@@ -328,171 +337,479 @@ class ANSIEditorUI {
     this.screen.render();
   }
 
+  // ============================================
+  // UI CREATION
+  // ============================================
+
+  private createUI(): void {
+    // Create screen using helper (sets up proper input/output)
+    this.screen = createScreen((this.ctx as any).bbs, {
+      dockBorders: true,
+      title: 'ANSI Art Editor',
+      responsive: true,
+    });
+
+    // CRITICAL: enableGrabKeys MUST be false for blessed widgets!
+    this.inputManager = new DoorInputManager(this.ctx as any, this.screen, {
+      enableGameMode: false,
+      enableGrabKeys: false,
+      enableMouse: true,
+      debug: false,
+      debugName: 'ANSI-EDITOR'
+    });
+
+    this.screen.render();
+  }
+
+  // ============================================
+  // FILE OPERATIONS
+  // ============================================
+
+  /**
+   * Show file browser dialog
+   */
   private async showFileBrowser(): Promise<void> {
-    await this.openFileDialog();
+    const files = await this.listFiles();
+
+    if (files.length === 0) {
+      this.showMessage('No Files', 'No saved files found.\nCreate a new file first.', 'yellow');
+      return;
+    }
+
+    this.editor.hide();
+
+    // Create file selection dialog
+    const fileList = new List({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: '80%',
+      height: '80%',
+      border: { type: 'line', fg: 'cyan' },
+      label: ' {bold}Your ANSI Files{/bold} ',
+      tags: true,
+      keys: true,
+      mouse: true,
+      vi: true,
+      style: {
+        selected: { bg: 'blue', fg: 'white', bold: true },
+        item: { fg: 'white' },
+        border: { fg: 'cyan' },
+      },
+      items: files.map((f, idx) => {
+        const sizeStr = this.formatFileSize(f.size);
+        const dateStr = new Date(f.modified).toLocaleDateString();
+        return `${(idx + 1).toString().padStart(3)}. ${f.filename.padEnd(30)} ${sizeStr.padStart(8)} ${dateStr}`;
+      }),
+    });
+
+    // Instructions
+    new Text({
+      parent: fileList,
+      bottom: 0,
+      left: 2,
+      content: '{gray-fg}Enter: Open | D: Delete | ESC: Cancel{/gray-fg}',
+      tags: true,
+    });
+
+    const closeDialog = () => {
+      fileList.destroy();
+      this.editor.show();
+      this.editor.focus();
+      this.screen.render();
+    };
+
+    fileList.key(['escape', 'q'], closeDialog);
+
+    fileList.key(['enter'], () => {
+      const index = fileList.selected;
+      if (index >= 0 && index < files.length) {
+        const file = files[index];
+        fileList.destroy();
+        // Reset BBS mode - this is a user file
+        this.isBBSFile = false;
+        this.currentBBSPath = null;
+        this.currentFilename = file.filename;
+        this.loadFile(file.filename).then(content => {
+          this.openEditor(content || '').catch(console.error);
+        }).catch(console.error);
+      }
+    });
+
+    fileList.key(['d', 'D'], () => {
+      const index = fileList.selected;
+      if (index >= 0 && index < files.length) {
+        const file = files[index];
+        // Confirm deletion
+        this.confirmDialog(
+          'Delete File',
+          `Delete "${file.filename}"?\n\nThis cannot be undone.`
+        ).then(confirmed => {
+          if (confirmed) {
+            this.deleteFile(file.filename).then(() => {
+              closeDialog();
+              // Reopen browser to refresh list
+              this.showFileBrowser().catch(console.error);
+            }).catch(console.error);
+          }
+        }).catch(console.error);
+      }
+    });
+
+    fileList.focus();
+    this.screen.render();
   }
 
-  private async showGallery(): Promise<void> {
-    const files = this.scanDirectory(this.state.currentDir);
-    await this.showMessage(
-      'Gallery View',
-      `${files.length} files found.\n\nGallery view with thumbnails coming soon!\nFor now, use File Browser to view and edit files.`,
-      'cyan'
-    );
+  /**
+   * Show save-as dialog (prompts for filename)
+   */
+  private async showSaveAsDialog(): Promise<void> {
+    const filename = await this.promptFilename('Save As');
+    if (filename) {
+      // Get current content from editor
+      const content = this.editor.getContent();
+
+      // Add .ans extension if not present
+      const finalName = filename.endsWith('.ans') ? filename : `${filename}.ans`;
+
+      await this.saveFile(finalName, content);
+      this.currentFilename = finalName;
+      this.showMessage('Saved', `File saved: ${finalName}`, 'green');
+    }
   }
 
-  private async showSettings(): Promise<void> {
-    const content = [
-      '',
-      `  Auto-save:          ${this.state.settings.autoSave ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      `  Backup on save:     ${this.state.settings.backupOnSave ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      `  Show line numbers:  ${this.state.settings.showLineNumbers ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      `  Show toolbar:       ${this.state.settings.showToolbar ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      `  Show status bar:    ${this.state.settings.showStatusBar ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      `  Confirm delete:     ${this.state.settings.confirmDelete ? '{green-fg}ON{/green-fg}' : '{red-fg}OFF{/red-fg}'}`,
-      '',
-      '{gray-fg}Settings are configured in this session{/gray-fg}',
-    ].join('\n');
-
-    await this.showMessage('Editor Settings', content, 'cyan');
+  /**
+   * Show open dialog (from editor menu)
+   */
+  private async showOpenDialog(): Promise<void> {
+    // Hide editor temporarily
+    this.editor.hide();
+    await this.showFileBrowser();
   }
 
-  private async showHelp(): Promise<void> {
-    const content = [
-      '',
-      '{cyan-fg}{bold}Text Editing Mode{/bold}{/cyan-fg}',
-      '  Arrow Keys     - Move cursor',
-      '  Ctrl+S         - Save file',
-      '  Ctrl+M         - Switch to Draw Mode',
-      '  ESC            - Exit editor',
-      '',
-      '{cyan-fg}{bold}Drawing Mode{/bold}{/cyan-fg}',
-      '  1-9            - Select drawing tool',
-      '  C              - Character picker',
-      '  F/B            - Foreground/Background color',
-      '  I              - Toggle iCE colors',
-      '  U              - Undo',
-      '  Ctrl+M         - Back to Text Mode',
-      '',
-      '{cyan-fg}{bold}Drawing Tools{/bold}{/cyan-fg}',
-      '  1 - Freehand    6 - Filled Ellipse',
-      '  2 - Line        7 - Flood Fill',
-      '  3 - Box         8 - Eyedropper',
-      '  4 - Box Filled  9 - Block Select',
-      '  5 - Ellipse',
-    ].join('\n');
+  // ============================================
+  // EDITOR
+  // ============================================
 
-    await this.showMessage('ANSI Editor Help', content, 'yellow');
+  private async openEditor(initialContent: string): Promise<void> {
+    // Destroy existing editor if any
+    if (this.editor) {
+      this.editor.destroy();
+    }
+
+    // Build title based on file type
+    let editorTitle = 'New File';
+    if (this.isBBSFile && this.currentBBSPath) {
+      editorTitle = `[BBS] ${this.currentBBSPath}`;
+    } else if (this.currentFilename) {
+      editorTitle = `Editing: ${this.currentFilename}`;
+    }
+
+    this.editor = new ANSIEditor({
+      parent: this.screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      title: editorTitle,
+      initialContent,
+      initialMode: 'draw',
+      showLineNumbers: false,
+      showMenuBar: true,
+      showToolbar: true,
+      showSidebar: true,
+      showStatusBar: true,
+
+      // Save callback (quick save to current file)
+      onSave: async (content: string) => {
+        // Handle BBS file saving (sysop mode)
+        if (this.isBBSFile && this.currentBBSPath) {
+          const success = await this.saveBBSFile(this.currentBBSPath, content);
+          if (success) {
+            this.showMessage('Saved', `BBS file saved: ${this.currentBBSPath}`, 'green');
+            return true;
+          } else {
+            this.showMessage('Error', `Failed to save BBS file: ${this.currentBBSPath}`, 'red');
+            return false;
+          }
+        }
+
+        // Handle user file saving
+        if (!this.currentFilename) {
+          // No filename yet, prompt for one
+          const filename = await this.promptFilename('Save');
+          if (!filename) return false;
+
+          this.currentFilename = filename.endsWith('.ans') ? filename : `${filename}.ans`;
+        }
+
+        await this.saveFile(this.currentFilename, content);
+        this.showMessage('Saved', `File saved: ${this.currentFilename}`, 'green');
+        return true;
+      },
+
+      // Save As callback (always prompts for filename, saves to user storage)
+      onSaveAs: async () => {
+        // Reset BBS mode - Save As always saves to user storage
+        this.isBBSFile = false;
+        this.currentBBSPath = null;
+        await this.showSaveAsDialog();
+      },
+
+      // Open callback (shows user file browser)
+      onOpen: async () => {
+        await this.showOpenDialog();
+      },
+
+      // Open BBS files callback (sysop only)
+      onOpenBBS: this.isSysop() ? async () => {
+        await this.showBBSFileBrowser();
+      } : undefined,
+
+      // Exit callback - exit the door entirely
+      onExit: () => {
+        this.cleanup();
+      },
+    });
+
+    this.editor.focus();
+    this.screen.render();
   }
 
-  private async showMessage(title: string, message: string, color: string): Promise<void> {
+  // ============================================
+  // DIALOGS
+  // ============================================
+
+  private async promptFilename(title: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const dialog = new Box({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 50,
+        height: 9,
+        border: { type: 'line', fg: 'yellow' },
+        label: ` {bold}${title}{/bold} `,
+        tags: true,
+        style: {
+          fg: 'white',
+          bg: 'blue',
+          border: { fg: 'yellow' }
+        },
+      });
+
+      new Text({
+        parent: dialog,
+        top: 1,
+        left: 2,
+        content: 'Enter filename (without .ans extension):',
+        tags: true,
+      });
+
+      const input = new Textbox({
+        parent: dialog,
+        top: 3,
+        left: 2,
+        width: 44,
+        height: 1,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          focus: { bg: 'black', fg: 'white' },
+        },
+        inputOnFocus: true,
+        keys: true,
+        mouse: true,
+      });
+
+      new Text({
+        parent: dialog,
+        top: 5,
+        left: 2,
+        content: '{gray-fg}Enter: Save | Escape: Cancel{/gray-fg}',
+        tags: true,
+      });
+
+      const closeDialog = (result: string | null) => {
+        dialog.destroy();
+        this.screen.render();
+        resolve(result);
+      };
+
+      input.on('submit', (value: string) => {
+        closeDialog(value && value.trim() ? value.trim() : null);
+      });
+
+      input.key(['escape'], () => {
+        closeDialog(null);
+      });
+
+      input.focus();
+      this.screen.render();
+    });
+  }
+
+  private async confirmDialog(title: string, message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const dialog = new Box({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 50,
+        height: 10,
+        border: { type: 'line', fg: 'red' },
+        label: ` {bold}${title}{/bold} `,
+        tags: true,
+        style: {
+          fg: 'white',
+          bg: 'blue',
+          border: { fg: 'red' }
+        },
+      });
+
+      new Text({
+        parent: dialog,
+        top: 1,
+        left: 2,
+        content: message,
+        tags: true,
+      });
+
+      new Text({
+        parent: dialog,
+        top: 6,
+        left: 2,
+        content: '{yellow-fg}Y{/yellow-fg}: Yes  {yellow-fg}N{/yellow-fg}/ESC: No',
+        tags: true,
+      });
+
+      const closeDialog = (result: boolean) => {
+        dialog.destroy();
+        this.screen.render();
+        resolve(result);
+      };
+
+      dialog.key(['y', 'Y'], () => closeDialog(true));
+      dialog.key(['n', 'N', 'escape'], () => closeDialog(false));
+
+      dialog.focus();
+      this.screen.render();
+    });
+  }
+
+  private showMessage(title: string, message: string, color: string): void {
     const msgBox = new Box({
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 70,
-      height: 'shrink',
+      width: 60,
+      height: 7,
       border: { type: 'line', fg: color },
-      style: { border: { fg: color } },
       label: ` {bold}${title}{/bold} `,
       tags: true,
+      keys: true,
+      focusable: true,
       padding: { left: 2, right: 2, top: 1, bottom: 1 },
+      style: {
+        fg: 'white',
+        bg: 'blue',
+        border: { fg: color }
+      },
     });
 
     new Text({
       parent: msgBox,
       top: 0,
       left: 0,
-      content: message + '\n\n{center}{gray-fg}Press any key to continue{/gray-fg}{/center}',
+      content: message + '\n\n{gray-fg}Press any key...{/gray-fg}',
       tags: true,
+      style: { bg: 'blue', fg: 'white' },
     });
 
-    this.screen.render();
-
-    // Wait for key press
-    await this.ctx.input.waitForKey();
-
-    msgBox.destroy();
-    this.screen.render();
-  }
-
-  private async openEditor(initialContent: string): Promise<void> {
-    try {
-      // Hide main menu
-      this.mainBox.hide();
-      this.statusBar.hide();
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      this.screen.off('click', outsideClickHandler);
+      msgBox.destroy();
       this.screen.render();
+    };
 
-      const result = await showANSIEditor(this.ctx.bbsSession as any, {
-        title: this.state.currentFile ? `Editing: ${this.state.currentFile.filename}` : 'New ANSI File',
-        initialContent,
-        maxLines: 1000,
-        maxLineLength: 160,
-        showLineNumbers: this.state.settings.showLineNumbers,
-        toolbar: this.state.settings.showToolbar,
-        statusBar: this.state.settings.showStatusBar,
-        onSave: async (content: string) => {
-          if (this.state.currentFile) {
-            if (this.state.settings.backupOnSave && fs.existsSync(this.state.currentFile.fullPath)) {
-              const backupPath = this.state.currentFile.fullPath + '.bak';
-              const original = fs.readFileSync(this.state.currentFile.fullPath);
-              fs.writeFileSync(backupPath, original);
-            }
-
-            fs.writeFileSync(this.state.currentFile.fullPath, content);
-            this.state.modified = false;
-
-            const stats = fs.statSync(this.state.currentFile.fullPath);
-            this.state.currentFile.size = stats.size;
-            this.state.currentFile.modified = stats.mtime;
-
-            return true;
-          }
-          return false;
-        }
-      });
-
-      if (result !== null) {
-        this.state.modified = result !== initialContent;
+    // Click outside to close
+    const outsideClickHandler = (data: any) => {
+      const pos = (msgBox as any)._getCoords();
+      if (!pos) return;
+      const outside = data.x < pos.xi || data.x > pos.xl || data.y < pos.yi || data.y > pos.yl;
+      if (outside) {
+        close();
       }
-    } catch (error) {
-      await this.showMessage('Error', error instanceof Error ? error.message : String(error), 'red');
-    } finally {
-      // Restore main menu
-      this.mainBox.show();
-      this.statusBar.show();
-      this.screen.render();
-    }
+    };
+    this.screen.on('click', outsideClickHandler);
+
+    msgBox.on('keypress', close);
+    msgBox.key(['enter', 'escape', 'space'], close);
+    msgBox.focus();
+    this.screen.render();
   }
 
-  private scanDirectory(dirPath: string): AnsiFile[] {
-    const files: AnsiFile[] = [];
+  private showHelp(): void {
+    const helpText = `{cyan-fg}{bold}Main Menu:{/bold}{/cyan-fg}
 
-    try {
-      const entries = fs.readdirSync(dirPath);
+  N              New file - create blank canvas
+  O              Open file - load from your files
+  H              Help - show this help
+  Q / ESC        Quit - exit editor
 
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry);
-        const stats = fs.statSync(fullPath);
 
-        if (stats.isFile()) {
-          const ext = path.extname(entry).toLowerCase();
-          if (ext === '.ans' || ext === '.asc' || ext === '.xb') {
-            files.push({
-              filename: entry,
-              fullPath,
-              size: stats.size,
-              modified: stats.mtime
-            });
-          }
-        }
-      }
-    } catch (error) {
-      // Directory doesn't exist or can't be read
-    }
+{yellow-fg}{bold}Moebius-Style Interface:{/bold}{/yellow-fg}
 
-    return files.sort((a, b) => a.filename.localeCompare(b.filename));
+  Menu Bar       File/Edit/Layer/Select/Colors/View/Help
+  F-Key Toolbar  F1-F12 character sets
+  Left Sidebar   Color palette + Tool buttons
+  Status Bar     Position, colors, current tool
+
+
+{cyan-fg}{bold}Your Files:{/bold}{/cyan-fg}
+
+  Files are stored in your personal storage.
+  Each user has their own private file space.
+  Files are preserved between sessions.
+
+
+{cyan-fg}{bold}Quick Keys in Editor:{/bold}{/cyan-fg}
+
+  Ctrl+S         Save file
+  Ctrl+Z         Undo
+  Ctrl+Y         Redo
+  F2             Toggle fullscreen
+  ?              Show help
+  ESC            Exit to menu
+`;
+
+    const helpModal = new DocModal({
+      parent: this.screen,
+      title: 'ANSI Editor Help',
+      content: helpText,
+      closeKeys: ['escape', 'q', '?', 'enter', 'space'],
+      footerText: '{bold} Scroll: Arrows/PgUp/PgDn | Close: ESC/Q/?/Enter {/bold}',
+      style: {
+        fg: 'white',
+        bg: 'blue',
+        border: { fg: 'cyan' },
+      },
+      onClose: () => {
+        helpModal.destroy();
+        this.editor?.focus();
+        this.screen.render();
+      },
+    });
+
+    helpModal.display(this.screen);
   }
+
+  // ============================================
+  // UTILITIES
+  // ============================================
 
   private formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes}B`;
@@ -503,6 +820,10 @@ class ANSIEditorUI {
   private cleanup(): void {
     if (this.hasExited) return;
     this.hasExited = true;
+
+    if (this.inputManager) {
+      this.inputManager.disable();
+    }
 
     if (this.screen && !this.screen.destroyed) {
       this.screen.destroy();
@@ -518,19 +839,19 @@ class ANSIEditorUI {
 
 const door = new Door({
   name: 'ANSI Editor',
-  version: '1.0.0',
-  description: 'Professional ANSI Art Editor with file management',
+  version: '2.0.0',
+  description: 'Professional ANSI Art Editor with user file storage',
   author: 'AmiExpress SDK v2.0',
 });
 
 door.onStart(async (ctx: DoorContext) => {
-  const editor = new ANSIEditorUI();
-  editor.setContext(ctx);
-  await editor.start();
+  const app = new ANSIEditorDoor();
+  app.setContext(ctx);
+  await app.start();
 });
 
 door.onClose(async (ctx: DoorContext) => {
-  // Cleanup handled by ANSIEditorUI
+  // Cleanup handled by ANSIEditorDoor
 });
 
 door.onError(async (ctx: DoorContext, error: Error) => {
