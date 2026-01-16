@@ -187,6 +187,10 @@ export async function createApp(session: DoorSession) {
   let viewMode: 'categories' | 'doors' = 'categories';
   let currentCategory = categoryTree;
 
+  // Type filter state
+  const doorTypes = ['ALL', 'XIM', 'TS', 'SIM', 'PY', 'RX'];
+  let currentTypeFilter = 'ALL';
+
   // Create screen
   let screen: ReturnType<typeof blessed.screen>;
   try {
@@ -231,11 +235,25 @@ export async function createApp(session: DoorSession) {
     parent: screen,
     top: 1,
     left: 0,
-    width: '100%',
+    width: '70%',
     height: 1,
     content: '{cyan-fg}Location:{/cyan-fg} All Doors',
     style: {
       fg: 'cyan',
+      bg: 'black'
+    }
+  });
+
+  // Create type filter display
+  const filterDisplay = createBox({
+    parent: screen,
+    top: 1,
+    right: 0,
+    width: '30%',
+    height: 1,
+    content: '{yellow-fg}Filter:{/yellow-fg} ALL',
+    style: {
+      fg: 'yellow',
       bg: 'black'
     }
   });
@@ -298,7 +316,7 @@ export async function createApp(session: DoorSession) {
       fg: 'white',
       border: { fg: 'gray' }
     },
-    content: '{yellow-fg}Up/Down:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} Select  {yellow-fg}Backspace:{/yellow-fg} Back  {yellow-fg}Q:{/yellow-fg} Quit'
+    content: '{yellow-fg}Up/Down:{/yellow-fg} Navigate  {yellow-fg}Enter:{/yellow-fg} Select  {yellow-fg}T:{/yellow-fg} Filter Type  {yellow-fg}Backspace:{/yellow-fg} Back  {yellow-fg}Q:{/yellow-fg} Quit'
   });
 
   /**
@@ -313,6 +331,52 @@ export async function createApp(session: DoorSession) {
       parts.push(' {yellow-fg}(viewing doors){/yellow-fg}');
     }
     breadcrumb.setContent(parts.join(''));
+  }
+
+  /**
+   * Update filter display
+   */
+  function updateFilterDisplay() {
+    const typeColors: Record<string, string> = {
+      'ALL': 'white',
+      'XIM': 'green',
+      'TS': 'cyan',
+      'SIM': 'yellow',
+      'PY': 'magenta',
+      'RX': 'blue'
+    };
+    const color = typeColors[currentTypeFilter] || 'white';
+    filterDisplay.setContent(`{yellow-fg}Filter:{/yellow-fg} {${color}-fg}${currentTypeFilter}{/${color}-fg}`);
+  }
+
+  /**
+   * Filter doors by current type filter
+   */
+  function filterDoorsByType(doorsToFilter: DoorInfo[]): DoorInfo[] {
+    if (currentTypeFilter === 'ALL') {
+      return doorsToFilter;
+    }
+    return doorsToFilter.filter(door => {
+      const doorType = formatType(door.type);
+      return doorType === currentTypeFilter;
+    });
+  }
+
+  /**
+   * Cycle to next type filter
+   */
+  function cycleTypeFilter() {
+    const currentIndex = doorTypes.indexOf(currentTypeFilter);
+    const nextIndex = (currentIndex + 1) % doorTypes.length;
+    currentTypeFilter = doorTypes[nextIndex];
+    updateFilterDisplay();
+
+    // Re-render current view with new filter
+    if (viewMode === 'doors') {
+      renderDoorView();
+    } else {
+      renderCategoryView();
+    }
   }
 
   /**
@@ -365,18 +429,26 @@ export async function createApp(session: DoorSession) {
     viewMode = 'doors';
     currentCategory = getCategoryAtPath(categoryTree, currentPath) || categoryTree;
 
-    const doorsToShow = getAllDoorsInCategory(currentCategory);
+    const allDoors = getAllDoorsInCategory(currentCategory);
+    const filteredDoors = filterDoorsByType(allDoors);
     const items: string[] = [];
 
     // Add back option
     items.push('{gray-fg}[..]{/gray-fg} Back to categories');
 
     // Add doors sorted by name
-    const sortedDoors = doorsToShow.sort((a, b) => a.name.localeCompare(b.name));
+    const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
     for (const door of sortedDoors) {
       const typeLabel = formatType(door.type);
       const sizeLabel = formatSize(door.size);
       items.push(`{yellow-fg}[${typeLabel.padEnd(3)}]{/yellow-fg} {green-fg}${door.command.padEnd(12)}{/green-fg} {white-fg}${door.name.padEnd(25)}{/white-fg} {cyan-fg}${sizeLabel.padStart(8)}{/cyan-fg}`);
+    }
+
+    // Show count with filter info
+    if (currentTypeFilter !== 'ALL') {
+      const filterInfo = `{gray-fg}Showing ${filteredDoors.length} of ${allDoors.length} doors (${currentTypeFilter} only){/gray-fg}`;
+      items.push('');
+      items.push(filterInfo);
     }
 
     mainList.setItems(items);
@@ -426,8 +498,10 @@ export async function createApp(session: DoorSession) {
       return;
     }
 
-    const doorsToShow = getAllDoorsInCategory(currentCategory).sort((a, b) => a.name.localeCompare(b.name));
-    const selectedDoor = doorsToShow[index - 1];
+    const allDoors = getAllDoorsInCategory(currentCategory);
+    const filteredDoors = filterDoorsByType(allDoors);
+    const sortedDoors = filteredDoors.sort((a, b) => a.name.localeCompare(b.name));
+    const selectedDoor = sortedDoors[index - 1];
 
     if (selectedDoor) {
       screen.destroy();
@@ -480,6 +554,11 @@ export async function createApp(session: DoorSession) {
     goBack();
   });
 
+  // Handle type filter toggle
+  screen.key(['t', 'T'], () => {
+    cycleTypeFilter();
+  });
+
   // Handle quit
   screen.key(['q', 'Q', 'escape'], () => {
     if (currentPath.length > 0 || viewMode === 'doors') {
@@ -496,6 +575,7 @@ export async function createApp(session: DoorSession) {
 
   // Initial render
   mainList.focus();
+  updateFilterDisplay();
   renderCategoryView();
 
   // Return promise that resolves when screen is destroyed
