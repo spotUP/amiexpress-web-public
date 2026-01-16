@@ -178,16 +178,63 @@ Example for large data:
 - PC-relative (within 32KB range), or
 - Calculated at runtime using base registers
 
+### Register Clobbering - CRITICAL
+
+**AmigaOS library functions clobber D0, D1, A0, and A1.** Always save important values BEFORE calling any library function.
+
+Common mistake:
+
+```asm
+        ; Calculate something important in D0
+        divu.w  #999,d0             ; D0 = result we need
+
+        ; WRONG: Call library function before saving D0
+        move.l  ABSEXECBASE,a6
+        move.l  somelib,a1
+        jsr     LVO_CloseLibrary(a6) ; CLOBBERS D0!
+
+        ; D0 is now garbage, not our result
+        move.l  d0,saved_value      ; WRONG - D0 was destroyed
+```
+
+Correct approach:
+
+```asm
+        ; Calculate something important in D0
+        divu.w  #999,d0             ; D0 = result we need
+
+        ; CORRECT: Save D0 BEFORE any library call
+        move.l  d0,saved_value      ; Save while D0 is valid
+
+        ; Now safe to call library
+        move.l  ABSEXECBASE,a6
+        move.l  somelib,a1
+        jsr     LVO_CloseLibrary(a6) ; D0 clobbered, but we saved it
+```
+
+**Registers clobbered by library calls:**
+- D0 - Return value (always clobbered)
+- D1 - Scratch (always clobbered)
+- A0 - Scratch (always clobbered)
+- A1 - Scratch (always clobbered)
+
+**Registers preserved by library calls:**
+- D2-D7 - Safe across calls
+- A2-A6 - Safe across calls (A6 is usually library base)
+
+**Rule of thumb:** If you compute something in D0/D1/A0/A1, save it to memory or a safe register (D2-D7, A2-A5) BEFORE calling any library function.
+
 ---
 
 ## Working Example: CP Listan
 
 See `sdk/68k/doors/cplistan/` for a complete working example featuring:
 
-- 999 embedded strings (42KB total)
-- Random number generation (LFSR seeded from DateStamp)
-- Offset table for large data handling
+- 999 embedded strings (46KB total)
+- Random number generation using dos.library DateStamp()
+- Offset table for large data handling (>32KB PC-relative limit)
 - Proper AEDoor.library integration
+- Correct register preservation (saves D0 before CloseLibrary)
 
 ---
 
