@@ -48,6 +48,15 @@ export class DoorLoader {
     // Reset it here so doors can allocate signals for their own MsgPorts.
     this.execLibrary.resetSignalsForDoor();
 
+    // Write fresh random seed for doors that need entropy
+    // This must be done per-door, not once at startup
+    const randomSeed = (Date.now() & 0xFFFFFFFF) ^ (Math.random() * 0xFFFFFFFF >>> 0);
+    console.log(`[DoorLoader] Writing random seed 0x${randomSeed.toString(16)} to 0x400`);
+    this.emulator.writeMemory32(0x00000400, randomSeed);
+    // Verify it was written
+    const readBack = this.emulator.readMemory32(0x00000400);
+    console.log(`[DoorLoader] Read back: 0x${readBack.toString(16)}`);
+
     // Read door binary (use amigafs for case-insensitive path resolution)
     let binary: Buffer;
     let executablePath = this.config.executablePath;
@@ -282,7 +291,10 @@ debugLog(`[DoorLoader] Building CLI args for doorType=${doorType} from config.ar
     this.emulator.setRegister(0, argLen); // D0 = length of arg string
     this.emulator.setRegister(1, 0); // D1 = 0 at startup
     this.emulator.setRegister(2, this.stackSizeBytes); // D2 = stack size
-debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)}`);
+    // D3 = random seed for doors that need entropy (changes each run)
+    const randomSeed = (Date.now() & 0xFFFFFFFF) ^ ((Math.random() * 0xFFFFFFFF) >>> 0);
+    this.emulator.setRegister(3, randomSeed); // D3 = random seed
+debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)} D3 (seed)=0x${randomSeed.toString(16)}`);
 
     // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
     // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
