@@ -50,6 +50,17 @@ TypeScript doors are the recommended approach for new development:
 **Release packaging:** Use `npm run pack` from your door repo root. The packer creates a minimal archive with
 `Commands/BBSCmd/` + `Doors/<door>/` (no SDK bundled).
 
+### 🔴 CRITICAL: Input Handling
+
+**[INPUT_HANDLING_GUIDE.md](INPUT_HANDLING_GUIDE.md)** - Complete guide for keyboard and mouse input
+
+**READ THIS BEFORE IMPLEMENTING INPUT!** The most common mistake in door development is using the wrong `enableGrabKeys` setting:
+
+- **Blessed widgets** (menus, forms, editors) → `enableGrabKeys: false`
+- **Games** (Tetris, Arkanoid) → `enableGrabKeys: true`
+
+**Wrong setting = Input won't work!** See the guide for complete examples and troubleshooting.
+
 ## 68K Amiga Doors (Legacy)
 
 **[68K_DOOR_DEVELOPMENT.md](68K_DOOR_DEVELOPMENT.md)** - Guide for legacy Amiga binary doors

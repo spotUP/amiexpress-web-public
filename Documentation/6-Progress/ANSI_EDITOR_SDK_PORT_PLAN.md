@@ -1,9 +1,37 @@
 # ANSI Editor SDK Port - Implementation Plan
 
-**Status:** Planning Phase
+**Status:** In Progress - Phase 3 (Drawing Tools)
 **Created:** 2026-01-14
+**Updated:** 2026-01-15
 **Target:** Full Moebius-level ANSI art editor in BBS Door SDK
 **Estimated Effort:** 2,000-2,500 lines, 15-20 hours
+
+---
+
+## Session Progress Log
+
+### Session 2026-01-15
+
+**Completed:**
+- [x] Mouse input routing fixed - `bbsSession.mouseEventsEnabled` flag set directly in DoorInputManager
+- [x] Coordinate system fixed - removed x/2 division and col*2 multiplication for direct column positioning
+- [x] Canvas cursor bounds clamping added - prevents cursor going outside canvas
+- [x] Color picker dialog rewritten using SDK components (Overlay + Box + List)
+- [x] Character picker dialog rewritten using SDK components (Overlay + Box + List)
+- [x] Freehand drawing works with mouse
+- [x] Basic draw tool operational
+
+**Key Fixes:**
+1. `sdk/utils/door-input-manager.ts` - Set `session.bbsSession.mouseEventsEnabled = true` directly (line 121-124)
+2. `sdk/utils/blessed-helpers.ts` - Removed duplicate JSON mouse handling (neo-blessed handles it internally)
+3. `sdk/engines/ui/blessed/widgets/ansi-editor.ts` - Fixed cursor positioning and dialog components
+
+**Remaining Work:**
+- Complete drawing tools (line, box, ellipse, fill, pick, select)
+- File format support (.ANS, .ASC)
+- Mode switching (text <-> draw)
+- iCE colors support
+- Brush modes (half-block, quarter-block)
 
 ---
 
@@ -1170,8 +1198,8 @@ Update `sdk/engines/ui/ansi-editor/README.md`:
 ### Core Modules
 
 - [ ] `core/canvas.ts` (NEW 900 lines)
-  - [ ] Canvas creation/cloning
-  - [ ] Cell get/set operations
+  - [x] Canvas creation/cloning - BASIC
+  - [x] Cell get/set operations - WORKING
   - [ ] Bresenham line algorithm
   - [ ] Box drawing (outline/filled)
   - [ ] Ellipse drawing (outline/filled)
@@ -1180,15 +1208,15 @@ Update `sdk/engines/ui/ansi-editor/README.md`:
   - [ ] Brush mode support
   - [ ] Mirror mode support
 
-- [ ] `core/editor-state.ts` (MODIFY +200 lines)
-  - [ ] Add drawing mode fields
+- [x] `core/editor-state.ts` (MODIFY +200 lines)
+  - [x] Add drawing mode fields
   - [ ] Mode switching methods
-  - [ ] Canvas accessors
+  - [x] Canvas accessors
   - [ ] Canvas undo/redo
 
-- [ ] `core/cursor.ts` (MODIFY +50 lines)
-  - [ ] Canvas bounds checking
-  - [ ] Canvas coordinate mapping
+- [x] `core/cursor.ts` (MODIFY +50 lines)
+  - [x] Canvas bounds checking - IMPLEMENTED
+  - [x] Canvas coordinate mapping - FIXED (direct columns)
 
 - [ ] `core/clipboard.ts` (MODIFY +100 lines)
   - [ ] Cell clipboard operations
@@ -1197,20 +1225,20 @@ Update `sdk/engines/ui/ansi-editor/README.md`:
 ### Rendering
 
 - [ ] `rendering/canvas-renderer.ts` (NEW 300 lines)
-  - [ ] Cell to ANSI conversion
+  - [x] Cell to ANSI conversion - BASIC
   - [ ] Color optimization
   - [ ] iCE color support
   - [ ] ANSI escape sequence generation
 
-- [ ] `rendering/viewport.ts` (MODIFY +150 lines)
-  - [ ] Canvas rendering mode
-  - [ ] Cursor overlay in canvas
+- [x] `rendering/viewport.ts` (MODIFY +150 lines)
+  - [x] Canvas rendering mode - WORKING
+  - [x] Cursor overlay in canvas - FIXED (direct positioning)
   - [ ] Selection visualization
 
 ### Input Handling
 
 - [ ] `input/drawing-tools.ts` (NEW 550 lines)
-  - [ ] Draw tool (freehand)
+  - [x] Draw tool (freehand) - WORKING
   - [ ] Line tool
   - [ ] Box tool (outline)
   - [ ] Box fill tool
@@ -1221,20 +1249,31 @@ Update `sdk/engines/ui/ansi-editor/README.md`:
   - [ ] Pick tool
   - [ ] Select tool
 
+- [x] `input/mouse-handler.ts` (COMPLETED)
+  - [x] Mouse event routing via DoorInputManager
+  - [x] Canvas coordinate mapping (direct columns, no division)
+  - [x] Bounds clamping (prevent out-of-canvas cursor)
+  - [x] Mouse drag for drawing
+
 - [ ] `input/keyboard-handler.ts` (MODIFY +200 lines)
   - [ ] Drawing mode key handling
   - [ ] Tool shortcuts (Alt+D/L/B/E/F/P/S/T)
   - [ ] Mode toggle (F9)
-  - [ ] Character picker (F3)
+  - [x] Character picker (F3) - IMPLEMENTED
   - [ ] Mouse/cursor drawing (Space/Enter)
 
 ### UI Components
 
-- [ ] `ui/character-picker.ts` (NEW 400 lines)
-  - [ ] 16x16 character grid
-  - [ ] Character set pages
-  - [ ] Navigation
-  - [ ] Selection
+- [x] `ui/character-picker.ts` (REWRITTEN with SDK components)
+  - [x] Character grid with SDK List widget
+  - [x] Character set pages (partial - basic CP437 chars)
+  - [x] Navigation via List keyboard handling
+  - [x] Selection with modal overlay
+
+- [x] `ui/color-picker.ts` (REWRITTEN with SDK components)
+  - [x] Color list with SDK List widget
+  - [x] FG/BG color selection
+  - [x] Modal overlay with trapModalInput
 
 - [ ] `ui/canvas-properties.ts` (NEW 200 lines)
   - [ ] Size input
@@ -1304,11 +1343,19 @@ Update `sdk/engines/ui/ansi-editor/README.md`:
 - [x] Undo/Redo
 - [x] Clipboard operations
 
-✅ **Drawing Mode (New - 0% Complete → 100% Target):**
-- [ ] Cell-based canvas (80x25 default)
+✅ **Drawing Mode (New - ~25% Complete → 100% Target):**
+- [x] Cell-based canvas (80x25 default)
 - [ ] 10 drawing tools (draw, line, box, ellipse, fill, pick, select, text)
-- [ ] Canvas rendering (Cell[] → ANSI)
-- [ ] Character picker (CP437)
+  - [x] Draw tool (freehand) - WORKING
+  - [ ] Line tool
+  - [ ] Box tool
+  - [ ] Ellipse tool
+  - [ ] Fill tool
+  - [ ] Pick tool
+  - [ ] Select tool
+  - [ ] Text tool
+- [x] Canvas rendering (Cell[] → ANSI) - BASIC
+- [x] Character picker (CP437) - SDK List-based
 - [ ] iCE colors (16 BG + blink)
 - [ ] Brush modes (half-block, quarter-block, etc.)
 - [ ] Mirror mode
