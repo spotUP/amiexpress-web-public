@@ -559,6 +559,166 @@ export function getCanvasDimensions(canvas: Cell[][]): { width: number; height: 
 }
 
 /**
+ * Parse ANSI string and populate canvas
+ * Handles escape sequences for colors and cursor positioning
+ */
+export function parseANSIToCanvas(
+  canvas: Cell[][],
+  ansiContent: string,
+  startX: number = 0,
+  startY: number = 0
+): void {
+  const height = canvas.length;
+  const width = height > 0 ? canvas[0].length : 0;
+
+  let x = startX;
+  let y = startY;
+  let fg = 7;  // Default white
+  let bg = 0;  // Default black
+  let blink = false;
+
+  let i = 0;
+  while (i < ansiContent.length) {
+    const char = ansiContent[i];
+
+    // Handle escape sequence
+    if (char === '\x1b' && ansiContent[i + 1] === '[') {
+      // Parse ANSI escape sequence
+      let j = i + 2;
+      let params = '';
+
+      // Collect parameters until we hit the command letter
+      while (j < ansiContent.length && !/[a-zA-Z]/.test(ansiContent[j])) {
+        params += ansiContent[j];
+        j++;
+      }
+
+      if (j < ansiContent.length) {
+        const cmd = ansiContent[j];
+        const paramList = params ? params.split(';').map(p => parseInt(p, 10) || 0) : [0];
+
+        switch (cmd) {
+          case 'm': // SGR - Select Graphic Rendition (colors/styles)
+            for (const param of paramList) {
+              if (param === 0) {
+                // Reset
+                fg = 7;
+                bg = 0;
+                blink = false;
+              } else if (param === 1) {
+                // Bold/bright - make foreground bright
+                if (fg < 8) fg += 8;
+              } else if (param === 5) {
+                // Blink
+                blink = true;
+              } else if (param === 25) {
+                // Blink off
+                blink = false;
+              } else if (param >= 30 && param <= 37) {
+                // Standard foreground colors
+                fg = param - 30;
+              } else if (param >= 40 && param <= 47) {
+                // Standard background colors
+                bg = param - 40;
+              } else if (param >= 90 && param <= 97) {
+                // Bright foreground colors
+                fg = param - 90 + 8;
+              } else if (param >= 100 && param <= 107) {
+                // Bright background colors (iCE)
+                bg = param - 100 + 8;
+              }
+            }
+            break;
+
+          case 'H': // Cursor position
+          case 'f': // Cursor position (alternative)
+            y = (paramList[0] || 1) - 1;
+            x = (paramList[1] || 1) - 1;
+            break;
+
+          case 'A': // Cursor up
+            y = Math.max(0, y - (paramList[0] || 1));
+            break;
+
+          case 'B': // Cursor down
+            y = Math.min(height - 1, y + (paramList[0] || 1));
+            break;
+
+          case 'C': // Cursor forward
+            x = Math.min(width - 1, x + (paramList[0] || 1));
+            break;
+
+          case 'D': // Cursor back
+            x = Math.max(0, x - (paramList[0] || 1));
+            break;
+
+          case 'J': // Erase display
+            if (paramList[0] === 2) {
+              clearCanvas(canvas);
+            }
+            break;
+
+          case 'K': // Erase line
+            if (y >= 0 && y < height) {
+              for (let lx = x; lx < width; lx++) {
+                canvas[y][lx] = { char: ' ', fg: 7, bg: 0, blink: false };
+              }
+            }
+            break;
+
+          case 's': // Save cursor position
+            // Not implemented for now
+            break;
+
+          case 'u': // Restore cursor position
+            // Not implemented for now
+            break;
+        }
+
+        i = j + 1;
+        continue;
+      }
+    }
+
+    // Handle newline
+    if (char === '\n') {
+      x = 0;
+      y++;
+      i++;
+      continue;
+    }
+
+    // Handle carriage return
+    if (char === '\r') {
+      x = 0;
+      i++;
+      continue;
+    }
+
+    // Handle tab
+    if (char === '\t') {
+      x = Math.min(width - 1, (Math.floor(x / 8) + 1) * 8);
+      i++;
+      continue;
+    }
+
+    // Regular character - place in canvas
+    if (y >= 0 && y < height && x >= 0 && x < width) {
+      canvas[y][x] = { char, fg, bg, blink };
+      x++;
+
+      // Auto-wrap at end of line
+      if (x >= width) {
+        x = 0;
+        y++;
+      }
+    }
+
+    i++;
+  }
+}
+
+/**
  * Resize canvas (crop or expand with empty cells)
  */
 export function resizeCanvas(
