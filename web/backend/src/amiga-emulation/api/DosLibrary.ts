@@ -12,10 +12,46 @@ import { initializeENVFiles } from "../utils/env-initializer";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
-// ========== File Operation Debugging ==========
-// Set DEBUG_FILE_OPS=1 to log all file operations (Open, Close, Read, Write, Lock, etc.)
-// This is extremely useful for debugging 68K doors that can't find files
-const DEBUG_FILE_OPS = process.env.DEBUG_FILE_OPS === "1";
+// Import modular DOS components
+import {
+  // Constants
+  MODE_OLDFILE,
+  MODE_NEWFILE,
+  MODE_READWRITE,
+  OFFSET_BEGINNING,
+  OFFSET_CURRENT,
+  OFFSET_END,
+  DOS_FILEHANDLE,
+  DOS_EXALLCONTROL,
+  DOS_FIB,
+  DOS_STDPKT,
+  DOS_CLI,
+  DOS_RDARGS,
+  STDIN_HANDLE,
+  STDOUT_HANDLE,
+  STDERR_HANDLE,
+  NIL_HANDLE,
+  DEBUG_FILE_OPS,
+  READARGS_DEFAULT_BUFFER_SIZE,
+  READARGS_HEAP_BASE,
+  DOS_ERRORS,
+  ENV_VAR_STRUCT_BASE,
+  ENV_STRING_BASE,
+  ENV_VAR_STRUCT_SIZE,
+  // Types
+  FileHandle,
+  Lock,
+  ReadArgsTemplateEntry,
+  ReadArgsContext,
+  ReadArgsToken,
+  ReadArgsTokenResult,
+  ReadArgsContextInfo,
+  ReadArgsInputInfo,
+  // Classes
+  DosPathResolver,
+  ReadArgsParser,
+  DosEnvManager,
+} from "./dos";
 
 /**
  * dos.library - Amiga DOS Library
@@ -37,90 +73,12 @@ const DEBUG_FILE_OPS = process.env.DEBUG_FILE_OPS === "1";
  * Previous offsets were incorrect (ParentDir was at -198, should be -210)
  *
  * Note: Some doors may also use undocumented/private offsets
+ *
+ * @see ./dos/dos-types.ts for type definitions and constants
+ * @see ./dos/dos-path-resolver.ts for path resolution logic
+ * @see ./dos/dos-readargs.ts for ReadArgs parsing
+ * @see ./dos/dos-env-manager.ts for environment variable management
  */
-
-// Amiga DOS mode constants (from dos/dos.h)
-const MODE_OLDFILE = 1005; // Open existing file for reading
-const MODE_NEWFILE = 1006; // Create new file or overwrite existing
-const MODE_READWRITE = 1004; // Open existing file for read/write
-
-// Seek modes (from dos/dos.h)
-const OFFSET_BEGINNING = -1; // Seek from start of file
-const OFFSET_CURRENT = 0; // Seek from current position
-const OFFSET_END = 1; // Seek from end of file
-
-// AllocDosObject types (from dos/dosextens.h)
-const DOS_FILEHANDLE = 0;   // Allocate FileHandle structure
-const DOS_EXALLCONTROL = 1; // Allocate ExAllControl structure
-const DOS_FIB = 2;          // Allocate FileInfoBlock structure (260 bytes)
-const DOS_STDPKT = 3;       // Allocate DosPacket structure
-const DOS_CLI = 4;          // Allocate CommandLineInterface structure
-const DOS_RDARGS = 5;       // Allocate RDArgs structure
-
-interface FileHandle {
-  id: number;
-  name: string;
-  mode: number; // MODE_OLDFILE, MODE_NEWFILE, etc.
-  position: number;
-  isConsole: boolean;
-  buffer?: Buffer; // File contents in memory
-  realPath?: string; // Actual filesystem path
-}
-
-interface Lock {
-  id: number;
-  path: string; // Real filesystem path
-  mode: number; // ACCESS_READ=-2, ACCESS_WRITE=-1
-  amigaPath: string; // Original AmigaDOS path (for CurrentDir/fixFilename)
-  memAddr: number; // Address of FileLockStruct in emulator memory
-  bptr: number; // BPTR (memAddr >> 2) returned to door
-}
-
-interface ReadArgsTemplateEntry {
-  displayName: string;
-  namesUpper: string[];
-  required: boolean;
-  isSwitch: boolean;
-  isKeyword: boolean;
-  isNumeric: boolean;
-  isMultiple: boolean;
-  isRest: boolean;
-  isToggle: boolean;
-}
-
-interface ReadArgsContext {
-  rdArgsPtr: number;
-  bufferPtr: number;
-  bufferSize: number;
-  bufferOffset: number;
-  ownsBuffer: boolean;
-  ownsStruct: boolean;
-}
-
-interface ReadArgsToken {
-  raw: string;
-  value: string;
-  normalizedValue: string;
-  key?: string;
-  keyUpper?: string;
-  consumed: boolean;
-}
-
-interface ReadArgsTokenResult {
-  tokens: ReadArgsToken[];
-  error?: number;
-}
-
-interface ReadArgsContextInfo {
-  rdArgsPtr: number;
-  context: ReadArgsContext;
-}
-
-interface ReadArgsInputInfo {
-  input: string;
-  sourcePtr: number;
-  length: number;
-}
 
 export class DosLibrary {
   private emulator: MoiraEmulator;
@@ -145,77 +103,9 @@ export class DosLibrary {
   private firstOpenSeen: boolean = false;
   private envNormalizedMap: Map<string, string> = new Map();
   private envVarCache: Map<string, number> = new Map();
-  // Environment variable storage at 0x120000+ to avoid overlap with door code (0x1000-0x100000)
-  private readonly envVarStructPointer: number = 0x120000;
-  private readonly envStringPointer: number = 0x122000;
+  // Environment variable storage pointers (using constants from dos-types.ts)
   private envVarStructNext: number;
   private envStringNext: number;
-  private readonly envVarStructSize: number = 0x40;
-
-  // Standard file handles
-  private readonly STDIN_HANDLE = 1;
-  private readonly STDOUT_HANDLE = 2;
-  private readonly STDERR_HANDLE = 3;
-  private readonly NIL_HANDLE = 99; // Special handle for NIL: device
-
-  // DOS error codes (from NDK dos/dos.h)
-  // Success
-  private readonly ERROR_NO_ERROR = 0;
-
-  // Memory errors (103-120)
-  private readonly ERROR_NO_FREE_STORE = 103; // Out of memory
-  private readonly ERROR_TASK_TABLE_FULL = 105; // Process table full
-  private readonly ERROR_BAD_TEMPLATE = 114;
-  private readonly ERROR_BAD_NUMBER = 115;
-  private readonly ERROR_REQUIRED_ARG_MISSING = 116;
-  private readonly ERROR_KEY_NEEDS_ARG = 117;
-  private readonly ERROR_TOO_MANY_ARGS = 118;
-  private readonly ERROR_UNMATCHED_QUOTES = 119;
-  private readonly ERROR_LINE_TOO_LONG = 120;
-
-  // Object errors (202-213)
-  private readonly ERROR_OBJECT_IN_USE = 202;
-  private readonly ERROR_OBJECT_EXISTS = 203;
-  private readonly ERROR_DIR_NOT_FOUND = 204;
-  private readonly ERROR_OBJECT_NOT_FOUND = 205;
-  private readonly ERROR_BAD_STREAM_NAME = 206;
-  private readonly ERROR_OBJECT_TOO_LARGE = 207;
-  private readonly ERROR_ACTION_NOT_KNOWN = 209;
-  private readonly ERROR_INVALID_COMPONENT_NAME = 210;
-  private readonly ERROR_INVALID_LOCK = 211;
-  private readonly ERROR_OBJECT_WRONG_TYPE = 212;
-  private readonly ERROR_DISK_NOT_VALIDATED = 213;
-
-  // Protection errors (214-223)
-  private readonly ERROR_WRITE_PROTECTED = 214;
-  private readonly ERROR_DELETE_PROTECTED = 215;
-  private readonly ERROR_READ_PROTECTED = 216;
-  private readonly ERROR_NOT_A_DOS_DISK = 218;
-  private readonly ERROR_SEEK_ERROR = 219; // Seek not possible (console/device)
-  private readonly ERROR_COMMENT_TOO_BIG = 220;
-  private readonly ERROR_DISK_FULL = 221;
-  private readonly ERROR_DISK_WRITE_PROTECTED = 223;
-
-  // Filename errors (232-240)
-  private readonly ERROR_RENAME_ACROSS_DEVICES = 224;
-  private readonly ERROR_DIRECTORY_NOT_EMPTY = 225;
-  private readonly ERROR_TOO_MANY_LEVELS = 226;
-  private readonly ERROR_DEVICE_NOT_MOUNTED = 227;
-  private readonly ERROR_NO_MORE_ENTRIES = 232;
-  private readonly ERROR_IS_SOFT_LINK = 233;
-  private readonly ERROR_OBJECT_LINKED = 234;
-  private readonly ERROR_BAD_HUNK = 235;
-  private readonly ERROR_NOT_IMPLEMENTED = 236;
-  private readonly ERROR_RECORD_NOT_LOCKED = 240;
-
-  // Lock/file handling errors (241-299)
-  private readonly ERROR_LOCK_COLLISION = 241;
-  private readonly ERROR_LOCK_TIMEOUT = 242;
-  private readonly ERROR_UNLOCK_ERROR = 243;
-
-  // Device errors (300-399)
-  private readonly ERROR_BUFFER_OVERFLOW = 303;
-  private readonly ERROR_INVALID_STREAM_STATE = 304;
 
   // Base paths for logical devices
   private rootPath: string = "";
@@ -227,6 +117,7 @@ export class DosLibrary {
   private currentDirectoryAmiga: string = "BBS:";
   private lastLockPath: string = "";
   private doorDirectory: string = ""; // Set by AmigaDoorSession for PROGDIR: device
+  private pathResolver: DosPathResolver; // Handles Amiga->native path resolution
   private locks: Map<number, Lock> = new Map();
   private nextLockId: number = 1;
 
@@ -251,9 +142,7 @@ export class DosLibrary {
   // CLI support (for GetArgStr, GetProgramName)
   private argStringPtr: number = 0; // Pointer to argument string
   private programName: string = ""; // Program name
-  private readonly READARGS_DEFAULT_BUFFER_SIZE = 4096;
-  private readonly READARGS_HEAP_BASE = 0x140000;
-  private readArgsHeapPtr: number = this.READARGS_HEAP_BASE;
+  private readArgsHeapPtr: number = READARGS_HEAP_BASE;
   private readArgsContexts: Map<number, ReadArgsContext> = new Map();
   private readArgsBufferPool: number[] = [];
   private doorFileLogPath: string;
@@ -265,30 +154,31 @@ export class DosLibrary {
       process.env.BBS_DATA_DIR ||
       process.env.BBS_ROOT ||
       path.resolve(process.cwd(), "../..");
+    this.pathResolver = new DosPathResolver();
     this.setBasePaths(detectedRoot);
-    this.readArgsHeapPtr = this.READARGS_HEAP_BASE;
-    this.envVarStructNext = this.envVarStructPointer;
-    this.envStringNext = this.envStringPointer;
+    this.readArgsHeapPtr = READARGS_HEAP_BASE;
+    this.envVarStructNext = ENV_VAR_STRUCT_BASE;
+    this.envStringNext = ENV_STRING_BASE;
 
     // Initialize standard I/O handles
-    this.openFiles.set(this.STDIN_HANDLE, {
-      id: this.STDIN_HANDLE,
+    this.openFiles.set(STDIN_HANDLE, {
+      id: STDIN_HANDLE,
       name: "STDIN",
       mode: MODE_OLDFILE,
       position: 0,
       isConsole: true,
     });
 
-    this.openFiles.set(this.STDOUT_HANDLE, {
-      id: this.STDOUT_HANDLE,
+    this.openFiles.set(STDOUT_HANDLE, {
+      id: STDOUT_HANDLE,
       name: "STDOUT",
       mode: MODE_NEWFILE,
       position: 0,
       isConsole: true,
     });
 
-    this.openFiles.set(this.STDERR_HANDLE, {
-      id: this.STDERR_HANDLE,
+    this.openFiles.set(STDERR_HANDLE, {
+      id: STDERR_HANDLE,
       name: "STDERR",
       mode: MODE_NEWFILE,
       position: 0,
@@ -296,8 +186,8 @@ export class DosLibrary {
     });
 
     // NIL: device (like /dev/null)
-    this.openFiles.set(this.NIL_HANDLE, {
-      id: this.NIL_HANDLE,
+    this.openFiles.set(NIL_HANDLE, {
+      id: NIL_HANDLE,
       name: "NIL:",
       mode: MODE_OLDFILE,
       position: 0,
@@ -366,8 +256,12 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     this.bbsDataPath = this.rootPath; // BBS data is at project root (Conf1, Conf2, Commands, etc.)
     this.bbsRoot = rootPath;
     this.currentDirectory = this.bbsDataPath;
-    this.ensureDirectory(this.bbsDataPath);
-    this.ensureDirectory("/tmp/ram/ENV");
+
+    // Configure path resolver with base paths
+    this.pathResolver.setBasePaths(rootPath);
+
+    this.pathResolver.ensureDirectory(this.bbsDataPath);
+    this.pathResolver.ensureDirectory("/tmp/ram/ENV");
     this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
   }
 
@@ -428,8 +322,8 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
   setEnvironment(env?: Record<string, string | undefined>): void {
     this.envNormalizedMap.clear();
     this.envVarCache.clear();
-    this.envVarStructNext = this.envVarStructPointer;
-    this.envStringNext = this.envStringPointer;
+    this.envVarStructNext = ENV_VAR_STRUCT_BASE;
+    this.envStringNext = ENV_STRING_BASE;
 
     if (!env) {
       return;
@@ -462,7 +356,7 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
       return existing;
     }
     const structAddr = this.envVarStructNext;
-    this.envVarStructNext += this.envVarStructSize;
+    this.envVarStructNext += ENV_VAR_STRUCT_SIZE;
 
     const nameAddr = this.writeEnvString(name);
     const valueAddr = this.writeEnvString(value);
@@ -490,180 +384,27 @@ debugLog(
   }
 
   /**
-   * Resolve Amiga path to real filesystem path
-   * Supports:
-   * - PROGDIR:path/file -> ~/Code/amiexpress-web/Doors/DoorName/path/file
-   * - Doors:path/file -> ~/Code/amiexpress-web/Doors/path/file
-   * - BBS:path/file -> ~/Code/amiexpress-web/path/file
-   * - Relative paths -> resolved from current directory
-   * - Absolute paths starting with / -> used as-is
-   */
-  private resolvePath(amigaPath: string): string | null {
-debugLog(`[dos.library] Resolving Amiga path: "${amigaPath}"`);
-
-    if (this.useNewFileSystem && this.pathManager) {
-      const currentDir = this.getCurrentDirectoryForResolution();
-      const normalized = this.normalizeAmigaPath(amigaPath);
-      const resolved = this.pathManager.amiToSysPath(normalized, currentDir);
-      if (resolved) {
-debugLog(
-          `[dos.library] PathManager resolved "${normalized}" -> ${resolved}`
-        );
-        return resolved;
-      }
-    }
-
-    // Handle PROGDIR: device - door's own directory
-    if (amigaPath.toUpperCase().startsWith("PROGDIR:")) {
-      const relativePath = amigaPath.substring(8);
-      let resolved = path.join(this.doorDirectory, relativePath);
-
-      // Amiga filesystems are case-insensitive
-      const { findCaseInsensitive } = require('../../utils/amigafs');
-      const dir = path.dirname(resolved);
-      const file = path.basename(resolved);
-      const caseInsensitivePath = findCaseInsensitive(dir, file);
-      if (caseInsensitivePath) {
-        resolved = caseInsensitivePath;
-      }
-
-debugLog(`[dos.library] PROGDIR: device -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle Doors: device - doors directory root
-    if (amigaPath.toUpperCase().startsWith("DOORS:")) {
-      const relativePath = amigaPath.substring(6);
-      const resolved = path.join(this.rootPath, "doors", relativePath);
-debugLog(`[dos.library] Doors: device -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle BBS: device - BBS system files
-    if (amigaPath.toUpperCase().startsWith("BBS:")) {
-      const relativePath = amigaPath.substring(4);
-      let resolved = path.join(this.bbsDataPath, relativePath);
-
-      // Amiga filesystems are case-insensitive
-      const { findCaseInsensitive } = require('../../utils/amigafs');
-      const dir = path.dirname(resolved);
-      const file = path.basename(resolved);
-      const caseInsensitivePath = findCaseInsensitive(dir, file);
-      if (caseInsensitivePath) {
-        resolved = caseInsensitivePath;
-      }
-
-debugLog(`[dos.library] BBS: device -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle S: device - Amiga system scripts/config (maps to BBS root /S)
-    if (amigaPath.toUpperCase().startsWith("S:")) {
-      const relativePath = amigaPath.substring(2);
-      const resolved = path.join(this.rootPath, "S", relativePath);
-debugLog(`[dos.library] S: device -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle absolute paths
-    if (amigaPath.startsWith("/")) {
-debugLog(`[dos.library] Absolute path -> ${amigaPath}`);
-      return amigaPath;
-    }
-
-    // Handle relative paths - resolve from current directory
-    let resolved = path.join(this.currentDirectory, amigaPath);
-
-    // Amiga filesystems are case-insensitive - try case-insensitive lookup
-    // This handles files like "Dir1" when code asks for "DIR1"
-    const { findCaseInsensitive } = require('../../utils/amigafs');
-    const dir = path.dirname(resolved);
-    const file = path.basename(resolved);
-    const caseInsensitivePath = findCaseInsensitive(dir, file);
-
-    if (caseInsensitivePath) {
-      resolved = caseInsensitivePath;
-debugLog(
-        `[dos.library] Case-insensitive match: "${amigaPath}" -> ${resolved}`
-      );
-    } else {
-debugLog(
-        `[dos.library] Relative path from ${this.currentDirectory} -> ${resolved}`
-      );
-    }
-
-    return resolved;
-  }
-
-  /**
    * Set the door directory for PROGDIR: device
    * Called by AmigaDoorSession when starting a door
    */
   setDoorDirectory(doorPath: string): void {
     this.doorDirectory = doorPath;
-debugLog(`[dos.library] PROGDIR: device set to ${doorPath}`);
-
-    // Set current directory to door directory by default
     this.currentDirectory = doorPath;
     this.currentDirectoryAmiga = "PROGDIR:";
-debugLog(`[dos.library] Current directory set to ${doorPath}`);
+
+    // Delegate to path resolver
+    this.pathResolver.setDoorDirectory(doorPath);
 
     if (this.pathManager) {
       this.pathManager.setProgDir(doorPath);
+      this.pathResolver.enableNewFileSystem(this.pathManager, this.fileManager || undefined);
     }
 
     if (this.fileManager) {
       this.fileManager.setCurrentDir("progdir:");
     }
-  }
 
-  private getCurrentDirectoryForResolution(): string {
-    if (this.fileManager) {
-      return this.fileManager.getCurrentDirSysPath();
-    }
-    return this.currentDirectory;
-  }
-
-  private ensureDirectory(dir: string): void {
-    try {
-      // Skip if directory already exists
-      if (amigafs.existsSync(dir)) {
-        return;
-      }
-
-debugLog(`[dos.library] Creating directory: ${dir}`);
-      amigafs.mkdirSync(dir, { recursive: true });
-    } catch (error) {
-console.warn(
-        `[dos.library] ⚠️ Unable to create directory ${dir}:`,
-        error
-      );
-    }
-  }
-
-  /**
-   * UADE compatibility: doors often pass relative filenames after calling
-   * CurrentDir(). Classic AmigaDOS prepends the current directory text so
-   * open() sees an absolute path. We mimic that behavior here so doors like
-   * XIM doors see the same semantics even without modifying their strings.
-   */
-  private normalizeAmigaPath(amigaPath: string): string {
-    if (amigaPath.includes(":") || amigaPath.startsWith("/")) {
-      return amigaPath;
-    }
-
-    if (!this.currentDirectoryAmiga) {
-console.warn(
-        "[dos.library] ⚠️ fixFilename: no current directory set, returning relative path unchanged"
-      );
-      return amigaPath;
-    }
-
-console.warn(
-      `[dos.library] ⚠️ fixFilename: prefixing "${amigaPath}" with current dir "${this.currentDirectoryAmiga}"`
-    );
-    const separator = this.currentDirectoryAmiga.endsWith("/") ? "" : "/";
-    return `${this.currentDirectoryAmiga}${separator}${amigaPath}`;
+    debugLog(`[dos.library] PROGDIR: set to ${doorPath}`);
   }
 
   /**
@@ -705,7 +446,7 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
       return { byte: data[0], eof: false };
     }
 
-    if (handle === this.STDIN_HANDLE) {
+    if (handle === STDIN_HANDLE) {
       if (this.inputBuffer.length === 0) {
         return { byte: 0, eof: true };
       }
@@ -716,16 +457,16 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
 
     const fh = this.openFiles.get(handle);
     if (!fh) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return { byte: 0, eof: true };
     }
 
-    if (handle === this.NIL_HANDLE) {
+    if (handle === NIL_HANDLE) {
       return { byte: 0, eof: true };
     }
 
     if (!fh.buffer) {
-      this.lastError = this.ERROR_READ_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_READ_PROTECTED;
       return { byte: 0, eof: true };
     }
 
@@ -749,8 +490,8 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
 
     const fileHandle = this.openFiles.get(handle);
     const isConsoleHandle =
-      handle === this.STDOUT_HANDLE ||
-      handle === this.STDERR_HANDLE ||
+      handle === STDOUT_HANDLE ||
+      handle === STDERR_HANDLE ||
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
@@ -762,7 +503,7 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
     }
 
     if (!fileHandle || !fileHandle.buffer) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return { bytes: -1 };
     }
 
@@ -799,7 +540,7 @@ debugLog(`[dos.library] Open(filename="${filename}", mode=${mode})`);
     if (this.useNewFileSystem && this.fileManager) {
       const bptr = this.fileManager.open(filename, mode);
       if (bptr > 0) {
-        this.lastError = this.ERROR_NO_ERROR;
+        this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(`[dos.library] Open (FileManager) returned BPTR: ${bptr}`);
         this.logDoorFile(`OPEN fm ok handle=${bptr} ami="${filename}" mode=${mode}`);
         ximDebugLogger.logFileOperation('Open (FileManager)', filename, undefined, { mode, bptr, success: true });
@@ -850,7 +591,7 @@ console.error(
         buffer: undefined,
         realPath: undefined,
       });
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Open: Console device "${filename}" -> handle ${fileId}`
       );
@@ -869,19 +610,19 @@ debugLog(
         buffer: undefined,
         realPath: undefined,
       });
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(`[dos.library] Open: NIL: device -> handle ${fileId}`);
       this.logDoorFile(`OPEN ok ami="NIL:" handle=${fileId} mode=${mode} nil=true`);
     } else {
       // Real file - resolve path and attempt to open
-      const realPath = this.resolvePath(filename);
+      const realPath = this.pathResolver.resolve(filename);
 
       if (!realPath) {
 console.error(
           `[dos.library] Open: Failed to resolve path "${filename}"`
         );
         fileId = 0;
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
         this.logDoorFile(`OPEN fail ami="${filename}" reason=resolve`);
       } else {
         try {
@@ -892,7 +633,7 @@ console.error(
             if (!amigafs.existsSync(realPath)) {
 console.error(`[dos.library] Open: File not found: ${realPath}`);
               fileId = 0;
-              this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+              this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
               this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=notfound`);
             } else {
               // Load entire file into memory
@@ -918,7 +659,7 @@ debugLog(
           } else {
 console.error(`[dos.library] Open: Unknown mode ${mode}`);
             fileId = 0;
-            this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+            this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
             this.logDoorFile(`OPEN fail ami="${filename}" real="${realPath}" reason=mode${mode}`);
           }
 
@@ -933,7 +674,7 @@ console.error(`[dos.library] Open: Unknown mode ${mode}`);
               buffer: buffer,
               realPath: realPath,
             });
-            this.lastError = this.ERROR_NO_ERROR;
+            this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
             this.logDoorFile(
               `OPEN ok ami="${filename}" real="${realPath}" handle=${fileId} mode=${mode} bytes=${buffer?.length ?? 0}`
             );
@@ -944,7 +685,7 @@ console.error(
             error
           );
           fileId = 0;
-          this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+          this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
           this.logDoorFile(
             `OPEN fail ami="${filename}" real="${realPath}" reason=exception`
           );
@@ -984,9 +725,9 @@ debugLog(`[dos.library] Close(0): No-op, returning success`);
     if (this.useNewFileSystem && this.fileManager) {
       // Do not allow ORIGINAL standard handles (stdin/stdout/stderr) to be closed
       // BUT allow closing if stdout has been redirected to a file (different BPTR)
-      const isOriginalStdout = (handle === this.STDOUT_HANDLE && this.stdoutBptr === this.STDOUT_HANDLE);
-      const isOriginalStdin = (handle === this.STDIN_HANDLE && this.stdinBptr === this.STDIN_HANDLE);
-      const isOriginalStderr = (handle === this.STDERR_HANDLE);
+      const isOriginalStdout = (handle === STDOUT_HANDLE && this.stdoutBptr === STDOUT_HANDLE);
+      const isOriginalStdin = (handle === STDIN_HANDLE && this.stdinBptr === STDIN_HANDLE);
+      const isOriginalStderr = (handle === STDERR_HANDLE);
 
       if (isOriginalStdin || isOriginalStdout || isOriginalStderr) {
 debugLog(
@@ -1006,7 +747,7 @@ debugLog(
 console.error(
           `[dos.library] Close (FileManager) failed for handle ${handle}`
         );
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
         return 0; // DOSFALSE
       }
     }
@@ -1014,7 +755,7 @@ console.error(
     // LEGACY: Old implementation (backward compatibility)
 
     // Standard handles should not be closed
-    if (handle <= 3 || handle === this.NIL_HANDLE) {
+    if (handle <= 3 || handle === NIL_HANDLE) {
 debugLog(
         `[dos.library] Close: Standard handle ${handle}, returning success without closing`
       );
@@ -1025,7 +766,7 @@ debugLog(
     const fileHandle = this.openFiles.get(handle);
     if (!fileHandle) {
 console.error(`[dos.library] Close: Invalid handle ${handle}`);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return 0; // DOSFALSE
     }
 
@@ -1064,7 +805,7 @@ console.error(
               `[dos.library] Close: Error writing file ${fileHandle.realPath}:`,
               error
             );
-            this.lastError = this.ERROR_WRITE_PROTECTED;
+            this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
             success = false;
             // NOTE: Still deallocate handle below (per spec)
           }
@@ -1118,12 +859,12 @@ debugLog(
         this.emulator.writeMemoryBuffer(bufferAddr, dataBuffer);
       }
 
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return bytesRead;
     }
 
     // LEGACY: Old implementation (backward compatibility)
-    if (handle === this.STDIN_HANDLE) {
+    if (handle === STDIN_HANDLE) {
       // Read from input buffer
       const bytesToRead = Math.min(length, this.inputBuffer.length);
 
@@ -1137,7 +878,7 @@ debugLog(
       // Remove read data from buffer
       this.inputBuffer = this.inputBuffer.substring(bytesToRead);
 
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Read returned: ${bytesToRead} bytes from STDIN`
       );
@@ -1148,13 +889,13 @@ debugLog(
     const fileHandle = this.openFiles.get(handle);
     if (!fileHandle) {
 console.error(`[dos.library] Read: Invalid handle ${handle}`);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
 
     // NIL: device always returns 0 bytes
-    if (handle === this.NIL_HANDLE) {
-      this.lastError = this.ERROR_NO_ERROR;
+    if (handle === NIL_HANDLE) {
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(`[dos.library] Read: NIL: device -> 0 bytes`);
       this.logDoorFile(`READ handle=${handle} ami="NIL:" bytes=0 nil=true`);
       return 0;
@@ -1163,7 +904,7 @@ debugLog(`[dos.library] Read: NIL: device -> 0 bytes`);
     // Check if file has a buffer
     if (!fileHandle.buffer) {
 console.error(`[dos.library] Read: No buffer for handle ${handle}`);
-      this.lastError = this.ERROR_READ_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_READ_PROTECTED;
       return -1;
     }
 
@@ -1184,7 +925,7 @@ debugLog(
     // Update file position
     fileHandle.position += bytesToRead;
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
       `[dos.library] Read returned: ${bytesToRead} bytes (position now ${fileHandle.position})`
     );
@@ -1246,7 +987,7 @@ debugLog(
 console.error(
           `[dos.library] Write (FileManager) failed for handle ${handle}`
         );
-        this.lastError = this.ERROR_WRITE_PROTECTED;
+        this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
         this.logDoorFile(`WRITE fm fail handle=${handle} len=${length}`);
         return -1;
       }
@@ -1276,7 +1017,7 @@ debugLog(`[dos.library] Write: WARNING - No output callback set!`);
         }
       }
 
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Write (FileManager) returned: ${result.bytesWritten} bytes`
       );
@@ -1288,8 +1029,8 @@ debugLog(
     // Check if this is a console/stdout/stderr handle
     const fileHandle = this.openFiles.get(handle);
     const isConsoleHandle =
-      handle === this.STDOUT_HANDLE ||
-      handle === this.STDERR_HANDLE ||
+      handle === STDOUT_HANDLE ||
+      handle === STDERR_HANDLE ||
       (fileHandle && fileHandle.isConsole);
 
     if (isConsoleHandle) {
@@ -1319,20 +1060,20 @@ debugLog(`[dos.library] Write: Sending to socket callback`);
 debugLog(`[dos.library] Write: WARNING - No output callback set!`);
       }
 
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       this.logDoorFile(`WRITE handle=${handle} ami="${fileHandle?.name ?? "*"}" bytes=${length} console=true`);
       return length;
     }
 
     // Check if it's NIL: device (discards output)
     const isNilDevice =
-      handle === this.NIL_HANDLE ||
+      handle === NIL_HANDLE ||
       (fileHandle &&
         fileHandle.name &&
         (fileHandle.name === "NIL:" || fileHandle.name === "NIL"));
 
     if (isNilDevice) {
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Write: NIL: device -> ${length} bytes discarded`
       );
@@ -1342,7 +1083,7 @@ debugLog(
     // Handle real file - fileHandle already retrieved above
     if (!fileHandle) {
 console.error(`[dos.library] Write: Invalid handle ${handle}`);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
 
@@ -1354,7 +1095,7 @@ console.error(`[dos.library] Write: Invalid handle ${handle}`);
 console.error(
         `[dos.library] Write: File not opened for writing (mode=${fileHandle.mode})`
       );
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
       this.logDoorFile(
         `WRITE fail handle=${handle} ami="${fileHandle.name}" real="${fileHandle.realPath ?? ""}" reason=notwritable mode=${fileHandle.mode}`
       );
@@ -1364,7 +1105,7 @@ console.error(
     // Check if file has a buffer
     if (!fileHandle.buffer) {
 console.error(`[dos.library] Write: No buffer for handle ${handle}`);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
       return -1;
     }
 
@@ -1388,7 +1129,7 @@ debugLog(
     // Update file position
     fileHandle.position += length;
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
       `[dos.library] Write returned: ${length} bytes (position now ${fileHandle.position})`
     );
@@ -1445,7 +1186,7 @@ debugLog(`[dos.library] Creating parent directory for stdout redirect: ${parentD
 
     const bptr = this.fileManager.open(amiPath, MODE_NEWFILE);
     if (!bptr) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
 console.error(`[dos.library] Failed to redirect stdout to ${amiPath}`);
       return 0;
     }
@@ -1588,7 +1329,7 @@ debugLog(`[dos.library] SetIoErr(${newError}), previous was ${oldError}`);
       now.getSeconds() * 50 + Math.floor(now.getMilliseconds() / 20);
 
 debugLog(
-      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute} (Local)`
+      `[dos.library] DateStamp() days=${daysSinceEpoch}, minutes=${minutesPastMidnight}, ticks=${ticksPastMinute}`
     );
 
     // Write DateStamp structure (3 x 32-bit longs, big-endian)
@@ -1663,7 +1404,7 @@ debugLog(
         whence = 2;
       } else {
 console.error(`[dos.library] Seek(FileManager): Invalid mode ${mode}`);
-        this.lastError = this.ERROR_OBJECT_IN_USE;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
         return -1;
       }
 
@@ -1671,11 +1412,11 @@ console.error(`[dos.library] Seek(FileManager): Invalid mode ${mode}`);
       const newPos = this.fileManager.seek(handle, offset, whence);
       if (newPos < 0) {
 console.error("[dos.library] Seek(FileManager): seek failed");
-        this.lastError = this.ERROR_OBJECT_IN_USE;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
         return -1;
       }
 
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Seek(FileManager): moved from ${oldPos} to ${newPos}`
       );
@@ -1685,12 +1426,12 @@ debugLog(
     const fileHandle = this.openFiles.get(handle);
     if (!fileHandle) {
 console.error(`[dos.library] Seek: Invalid handle ${handle}`);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
 
     // Treat console/NIL handles as virtual streams that support Seek()
-    if (fileHandle.isConsole || handle === this.NIL_HANDLE) {
+    if (fileHandle.isConsole || handle === NIL_HANDLE) {
       const oldPos = fileHandle.position;
       let newPos = oldPos;
       if (mode === OFFSET_BEGINNING) {
@@ -1704,7 +1445,7 @@ console.error(`[dos.library] Seek: Invalid handle ${handle}`);
 console.error(
           `[dos.library] Seek: Invalid mode ${mode} for console handle`
         );
-        this.lastError = this.ERROR_OBJECT_IN_USE;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
         return -1;
       }
 
@@ -1713,7 +1454,7 @@ console.error(
       }
 
       fileHandle.position = newPos;
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
         `[dos.library] Seek: Console/NIL handle ${handle} moved from ${oldPos} to ${newPos}`
       );
@@ -1722,7 +1463,7 @@ debugLog(
 
     if (!fileHandle.buffer) {
 console.error(`[dos.library] Seek: No buffer for handle ${handle}`);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
       return -1;
     }
 
@@ -1739,7 +1480,7 @@ console.error(`[dos.library] Seek: No buffer for handle ${handle}`);
       newPosition = fileHandle.buffer.length + offset;
     } else {
 console.error(`[dos.library] Seek: Invalid mode ${mode}`);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
       return -1;
     }
 
@@ -1752,7 +1493,7 @@ console.error(`[dos.library] Seek: Invalid mode ${mode}`);
 
     fileHandle.position = newPosition;
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
       `[dos.library] Seek: Moved from ${oldPosition} to ${newPosition}`
     );
@@ -1767,10 +1508,10 @@ debugLog(
     const handle = this.emulator.getRegister(CPURegister.D1);
     const result = this.readByteFromHandle(handle);
     if (result.eof) {
-      this.lastError = this.ERROR_NO_MORE_ENTRIES;
+      this.lastError = DOS_ERRORS.ERROR_NO_MORE_ENTRIES;
       return -1;
     }
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return result.byte;
   }
 
@@ -1784,7 +1525,7 @@ debugLog(
     const buffer = Buffer.from([ch]);
     const result = this.writeBytesToHandle(handle, buffer);
     if (result.bytes < 0) {
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
       return -1;
     }
 
@@ -1797,7 +1538,7 @@ debugLog(
       }
     }
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return ch;
   }
 
@@ -1830,7 +1571,7 @@ console.error(`[dos.library] AddDosEntry: NULL dlist pointer`);
     // STUB: Proper implementation would add to DosList chain
     // For now, return success to prevent crashes
 console.warn(`[dos.library] AddDosEntry: STUB implementation - returning success`);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return 1; // Success
   }
 
@@ -1861,7 +1602,7 @@ debugLog(`[dos.library] FindDosEntry(dlist=0x${dlistPtr.toString(16)}, name="${n
     // STUB: Proper implementation would search DosList chain
     // For now, return NULL (not found) to prevent crashes
 console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (not found)`);
-    this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
     return 0; // NULL (not found)
   }
 
@@ -1882,7 +1623,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     } catch (e) { /* ignore */ }
 
     if (bufPtr === 0 || maxLen <= 1) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return 0;
     }
 
@@ -1909,11 +1650,11 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     } catch (e) { /* ignore */ }
 
     if (bytesRead === 0) {
-      this.lastError = this.ERROR_NO_MORE_ENTRIES;
+      this.lastError = DOS_ERRORS.ERROR_NO_MORE_ENTRIES;
       return 0;
     }
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return bufPtr;
   }
 
@@ -1929,7 +1670,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     const result = this.writeBytesToHandle(handle, buffer);
 
     if (result.bytes < 0) {
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
       return -1;
     }
 
@@ -1942,7 +1683,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
       }
     }
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return buffer.length;
   }
 
@@ -1964,7 +1705,7 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
 
     const blocksRead =
       blockLen > 0 ? Math.floor(Math.max(0, bytesRead) / blockLen) : 0;
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return blocksRead;
   }
 
@@ -1985,13 +1726,13 @@ console.warn(`[dos.library] FindDosEntry: STUB implementation - returning NULL (
     const bytesWritten = this.Write();
 
     if (bytesWritten < 0) {
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
       return 0;
     }
 
     const blocksWritten =
       blockLen > 0 ? Math.floor(bytesWritten / blockLen) : 0;
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return blocksWritten;
   }
 
@@ -2050,7 +1791,7 @@ debugLog(`[dos.library] FOpen("${filename}", "${modeStr}")`);
         break;
       default:
 console.error(`[dos.library] FOpen: Invalid mode "${modeStr}"`);
-        this.lastError = this.ERROR_BAD_NUMBER;
+        this.lastError = DOS_ERRORS.ERROR_BAD_NUMBER;
         return 0;
     }
 
@@ -2074,7 +1815,7 @@ console.error(`[dos.library] FOpen: Open failed for "${filename}"`);
     }
 
 debugLog(`[dos.library] FOpen → handle=0x${handle.toString(16)}`);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return handle;
   }
 
@@ -2092,7 +1833,7 @@ debugLog(`[dos.library] FClose(handle=0x${handle.toString(16)})`);
 
     if (handle === 0) {
 console.error(`[dos.library] FClose: NULL handle`);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return -1;
     }
 
@@ -2100,7 +1841,7 @@ console.error(`[dos.library] FClose: NULL handle`);
     this.emulator.setRegister(CPURegister.D1, handle);
     this.Close();
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return 0;
   }
 
@@ -2115,16 +1856,16 @@ console.error(`[dos.library] FClose: NULL handle`);
     if (this.useNewFileSystem && this.fileManager) {
       const pos = this.fileManager.seek(handle, -1, 1);
       if (pos < 0) {
-        this.lastError = this.ERROR_SEEK_ERROR;
+        this.lastError = DOS_ERRORS.ERROR_SEEK_ERROR;
         return -1;
       }
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return ch;
     }
 
     const fh = this.openFiles.get(handle);
     if (!fh || fh.position === 0) {
-      this.lastError = this.ERROR_SEEK_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_SEEK_ERROR;
       return -1;
     }
 
@@ -2132,7 +1873,7 @@ console.error(`[dos.library] FClose: NULL handle`);
     if (fh.buffer) {
       fh.buffer[fh.position] = ch;
     }
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return ch;
   }
 
@@ -2143,16 +1884,16 @@ console.error(`[dos.library] FClose: NULL handle`);
   Flush(): number {
     const handle = this.emulator.getRegister(CPURegister.D1);
     if (this.useNewFileSystem) {
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return -1;
     }
 
-    if (handle === this.STDOUT_HANDLE || handle === this.STDERR_HANDLE) {
-      this.lastError = this.ERROR_NO_ERROR;
+    if (handle === STDOUT_HANDLE || handle === STDERR_HANDLE) {
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return -1;
     }
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     return -1;
   }
 
@@ -2167,13 +1908,13 @@ console.error(`[dos.library] FClose: NULL handle`);
 
 debugLog(`[dos.library] DeleteFile("${filename}")`);
 
-    const realPath = this.resolvePath(filename);
+    const realPath = this.pathResolver.resolve(filename);
     if (!realPath) {
 console.error(
         `[dos.library] DeleteFile: Failed to resolve path "${filename}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2181,7 +1922,7 @@ console.error(
     if (!amigafs.existsSync(realPath)) {
 console.error(`[dos.library] DeleteFile: File not found: ${realPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2191,7 +1932,7 @@ console.error(
         `[dos.library] DeleteFile: Cannot delete directory with DeleteFile: ${realPath}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
       return;
     }
 
@@ -2201,14 +1942,14 @@ console.error(
 debugLog(`[dos.library] DeleteFile: Deleted file ${realPath}`);
 
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] DeleteFile: Error deleting file ${realPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
     }
   }
 
@@ -2226,15 +1967,15 @@ console.error(
 
 debugLog(`[dos.library] Rename("${oldName}", "${newName}")`);
 
-    const oldPath = this.resolvePath(oldName);
-    const newPath = this.resolvePath(newName);
+    const oldPath = this.pathResolver.resolve(oldName);
+    const newPath = this.pathResolver.resolve(newName);
 
     if (!oldPath) {
 console.error(
         `[dos.library] Rename: Failed to resolve old path "${oldName}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2243,14 +1984,14 @@ console.error(
         `[dos.library] Rename: Failed to resolve new path "${newName}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
     if (!amigafs.existsSync(oldPath)) {
 console.error(`[dos.library] Rename: Source file not found: ${oldPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2259,7 +2000,7 @@ console.error(
         `[dos.library] Rename: Destination already exists: ${newPath}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
       return;
     }
 
@@ -2268,14 +2009,14 @@ console.error(
       amigafs.renameSync(oldPath, newPath);
 debugLog(`[dos.library] Rename: Renamed ${oldPath} to ${newPath}`);
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] Rename: Error renaming ${oldPath} to ${newPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
     }
   }
 
@@ -2324,12 +2065,12 @@ debugLog(
     const originalName = name;
 
     if (this.useNewFileSystem) {
-      name = this.normalizeAmigaPath(name);
+      name = this.pathResolver.normalizeAmigaPath(name);
     }
 
-    const realPath = this.resolvePath(name);
+    const realPath = this.pathResolver.resolve(name);
     if (!realPath) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
 debugLog(
         `[dos.library] 🔒 Lock("${name}") - ❌ Failed to resolve path [IoErr=${
           this.lastError
@@ -2341,7 +2082,7 @@ debugLog(
 
     // Check if path exists
     if (!amigafs.existsSync(realPath)) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
 debugLog(
         `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ⚠️  NOT FOUND [IoErr=${
           this.lastError
@@ -2374,7 +2115,7 @@ debugLog(
       `[dos.library] Lock: Created lock ${lockId} (BPTR ${bptr}) for path ${realPath}`
     );
     this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR, not lockId!
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -2407,7 +2148,7 @@ debugLog(`[dos.library] UnLock: Released lock ${lockId} (BPTR ${bptrIn})`);
 console.warn(`[dos.library] UnLock: Invalid lock BPTR ${bptrIn}`);
     }
 
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -2421,7 +2162,7 @@ console.warn(`[dos.library] UnLock: Invalid lock BPTR ${bptrIn}`);
     if (bptrIn === 0) {
 debugLog(`[dos.library] DupLock(0) - NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -2439,7 +2180,7 @@ console.error(
         `[dos.library] DupLock: Invalid lock BPTR 0x${bptrIn.toString(16)}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_INVALID_LOCK;
+      this.lastError = DOS_ERRORS.ERROR_INVALID_LOCK;
       return;
     }
 
@@ -2462,7 +2203,7 @@ debugLog(
     );
 
     this.emulator.setRegister(CPURegister.D0, newBptr); // Return BPTR, not lockId!
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -2498,7 +2239,7 @@ debugLog(
     if (!lock) {
 console.error(`[dos.library] Examine: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2644,14 +2385,14 @@ debugLog(
       }
 
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] Examine: Error examining path ${lock.path}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
     }
   }
 
@@ -2674,7 +2415,7 @@ debugLog(
     if (!result) {
 console.error(`[dos.library] ExNext: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
     const { lock, lockId } = result;
@@ -2692,7 +2433,7 @@ console.error(
           error
         );
         this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
         return;
       }
     }
@@ -2704,7 +2445,7 @@ console.error(
       // No more entries
 debugLog(`[dos.library] ExNext: No more entries`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_MORE_ENTRIES;
+      this.lastError = DOS_ERRORS.ERROR_NO_MORE_ENTRIES;
 
       // Clean up iterator
       this.dirIterators.delete(lockId);
@@ -2778,14 +2519,14 @@ debugLog(
       this.dirIteratorIndex.set(lockId, index + 1);
 
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] ExNext: Error reading file ${filePath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
     }
   }
 
@@ -2859,11 +2600,11 @@ debugLog(
       );
 
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(`[dos.library] Info: Error getting volume info:`, error);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
     }
   }
 
@@ -2878,13 +2619,13 @@ console.error(`[dos.library] Info: Error getting volume info:`, error);
 
 debugLog(`[dos.library] CreateDir("${name}")`);
 
-    const realPath = this.resolvePath(name);
+    const realPath = this.pathResolver.resolve(name);
     if (!realPath) {
 console.error(
         `[dos.library] CreateDir: Failed to resolve path "${name}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2894,7 +2635,7 @@ console.error(
         `[dos.library] CreateDir: Path already exists: ${realPath}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_IN_USE;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
       return;
     }
 
@@ -2918,14 +2659,14 @@ debugLog(`[dos.library] CreateDir: Created directory ${realPath}`);
       });
 
       this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] CreateDir: Error creating directory ${realPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
     }
   }
 
@@ -2959,7 +2700,7 @@ debugLog(
         `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} (BPTR ${oldDirBptr}) for ${this.currentDirectory}`
       );
       this.emulator.setRegister(CPURegister.D0, oldDirBptr); // Return BPTR
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -2968,7 +2709,7 @@ debugLog(
     if (!result) {
 console.error(`[dos.library] CurrentDir: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
     const newLock = result.lock;
@@ -2982,7 +2723,7 @@ console.error(
         `[dos.library] CurrentDir: Lock BPTR ${bptrIn} does not point to a directory: ${newLock.path}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -2998,7 +2739,7 @@ debugLog(
 
     // Return BPTR for old directory
     this.emulator.setRegister(CPURegister.D0, oldDirBptr);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -3017,7 +2758,7 @@ debugLog(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation no
 
     // Process creation not supported in door emulation
     this.emulator.setRegister(CPURegister.D0, 0);
-    this.lastError = this.ERROR_NO_FREE_STORE;
+    this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
   }
 
   /**
@@ -3059,7 +2800,7 @@ debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (dynamic code loading n
 
     // Dynamic code loading not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
-    this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
   }
 
   /**
@@ -3076,7 +2817,7 @@ debugLog(
 
     // Always success since LoadSeg always returns NULL
     this.emulator.setRegister(CPURegister.D0, -1);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -3094,7 +2835,7 @@ debugLog(
 
     // Return fake MsgPort address for compatibility
     this.emulator.setRegister(CPURegister.D0, 0x4000);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -3113,20 +2854,20 @@ debugLog(
 
 debugLog(`[dos.library] SetComment("${name}", "${comment}")`);
 
-    const realPath = this.resolvePath(name);
+    const realPath = this.pathResolver.resolve(name);
     if (!realPath) {
 console.error(
         `[dos.library] SetComment: Failed to resolve path "${name}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
     if (!amigafs.existsSync(realPath)) {
 console.error(`[dos.library] SetComment: File not found: ${realPath}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -3149,14 +2890,14 @@ debugLog(
       }
 
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] SetComment: Error setting comment on ${realPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
     }
   }
 
@@ -3184,7 +2925,7 @@ debugLog(
     if (!handle) {
 console.error(`[dos.library] SetFileSize: Invalid file handle 0x${fhBptr.toString(16)}`);
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_INVALID_LOCK;
+      this.lastError = DOS_ERRORS.ERROR_INVALID_LOCK;
       return;
     }
 
@@ -3194,7 +2935,7 @@ console.error(
         `[dos.library] SetFileSize: Cannot resize console/NIL handle "${handle.name}"`
       );
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_ACTION_NOT_KNOWN;
+      this.lastError = DOS_ERRORS.ERROR_ACTION_NOT_KNOWN;
       return;
     }
 
@@ -3233,14 +2974,14 @@ debugLog(
       );
 
       this.emulator.setRegister(CPURegister.D0, absoluteSize);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] SetFileSize: Error resizing file ${handle.realPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_SEEK_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_SEEK_ERROR;
     }
   }
 
@@ -3259,13 +3000,13 @@ debugLog(
       `[dos.library] SetProtection("${name}", 0x${protect.toString(16)})`
     );
 
-    const realPath = this.resolvePath(name);
+    const realPath = this.pathResolver.resolve(name);
     if (!realPath) {
 console.error(
         `[dos.library] SetProtection: Failed to resolve path "${name}"`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -3274,7 +3015,7 @@ console.error(
         `[dos.library] SetProtection: File not found: ${realPath}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
 
@@ -3304,14 +3045,14 @@ debugLog(
       );
 
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(
         `[dos.library] SetProtection: Error setting protection on ${realPath}:`,
         error
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_WRITE_PROTECTED;
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
     }
   }
 
@@ -3328,7 +3069,7 @@ debugLog(`[dos.library] ParentDir(lock=0x${bptrIn.toString(16)})`);
     if (bptrIn === 0) {
 debugLog(`[dos.library] ParentDir: NULL lock, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3339,7 +3080,7 @@ console.error(
         `[dos.library] ParentDir: Invalid lock BPTR 0x${bptrIn.toString(16)}`
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_INVALID_LOCK;
+      this.lastError = DOS_ERRORS.ERROR_INVALID_LOCK;
       return;
     }
     const lock = result.lock;
@@ -3351,7 +3092,7 @@ console.error(
     if (parentPath === lock.path || parentPath === this.bbsRoot) {
 debugLog(`[dos.library] ParentDir: At root, returning 0`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3375,7 +3116,7 @@ debugLog(
     );
 
     this.emulator.setRegister(CPURegister.D0, parentBptr); // Return BPTR
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -3394,7 +3135,7 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
     } else {
       this.emulator.setRegister(CPURegister.D0, 0);
     }
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -3491,7 +3232,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         this.fileManager.close(ownedOutputHandle);
       }
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE = success
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3536,7 +3277,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         this.fileManager.close(ownedOutputHandle);
       }
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3571,7 +3312,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         this.fileManager.close(ownedOutputHandle);
       }
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3618,7 +3359,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         this.fileManager.close(ownedOutputHandle);
       }
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3661,7 +3402,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
         this.fileManager.close(ownedOutputHandle);
       }
       this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -3674,7 +3415,7 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
 
     // Shell command execution not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
-    this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+    this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
   }
 
   /**
@@ -3755,7 +3496,7 @@ debugLog(
     this.emulator.writeMemory(bufPtr + copyLen, 0); // Null terminator
 
     this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
       `[dos.library] GetCliProgramName: Returned "${this.programName.substring(
         0,
@@ -3792,7 +3533,7 @@ debugLog(
     );
 
     // For console/stdin, check if input buffer has data
-    if (fileHandle === this.STDIN_HANDLE || fileHandle === this.STDOUT_HANDLE) {
+    if (fileHandle === STDIN_HANDLE || fileHandle === STDOUT_HANDLE) {
       const hasData = this.inputBuffer.length > 0;
       this.emulator.setRegister(CPURegister.D0, hasData ? -1 : 0);
 debugLog(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
@@ -3803,7 +3544,7 @@ debugLog(`[dos.library] WaitForChar: Console, hasData=${hasData}`);
     const file = this.openFiles.get(fileHandle);
     if (!file) {
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE - invalid handle
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
 debugLog(`[dos.library] WaitForChar: Invalid file handle`);
       return -1;
     }
@@ -3841,7 +3582,7 @@ debugLog(`[dos.library] VFPrintf(fh=${fileHandle}, fmt="${fmt}")`);
     const file = this.openFiles.get(fileHandle);
     if (!file) {
       this.emulator.setRegister(CPURegister.D0, -1); // EOF
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
 debugLog(`[dos.library] VFPrintf: Invalid file handle`);
       return;
     }
@@ -4022,12 +3763,12 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
 
     if (bufferPtr === 0 || bufferSize === 0) {
       bufferPtr = this.allocateReadArgsBufferInternal(
-        this.READARGS_DEFAULT_BUFFER_SIZE
+        READARGS_DEFAULT_BUFFER_SIZE
       );
       if (bufferPtr === 0) {
         return null;
       }
-      bufferSize = this.READARGS_DEFAULT_BUFFER_SIZE;
+      bufferSize = READARGS_DEFAULT_BUFFER_SIZE;
       ownsBuffer = true;
       this.writeLong(rdargsAddr + 16, bufferPtr);
       this.writeLong(rdargsAddr + 20, bufferSize);
@@ -4163,7 +3904,7 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
     }
 
     if (inQuotes) {
-      return { tokens: [], error: this.ERROR_UNMATCHED_QUOTES };
+      return { tokens: [], error: DOS_ERRORS.ERROR_UNMATCHED_QUOTES };
     }
     flushToken();
     return { tokens };
@@ -4316,13 +4057,13 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
     const aligned = (size + 3) & ~3;
     if (context.bufferPtr === 0 || context.bufferSize === 0) {
       const bufferPtr = this.allocateReadArgsBufferInternal(
-        Math.max(this.READARGS_DEFAULT_BUFFER_SIZE, aligned)
+        Math.max(READARGS_DEFAULT_BUFFER_SIZE, aligned)
       );
       if (bufferPtr === 0) {
         return null;
       }
       context.bufferPtr = bufferPtr;
-      context.bufferSize = Math.max(this.READARGS_DEFAULT_BUFFER_SIZE, aligned);
+      context.bufferSize = Math.max(READARGS_DEFAULT_BUFFER_SIZE, aligned);
       context.bufferOffset = 0;
       context.ownsBuffer = true;
       this.writeLong(context.rdArgsPtr + 16, context.bufferPtr);
@@ -4342,7 +4083,7 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
   private allocateReadArgsBufferInternal(size: number): number {
     const aligned = (size + 3) & ~3;
     if (
-      aligned === this.READARGS_DEFAULT_BUFFER_SIZE &&
+      aligned === READARGS_DEFAULT_BUFFER_SIZE &&
       this.readArgsBufferPool.length > 0
     ) {
       const addr = this.readArgsBufferPool.pop() as number;
@@ -4406,7 +4147,7 @@ debugLog(
 debugLog(
         `[dos.library] NameFromLock: Lock BPTR ${bptrIn.toString(16)} not found`
       );
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
       return;
     }
@@ -4442,7 +4183,7 @@ debugLog(`[dos.library] OpenFromLock(lock=${bptrIn})`);
     if (!result) {
 console.error(`[dos.library] OpenFromLock: Invalid lock BPTR ${bptrIn}`);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       return;
     }
     const { lock, lockId } = result;
@@ -4456,7 +4197,7 @@ debugLog(`[dos.library] OpenFromLock: Opening file ${filePath}`);
       if (!this.fileManager) {
 console.error(`[dos.library] OpenFromLock: FileManager not available`);
         this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
         return;
       }
 
@@ -4464,7 +4205,7 @@ console.error(`[dos.library] OpenFromLock: FileManager not available`);
       if (bptr === 0) {
 console.error(`[dos.library] OpenFromLock: Failed to open ${filePath}`);
         this.emulator.setRegister(CPURegister.D0, 0);
-        this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+        this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
         return;
       }
 
@@ -4473,11 +4214,11 @@ console.error(`[dos.library] OpenFromLock: Failed to open ${filePath}`);
 
 debugLog(`[dos.library] OpenFromLock: Opened ${filePath} as BPTR ${bptr}`);
       this.emulator.setRegister(CPURegister.D0, bptr);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
     } catch (error) {
 console.error(`[dos.library] OpenFromLock: Error opening ${filePath}:`, error);
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
     }
   }
 
@@ -4501,7 +4242,7 @@ debugLog(
 
     const file = this.openFiles.get(fileHandle);
     if (!file) {
-      this.lastError = this.ERROR_OBJECT_NOT_FOUND;
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
       return;
     }
@@ -4766,7 +4507,7 @@ debugLog(
         "[dos.library] ReadArgs() - Invalid template or array pointer"
       );
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_BAD_TEMPLATE;
+      this.lastError = DOS_ERRORS.ERROR_BAD_TEMPLATE;
       return;
     }
 
@@ -4783,14 +4524,14 @@ debugLog(
         "[dos.library] ReadArgs() - No template entries, returning existing RDArgs"
       );
       this.emulator.setRegister(CPURegister.D0, rdargsAddr);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
     const contextInfo = this.getOrCreateReadArgsContext(rdargsAddr);
     if (!contextInfo) {
       this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = this.ERROR_NO_FREE_STORE;
+      this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
       return;
     }
 
@@ -4873,7 +4614,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
           const restString = restParts.join(" ");
           const ptr = this.allocateStringStorage(context, restString);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for /F value");
+            fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for /F value");
             return;
           }
           entryState[i].provided = true;
@@ -4920,7 +4661,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
       );
 
       if (namedValue === "NEED_VALUE") {
-        fail(this.ERROR_KEY_NEEDS_ARG, `${entry.displayName} missing value`);
+        fail(DOS_ERRORS.ERROR_KEY_NEEDS_ARG, `${entry.displayName} missing value`);
         return;
       }
 
@@ -4941,7 +4682,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
         const parsed = this.parseReadArgsNumber(stringValue);
         if (parsed === null) {
           fail(
-            this.ERROR_BAD_NUMBER,
+            DOS_ERRORS.ERROR_BAD_NUMBER,
             `Invalid number for ${entry.displayName}`
           );
           return;
@@ -4955,7 +4696,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
           const ptr = this.allocateNumberStorage(context, numericValue);
           if (!ptr) {
             fail(
-              this.ERROR_LINE_TOO_LONG,
+              DOS_ERRORS.ERROR_LINE_TOO_LONG,
               "Insufficient buffer for numeric value"
             );
             return;
@@ -4965,7 +4706,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
           const ptr = this.allocateStringStorage(context, stringValue);
           if (!ptr) {
             fail(
-              this.ERROR_LINE_TOO_LONG,
+              DOS_ERRORS.ERROR_LINE_TOO_LONG,
               "Insufficient buffer for string value"
             );
             return;
@@ -5006,19 +4747,19 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
         if (entry.isNumeric) {
           const parsed = this.parseReadArgsNumber(stolenValue);
           if (parsed === null) {
-            fail(this.ERROR_BAD_NUMBER, `Invalid number for ${entry.displayName}`);
+            fail(DOS_ERRORS.ERROR_BAD_NUMBER, `Invalid number for ${entry.displayName}`);
             return;
           }
           const ptr = this.allocateNumberStorage(context, parsed);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
+            fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
             return;
           }
           setArrayValue(idx, ptr);
         } else {
           const ptr = this.allocateStringStorage(context, stolenValue);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for string value");
+            fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for string value");
             return;
           }
           setArrayValue(idx, ptr);
@@ -5035,19 +4776,19 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
       if (multiEntryInfo.isNumeric) {
         const ptrArray = this.allocatePointerArray(context, multiStrings.length + 1);
         if (!ptrArray) {
-          fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
+          fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
           return;
         }
         let offset = 0;
         for (const value of multiStrings) {
           const parsed = this.parseReadArgsNumber(value);
           if (parsed === null) {
-            fail(this.ERROR_BAD_NUMBER, `Invalid number in /M/N: ${value}`);
+            fail(DOS_ERRORS.ERROR_BAD_NUMBER, `Invalid number in /M/N: ${value}`);
             return;
           }
           const ptr = this.allocateNumberStorage(context, parsed);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
+            fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for numeric value");
             return;
           }
           this.emulator.writeMemory32(ptrArray + offset, ptr);
@@ -5060,14 +4801,14 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
         // Regular /M (strings)
         const ptrArray = this.allocatePointerArray(context, multiStrings.length + 1);
         if (!ptrArray) {
-          fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
+          fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi arguments");
           return;
         }
         let offset = 0;
         for (const value of multiStrings) {
           const ptr = this.allocateStringStorage(context, value);
           if (!ptr) {
-            fail(this.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi value");
+            fail(DOS_ERRORS.ERROR_LINE_TOO_LONG, "Insufficient buffer for multi value");
             return;
           }
           this.emulator.writeMemory32(ptrArray + offset, ptr);
@@ -5085,7 +4826,7 @@ debugLog(`[dos.library] ReadArgs() ERROR ${code}: ${message}`);
     );
     if (missing.length > 0) {
       fail(
-        this.ERROR_REQUIRED_ARG_MISSING,
+        DOS_ERRORS.ERROR_REQUIRED_ARG_MISSING,
         `Missing required arguments: ${missing
           .map((m) => m.displayName)
           .join(", ")}`
@@ -5127,7 +4868,7 @@ debugLog(parsedLine);
     this.logDoorFile(parsedLine);
 
     this.emulator.setRegister(CPURegister.D0, rdargsAddr);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
@@ -5144,7 +4885,7 @@ debugLog(`[dos.library] FreeArgs(rdargs=0x${rdargsAddr.toString(16)})`);
 
     if (rdargsAddr === 0) {
 debugLog(`[dos.library] FreeArgs() - NULL pointer, nothing to free`);
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
@@ -5155,19 +4896,19 @@ debugLog(
           16
         )}`
       );
-      this.lastError = this.ERROR_NO_ERROR;
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
       return;
     }
 
     if (context.ownsBuffer && context.bufferPtr !== 0) {
       this.zeroMemory(context.bufferPtr, context.bufferSize);
-      if (context.bufferSize === this.READARGS_DEFAULT_BUFFER_SIZE) {
+      if (context.bufferSize === READARGS_DEFAULT_BUFFER_SIZE) {
         this.readArgsBufferPool.push(context.bufferPtr);
       }
     }
 
     this.readArgsContexts.delete(rdargsAddr);
-    this.lastError = this.ERROR_NO_ERROR;
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
