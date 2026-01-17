@@ -366,6 +366,8 @@ sdk/core/**/*.js
 sdk/core/**/*.d.ts
 sdk/core/**/*.js.map
 sdk/core/**/*.d.ts.map
+# But keep SDK type declarations
+!sdk/types/*.d.ts
 
 # TypeScript Door compiled output (source is .ts)
 Doors/**/*.js
