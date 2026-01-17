@@ -25,21 +25,31 @@ export const app = express();
 // Uses config.corsOrigins which already includes https://bbs.uprough.net
 const corsOrigins = config.get('corsOrigins') as string[];
 
+console.log('[CORS] NODE_ENV:', process.env.NODE_ENV);
+console.log('[CORS] Configured origins:', corsOrigins);
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, curl, telnet clients)
-    if (!origin) return callback(null, true);
+console.log('[CORS] Request origin:', origin);
+
+    // Allow requests with no origin (mobile apps, Postman, curl, telnet clients, same-origin requests)
+    if (!origin) {
+console.log('[CORS] No origin header - allowing (same-origin or non-browser request)');
+      return callback(null, true);
+    }
 
     // Development mode: allow all origins (convenience)
     if (process.env.NODE_ENV === 'development') {
+console.log('[CORS] Development mode - allowing all origins');
       return callback(null, true);
     }
 
     // Production mode: check against configured origins
     if (corsOrigins.includes(origin)) {
+console.log('[CORS] Origin allowed:', origin);
       callback(null, true);
     } else {
-console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+console.warn(`[CORS] BLOCKED request from unauthorized origin: ${origin}`);
 console.warn(`[CORS] Allowed origins:`, corsOrigins);
       callback(new Error('Not allowed by CORS'));
     }
