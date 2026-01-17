@@ -1,37 +1,52 @@
 /**
- * Type declarations for zmodem.js
- * @see https://github.com/nickcoutsos/node-zmodem
+ * Type declarations for zmodem.js module
+ * ZMODEM file transfer protocol implementation
  */
 
 declare module 'zmodem.js' {
   export interface SentryOptions {
-    to_terminal: (octets: number[]) => void;
+    to_terminal: (data: any) => void;
+    sender: (data: any) => void;
     on_detect: (detection: Detection) => void;
     on_retract?: () => void;
-    sender?: (octets: number[]) => void;
   }
 
   export interface Detection {
-    confirm: () => Session;
-    deny: () => void;
-    is_valid: () => boolean;
+    confirm(): ZmodemSession;
+    deny(): void;
+    is_valid(): boolean;
   }
 
-  export interface Session {
+  export interface ZmodemSession {
+    // Session control
+    abort(): void;
+    close(): void;
+    has_ended(): boolean;
     type: 'send' | 'receive';
-    abort: () => void;
-    has_ended: () => boolean;
 
     // For receive sessions
-    on: (event: string, callback: (...args: any[]) => void) => void;
-    start: () => void;
+    on(event: 'offer', callback: (offer: FileOffer) => void): void;
+    on(event: 'session_end', callback: () => void): void;
+    start(): void;
 
     // For send sessions
-    send_offer: (file: FileOffer) => Promise<Transfer | null>;
-    close: () => Promise<void>;
+    send_offer(fileInfo: FileInfo): Promise<Transfer | null>;
   }
 
   export interface FileOffer {
+    name: string;
+    size: number;
+    mtime: Date | null;
+    mode: number | null;
+    serial: number | null;
+    files_remaining: number | null;
+    bytes_remaining: number | null;
+
+    accept(opts?: { on_input?: (data: Uint8Array) => void }): Transfer;
+    skip(): void;
+  }
+
+  export interface FileInfo {
     name: string;
     size: number;
     mtime?: Date;
@@ -41,35 +56,27 @@ declare module 'zmodem.js' {
   }
 
   export interface Transfer {
-    end: (data?: Uint8Array | number[]) => Promise<void>;
-    skip: () => void;
-  }
+    // For receive transfers
+    on(event: 'input', callback: (data: Uint8Array) => void): void;
+    end(): Promise<void>;
 
-  export interface Offer {
-    name: string;
-    size: number;
-    mtime: Date | null;
-    mode: number | null;
-    accept: (options?: { on_input?: (payload: Uint8Array) => void }) => Transfer;
-    skip: () => void;
+    // For send transfers
+    send(data: Uint8Array): Promise<void>;
+
+    // Progress tracking
+    get_details(): {
+      name: string;
+      size: number;
+      bytes_sent?: number;
+    };
   }
 
   export class Sentry {
     constructor(options: SentryOptions);
     consume(data: Uint8Array | Buffer | number[]): void;
-    get_confirmed_session(): Session | null;
+    get_confirmed_session(): ZmodemSession | null;
     abort(): void;
   }
-
-  export class Browser {
-    static send_files(
-      session: Session,
-      files: File[],
-      options?: { on_offer_response?: (file: File, transfer: Transfer | null) => void }
-    ): Promise<void>;
-  }
-
-  export const ZMLIB_VERSION: string;
 
   export namespace Header {
     function build(type: string, options?: any): {
@@ -77,6 +84,28 @@ declare module 'zmodem.js' {
       to_hex(): number[];
       get_name(): string;
     };
-    function parse(data: Uint8Array | number[]): any;
   }
+
+  export const ZMACHINE_CONSTANTS: {
+    ZRQINIT: number;
+    ZRINIT: number;
+    ZSINIT: number;
+    ZACK: number;
+    ZFILE: number;
+    ZSKIP: number;
+    ZNAK: number;
+    ZABORT: number;
+    ZFIN: number;
+    ZRPOS: number;
+    ZDATA: number;
+    ZEOF: number;
+    ZFERR: number;
+    ZCRC: number;
+    ZCHALLENGE: number;
+    ZCOMPL: number;
+    ZCAN: number;
+    ZFREECNT: number;
+    ZCOMMAND: number;
+    ZSTDERR: number;
+  };
 }

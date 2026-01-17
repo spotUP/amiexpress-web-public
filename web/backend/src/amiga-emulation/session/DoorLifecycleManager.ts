@@ -342,8 +342,37 @@ debugLog(
           }
 
           // Handle synchronously - for JH_WRITE this just emits to socket and replies
-          // Note: handleMessage is async but the sync parts (including replyMsg) run immediately
-          self.ximProtocol.handleMessage(parsed);
+          // Note: handleMessage is async but the sync parts run immediately
+          // CRITICAL FIX 2026-01-16: For non-blocking commands, call replyMsg SYNCHRONOUSLY!
+          // The .then() callback won't run until the call stack is empty, but we're in a
+          // trap handler (synchronous loop in waitForReply). If we defer replyMsg to .then(),
+          // it never runs before waitForReply times out.
+          //
+          // For blocking commands (JH_HK, JH_LI, JH_PM, JH_ExtHK), we DON'T reply immediately -
+          // the input handler will call replyMsg when user input arrives.
+          const isBlockingCommand = blockingCommands.includes(parsed.command);
+
+          if (isBlockingCommand) {
+            // Blocking command - handleMessage will pause and wait for input
+            // replyMsg will be called by input handler when input arrives
+            console.log(`[DoorLifecycleManager] XIMProcessor: Blocking cmd=${parsed.command}, waiting for input`);
+            self.ximProtocol.handleMessage(parsed);
+          } else {
+            // Non-blocking command - handle and reply synchronously
+            // Most handlers are sync (no await), so handleMessage returns immediately
+            self.ximProtocol.handleMessage(parsed);
+            // Reply immediately - don't wait for .then()
+            if (!self.ximProtocol.isWaitingForLineInput()) {
+              console.log(`[DoorLifecycleManager] XIMProcessor: Calling replyMsg SYNC for cmd=${parsed.command}`);
+              execLib.replyMsg(parsed.msgAddr);
+            }
+
+            // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
+            if (self.ximProtocol.isShuttingDown()) {
+              console.log(`[DoorLifecycleManager] XIMProcessor: Door sent JH_SHUTDOWN - stopping execution`);
+              self.executionState.isRunning = false;
+            }
+          }
         }
       });
     }
@@ -386,7 +415,28 @@ debugLog(
             self.emulator.pause();
           }
 
-          self.ximProtocol.handleMessage(parsed);
+          // Handle message synchronously for blocking commands, async for others
+          // Note: handleMessage is async but sync parts run immediately
+          self.ximProtocol.handleMessage(parsed).then(() => {
+            // CRITICAL FIX 2026-01-16: Reply to door after message handling completes!
+            // Without this, door stays blocked on Wait() forever because replyMsg
+            // was never called. This matches what pollXIMMessages does.
+            // AEDoor.library disassembly confirms ALL commands block on Wait() after PutMsg.
+            if (self.ximProtocol && !self.ximProtocol.isWaitingForLineInput()) {
+              console.log(`[DoorLifecycleManager] doorMessageCallback: Calling replyMsg for cmd=${parsed.command}`);
+              execLib.replyMsg(parsed.msgAddr);
+            } else {
+              console.log(`[DoorLifecycleManager] doorMessageCallback: SKIPPING replyMsg - waiting for input, cmd=${parsed.command}`);
+            }
+
+            // CRITICAL FIX 2026-01-17: Check if door requested shutdown (JH_SHUTDOWN)
+            // This check was only in pollXIMMessages but doorMessageCallback skips polling!
+            // Without this, session stays stuck in door_running state forever.
+            if (self.ximProtocol && self.ximProtocol.isShuttingDown()) {
+              console.log(`[DoorLifecycleManager] doorMessageCallback: Door sent JH_SHUTDOWN - stopping execution`);
+              self.executionState.isRunning = false;
+            }
+          });
         }
       });
     }
@@ -2075,7 +2125,7 @@ debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
     const portNameAddr = 0x500; // Temporary address for port name
     this.emulator.writeString(portNameAddr, portName);
 
-    const aePortAddr = execLib.findPort(portNameAddr);
+    let aePortAddr = execLib.findPort(portNameAddr);
 
     if (!aePortAddr || aePortAddr === 0) {
       // Port not found yet - door might not have created it
@@ -2086,11 +2136,26 @@ debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
     // regardless of what its .info file says (handles missing/incorrect TYPE in .info)
     if (!this.detectedXIMPort) {
       this.detectedXIMPort = true;
+console.log(`[DoorLifecycleManager] DETECTED AEDoorPort via findPort at 0x${aePortAddr.toString(16)} - updating XIMProtocol (hasXIM=${!!this.ximProtocol})`);
       // CRITICAL: Update XIMProtocol's port address to the actual port the door created.
       // Native AEDoor.library creates its own AEDoorPort{nodeId}, which may be different
       // from the AEServer.{nodeId} port we pre-created. Replies must go to this port.
       if (this.ximProtocol) {
         this.ximProtocol.setXimPortAddress(aePortAddr);
+      }
+    }
+
+    // CRITICAL FIX 2026-01-16: Use the ACTUAL port address from door's GetMsg calls
+    // The door creates its own AEDoorPort which may have a different address than
+    // the one we found via findPort. We need to inject messages to the door's ACTUAL port.
+    const actualDoorPort = execLib.getActualDoorPort();
+    if (actualDoorPort && actualDoorPort !== 0 && this.ximProtocol) {
+      const currentPort = (this.ximProtocol as any).doorPort;
+      if (currentPort !== actualDoorPort) {
+console.log(`[DoorLifecycleManager] UPDATING to actual AEDoorPort: 0x${actualDoorPort.toString(16)} (was 0x${currentPort.toString(16)})`);
+        this.ximProtocol.setXimPortAddress(actualDoorPort);
+        // Also update the address we use for polling
+        aePortAddr = actualDoorPort;
       }
     }
 
@@ -2111,9 +2176,19 @@ debugLog(`[DoorLifecycleManager] XIM polling FAILED: execLib is null`);
             // Blocking commands (JH_PM, JH_LI, JH_HK) set waitingFor* flags and pause.
             // The reply will be sent when input arrives (completeLineInput, completeHotkey, etc.)
             // Sending premature reply causes door to continue with empty/stale data.
-            if (!this.ximProtocol.isWaitingForLineInput()) {
+            const isWaiting = this.ximProtocol.isWaitingForLineInput();
+            const replyHandled = this.ximProtocol.wasReplyHandled();
+            const humanName = this.ximProtocol.parseMessage(msg.msgAddr)?.command;
+            console.log(`[DoorLifecycleManager] After handleMessage: cmd=${humanName} isWaiting=${isWaiting} replyHandled=${replyHandled} msgAddr=0x${msg.msgAddr.toString(16)}`);
+            if (!isWaiting && !replyHandled) {
               // Reply to door via mn_ReplyPort so door's WaitPort/GetMsg unblocks
+              console.log(`[DoorLifecycleManager] Calling replyMsg for cmd=${humanName}`);
               execLib.replyMsg(msg.msgAddr);
+              console.log(`[DoorLifecycleManager] replyMsg completed for cmd=${humanName}`);
+            } else if (replyHandled) {
+              console.log(`[DoorLifecycleManager] SKIPPING replyMsg - already handled by system command`);
+            } else {
+              console.log(`[DoorLifecycleManager] SKIPPING replyMsg - waiting for input`);
             }
 
             // Check if door requested shutdown (JH_SHUTDOWN)
