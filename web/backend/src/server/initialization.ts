@@ -314,12 +314,11 @@ export async function initializeData() {
     // Inject conferences into screen handler
     setConferences(conferences);
 
-    // Load message bases for all conferences
-    messageBases = [];
-    for (const conf of conferences) {
-      const bases = await db.getMessageBases(conf.id);
-      messageBases.push(...bases);
-    }
+    // Load message bases from disk (CRITICAL: Disk-based, not database - CLAUDE.md rule #10)
+    // express.e:2048-2112 - Reads from {ConfLocation}/MsgBases.info or defaults to 1 base per conference
+    const { MessageBaseLoaderService } = await import('../services/message-base-loader.service.js');
+    const messageBaseLoader = new MessageBaseLoaderService(bbsRoot);
+    messageBases = messageBaseLoader.loadAllMessageBases(conferences);
 
     // Inject dependencies into conference handler
     setConferencesForConferenceHandler(conferences);
