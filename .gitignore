@@ -107,6 +107,11 @@ dist
 # Gatsby files
 .cache/
 public
+# Vite uses public/ for static assets - un-ignore frontend public directory
+!web/frontend/public/
+!web/frontend/public/**
+# But ignore font backups (not needed in production)
+web/frontend/public/fonts/backups/
 
 # Storybook build outputs
 .out
