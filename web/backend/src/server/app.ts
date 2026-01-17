@@ -44,18 +44,19 @@ console.log('[CORS] Development mode - allowing all origins');
       return callback(null, true);
     }
 
-    // Production mode: check against configured origins
-    if (corsOrigins.includes(origin)) {
-console.log('[CORS] Origin allowed:', origin);
-      callback(null, true);
-    } else {
-console.warn(`[CORS] BLOCKED request from unauthorized origin: ${origin}`);
-console.warn(`[CORS] Allowed origins:`, corsOrigins);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        // Production mode: check against configured origins
+        if (corsOrigins.includes(origin)) {
+          console.log('[CORS] Origin allowed:', origin);
+          callback(null, true);
+        } else {
+          console.warn(`[CORS] BLOCKED request from unauthorized origin: ${origin}`);
+          console.warn(`[CORS] Allowed origins:`, corsOrigins);
+          const error = new Error('Not allowed by CORS');
+          (error as any).statusCode = 403;
+          callback(error);
+        }
+      },
+      credentials: true,  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
@@ -105,8 +106,18 @@ app.use(
     } catch (_) {
       /* ignore logging failures */
     }
-    res.status(500).json({ error: 'Internal Server Error' });
-    next(err);
+
+    // Don't send response if headers already sent
+    if (res.headersSent) {
+      return next(err);
+    }
+
+    const statusCode = err.statusCode || 500;
+    const message = process.env.NODE_ENV === 'production' && statusCode === 500
+      ? 'Internal Server Error'
+      : (err.message || 'Internal Server Error');
+
+    res.status(statusCode).json({ error: message });
   }
 );
 
