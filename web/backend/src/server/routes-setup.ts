@@ -249,7 +249,7 @@ console.log(`[Static] Serving BBS Terminal at / from ${bbsFrontendPath}`);
       if (req.path.startsWith('/sdk') || req.path.startsWith('/admin')) {
         return next();
       }
-      // Skip asset files
+      // Skip asset files - let them 404 naturally
       if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|map|json)$/)) {
         return next();
       }
@@ -527,5 +527,40 @@ console.error('[Download] Error:', error);
 console.error('Get user error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
+  });
+
+  // ===== Global Error Handler (MUST BE LAST) =====
+  // Catches errors from express.static and other middleware
+  // This handler catches any errors that weren't caught by route-specific error handling
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    // Log error details for debugging
+    console.error('[Express Error]', {
+      url: req.url,
+      method: req.method,
+      error: err.message,
+      code: err.code,
+      statusCode: err.statusCode,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+
+    // For static file errors (ENOENT = file not found, permission errors, etc.)
+    // Return 404 instead of 500 to prevent confusion
+    if (err.code === 'ENOENT' || err.statusCode === 404) {
+      return res.status(404).send('Not Found');
+    }
+
+    // For permission/access errors
+    if (err.code === 'EACCES' || err.code === 'EPERM') {
+      console.error('[Express Error] Permission denied:', req.url);
+      return res.status(403).send('Forbidden');
+    }
+
+    // For all other errors, return 500 with safe message
+    const statusCode = err.statusCode || 500;
+    res.status(statusCode).send(
+      process.env.NODE_ENV === 'production'
+        ? 'Internal Server Error'
+        : `Error: ${err.message}`
+    );
   });
 }
