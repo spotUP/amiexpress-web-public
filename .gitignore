@@ -7,6 +7,8 @@ Doors/*/node_modules/
 dist/
 backend/dist/
 .vite/
+# But keep door dist folders - needed for Docker builds
+!Doors/*/dist/
 
 # TypeScript build artifacts in source directories
 web/backend/src/**/*.js
@@ -343,3 +345,7 @@ SysopStats/
 # Node work directories
 Node*/WorkDir/
 .watch-doors.pid
+
+# Re-include door dist folders (after all other dist patterns)
+!Doors/*/dist/
+!Doors/*/dist/**

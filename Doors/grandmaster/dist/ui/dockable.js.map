@@ -1,0 +1,1 @@
+{"version":3,"file":"dockable.js","sourceRoot":"","sources":["../../ui/dockable.ts"],"names":[],"mappings":";;AAGA,wCAUC;AAbD,oFAAqF;AAGrF,SAAgB,cAAc,CAAC,OAA6B;IAC1D,OAAO,IAAA,qCAAmB,EAAC;QACzB,WAAW,EAAE,KAAK;QAClB,UAAU,EAAE,KAAK;QACjB,aAAa,EAAE,IAAI;QACnB,SAAS,EAAE,IAAI;QACf,SAAS,EAAE,IAAI;QACf,YAAY,EAAE,OAAO;QACrB,GAAG,OAAO;KACX,CAAC,CAAC;AACL,CAAC"}

@@ -1,0 +1,751 @@
+// @ts-nocheck
+/**
+ * Neo-Blessed modal dialogs for ANSI Editor
+ * Professional UI overlays using SDK UI engine
+ */
+import { UIHelpers, List, Box, ScrollableBox, Message, ConfirmModal } from '@amiexpress/bbs-door-sdk';
+import { COLOR_NAMES } from './types.js';
+// =============================================================================
+// BASE MODAL CLASS
+// =============================================================================
+export class BaseModal {
+    ui;
+    helpers;
+    container = null;
+    result = null;
+    constructor(ui) {
+        this.ui = ui;
+        this.helpers = new UIHelpers(ui);
+    }
+    close() {
+        if (this.container) {
+            this.container.destroy();
+            this.container = null;
+            this.ui.render(true);
+        }
+    }
+}
+// =============================================================================
+// TOOL SELECTOR MODAL
+// =============================================================================
+export class ToolSelectorModal extends BaseModal {
+    currentTool;
+    constructor(ui, currentTool) {
+        super(ui);
+        this.currentTool = currentTool;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            const toolOptions = [
+                { label: 'Draw', value: 'draw', icon: '*', desc: 'Freehand drawing' },
+                { label: 'Line', value: 'line', icon: '/', desc: 'Draw straight lines' },
+                { label: 'Box', value: 'box', icon: '#', desc: 'Draw rectangles' },
+                { label: 'Box Fill', value: 'box-fill', icon: '█', desc: 'Filled rectangles' },
+                { label: 'Ellipse', value: 'ellipse', icon: 'O', desc: 'Draw ellipse outline' },
+                { label: 'Ellipse Fill', value: 'ellipse-fill', icon: '0', desc: 'Filled ellipse' },
+                { label: 'Text', value: 'text', icon: 'T', desc: 'Type text mode' },
+                { label: 'Fill', value: 'fill', icon: '@', desc: 'Flood fill area' },
+                { label: 'Pick', value: 'pick', icon: '+', desc: 'Pick color/char' },
+                { label: 'Select', value: 'select', icon: 'S', desc: 'Select region' },
+                { label: 'Shifter', value: 'shifter', icon: '<', desc: 'Shift half-blocks' },
+            ];
+            const list = new List({
+                parent: this.ui.screen,
+                top: 'center',
+                left: 'center',
+                width: 55,
+                height: 18,
+                label: ' SELECT TOOL ',
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                    selected: {
+                        bg: 'cyan',
+                        fg: 'black',
+                    },
+                },
+                shadow: true,
+                wrapItems: false,
+                items: toolOptions.map(t => ` ${t.icon}  ${t.label.padEnd(12)} ${t.desc}`),
+                keys: true,
+                vi: true,
+                mouse: true,
+            });
+            this.container = list; // For close() cleanup
+            // Set selected index to current tool
+            const currentIndex = toolOptions.findIndex(t => t.value === this.currentTool);
+            if (currentIndex >= 0) {
+                list.select(currentIndex);
+            }
+            // Handle selection
+            list.on('select', (_, index) => {
+                this.result = toolOptions[index].value;
+                this.close();
+                resolve(this.result);
+            });
+            // Handle keyboard shortcuts
+            list.key(['escape'], () => {
+                this.result = null;
+                this.close();
+                resolve(null);
+            });
+            // Show help
+            const footer = new Box({
+                parent: list,
+                bottom: 0,
+                left: 0,
+                height: 1,
+                width: '100%-2',
+                content: ' ARROWS: Navigate | ENTER: Select | ESC: Cancel',
+                style: { fg: 'yellow' },
+                tags: true
+            });
+            list.focus();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// COLOR PICKER MODAL
+// =============================================================================
+export class ColorPickerModal extends BaseModal {
+    currentFg;
+    currentBg;
+    iceColorsEnabled;
+    constructor(ui, currentFg, currentBg, iceColorsEnabled) {
+        super(ui);
+        this.currentFg = currentFg;
+        this.currentBg = currentBg;
+        this.iceColorsEnabled = iceColorsEnabled;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            this.container = new Box({
+                parent: this.ui.screen,
+                top: 'center',
+                left: 'center',
+                width: 72,
+                height: 24,
+                label: ` COLOR PICKER ${this.iceColorsEnabled ? '[iCE COLORS]' : ''} `,
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                },
+                shadow: true,
+            });
+            let selectedFg = this.currentFg;
+            let selectedBg = this.currentBg;
+            let mode = 'fg';
+            // Foreground color list (all 16 colors)
+            const fgList = new List({
+                parent: this.container,
+                top: 2,
+                left: 2,
+                width: 32,
+                height: 18,
+                label: ' Foreground ',
+                border: { type: 'line' },
+                wrapItems: false,
+                items: COLOR_NAMES.map((name, i) => `${i.toString().padStart(2)}: ${name}`),
+                keys: true,
+                mouse: true,
+                style: {
+                    selected: { bg: 'cyan', fg: 'black' },
+                    border: { fg: 'green' },
+                },
+            });
+            // Background color list (8 or 16 depending on iCE mode)
+            const bgColorCount = this.iceColorsEnabled ? 16 : 8;
+            const bgList = new List({
+                parent: this.container,
+                top: 2,
+                right: 2,
+                width: 32,
+                height: 18,
+                label: ' Background ',
+                border: { type: 'line' },
+                wrapItems: false,
+                items: COLOR_NAMES.slice(0, bgColorCount).map((name, i) => `${i.toString().padStart(2)}: ${name}`),
+                keys: true,
+                mouse: true,
+                style: {
+                    selected: { bg: 'cyan', fg: 'black' },
+                    border: { fg: 'white' },
+                },
+            });
+            // Set initial selections
+            fgList.select(selectedFg);
+            bgList.select(selectedBg);
+            // Preview box
+            const preview = new Box({
+                parent: this.container,
+                bottom: 0,
+                left: 2,
+                width: 68,
+                height: 1,
+                content: ' PREVIEW: Press ENTER to confirm, ESC to cancel ',
+            });
+            const updatePreview = () => {
+                // Build color preview string
+                let content = ' ';
+                for (let i = 0; i < 10; i++) {
+                    content += '█';
+                }
+                content += ' ';
+                preview.setContent(content);
+                // Update preview colors
+                preview.style.fg = COLOR_NAMES[selectedFg].toLowerCase();
+                preview.style.bg = COLOR_NAMES[selectedBg].toLowerCase();
+            };
+            // Handle foreground selection
+            fgList.on('select', (_, index) => {
+                selectedFg = index;
+                updatePreview();
+                this.ui.render(true);
+            });
+            // Handle background selection
+            bgList.on('select', (_, index) => {
+                selectedBg = index;
+                updatePreview();
+                this.ui.render(true);
+            });
+            // Tab to switch between fg/bg
+            const switchFocus = () => {
+                if (mode === 'fg') {
+                    mode = 'bg';
+                    bgList.focus();
+                    bgList.style.border.fg = 'green';
+                    fgList.style.border.fg = 'white';
+                }
+                else {
+                    mode = 'fg';
+                    fgList.focus();
+                    fgList.style.border.fg = 'green';
+                    bgList.style.border.fg = 'white';
+                }
+                this.ui.render(true);
+            };
+            fgList.key(['tab'], switchFocus);
+            bgList.key(['tab'], switchFocus);
+            // Confirm selection
+            const confirm = () => {
+                this.result = { fg: selectedFg, bg: selectedBg };
+                this.close();
+                resolve(this.result);
+            };
+            fgList.key(['enter'], confirm);
+            bgList.key(['enter'], confirm);
+            // Cancel
+            const cancel = () => {
+                this.result = null;
+                this.close();
+                resolve(null);
+            };
+            fgList.key(['escape'], cancel);
+            bgList.key(['escape'], cancel);
+            fgList.focus();
+            updatePreview();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// FILE DIALOG MODAL
+// =============================================================================
+export class FileDialogModal extends BaseModal {
+    title;
+    files;
+    action;
+    constructor(ui, title, files, action) {
+        super(ui);
+        this.title = title;
+        this.files = files;
+        this.action = action;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            this.container = this.ui.createBox({
+                fixed: true,
+                top: 'center',
+                left: 'center',
+                width: 60,
+                height: 20,
+                label: ` ${this.title} `,
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                },
+                shadow: true,
+            });
+            const list = this.ui.createList({
+                parent: this.container,
+                top: 0,
+                left: 0,
+                width: 58,
+                height: 16,
+                wrapItems: false,
+                items: this.files.length > 0 ? this.files : ['<No files found>'],
+                keys: true,
+                vi: true,
+                mouse: true,
+                style: {
+                    selected: { bg: 'cyan', fg: 'black' },
+                },
+            });
+            // Input for filename (for save)
+            let filenameInput = null;
+            if (this.action === 'save') {
+                this.ui.createText({
+                    parent: this.container,
+                    bottom: 2,
+                    left: 2,
+                    content: 'Filename:',
+                    style: { fg: 'yellow' },
+                });
+                filenameInput = this.ui.createTextbox({
+                    parent: this.container,
+                    bottom: 1,
+                    left: 12,
+                    width: 44,
+                    height: 1,
+                    border: { type: 'line' },
+                    style: {
+                        fg: 'white',
+                        bg: 'black',
+                    },
+                });
+            }
+            // Handle selection
+            list.on('select', (_, index) => {
+                if (this.files.length > 0) {
+                    this.result = this.files[index];
+                    this.close();
+                    resolve(this.result);
+                }
+            });
+            // Handle save with filename
+            if (filenameInput) {
+                filenameInput.on('submit', () => {
+                    const filename = filenameInput.getValue();
+                    if (filename) {
+                        this.result = filename;
+                        this.close();
+                        resolve(this.result);
+                    }
+                });
+            }
+            // Cancel
+            list.key(['escape'], () => {
+                this.result = null;
+                this.close();
+                resolve(null);
+            });
+            list.focus();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// CONFIRM DIALOG
+// =============================================================================
+export class ConfirmDialog extends BaseModal {
+    title;
+    message;
+    constructor(ui, title, message) {
+        super(ui);
+        this.title = title;
+        this.message = message;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            const modal = new ConfirmModal({
+                parent: this.ui.screen,
+                title: this.title,
+                message: this.message,
+                confirmText: 'Yes',
+                cancelText: 'No',
+                confirmColor: 'green',
+                cancelColor: 'red',
+                onConfirm: () => {
+                    this.result = true;
+                    resolve(true);
+                },
+                onCancel: () => {
+                    this.result = false;
+                    resolve(false);
+                }
+            });
+            modal.display();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// MESSAGE DIALOG
+// =============================================================================
+export class MessageDialog extends BaseModal {
+    title;
+    message;
+    type;
+    constructor(ui, title, message, type = 'info') {
+        super(ui);
+        this.title = title;
+        this.message = message;
+        this.type = type;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            const borderColor = this.type === 'error' ? 'red' : this.type === 'warning' ? 'yellow' : 'cyan';
+            const modal = new Message({
+                parent: this.ui.screen,
+                title: this.title,
+                style: {
+                    border: { fg: borderColor }
+                }
+            });
+            modal.display(this.message, () => {
+                modal.destroy();
+                this.ui.render(true);
+                resolve();
+            });
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// HELP DIALOG
+// =============================================================================
+export class HelpDialog extends BaseModal {
+    async show() {
+        return new Promise((resolve) => {
+            const helpText = `
+                     ANSI EDITOR - COMPLETE REFERENCE GUIDE
+
+ NOTE: All hotkeys work on both PC and Mac. Alternative keys provided where
+ OS hotkeys conflict (e.g., [ ] keys for color cycling work on all platforms).
+
+ === CURSOR MOVEMENT ===
+   Arrow Keys - Move cursor one cell
+   Shift+Arrows - Move cursor and create/extend selection
+   Home - Jump to start of current line
+   End - Jump to end of current line
+   Page Up - Jump to top of canvas (row 0)
+   Page Down - Jump to bottom of canvas (row 21)
+
+ === BASIC EDITING ===
+   Printable chars - Type character at cursor position
+   Space - Draw current character (useful in draw mode)
+   Backspace - Delete character at cursor and move back
+   Delete - Delete character under cursor
+   Insert - Toggle insert/overwrite mode (status bar shows INS/OVR)
+   Enter - Move to next line (insert mode)
+   Escape - Cancel selection, exit text mode, or show this help
+
+ === DRAWING TOOLS ===
+   Tab - Show tool selector modal (choose from all tools)
+   Shift+Tab - Cycle backwards through tools
+   D - Draw mode: freehand drawing with mouse or keyboard
+   L - Line mode: draw straight lines between two points
+   B - Box mode: draw rectangles (outline or filled)
+   E - Ellipse mode: draw circles and ellipses
+   T - Text mode: type text strings anywhere on canvas
+   F - Fill mode: flood fill enclosed areas
+   P - Pick mode: sample colors/character from canvas (Alt+U)
+   S - Shifter mode: shift cells with arrow keys
+   H - Shifter mode (alternate key)
+
+ === BRUSH CONTROL (Draw Mode Only) ===
+   1-9 - Set brush size (1=single cell, 9=large brush)
+   [ ] - Cycle brush mode (half-block/shading/colorize/custom/replace)
+
+ === COLOR CONTROL ===
+   F1-F8 - Set foreground color (0-7: Black/Red/Green/Yellow/Blue/Mag/Cyan/White)
+   Shift+F1-F8 - Set background color (0-7)
+   [ ] - Cycle foreground color
+   - = - Cycle background color
+   K - Show color picker modal (interactive selector)
+   Alt+U - Sample colors and character from cell under cursor
+
+ === SELECTION & CLIPBOARD ===
+   S - Start block selection mode (toggle on/off)
+   Shift+Arrows - Extend selection while moving cursor
+   Ctrl+A - Select all (entire canvas)
+   Ctrl+X - Cut selection (removes and copies to clipboard)
+   Ctrl+C - Copy selection to clipboard
+   Ctrl+V - Paste from clipboard at cursor position
+   Escape - Cancel/clear current selection
+
+ === SELECTION OPERATIONS (WHEN SELECTED) ===
+   M - Move selection (cut and prepare for paste)
+   F - Fill selection with current foreground color
+   E / Delete - Erase selection (clear to spaces)
+   R - Rotate selection 90 degrees clockwise
+   X - Flip selection horizontally
+   Y - Flip selection vertically
+   = - Center selection horizontally on canvas
+
+ === LINE OPERATIONS ===
+   Alt+L - Left justify current line (remove leading spaces)
+   Alt+R - Right justify current line (move content to right edge)
+   Alt+C - Center current line horizontally
+   Alt+E - Erase entire current line (fill with spaces)
+   Alt+Home - Erase from start of line to cursor
+   Alt+End - Erase from cursor to end of line
+
+ === ROW & COLUMN OPERATIONS ===
+   Alt+Up - Insert blank row at cursor position
+   Alt+Down - Delete current row (shift rows up)
+   Alt+Right - Insert blank column at cursor position
+   Alt+Left - Delete current column (shift columns left)
+   Alt+Shift+E - Erase entire column at cursor
+   Alt+PageUp - Erase from top of column to cursor
+   Alt+PageDown - Erase from cursor to bottom of column
+
+ === UNDO & REDO ===
+   Ctrl+Z - Undo last operation (100 levels)
+   Ctrl+Y - Redo previously undone operation
+   (Continuous typing is grouped into single undo operation)
+
+ === FILE OPERATIONS ===
+   Ctrl+S - Save file (choose filename and format)
+   Ctrl+O - Load file from BBS file area
+   Ctrl+I - Import file as selection (loads into clipboard)
+   Ctrl+E - Export selection to file
+   Q - Quit editor (prompts to save if modified)
+   (Supports .ANS, .ASC, .TXT, .XB, .BIN, .DIZ formats)
+   (Auto-saves backups every 5 minutes)
+
+ === ADVANCED FEATURES ===
+   Alt+M - Toggle mirror mode (horizontal symmetry drawing)
+   G - Cycle guide overlays (80x25, 80x40, 44x22, grid, none)
+   Alt+N - Toggle numpad drawing mode (keyboard directional drawing)
+
+ === STATUS BAR INFO ===
+   Shows: Tool | Position | Colors | Character | iCE | F-Keys | Mirror | NumPad | Guide | File
+   * = Modified (unsaved changes)
+   MIR = Mirror mode active  |  NUM = Numpad drawing active
+   Guide types: 80X25, 80X40, 44X22, GRID, or ----- (none)
+
+ === MOUSE SUPPORT ===
+   Left Click - Draw at clicked position (draw mode)
+   Click+Drag - Continuous drawing while dragging
+   Right Click - Sample colors from clicked cell
+
+ === TIPS & TRICKS ===
+   - Use Tab tool selector for quick access to all tools
+   - Insert mode adds characters, overwrite mode replaces them
+   - Status bar shows current character code (helpful for graphics chars)
+   - Selection dimensions appear in status bar when selecting
+   - Canvas size is 80 columns x 22 rows (standard ANSI terminal)
+   - Use shifter tool to move content without redrawing
+   - Undo is chunked: rapid edits group into single undo operation
+   - Mirror mode creates perfect symmetry for logos and borders
+   - Guide overlays help align content to common BBS layouts
+
+            Use Arrow Up/Down to scroll - ESC or ENTER to close
+      `;
+            this.container = new ScrollableBox({
+                parent: this.ui.screen,
+                top: 'center',
+                left: 'center',
+                width: 75,
+                height: 22,
+                label: ' ANSI EDITOR HELP ',
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                },
+                shadow: true,
+                scrollable: true,
+                alwaysScroll: true,
+                keys: true,
+                vi: true,
+                mouse: true,
+                content: helpText
+            });
+            this.container.key(['escape', 'enter', 'q'], () => {
+                this.close();
+                resolve();
+            });
+            this.container.focus();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// GALLERY BROWSER MODAL (from old editor)
+// =============================================================================
+export class GalleryBrowserModal extends BaseModal {
+    files;
+    constructor(ui, files) {
+        super(ui);
+        this.files = files;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            // Format file list with nice display names
+            const fileItems = this.files.map(f => {
+                const name = f.replace(/\.(txt|ans|asc|bin|xb)$/i, '');
+                const ext = f.split('.').pop()?.toUpperCase() || '';
+                return `${name.padEnd(40)} [${ext}]`;
+            });
+            const list = new List({
+                parent: this.ui.screen,
+                top: 'center',
+                left: 'center',
+                width: 70,
+                height: 20,
+                label: ' BBS SCREENS GALLERY ',
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                    selected: {
+                        bg: 'cyan',
+                        fg: 'black',
+                    },
+                },
+                shadow: true,
+                wrapItems: false,
+                items: fileItems,
+                keys: true,
+                vi: true,
+                mouse: true,
+                scrollable: true,
+                scrollbar: {
+                    ch: ' ',
+                    style: {
+                        bg: 'blue',
+                    },
+                },
+            });
+            this.container = list;
+            // Instructions
+            new Box({
+                parent: list,
+                bottom: 0,
+                left: 0,
+                width: '100%-2',
+                height: 1,
+                content: ' Enter - Load and edit | Esc - Cancel',
+                style: {
+                    fg: 'yellow',
+                },
+                tags: false
+            });
+            // Handle selection
+            list.on('select', (item, index) => {
+                this.close();
+                resolve(this.files[index]);
+            });
+            list.key(['escape', 'q'], () => {
+                this.close();
+                resolve(null);
+            });
+            list.focus();
+            this.ui.render(true);
+        });
+    }
+}
+// =============================================================================
+// RECENT FILES MODAL (from old editor)
+// =============================================================================
+export class RecentFilesModal extends BaseModal {
+    recentFiles;
+    constructor(ui, recentFiles) {
+        super(ui);
+        this.recentFiles = recentFiles;
+    }
+    async show() {
+        return new Promise((resolve) => {
+            // If no recent files, show empty message
+            if (this.recentFiles.length === 0) {
+                const msg = new Message({
+                    parent: this.ui.screen,
+                    title: ' RECENT FILES ',
+                    style: {
+                        border: { fg: 'cyan' }
+                    }
+                });
+                msg.display('No recent files', () => {
+                    msg.destroy();
+                    this.ui.render(true);
+                    resolve(null);
+                });
+                this.ui.render(true);
+                return;
+            }
+            // Format file list with nice display names
+            const fileItems = this.recentFiles.map(f => {
+                const name = f.replace(/\.(txt|ans|asc|bin|xb)$/i, '');
+                const ext = f.split('.').pop()?.toUpperCase() || '';
+                return `${name.padEnd(35)} [${ext}]`;
+            });
+            const list = new List({
+                parent: this.ui.screen,
+                top: 'center',
+                left: 'center',
+                width: 60,
+                height: 16,
+                label: ' RECENT FILES ',
+                border: { type: 'line' },
+                style: {
+                    fg: 'white',
+                    bg: 'blue',
+                    border: { fg: 'cyan' },
+                    selected: {
+                        bg: 'cyan',
+                        fg: 'black',
+                    },
+                },
+                shadow: true,
+                wrapItems: false,
+                items: fileItems,
+                keys: true,
+                vi: true,
+                mouse: true,
+                scrollable: true,
+                scrollbar: {
+                    ch: ' ',
+                    style: {
+                        bg: 'blue',
+                    },
+                },
+            });
+            this.container = list;
+            // Instructions
+            new Box({
+                parent: list,
+                bottom: 0,
+                left: 0,
+                width: '100%-2',
+                height: 1,
+                content: ' Enter - Load file | Esc - Cancel',
+                style: {
+                    fg: 'yellow',
+                },
+                tags: false
+            });
+            // Handle selection
+            list.on('select', (item, index) => {
+                this.close();
+                resolve(this.recentFiles[index]);
+            });
+            list.key(['escape', 'q'], () => {
+                this.close();
+                resolve(null);
+            });
+            list.focus();
+            this.ui.render(true);
+        });
+    }
+}

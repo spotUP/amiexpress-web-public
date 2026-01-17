@@ -1,0 +1,74 @@
+/**
+ * Bubble Bobble - Game Constants
+ */
+import { LevelData, HighScore, EnemyType, ItemType } from './types';
+export declare const SCREEN_WIDTH = 80;
+export declare const SCREEN_HEIGHT = 24;
+export declare const GAME_WIDTH = 32;
+export declare const GAME_HEIGHT = 20;
+export declare const GAME_TICK_MS = 50;
+export declare const STARTING_LIVES = 3;
+export declare const GRAVITY = 0.25;
+export declare const JUMP_POWER = -1.2;
+export declare const PLAYER_SPEED = 0.5;
+export declare const PLAYER_SPEED_SHOES = 0.7;
+export declare const MAX_FALL_SPEED = 1;
+export declare const BUBBLE_SHOOT_SPEED = 1.2;
+export declare const BUBBLE_FLOAT_SPEED = -0.15;
+export declare const BUBBLE_RANGE = 8;
+export declare const BUBBLE_RANGE_CANDY = 12;
+export declare const BUBBLE_SHOOT_TIME = 15;
+export declare const BUBBLE_FLOAT_TIME = 300;
+export declare const BUBBLE_POP_TIME = 10;
+export declare const ENEMY_BUBBLE_TIME = 180;
+export declare const ENEMY_ANGRY_TIME = 120;
+export declare const HURRY_UP_TIME = 600;
+export declare const LEVEL_COMPLETE_DELAY = 60;
+export declare const INVINCIBLE_TIME = 90;
+export declare const RESPAWN_TIME = 60;
+export declare const ITEM_LIFETIME = 300;
+export declare const COMBO_WINDOW = 30;
+export declare const SCORES: Record<string, number>;
+export declare const SPRITES: {
+    player: string;
+    playerLeft: string;
+    playerRight: string;
+    bubble: string;
+    bubbleFull: string;
+    wall: string;
+    platform: string;
+    enemy: {
+        zenChan: string;
+        mighta: string;
+        monsta: string;
+        banebou: string;
+        pulpul: string;
+        drunk: string;
+        invader: string;
+        superDrunk: string;
+    };
+    item: {
+        apple: string;
+        orange: string;
+        cherry: string;
+        grape: string;
+        watermelon: string;
+        diamond: string;
+        crown: string;
+        shoe: string;
+        candy: string;
+        umbrella: string;
+        ring: string;
+        cross: string;
+        bomb: string;
+        thunder: string;
+        fire: string;
+        water: string;
+    };
+};
+export declare const ENEMY_COLORS: Record<EnemyType, string>;
+export declare const ITEM_COLORS: Record<ItemType, string>;
+export declare const LEVELS: LevelData[];
+export declare function getLevelData(level: number): LevelData;
+export declare const MENU_OPTIONS: string[];
+export declare const DEFAULT_HIGHSCORES: HighScore[];

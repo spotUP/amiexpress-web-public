@@ -1,0 +1,88 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TYPING_HEIGHT = void 0;
+exports.createChatLog = createChatLog;
+exports.updateChatHeader = updateChatHeader;
+exports.addBBSEvent = addBBSEvent;
+/**
+ * Chat log component
+ * Main chat message display area
+ */
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const menu_bar_1 = require("./menu-bar");
+const status_bar_1 = require("./status-bar");
+const input_box_1 = require("./input-box");
+const typing_preview_1 = require("./typing-preview");
+Object.defineProperty(exports, "TYPING_HEIGHT", { enumerable: true, get: function () { return typing_preview_1.TYPING_HEIGHT; } });
+function createChatLog(screen, sidebarWidth) {
+    // Create dockable panel for chat
+    const screenWidth = screen.width || 80;
+    const screenHeight = screen.height || 24;
+    const chatPanel = new blessed_1.DockablePanel({
+        parent: screen,
+        title: ' Chat ',
+        label: ' Chat ',
+        top: menu_bar_1.MENU_HEIGHT,
+        left: sidebarWidth,
+        width: screenWidth - sidebarWidth,
+        height: screenHeight - menu_bar_1.MENU_HEIGHT - status_bar_1.STATUS_HEIGHT - input_box_1.INPUT_HEIGHT,
+        dockPosition: 'float',
+        showMinimizeButton: true,
+        resizable: true,
+        draggable: true,
+        minWidth: 40,
+        minHeight: 10,
+        zIndex: 1,
+        persistenceKey: 'chat-main',
+        topConstraint: menu_bar_1.MENU_HEIGHT,
+        bottomConstraint: status_bar_1.STATUS_HEIGHT + input_box_1.INPUT_HEIGHT,
+        border: { type: 'line', fg: 'green' },
+        style: {
+            fg: 'white',
+            bg: 'lightblack', // Dark grey for panel backgrounds
+        },
+    });
+    // Explicitly set position after creation
+    chatPanel.position.left = sidebarWidth;
+    chatPanel.position.top = menu_bar_1.MENU_HEIGHT;
+    const panelWidth = screenWidth - sidebarWidth;
+    const panelHeight = screenHeight - menu_bar_1.MENU_HEIGHT - status_bar_1.STATUS_HEIGHT - input_box_1.INPUT_HEIGHT;
+    const logWidth = panelWidth - 2;
+    const logHeight = panelHeight - 2;
+    // Use Log widget for proper chat functionality with type safety
+    const chatLog = (0, blessed_helpers_1.createLog)({
+        parent: chatPanel,
+        top: 0,
+        left: 0,
+        width: '100%-2',
+        height: '100%-2',
+        label: '',
+        border: { type: 'none' },
+        mouse: true,
+        scrollable: true,
+        alwaysScroll: true,
+        scrollOnInput: true,
+        scrollback: 1000,
+        tags: true,
+        scrollbar: {
+            ch: '█',
+            style: { fg: 'cyan' }
+        },
+        style: {
+            fg: 'white',
+            bg: 'lightblack',
+        },
+    });
+    return { panel: chatPanel, log: chatLog };
+}
+function updateChatHeader(chatLog, channelName) {
+    chatLog.setLabel(` ${channelName} `);
+}
+/**
+ * Add a BBS event announcement to the chat log
+ */
+function addBBSEvent(chatLog, formattedEvent) {
+    // Add the event to the log using the Log widget's add method
+    chatLog.add(formattedEvent);
+}

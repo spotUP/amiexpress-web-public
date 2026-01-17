@@ -1,0 +1,1921 @@
+"use strict";
+/**
+ * GRANDMASTER Application Factory
+ *
+ * Creates and manages the main application lifecycle including:
+ * - Screen setup with neo-blessed
+ * - Game state management
+ * - Mode selection and transitions
+ * - Audio/input initialization
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GrandmasterApp = void 0;
+exports.createApp = createApp;
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const dockable_1 = require("./ui/dockable");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const game_1 = require("./core/game");
+const menu_1 = require("./ui/menu");
+const game_screen_1 = require("./ui/game-screen");
+const settings_screen_1 = require("./ui/settings-screen");
+const lobby_screen_1 = require("./ui/lobby-screen");
+const versus_screen_1 = require("./ui/versus-screen");
+const leaderboard_screen_1 = require("./ui/leaderboard-screen");
+const attract_screen_1 = require("./ui/attract-screen");
+const handler_1 = require("./input/handler");
+const config_1 = require("./input/config");
+const sounds_1 = require("./audio/sounds");
+const high_scores_1 = require("./core/high-scores");
+const network_manager_1 = require("./network/network-manager");
+const attack_system_1 = require("./network/attack-system");
+const tetrinet_lobby_adapter_1 = require("./network/tetrinet-lobby-adapter");
+const tetrinet_client_1 = require("./network/tetrinet-client");
+const tetrinet_server_browser_1 = require("./network/tetrinet-server-browser");
+const tetrinet_external_adapter_1 = require("./network/tetrinet-external-adapter");
+const tetrinet_engine_1 = require("./core/tetrinet/tetrinet-engine");
+const tetrinet_screen_1 = require("./ui/tetrinet-screen");
+const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
+const multiplayer_server_1 = require("./server/multiplayer-server");
+const manual_1 = require("./ui/manual");
+/**
+ * Main application class
+ */
+class GrandmasterApp {
+    constructor(session) {
+        this.gameEngine = null;
+        this.network = null;
+        this.attackManager = null;
+        this.currentScreen = 'menu';
+        this.session = session;
+        this.state = this.createInitialState();
+        this.sounds = new sounds_1.SoundEngine(session);
+        this.highScores = new high_scores_1.HighScoreManager();
+        this.multiplayerServer = new multiplayer_server_1.MultiplayerServer();
+        this.screen = this.createScreen();
+        // Create input manager for centralized state management
+        this.inputManager = new blessed_helpers_1.DoorInputManager(session, this.screen, {
+            enableGameMode: true,
+            enableGrabKeys: true,
+            enableMouse: true,
+            debug: false,
+            debugName: 'GRANDMASTER'
+        });
+        // Create input handler with user's key bindings
+        this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings);
+        // Initialize network manager if session has socket
+        if (session.bbsSession?.socket) {
+            this.network = new network_manager_1.GrandmasterNetworkManager(session.bbsSession);
+        }
+    }
+    /**
+     * Create initial application state
+     */
+    createInitialState() {
+        return {
+            currentMode: null,
+            playerName: this.session.user?.username || 'Player',
+            settings: {
+                rotationSystem: 'SRS',
+                das: 133, // Delayed Auto-Shift (ms)
+                arr: 10, // Auto-Repeat Rate (ms)
+                softDropSpeed: 20, // Multiplier
+                ghostPiece: true,
+                lockDelay: 500, // ms
+                previewCount: 5,
+                musicVolume: 0.8,
+                sfxVolume: 1.0,
+                keyBindings: {
+                    left: [...config_1.DEFAULT_KEYS.left],
+                    right: [...config_1.DEFAULT_KEYS.right],
+                    rotateCW: [...config_1.DEFAULT_KEYS.rotateCW],
+                    rotateCCW: [...config_1.DEFAULT_KEYS.rotateCCW],
+                    rotate180: [...config_1.DEFAULT_KEYS.rotate180],
+                    softDrop: [...config_1.DEFAULT_KEYS.softDrop],
+                    hardDrop: [...config_1.DEFAULT_KEYS.hardDrop],
+                    hold: [...config_1.DEFAULT_KEYS.hold],
+                    pause: [...config_1.DEFAULT_KEYS.pause],
+                },
+                // Visual Effects Settings
+                blockGlow: true,
+                glowIntensity: 1.0,
+                clearStyle: 'inward',
+                clearDirection: 'in',
+                clearAnimationSpeed: 1.0,
+                placementEffects: true,
+                floatTextMode: 'offboard',
+                b2bGlowEnabled: true,
+                connectedBlocks: false, // Disabled by default (BBS terminal limitations)
+                animationIntensity: 'normal',
+            },
+            stats: {
+                gamesPlayed: 0,
+                totalLines: 0,
+                totalScore: 0,
+                bestGrade: '9',
+                bestLevel: 0,
+                fastestSprint: null,
+                highestCombo: 0,
+                tetrisCount: 0,
+                tSpinCount: 0,
+                perfectClears: 0,
+            },
+        };
+    }
+    /**
+     * Check if a modal/dialog is currently open
+     * This prevents screen-level escape handlers from firing when a modal is handling ESC
+     */
+    isModalOpen() {
+        return this.screen?.children?.some((child) => child.type === 'docmodal' ||
+            child.type === 'question' ||
+            child.type === 'message' ||
+            child.type === 'prompt' ||
+            child.type === 'loading') || false;
+    }
+    /**
+     * Create neo-blessed screen
+     */
+    createScreen() {
+        const screen = (0, blessed_helpers_1.createScreen)(this.session.bbs, {
+            dockBorders: true,
+            title: 'GRANDMASTER v1.1.0', // Version for debugging
+            fullUnicode: false,
+            smartCSR: false, // Disable smart scroll-region optimization - prevents layout corruption
+            fastCSR: false, // Disable fast CSR - forces full redraws for stable rendering
+            focusKeys: false, // Disable focus navigation keys - prevent arrows from being swallowed
+            ignoreLocked: ['mouse', 'keypress'], // Prevent blur from clearing screen
+        });
+        // Prevent screen from clearing on blur - add a render call to redraw
+        // Use 'any' to access internal blessed properties
+        const program = screen.program;
+        if (program) {
+            // Override blur handler to just re-render instead of clearing
+            program.on('blur', () => {
+                // Just re-render on blur, don't clear
+                screen.render();
+            });
+        }
+        // Note: Input setup is now handled by DoorInputManager in run()
+        // This keeps screen creation separate from input state management
+        return screen;
+    }
+    /**
+     * Run the application
+     */
+    async run(initialMode) {
+        // Clear any previous door's screen artifacts
+        // This prevents ghosting when switching between doors
+        this.screen.program.write('\x1b[2J'); // Clear entire screen with ANSI
+        this.screen.program.write('\x1b[H'); // Move cursor to home (0,0)
+        this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
+        this.screen.render();
+        // Wait for screen clear to propagate to terminal (critical for modem speeds)
+        // At slow speeds, ANSI clear codes take time to transmit
+        await this.sleep(200);
+        // Enable door input (game mode, keyboard capture, mouse, input handler)
+        // DoorInputManager handles all input state in one place
+        this.inputManager.enable();
+        // Show attract mode (boot sequence + demo)
+        await this.showAttractMode();
+        // Handle direct mode launch
+        if (initialMode) {
+            const mode = this.parseMode(initialMode);
+            if (mode) {
+                await this.startGame(mode);
+                return;
+            }
+        }
+        // Show main menu
+        await this.showMainMenu();
+    }
+    /**
+     * Play cinematic boot sequence
+     */
+    async playBootSequence() {
+        const bootBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 60,
+            height: 15,
+            content: '',
+            style: {
+                fg: 'white',
+                bg: 'black',
+            },
+        });
+        const frames = [
+            '{bold}{cyan-fg}INITIALIZING...{/cyan-fg}{/bold}',
+            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Loading TGM3 Engine...{/gray-fg}',
+            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Calibrating 20G Gravity...{/gray-fg}',
+            '{bold}{cyan-fg}GRANDMASTER{/cyan-fg}{/bold}\n\n{gray-fg}Initializing Grade System...{/gray-fg}',
+            '{bold}{yellow-fg}G R A N D M A S T E R{/yellow-fg}{/bold}\n\n{white-fg}TGM3-Inspired Multiplayer Tetris{/white-fg}\n\n{gray-fg}Press any key...{/gray-fg}',
+        ];
+        for (let i = 0; i < frames.length; i++) {
+            bootBox.setContent(`${frames[i]}`);
+            this.screen.render();
+            await this.sleep(400);
+        }
+        // Wait for keypress
+        await this.waitForKey();
+        bootBox.destroy();
+    }
+    /**
+     * Show attract mode (boot sequence + demo gameplay + info screens)
+     */
+    async showAttractMode() {
+        // Disable main input handler during attract mode so it doesn't swallow keys
+        this.inputHandler.setEnabled(false);
+        return new Promise((resolve) => {
+            const attractScreen = new attract_screen_1.AttractScreen(this.screen, this.sounds, this.state);
+            attractScreen.run(() => {
+                attractScreen.cleanup();
+                this.inputHandler.setEnabled(true);
+                resolve();
+            });
+        });
+    }
+    /**
+     * Show main menu
+     */
+    async showMainMenu() {
+        this.currentScreen = 'menu';
+        const menuScreen = new menu_1.MenuScreen(this.screen, this.state, this.sounds);
+        const selection = await menuScreen.show();
+        switch (selection) {
+            case 'master':
+                await this.startGame('master');
+                break;
+            case 'death':
+                await this.startGame('death');
+                break;
+            case 'sprint':
+                await this.startGame('sprint');
+                break;
+            case 'marathon':
+                await this.startGame('marathon');
+                break;
+            case 'cpu_battle':
+                await this.showCpuBattle();
+                break;
+            case 'versus':
+                await this.showLobby();
+                break;
+            case 'tetrinet':
+                await this.showTetriNetLobby();
+                break;
+            case 'training':
+                await this.startGame('training');
+                break;
+            case 'settings':
+                await this.showSettings();
+                break;
+            case 'stats':
+                await this.showStats();
+                break;
+            case 'manual':
+                await this.showManual();
+                break;
+            case 'quit':
+                await this.quit();
+                return;
+        }
+        // Return to menu after game/screen ends
+        if (this.currentScreen !== 'menu') {
+            await this.showMainMenu();
+        }
+    }
+    /**
+     * Start a game in specified mode
+     */
+    async startGame(mode) {
+        this.currentScreen = 'game';
+        this.state.currentMode = mode;
+        // Disable mouse control during gameplay
+        this.screen.program.disableMouse();
+        // Create game engine
+        this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds);
+        // Start replay recording
+        const userId = this.session.user?.id || 'guest';
+        const username = this.session.user?.username || this.state.playerName;
+        this.gameEngine.startRecording(userId, username);
+        // Create game screen
+        const gameScreen = new game_screen_1.GameScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state);
+        // Run game loop
+        await gameScreen.run();
+        // Submit score and replay
+        await this.submitScore(userId, username);
+        // Update stats after game
+        await this.updateStats();
+        // Re-enable mouse control for menus
+        this.screen.program.enableMouse();
+        // Clean up
+        this.gameEngine = null;
+        this.state.currentMode = null;
+    }
+    /**
+     * Show multiplayer lobby
+     */
+    async showLobby() {
+        this.currentScreen = 'lobby';
+        // Disable game mode so textboxes can receive input
+        if (this.session.bbs?.disableGameMode) {
+            this.session.bbs.disableGameMode();
+            console.log('[GRANDMASTER] Game mode disabled for versus lobby chat');
+        }
+        this.inputHandler.setEnabled(false);
+        // Check if network is available
+        if (!this.network) {
+            const errorBox = (0, dockable_1.createDockable)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 60,
+                height: 8,
+                border: { type: 'line' },
+                style: { border: { fg: 'red' } },
+                content: '{bold}{red-fg}ERROR{/red-fg}{/bold}\n\n' +
+                    '{white-fg}Multiplayer not available\n' +
+                    'Network connection required{/white-fg}\n\n' +
+                    '{gray-fg}Press any key to return{/gray-fg}',
+                persistenceKey: 'grandmaster.app.network-error',
+            });
+            this.screen.render();
+            await this.waitForKey();
+            errorBox.destroy();
+            return;
+        }
+        // Show mode selection first
+        const modePanel = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 12,
+            border: { type: 'line' },
+            label: ' Select Mode ',
+            style: { border: { fg: 'cyan' } },
+            persistenceKey: 'grandmaster.app.multiplayer-mode',
+        });
+        const modeBox = (0, blessed_helpers_1.createList)({
+            parent: modePanel,
+            top: 1,
+            left: 1,
+            width: 48,
+            height: 10,
+            style: {
+                selected: { bg: 'blue', fg: 'white' },
+            },
+            items: [
+                '1v1 Versus',
+                '2v2 Team Battle',
+                'Battle Royale (99)',
+                'Back to Menu',
+            ],
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+        modeBox.focus();
+        this.screen.render();
+        const modeSelection = await new Promise((resolve) => {
+            modeBox.on('select', (_item, index) => {
+                resolve(index);
+            });
+            this.screen.key(['escape'], () => {
+                if (this.isModalOpen())
+                    return;
+                resolve(3); // Back
+            });
+        });
+        modeBox.destroy();
+        modePanel.destroy();
+        if (modeSelection === 3) {
+            return; // Back to menu
+        }
+        // Map selection to mode
+        const modes = ['versus_1v1', 'team_2v2', 'battle_royale'];
+        const selectedMode = modes[modeSelection];
+        // Create lobby screen
+        const localPlayerId = this.session.user?.id || this.state.playerName;
+        const lobbyScreen = new lobby_screen_1.LobbyScreen(this.screen, this.state, this.sounds, this.network, localPlayerId);
+        // Show lobby and wait for result
+        const result = await lobbyScreen.show('custom', selectedMode);
+        // Re-enable game mode and input handler after lobby
+        this.inputHandler.setEnabled(true);
+        if (this.session.bbs?.enableGameMode) {
+            this.session.bbs.enableGameMode();
+            console.log('[GRANDMASTER] Game mode re-enabled after versus lobby');
+        }
+        if (result.action === 'start' && result.mode) {
+            // Start multiplayer game
+            await this.startVersusGame(result.mode);
+        }
+    }
+    /**
+     * Show TetriNET lobby for classic TetriNET gameplay
+     */
+    async showTetriNetLobby() {
+        this.currentScreen = 'lobby';
+        // Disable game mode so textboxes can receive input
+        if (this.session.bbs?.disableGameMode) {
+            this.session.bbs.disableGameMode();
+            console.log('[GRANDMASTER] Game mode disabled for TetriNET lobby chat');
+        }
+        this.inputHandler.setEnabled(false);
+        // First show mode selection
+        const modePanel = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 45,
+            height: 12,
+            border: { type: 'line' },
+            label: ' TetriNET Mode ',
+            style: { border: { fg: 'yellow' } },
+            persistenceKey: 'grandmaster.app.tnet-mode',
+        });
+        const modeBox = (0, blessed_helpers_1.createList)({
+            parent: modePanel,
+            top: 1,
+            left: 1,
+            width: 43,
+            height: 10,
+            style: {
+                selected: { bg: 'blue', fg: 'white' },
+            },
+            items: [
+                'Create Game (Standard)',
+                'Create Game (Extended - 16 specials)',
+                'Create Game (Classic - no specials)',
+                'Join Game',
+                '',
+                'Connect to External Server',
+                '',
+                'Back to Menu',
+            ],
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+        modeBox.focus();
+        this.screen.render();
+        const selection = await new Promise((resolve) => {
+            modeBox.on('select', (_item, index) => {
+                resolve(index);
+            });
+            this.screen.key(['escape'], () => {
+                if (this.isModalOpen())
+                    return;
+                resolve(7); // Back
+            });
+        });
+        modeBox.destroy();
+        modePanel.destroy();
+        if (selection === 4 || selection === 6 || selection === 7) {
+            return; // Back to menu or separator
+        }
+        // Handle "Connect to External Server" option
+        if (selection === 5) {
+            await this.showTetriNetServerConnect();
+            return;
+        }
+        // Map selection to mode and entry type
+        const modeMap = {
+            0: 'standard',
+            1: 'extended',
+            2: 'classic',
+            3: 'standard', // Join defaults to standard
+        };
+        const selectedMode = modeMap[selection] || 'standard';
+        const entryMode = selection === 3 ? 'join' : 'custom';
+        // Create TetriNET lobby adapter
+        if (!this.network) {
+            this.network = new network_manager_1.GrandmasterNetworkManager(this.session.bbsSession);
+        }
+        const adapter = new tetrinet_lobby_adapter_1.TetriNetLobbyAdapter(this.network);
+        // Add local player
+        const playerName = this.session.user?.username || this.state.playerName;
+        adapter.addLocalPlayer(playerName, 1);
+        // Create lobby with TetriNET-specific features
+        const lobby = new blessed_1.MultiplayerLobby({
+            parent: this.screen,
+            adapter,
+            localPlayerId: 'slot-1',
+            title: 'TETRINET LOBBY',
+            features: {
+                slotBased: true, // Slots 1-6
+                chat: true, // Partyline chat
+                teams: true, // Team selection
+                settingsEditor: true, // Game options
+                leaderboard: true, // Winlist
+                bots: false, // No bots in TetriNET
+            },
+            modes: {
+                standard: {
+                    name: 'Standard (9 specials)',
+                    maxPlayers: 6,
+                    maxSlots: 6,
+                    minPlayers: 2,
+                    teamBased: true,
+                    teams: ['Red', 'Blue'],
+                },
+                extended: {
+                    name: 'Extended (16 specials)',
+                    maxPlayers: 6,
+                    maxSlots: 6,
+                    minPlayers: 2,
+                    teamBased: true,
+                    teams: ['Red', 'Blue'],
+                },
+                classic: {
+                    name: 'Classic (no specials)',
+                    maxPlayers: 6,
+                    maxSlots: 6,
+                    minPlayers: 2,
+                    teamBased: true,
+                    teams: ['Red', 'Blue'],
+                },
+            },
+            gameSettings: [
+                {
+                    key: 'startingLevel',
+                    label: 'Starting Level',
+                    type: 'number',
+                    min: 1,
+                    max: 100,
+                    default: 1,
+                },
+                {
+                    key: 'linesToMakeForSpecials',
+                    label: 'Lines for Special',
+                    type: 'number',
+                    min: 1,
+                    max: 4,
+                    default: 1,
+                },
+                {
+                    key: 'specialsAddedEachTime',
+                    label: 'Specials Added',
+                    type: 'number',
+                    min: 1,
+                    max: 4,
+                    default: 1,
+                },
+                {
+                    key: 'inventorySize',
+                    label: 'Inventory Size',
+                    type: 'number',
+                    min: 1,
+                    max: 18,
+                    default: 10,
+                },
+                {
+                    key: 'delayBeforeSuddenDeath',
+                    label: 'Sudden Death (min)',
+                    type: 'number',
+                    min: 0,
+                    max: 15,
+                    default: 2,
+                },
+                {
+                    key: 'suddenDeathTick',
+                    label: 'SD Tick (sec)',
+                    type: 'number',
+                    min: 1,
+                    max: 30,
+                    default: 10,
+                },
+            ],
+            onSound: (sound) => {
+                const soundMap = {
+                    select: 'menu_select',
+                    error: 'error',
+                    countdown: 'countdown',
+                    join: 'menu_select',
+                    leave: 'menu_select',
+                    chat: 'menu_select',
+                };
+                const sfx = soundMap[sound];
+                if (sfx) {
+                    this.sounds.playSfx(sfx);
+                }
+            },
+        });
+        // Show lobby and wait for result
+        const result = await lobby.show(entryMode, selectedMode);
+        // Re-enable game mode and input handler after lobby
+        this.inputHandler.setEnabled(true);
+        if (this.session.bbs?.enableGameMode) {
+            this.session.bbs.enableGameMode();
+            console.log('[GRANDMASTER] Game mode re-enabled after TetriNET lobby');
+        }
+        if (result.action === 'start') {
+            // Start TetriNET game with the settings from lobby
+            await this.startTetriNetGame(result.mode || 'standard', result.settings || {});
+        }
+    }
+    /**
+     * Start a TetriNET game
+     */
+    async startTetriNetGame(mode, settings) {
+        // Disable mouse control during gameplay
+        this.screen.program.disableMouse();
+        // TODO: Implement TetriNET game screen
+        // For now show placeholder
+        const placeholder = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 8,
+            border: { type: 'line' },
+            style: { border: { fg: 'yellow' } },
+            content: `{bold}{yellow-fg}TetriNET Game Starting{/yellow-fg}{/bold}\n\n` +
+                `Mode: ${mode}\n` +
+                `Level: ${settings.startingLevel || 1}\n\n` +
+                `{gray-fg}Game screen coming soon...{/gray-fg}`,
+            persistenceKey: 'grandmaster.app.tnet-placeholder',
+        });
+        this.screen.render();
+        await this.waitForKey();
+        placeholder.destroy();
+        // Re-enable mouse control for menus
+        this.screen.program.enableMouse();
+    }
+    /**
+     * Show TetriNET external server connection dialog
+     */
+    async showTetriNetServerConnect() {
+        // Import textbox helpers
+        const { createTextbox } = await Promise.resolve().then(() => __importStar(require('@amiexpress/bbs-door-sdk/utils/blessed-helpers')));
+        // Predefined server list from https://servers.tetrinet.fr/
+        let predefinedServers = [
+            { name: 'tetrinet.fr', host: 'tetrinet.fr' },
+            { name: 'tetrinet.de', host: 'tetrinet.de' },
+            { name: 'tetrinet.lfjr.net', host: 'tetrinet.lfjr.net' },
+            { name: 'tetrinet.cyteen.eu', host: 'tetrinet.cyteen.eu' },
+            { name: 'tetrinet.geekshed.net', host: 'tetrinet.geekshed.net' },
+            { name: 'linuxiuvat.de', host: 'linuxiuvat.de' },
+            { name: 'tetrinet.laber.fasel.org', host: 'tetrinet.laber.fasel.org' },
+        ];
+        let selectedServer = '';
+        let selectedPort = 31457;
+        let selectedMode = 'tetrifast';
+        // Server selection
+        const getItems = () => [
+            ...predefinedServers.map(s => s.name),
+            '',
+            '{yellow-fg}Enter Custom Server...{/yellow-fg}',
+            '{cyan-fg}Update Server List (Live)...{/cyan-fg}',
+            '',
+            '{gray-fg}Back{/gray-fg}',
+        ];
+        const serverPanel = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: Math.min(predefinedServers.length + 10, 20),
+            border: { type: 'line' },
+            label: ' Select TetriNET Server ',
+            style: { border: { fg: 'cyan' } },
+            persistenceKey: 'grandmaster.app.server-select',
+        });
+        const serverSelectBox = (0, blessed_helpers_1.createList)({
+            parent: serverPanel,
+            top: 1,
+            left: 1,
+            width: 48,
+            height: Math.min(predefinedServers.length + 8, 18),
+            style: {
+                selected: { bg: 'blue', fg: 'white' },
+            },
+            items: getItems(),
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+        serverSelectBox.focus();
+        this.screen.render();
+        let serverSelection = -1;
+        while (serverSelection === -1) {
+            serverSelection = await new Promise((resolve) => {
+                const onSelect = (_item, index) => {
+                    this.screen.unkey(['escape'], onEscape);
+                    resolve(index);
+                };
+                const onEscape = () => {
+                    serverSelectBox.removeListener('select', onSelect);
+                    resolve(predefinedServers.length + 5); // Back
+                };
+                serverSelectBox.once('select', onSelect);
+                this.screen.key(['escape'], onEscape);
+            });
+            // Handle Update Server List (Live)
+            if (serverSelection === predefinedServers.length + 2) {
+                serverSelectBox.setLabel(' Fetching live servers... ');
+                this.screen.render();
+                const browser = new tetrinet_server_browser_1.TetriNetServerBrowser();
+                const liveServers = await browser.fetchServers();
+                if (liveServers.length > 0) {
+                    predefinedServers = liveServers.map(s => ({
+                        name: `${s.name} [${s.players}/${s.maxPlayers}]`,
+                        host: s.host,
+                        port: s.port
+                    }));
+                    serverSelectBox.setItems(getItems());
+                }
+                else {
+                    serverSelectBox.setLabel(' Select TetriNET Server (Update Failed) ');
+                }
+                serverSelection = -1; // Loop again
+                serverSelectBox.setLabel(' Select TetriNET Server ');
+                serverSelectBox.focus();
+                this.screen.render();
+            }
+        }
+        serverSelectBox.destroy();
+        serverPanel.destroy();
+        // Handle back/cancel
+        const backIndex = predefinedServers.length + 5;
+        if (serverSelection === predefinedServers.length || serverSelection === predefinedServers.length + 4 || serverSelection === backIndex) {
+            return;
+        }
+        // Custom server entry
+        if (serverSelection === predefinedServers.length + 1) {
+            // Show custom server dialog
+            const customDialog = (0, dockable_1.createDockable)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 55,
+                height: 10,
+                border: { type: 'line' },
+                label: ' Enter Server Address ',
+                style: {
+                    border: { fg: 'cyan' },
+                },
+                persistenceKey: 'grandmaster.app.custom-server',
+            });
+            const serverLabel = (0, blessed_helpers_1.createBox)({
+                parent: customDialog,
+                top: 1,
+                left: 2,
+                width: 20,
+                height: 1,
+                content: '{bold}Server:{/bold}',
+            });
+            const serverInput = createTextbox({
+                parent: customDialog,
+                top: 1,
+                left: 22,
+                width: 28,
+                height: 3,
+                border: { type: 'line' },
+                style: {
+                    border: { fg: 'white' },
+                    focus: { fg: 'cyan' },
+                },
+                inputOnFocus: true,
+                mouse: true,
+            });
+            const portLabel = (0, blessed_helpers_1.createBox)({
+                parent: customDialog,
+                top: 4,
+                left: 2,
+                width: 20,
+                height: 1,
+                content: '{bold}Port:{/bold}',
+            });
+            const portInput = createTextbox({
+                parent: customDialog,
+                top: 4,
+                left: 22,
+                width: 10,
+                height: 3,
+                border: { type: 'line' },
+                style: {
+                    border: { fg: 'white' },
+                    focus: { fg: 'cyan' },
+                },
+                inputOnFocus: true,
+                mouse: true,
+            });
+            portInput.setValue('31457');
+            const customInstructions = (0, blessed_helpers_1.createBox)({
+                parent: customDialog,
+                top: 7,
+                left: 2,
+                width: 50,
+                height: 1,
+                content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
+            });
+            this.screen.render();
+            const inputs = [serverInput, portInput];
+            let focusIndex = 0;
+            inputs[focusIndex].focus();
+            const customResult = await new Promise((resolve) => {
+                const onTab = () => {
+                    focusIndex = (focusIndex + 1) % inputs.length;
+                    inputs[focusIndex].focus();
+                    this.screen.render();
+                };
+                const onSTab = () => {
+                    focusIndex = (focusIndex - 1 + inputs.length) % inputs.length;
+                    inputs[focusIndex].focus();
+                    this.screen.render();
+                };
+                const onEnter = () => {
+                    const server = serverInput.getValue()?.trim() || '';
+                    const port = parseInt(portInput.getValue()?.trim() || '31457', 10);
+                    if (!server) {
+                        this.sounds.playSfx('error');
+                        return;
+                    }
+                    cleanup();
+                    resolve({ server, port });
+                };
+                const onEscape = () => {
+                    cleanup();
+                    resolve(null);
+                };
+                const cleanup = () => {
+                    this.screen.unkey(['tab'], onTab);
+                    this.screen.unkey(['S-tab'], onSTab);
+                    this.screen.unkey(['enter'], onEnter);
+                    this.screen.unkey(['escape'], onEscape);
+                };
+                this.screen.key(['tab'], onTab);
+                this.screen.key(['S-tab'], onSTab);
+                this.screen.key(['enter'], onEnter);
+                this.screen.key(['escape'], onEscape);
+            });
+            customDialog.destroy();
+            if (!customResult) {
+                return; // Cancelled
+            }
+            selectedServer = customResult.server;
+            selectedPort = customResult.port;
+        }
+        else {
+            // Predefined server
+            selectedServer = predefinedServers[serverSelection].host;
+            selectedPort = predefinedServers[serverSelection].port || 31457;
+        }
+        // Ask for mode (includes TSpec spectator)
+        const modePanel = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 34,
+            height: 7,
+            border: { type: 'line' },
+            label: ' Mode ',
+            style: { border: { fg: 'cyan' } },
+            persistenceKey: 'grandmaster.app.tnet-mode-select',
+        });
+        const modeSelectBox = (0, blessed_helpers_1.createList)({
+            parent: modePanel,
+            top: 1,
+            left: 1,
+            width: 32,
+            height: 5,
+            style: {
+                selected: { bg: 'blue', fg: 'white' },
+            },
+            items: ['TetriFast (Recommended)', 'Standard', 'TSpec (Spectator)'],
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+        modeSelectBox.focus();
+        this.screen.render();
+        const modeSelection = await new Promise((resolve) => {
+            modeSelectBox.on('select', (_item, index) => {
+                resolve(index);
+            });
+            this.screen.key(['escape'], () => {
+                if (this.isModalOpen())
+                    return;
+                resolve(-1);
+            });
+        });
+        modeSelectBox.destroy();
+        modePanel.destroy();
+        if (modeSelection === -1)
+            return;
+        selectedMode = modeSelection === 0 ? 'tetrifast' : modeSelection === 1 ? 'standard' : 'tspec';
+        if (selectedMode === 'tspec' && selectedPort === 31457) {
+            selectedPort = 31458;
+        }
+        // Now show nickname dialog
+        const nickDialog = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 8,
+            border: { type: 'line' },
+            label: ` Connecting to ${selectedServer} `,
+            style: {
+                border: { fg: 'cyan' },
+            },
+            persistenceKey: 'grandmaster.app.nickname',
+        });
+        const nickLabel = (0, blessed_helpers_1.createBox)({
+            parent: nickDialog,
+            top: 1,
+            left: 2,
+            width: 20,
+            height: 1,
+            content: '{bold}Nickname:{/bold}',
+        });
+        const nickInput = createTextbox({
+            parent: nickDialog,
+            top: 1,
+            left: 22,
+            width: 20,
+            height: 3,
+            border: { type: 'line' },
+            style: {
+                border: { fg: 'white' },
+                focus: { fg: 'cyan' },
+            },
+            inputOnFocus: true,
+            mouse: true,
+        });
+        const playerName = this.session.user?.username || this.state.playerName;
+        nickInput.setValue(playerName.substring(0, 15));
+        const nickInstructions = (0, blessed_helpers_1.createBox)({
+            parent: nickDialog,
+            top: 4,
+            left: 2,
+            width: 45,
+            height: 1,
+            content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
+        });
+        this.screen.render();
+        nickInput.focus();
+        const nickResult = await new Promise((resolve) => {
+            const onEnter = () => {
+                const nickname = nickInput.getValue()?.trim() || 'Player';
+                cleanup();
+                resolve(nickname.substring(0, 15));
+            };
+            const onEscape = () => {
+                cleanup();
+                resolve(null);
+            };
+            const cleanup = () => {
+                this.screen.unkey(['enter'], onEnter);
+                this.screen.unkey(['escape'], onEscape);
+            };
+            this.screen.key(['enter'], onEnter);
+            this.screen.key(['escape'], onEscape);
+        });
+        nickDialog.destroy();
+        if (!nickResult) {
+            return; // Cancelled
+        }
+        let passwordResult = '';
+        if (selectedMode === 'tspec') {
+            const passwordDialog = (0, dockable_1.createDockable)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 50,
+                height: 8,
+                border: { type: 'line' },
+                label: ' TSpec Password ',
+                style: {
+                    border: { fg: 'cyan' },
+                },
+                persistenceKey: 'grandmaster.app.tspec-password',
+            });
+            (0, blessed_helpers_1.createBox)({
+                parent: passwordDialog,
+                top: 1,
+                left: 2,
+                width: 20,
+                height: 1,
+                content: '{bold}Password:{/bold}',
+            });
+            const passwordInput = createTextbox({
+                parent: passwordDialog,
+                top: 1,
+                left: 22,
+                width: 20,
+                height: 3,
+                border: { type: 'line' },
+                style: {
+                    border: { fg: 'white' },
+                    focus: { fg: 'cyan' },
+                },
+                inputOnFocus: true,
+                mouse: true,
+            });
+            (0, blessed_helpers_1.createBox)({
+                parent: passwordDialog,
+                top: 4,
+                left: 2,
+                width: 45,
+                height: 1,
+                content: '{gray-fg}Enter TSpec password (ESC to cancel){/gray-fg}',
+            });
+            this.screen.render();
+            passwordInput.focus();
+            const passResult = await new Promise((resolve) => {
+                const onEnter = () => {
+                    const password = passwordInput.getValue()?.trim() || '';
+                    cleanup();
+                    resolve(password);
+                };
+                const onEscape = () => {
+                    cleanup();
+                    resolve(null);
+                };
+                const cleanup = () => {
+                    this.screen.unkey(['enter'], onEnter);
+                    this.screen.unkey(['escape'], onEscape);
+                };
+                this.screen.key(['enter'], onEnter);
+                this.screen.key(['escape'], onEscape);
+            });
+            passwordDialog.destroy();
+            if (passResult === null) {
+                return;
+            }
+            passwordResult = passResult;
+        }
+        const result = {
+            server: selectedServer,
+            port: selectedPort,
+            nickname: nickResult,
+            mode: selectedMode,
+            password: passwordResult,
+        };
+        // Show connecting status
+        const statusBox = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 7,
+            border: { type: 'line' },
+            style: { border: { fg: 'cyan' } },
+            content: `{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+                `Server: ${result.server}:${result.port}\n` +
+                `Mode: ${result.mode}\n` +
+                `Status: Initializing...`,
+            persistenceKey: 'grandmaster.app.connecting-status',
+        });
+        this.screen.render();
+        // Helper to update status
+        const updateStatus = (status) => {
+            statusBox.setContent(`{bold}{cyan-fg}Connecting to TetriNET server...{/cyan-fg}{/bold}\n\n` +
+                `Server: ${result.server}:${result.port}\n` +
+                `Mode: ${result.mode}\n` +
+                `Status: ${status}`);
+            this.screen.render();
+        };
+        try {
+            // Create client and connect
+            updateStatus('Creating socket...');
+            const client = new tetrinet_client_1.TetriNetClient({
+                host: result.server,
+                port: result.port,
+                nickname: result.nickname,
+                mode: result.mode,
+                password: result.password,
+                timeout: 15000,
+            });
+            // Listen for state changes to update UI
+            client.on('state:change', (state) => {
+                if (state === 'connecting') {
+                    updateStatus('Connecting to server...');
+                }
+                else if (state === 'connected') {
+                    updateStatus(result.mode === 'tspec' ? 'Connected! Spectator mode' : 'Connected! Waiting for slot...');
+                }
+            });
+            // Listen for detailed status updates
+            client.on('status', (status) => {
+                updateStatus(status);
+            });
+            updateStatus('Initiating TCP connection...');
+            await client.connect();
+            statusBox.setContent(`{bold}{green-fg}Connected!{/green-fg}{/bold}\n\n` +
+                `${client.getSlot() ? `Slot ${client.getSlot()} assigned` : 'Spectator connected'}`);
+            this.screen.render();
+            // Wait a moment to show connected status
+            await new Promise(r => setTimeout(r, 1000));
+            statusBox.destroy();
+            // Show the external server lobby/game
+            await this.runTetriNetExternalGame(client);
+            updateStatus('Disconnecting...');
+            client.disconnect();
+        }
+        catch (error) {
+            statusBox.setContent(`{bold}{red-fg}Connection Failed{/red-fg}{/bold}\n\n` +
+                `${error.message}`);
+            this.screen.render();
+            await this.waitForKey();
+            statusBox.destroy();
+        }
+    }
+    /**
+     * Run TetriNET game connected to external server
+     */
+    async runTetriNetExternalGame(client) {
+        if (this.session.bbs?.disableGameMode) {
+            this.session.bbs.disableGameMode();
+            console.log('[GRANDMASTER] Game mode disabled for TetriNET partyline input');
+        }
+        this.inputHandler.setEnabled(false);
+        const externalAdapter = new tetrinet_external_adapter_1.TetriNetExternalAdapter(client);
+        let gameScreen = null;
+        let gameEngine = null;
+        let lobbyEscapeHandler = null;
+        let spectatorPublic = false;
+        const { createTextbox } = await Promise.resolve().then(() => __importStar(require('@amiexpress/bbs-door-sdk/utils/blessed-helpers')));
+        const footerHeight = 3;
+        const inputHeight = 3;
+        const sidePanelHeight = `100%-${footerHeight + inputHeight}`;
+        const chatWidth = 36; // Consistent width for chat area and input
+        const createLobbyUi = () => {
+            const gameBox = (0, dockable_1.createDockable)({
+                parent: this.screen,
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                label: ` TetriNET - ${client.getSlot() ? `Slot ${client.getSlot()}` : 'Connected'} `,
+                border: { type: 'line' },
+                style: { border: { fg: 'yellow' }, bg: 'black' },
+                persistenceKey: 'grandmaster.tnet.external.frame',
+            });
+            const chatArea = (0, dockable_1.createDockable)({
+                parent: gameBox,
+                top: 0,
+                left: 0,
+                width: chatWidth,
+                height: sidePanelHeight,
+                label: client.getSlot() ? ' Partyline Chat ' : ' TSpec Chat ',
+                border: { type: 'line' },
+                style: { border: { fg: 'cyan' }, bg: 'black' },
+                scrollable: true,
+                alwaysScroll: true,
+                mouse: true,
+                persistenceKey: 'grandmaster.tnet.external.chat',
+            });
+            const rightPanel = (0, blessed_helpers_1.createBox)({
+                parent: gameBox,
+                top: 0,
+                right: 0,
+                width: 26,
+                height: sidePanelHeight,
+                style: { bg: 'black' },
+            });
+            const playerList = (0, dockable_1.createDockable)({
+                parent: rightPanel,
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: 11,
+                label: ' Players ',
+                border: { type: 'line' },
+                style: { border: { fg: 'green' }, bg: 'black' },
+                persistenceKey: 'grandmaster.tnet.external.players',
+            });
+            const spectatorList = (0, dockable_1.createDockable)({
+                parent: rightPanel,
+                top: 11,
+                left: 0,
+                width: '100%',
+                height: `100%-11`,
+                label: ' Spectators ',
+                border: { type: 'line' },
+                style: { border: { fg: 'magenta' }, bg: 'black' },
+                persistenceKey: 'grandmaster.tnet.external.spectators',
+            });
+            const footer = (0, dockable_1.createDockable)({
+                parent: gameBox,
+                bottom: 0,
+                left: 0,
+                width: '100%',
+                height: footerHeight,
+                border: { type: 'line' },
+                style: { border: { fg: 'gray' }, bg: 'black' },
+                persistenceKey: 'grandmaster.tnet.external.footer',
+            });
+            (0, blessed_helpers_1.createBox)({
+                parent: footer,
+                top: 0,
+                left: 1,
+                width: '100%-2',
+                height: 1,
+                content: '{bold}Commands:{/bold} /team <name> | /me <action> | /public | /private | ESC to disconnect',
+            });
+            const footerStatus = (0, blessed_helpers_1.createBox)({
+                parent: footer,
+                top: 1,
+                left: 1,
+                width: '100%-2',
+                height: 1,
+            });
+            const chatInput = createTextbox({
+                parent: gameBox,
+                bottom: footerHeight,
+                left: 0,
+                width: chatWidth,
+                height: inputHeight,
+                border: { type: 'line' },
+                style: {
+                    border: { fg: 'white' },
+                    focus: { fg: 'cyan' },
+                    bg: 'black',
+                },
+                inputOnFocus: true,
+                mouse: true,
+            });
+            return {
+                gameBox,
+                chatArea,
+                playerList,
+                spectatorList,
+                footerStatus,
+                chatInput,
+                destroy: () => gameBox.destroy(),
+            };
+        };
+        let lobbyUi = createLobbyUi();
+        const updateFooterStatus = () => {
+            if (!lobbyUi)
+                return;
+            const modeLabel = client.getSlot() ? 'Player' : 'Spectator';
+            const chatMode = spectatorPublic ? 'Public' : 'Private';
+            const chatHint = client.getSlot() ? 'Partyline' : `TSpec ${chatMode}`;
+            lobbyUi.footerStatus.setContent(`{gray-fg}Mode:{/gray-fg} ${modeLabel}  {gray-fg}Chat:{/gray-fg} ${chatHint}`);
+            this.screen.render();
+        };
+        const updatePlayerList = () => {
+            if (!lobbyUi)
+                return;
+            const players = client.getPlayers();
+            let content = '';
+            for (let slot = 1; slot <= 6; slot++) {
+                const player = players.find(p => p.slot === slot);
+                if (player) {
+                    const alive = player.alive ? '{green-fg}[OK]{/green-fg}' : '{red-fg}[OUT]{/red-fg}';
+                    const team = player.team ? `{gray-fg}(${player.team}){/gray-fg}` : '';
+                    content += `${slot}. {white-fg}${player.name}{/white-fg} ${alive} ${team}\n`;
+                }
+                else {
+                    content += `${slot}. {gray-fg}(empty){/gray-fg}\n`;
+                }
+            }
+            lobbyUi.playerList.setContent(content.trim());
+            this.screen.render();
+        };
+        const updateSpectatorList = () => {
+            if (!lobbyUi)
+                return;
+            const spectators = client.getSpectators();
+            if (spectators.length === 0) {
+                lobbyUi.spectatorList.setContent('{gray-fg}(none){/gray-fg}');
+            }
+            else {
+                lobbyUi.spectatorList.setContent(spectators.join('\n'));
+            }
+            this.screen.render();
+        };
+        const addChatMessage = (msg) => {
+            if (!lobbyUi)
+                return;
+            const current = lobbyUi.chatArea.getContent();
+            const lines = current.split('\n').slice(-50);
+            lines.push(msg);
+            lobbyUi.chatArea.setContent(lines.join('\n'));
+            lobbyUi.chatArea.setScrollPerc(100);
+            this.screen.render();
+        };
+        const refreshOpponents = () => {
+            if (!gameScreen)
+                return;
+            const mySlot = client.getSlot();
+            const players = client.getPlayers().filter(p => p.slot !== mySlot);
+            const opponents = players.map(player => {
+                const board = externalAdapter.getBoardForSlot(player.slot) || (0, tetrinet_board_1.createTetriNetBoard)(12, 22);
+                return {
+                    id: player.name || `slot-${player.slot}`,
+                    name: player.name || `Slot ${player.slot}`,
+                    board,
+                    level: player.level,
+                    alive: player.alive,
+                    hasImmunity: false,
+                };
+            });
+            gameScreen.updateOpponents(opponents);
+        };
+        const registerLobbyEscape = (resolve) => {
+            lobbyEscapeHandler = () => {
+                client.disconnect();
+                resolve();
+            };
+            this.screen.key(['escape'], lobbyEscapeHandler);
+        };
+        const unregisterLobbyEscape = () => {
+            if (lobbyEscapeHandler) {
+                this.screen.unkey(['escape'], lobbyEscapeHandler);
+                lobbyEscapeHandler = null;
+            }
+        };
+        const setupLobbyInput = () => {
+            const ui = lobbyUi;
+            if (!ui)
+                return;
+            ui.chatInput.on('submit', (value) => {
+                const text = value?.trim();
+                if (!text) {
+                    ui.chatInput.clearValue();
+                    ui.chatInput.focus();
+                    return;
+                }
+                if (text === '/public') {
+                    spectatorPublic = true;
+                    updateFooterStatus();
+                }
+                else if (text === '/private') {
+                    spectatorPublic = false;
+                    updateFooterStatus();
+                }
+                else if (text.startsWith('/team ')) {
+                    client.setTeam(text.substring(6).trim());
+                }
+                else if (text.startsWith('/me ')) {
+                    client.sendAction(text.substring(4).trim());
+                }
+                else if (text === '/start') {
+                    client.sendStartGame(true);
+                }
+                else if (text === '/stop') {
+                    client.sendStartGame(false);
+                }
+                else if (text === '/pause') {
+                    client.sendPause(true);
+                }
+                else if (text === '/resume') {
+                    client.sendPause(false);
+                }
+                else if (text.startsWith('/version')) {
+                    client.sendVersion('GRANDMASTER 1.0');
+                }
+                else {
+                    if (!client.getSlot() && spectatorPublic && !text.startsWith('//')) {
+                        client.sendChat(`//${text}`);
+                    }
+                    else {
+                        client.sendChat(text);
+                    }
+                    if (client.getSlot()) {
+                        const name = this.session.user?.username || this.state.playerName;
+                        addChatMessage(`<${name}> ${text}`);
+                    }
+                }
+                ui.chatInput.clearValue();
+                ui.chatInput.focus();
+                this.screen.render();
+            });
+            ui.chatInput.focus();
+            this.screen.render();
+        };
+        updatePlayerList();
+        updateSpectatorList();
+        updateFooterStatus();
+        setupLobbyInput();
+        externalAdapter.onUpdate(() => refreshOpponents());
+        client.drainBacklog();
+        client.on('player:joined', (player) => {
+            addChatMessage(`{green-fg}*** ${player.name} joined (slot ${player.slot}){/green-fg}`);
+            updatePlayerList();
+            refreshOpponents();
+        });
+        client.on('player:left', (data) => {
+            addChatMessage(`{red-fg}*** Player left slot ${data.slot}{/red-fg}`);
+            updatePlayerList();
+            refreshOpponents();
+        });
+        client.on('player:team', (data) => {
+            addChatMessage(`{cyan-fg}*** Slot ${data.slot} joined team: ${data.team}{/cyan-fg}`);
+            updatePlayerList();
+        });
+        client.on('chat', (data) => {
+            if (data.isAction) {
+                addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+            }
+            else if (data.isGameMessage) {
+                addChatMessage(`{yellow-fg}[GAME] ${data.text}{/yellow-fg}`);
+            }
+            else {
+                addChatMessage(`<${data.name}> ${data.text}`);
+            }
+        });
+        client.on('spectator:list', () => {
+            updateSpectatorList();
+        });
+        client.on('spectator:joined', (name) => {
+            addChatMessage(`{magenta-fg}*** ${name} is spectating{/magenta-fg}`);
+            updateSpectatorList();
+        });
+        client.on('spectator:left', (name) => {
+            addChatMessage(`{magenta-fg}*** ${name} stopped spectating{/magenta-fg}`);
+            updateSpectatorList();
+        });
+        client.on('spectator:chat', (data) => {
+            if (data.isAction) {
+                addChatMessage(`{magenta-fg}* ${data.name} ${data.text}{/magenta-fg}`);
+            }
+            else {
+                addChatMessage(`[SPEC] <${data.name}> ${data.text}`);
+            }
+        });
+        const handleGameStart = async (data) => {
+            if (gameScreen)
+                return;
+            addChatMessage(data.inProgress
+                ? `{yellow-fg}*** Game is already in progress{/yellow-fg}`
+                : `{bold}{green-fg}*** GAME STARTING! ***{/green-fg}{/bold}`);
+            if (lobbyUi) {
+                lobbyUi.destroy();
+                lobbyUi = null;
+            }
+            unregisterLobbyEscape();
+            this.inputHandler.setEnabled(true);
+            gameEngine = new tetrinet_engine_1.TetriNetEngine(this.state.settings, data.options || {});
+            gameScreen = new tetrinet_screen_1.TetriNetScreen({
+                screen: this.screen,
+                engine: gameEngine,
+                inputHandler: this.inputHandler,
+                sounds: this.sounds,
+                state: this.state,
+                network: externalAdapter,
+                playerName: this.state.playerName,
+            });
+            const unsubSpecial = gameEngine.onSpecialUsed((special, targetId) => {
+                const targetSlot = targetId ? externalAdapter.getSlotForPlayerId(targetId) : client.getSlot();
+                if (targetSlot) {
+                    client.sendSpecial(targetSlot, special);
+                }
+            });
+            const unsubLines = gameEngine.onLinesAdded((count) => {
+                if (count === 1 || count === 2 || count === 4) {
+                    client.sendRaw(`sb 0 cs${count} ${client.getSlot()}`);
+                }
+            });
+            const unsubOver = gameEngine.onGameOver(() => {
+                client.sendPlayerLost();
+            });
+            refreshOpponents();
+            await gameScreen.run();
+            unsubSpecial();
+            unsubLines();
+            unsubOver();
+            gameScreen = null;
+            gameEngine = null;
+            this.inputHandler.setEnabled(false);
+            lobbyUi = createLobbyUi();
+            updatePlayerList();
+            setupLobbyInput();
+            this.screen.render();
+        };
+        client.on('game:start', (data) => {
+            void handleGameStart(data);
+        });
+        client.on('game:end', () => {
+            addChatMessage(`{bold}{yellow-fg}*** GAME OVER ***{/yellow-fg}{/bold}`);
+            updatePlayerList();
+        });
+        client.on('player:lost', (data) => {
+            addChatMessage(`{red-fg}*** Slot ${data.slot} topped out!{/red-fg}`);
+            updatePlayerList();
+            refreshOpponents();
+        });
+        client.on('special:used', (data) => {
+            if (!gameEngine)
+                return;
+            const mySlot = client.getSlot();
+            if (!mySlot)
+                return;
+            const targetSlot = data.targetSlot ?? 0;
+            if (data.classicLines && (targetSlot === 0 || targetSlot === mySlot)) {
+                gameEngine.addGarbage(data.classicLines, 'classic');
+                return;
+            }
+            if (targetSlot === 0 || targetSlot === mySlot) {
+                gameEngine.applyIncomingSpecial(data.special, `slot-${data.senderSlot}`);
+            }
+        });
+        client.on('disconnected', () => {
+            addChatMessage(`{red-fg}*** Disconnected from server{/red-fg}`);
+        });
+        client.on('error', (error) => {
+            addChatMessage(`{red-fg}*** Error: ${error.message}{/red-fg}`);
+        });
+        await new Promise((resolve) => {
+            registerLobbyEscape(resolve);
+        });
+        if (lobbyUi) {
+            lobbyUi.destroy();
+            lobbyUi = null;
+        }
+        unregisterLobbyEscape();
+        this.inputHandler.setEnabled(true);
+        if (this.session.bbs?.enableGameMode) {
+            this.session.bbs.enableGameMode();
+            console.log('[GRANDMASTER] Game mode re-enabled after TetriNET partyline');
+        }
+    }
+    /**
+     * Show CPU Battle mode (offline versus with bots)
+     */
+    async showCpuBattle() {
+        this.currentScreen = 'lobby';
+        // Show difficulty selection
+        const difficultyPanel = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 15,
+            border: { type: 'line' },
+            label: ' Select Bot Difficulty ',
+            style: { border: { fg: 'magenta' } },
+            persistenceKey: 'grandmaster.app.bot-difficulty',
+        });
+        const difficultyBox = (0, blessed_helpers_1.createList)({
+            parent: difficultyPanel,
+            top: 1,
+            left: 1,
+            width: 48,
+            height: 13,
+            style: {
+                selected: { bg: 'blue', fg: 'white' },
+            },
+            items: [
+                '1 - Beginner (Easy warm-up)',
+                '3 - Amateur (Casual play)',
+                '5 - Skilled (Default)',
+                '7 - Expert (Challenging)',
+                '9 - Grandmaster (Extreme)',
+                '10 - God (Nearly Impossible)',
+                '',
+                'Back to Menu',
+            ],
+            keys: true,
+            vi: true,
+            mouse: true,
+        });
+        difficultyBox.focus();
+        this.screen.render();
+        const selection = await new Promise((resolve) => {
+            difficultyBox.on('select', (_item, index) => {
+                resolve(index);
+            });
+            this.screen.key(['escape'], () => {
+                if (this.isModalOpen())
+                    return;
+                resolve(7); // Back
+            });
+        });
+        difficultyBox.destroy();
+        difficultyPanel.destroy();
+        if (selection === 6 || selection === 7) {
+            return; // Back to menu
+        }
+        // Map selection to difficulty
+        const difficulties = [1, 3, 5, 7, 9, 10];
+        const botDifficulty = difficulties[selection];
+        // Start CPU battle with selected difficulty
+        await this.startCpuBattle(botDifficulty);
+    }
+    /**
+     * Start versus game
+     */
+    async startVersusGame(mode) {
+        if (!this.network)
+            return;
+        this.currentScreen = 'game';
+        this.state.currentMode = 'versus';
+        // Disable mouse control during gameplay
+        this.screen.program.disableMouse();
+        // Create attack manager for multiplayer
+        this.attackManager = new attack_system_1.AttackManager();
+        // Create game engine with attack manager
+        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+        // Create versus screen
+        const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, this.network, this.attackManager);
+        // Run game loop
+        await versusScreen.run();
+        // Update stats after game
+        await this.updateStats();
+        // Re-enable mouse control for menus
+        this.screen.program.enableMouse();
+        // Clean up
+        versusScreen.cleanup();
+        this.gameEngine = null;
+        this.attackManager = null;
+        this.state.currentMode = null;
+    }
+    /**
+     * Start CPU Battle (local versus with bots)
+     */
+    async startCpuBattle(botDifficulty) {
+        this.currentScreen = 'game';
+        this.state.currentMode = 'versus';
+        // Disable mouse control during gameplay
+        this.screen.program.disableMouse();
+        // Show loading message
+        const loadingBox = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 7,
+            border: { type: 'line' },
+            style: { border: { fg: 'cyan' } },
+            content: `{bold}Initializing CPU Battle{/bold}\n\n` +
+                `{gray-fg}Opponent Difficulty: ${botDifficulty}/10{/gray-fg}\n` +
+                `{gray-fg}Loading AI...{/gray-fg}`,
+            persistenceKey: 'grandmaster.app.cpu-loading',
+        });
+        this.screen.render();
+        await this.sleep(800);
+        loadingBox.destroy();
+        // Create attack manager for bot battles
+        this.attackManager = new attack_system_1.AttackManager();
+        // Create game engine with attack manager
+        this.gameEngine = new game_1.GameEngine('versus', this.state.settings, this.sounds, this.attackManager);
+        // Create versus screen with bot support
+        // Note: We pass null for network since this is offline mode
+        // The versus screen will need to be updated to support bots
+        const versusScreen = new versus_screen_1.VersusScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, null, // No network for CPU battle
+        this.attackManager, botDifficulty // Pass bot difficulty for AI
+        );
+        // Run game loop
+        await versusScreen.run();
+        // Update stats after game
+        await this.updateStats();
+        // Re-enable mouse control for menus
+        this.screen.program.enableMouse();
+        // Clean up
+        versusScreen.cleanup();
+        this.gameEngine = null;
+        this.attackManager = null;
+        this.state.currentMode = null;
+    }
+    /**
+     * Show settings screen
+     */
+    async showSettings() {
+        this.currentScreen = 'settings';
+        const settingsScreen = new settings_screen_1.SettingsScreen(this.screen, this.state, this.sounds);
+        await settingsScreen.show();
+        // Update input handler with any changed key bindings
+        this.inputHandler.updateConfig(this.state.settings.keyBindings);
+    }
+    /**
+     * Show statistics/leaderboard screen
+     */
+    async showStats() {
+        this.currentScreen = 'stats';
+        const leaderboardScreen = new leaderboard_screen_1.LeaderboardScreen(this.screen, this.highScores, this.sounds, this.state.playerName);
+        await leaderboardScreen.show();
+    }
+    /**
+     * Show player manual
+     */
+    async showManual() {
+        return new Promise((resolve) => {
+            (0, manual_1.showManual)(this.screen, () => {
+                this.screen.render();
+                resolve();
+            });
+        });
+    }
+    /**
+     * Update statistics after game
+     */
+    async updateStats() {
+        if (!this.gameEngine)
+            return;
+        const result = this.gameEngine.getResult();
+        const stats = this.state.stats;
+        stats.gamesPlayed++;
+        stats.totalLines += result.linesCleared;
+        stats.totalScore += result.score;
+        stats.tetrisCount += result.tetrisCount;
+        stats.tSpinCount += result.tSpinCount;
+        stats.perfectClears += result.perfectClears;
+        if (result.combo > stats.highestCombo) {
+            stats.highestCombo = result.combo;
+        }
+        if (result.level > stats.bestLevel) {
+            stats.bestLevel = result.level;
+        }
+        // Compare grades
+        if (this.compareGrades(result.grade, stats.bestGrade) > 0) {
+            stats.bestGrade = result.grade;
+        }
+        // Sprint time
+        if (this.state.currentMode === 'sprint' && result.time) {
+            if (!stats.fastestSprint || result.time < stats.fastestSprint) {
+                stats.fastestSprint = result.time;
+            }
+        }
+        // Save high score
+        const { isHighScore, rank } = this.highScores.addScore(this.state.playerName, result);
+        // Show high score notification if achieved
+        if (isHighScore && rank !== null) {
+            await this.showHighScoreNotification(rank, result.score);
+        }
+    }
+    /**
+     * Submit score to multiplayer server
+     */
+    async submitScore(userId, username) {
+        if (!this.gameEngine)
+            return;
+        // Get game result
+        const result = this.gameEngine.getResult();
+        // Finalize replay
+        const replay = this.gameEngine.finalizeRecording();
+        // Submit to server
+        try {
+            const submission = await this.multiplayerServer.submitScore(userId, username, result, replay || undefined);
+            if (submission.accepted) {
+                // Show submission success (optional)
+                // Could show rank, personal best, etc.
+                if (submission.isPersonalBest) {
+                    // New personal best!
+                }
+                if (submission.isTopTen) {
+                    // Made it to top 10!
+                }
+            }
+            else {
+                // Submission rejected (validation failed, anti-cheat, etc.)
+                console.warn('Score submission rejected:', submission.reason);
+            }
+        }
+        catch (error) {
+            // Failed to submit (network error, server down, etc.)
+            console.error('Failed to submit score:', error);
+            // Don't throw - game should continue even if submission fails
+        }
+    }
+    /**
+     * Show high score notification
+     */
+    async showHighScoreNotification(rank, score) {
+        const rankSuffix = (r) => {
+            if (r === 1)
+                return 'st';
+            if (r === 2)
+                return 'nd';
+            if (r === 3)
+                return 'rd';
+            return 'th';
+        };
+        const notificationBox = (0, dockable_1.createDockable)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 10,
+            border: { type: 'line' },
+            style: { border: { fg: 'yellow' } },
+            content: `{bold}{yellow-fg}NEW HIGH SCORE!{/yellow-fg}{/bold}\n\n` +
+                `{white-fg}Rank: {bold}${rank}${rankSuffix(rank)}{/bold}{/white-fg}\n` +
+                `{white-fg}Score: {bold}${score.toLocaleString()}{/bold}{/white-fg}\n\n` +
+                `{gray-fg}Press any key to continue...{/gray-fg}`,
+            persistenceKey: 'grandmaster.app.high-score',
+        });
+        this.screen.render();
+        await this.waitForKey();
+        notificationBox.destroy();
+    }
+    /**
+     * Compare two grades (-1, 0, 1)
+     */
+    compareGrades(a, b) {
+        const GRADE_ORDER = [
+            '9', '8', '7', '6', '5', '4', '3', '2', '1',
+            'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9',
+            'S10', 'S11', 'S12', 'S13',
+            'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9',
+            'M', 'MK', 'MV', 'MO', 'GM',
+        ];
+        return GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b);
+    }
+    /**
+     * Parse mode string to GameMode
+     */
+    parseMode(mode) {
+        const MODE_MAP = {
+            'MASTER': 'master',
+            'DEATH': 'death',
+            'SHIRASE': 'death',
+            'SPRINT': 'sprint',
+            'MARATHON': 'marathon',
+            'ULTRA': 'ultra',
+            'ZEN': 'zen',
+            'VERSUS': 'versus',
+            'TRAINING': 'training',
+        };
+        return MODE_MAP[mode] || null;
+    }
+    /**
+     * Quit the application
+     */
+    async quit() {
+        // Clear screen buffer before exit to prevent ghosting in next door
+        // This ensures tetrinet lobby, menus, etc. don't leak into BBS or next GMASTER session
+        this.screen.clearRegion(0, this.screen.width, 0, this.screen.height);
+        this.screen.alloc();
+        this.screen.render();
+        // Wait for clear to propagate (critical for modem speeds)
+        await this.sleep(200);
+        // Disable door input (restores BBS state)
+        // DoorInputManager handles all cleanup in correct order
+        this.inputManager.disable();
+        // Disconnect from network to prevent socket leaks
+        if (this.network) {
+            this.network.disconnect();
+            console.log('[GRANDMASTER] Network disconnected');
+        }
+        // Destroy screen (this will cleanup blessed state)
+        this.screen.destroy();
+    }
+    /**
+     * Wait for any keypress
+     */
+    waitForKey() {
+        return new Promise((resolve) => {
+            const handler = () => {
+                this.screen.removeListener('keypress', handler);
+                resolve();
+            };
+            this.screen.on('keypress', handler);
+        });
+    }
+    /**
+     * Sleep helper
+     */
+    sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+}
+exports.GrandmasterApp = GrandmasterApp;
+/**
+ * Create and run the GRANDMASTER application
+ */
+async function createApp(session, initialMode) {
+    const app = new GrandmasterApp(session);
+    await app.run(initialMode);
+}
+//# sourceMappingURL=app.js.map

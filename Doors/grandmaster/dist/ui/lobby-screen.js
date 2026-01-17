@@ -1,0 +1,211 @@
+"use strict";
+/**
+ * Lobby Screen
+ *
+ * Multiplayer lobby using the SDK's generic MultiplayerLobby widget
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LobbyScreen = void 0;
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_2 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const bot_lobby_1 = require("../network/bot-lobby");
+/**
+ * Adapter that wraps GrandmasterNetworkManager for the SDK MultiplayerLobby
+ */
+class GrandmasterLobbyAdapter extends blessed_2.EventEmitter {
+    constructor(network) {
+        super();
+        this.botDifficulty = 5;
+        this.network = network;
+        this.setupEventForwarding();
+    }
+    setupEventForwarding() {
+        // Forward network events to lobby adapter events
+        this.network.on('player:joined', (player) => {
+            this.emit('player:joined', this.convertPlayer(player));
+        });
+        this.network.on('player:left', (playerId) => {
+            this.emit('player:left', playerId);
+        });
+        this.network.on('player:ready', (data) => {
+            this.emit('player:ready', data);
+        });
+        this.network.on('match:starting', () => {
+            this.emit('match:starting');
+        });
+        this.network.on('match:started', () => {
+            this.emit('match:started');
+        });
+    }
+    convertPlayer(player) {
+        return {
+            id: player.id,
+            name: player.name,
+            ready: player.ready,
+            isBot: player.isBot,
+            botDifficulty: player.botDifficulty,
+            extra: {
+                rank: player.rank,
+                rating: player.rating,
+            },
+        };
+    }
+    getState() {
+        const matchState = this.network.getMatchState();
+        if (!matchState)
+            return null;
+        return {
+            lobbyId: matchState.matchId,
+            mode: matchState.mode,
+            players: matchState.players.map(p => this.convertPlayer(p)),
+            status: matchState.status === 'countdown' ? 'starting' : matchState.status === 'playing' ? 'in_progress' : 'waiting',
+            hostId: matchState.players[0]?.id,
+        };
+    }
+    async joinQueue(mode) {
+        await this.network.joinQueue(mode);
+    }
+    async createLobby(mode, isPrivate) {
+        return await this.network.createLobby(mode, isPrivate);
+    }
+    async joinLobby(lobbyId) {
+        await this.network.joinLobby(lobbyId);
+    }
+    async leaveLobby() {
+        await this.network.leaveQueue();
+    }
+    async setReady(ready) {
+        await this.network.setReady(ready);
+    }
+    async startMatch() {
+        await this.network.startMatch();
+    }
+    fillWithBots(count, difficulty) {
+        const matchState = this.network.getMatchState();
+        if (!matchState)
+            return;
+        const diff = (difficulty ?? this.botDifficulty);
+        matchState.players = (0, bot_lobby_1.fillLobbyWithBots)(matchState.players, count, diff);
+        this.emit('state:updated');
+    }
+    removeBots() {
+        const matchState = this.network.getMatchState();
+        if (!matchState)
+            return;
+        matchState.players = (0, bot_lobby_1.removeBots)(matchState.players);
+        this.emit('state:updated');
+    }
+}
+/**
+ * Lobby Screen
+ *
+ * Thin wrapper around SDK's MultiplayerLobby widget
+ */
+class LobbyScreen {
+    constructor(screen, state, sounds, network, localPlayerId) {
+        this.lobby = null;
+        this.screen = screen;
+        this.state = state;
+        this.sounds = sounds;
+        this.network = network;
+        this.localPlayerId = localPlayerId;
+    }
+    /**
+     * Show lobby and wait for result
+     */
+    async show(mode, selectedMode) {
+        // Enable mouse control for lobby interaction
+        this.screen.program.enableMouse();
+        // Create adapter
+        const adapter = new GrandmasterLobbyAdapter(this.network);
+        // Create lobby widget
+        this.lobby = new blessed_1.MultiplayerLobby({
+            parent: this.screen,
+            adapter,
+            localPlayerId: this.localPlayerId,
+            title: 'GRANDMASTER LOBBY',
+            features: {
+                bots: true,
+                settingsEditor: true,
+            },
+            gameSettings: [
+                {
+                    key: 'startingLevel',
+                    label: 'Start Level',
+                    type: 'number',
+                    min: 1,
+                    max: 20,
+                    default: 1,
+                    hostOnly: true,
+                },
+                {
+                    key: 'rule',
+                    label: 'Rule Set',
+                    type: 'select',
+                    options: [
+                        { value: 'classic', label: 'Classic' },
+                        { value: 'standard', label: 'Standard' },
+                        { value: 'extended', label: 'Extended' },
+                    ],
+                    default: 'standard',
+                    hostOnly: true,
+                },
+                {
+                    key: 'suddenDeath',
+                    label: 'Sudden Death',
+                    type: 'number',
+                    min: 0,
+                    max: 15,
+                    default: 2,
+                    description: 'Minutes until sudden death (0=off)',
+                    hostOnly: true,
+                },
+                {
+                    key: 'garbage',
+                    label: 'Garbage Lines',
+                    type: 'checkbox',
+                    default: true,
+                    hostOnly: true,
+                },
+            ],
+            defaultBotDifficulty: 5,
+            modes: {
+                versus_1v1: { name: '1v1 Versus', maxPlayers: 2, minPlayers: 2 },
+                team_2v2: { name: '2v2 Team Battle', maxPlayers: 4, minPlayers: 4 },
+                battle_royale: { name: 'Battle Royale (99)', maxPlayers: 99, minPlayers: 2 },
+            },
+            onSound: (sound) => {
+                // Map SDK sound names to GRANDMASTER sound effects
+                const soundMap = {
+                    select: 'menu_select',
+                    error: 'error',
+                    countdown: 'countdown',
+                    join: 'menu_select',
+                    leave: 'menu_select',
+                    chat: 'menu_select',
+                };
+                const sfx = soundMap[sound];
+                if (sfx) {
+                    this.sounds.playSfx(sfx);
+                }
+            },
+            formatPlayer: (player, isLocal, isHost) => {
+                const readyStatus = player.ready
+                    ? '{green-fg}[READY]{/green-fg}'
+                    : '{gray-fg}[NOT READY]{/gray-fg}';
+                const hostBadge = isHost ? '{yellow-fg}[HOST]{/yellow-fg} ' : '';
+                const youBadge = isLocal ? '{cyan-fg}(You){/cyan-fg} ' : '';
+                const botBadge = player.isBot
+                    ? `{magenta-fg}[CPU-${player.botDifficulty}]{/magenta-fg} `
+                    : '';
+                return `${hostBadge}${youBadge}${botBadge}{white-fg}${player.name}{/white-fg} ${readyStatus}`;
+            },
+        });
+        // Convert lobby mode to entry mode
+        const entryMode = mode === 'matchmaking' ? 'matchmaking' : 'custom';
+        // Show and return result
+        return await this.lobby.show(entryMode, selectedMode || 'versus_1v1');
+    }
+}
+exports.LobbyScreen = LobbyScreen;
+//# sourceMappingURL=lobby-screen.js.map
