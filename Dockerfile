@@ -144,9 +144,10 @@ WORKDIR /app
 # Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
-# Install production deps and rebuild better-sqlite3 for Linux
+# Install production deps and rebuild native modules for Linux
 RUN npm ci --only=production --ignore-scripts && \
     npm rebuild better-sqlite3 && \
+    npm rebuild deasync && \
     npm cache clean --force
 
 # Copy all built artifacts (frontend assets)
