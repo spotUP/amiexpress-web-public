@@ -19,6 +19,7 @@ import * as amigafs from '../utils/amigafs';
 import { displayScreen, doPause } from './screen.handler';
 import { displayConferenceBulletins, joinConference } from './operations/conference.handler';
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
+import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
@@ -613,16 +614,36 @@ console.error('[handleCommand] Error running queued screen commands:', error);
       }
 
       // express.e:28573-28574 - After CONF_BULL, auto-rejoin with user stats
+      // express.e: joinConf(loggedOnUser.confRJoin,loggedOnUser.msgBaseRJoin,FALSE,FORCE_MAILSCAN_SKIP)
       if (session.subState === LoggedOnSubState.AUTO_REJOIN) {
         displayFlowLog('AUTO_REJOIN: calling joinConference with auto=true');
-        const confId = session.currentConf || session.user?.confRJoin || 1;
-        const msgBaseId = session.currentMsgBase || session.user?.msgBaseRJoin || 1;
+        const confId = session.user?.confRJoin || session.currentConf || 1;
+        // express.e:4995 - IF (msgBaseNum<1) OR (msgBaseNum>getConfMsgBaseCount(conf)) THEN msgBaseNum:=1
+        // msgBaseRJoin is a RELATIVE number (1 = first message base), not a database ID
+        const confMsgBases = getMessageBases().filter((mb: any) => mb.conferenceId === confId);
+        // Use user's stored msgBaseRJoin (relative number per express.e:5136)
+        let msgBaseNum = session.user?.msgBaseRJoin || session.msgBaseRJoin || 1;
+        // Validate range like express.e:4995 does
+        if (msgBaseNum < 1 || msgBaseNum > confMsgBases.length) {
+          msgBaseNum = 1;
+        }
+        // Convert relative number to database ID for joinConference call
+        const msgBaseId = confMsgBases.length > 0 ? confMsgBases[msgBaseNum - 1]?.id || confMsgBases[0].id : 1;
+        displayFlowLog(`AUTO_REJOIN: confId=${confId}, msgBaseNum=${msgBaseNum}, msgBaseId=${msgBaseId}`);
 
         // express.e:28574 - joinConf(loggedOnUser.confRJoin, loggedOnUser.msgBaseRJoin, FALSE, FORCE_MAILSCAN_SKIP)
         // The auto=true parameter triggers S command and Auto-ReJoined message display
-        await joinConference(socket, session, confId, msgBaseId, false, true);
+        const joinSuccess = await joinConference(socket, session, confId, msgBaseId, false, true);
 
         session.blockOLM = false;
+
+        // CRITICAL: If joinConference fails, skip to DISPLAY_MENU to avoid infinite loop
+        if (!joinSuccess) {
+          displayFlowLog('AUTO_REJOIN: joinConference failed, skipping to DISPLAY_MENU');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          continue;
+        }
+
         // joinConference sets subState to DISPLAY_MENU and menuPause to true
         if (pauseDisplayFlow(socket, session)) {
           displayFlowLog('pause after auto-rejoin');
@@ -799,14 +820,19 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   // NOTE: Door input routing is handled in socket-handlers.ts (checks doorInputHandler)
   // This function should only be called for non-door input
 
+console.log(`[handleCommand] ENTRY: data="${data}" subState=${session.subState} paginatedScreen=${!!session.paginatedScreen} inDoorManager=${session.inDoorManager}`);
+
   // If user is responding to a paginated screen prompt, handle that first
   if (session.paginatedScreen) {
+console.log(`[handleCommand] Has paginatedScreen - calling handlePaginatedScreenInput`);
     const { handlePaginatedScreenInput } = require('./screen.handler');
     try {
       const handled = await handlePaginatedScreenInput(socket, session, data);
+console.log(`[handleCommand] handlePaginatedScreenInput returned: handled=${handled} paginatedScreen=${!!session.paginatedScreen}`);
       if (handled) {
         // If pagination finished and we're still in a display-flow state, resume it
         if (!session.paginatedScreen && isDisplayFlowState(session.subState)) {
+console.log(`[handleCommand] Pagination finished, resuming display flow (subState=${session.subState})`);
           await advanceDisplayFlow(socket, session);
         }
         return;
@@ -2804,62 +2830,11 @@ console.log(' In RL confirmation state');
     return;
   }
 
-  // Handle CM (Conference Maintenance) menu input
-  if (session.subState === LoggedOnSubState.CM_DISPLAY_MENU) {
-console.log('  In CM menu state');
-    await handleCMInput(socket, session, data.trim());
-    return;
-  }
+  // CM (Conference Maintenance) states are handled by state-router
+  // See: command-handler/conference-maint-states.ts
 
-  // Handle CM numeric inputs (B and C options)
-  if (session.subState === LoggedOnSubState.CM_INPUT_HIGH_MSG) {
-console.log('  In CM high message input state');
-    await handleCMNumericInput(socket, session, data.trim(), 'HIGH_MSG');
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.CM_INPUT_LOW_MSG) {
-console.log('  In CM low message input state');
-    await handleCMNumericInput(socket, session, data.trim(), 'LOW_MSG');
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.CM_INPUT_RATIO) {
-console.log('  In CM ratio input state');
-    await handleCMNumericInput(socket, session, data.trim(), 'RATIO');
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.CM_INPUT_RATIO_TYPE) {
-console.log('  In CM ratio type input state');
-    await handleCMNumericInput(socket, session, data.trim(), 'RATIO_TYPE');
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.CM_INPUT_CAPACITY) {
-console.log('  In CM capacity input state');
-    await handleCMNumericInput(socket, session, data.trim(), 'CAPACITY');
-    return;
-  }
-
-  // Handle voting booth states
-  if (session.subState === LoggedOnSubState.VO_TOPIC_SELECT) {
-console.log('  In vote topic selection state');
-    await handleVoteTopicSelect(socket, session, data.trim());
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.VO_ANSWER_INPUT) {
-console.log('  In vote answer input state');
-    await handleVoteAnswerInput(socket, session, data.trim());
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.VO_MENU_CHOICE) {
-console.log('  In vote menu choice state');
-    await handleVoteMenuChoice(socket, session, data.trim());
-    return;
-  }
+  // VO (Voting Booth) states are handled by state-router
+  // See: command-handler/voting-states.ts
 
   // Handle message posting workflow (line-based input like login system)
 console.log(' Checking if in POST_MESSAGE_SUBJECT state:', (session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT);
@@ -3007,123 +2982,8 @@ console.error('[Message] Failed to store message:', error);
     return;
   }
 
-  // FM Command (File Maintenance) Input Handlers
-  // express.e:24889-25045
-
-  if (session.subState === LoggedOnSubState.FM_YESNO_INPUT) {
-    // Y/n prompt for using flagged files
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleYesNoInput(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') {
-      // Backspace (express.e:2304-2320)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      emitText(socket, data);
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_FILENAME_INPUT) {
-    // Filename pattern input
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleFilenameInput(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') {
-      // Backspace (express.e:2304-2320)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342)
-      emitText(socket, data);
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_DIRSPAN_INPUT) {
-    // Directory span input
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleDirSpanInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_ACTION_INPUT) {
-    // D/M/V/Q action input
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleActionInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_REMOVE_FLAG_INPUT) {
-    // Remove from flagged list Y/n
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleRemoveFlagInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_CONFIRM_DELETE) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleConfirmDeleteInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.FM_MOVE_DEST_INPUT) {
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await FileMaintenanceHandler.handleMoveDestInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
+  // FM Command (File Maintenance) states are handled by state-router
+  // See: command-handler/file-maintenance-states.ts
 
   // CF Command (Conference Flags) Input Handlers
   // express.e:24672-24841
@@ -3158,256 +3018,17 @@ console.error('[Message] Failed to store message:', error);
     return;
   }
 
-  // W Command (Write User Parameters) Input Handlers
-  // express.e:25712-26092
-
-  if (session.subState === LoggedOnSubState.W_OPTION_SELECT) {
-    // Option selection (0-16 or CR to quit)
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWOptionSelectInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      emitText(socket, '\b \b');
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      emitText(socket, data);
+  // Use state router for modularized state handling
+  // This handles W_EDIT_*, FM_*, CM_*, VO_* states
+  if (isRoutedState(session.subState as LoggedOnSubState)) {
+    const routeResult = await routeStateInput(socket, session, data);
+    if (routeResult.handled && !routeResult.continueProcessing) {
+      return;
     }
-    return;
   }
 
-  if (session.subState === LoggedOnSubState.W_EDIT_NAME) {
-    // Edit username
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditNameInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_EMAIL) {
-    // Edit email
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditEmailInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_REALNAME) {
-    // Edit real name
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditRealnameInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_INTERNETNAME) {
-    // Edit internet name
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditInternetnameInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_LOCATION) {
-    // Edit location
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditLocationInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_PHONE) {
-    // Edit phone
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditPhoneInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_PASSWORD) {
-    // Edit password (first entry)
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      handleWEditPasswordInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM) {
-    // Edit password (confirmation)
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditPasswordConfirmInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_LINES) {
-    // Edit lines per screen
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditLinesInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_COMPUTER) {
-    // Edit computer type
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditComputerInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_SCREENTYPE) {
-    // Edit screen type
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditScreentypeInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_PROTOCOL) {
-    // Edit transfer protocol
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditProtocolInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_TRANSLATOR) {
-    // Edit translator
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditTranslatorInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_MODEM_SPEED) {
-    // Edit modem emulation speed (web extension)
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleWEditModemSpeedInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      emitText(socket, '\b \b');
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      emitText(socket, data);
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.W_EDIT_FONT) {
-    // Edit terminal font (web extension)
-console.log('[W_EDIT_FONT] State detected, data:', data, 'inputBuffer:', session.inputBuffer);
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-console.log('[W_EDIT_FONT] Enter pressed, calling handleWEditFontInput with:', input);
-      session.inputBuffer = '';
-      await handleWEditFontInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-      emitText(socket, '\b \b');
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      emitText(socket, data);
-    }
-    return;
-  }
+  // W Command (Write User Parameters) states are handled by state-router
+  // See: command-handler/user-edit-states.ts
 
   // Safety: if shortcuts mode is active but no shortcuts are loaded or the flag is off,
   // fall back to normal line input (prevents unwanted single-key triggering).
@@ -3712,6 +3333,23 @@ export async function processCommand(socket: any, session: BBSSession, command: 
   }
 
 console.log(`[CommandPriority] Processing command: ${command} with params: ${params}`);
+
+  // SPECIAL CASE: "J" command with numeric params should use internal handler directly
+  // This handles RETURNCOMMAND "j 2" from JoinCnf door - it means "join conference 2"
+  // NOT "run JoinCnf door again with arg 2" (which causes infinite loop/hang)
+  // express.e behavior: J with number = direct join, J without params = show door/selection
+  const trimmedParams = params.trim();
+  if (command === 'J' && trimmedParams && /^\d+(\.\d+)?$/.test(trimmedParams)) {
+console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using internal handler directly`);
+    await processBBSCommand(socket, session, command, params);
+    // After join completes, trigger display flow to show menu
+    // Clear skipNextDisplayFlowMenu flag that may have been set by previous menu display
+    session.skipNextDisplayFlowMenu = false;
+    if (isDisplayFlowState(session.subState)) {
+      await advanceDisplayFlow(socket, session);
+    }
+    return 'SUCCESS';
+  }
 
   // Try SysCommand first
   const sysResult = await runSysCommand(socket, session, command, params);
