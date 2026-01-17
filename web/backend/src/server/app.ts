@@ -21,14 +21,9 @@ import { getSystemTime } from '../utils/date-time.util';
 
 export const app = express();
 
-// Configure CORS with security restrictions
-const allowedOrigins = [
-  process.env.ALLOWED_ORIGIN,
-  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null,
-  process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : null,
-  process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3000' : null,
-  process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3001' : null,
-].filter(Boolean);
+// Configure CORS with centralized origin list (includes production domains)
+// Uses config.corsOrigins which already includes https://bbs.uprough.net
+const corsOrigins = config.get('corsOrigins') as string[];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -40,11 +35,12 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Production mode: strict origin checking
-    if (allowedOrigins.includes(origin)) {
+    // Production mode: check against configured origins
+    if (corsOrigins.includes(origin)) {
       callback(null, true);
     } else {
 console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+console.warn(`[CORS] Allowed origins:`, corsOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
