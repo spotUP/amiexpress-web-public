@@ -91,34 +91,14 @@ COPY sdk/tools/preview/frontend ./
 RUN npm ci --ignore-scripts && npm run build
 
 # ============================================================================
-# Stage 6: Build TypeScript Doors
+# Stage 6: Build TypeScript Doors (DISABLED - built at runtime or pre-built)
 # ============================================================================
+# Doors are now expected to be pre-built or built at runtime
+# This dramatically speeds up Docker builds
 FROM node:18-alpine AS doors-builder
-
 WORKDIR /app
-
-# Copy SDK (TypeScript doors depend on it)
-COPY --from=sdk-builder /app/sdk ./sdk
-
-# Install build tools
-RUN apk add --no-cache bash findutils
-
-# Copy all TypeScript doors
 COPY Doors ./Doors
-
-# Build TypeScript doors (top-level only, skip node_modules)
-RUN echo "[Build] Building TypeScript doors..." && \
-    for doordir in Doors/*/; do \
-      doorname=$(basename "$doordir"); \
-      if [ -f "${doordir}package.json" ] && [ "$doorname" != "node_modules" ]; then \
-        echo "[Build] Building door: $doorname"; \
-        cd "/app/$doordir" && \
-        (npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts 2>/dev/null) && \
-        (npm run build 2>&1 || echo "[Build] No build script for $doorname"); \
-        cd /app; \
-      fi; \
-    done && \
-    echo "[Build] TypeScript doors build complete"
+RUN echo "[Build] Doors stage - copying pre-built doors only"
 
 # ============================================================================
 # Stage 7: Build Backend
