@@ -13,6 +13,7 @@ backend/dist/
 # TypeScript build artifacts in source directories
 web/backend/src/**/*.js
 web/backend/src/**/*.d.ts
+!web/backend/src/types/*.d.ts
 web/backend/src/**/*.d.ts.map
 web/backend/src/**/*.js.map
 web/config-app/src/**/*.js
@@ -349,3 +350,26 @@ Node*/WorkDir/
 # Re-include door dist folders (after all other dist patterns)
 !Doors/*/dist/
 !Doors/*/dist/**
+
+# SDK blessed UI compiled output (source is .ts)
+sdk/engines/ui/blessed/**/*.js
+sdk/engines/ui/blessed/**/*.d.ts
+sdk/engines/ui/blessed/**/*.js.map
+sdk/engines/ui/blessed/**/*.d.ts.map
+
+# SDK compiled output (TypeScript -> JavaScript)
+sdk/src/**/*.js
+sdk/src/**/*.d.ts
+sdk/src/**/*.js.map
+sdk/src/**/*.d.ts.map
+sdk/core/**/*.js
+sdk/core/**/*.d.ts
+sdk/core/**/*.js.map
+sdk/core/**/*.d.ts.map
+
+# TypeScript Door compiled output (source is .ts)
+Doors/**/*.js
+Doors/**/*.d.ts
+Doors/**/*.js.map
+Doors/**/*.d.ts.map
+!Doors/**/dist/**
