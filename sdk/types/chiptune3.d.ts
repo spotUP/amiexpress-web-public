@@ -1,6 +1,6 @@
 /**
- * Type declarations for chiptune3
- * Tracker music player for MOD, XM, S3M, IT formats
+ * Type declarations for chiptune3 module
+ * Chiptune player for tracker music formats (MOD, XM, S3M, IT, etc.)
  */
 
 declare module 'chiptune3' {
@@ -12,37 +12,68 @@ declare module 'chiptune3' {
   }
 
   export interface ChiptuneJsPlayer {
-    setVol(volume: number): void;
-    play(buffer: ArrayBuffer): void;
+    constructor(config?: ChiptuneJsConfig);
+
+    // Playback control
+    load(input: string | ArrayBuffer): Promise<void>;
+    play(buffer?: ArrayBuffer): void;
     stop(): void;
     pause(): void;
-    unpause(): void;
     togglePause(): void;
+
+    // Volume control
+    setVol(volume: number): void;
+    getVol(): number;
+
+    // Position control
     seek(position: number): void;
-    getPosition(): number;
+    getCurrentTime(): number;
     getDuration(): number;
-    getCurrentRow(): number;
-    getCurrentPattern(): number;
-    getCurrentOrder(): number;
+
+    // Metadata
     getMetadata(): {
       title: string;
       message: string;
       type: string;
       channels: number;
       patterns: number;
-      orders: number;
       samples: number;
       instruments: number;
     };
-    onInitialized(callback: () => void): void;
-    onPlay(callback: () => void): void;
-    onStop(callback: () => void): void;
-    onEnded(callback: () => void): void;
-    onError(callback: (error: Error) => void): void;
-    onProgress(callback: (position: number, duration: number) => void): void;
+
+    // Event handlers
+    onEnded?: () => void;
+    onError?: (error: Error) => void;
+
+    // Cleanup
+    cleanup(): void;
   }
 
-  export class ChiptuneJsPlayer implements ChiptuneJsPlayer {
+  export class ChiptuneJsPlayer {
     constructor(config?: ChiptuneJsConfig);
+    load(input: string | ArrayBuffer): Promise<void>;
+    play(buffer?: ArrayBuffer): void;
+    stop(): void;
+    pause(): void;
+    togglePause(): void;
+    setVol(volume: number): void;
+    getVol(): number;
+    seek(position: number): void;
+    getCurrentTime(): number;
+    getDuration(): number;
+    getMetadata(): {
+      title: string;
+      message: string;
+      type: string;
+      channels: number;
+      patterns: number;
+      samples: number;
+      instruments: number;
+    };
+    onEnded?: () => void;
+    onError?: (error: Error) => void;
+    cleanup(): void;
   }
+
+  export default ChiptuneJsPlayer;
 }
