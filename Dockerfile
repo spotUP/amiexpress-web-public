@@ -54,15 +54,11 @@ RUN npm ci
 COPY web/frontend ./
 # Set NODE_ENV for production build
 ENV NODE_ENV=production
-# Skip prebuild script (terminal already built), just run vite build
-RUN echo "[Build] Starting frontend build with NODE_ENV=$NODE_ENV" && \
-    (npm run build --ignore-scripts || vite build) && \
-    echo "[Build] Frontend build complete. Checking dist contents:" && \
-    ls -la dist/ && \
-    echo "[Build] Assets:" && \
-    ls -la dist/assets/ && \
-    echo "[Build] Fonts:" && \
-    ls -la dist/fonts/
+# Run vite build directly (skip prebuild - terminal already built in separate stage)
+RUN echo "[Build] Starting frontend vite build" && \
+    npx vite build && \
+    echo "[Build] Frontend build complete" && \
+    ls -la dist/
 
 # ============================================================================
 # Stage 4: Build Config App (Admin UI)
