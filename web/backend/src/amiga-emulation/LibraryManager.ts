@@ -614,6 +614,18 @@ debugLog("[LibraryManager] Installing library call traps...");
     this.libraryTraps.setAmiSSLMasterLibrary(this.amisslMasterLibrary);
     this.libraryTraps.setAmiSSLLibrary(this.amisslLibrary);
 
+    // Set up callback so OpenAmiSSL() triggers vector installation
+    const libraryTrapsRef = this.libraryTraps;
+    const execLibraryRef = this.execLibrary;
+    this.amisslMasterLibrary.setOnOpenAmiSSL(() => {
+      debugLog("[LibraryManager] OpenAmiSSL called, installing amissl.library vectors...");
+      // First register amissl.library in ExecLibrary so getLibraryBase works
+      if (execLibraryRef) {
+        execLibraryRef.openLibraryHybrid("amissl.library", 0, false);
+      }
+      libraryTrapsRef.installAmiSSLVectors();
+    });
+
     // Pre-open utility.library and install vectors immediately
     // Some doors use utility.library functions without calling OpenLibrary first
 debugLog("[LibraryManager] Pre-opening utility.library and installing vectors...");

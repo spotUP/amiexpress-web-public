@@ -641,7 +641,7 @@ export async function parseMciCodes(
   sysopName: string = 'Sysop',
   location: string = 'The Internet',
   socket?: any  // When provided, execute inline (express.e outdata=NIL mode)
-): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number; inlineEmitted?: boolean }> {
+): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number; inlineEmitted?: boolean; pendingInlineContent?: string }> {
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
@@ -1099,8 +1099,42 @@ console.error('[parseMciCodes] Error getting file count:', error);
     // ~f, ~CC_, ~SS_, ~SR_ (with optional numeric prefix for ~SR_)
     const inlineMciRegex = /~([fF]|CC_[^\s|~\r\n]+|(?:SS_|2S)[^\s|~\r\n]+|\d*SR_[^\s|~\r\n]+)(?:\|{1,2})?/g;
 
+    // Regex to find ~SP codes - express.e:5455-5461
+    // ~SP followed by . (SP.), | (mciterminator), whitespace, or end of string
+    const spRegex = /~SP(?:\.|[\s|]|$)/;
+
     let lastIndex = 0;
     let match;
+
+    // Helper to emit text, checking for ~SP and handling immediate pause
+    // express.e:5455-5461 - ~SP causes immediate doPause(), then continues
+    // Returns: { emitted: boolean, foundSp: boolean, textAfterSp: string }
+    const emitTextWithSpCheck = (text: string): { emitted: boolean; foundSp: boolean; remainingContent: string } => {
+      const spMatch = text.match(spRegex);
+      if (spMatch && spMatch.index !== undefined) {
+        // Found ~SP - emit text before it, then stop
+        const textBeforeSp = text.substring(0, spMatch.index);
+        const spCodeLen = spMatch[0].length;
+        const textAfterSp = text.substring(spMatch.index + spCodeLen);
+
+        if (textBeforeSp.length > 0) {
+          let toEmit = addAnsiEscapes(textBeforeSp);
+          toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+          emitText(socket, toEmit);
+        }
+
+        // Return remaining content (text after ~SP + rest of parsed content)
+        return { emitted: textBeforeSp.length > 0, foundSp: true, remainingContent: textAfterSp };
+      } else {
+        // No ~SP - emit all text
+        if (text.length > 0) {
+          let toEmit = addAnsiEscapes(text);
+          toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+          emitText(socket, toEmit);
+        }
+        return { emitted: text.length > 0, foundSp: false, remainingContent: '' };
+      }
+    };
 
     while ((match = inlineMciRegex.exec(parsed)) !== null) {
       const fullMatch = match[0];
@@ -1109,9 +1143,27 @@ console.error('[parseMciCodes] Error getting file count:', error);
       // express.e:5793-5794 - Output text before this MCI code
       const textBefore = parsed.substring(lastIndex, match.index);
       if (textBefore.length > 0) {
-        let toEmit = addAnsiEscapes(textBefore);
-        toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-        emitText(socket, toEmit);
+        // Check for ~SP and emit text up to it (express.e:5455-5461)
+        const result = emitTextWithSpCheck(textBefore);
+        if (result.foundSp) {
+          // express.e:5455-5461 - ~SP causes immediate pause
+          hasPause = true;
+          // Store remaining content for processing after pause
+          // Remaining = text after ~SP + current MCI code + rest of parsed content
+          const remainingParsed = result.remainingContent + parsed.substring(match.index);
+          screenDebug('[MCI] Sequential: ~SP found, pausing with remaining content');
+          inlineEmitted = true;
+          // Return with pending content - caller will handle pause and continuation
+          return {
+            parsed: '',
+            commands: commandsToExecute,
+            hasPause: true,
+            slowmo: slowmoApplied,
+            slowmoCount: slowmoAppliedCount,
+            inlineEmitted: true,
+            pendingInlineContent: remainingParsed
+          };
+        }
         screenDebug('[MCI] Sequential: emitted text before ~' + code.substring(0, 10));
       }
 
@@ -1179,11 +1231,28 @@ console.log('[MCI][CC_] COMMAND RESULT:', commandStr, '→', result);
     if (lastIndex < parsed.length) {
       const remaining = parsed.substring(lastIndex);
       if (remaining.length > 0) {
-        let toEmit = addAnsiEscapes(remaining);
-        toEmit = toEmit.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-        emitText(socket, toEmit);
-        screenDebug('[MCI] Sequential: emitted remaining text');
-        inlineEmitted = true;
+        // Check for ~SP and emit text up to it (express.e:5455-5461)
+        const result = emitTextWithSpCheck(remaining);
+        if (result.foundSp) {
+          // express.e:5455-5461 - ~SP causes immediate pause
+          hasPause = true;
+          screenDebug('[MCI] Sequential: ~SP found in remaining text, pausing');
+          inlineEmitted = true;
+          // Return with pending content for processing after pause
+          return {
+            parsed: '',
+            commands: commandsToExecute,
+            hasPause: true,
+            slowmo: slowmoApplied,
+            slowmoCount: slowmoAppliedCount,
+            inlineEmitted: true,
+            pendingInlineContent: result.remainingContent
+          };
+        }
+        if (result.emitted) {
+          screenDebug('[MCI] Sequential: emitted remaining text');
+          inlineEmitted = true;
+        }
       }
     }
 
@@ -2146,6 +2215,13 @@ console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
         if (segmentResult.slowmoCount !== undefined) session.slowmoCount = segmentResult.slowmoCount;
         if (segmentResult.inlineEmitted) inlineEmitted = true;
 
+        // express.e:5455-5461 - Handle pendingInlineContent from ~SP in inline mode
+        // If inline processing found ~SP, prepend remaining content to segment list
+        if (segmentResult.pendingInlineContent && segmentResult.pendingInlineContent.length > 0) {
+          session.screenSegments!.segments.unshift(segmentResult.pendingInlineContent);
+          console.log(`[~SP] Prepended pendingInlineContent to segments (${segmentResult.pendingInlineContent.length} bytes)`);
+        }
+
         // [NEWLINE-DEBUG] Log parsed segment newlines
         const parsedSegmentNewlines = (parsed.match(/\n/g) || []).length;
         const parsedSegmentCRLF = (parsed.match(/\r\n/g) || []).length;
@@ -2168,6 +2244,20 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} byt
         if (result.inlineEmitted) inlineEmitted = true;
         session.lastScreenHadPause = result.hasPause;
 
+        // express.e:5455-5461 - Handle pendingInlineContent from ~SP in inline mode
+        if (result.pendingInlineContent && result.pendingInlineContent.length > 0) {
+          const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+          session.screenSegments = {
+            segments: [result.pendingInlineContent],
+            currentIndex: 0,
+            screenName,
+            inlineMode: true,
+            eventName,
+            isFlowScreen: true
+          };
+          console.log(`[~SP] Stored pendingInlineContent in single segment branch (${result.pendingInlineContent.length} bytes)`);
+        }
+
         // [NEWLINE-DEBUG] Log parsed content newlines (single segment case)
         const parsedNewlines = (parsed.match(/\n/g) || []).length;
         const parsedCRLF = (parsed.match(/\r\n/g) || []).length;
@@ -2188,6 +2278,22 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes,
       }
       if (result.inlineEmitted) inlineEmitted = true;
       session.lastScreenHadPause = result.hasPause;
+
+      // express.e:5455-5461 - Handle pendingInlineContent from ~SP in inline mode
+      // When ~SP is found during inline MCI processing, remaining content is returned here
+      // Store it in screenSegments for processing after pause is dismissed
+      if (result.pendingInlineContent && result.pendingInlineContent.length > 0) {
+        const eventName = isPetscii ? 'petscii-output' : 'ansi-output';
+        session.screenSegments = {
+          segments: [result.pendingInlineContent],
+          currentIndex: 0,
+          screenName,
+          inlineMode: true,
+          eventName,
+          isFlowScreen: true
+        };
+        console.log(`[~SP] Stored pendingInlineContent (${result.pendingInlineContent.length} bytes) for processing after pause`);
+      }
 
       // [NEWLINE-DEBUG] Log parsed content newlines (normal case)
       const parsedNormalNewlines = (parsed.match(/\n/g) || []).length;
@@ -2766,9 +2872,11 @@ export function startPagination(
 export async function handlePaginatedScreenInput(socket: any, session: BBSSession, data: string): Promise<boolean> {
   const paged = session.paginatedScreen;
   if (!paged) {
+console.log(`[handlePaginatedScreenInput] No paginatedScreen set, returning false`);
     return false;
   }
 
+console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.lines.length} nextIndex=${paged.nextIndex} pageSize=${paged.pageSize}`);
   const key = (data || '').trim().toUpperCase();
   const yes = key === '' || key === 'Y' || key === '\r' || key === '\n';
   const no = key === 'N';
@@ -2986,9 +3094,14 @@ export function hasKeysFileForResolvedPath(resolvedPath: string): boolean {
  * @param session - Current BBS session (for future enhancements)
  */
 export function doPause(socket: any, session: BBSSession, onComplete?: () => void): void {
+console.log(`[doPause] CALLED - setting up paginatedScreen (subState=${session.subState})`);
+  fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] doPause: CALLED, subState=${session.subState}\n`);
   // Express.e:5143-5144 - "\b\n(Pause)...Space To Resume:"
   // CRITICAL: Must flush immediately before waiting for keypress (express.e behavior)
-  emitPrompt(socket, '\b\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
+  // NOTE: Use \r\n for web terminal (xterm.js) compatibility.
+  // express.e uses \b\n but on xterm.js \n alone doesn't return to column 0.
+  // After ANSI art that positions cursor anywhere, \r ensures we start at column 0.
+  emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
 
   // Install a minimal pagination gate so the next keypress is required before
   // the display flow continues (matches express.e pause semantics).

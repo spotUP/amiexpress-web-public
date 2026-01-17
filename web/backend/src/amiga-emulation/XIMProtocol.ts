@@ -138,7 +138,13 @@ debugLog(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`);
       doorPortAddr: doorPort,
       // Native door detection - starts false, set by 500ms timer if no XIM commands
       isNativeDoor: false,
+      // CRITICAL: Explicitly initialize usedXimInput to false for each door session
+      // This prevents state leakage from previous door sessions
+      usedXimInput: false,
     } as XIMState;
+
+    console.log(`[XIMProtocol] New XIM state created with usedXimInput=${this.state.usedXimInput} doorPort=0x${doorPort.toString(16)}`);
+
 
     // Initialize specialized handlers
     this.messageParser = new XIMMessageParser(emulator);
@@ -198,6 +204,7 @@ debugLog(`  User: ${bbsSession.user.username || 'Unknown'}`);
    * different from the AEServer.{nodeId} we pre-created.
    */
   setXimPortAddress(addr: number): void {
+console.log(`[XIMProtocol] setXimPortAddress: UPDATING port from 0x${this.doorPort.toString(16)} to 0x${addr.toString(16)}`);
 debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16)} to 0x${addr.toString(16)}`);
     this.doorPort = addr;
     this.state.ximPortAddr = addr;
@@ -249,16 +256,20 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
    * The door's next GetMsg() call will receive the keystroke.
    */
   injectInputToNativeDoor(keyChar: string): void {
+console.log(`[XIMProtocol] injectInputToNativeDoor CALLED with '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) registered=${this.state.registered} doorPort=0x${this.doorPort.toString(16)}`);
     if (!this.state.registered) {
+console.log('[XIMProtocol] Cannot inject input - door not registered');
 debugLog('[XIMProtocol] Cannot inject input - door not registered');
       return;
     }
 
     if (this.doorPort === 0) {
+console.log('[XIMProtocol] Cannot inject input - no door port address');
 debugLog('[XIMProtocol] Cannot inject input - no door port address');
       return;
     }
 
+console.log(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
 debugLog(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
 
     // Allocate memory for jhMessage structure
@@ -317,9 +328,13 @@ debugLog(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
       message: 'Injected input to native door via PutMsg',
     });
 
-    // Send the message to AEDoorPort via PutMsg
-debugLog(`[XIMProtocol] Calling PutMsg(0x${this.doorPort.toString(16)}, 0x${msgAddr.toString(16)})`);
-    this.execLibrary.putMsg(this.doorPort, msgAddr, { suppressDoorCallback: true });
+    // CRITICAL FIX: Send to door's reply port, NOT AEDoorPort!
+    // HYBRID doors (like quicklogin) poll their reply port for input, not AEDoorPort.
+    // After sending XIM output commands, they wait on their reply port for input.
+    const targetPort = this.doorReplyPort || this.doorPort;
+    console.log(`[XIMProtocol] Injecting to port 0x${targetPort.toString(16)} (doorReplyPort=0x${(this.doorReplyPort || 0).toString(16)}, doorPort=0x${this.doorPort.toString(16)})`);
+debugLog(`[XIMProtocol] Calling PutMsg(0x${targetPort.toString(16)}, 0x${msgAddr.toString(16)}) [reply port injection]`);
+    this.execLibrary.putMsg(targetPort, msgAddr, { suppressDoorCallback: true });
 
 debugLog(`[XIMProtocol] Input injected successfully`);
   }
@@ -340,6 +355,7 @@ debugLog(`[XIMProtocol] Input injected successfully`);
     const isNativeDoor = this.state.isNativeDoor === true;
     const usedXimInput = this.state.usedXimInput === true;
 
+console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor} usedXimInput=${usedXimInput} doorPort=0x${this.doorPort.toString(16)}`);
     debugLog(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} waiting=${isWaiting} isNative=${isNativeDoor} usedXimInput=${usedXimInput}`);
 
     // Must be registered
@@ -429,7 +445,12 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
    * Routes to appropriate specialized handler based on command type
    */
   async handleMessage(msg: XIMMessage): Promise<void> {
+    // Reset reply flag at the start of each message
+    // System commands set this to true when they send their own reply
+    this.state.replyHandled = false;
+
     const humanName = this.messageParser.getCommandName(msg.command);
+    console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${msg.string?.substring(0, 50) || ''}"`);
 
     // Log incoming message to XIM debug log
     ximDebugLogger.logMessage(msg.command, humanName, 'RECV', {
@@ -1392,6 +1413,7 @@ debugLog(
    */
   getStateSnapshot(): XIMState {
     const debugId = (this.state as any)._debugId || 'UNKNOWN';
+    console.log(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCommand="${this.state.returnCommand || 'NONE'}", chainCommand="${this.state.chainCommand || 'NONE'}"`);
 debugLog(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCommand="${this.state.returnCommand || 'NONE'}", chainCommand="${this.state.chainCommand || 'NONE'}"`);
     return { ...this.state };
   }
@@ -1401,6 +1423,14 @@ debugLog(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCom
    */
   isShuttingDown(): boolean {
     return this.state.shuttingDown;
+  }
+
+  /**
+   * Check if the reply for the current message was already handled internally
+   * (e.g., by system commands that send their own reply)
+   */
+  wasReplyHandled(): boolean {
+    return this.state.replyHandled === true;
   }
 
   /**

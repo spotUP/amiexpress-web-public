@@ -793,10 +793,18 @@ console.log(
 
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
       try {
-        const { handleCommand } = require('./command.handler');
+        // CRITICAL: Use processCommand directly, NOT handleCommand!
+        // handleCommand is for character-by-character input with line buffering.
+        // processCommand executes a full command string immediately.
+        const { processCommand } = require('./command.handler');
         const runCommand = async (cmd?: string) => {
           if (cmd && cmd.trim().length > 0) {
-            await handleCommand(socket, session, cmd.trim());
+            const trimmed = cmd.trim();
+            const parts = trimmed.toUpperCase().split(/\s+/);
+            const command = parts[0];
+            const params = parts.slice(1).join(' ');
+            console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
+            await processCommand(socket, session, command, params);
           }
         };
 
@@ -1877,6 +1885,7 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
 console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
 console.log(`[executeAmigaDoor] Path: ${door.path}`);
+  fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor START: door="${door.name}" type="${door.type}" path="${door.path}"\n`);
   disableShortcuts(session);
 
   try {
@@ -2368,9 +2377,11 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     if (typeof (amigaSession as any).getExitState === 'function') {
       const exitState = (amigaSession as any).getExitState();
       const ximState = exitState?.ximState || {};
+      console.log(`[executeAmigaDoor] getExitState returned: ximState.returnCommand="${ximState.returnCommand || 'NONE'}", hasXimProtocol=${!!exitState?.ximState}`);
       if (ximState.returnCommand) {
         (session as any).returnCommand = ximState.returnCommand;
 console.log(`[executeAmigaDoor] RETURNCOMMAND requested: ${ximState.returnCommand}`);
+        fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] RETURNCOMMAND captured: "${ximState.returnCommand}"\n`);
       }
       if (ximState.chainCommand) {
         (session as any).chainCommand = ximState.chainCommand;
@@ -2391,10 +2402,18 @@ console.log(
 
       // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
       try {
-        const { handleCommand } = require('./command.handler');
+        // CRITICAL: Use processCommand directly, NOT handleCommand!
+        // handleCommand is for character-by-character input with line buffering.
+        // processCommand executes a full command string immediately.
+        const { processCommand } = require('./command.handler');
         const runCommand = async (cmd?: string) => {
           if (cmd && cmd.trim().length > 0) {
-            await handleCommand(socket, session, cmd.trim());
+            const trimmed = cmd.trim();
+            const parts = trimmed.toUpperCase().split(/\s+/);
+            const command = parts[0];
+            const params = parts.slice(1).join(' ');
+            console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
+            await processCommand(socket, session, command, params);
           }
         };
 
@@ -2428,11 +2447,21 @@ console.warn('[executeAmigaDoor] Failed to auto-run pending door commands:', err
       }
     }
 
-    // Return to menu (only if user is logged in)
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = false;
-    if (session.state === BBSState.LOGGEDON && session.user) {
-      await displayMainMenu(socket, session);
+    // Return to menu (only if user is logged in and no pause is active)
+    // CRITICAL: If processCommand set up a pause (via advanceDisplayFlow -> doPause),
+    // do NOT call displayMainMenu here - it would clear paginatedScreen and break the pause.
+    // The display flow will handle showing the menu after the user dismisses the pause.
+    const doorName = door?.name || door?.command || 'Unknown';
+    fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor EXIT: door="${doorName}", paginatedScreen=${!!session.paginatedScreen}, returnCommand=${(session as any).returnCommand || 'NONE'}\n`);
+    if (session.paginatedScreen) {
+      console.log('[executeAmigaDoor] Pause is active, skipping displayMainMenu (will resume via display flow)');
+      fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor: SKIPPING displayMainMenu (pause active)\n`);
+    } else {
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      session.menuPause = false;
+      if (session.state === BBSState.LOGGEDON && session.user) {
+        await displayMainMenu(socket, session);
+      }
     }
 
   } catch (error) {

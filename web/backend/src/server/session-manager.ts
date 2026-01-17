@@ -181,7 +181,21 @@ export function getSession(socketId: string): BBSSession | undefined {
   // First check if this socket is mapped to a user (post-login)
   const userId = socketToUser.get(socketId);
   if (userId) {
-    return userSessions.get(userId);
+    const userSession = userSessions.get(userId);
+    // DEBUG: Check if sessions by nodeId has different data
+    const nodeId = socketToNodeId.get(socketId);
+    if (nodeId) {
+      const nodeSession = sessions.get(nodeId.toString());
+      if (nodeSession && userSession && nodeSession !== userSession) {
+        console.log(`[SessionManager] WARNING: userSession !== nodeSession! userSession.inDoorManager=${userSession.inDoorManager}, nodeSession.inDoorManager=${nodeSession.inDoorManager}`);
+        // CRITICAL FIX: Return nodeSession if it has door state, as it's the most recently updated
+        if (nodeSession.inDoorManager && !userSession.inDoorManager) {
+          console.log(`[SessionManager] Using nodeSession (has door state)`);
+          return nodeSession;
+        }
+      }
+    }
+    return userSession;
   }
 
   // Look up nodeId from socket.id, then get session by nodeId

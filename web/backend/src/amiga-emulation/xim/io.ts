@@ -263,6 +263,7 @@ export class XIMIOHandler {
    */
   handleLineInput(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
+    console.log(`[XIMIOHandler] JH_LI (Line Input) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     if (this.state.carrierDropped) {
@@ -323,10 +324,13 @@ export class XIMIOHandler {
       } else {
         this.directEmit('ansi-output', defaultText);
       }
-      // Auto-respond for confirm-only prompt
-      this.messageParser.writeMessageString(msg.msgAddr, defaultText);
+      // CRITICAL FIX: For confirm-only prompts (data=0), door expects empty confirmation response
+      // NOT the file path echoed back. Door writes file → sends path via JH_LI → expects empty/Enter.
+      // Echoing the path back causes door to loop (e.g., zOOsTAT repeatedly sends JH_LI).
+      const confirmResponse = '';
+      this.messageParser.writeMessageString(msg.msgAddr, confirmResponse);
       if (msg.stringPtr) {
-        this.messageParser.writeString(msg.stringPtr, defaultText, DoorConstants.MESSAGE_STRING_CAPACITY);
+        this.messageParser.writeString(msg.stringPtr, confirmResponse, DoorConstants.MESSAGE_STRING_CAPACITY);
       }
       this.reply(msg, 1);
       // CRITICAL: Send reply to door's mn_ReplyPort so it wakes from Wait()
@@ -559,6 +563,7 @@ debugLog(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ?
    */
   handlePromptMessage(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
+    console.log(`[XIMIOHandler] JH_PM (Prompt Message) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     const prompt = this.getMessageString(msg);
@@ -651,6 +656,7 @@ debugLog('[XIMIOHandler] JH_HK: Hotkey input request');
     this.state.lineCount = 0;
 
     // Mark that this door uses XIM input commands - prevents native input injection
+    console.log(`[XIMIOHandler] JH_HK (Hotkey) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     if (this.state.carrierDropped) {
@@ -785,6 +791,7 @@ debugLog('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
     this.state.lineCount = 0;
 
     // Mark that this door uses XIM input commands - prevents native input injection
+    console.log(`[XIMIOHandler] JH_ExtHK (Extended Hotkey) received - setting usedXimInput=true`);
     this.state.usedXimInput = true;
 
     if (this.state.carrierDropped) {

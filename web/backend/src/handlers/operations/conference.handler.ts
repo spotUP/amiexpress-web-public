@@ -111,15 +111,23 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   session.currentConf = confId;
   session.conferenceId = confId; // XIM doors read this
   session.currentConference = confId; // GlobalStructures reads this
-  session.currentMsgBase = msgBaseId;
+  session.currentMsgBase = msgBaseId; // Database ID for internal queries
   session.currentConfName = conference.name;
   session.relConfNum = confId; // For simplicity, use absolute conf number as relative
   session.confRJoin = confId;
-  session.msgBaseRJoin = msgBaseId;
+
+  // express.e:5136 - loggedOnUser.msgBaseRJoin:=msgBaseNum
+  // msgBaseRJoin is stored as RELATIVE number (1-indexed), NOT database ID
+  // Calculate relative msgBaseNum from database msgBaseId
+  const confMsgBases = messageBases.filter(mb => mb.conferenceId === confId);
+  const msgBaseIndex = confMsgBases.findIndex(mb => mb.id === msgBaseId);
+  const msgBaseNum = msgBaseIndex >= 0 ? msgBaseIndex + 1 : 1; // 1-indexed
+
+  session.msgBaseRJoin = msgBaseNum;
   if (session.user) {
     session.user.confRJoin = confId;
     session.user.autoRejoin = confId;
-    session.user.msgBaseRJoin = msgBaseId;
+    session.user.msgBaseRJoin = msgBaseNum; // express.e:5136 - store relative number
     try {
       const { db } = require('../../database');
       await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });

@@ -45,8 +45,11 @@ const MESSAGE_DATA_OFFSET = 0xDC;     // 220 - int Data field
 const MESSAGE_COMMAND_OFFSET = 0xE0;  // 224 - int Command field
 const MESSAGE_REPLY_PORT_OFFSET = 14;
 const MESSAGE_LENGTH_OFFSET = 18;
-const MESSAGE_LENGTH = 0x100;
-const MESSAGE_STRING_CAPACITY = 200;
+const MESSAGE_LENGTH = 0x100;  // mn_Length = 256 bytes (matches native AEDoor.library line 213)
+// CRITICAL: Native AEDoor.library uses 198-char limit (DBEQ D1=0xC6 in sendStrCmd/copyStr)
+// The DBEQ instruction decrements D1 from 198 to -1, allowing 199 iterations
+// but the last write is the null terminator, giving 198 actual chars.
+const MESSAGE_STRING_CAPACITY = 198;
 
 /**
  * AEDoor.library Bridge Class
@@ -319,9 +322,10 @@ console.log(`[AEDoorLibrary] Wrote node ID ${nodeId} to BBSInfo+0xf`);
     this.writeCString(bbsInfoAddr + 0x150, dateStr, 19);   // Date at +0x150
     this.writeCString(bbsInfoAddr + 0x170, timeStr, 19);   // Time at +0x170
 
-    // Update DoorInfo pointers to point to BBSInfo data
-    this.emulator.writeMemory32(difaceAddr + 0x1c, bbsInfoAddr + 0xdc);  // Location ptr
-    this.emulator.writeMemory32(difaceAddr + 0x20, bbsInfoAddr + 0x14);  // User name ptr
+    // CRITICAL: Do NOT overwrite DoorInfo+0x1c (dif_Data) and DoorInfo+0x20 (dif_String)!
+    // These MUST point to the message buffer (JHM_Data and JHM_String), not to BBSInfo.
+    // They are correctly set in createComm() and used by getData/getString/prompt/etc.
+    // BBSInfo is a separate structure at 0x46 for direct user data access.
 
 console.log(`[AEDoorLibrary] BBSInfo populated:`);
 console.log(`[AEDoorLibrary]   Username: "${username}" at 0x${(bbsInfoAddr + 0x14).toString(16)}`);
@@ -343,9 +347,28 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
 
   /**
    * DeleteComm() - LVO -36
-   */
-  /**
-   * @deprecated UNUSED - Traps disabled, real library executes now
+   *
+   * Native behavior (from aedoor.library.asm lines 248-269):
+   *   deleteComm:
+   *       MOVEM.L D1-D7/A2-A6,-(SP)
+   *   deleteComm2:
+   *       MOVEQ   #JH_SHUTDOWN,D0  ; D0 = 2 (JH_SHUTDOWN)
+   *       BSR.W   sendCmd          ; Send shutdown command
+   *   deleteComm3:
+   *       ... (save pointers, get SysBase)
+   *       JSR     _LVORemPort(A6)  ; Remove reply port
+   *       JSR     _LVOFreeSignal(A6) ; Free signal
+   *   deleteComm4:
+   *       JSR     _LVOFreeMem(A6)  ; Free 326 bytes
+   *       MOVEQ   #0,D0            ; Return 0
+   *       MOVEM.L (SP)+,D1-D7/A2-A6
+   *       RTS
+   *
+   * Register inputs:
+   *   A1 = DoorInfo pointer
+   *
+   * Returns:
+   *   D0 = 0
    */
   deleteComm(): void {
     const state = this.getStateFromA1();
@@ -353,11 +376,31 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
       return;
     }
 
+    console.log(`[AEDoorLibrary] DeleteComm for DIFace 0x${state.difaceAddr.toString(16)}`);
+
+    // Send JH_SHUTDOWN (command 2) like native does
+    this.dispatchCommand(state, XIMCommand.JH_SHUTDOWN, {});
+
+    // Remove from interfaces map
     this.interfaces.delete(state.difaceAddr);
+
+    // Cleanup: Remove port, free signal, free memory
     if (state.replyPortAddr) {
       this.execLibrary.deleteMsgPort(state.replyPortAddr);
     }
+
+    // Free additional buffers we allocated in createComm
+    if (state.eventHookAddr) this.execLibrary.freeMem(state.eventHookAddr, 4);
+    if (state.nameBufAddr) this.execLibrary.freeMem(state.nameBufAddr, 16);
+    if (state.bbsInfoAddr) this.execLibrary.freeMem(state.bbsInfoAddr, 152);
+    if (state.nodeBufAddr) this.execLibrary.freeMem(state.nodeBufAddr, 255);
+    if (state.nodeStateAddr) this.execLibrary.freeMem(state.nodeStateAddr, 512);
+
+    // Free main DoorInfo structure
     this.execLibrary.freeMem(state.difaceAddr, DIFACE_SIZE);
+
+    // Return 0 (native does this)
+    this.emulator.setRegister(0, 0);
   }
 
   /**
@@ -461,37 +504,69 @@ console.log(`[AEDoorLibrary]   BBS Name: "${verifyBbs}"`);
 
   /**
    * Prompt() - LVO -78
-   */
-  /**
-   * @deprecated UNUSED - Traps disabled, real library executes now
+   *
+   * Native behavior (from aedoor.library.asm lines 330-342):
+   *   prompt:
+   *       MOVEQ   #JH_PM,D0        ; Command = 5 (Prompt Message)
+   *       BSR.S   sendStrDataCmd   ; Send with string from A0, data from D1
+   *       MOVEA.L dif_Data(A1),A0  ; A0 = pointer to JHM_Data
+   *       MOVEQ   #-1,D0           ; D0 = -1
+   *       CMP.L   (A0),D0          ; Compare JHM_Data value with -1
+   *       BEQ.S   .nostr           ; If equal, carrier lost
+   *       MOVE.L  dif_String(A1),D0 ; Return string pointer
+   *       RTS
+   *   .nostr:
+   *       MOVEQ   #0,D0            ; Return 0
+   *       RTS
+   *
+   * Register inputs:
+   *   A0 = prompt string pointer
+   *   D1 = max length (passed to BBS)
+   *   A1 = DoorInfo pointer
+   *
+   * Returns:
+   *   D0 = stringPtr (user input) or 0 if carrier lost
    */
   prompt(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const maxlen = this.emulator.getRegister(0);
-    const promptAddr = this.emulator.getRegister(10);
-    const promptText = promptAddr ? this.readCString(promptAddr, 200) : "";
+    const promptAddr = this.emulator.getRegister(8);  // A0 = prompt string
+    const maxlen = this.emulator.getRegister(1);      // D1 = max length
+    const promptText = promptAddr ? this.readCString(promptAddr, MESSAGE_STRING_CAPACITY) : "";
 
-console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
+    console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
 
-    if (promptText.length > 0) {
-      this.socket.emit("ansi-output", promptText);
+    // Send JH_PM (command 5) with prompt string from A0, data from D1
+    const result = this.dispatchCommand(state, XIMCommand.JH_PM, {
+      string: promptText,
+      data: maxlen,
+    });
+
+    // Check for carrier lost (data = -1)
+    const dataValue = this.emulator.readMemory32(state.dataPtr);
+    if (dataValue === 0xFFFFFFFF) { // -1 as unsigned 32-bit
+      this.emulator.setRegister(0, 0);
+      return 0;
     }
 
-    this.activePrompt = {
-      state,
-      maxlen,
-      resolve: () => {},
-    };
-
-    this.emulator.pause();
+    // Return string pointer (where user input is stored)
     this.emulator.setRegister(0, state.stringPtr);
     return state.stringPtr;
   }
 
   /**
    * WriteStr() - LVO -84
+   *
+   * Native behavior (from aedoor.library.asm lines 344-368):
+   * 1. Copies string to msg buffer in 198-char chunks
+   * 2. For each full chunk, sends JH_SM with data=0 (no newline)
+   * 3. For final chunk, sends JH_SM with original newline flag
+   * 4. Uses command JH_SM (4), NOT JH_WRITE (3)
+   *
+   * Register inputs:
+   *   A0 = string pointer
+   *   D0 = newline flag (0=no newline, 1=add newline after final chunk)
    */
   writeStr(): number {
     const state = this.getStateFromA1();
@@ -500,24 +575,55 @@ console.log(`[AEDoorLibrary] Prompt(maxlen=${maxlen}) -> "${promptText}"`);
     if (!state) {
       const stringAddr = this.emulator.getRegister(8); // A0 = text pointer
       const text = this.readCString(stringAddr, 4096);
-console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
+      console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
       this.socket.emit("ansi-output", text);
       this.emulator.setRegister(0, 0); // Success
       return 0;
     }
 
     // Handle XIM doors with state
-    const stringAddr = this.emulator.getRegister(8);
-    const mode = this.emulator.getRegister(1); // 0 = NOLF, 1 = LF
-    let text = this.readCString(stringAddr, state.stringCapacity);
-    if (mode) {
-      text += "\r\n";
+    const stringAddr = this.emulator.getRegister(8); // A0 = string pointer
+    const newlineFlag = this.emulator.getRegister(1); // D1 = 0=NOLF, 1=LF
+    const fullText = this.readCString(stringAddr, 4096); // Read full string (may be > 198 chars)
+
+    // Chunk string into 198-char pieces like native (DBEQ D1=0xC6)
+    let offset = 0;
+    let result = 0;
+
+    while (offset < fullText.length) {
+      const remaining = fullText.length - offset;
+      const chunkLen = Math.min(remaining, MESSAGE_STRING_CAPACITY);
+      const chunk = fullText.substring(offset, offset + chunkLen);
+      const isLastChunk = offset + chunkLen >= fullText.length;
+
+      // For intermediate chunks: data=0 (no newline)
+      // For final chunk: data=original newline flag
+      let chunkText = chunk;
+      if (isLastChunk && newlineFlag) {
+        chunkText += "\r\n";
+      }
+
+      result = this.dispatchCommand(state, XIMCommand.JH_SM, {
+        string: chunkText,
+        data: isLastChunk ? newlineFlag : 0,
+        useStringPointer: true,
+      });
+
+      offset += chunkLen;
     }
 
-    const result = this.dispatchCommand(state, XIMCommand.JH_WRITE, {
-      string: text,
-      useStringPointer: true,
-    });
+    // Handle empty string case
+    if (fullText.length === 0) {
+      let text = "";
+      if (newlineFlag) {
+        text = "\r\n";
+      }
+      result = this.dispatchCommand(state, XIMCommand.JH_SM, {
+        string: text,
+        data: newlineFlag,
+        useStringPointer: true,
+      });
+    }
 
     this.emulator.setRegister(0, result);
     return result;
@@ -525,13 +631,23 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * ShowGFile() - LVO -90
+   *
+   * Native behavior (from aedoor.library.asm lines 373-375):
+   *   MOVEQ #JH_SG,D0     ; Command = 7
+   *   BRA.W sendStrCmd    ; Jump to sendStrCmd
+   *
+   * Sends command 7 with filename string from A0.
+   *
+   * Register inputs:
+   *   A0 = filename string pointer
+   *   A1 = DoorInfo pointer
    */
   showGFile(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const filenameAddr = this.emulator.getRegister(10);
-    const filename = this.readCString(filenameAddr, 200);
+    const filenameAddr = this.emulator.getRegister(8); // A0 = filename (NOT A2!)
+    const filename = this.readCString(filenameAddr, MESSAGE_STRING_CAPACITY);
     const result = this.dispatchCommand(state, XIMCommand.JH_SG, {
       string: filename,
       useStringPointer: true,
@@ -542,13 +658,23 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * ShowFile() - LVO -96
+   *
+   * Native behavior (from aedoor.library.asm lines 377-379):
+   *   MOVEQ #JH_SF,D0     ; Command = 8
+   *   BRA.W sendStrCmd    ; Jump to sendStrCmd
+   *
+   * Sends command 8 with filename string from A0.
+   *
+   * Register inputs:
+   *   A0 = filename string pointer
+   *   A1 = DoorInfo pointer
    */
   showFile(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const filenameAddr = this.emulator.getRegister(10);
-    const filename = this.readCString(filenameAddr, 200);
+    const filenameAddr = this.emulator.getRegister(8); // A0 = filename (NOT A2!)
+    const filename = this.readCString(filenameAddr, MESSAGE_STRING_CAPACITY);
     const result = this.dispatchCommand(state, XIMCommand.JH_SF, {
       string: filename,
       useStringPointer: true,
@@ -559,18 +685,28 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * SetDT() - LVO -102
+   *
+   * Native behavior (from aedoor.library.asm lines 381-387):
+   * Shared function with getDT, differentiated by D1 flag.
+   * For setDT (D1=0): Writes string from A0 to user data field.
+   *
+   * Register inputs:
+   *   D0 = data type field (DT_NAME, DT_LOCATION, etc.)
+   *   D1 = 0 (write mode - setDT)
+   *   A0 = pointer to string value to write
+   *   A1 = DoorInfo pointer
    */
   setDT(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
     const dataType = this.emulator.getRegister(0);
-    const valueAddr = this.emulator.getRegister(10);
+    const valueAddr = this.emulator.getRegister(8); // A0 = string pointer (NOT A2!)
     const value = this.readCString(valueAddr, state.stringCapacity);
 
     const result = this.dispatchCommand(state, dataType, {
       string: value,
-      data: 0,
+      data: 0, // D1=0 for write mode
     });
     this.emulator.setRegister(0, result);
     return result;
@@ -578,22 +714,37 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * GetDT() - LVO -108
+   *
+   * Native behavior (from aedoor.library.asm lines 381-399):
+   * Shared function with setDT, differentiated by D1 flag.
+   * For getDT (D1=1): Reads user data field into msg.string.
+   *
+   * Register inputs:
+   *   D0 = data type field (DT_NAME, DT_LOCATION, etc.)
+   *   D1 = 1 (read mode - getDT)
+   *   A1 = DoorInfo pointer
+   *
+   * Returns:
+   *   D0 = stringPtr (pointer to result in msg buffer)
+   *   Returns 0 if carrier lost (data = -1)
+   *
+   * NOTE: Native getDT does NOT copy to a destination buffer.
+   * The door calls copyStr() separately if it needs to copy the result.
    */
   getDT(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
     const dataType = this.emulator.getRegister(0);
-    const destAddr = this.emulator.getRegister(10);
     const result = this.dispatchCommand(state, dataType, {
-      data: 1,
+      data: 1, // D1=1 for read mode
     });
 
-    if (destAddr) {
-      const value = this.readCString(state.stringPtr, state.stringCapacity);
-      this.writeCString(destAddr, value, state.stringCapacity);
-      this.emulator.setRegister(0, destAddr);
-      return destAddr;
+    // Native checks dif_Data for carrier lost (-1)
+    // If carrier lost, return 0; otherwise return stringPtr
+    if (result === -1) {
+      this.emulator.setRegister(0, 0);
+      return 0;
     }
 
     this.emulator.setRegister(0, state.stringPtr);
@@ -602,44 +753,79 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
 
   /**
    * GetStr() - LVO -114
+   *
+   * Native behavior (from aedoor.library.asm lines 389-401):
+   *   getStr:
+   *       MOVEQ   #0,D0           ; D0 = 0 (JH_LI command)
+   *       BSR.W   sendStrDataCmd  ; Send with string from A0, data from D1
+   *       MOVEA.L dif_Data(A1),A0 ; A0 = pointer to JHM_Data
+   *       MOVEQ   #-1,D0          ; D0 = -1
+   *       CMP.L   (A0),D0         ; Compare JHM_Data value with -1
+   *       BEQ.S   .nostr          ; If equal, carrier lost
+   *       MOVE.L  dif_String(A1),D0 ; Return string pointer
+   *       RTS
+   *   .nostr:
+   *       MOVEQ   #0,D0           ; Return 0
+   *       RTS
+   *
+   * Register inputs:
+   *   A0 = default/prompt string pointer (may be NULL)
+   *   D1 = data value (passed to BBS, e.g., max length)
+   *   A1 = DoorInfo pointer
+   *
+   * Returns:
+   *   D0 = stringPtr (user input) or 0 if carrier lost
    */
   getStr(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const maxlen = this.emulator.getRegister(0);
-    const defaultAddr = this.emulator.getRegister(10);
+    const defaultAddr = this.emulator.getRegister(8);  // A0 = default/prompt string
+    const dataValue = this.emulator.getRegister(1);    // D1 = data value
+    const defaultStr = defaultAddr ? this.readCString(defaultAddr, MESSAGE_STRING_CAPACITY) : "";
 
-    if (defaultAddr) {
-      const defaultStr = this.readCString(defaultAddr, state.stringCapacity);
-      this.writeCString(state.stringPtr, defaultStr, state.stringCapacity);
-      this.socket.emit("ansi-output", defaultStr);
+    console.log(`[AEDoorLibrary] GetStr(data=${dataValue}) -> "${defaultStr}"`);
+
+    // Send command 0 (JH_LI) with string from A0, data from D1
+    const result = this.dispatchCommand(state, XIMCommand.JH_LI, {
+      string: defaultStr,
+      data: dataValue,
+    });
+
+    // Check for carrier lost (data = -1)
+    const replyData = this.emulator.readMemory32(state.dataPtr);
+    if (replyData === 0xFFFFFFFF) { // -1 as unsigned 32-bit
+      this.emulator.setRegister(0, 0);
+      return 0;
     }
 
-    this.activePrompt = {
-      state,
-      maxlen,
-      resolve: () => {},
-    };
-
-    this.emulator.pause();
+    // Return string pointer (where user input is stored)
     this.emulator.setRegister(0, state.stringPtr);
     return state.stringPtr;
   }
 
   /**
    * CopyStr() - LVO -120
-   * Copies the string FROM stringPtr (library buffer) TO door's buffer (A2)
-   * The door calls this after GetDT to copy the result to its own storage
-   * D0 = max length, A2 = destination buffer
-   * Returns: pointer to the copied string (destination)
+   *
+   * Native behavior (from aedoor.library.asm lines 406-409):
+   * Copies string FROM stringPtr (library buffer) TO door's buffer (A0).
+   * Uses DBEQ loop with 198 char limit.
+   *
+   * Register inputs:
+   *   A0 = destination buffer (door's storage) - NOT A2!
+   *   A1 = DoorInfo pointer
+   *   (D0 is used internally, but native uses fixed 198 char limit)
+   *
+   * Returns:
+   *   D0 = destination buffer pointer
    */
   copyStr(): number {
     const state = this.getStateFromA1();
     if (!state) return 0;
 
-    const destAddr = this.emulator.getRegister(10); // A2 = destination (door's buffer)
-    const maxlen = this.emulator.getRegister(0);    // D0 = max length
+    const destAddr = this.emulator.getRegister(8); // A0 = destination (NOT A2!)
+    // Native uses fixed 198 char limit (DBEQ D1=0xC6)
+    const maxlen = MESSAGE_STRING_CAPACITY;
 
     // Copy FROM stringPtr (library's buffer with GetDT result) TO destAddr (door's buffer)
     const source = this.readCString(state.stringPtr, maxlen);
@@ -656,53 +842,187 @@ console.log(`[AEDoorLibrary] WriteStr(direct): "${text}"`);
   /**
    * HotKey() - LVO -126
    *
-   * Placeholder: returns -1 to indicate no immediate keypress.
+   * Native behavior (from aedoor.library.asm lines 414-425):
+   *   hotKey:
+   *       MOVEQ   #6,D0           ; D0 = 6 (JH_HK command)
+   *       BSR.W   sendStrCmd      ; Send with prompt string from A0
+   *       MOVEA.L dif_Data(A1),A0 ; A0 = pointer to JHM_Data
+   *       MOVE.L  (A0),D0         ; D0 = JHM_Data value
+   *       BMI.S   .exit           ; If negative, return D0 (error/carrier lost)
+   *       MOVEA.L dif_String(A1),A0 ; A0 = string buffer
+   *       MOVEQ   #0,D0           ; Clear D0
+   *       MOVE.B  (A0),D0         ; D0 = first byte of string (the key)
+   *       MOVEQ   #0,D1           ; D1 = 0
+   *   .exit:
+   *       RTS
+   *
+   * Register inputs:
+   *   A0 = prompt string pointer (may be NULL)
+   *   A1 = DoorInfo pointer
+   *
+   * Returns:
+   *   D0 = character code (0-255) if key pressed
+   *   D0 = negative value if error/carrier lost
+   *   D1 = 0 on success
    */
   hotKey(): number {
-    this.emulator.setRegister(0, -1);
-    return -1;
+    const state = this.getStateFromA1();
+    if (!state) {
+      this.emulator.setRegister(0, -1);
+      return -1;
+    }
+
+    const promptAddr = this.emulator.getRegister(8);  // A0 = prompt string
+    const promptText = promptAddr ? this.readCString(promptAddr, MESSAGE_STRING_CAPACITY) : "";
+
+    console.log(`[AEDoorLibrary] HotKey() prompt="${promptText}"`);
+
+    // Send JH_HK (command 6) with prompt string from A0
+    const result = this.dispatchCommand(state, XIMCommand.JH_HK, {
+      string: promptText,
+      useStringPointer: true,
+    });
+
+    // Check reply data value
+    const dataValue = this.emulator.readMemory32(state.dataPtr);
+
+    // If data is negative (signed), return it as error/carrier lost
+    if ((dataValue & 0x80000000) !== 0) {
+      // Convert to signed 32-bit
+      const signedValue = dataValue | 0;
+      this.emulator.setRegister(0, signedValue);
+      console.log(`[AEDoorLibrary] HotKey() -> error/carrier lost: ${signedValue}`);
+      return signedValue;
+    }
+
+    // Get first character from string buffer
+    const charCode = this.emulator.readMemory(state.stringPtr);
+    this.emulator.setRegister(0, charCode);
+    this.emulator.setRegister(1, 0);  // D1 = 0 on success
+
+    console.log(`[AEDoorLibrary] HotKey() -> char: ${charCode} ('${String.fromCharCode(charCode)}')`);
+    return charCode;
   }
 
   /**
    * PreCreateComm() - LVO -132
-   * Per aedoor.library disassembly (libFunc19):
-   *   1. Saves registers (D1-D7/A2-A6)
-   *   2. Calls createComm to create a new CommHandle
-   *   3. Saves handle in A1
-   *   4. Jumps to LAB_262 (cleanup)
-   *   5. Returns D0=0
    *
-   * CRITICAL: Native returns D0=0, NOT 1!
-   * The native code doesn't validate nodeNum - it just creates and cleans up a CommHandle.
+   * Native behavior (from aedoor.library.asm lines 427-431):
+   *   preCreateComm:
+   *       MOVEM.L D1-D7/A2-A6,-(SP)
+   *       BSR.W   createComm      ; Call createComm
+   *       MOVEA.L D0,A1           ; A1 = DoorInfo pointer
+   *       BRA.W   deleteComm3     ; Jump to cleanup (WITHOUT JH_SHUTDOWN)
+   *
+   * This function:
+   * 1. Creates a comm handle (calls createComm)
+   * 2. Immediately cleans up WITHOUT sending JH_SHUTDOWN
+   * 3. Returns 0
+   *
+   * Used for initialization testing.
    */
   preCreateComm(): number {
-    // Native libFunc19 eventually returns D0=0 via LAB_262->LAB_27E cleanup
-    // No validation needed - native doesn't do any
-    this.emulator.setRegister(0, 0); // Success - D0=0 like native
+    console.log(`[AEDoorLibrary] PreCreateComm: creating and immediately cleaning up`);
+
+    // Call createComm to allocate and set up DoorInfo
+    const difaceAddr = this.createComm();
+
+    if (difaceAddr === 0) {
+      this.emulator.setRegister(0, 0);
+      return 0;
+    }
+
+    // Set A1 = DoorInfo pointer (for cleanup)
+    this.emulator.setRegister(9, difaceAddr);
+
+    // Get state and clean up WITHOUT sending JH_SHUTDOWN (deleteComm3 path)
+    const state = this.interfaces.get(difaceAddr);
+    if (state) {
+      // Remove from interfaces map
+      this.interfaces.delete(state.difaceAddr);
+
+      // Cleanup: Remove port, free signal, free memory (but NO JH_SHUTDOWN)
+      if (state.replyPortAddr) {
+        this.execLibrary.deleteMsgPort(state.replyPortAddr);
+      }
+
+      // Free additional buffers
+      if (state.eventHookAddr) this.execLibrary.freeMem(state.eventHookAddr, 4);
+      if (state.nameBufAddr) this.execLibrary.freeMem(state.nameBufAddr, 16);
+      if (state.bbsInfoAddr) this.execLibrary.freeMem(state.bbsInfoAddr, 152);
+      if (state.nodeBufAddr) this.execLibrary.freeMem(state.nodeBufAddr, 255);
+      if (state.nodeStateAddr) this.execLibrary.freeMem(state.nodeStateAddr, 512);
+
+      // Free main DoorInfo structure
+      this.execLibrary.freeMem(state.difaceAddr, DIFACE_SIZE);
+    }
+
+    // Return 0 (native does this)
+    this.emulator.setRegister(0, 0);
     return 0;
   }
 
   /**
    * PostDeleteComm() - LVO -138
-   * Per aedoor.library disassembly (libFunc20): Creates CommHandle, sends cmd 2, loops
-   * This is called during door cleanup. The native implementation creates a new comm handle
-   * and sends a cleanup command.
    *
-   * Native behavior (from disassembly):
-   *   1. Saves registers (D1-D7/A2-A6)
-   *   2. Calls createComm to create a new CommHandle
-   *   3. Sends command 2 via libFunc04 (PutMsg/Wait/GetMsg)
-   *   4. Cleans up via LAB_262->LAB_27E
-   *   5. Returns D0=0
+   * Native behavior (from aedoor.library.asm lines 433-439):
+   *   postDeleteComm:
+   *       MOVEM.L D1-D7/A2-A6,-(SP)
+   *       BSR.W   createComm      ; Call createComm
+   *       MOVEA.L D0,A1           ; A1 = DoorInfo pointer
+   *       MOVEQ   #JH_SHUTDOWN,D0 ; D0 = 2 (JH_SHUTDOWN)
+   *       PEA     deleteComm2(PC) ; Push return address (deleteComm2)
+   *       BRA.W   sendCmd         ; Call sendCmd, returns to deleteComm2
    *
-   * CRITICAL: Native returns D0=0, NOT a CommHandle pointer!
-   * Returning non-zero causes doors to loop infinitely.
+   * This function:
+   * 1. Creates a comm handle (calls createComm)
+   * 2. Sends JH_SHUTDOWN command
+   * 3. Cleans up (full deleteComm path)
+   * 4. Returns 0
+   *
+   * Used for graceful door termination.
    */
   postDeleteComm(): number {
-    // Native libFunc20 eventually returns D0=0 via LAB_262->LAB_27E cleanup
-    // The door code checks "tst.l d0; bne" so D0=0 means success (continue),
-    // D0!=0 means error/retry loop
-    this.emulator.setRegister(0, 0); // Success - D0=0 like native
+    console.log(`[AEDoorLibrary] PostDeleteComm: creating, shutting down, and cleaning up`);
+
+    // Call createComm to allocate and set up DoorInfo
+    const difaceAddr = this.createComm();
+
+    if (difaceAddr === 0) {
+      this.emulator.setRegister(0, 0);
+      return 0;
+    }
+
+    // Set A1 = DoorInfo pointer
+    this.emulator.setRegister(9, difaceAddr);
+
+    // Get state
+    const state = this.interfaces.get(difaceAddr);
+    if (state) {
+      // Send JH_SHUTDOWN (command 2) like native does
+      this.dispatchCommand(state, XIMCommand.JH_SHUTDOWN, {});
+
+      // Remove from interfaces map
+      this.interfaces.delete(state.difaceAddr);
+
+      // Full cleanup: Remove port, free signal, free memory
+      if (state.replyPortAddr) {
+        this.execLibrary.deleteMsgPort(state.replyPortAddr);
+      }
+
+      // Free additional buffers
+      if (state.eventHookAddr) this.execLibrary.freeMem(state.eventHookAddr, 4);
+      if (state.nameBufAddr) this.execLibrary.freeMem(state.nameBufAddr, 16);
+      if (state.bbsInfoAddr) this.execLibrary.freeMem(state.bbsInfoAddr, 152);
+      if (state.nodeBufAddr) this.execLibrary.freeMem(state.nodeBufAddr, 255);
+      if (state.nodeStateAddr) this.execLibrary.freeMem(state.nodeStateAddr, 512);
+
+      // Free main DoorInfo structure
+      this.execLibrary.freeMem(state.difaceAddr, DIFACE_SIZE);
+    }
+
+    // Return 0 (native does this)
+    this.emulator.setRegister(0, 0);
     return 0;
   }
 

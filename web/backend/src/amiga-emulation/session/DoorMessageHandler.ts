@@ -986,15 +986,17 @@ debugLog(`[DoorMessageHandler]   CHAIN: Chain command`);
         break;
 
       case XIMCommand.RETURNCOMMAND:
-        // express.e:3492-3493: Store command to run on exit
-        // TODO: Implement return command handler (store command for execution on door exit)
-debugLog(`[DoorMessageHandler]   RETURNCOMMAND: Stub - not implemented`);
-        break;
-
       case XIMCommand.RETURNCOMMAND2:
-        // express.e:4064-4065: Store second command to run on exit (same handler)
-        // TODO: Implement return command handler (store second command for execution on door exit)
-debugLog(`[DoorMessageHandler]   RETURNCOMMAND2: Stub - not implemented`);
+        // express.e:3492-3493, 4064-4065: Store command to run on exit
+        // This is a fallback if ximProtocol isn't handling it
+        {
+          const returnCmd = str || '';
+debugLog(`[DoorMessageHandler]   RETURNCOMMAND: "${returnCmd}"`);
+          if (this.config.bbsSession) {
+            (this.config.bbsSession as any).returnCommand = returnCmd;
+debugLog(`[DoorMessageHandler]   RETURNCOMMAND: Stored in bbsSession.returnCommand`);
+          }
+        }
         break;
 
       // DT_* commands (user data)

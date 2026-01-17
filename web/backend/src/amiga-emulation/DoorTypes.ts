@@ -30,6 +30,59 @@ export interface DoorConfig {
   overclockFactor?: number; // CPU overclocking multiplier (0=auto, 1-50=specific, -1=force disable)
 }
 
+/**
+ * Door Protocol Constants
+ *
+ * Native AEDoor.library Memory Layout (from aedoor.library.asm disassembly):
+ * ============================================================================
+ *
+ * createComm() allocates 326 bytes (0x146) total for DoorInfo structure:
+ *   - DoorInfo fields (pointers, port name buffer)
+ *   - MsgPort structure (MP_SIZE = 34 bytes)
+ *   - jhMessage structure (MN_LENGTH = 256 bytes)
+ *
+ * DoorInfo Structure (dif_* offsets):
+ *   dif_AEPort      - ptr to AEDoorPort (found via FindPort)
+ *   dif_MsgPort     - ptr to door's reply port
+ *   dif_Message     - ptr to jhMessage
+ *   dif_ReplyName   - name buffer ("DoorReplyPort{n}")
+ *   dif_Data        - ptr to JHM_Data field in message
+ *   dif_String      - ptr to JHM_String field in message
+ *   dif_Sizeof      - size marker (end of DoorInfo, start of MsgPort)
+ *
+ * jhMessage Structure (after Exec message header):
+ *   +0x00: mn_Node (10 bytes)
+ *   +0x0a: mn_ReplyPort (4 bytes) - pointer to reply port
+ *   +0x0e: mn_Length (2 bytes) - message length (256)
+ *   +0x14: String[198] - embedded string buffer (DBEQ D1=0xC6 = 198 chars)
+ *   +0xDC: Data (LONG) - data/status field
+ *   +0xE0: Command (LONG) - XIM command code
+ *   +0xE4: NodeID (LONG) - node number
+ *   +0xE8: LineNum (LONG) - line number
+ *   +0xEC: Signal (LONG) - signal mask
+ *   +0xF0: Task (LONG) - task pointer
+ *
+ * Port Naming Convention:
+ *   BBS port:   "AEDoorPort{n}" (n = 1-2 digit node number)
+ *   Reply port: "DoorReplyPort{n}"
+ *
+ * Blocking Behavior (CRITICAL):
+ *   ALL AEDoor.library functions use this pattern:
+ *     PutMsg(AEDoorPort, message)    - send request
+ *     mask = 1 << replyPort->sigBit  - create signal mask
+ *     Wait(mask)                     - BLOCK until signal
+ *     GetMsg(replyPort)              - retrieve reply
+ *   BBS must call ReplyMsg() to unblock the door!
+ *
+ * Carrier Lost Convention:
+ *   msg.data = -1 (0xFFFFFFFF) signals carrier dropped
+ *   Native functions check BMI (branch if minus) to detect this
+ *   prompt/getStr/hotKey return 0 or negative value on carrier loss
+ *
+ * String Length Limit:
+ *   Native library uses DBEQ loop with D1=198 (0xC6) as counter
+ *   This allows 198 actual characters plus null terminator
+ */
 export class DoorConstants {
   // Exec message header size (mn_Node + reply/length)
   static readonly MESSAGE_HEADER_SIZE = 0x14;
@@ -37,7 +90,9 @@ export class DoorConstants {
   static readonly DOOR_INFO_SIZE = 0x240;
   static readonly DOOR_INFO_MESSAGE_OFFSET = 0x46;
   static readonly MESSAGE_STRING_OFFSET = 0x14;
-  static readonly MESSAGE_STRING_CAPACITY = 200;
+  // CRITICAL: Native AEDoor.library uses 198-char limit (DBEQ D1=0xC6)
+  // See aedoor.library.asm lines 293-296 (sendStrCmd) and 406-409 (copyStr)
+  static readonly MESSAGE_STRING_CAPACITY = 198;
   static readonly MESSAGE_DATA_OFFSET = 0xdc;
   static readonly MESSAGE_COMMAND_OFFSET = 0xe0;
   static readonly MESSAGE_NODE_OFFSET = 0xe4;

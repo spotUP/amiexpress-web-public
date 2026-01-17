@@ -391,6 +391,9 @@ export interface XIMState {
   // Track if door has used XIM input commands (JH_HK, JH_LI, JH_PM, etc.)
   // If true, NEVER inject native input - the door expects replies to its requests
   usedXimInput?: boolean;
+  // Track if the current message's reply was already handled internally
+  // This prevents double-reply when system commands send their own reply
+  replyHandled?: boolean;
 }
 
 /**
@@ -488,5 +491,7 @@ export const FieldLengths = {
   BB_CHATFLAG: 3,        // Chat enabled (ON/OFF)
   DT_STAMP: 190,         // Date/time stamp strings
   EXPRESS_VERSION: 10,   // Version string
-  GENERIC_STRING: 200,   // Maximum embedded string (MESSAGE_STRING_CAPACITY)
+  // CRITICAL: Native AEDoor.library uses 198-char limit (DBEQ D1=0xC6 in sendStrCmd/copyStr)
+  // See aedoor.library.asm lines 293-296, 406-409
+  GENERIC_STRING: 198,   // Maximum embedded string (MESSAGE_STRING_CAPACITY)
 } as const;

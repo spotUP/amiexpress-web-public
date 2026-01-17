@@ -411,12 +411,14 @@ debugLog(`[XIMSystem] RAWARROW: Toggle raw arrow mode -> ${this.state.rawArrow ?
   handleReturnCommand(msg: XIMMessage): void {
     const command = this.getMessageString(msg);
 
+    console.log(`[XIMSystem] handleReturnCommand called: command="${command}"`);
 debugLog(`[XIMSystem] RETURNCOMMAND: "${command}" -> state.returnCommand set`);
 
     this.bbsSession.returnCommand = command;
     this.state.returnCommand = command;
 
     // Verify it was set
+    console.log(`[XIMSystem] RETURNCOMMAND: state.returnCommand now="${this.state.returnCommand}"`);
 debugLog(`[XIMSystem] RETURNCOMMAND verify: state.returnCommand="${this.state.returnCommand}"`);
 
     this.reply(msg, msg.data ?? 0);
@@ -728,6 +730,9 @@ debugLog(`[XIMSystem] Flagged "${fileName}" in conf ${confNum}, total flagged: $
       this.execLibrary.replyMsg(msg.msgAddr);
       debugLog(`[XIMSystem] Reply sent via ReplyMsg (fallback)`);
     }
+
+    // Mark reply as handled so DoorLifecycleManager doesn't send a duplicate
+    this.state.replyHandled = true;
   }
 
   /**

@@ -247,6 +247,11 @@ check_and_install_deps() {
   fi
 }
 
+# Clean stale .js files (compiled next to .ts sources - shouldn't exist)
+if [ -f "$REPO_ROOT/dev/scripts/clean-stale-js.sh" ]; then
+  "$REPO_ROOT/dev/scripts/clean-stale-js.sh" > /dev/null 2>&1
+fi
+
 # Check backend dependencies
 check_and_install_deps "$REPO_ROOT/web/backend" "Backend"
 

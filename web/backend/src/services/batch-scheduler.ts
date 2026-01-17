@@ -181,27 +181,43 @@ function processMciInCommand(
 ): string {
   let result = cmd;
 
-  // Node number
-  result = result.replace(/%N/gi, nodeId.toString());
+  // Express.e MCI codes (express.e:5258-5850)
+  // IMPORTANT: Order matters - longer codes must come before shorter ones
+  // to avoid partial matches (e.g., ~ND before ~N)
 
-  // User info if available
+  // ~ND = node number (express.e:5409-5412)
+  result = result.replace(/~ND/gi, nodeId.toString());
+
+  // ~N = username (express.e:5292-5295)
   if (context?.username) {
-    result = result.replace(/%U/gi, context.username);
-  }
-  if (context?.location) {
-    result = result.replace(/%L/gi, context.location);
-  }
-  if (context?.confName) {
-    result = result.replace(/%C/gi, context.confName);
-  }
-  if (context?.confNum !== undefined) {
-    result = result.replace(/%#/gi, context.confNum.toString());
+    result = result.replace(/~N/g, context.username);
   }
 
-  // Date/time
+  // ~UL = user location (express.e:5296-5299)
+  if (context?.location) {
+    result = result.replace(/~UL/gi, context.location);
+  }
+
+  // ~CF = conference number (express.e:5413-5416)
+  if (context?.confNum !== undefined) {
+    result = result.replace(/~CF/gi, context.confNum.toString());
+  }
+
+  // ~CN = conference name (express.e:5417-5419)
+  if (context?.confName) {
+    result = result.replace(/~CN/gi, context.confName);
+  }
+
+  // ~DT = date (express.e:5435-5438)
   const now = getSystemTime();
-  result = result.replace(/%D/gi, now.toLocaleDateString());
-  result = result.replace(/%T/gi, now.toLocaleTimeString());
+  result = result.replace(/~DT/gi, now.toLocaleDateString());
+
+  // ~OT = time (express.e:5395-5398)
+  result = result.replace(/~OT/gi, now.toLocaleTimeString());
+
+  // ~LG / ~ON = node number (express.e:5379-5382) - alias for ~ND
+  result = result.replace(/~LG/gi, nodeId.toString());
+  result = result.replace(/~ON/gi, nodeId.toString());
 
   return result;
 }
@@ -800,9 +816,13 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
       detached: true, // Create new process group so we can kill the entire tree
     });
 
-    // Timeout to prevent stuck doors from running forever (300 seconds max for batch doors)
-    // Increased from 60s to 300s to allow mtop to process large user databases (~1000 users)
-    const BATCH_DOOR_TIMEOUT = 300000;
+    // Timeout to prevent stuck doors from running forever
+    // - XIM doors (interactive): 300s to allow for user interaction
+    // - SIM doors (utilities): 30s since they should complete quickly
+    // - mtop is an exception - it's XIM and needs 300s for large user databases
+    const doorName = path.basename(doorPath).toLowerCase();
+    const isSimUtility = doorType === 'SIM';
+    const BATCH_DOOR_TIMEOUT = isSimUtility ? 30000 : 300000; // 30s for SIM, 300s for others
     let killed = false;
     const timeoutHandle = setTimeout(() => {
       if (!child.killed && child.pid) {

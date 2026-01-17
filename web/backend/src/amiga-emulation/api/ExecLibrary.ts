@@ -2921,6 +2921,7 @@ debugLog(`[ExecLibrary][autoRegisterPort] Set PA_SIGNAL for port "${name}": 0x${
       // Read SigTask from memory - door may have set it via FindTask(NULL)
       // Only set to current task if door didn't set one
       let sigTask = this.emulator.readMemory32(portAddr + 16);
+      console.log(`[ExecLibrary] autoRegisterPort: name="${name}" sigTask=0x${sigTask.toString(16)} currentTask=0x${this.currentTask.address.toString(16)} sigBit=${sigBit}`);
       if (sigTask === 0) {
         sigTask = this.currentTask.address;
         this.emulator.writeMemory32(portAddr + 16, sigTask);
@@ -5123,6 +5124,7 @@ debugLog(
       // Signal the task that owns this port
       if (port.sigTask !== 0) {
         const signalMask = 1 << port.sigBit; // Convert bit number to mask
+        console.log(`[ExecLibrary] PutMsg: Calling Signal(task=0x${port.sigTask.toString(16)}, mask=0x${signalMask.toString(16)}) sigBit=${port.sigBit} portName=${port.name}`);
 debugLog(
           `[ExecLibrary]   *** Calling Signal() to wake waiting task ***`
         );
@@ -5174,6 +5176,18 @@ debugLog(
    * Options:
    *   skipReplies: If true, skip NT_REPLYMSG messages (leave them for door to get)
    */
+  // Track the actual AEDoorPort address from door's GetMsg calls
+  // This captures the door's OWN port, not the one we pre-created
+  private lastAEDoorPortAddr: number = 0;
+
+  /**
+   * Get the actual AEDoorPort address that the door is polling.
+   * This is more reliable than findPort because it captures the door's OWN port.
+   */
+  getActualDoorPort(): number {
+    return this.lastAEDoorPortAddr;
+  }
+
   getMsg(portAddr: number, options?: { skipReplies?: boolean }): number {
     // File-based debug logging
     this.logExecDebug(
@@ -5190,6 +5204,14 @@ console.error(
         `[ExecLibrary]   Port not found: 0x${portAddr.toString(16)}`
       );
       return 0;
+    }
+
+    // CRITICAL: Track actual AEDoorPort address from door's GetMsg calls
+    // The door creates its own AEDoorPort which may have a different address
+    // than the one we pre-created. We need to inject messages to the door's port.
+    if (port.name.toLowerCase().startsWith('aedoorport') && this.lastAEDoorPortAddr !== portAddr) {
+      this.lastAEDoorPortAddr = portAddr;
+console.log(`[ExecLibrary] CAPTURED actual AEDoorPort address: 0x${portAddr.toString(16)} (port="${port.name}")`);
     }
 
     this.logExecDebug(
@@ -5551,11 +5573,25 @@ debugLog(
     const NT_REPLYMSG = 6;
     this.emulator.writeMemory(msgAddr + 8, NT_REPLYMSG);
 
+    // CRITICAL FIX 2026-01-16: Update mn_ReplyPort to point to AEDoorPort before sending reply.
+    // This prevents infinite loops where:
+    // 1. BBS sends reply to door's port (message still has mn_ReplyPort = door's port)
+    // 2. Door receives message and calls ReplyMsg on it
+    // 3. Without this fix: message goes back to door's own port = infinite loop
+    // 4. With this fix: message goes to AEDoorPort where BBS handles it
+    const aeDoorPort = this.getDoorPortAddress();
+    if (aeDoorPort !== 0) {
+      this.emulator.writeMemory32(msgAddr + 14, aeDoorPort); // mn_ReplyPort = AEDoorPort
+      this.logExecDebug(`ReplyMsg: Updated mn_ReplyPort to AEDoorPort 0x${aeDoorPort.toString(16)}`);
+    }
+
     // Track replies so host-side polling can skip them on AEDoorPort.
     this.markMessageAsReplied(msgAddr);
 
     // Send message back to reply port via PutMsg
+    console.log(`[ExecLibrary] replyMsg: Putting message 0x${msgAddr.toString(16)} to replyPort 0x${replyPortAddr.toString(16)}`);
     this.putMsg(replyPortAddr, msgAddr, { suppressDoorCallback: true });
+    console.log(`[ExecLibrary] replyMsg: Message delivered to replyPort`);
 
     // NOTE: Doors should poll their own reply port for replies, not AEDoorPort.
     // The standard Exec message flow is:
@@ -5863,6 +5899,7 @@ debugLog(
     // 1. OR signals into task's tc_SigRecvd field
     const oldSigRecvd = this.currentTask.sigRecvd;
     this.currentTask.sigRecvd |= signals;
+    console.log(`[ExecLibrary] Signal APPLIED: sigRecvd 0x${oldSigRecvd.toString(16)} -> 0x${this.currentTask.sigRecvd.toString(16)}, sigWait=0x${this.currentTask.sigWait.toString(16)}, isWaiting=${this.currentTask.isWaiting}`);
 debugLog(
       `[ExecLibrary]   sigRecvd: 0x${oldSigRecvd.toString(
         16

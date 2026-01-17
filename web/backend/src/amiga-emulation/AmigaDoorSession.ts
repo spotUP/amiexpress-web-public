@@ -1000,6 +1000,7 @@ debugLog("[AmigaDoorSession] Refactored door session terminated");
    */
   getExitState() {
     const ximState = this.sharedState.ximProtocol?.getStateSnapshot();
+    console.log(`[AmigaDoorSession] getExitState: hasXimProtocol=${!!this.sharedState.ximProtocol}, returnCommand="${ximState?.returnCommand || 'NONE'}"`);
 debugLog(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximProtocol}, returnCommand="${ximState?.returnCommand || 'NONE'}"`);
     return {
       ximState,

@@ -40,10 +40,20 @@ export class XIMDataQueryHandler {
 
   /**
    * Handle data query commands
-   * Protocol:
-   * - msg.data = direction flag:
-   *   - IF msg.data != 0: READ mode - copy user data TO msg.string
-   *   - IF msg.data == 0: WRITE mode - copy msg.string TO user data
+   *
+   * Protocol (from aedoor.library.asm lines 381-387):
+   * - msg.data = direction flag set by setDT/getDT library functions:
+   *   - setDT: D1=0 (WRITE mode) - copy msg.string TO user data field
+   *   - getDT: D1=1 (READ mode)  - copy user data field TO msg.string
+   *
+   * Native convention:
+   *   - IF msg.data == 0: WRITE mode (setDT)
+   *   - IF msg.data != 0: READ mode (getDT)
+   *
+   * Return values:
+   *   - On success: msg.data unchanged or set to result count
+   *   - On carrier lost: msg.data = -1 (0xFFFFFFFF)
+   *   - Door's getDT() checks if data < 0, returns null if carrier lost
    */
   handleDataQuery(msg: XIMMessage): void {
 debugLog(`[XIMDataQuery] Door querying data: ${this.messageParser.getCommandName(msg.command)}`);
